@@ -1,5 +1,5 @@
 [package]
-name = "homectl-rs"
+name = "homectl"
 version = "0.1.0"
 authors = ["Rasmus Eskola <fruitiex@gmail.com>"]
 edition = "2018"
@@ -10,3 +10,4 @@ edition = "2018"
 config = "0.9"
 serde = { version = "1.0", features = ["derive"] }
 palette = "0.5"
+diesel = { version = "1.0.0", features = ["postgres"] }
