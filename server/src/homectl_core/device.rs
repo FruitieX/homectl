@@ -45,3 +45,9 @@ pub struct Device<T = DeviceKind> {
 
     kind: T,
 }
+
+impl Device {
+    pub fn get_id(&self) -> String {
+        self.id.clone()
+    }
+}
