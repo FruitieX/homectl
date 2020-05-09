@@ -1,2 +1,2 @@
 [integrations]
-name = "foo"
+dummy_test = "dummy"
