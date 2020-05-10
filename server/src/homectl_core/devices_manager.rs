@@ -4,8 +4,7 @@ use super::{
     integrations_manager::{Integrations, IntegrationsTree, ManagedIntegration},
 };
 use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex, MutexGuard},
+    sync::{MutexGuard},
 };
 
 pub struct DevicesManager {

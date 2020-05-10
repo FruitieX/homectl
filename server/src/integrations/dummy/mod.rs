@@ -1,7 +1,7 @@
 use crate::homectl_core::{
-    device::{Device, DeviceKind, OnOffDevice},
+    device::Device,
     integration::{Integration, IntegrationId},
-    integrations_manager::{IntegrationsManager, SharedIntegrationsManager},
+    integrations_manager::SharedIntegrationsManager,
 };
 
 pub struct Dummy {
@@ -13,7 +13,7 @@ pub struct Dummy {
 impl Integration for Dummy {
     fn new(
         id: &IntegrationId,
-        config: &String,
+        _config: &String,
         shared_integrations_manager: SharedIntegrationsManager,
     ) -> Self {
         // test that we can call methods on integrations_manager

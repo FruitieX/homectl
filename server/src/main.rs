@@ -31,6 +31,7 @@ fn main() {
     {
         let integrations_manager = shared_integrations_manager.lock().unwrap();
         integrations_manager.run_register_pass();
+        integrations_manager.run_start_pass();
     }
 
     let connection = establish_connection();

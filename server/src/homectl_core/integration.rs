@@ -1,6 +1,6 @@
 // https://doc.rust-lang.org/std/sync/mpsc/fn.channel.html
 
-use super::{integrations_manager::{SharedIntegrationsManager, IntegrationsManager}, device::{Device, DeviceKind}};
+use super::{integrations_manager::{SharedIntegrationsManager}, device::{Device, DeviceKind}};
 
 pub type IntegrationId = String;
 
