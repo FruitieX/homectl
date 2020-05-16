@@ -16,6 +16,7 @@ pub struct Dummy {
     id: String,
     devices: Vec<Device>,
     shared_integrations_manager: SharedIntegrationsManager,
+    config: DummyConfig,
 }
 
 #[async_trait]
@@ -25,23 +26,10 @@ impl Integration for Dummy {
         config: &config::Value,
         shared_integrations_manager: SharedIntegrationsManager,
     ) -> Self {
-        println!(
-            "asdasd: {:?}",
-            config.clone().try_into::<DummyConfig>().unwrap()
-        );
-
-        // test that we can call methods on integrations_manager
-        // {
-        //     let mut integrations_manager = shared_integrations_manager.lock().unwrap();
-        //     integrations_manager.load_integration(
-        //         &String::from("asd"),
-        //         &String::from("asd"),
-        //         shared_integrations_manager.clone(),
-        //     );
-        // }
         Dummy {
             id: id.clone(),
             devices: Vec::new(),
+            config: config.clone().try_into().unwrap(),
             shared_integrations_manager,
         }
     }
