@@ -36,10 +36,8 @@ impl Integration for Dummy {
     }
 
     async fn register(&self) -> Result<(), Box<dyn Error>> {
-        let resp = reqwest::get("https://httpbin.org/ip")
-            .await?
-            .json::<HashMap<String, String>>()
-            .await?;
+        let resp: HashMap<String, String> =
+            reqwest::get("https://httpbin.org/ip").await?.json().await?;
         println!("{:#?}", resp);
         println!("registered dummy integration");
 
