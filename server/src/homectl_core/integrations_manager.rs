@@ -90,6 +90,8 @@ impl IntegrationsManager {
     }
 }
 
+// integrations will perhaps one day be loaded dynamically:
+// https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html
 fn load_integration(
     module_name: &String,
     id: &IntegrationId,
