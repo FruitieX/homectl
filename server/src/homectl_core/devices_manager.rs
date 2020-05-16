@@ -3,9 +3,7 @@ use super::{
     integration::IntegrationId,
     integrations_manager::{Integrations, IntegrationsTree, ManagedIntegration},
 };
-use std::{
-    sync::{MutexGuard},
-};
+use std::sync::MutexGuard;
 
 pub struct DevicesManager {
     integrations: Integrations,
@@ -19,8 +17,11 @@ impl DevicesManager {
     }
 
     pub fn register_device(&self, integration_id: &IntegrationId, device: Device) {
+        let device_id = device.get_id();
         let mut integrations: MutexGuard<IntegrationsTree> = self.integrations.lock().unwrap();
         let managed: Option<&mut ManagedIntegration> = integrations.get_mut(integration_id);
-        managed.unwrap().devices.insert(device.get_id(), device);
+        managed.unwrap().devices.insert(device_id.clone(), device);
+
+        println!("registered device {}", device_id);
     }
 }

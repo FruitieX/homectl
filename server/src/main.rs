@@ -9,10 +9,14 @@ mod integrations;
 
 use db::{actions::find_floorplans, establish_connection};
 use homectl_core::integrations_manager::IntegrationsManager;
-use std::sync::{Arc, Mutex};
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+};
 
 // https://github.com/actix/examples/blob/master/diesel/src/main.rs
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn Error>> {
     let config = homectl_core::config::read_config();
 
     println!("Using config:");
@@ -28,13 +32,15 @@ fn main() {
             .unwrap();
     }
 
-    {
-        let integrations_manager = shared_integrations_manager.lock().unwrap();
-        integrations_manager.run_register_pass();
-        integrations_manager.run_start_pass();
-    }
-
     let connection = establish_connection();
     let results = find_floorplans(&connection);
-    println!("Floorplans in DB: {:?}", results)
+    println!("Floorplans in DB: {:?}", results);
+
+    {
+        let integrations_manager = shared_integrations_manager.lock().unwrap();
+        integrations_manager.run_register_pass().await?;
+        integrations_manager.run_start_pass().await?;
+
+        Ok(())
+    }
 }

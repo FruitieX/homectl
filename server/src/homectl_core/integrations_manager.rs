@@ -6,13 +6,16 @@ use super::{
 use crate::integrations::dummy::Dummy;
 use std::{
     collections::HashMap,
+    error::Error,
     sync::{Arc, Mutex},
 };
 
 pub type DeviceId = String;
 
+pub type ThreadsafeIntegration = Box<dyn Integration + Send + Sync>;
+
 pub struct ManagedIntegration {
-    pub integration: Box<dyn Integration>,
+    pub integration: ThreadsafeIntegration,
     pub devices: HashMap<DeviceId, Device>,
 }
 
@@ -66,20 +69,24 @@ impl IntegrationsManager {
         Ok(())
     }
 
-    pub fn run_register_pass(&self) {
+    pub async fn run_register_pass(&self) -> Result<(), Box<dyn Error>> {
         let integrations = self.integrations.lock().unwrap();
 
         for (_integration_id, managed) in integrations.iter() {
-            managed.integration.register();
+            managed.integration.register().await?;
         }
+
+        Ok(())
     }
 
-    pub fn run_start_pass(&self) {
+    pub async fn run_start_pass(&self) -> Result<(), Box<dyn Error>> {
         let integrations = self.integrations.lock().unwrap();
 
         for (_integration_id, managed) in integrations.iter() {
-            managed.integration.start();
+            managed.integration.start().await?;
         }
+
+        Ok(())
     }
 }
 
@@ -88,7 +95,7 @@ fn load_integration(
     id: &IntegrationId,
     config: &String,
     integrations_manager: SharedIntegrationsManager,
-) -> Result<Box<dyn Integration>, String> {
+) -> Result<ThreadsafeIntegration, String> {
     match module_name.as_str() {
         "dummy" => Ok(Box::new(Dummy::new(id, config, integrations_manager))),
         _ => Err(format!("Unknown module name {}!", module_name)),

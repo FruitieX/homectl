@@ -1,17 +1,27 @@
+use async_trait::async_trait;
 // https://doc.rust-lang.org/std/sync/mpsc/fn.channel.html
 
-use super::{integrations_manager::{SharedIntegrationsManager}, device::{Device, DeviceKind}};
+use super::{
+    device::{Device, DeviceKind},
+    integrations_manager::SharedIntegrationsManager,
+};
+use std::error::Error;
 
 pub type IntegrationId = String;
 
+#[async_trait]
 pub trait Integration {
     // rustc --explain E0038
-    fn new(id: &IntegrationId, config: &String, integrations_manager: SharedIntegrationsManager) -> Self
+    fn new(
+        id: &IntegrationId,
+        config: &String,
+        integrations_manager: SharedIntegrationsManager,
+    ) -> Self
     where
         Self: Sized;
 
-    fn register(&self) {}
-    fn start(&self) {}
+    async fn register(&self) -> Result<(), Box<dyn Error>>;
+    async fn start(&self) -> Result<(), Box<dyn Error>>;
 
     fn get_devices(&self) -> Vec<Device<DeviceKind>> {
         Vec::new()

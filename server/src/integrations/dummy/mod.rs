@@ -3,6 +3,8 @@ use crate::homectl_core::{
     integration::{Integration, IntegrationId},
     integrations_manager::SharedIntegrationsManager,
 };
+use async_trait::async_trait;
+use std::{collections::HashMap, error::Error};
 
 pub struct Dummy {
     id: String,
@@ -10,6 +12,7 @@ pub struct Dummy {
     shared_integrations_manager: SharedIntegrationsManager,
 }
 
+#[async_trait]
 impl Integration for Dummy {
     fn new(
         id: &IntegrationId,
@@ -32,12 +35,21 @@ impl Integration for Dummy {
         }
     }
 
-    fn register(&self) {
+    async fn register(&self) -> Result<(), Box<dyn Error>> {
+        let resp = reqwest::get("https://httpbin.org/ip")
+            .await?
+            .json::<HashMap<String, String>>()
+            .await?;
+        println!("{:#?}", resp);
         println!("registered dummy integration");
+
+        Ok(())
     }
 
-    fn start(&self) {
+    async fn start(&self) -> Result<(), Box<dyn Error>> {
         println!("started dummy integration");
+
+        Ok(())
     }
 
     fn get_devices(&self) -> Vec<Device> {
