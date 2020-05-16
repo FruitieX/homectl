@@ -4,32 +4,21 @@ use crate::homectl_core::{
     integrations_manager::SharedIntegrationsManager,
 };
 use async_trait::async_trait;
-use serde::Deserialize;
 use std::{collections::HashMap, error::Error};
 
-#[derive(Debug, Deserialize)]
-pub struct DummyConfig {
-    asd: String,
-}
-
-pub struct Dummy {
+pub struct Hue {
     id: String,
     devices: Vec<Device>,
     shared_integrations_manager: SharedIntegrationsManager,
 }
 
 #[async_trait]
-impl Integration for Dummy {
+impl Integration for Hue {
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        _config: &String,
         shared_integrations_manager: SharedIntegrationsManager,
     ) -> Self {
-        println!(
-            "asdasd: {:?}",
-            config.clone().try_into::<DummyConfig>().unwrap()
-        );
-
         // test that we can call methods on integrations_manager
         // {
         //     let mut integrations_manager = shared_integrations_manager.lock().unwrap();

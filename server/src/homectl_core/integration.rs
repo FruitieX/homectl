@@ -14,7 +14,7 @@ pub trait Integration {
     // rustc --explain E0038
     fn new(
         id: &IntegrationId,
-        config: &String,
+        config: &config::Value,
         integrations_manager: SharedIntegrationsManager,
     ) -> Self
     where

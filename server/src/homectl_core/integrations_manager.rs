@@ -44,6 +44,7 @@ impl IntegrationsManager {
         &self,
         module_name: &String,
         integration_id: &IntegrationId,
+        config: &config::Value,
         shared_integrations_manager: SharedIntegrationsManager,
     ) -> Result<(), String> {
         println!("loading integration with module_name {}", module_name);
@@ -51,7 +52,7 @@ impl IntegrationsManager {
         let integration = load_integration(
             module_name,
             integration_id,
-            &"".into(),
+            config,
             shared_integrations_manager,
         )?;
 
@@ -95,7 +96,7 @@ impl IntegrationsManager {
 fn load_integration(
     module_name: &String,
     id: &IntegrationId,
-    config: &String,
+    config: &config::Value,
     integrations_manager: SharedIntegrationsManager,
 ) -> Result<ThreadsafeIntegration, String> {
     match module_name.as_str() {
