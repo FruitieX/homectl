@@ -71,9 +71,9 @@ impl IntegrationsManager {
     }
 
     pub async fn run_register_pass(&self) -> Result<(), Box<dyn Error>> {
-        let integrations = self.integrations.lock().unwrap();
+        let mut integrations = self.integrations.lock().unwrap();
 
-        for (_integration_id, managed) in integrations.iter() {
+        for (_integration_id, managed) in integrations.iter_mut() {
             managed.integration.register().await?;
         }
 
@@ -81,9 +81,9 @@ impl IntegrationsManager {
     }
 
     pub async fn run_start_pass(&self) -> Result<(), Box<dyn Error>> {
-        let integrations = self.integrations.lock().unwrap();
+        let mut integrations = self.integrations.lock().unwrap();
 
-        for (_integration_id, managed) in integrations.iter() {
+        for (_integration_id, managed) in integrations.iter_mut() {
             managed.integration.start().await?;
         }
 

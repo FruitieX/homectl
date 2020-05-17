@@ -34,7 +34,7 @@ impl Integration for Dummy {
         }
     }
 
-    async fn register(&self) -> Result<(), Box<dyn Error>> {
+    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
         let resp: HashMap<String, String> =
             reqwest::get("https://httpbin.org/ip").await?.json().await?;
         println!("{:#?}", resp);
@@ -43,7 +43,7 @@ impl Integration for Dummy {
         Ok(())
     }
 
-    async fn start(&self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         println!("started dummy integration");
 
         Ok(())

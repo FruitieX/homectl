@@ -21,6 +21,7 @@ pub struct Hue {
     devices: Vec<Device>,
     shared_integrations_manager: SharedIntegrationsManager,
     config: HueConfig,
+    bridge_state: Option<BridgeState>,
 }
 
 #[async_trait]
@@ -35,24 +36,29 @@ impl Integration for Hue {
             devices: Vec::new(),
             config: config.clone().try_into().unwrap(),
             shared_integrations_manager,
+            bridge_state: None,
         }
     }
 
-    async fn register(&self) -> Result<(), Box<dyn Error>> {
-        let resp: BridgeState = reqwest::get(&format!(
+    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
+        let bridge_state: BridgeState = reqwest::get(&format!(
             "http://{}/api/{}",
             self.config.addr, self.config.username
         ))
         .await?
         .json()
         .await?;
-        println!("{:#?}", resp);
+
+        self.bridge_state = Some(bridge_state);
+
+        println!("{:#?}", self.bridge_state);
+
         println!("registered hue integration");
 
         Ok(())
     }
 
-    async fn start(&self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         println!("started hue integration");
 
         Ok(())
