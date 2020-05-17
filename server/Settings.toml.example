@@ -1,0 +1,8 @@
+[integrations.dummy_test]
+plugin = "dummy"
+asd = "foo"
+
+[integrations.hue1]
+plugin = "hue"
+addr = "192.168.1.123"
+username = "<hue username string here>"

@@ -1,3 +1,0 @@
-[integrations.dummy_test]
-plugin = "dummy"
-asd = "foo"
