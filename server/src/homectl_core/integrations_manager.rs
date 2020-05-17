@@ -3,7 +3,7 @@ use super::{
     devices_manager::DevicesManager,
     integration::{Integration, IntegrationId},
 };
-use crate::integrations::dummy::Dummy;
+use crate::integrations::{dummy::Dummy, hue::Hue};
 use std::{
     collections::HashMap,
     error::Error,
@@ -101,6 +101,7 @@ fn load_integration(
 ) -> Result<ThreadsafeIntegration, String> {
     match module_name.as_str() {
         "dummy" => Ok(Box::new(Dummy::new(id, config, integrations_manager))),
+        "hue" => Ok(Box::new(Hue::new(id, config, integrations_manager))),
         _ => Err(format!("Unknown module name {}!", module_name)),
     }
 }
