@@ -22,8 +22,4 @@ pub trait Integration {
 
     async fn register(&mut self) -> Result<(), Box<dyn Error>>;
     async fn start(&mut self) -> Result<(), Box<dyn Error>>;
-
-    fn get_devices(&self) -> Vec<Device<DeviceKind>> {
-        Vec::new()
-    }
 }

@@ -48,8 +48,4 @@ impl Integration for Dummy {
 
         Ok(())
     }
-
-    fn get_devices(&self) -> Vec<Device> {
-        self.devices.clone()
-    }
 }

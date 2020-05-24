@@ -8,7 +8,8 @@ use crate::homectl_core::{
 use async_trait::async_trait;
 use bridge::BridgeState;
 use serde::Deserialize;
-use std::{collections::HashMap, error::Error};
+use std::{collections::HashMap, error::Error, thread, time::Duration};
+use tokio::time::{interval_at, Instant};
 
 #[derive(Debug, Deserialize)]
 pub struct HueConfig {
@@ -52,7 +53,6 @@ impl Integration for Hue {
         self.bridge_state = Some(bridge_state);
 
         println!("{:#?}", self.bridge_state);
-
         println!("registered hue integration");
 
         Ok(())
@@ -61,10 +61,21 @@ impl Integration for Hue {
     async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         println!("started hue integration");
 
+        let cloned = self.shared_integrations_manager.clone();
+
+        tokio::spawn(async move { poll_sensors(cloned).await });
+
         Ok(())
     }
+}
 
-    fn get_devices(&self) -> Vec<Device> {
-        self.devices.clone()
+async fn poll_sensors(shared_integrations_manager: SharedIntegrationsManager) {
+    let poll_rate = Duration::from_millis(500);
+    let start = Instant::now() + poll_rate;
+    let mut interval = interval_at(start, poll_rate);
+
+    loop {
+        interval.tick().await;
+        println!("would poll");
     }
 }

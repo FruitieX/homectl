@@ -13,6 +13,7 @@ use integrations::dummy::DummyConfig;
 use std::{
     error::Error,
     sync::{Arc, Mutex},
+    thread,
 };
 
 // https://github.com/actix/examples/blob/master/diesel/src/main.rs
@@ -46,11 +47,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let results = find_floorplans(&connection);
     println!("Floorplans in DB: {:?}", results);
 
-    {
+    let result = {
         let integrations_manager = shared_integrations_manager.lock().unwrap();
         integrations_manager.run_register_pass().await?;
         integrations_manager.run_start_pass().await?;
 
         Ok(())
-    }
+    };
+
+    // TODO :)
+    // find some other way to keep the main thread alive
+    thread::sleep(std::time::Duration::new(10000, 0));
+
+    result
 }
