@@ -12,12 +12,7 @@ use std::{
 
 pub type DeviceId = String;
 
-pub struct ManagedIntegration {
-    pub integration: Box<dyn Integration>,
-    pub devices: HashMap<DeviceId, Device>,
-}
-
-pub type IntegrationsTree = HashMap<IntegrationId, ManagedIntegration>;
+pub type IntegrationsTree = HashMap<IntegrationId, Box<dyn Integration>>;
 pub type Integrations = Arc<Mutex<IntegrationsTree>>;
 
 pub struct IntegrationsManager {
@@ -46,15 +41,9 @@ impl IntegrationsManager {
         let integration =
             load_integration(module_name, integration_id, config, self.sender.clone())?;
 
-        let devices = HashMap::new();
-        let managed = ManagedIntegration {
-            integration,
-            devices,
-        };
-
         {
             let mut integrations = self.integrations.lock().unwrap();
-            integrations.insert(integration_id.clone(), managed);
+            integrations.insert(integration_id.clone(), integration);
         }
 
         Ok(())
@@ -63,8 +52,8 @@ impl IntegrationsManager {
     pub async fn run_register_pass(&self) -> Result<(), Box<dyn Error>> {
         let mut integrations = self.integrations.lock().unwrap();
 
-        for (_integration_id, managed) in integrations.iter_mut() {
-            managed.integration.register().await?;
+        for (_integration_id, integration) in integrations.iter_mut() {
+            integration.register().await?;
         }
 
         Ok(())
@@ -73,14 +62,25 @@ impl IntegrationsManager {
     pub async fn run_start_pass(&self) -> Result<(), Box<dyn Error>> {
         let mut integrations = self.integrations.lock().unwrap();
 
-        for (_integration_id, managed) in integrations.iter_mut() {
-            managed.integration.start().await?;
+        for (_integration_id, integration) in integrations.iter_mut() {
+            integration.start().await?;
         }
 
         Ok(())
     }
 
-    pub fn set_device_state(&self, device: Device) {}
+    pub fn set_device_state(&self, device: Device) {
+        let mut integrations = self.integrations.lock().unwrap();
+
+        let integration = integrations.get_mut(&device.integration_id);
+
+        match integration {
+            Some(integration) => {
+                integration.set_device_state(device);
+            }
+            None => {}
+        }
+    }
 }
 
 // integrations will perhaps one day be loaded dynamically:

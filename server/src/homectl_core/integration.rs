@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 // https://doc.rust-lang.org/std/sync/mpsc/fn.channel.html
 
-use super::events::TxEventChannel;
+use super::{device::Device, events::TxEventChannel};
 use std::error::Error;
 
 pub type IntegrationId = String;
@@ -15,4 +15,5 @@ pub trait Integration {
 
     async fn register(&mut self) -> Result<(), Box<dyn Error>>;
     async fn start(&mut self) -> Result<(), Box<dyn Error>>;
+    fn set_device_state(&mut self, device: Device);
 }

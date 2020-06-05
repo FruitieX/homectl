@@ -65,6 +65,10 @@ impl Integration for Hue {
 
         Ok(())
     }
+
+    fn set_device_state(&mut self, device: Device) {
+        println!("hue: would set_device_state {:?}", device);
+    }
 }
 
 async fn poll_sensors(config: HueConfig, integration_id: IntegrationId, sender: TxEventChannel) {

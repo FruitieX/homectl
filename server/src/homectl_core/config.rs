@@ -1,5 +1,4 @@
 extern crate config;
-use crate::integrations::dummy::DummyConfig;
 use serde::Deserialize;
 use std::collections::HashMap;
 

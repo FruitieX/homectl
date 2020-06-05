@@ -18,15 +18,23 @@ pub struct Light {
 
 /// button sensors, motion sensors
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub struct OnOffSensor {
-    value: bool,
+pub enum SensorKind {
+    OnOffSensor {
+        value: bool,
+    },
+    DimmerSwitch {
+        on: bool,
+        up: bool,
+        down: bool,
+        off: bool,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DeviceKind {
     OnOffDevice(OnOffDevice),
     Light(Light),
-    OnOffSensor(OnOffSensor),
+    Sensor(SensorKind),
 }
 
 /// active scene that's controlling the device state, if any

@@ -2,6 +2,7 @@ use crate::homectl_core::{
     device::Device,
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
+    integrations_manager::DeviceId,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -14,7 +15,7 @@ pub struct DummyConfig {
 
 pub struct Dummy {
     id: String,
-    devices: Vec<Device>,
+    devices: HashMap<DeviceId, Device>,
     sender: TxEventChannel,
     config: DummyConfig,
 }
@@ -24,7 +25,7 @@ impl Integration for Dummy {
     fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
         Dummy {
             id: id.clone(),
-            devices: Vec::new(),
+            devices: HashMap::new(),
             config: config.clone().try_into().unwrap(),
             sender,
         }
@@ -43,5 +44,9 @@ impl Integration for Dummy {
         println!("started dummy integration");
 
         Ok(())
+    }
+
+    fn set_device_state(&mut self, device: Device) {
+        self.devices.insert(device.id.clone(), device);
     }
 }
