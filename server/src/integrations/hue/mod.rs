@@ -1,17 +1,17 @@
 pub mod bridge;
 
 use crate::homectl_core::{
-    device::Device,
+    device::{Device, DeviceKind, Light},
+    events::{Message, TxEventChannel},
     integration::{Integration, IntegrationId},
-    integrations_manager::SharedIntegrationsManager,
 };
 use async_trait::async_trait;
 use bridge::BridgeState;
 use serde::Deserialize;
-use std::{collections::HashMap, error::Error, thread, time::Duration};
+use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {
     addr: String,
     username: String,
@@ -20,23 +20,19 @@ pub struct HueConfig {
 pub struct Hue {
     id: String,
     devices: Vec<Device>,
-    shared_integrations_manager: SharedIntegrationsManager,
+    sender: TxEventChannel,
     config: HueConfig,
     bridge_state: Option<BridgeState>,
 }
 
 #[async_trait]
 impl Integration for Hue {
-    fn new(
-        id: &IntegrationId,
-        config: &config::Value,
-        shared_integrations_manager: SharedIntegrationsManager,
-    ) -> Self {
+    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
         Hue {
             id: id.clone(),
             devices: Vec::new(),
             config: config.clone().try_into().unwrap(),
-            shared_integrations_manager,
+            sender,
             bridge_state: None,
         }
     }
@@ -61,15 +57,17 @@ impl Integration for Hue {
     async fn start(&mut self) -> Result<(), Box<dyn Error>> {
         println!("started hue integration");
 
-        let cloned = self.shared_integrations_manager.clone();
+        let config = self.config.clone();
+        let integration_id = self.id.clone();
+        let sender = self.sender.clone();
 
-        tokio::spawn(async move { poll_sensors(cloned).await });
+        tokio::spawn(async move { poll_sensors(config, integration_id, sender).await });
 
         Ok(())
     }
 }
 
-async fn poll_sensors(shared_integrations_manager: SharedIntegrationsManager) {
+async fn poll_sensors(config: HueConfig, integration_id: IntegrationId, sender: TxEventChannel) {
     let poll_rate = Duration::from_millis(500);
     let start = Instant::now() + poll_rate;
     let mut interval = interval_at(start, poll_rate);
@@ -77,5 +75,19 @@ async fn poll_sensors(shared_integrations_manager: SharedIntegrationsManager) {
     loop {
         interval.tick().await;
         println!("would poll");
+
+        let kind = Light {
+            power: true,
+            brightness: 1.0,
+            color: None,
+        };
+        sender
+            .send(Message::HandleDeviceUpdate(Device {
+                id: String::from("test"),
+                integration_id: integration_id.clone(),
+                scene: None,
+                kind: DeviceKind::Light(kind),
+            }))
+            .unwrap();
     }
 }

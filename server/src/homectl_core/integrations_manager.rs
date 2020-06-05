@@ -1,6 +1,6 @@
 use super::{
     device::Device,
-    devices_manager::DevicesManager,
+    events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
 use crate::integrations::{dummy::Dummy, hue::Hue};
@@ -12,10 +12,8 @@ use std::{
 
 pub type DeviceId = String;
 
-pub type ThreadsafeIntegration = Box<dyn Integration + Send + Sync>;
-
 pub struct ManagedIntegration {
-    pub integration: ThreadsafeIntegration,
+    pub integration: Box<dyn Integration>,
     pub devices: HashMap<DeviceId, Device>,
 }
 
@@ -23,20 +21,17 @@ pub type IntegrationsTree = HashMap<IntegrationId, ManagedIntegration>;
 pub type Integrations = Arc<Mutex<IntegrationsTree>>;
 
 pub struct IntegrationsManager {
-    integrations: Integrations,
-    devices_manager: DevicesManager,
+    pub integrations: Integrations,
+    sender: TxEventChannel,
 }
 
-pub type SharedIntegrationsManager = Arc<Mutex<IntegrationsManager>>;
-
 impl IntegrationsManager {
-    pub fn new() -> Self {
+    pub fn new(sender: TxEventChannel) -> Self {
         let integrations: Integrations = Arc::new(Mutex::new(HashMap::new()));
-        let devices_manager = DevicesManager::new(integrations.clone());
 
         IntegrationsManager {
             integrations,
-            devices_manager,
+            sender,
         }
     }
 
@@ -45,16 +40,11 @@ impl IntegrationsManager {
         module_name: &String,
         integration_id: &IntegrationId,
         config: &config::Value,
-        shared_integrations_manager: SharedIntegrationsManager,
     ) -> Result<(), String> {
         println!("loading integration with module_name {}", module_name);
 
-        let integration = load_integration(
-            module_name,
-            integration_id,
-            config,
-            shared_integrations_manager,
-        )?;
+        let integration =
+            load_integration(module_name, integration_id, config, self.sender.clone())?;
 
         let devices = HashMap::new();
         let managed = ManagedIntegration {
@@ -89,6 +79,8 @@ impl IntegrationsManager {
 
         Ok(())
     }
+
+    pub fn set_device_state(&self, device: Device) {}
 }
 
 // integrations will perhaps one day be loaded dynamically:
@@ -97,11 +89,11 @@ fn load_integration(
     module_name: &String,
     id: &IntegrationId,
     config: &config::Value,
-    integrations_manager: SharedIntegrationsManager,
-) -> Result<ThreadsafeIntegration, String> {
+    sender: TxEventChannel,
+) -> Result<Box<dyn Integration>, String> {
     match module_name.as_str() {
-        "dummy" => Ok(Box::new(Dummy::new(id, config, integrations_manager))),
-        "hue" => Ok(Box::new(Hue::new(id, config, integrations_manager))),
+        "dummy" => Ok(Box::new(Dummy::new(id, config, sender))),
+        "hue" => Ok(Box::new(Hue::new(id, config, sender))),
         _ => Err(format!("Unknown module name {}!", module_name)),
     }
 }

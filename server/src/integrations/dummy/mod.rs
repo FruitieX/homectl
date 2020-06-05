@@ -1,7 +1,7 @@
 use crate::homectl_core::{
     device::Device,
+    events::TxEventChannel,
     integration::{Integration, IntegrationId},
-    integrations_manager::SharedIntegrationsManager,
 };
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -15,22 +15,18 @@ pub struct DummyConfig {
 pub struct Dummy {
     id: String,
     devices: Vec<Device>,
-    shared_integrations_manager: SharedIntegrationsManager,
+    sender: TxEventChannel,
     config: DummyConfig,
 }
 
 #[async_trait]
 impl Integration for Dummy {
-    fn new(
-        id: &IntegrationId,
-        config: &config::Value,
-        shared_integrations_manager: SharedIntegrationsManager,
-    ) -> Self {
+    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
         Dummy {
             id: id.clone(),
             devices: Vec::new(),
             config: config.clone().try_into().unwrap(),
-            shared_integrations_manager,
+            sender,
         }
     }
 
