@@ -93,15 +93,16 @@ async fn poll_sensors(config: HueConfig, integration_id: IntegrationId, sender: 
             brightness: Some(1.0),
             color: None,
         };
-        sender
-            .send(Message::HandleDeviceUpdate(Device {
-                id: String::from("test"),
-                name: String::from("Test sensor"),
-                integration_id: integration_id.clone(),
-                scene: None,
-                kind: DeviceKind::Light(kind),
-            }))
-            .unwrap();
+
+        let device = Device {
+            id: String::from("test"),
+            name: String::from("Test sensor"),
+            integration_id: integration_id.clone(),
+            scene: None,
+            kind: DeviceKind::Light(kind),
+        };
+
+        sender.send(Message::DeviceRefresh { device }).unwrap();
     }
 }
 
@@ -139,15 +140,16 @@ async fn do_refresh_lights(
             brightness: None,
             color: hue_to_palette(bridge_light.clone()),
         };
-        sender
-            .send(Message::HandleDeviceUpdate(Device {
-                id: light_id,
-                name: bridge_light.name.clone(),
-                integration_id: integration_id.clone(),
-                scene: None,
-                kind: DeviceKind::Light(kind),
-            }))
-            .unwrap();
+
+        let device = Device {
+            id: light_id,
+            name: bridge_light.name.clone(),
+            integration_id: integration_id.clone(),
+            scene: None,
+            kind: DeviceKind::Light(kind),
+        };
+
+        sender.send(Message::DeviceRefresh { device }).unwrap();
     }
 
     Ok(())

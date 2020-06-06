@@ -19,8 +19,8 @@ impl DevicesManager {
         }
     }
 
-    /// Checks whether device values were changed or not due to update
-    pub fn handle_device_update(&mut self, device: Device) {
+    /// Checks whether device values were changed or not due to refresh
+    pub fn handle_device_refresh(&mut self, device: Device) {
         // println!("handle_device_update for device {}", device.id);
 
         // FIXME: some of these .clone() calls may be unnecessary?
@@ -39,7 +39,7 @@ impl DevicesManager {
                 (_, None) => {
                     println!("Discovered device: {:?}", device);
                     self.sender
-                        .send(Message::DeviceUpdated {
+                        .send(Message::DeviceUpdate {
                             old: None,
                             new: device,
                         })
@@ -50,7 +50,7 @@ impl DevicesManager {
                 // other subsystems
                 (DeviceKind::Sensor(_), Some(old)) => {
                     self.sender
-                        .send(Message::DeviceUpdated {
+                        .send(Message::DeviceUpdate {
                             old: Some(old.clone()),
                             new: device,
                         })
@@ -62,7 +62,9 @@ impl DevicesManager {
                 // emitting SetDeviceState message
                 (_, Some(expected_state)) => {
                     self.sender
-                        .send(Message::SetDeviceState(expected_state.clone()))
+                        .send(Message::SetDeviceState {
+                            device: expected_state.clone(),
+                        })
                         .unwrap();
                 }
             }

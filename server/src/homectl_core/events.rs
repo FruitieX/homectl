@@ -5,13 +5,13 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 pub enum Message {
     /// Information about current device state was gathered (usually through
     /// polling), need to determine whether values have actually changed or not
-    HandleDeviceUpdate(Device),
+    DeviceRefresh { device: Device },
 
     /// Device values have changed, need to take any appropriate actions
-    DeviceUpdated { old: Option<Device>, new: Device },
+    DeviceUpdate { old: Option<Device>, new: Device },
 
-    /// Triggers state update for physical device
-    SetDeviceState(Device),
+    /// Triggers state change for device
+    SetDeviceState { device: Device },
 }
 
 pub type TxEventChannel = Sender<Message>;
