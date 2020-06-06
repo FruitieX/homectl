@@ -1,4 +1,5 @@
 pub mod bridge;
+pub mod convert;
 pub mod lights;
 pub mod sensors;
 pub mod utils;
@@ -11,7 +12,7 @@ use crate::homectl_core::{
 use async_trait::async_trait;
 use bridge::BridgeState;
 use serde::Deserialize;
-use std::{error::Error};
+use std::error::Error;
 
 use lights::poll_lights;
 use sensors::poll_sensors;
@@ -65,6 +66,7 @@ impl Integration for Hue {
         println!("started hue integration");
 
         // FIXME: how to do this in a not stupid way
+        let sensors = self.bridge_state.clone().unwrap().sensors;
         let config1 = self.config.clone();
         let config2 = self.config.clone();
         let integration_id1 = self.id.clone();
@@ -72,7 +74,7 @@ impl Integration for Hue {
         let sender1 = self.sender.clone();
         let sender2 = self.sender.clone();
 
-        tokio::spawn(async { poll_sensors(config1, integration_id1, sender1).await });
+        tokio::spawn(async { poll_sensors(config1, integration_id1, sender1, sensors).await });
         tokio::spawn(async { poll_lights(config2, integration_id2, sender2).await });
 
         Ok(())

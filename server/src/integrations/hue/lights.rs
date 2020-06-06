@@ -1,11 +1,11 @@
 use crate::homectl_core::{
-    device::{Device, DeviceKind, Light},
+    device::{Device, DeviceKind},
     events::{Message, TxEventChannel},
     integration::IntegrationId,
 };
 
 use super::bridge::BridgeLights;
-use super::{utils::hue_to_palette, HueConfig};
+use super::{convert::to_light, HueConfig};
 use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
 
@@ -23,11 +23,7 @@ pub async fn do_refresh_lights(
     .await?;
 
     for (light_id, bridge_light) in bridge_lights {
-        let kind = Light {
-            power: bridge_light.state.on,
-            brightness: None,
-            color: hue_to_palette(bridge_light.clone()),
-        };
+        let kind = to_light(bridge_light.clone());
 
         let device = Device {
             id: light_id,
@@ -50,7 +46,6 @@ pub async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sende
 
     loop {
         interval.tick().await;
-        println!("would poll lights");
 
         let sender = sender.clone();
         let result = do_refresh_lights(config.clone(), integration_id.clone(), sender).await;

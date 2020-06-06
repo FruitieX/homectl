@@ -28,6 +28,7 @@ pub enum SensorKind {
         down: bool,
         off: bool,
     },
+    Unknown,
 }
 
 #[derive(Clone, Debug, PartialEq)]

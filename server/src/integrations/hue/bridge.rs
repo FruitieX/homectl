@@ -20,19 +20,20 @@ pub struct BridgeLight {
 pub type BridgeLightId = String;
 pub type BridgeLights = HashMap<BridgeLightId, BridgeLight>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ZLLPresenceState {
-    presence: bool,
-    lastupdated: String,
+    pub presence: bool,
+    pub lastupdated: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ZLLSwitchState {
-    buttonevent: Option<u32>,
-    lastupdated: String,
+    // Might be None for new switches with no buttonevents yet
+    pub buttonevent: Option<u32>,
+    pub lastupdated: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 #[serde(tag = "type")]
 pub enum BridgeSensor {
     Daylight {
@@ -57,8 +58,8 @@ pub enum BridgeSensor {
 pub type BridgeSensorId = String;
 pub type BridgeSensors = HashMap<BridgeSensorId, BridgeSensor>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct BridgeState {
-    lights: BridgeLights,
-    sensors: BridgeSensors,
+    pub lights: BridgeLights,
+    pub sensors: BridgeSensors,
 }
