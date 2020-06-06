@@ -12,7 +12,7 @@ pub struct OnOffDevice {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Light {
     pub power: bool,
-    pub brightness: f64,
+    pub brightness: Option<f64>,
     pub color: Option<Lch>,
 }
 
@@ -50,6 +50,7 @@ type DeviceId = String;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Device<T = DeviceKind> {
     pub id: DeviceId,
+    pub name: String,
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
     pub kind: T,

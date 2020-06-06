@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let msg = receiver.recv()?;
 
-        println!("got msg: {:?}", msg);
+        println!("got msg: {:#?}", msg);
 
         match msg {
             Message::HandleDeviceUpdate(device) => devices_manager.handle_device_update(device),

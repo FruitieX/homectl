@@ -1,20 +1,20 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct BridgeLightState {
-    on: bool,
-    bri: Option<u32>,
-    hue: Option<u32>,
-    sat: Option<u32>,
-    transitiontime: Option<u32>,
-    reachable: Option<bool>,
+    pub on: bool,
+    pub bri: Option<u32>,
+    pub hue: Option<u32>,
+    pub sat: Option<u32>,
+    pub transitiontime: Option<u32>,
+    pub reachable: Option<bool>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct BridgeLight {
-    state: BridgeLightState,
-    name: String,
+    pub state: BridgeLightState,
+    pub name: String,
 }
 
 pub type BridgeLightId = String;
