@@ -124,16 +124,14 @@ async fn do_refresh_lights(
     config: HueConfig,
     integration_id: IntegrationId,
     sender: TxEventChannel,
-) {
+) -> Result<(), Box<dyn Error>> {
     let bridge_lights: BridgeLights = reqwest::get(&format!(
         "http://{}/api/{}/lights",
         config.addr, config.username
     ))
-    .await
-    .unwrap() // FIXME: no .unwrap(), why doesn't `.await?` work here
+    .await?
     .json()
-    .await
-    .unwrap();
+    .await?;
 
     for (light_id, bridge_light) in bridge_lights {
         let kind = Light {
@@ -151,6 +149,8 @@ async fn do_refresh_lights(
             }))
             .unwrap();
     }
+
+    Ok(())
 }
 
 async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sender: TxEventChannel) {
@@ -163,6 +163,11 @@ async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sender: T
         println!("would poll lights");
 
         let sender = sender.clone();
-        do_refresh_lights(config.clone(), integration_id.clone(), sender).await;
+        let result = do_refresh_lights(config.clone(), integration_id.clone(), sender).await;
+
+        match result {
+            Ok(()) => {}
+            Err(e) => println!("Error while polling lights: {:?}", e),
+        }
     }
 }
