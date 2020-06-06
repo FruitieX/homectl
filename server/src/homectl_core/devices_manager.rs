@@ -19,6 +19,7 @@ impl DevicesManager {
         }
     }
 
+    /// Checks whether device values were changed or not due to update
     pub fn handle_device_update(&mut self, device: Device) {
         // println!("handle_device_update for device {}", device.id);
 
@@ -66,5 +67,10 @@ impl DevicesManager {
                 }
             }
         }
+    }
+
+    /// Adjusts stored state for given device
+    pub fn set_device_state(&mut self, device: Device) {
+        self.state.insert(device.id.clone(), device.clone());
     }
 }

@@ -55,12 +55,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let msg = receiver.recv()?;
 
-        println!("got msg: {:#?}", msg);
+        println!("got msg: {:?}", msg);
 
         match msg {
             Message::HandleDeviceUpdate(device) => devices_manager.handle_device_update(device),
             Message::DeviceUpdated { old, new } => rules_engine.device_updated(old, new),
-            Message::SetDeviceState(device) => integrations_manager.set_device_state(device),
+            Message::SetDeviceState(device) => {
+                devices_manager.set_device_state(device.clone());
+                integrations_manager.set_device_state(device);
+            }
         }
     }
 }
