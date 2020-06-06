@@ -1,16 +1,20 @@
 pub mod bridge;
+pub mod lights;
+pub mod sensors;
+pub mod utils;
 
 use crate::homectl_core::{
-    device::{Device, DeviceKind, Light},
-    events::{Message, TxEventChannel},
+    device::Device,
+    events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
 use async_trait::async_trait;
-use bridge::{BridgeLight, BridgeLights, BridgeState};
-use palette::{Hsl, IntoColor, Lch};
+use bridge::BridgeState;
 use serde::Deserialize;
-use std::{error::Error, time::Duration};
-use tokio::time::{interval_at, Instant};
+use std::{error::Error};
+
+use lights::poll_lights;
+use sensors::poll_sensors;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {
@@ -76,100 +80,5 @@ impl Integration for Hue {
 
     fn set_device_state(&mut self, device: Device) {
         println!("hue: would set_device_state {:?}", device);
-    }
-}
-
-async fn poll_sensors(config: HueConfig, integration_id: IntegrationId, sender: TxEventChannel) {
-    let poll_rate = Duration::from_millis(config.poll_rate_sensors);
-    let start = Instant::now() + poll_rate;
-    let mut interval = interval_at(start, poll_rate);
-
-    loop {
-        interval.tick().await;
-        println!("would poll sensors");
-
-        let kind = Light {
-            power: true,
-            brightness: Some(1.0),
-            color: None,
-        };
-
-        let device = Device {
-            id: String::from("test"),
-            name: String::from("Test sensor"),
-            integration_id: integration_id.clone(),
-            scene: None,
-            kind: DeviceKind::Light(kind),
-        };
-
-        sender.send(Message::DeviceRefresh { device }).unwrap();
-    }
-}
-
-fn hue_to_palette(bridge_light: BridgeLight) -> Option<Lch> {
-    let hue: f32 = bridge_light.state.hue? as f32;
-    let saturation: f32 = bridge_light.state.sat? as f32;
-    let lightness: f32 = bridge_light.state.bri? as f32;
-
-    let hsl = Hsl::new(
-        (hue / 65536.0) * 360.0,
-        saturation / 254.0,
-        lightness / 254.0,
-    );
-    let lch: Lch = hsl.into_lch();
-
-    Some(lch)
-}
-
-async fn do_refresh_lights(
-    config: HueConfig,
-    integration_id: IntegrationId,
-    sender: TxEventChannel,
-) -> Result<(), Box<dyn Error>> {
-    let bridge_lights: BridgeLights = reqwest::get(&format!(
-        "http://{}/api/{}/lights",
-        config.addr, config.username
-    ))
-    .await?
-    .json()
-    .await?;
-
-    for (light_id, bridge_light) in bridge_lights {
-        let kind = Light {
-            power: bridge_light.state.on,
-            brightness: None,
-            color: hue_to_palette(bridge_light.clone()),
-        };
-
-        let device = Device {
-            id: light_id,
-            name: bridge_light.name.clone(),
-            integration_id: integration_id.clone(),
-            scene: None,
-            kind: DeviceKind::Light(kind),
-        };
-
-        sender.send(Message::DeviceRefresh { device }).unwrap();
-    }
-
-    Ok(())
-}
-
-async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sender: TxEventChannel) {
-    let poll_rate = Duration::from_millis(config.poll_rate_lights);
-    let start = Instant::now() + poll_rate;
-    let mut interval = interval_at(start, poll_rate);
-
-    loop {
-        interval.tick().await;
-        println!("would poll lights");
-
-        let sender = sender.clone();
-        let result = do_refresh_lights(config.clone(), integration_id.clone(), sender).await;
-
-        match result {
-            Ok(()) => {}
-            Err(e) => println!("Error while polling lights: {:?}", e),
-        }
     }
 }
