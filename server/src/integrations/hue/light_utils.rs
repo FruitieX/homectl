@@ -7,6 +7,7 @@ use crate::homectl_core::{
 };
 use palette::{Hsl, IntoColor, Lch};
 
+/// Convert BridgeLight color into Lch
 pub fn to_palette(bridge_light: BridgeLight) -> Option<Lch> {
     let hue: f32 = bridge_light.state.hue? as f32;
     let saturation: f32 = bridge_light.state.sat? as f32;
@@ -22,6 +23,7 @@ pub fn to_palette(bridge_light: BridgeLight) -> Option<Lch> {
     Some(lch)
 }
 
+/// Constructs Light kind from BridgeLight
 pub fn to_light(bridge_light: BridgeLight) -> Light {
     Light {
         power: bridge_light.state.on,
@@ -30,7 +32,12 @@ pub fn to_light(bridge_light: BridgeLight) -> Light {
     }
 }
 
-pub fn bridge_light_to_device(id: DeviceId, integration_id: IntegrationId, bridge_light: BridgeLight) -> Device {
+/// Converts BridgeLight into Device
+pub fn bridge_light_to_device(
+    id: DeviceId,
+    integration_id: IntegrationId,
+    bridge_light: BridgeLight,
+) -> Device {
     let name = bridge_light.name.clone();
     let kind = DeviceKind::Light(to_light(bridge_light));
 

@@ -1,4 +1,6 @@
-use super::bridge::{BridgeSensor, BridgeSensors, ZLLSwitchState};
+use super::bridge::{
+    BridgeButtonEvent, BridgeSensor, BridgeSensorId, BridgeSensors, ZLLSwitchState,
+};
 use crate::homectl_core::{
     device::{Device, DeviceKind, SensorKind},
     integration::IntegrationId,
@@ -14,7 +16,8 @@ pub enum DimmerSwitchButtonId {
     Unknown,
 }
 
-fn get_button_id(buttonevent: u32) -> DimmerSwitchButtonId {
+/// Returns which DimmerSwitchButtonId is referred to in BridgeButtonEvent
+fn get_button_id(buttonevent: BridgeButtonEvent) -> DimmerSwitchButtonId {
     let str = buttonevent.to_string();
     let button_id = str.chars().nth(0);
 
@@ -27,13 +30,15 @@ fn get_button_id(buttonevent: u32) -> DimmerSwitchButtonId {
     }
 }
 
-pub fn cmp_button_id(buttonevent: u32, button_id: DimmerSwitchButtonId) -> bool {
+/// Returns whether BridgeButtonEvent refers to DimmerSwitchButtonId
+pub fn cmp_button_id(buttonevent: BridgeButtonEvent, button_id: DimmerSwitchButtonId) -> bool {
     let event_button_id = get_button_id(buttonevent);
 
     event_button_id == button_id
 }
 
-fn get_button_state(buttonevent: u32) -> bool {
+/// Returns whether BridgeButtonEvent is in a pressed state or not
+fn get_button_state(buttonevent: BridgeButtonEvent) -> bool {
     let str = buttonevent.to_string();
     let state = str.chars().nth(3);
 
@@ -46,7 +51,12 @@ fn get_button_state(buttonevent: u32) -> bool {
     }
 }
 
-pub fn is_button_pressed(buttonevent: Option<u32>, button_id: DimmerSwitchButtonId) -> bool {
+/// Returns whether DimmerSwitchButtonId is in a pressed state in the
+/// BridgeButtonEvent
+pub fn is_button_pressed(
+    buttonevent: Option<BridgeButtonEvent>,
+    button_id: DimmerSwitchButtonId,
+) -> bool {
     match buttonevent {
         Some(buttonevent) => {
             let button_id_match = cmp_button_id(buttonevent, button_id);
@@ -58,15 +68,17 @@ pub fn is_button_pressed(buttonevent: Option<u32>, button_id: DimmerSwitchButton
     }
 }
 
-pub fn find_prev_bridge_sensor(
-    prev_bridge_sensors: &BridgeSensors,
-    sensor_id: &String,
+/// Tries to find BridgeSensor with matching BridgeSensorId
+pub fn find_bridge_sensor(
+    bridge_sensors: &BridgeSensors,
+    sensor_id: &BridgeSensorId,
 ) -> Option<BridgeSensor> {
-    prev_bridge_sensors
+    bridge_sensors
         .get(sensor_id)
         .map(|bridge_sensor| bridge_sensor.clone())
 }
 
+/// Returns name of BridgeSensor
 fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
     match bridge_sensor {
         BridgeSensor::Daylight { name } => name,
@@ -77,6 +89,7 @@ fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
     }
 }
 
+/// Converts BridgeSensor into Device
 pub fn bridge_sensor_to_device(
     id: DeviceId,
     integration_id: IntegrationId,
@@ -129,6 +142,29 @@ pub fn bridge_sensor_to_device(
             }
         }
     }
+}
+
+/// Best effort conversion of DimmerSwitchButtonId and button_state back into a
+/// BridgeButtonEvent. This conversion is lossy because we don't have the data
+/// needed to reconstruct the exact button state.
+fn to_buttonevent(button_id: DimmerSwitchButtonId, button_state: bool) -> BridgeButtonEvent {
+    let mut s = String::new();
+
+    s.push(match button_id {
+        DimmerSwitchButtonId::On => '1',
+        DimmerSwitchButtonId::Up => '2',
+        DimmerSwitchButtonId::Down => '3',
+        DimmerSwitchButtonId::Off => '4',
+        _ => '0',
+    });
+    s.push('0');
+    s.push('0');
+    s.push(match button_state {
+        true => '0',  // INITIAL_PRESSED
+        false => '2', // SHORT_RELEASED
+    });
+
+    s.parse::<BridgeButtonEvent>().unwrap()
 }
 
 /// Do some extrapolation on old and new bridge_sensor states to try and figure
@@ -228,24 +264,4 @@ pub fn extrapolate_sensor_updates(
         }
         _ => Vec::new(),
     }
-}
-
-fn to_buttonevent(button_id: DimmerSwitchButtonId, button_state: bool) -> u32 {
-    let mut s = String::new();
-
-    s.push(match button_id {
-        DimmerSwitchButtonId::On => '1',
-        DimmerSwitchButtonId::Up => '2',
-        DimmerSwitchButtonId::Down => '3',
-        DimmerSwitchButtonId::Off => '4',
-        _ => '0',
-    });
-    s.push('0');
-    s.push('0');
-    s.push(match button_state {
-        true => '0',  // INITIAL_PRESSED
-        false => '2', // SHORT_RELEASED
-    });
-
-    s.parse::<u32>().unwrap()
 }

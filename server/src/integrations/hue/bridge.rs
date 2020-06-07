@@ -26,10 +26,12 @@ pub struct ZLLPresenceState {
     pub lastupdated: String,
 }
 
+pub type BridgeButtonEvent = u32;
+
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ZLLSwitchState {
     // Might be None for new switches with no buttonevents yet
-    pub buttonevent: Option<u32>,
+    pub buttonevent: Option<BridgeButtonEvent>,
     pub lastupdated: String,
 }
 

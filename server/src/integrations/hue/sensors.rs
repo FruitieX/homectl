@@ -1,6 +1,6 @@
 use super::{
     bridge::BridgeSensors,
-    utils::{bridge_sensor_to_device, extrapolate_sensor_updates, find_prev_bridge_sensor},
+    sensor_utils::{bridge_sensor_to_device, extrapolate_sensor_updates, find_bridge_sensor},
     HueConfig,
 };
 use crate::homectl_core::{
@@ -44,7 +44,7 @@ pub async fn do_refresh_sensors(
     sensors_state.bridge_sensors = result.clone();
 
     for (sensor_id, bridge_sensor) in result {
-        let prev_bridge_sensor = find_prev_bridge_sensor(&prev_bridge_sensors, &sensor_id);
+        let prev_bridge_sensor = find_bridge_sensor(&prev_bridge_sensors, &sensor_id);
 
         let events = extrapolate_sensor_updates(prev_bridge_sensor, bridge_sensor)
             .into_iter()

@@ -1,8 +1,8 @@
 pub mod bridge;
-pub mod convert;
 pub mod lights;
+pub mod light_utils;
 pub mod sensors;
-pub mod utils;
+pub mod sensor_utils;
 
 use crate::homectl_core::{
     device::Device,
@@ -14,10 +14,10 @@ use bridge::BridgeState;
 use serde::Deserialize;
 use std::error::Error;
 
-use convert::bridge_light_to_device;
+use light_utils::bridge_light_to_device;
 use lights::poll_lights;
 use sensors::poll_sensors;
-use utils::bridge_sensor_to_device;
+use sensor_utils::bridge_sensor_to_device;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {

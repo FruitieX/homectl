@@ -5,7 +5,7 @@ use crate::homectl_core::{
 };
 
 use super::bridge::BridgeLights;
-use super::{convert::to_light, HueConfig};
+use super::{light_utils::to_light, HueConfig};
 use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
 
