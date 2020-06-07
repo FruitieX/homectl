@@ -27,7 +27,6 @@ pub struct HueConfig {
 
 pub struct Hue {
     id: String,
-    devices: Vec<Device>,
     sender: TxEventChannel,
     config: HueConfig,
     bridge_state: Option<BridgeState>,
@@ -38,7 +37,6 @@ impl Integration for Hue {
     fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
         Hue {
             id: id.clone(),
-            devices: Vec::new(),
             config: config.clone().try_into().unwrap(),
             sender,
             bridge_state: None,

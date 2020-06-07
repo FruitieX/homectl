@@ -1,11 +1,9 @@
 use super::{
     bridge::BridgeSensors,
-    convert::to_sensor,
-    utils::{find_old_bridge_sensor, get_sensor_device_update_messages},
+    utils::{bridge_sensor_to_device, extrapolate_sensor_updates, find_prev_bridge_sensor},
     HueConfig,
 };
 use crate::homectl_core::{
-    device::{Device, DeviceKind, Light},
     events::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -28,7 +26,7 @@ pub async fn do_refresh_sensors(
 ) -> Result<(), Box<dyn Error>> {
     // NOTE: we can't hold onto this mutex lock across the following .await
     // statements
-    let old_bridge_sensors = {
+    let prev_bridge_sensors = {
         let sensors_state = sensors_state.lock().unwrap();
         let bridge_sensors = sensors_state.bridge_sensors.clone();
         bridge_sensors
@@ -46,14 +44,17 @@ pub async fn do_refresh_sensors(
     sensors_state.bridge_sensors = result.clone();
 
     for (sensor_id, bridge_sensor) in result {
-        let old_bridge_sensor = find_old_bridge_sensor(&old_bridge_sensors, &sensor_id);
+        let prev_bridge_sensor = find_prev_bridge_sensor(&prev_bridge_sensors, &sensor_id);
 
-        let events = get_sensor_device_update_messages(
-            sensor_id,
-            integration_id.clone(),
-            old_bridge_sensor,
-            bridge_sensor,
-        );
+        let events = extrapolate_sensor_updates(prev_bridge_sensor, bridge_sensor)
+            .into_iter()
+            .map(|bridge_sensor| Message::DeviceRefresh {
+                device: bridge_sensor_to_device(
+                    sensor_id.clone(),
+                    integration_id.clone(),
+                    bridge_sensor,
+                ),
+            });
 
         for event in events {
             sender.send(event).unwrap();

@@ -16,18 +16,14 @@ pub struct DummyConfig {
 pub struct Dummy {
     id: String,
     devices: HashMap<DeviceId, Device>,
-    sender: TxEventChannel,
-    config: DummyConfig,
 }
 
 #[async_trait]
 impl Integration for Dummy {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
+    fn new(id: &IntegrationId, _config: &config::Value, _sender: TxEventChannel) -> Self {
         Dummy {
             id: id.clone(),
             devices: HashMap::new(),
-            config: config.clone().try_into().unwrap(),
-            sender,
         }
     }
 
@@ -35,13 +31,13 @@ impl Integration for Dummy {
         let resp: HashMap<String, String> =
             reqwest::get("https://httpbin.org/ip").await?.json().await?;
         println!("{:#?}", resp);
-        println!("registered dummy integration");
+        println!("registered dummy integration {}", self.id);
 
         Ok(())
     }
 
     async fn start(&mut self) -> Result<(), Box<dyn Error>> {
-        println!("started dummy integration");
+        println!("started dummy integration {}", self.id);
 
         Ok(())
     }

@@ -25,8 +25,8 @@ impl DevicesManager {
 
         // FIXME: some of these .clone() calls may be unnecessary?
 
-        let old_state = self.state.clone();
-        let internal_state = old_state.get(&device.id);
+        let prev_state = self.state.clone();
+        let internal_state = prev_state.get(&device.id);
 
         self.state.insert(device.id.clone(), device.clone());
 

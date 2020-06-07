@@ -1,12 +1,11 @@
 use super::bridge::{BridgeSensor, BridgeSensors, ZLLSwitchState};
 use crate::homectl_core::{
     device::{Device, DeviceKind, SensorKind},
-    events::Message,
     integration::IntegrationId,
     integrations_manager::DeviceId,
 };
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum DimmerSwitchButtonId {
     On,
     Up,
@@ -15,7 +14,7 @@ pub enum DimmerSwitchButtonId {
     Unknown,
 }
 
-pub fn get_button_id(buttonevent: u32) -> DimmerSwitchButtonId {
+fn get_button_id(buttonevent: u32) -> DimmerSwitchButtonId {
     let str = buttonevent.to_string();
     let button_id = str.chars().nth(0);
 
@@ -34,7 +33,7 @@ pub fn cmp_button_id(buttonevent: u32, button_id: DimmerSwitchButtonId) -> bool 
     event_button_id == button_id
 }
 
-pub fn get_button_state(buttonevent: u32) -> bool {
+fn get_button_state(buttonevent: u32) -> bool {
     let str = buttonevent.to_string();
     let state = str.chars().nth(3);
 
@@ -59,11 +58,11 @@ pub fn is_button_pressed(buttonevent: Option<u32>, button_id: DimmerSwitchButton
     }
 }
 
-pub fn find_old_bridge_sensor(
-    old_bridge_sensors: &BridgeSensors,
+pub fn find_prev_bridge_sensor(
+    prev_bridge_sensors: &BridgeSensors,
     sensor_id: &String,
 ) -> Option<BridgeSensor> {
-    old_bridge_sensors
+    prev_bridge_sensors
         .get(sensor_id)
         .map(|bridge_sensor| bridge_sensor.clone())
 }
@@ -78,7 +77,7 @@ fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
     }
 }
 
-fn bridge_sensor_to_device(
+pub fn bridge_sensor_to_device(
     id: DeviceId,
     integration_id: IntegrationId,
     bridge_sensor: BridgeSensor,
@@ -137,69 +136,116 @@ fn bridge_sensor_to_device(
 ///
 /// Usually this will return a Vec with 0 or 1 items, but there are some
 /// scenarios where we might have missed some events due to polling.
-pub fn get_sensor_device_update_messages(
-    sensor_id: DeviceId,
-    integration_id: IntegrationId,
-    old_bridge_sensor: Option<BridgeSensor>,
-    bridge_sensor: BridgeSensor,
-) -> Vec<Message> {
+pub fn extrapolate_sensor_updates(
+    prev_bridge_sensor: Option<BridgeSensor>,
+    next_bridge_sensor: BridgeSensor,
+) -> Vec<BridgeSensor> {
     // Quick optimization: if the states are equal, there are no updates
-    if old_bridge_sensor == Some(bridge_sensor.clone()) {
+    if prev_bridge_sensor == Some(next_bridge_sensor.clone()) {
         return vec![];
     }
 
-    match (old_bridge_sensor.clone(), bridge_sensor.clone()) {
+    match (prev_bridge_sensor.clone(), next_bridge_sensor.clone()) {
         // ZLLPresence sensor updates are infrequent enough that we should not
         // need to worry about missing out on updates
-        (_, BridgeSensor::ZLLPresence { .. }) => {
-            let old = old_bridge_sensor.map(|bridge_sensor| {
-                bridge_sensor_to_device(
-                    sensor_id.clone(),
-                    integration_id.clone(),
-                    bridge_sensor.clone(),
-                )
-            });
-
-            let new = bridge_sensor_to_device(sensor_id, integration_id, bridge_sensor);
-
-            vec![Message::DeviceRefresh { device: new }]
-        }
+        (_, BridgeSensor::ZLLPresence { .. }) => vec![next_bridge_sensor],
 
         // ZLLSwitches can be pressed quickly, and a naive polling implementation would
-        // miss out on a lot of button events.
+        // miss out on a lot of button state transition events.
         (
             Some(BridgeSensor::ZLLSwitch {
                 state:
                     ZLLSwitchState {
-                        buttonevent: Some(old_buttonevent),
-                        lastupdated: old_lastupdated,
+                        buttonevent: Some(prev_buttonevent),
+                        lastupdated: prev_lastupdated,
                     },
                 ..
             }),
             BridgeSensor::ZLLSwitch {
                 state:
                     ZLLSwitchState {
-                        buttonevent: Some(buttonevent),
-                        lastupdated,
+                        buttonevent: Some(next_buttonevent),
+                        lastupdated: next_lastupdated,
                     },
-                ..
+                name,
             },
         ) => {
-            let mut events = Vec::new();
+            let mut updates = Vec::new();
 
-            let prev_button_id = get_button_id(buttonevent);
-            let next_button_id = get_button_id(buttonevent);
+            let prev_button_id = get_button_id(prev_buttonevent);
+            let next_button_id = get_button_id(next_buttonevent);
 
-            let prev_button_state = get_button_state(old_buttonevent);
-            let next_button_state = get_button_state(buttonevent);
+            let prev_button_state = get_button_state(prev_buttonevent);
+            let next_button_state = get_button_state(next_buttonevent);
 
-            // button ID and states remained unchanged but timestamp changed, assume we missed the first half of a button press/release (or release/press) cycle
-            if prev_button_id == next_button_id && prev_button_state == next_button_state {
-                // events.push(Message::DeviceRefresh {})
+            // button ID and states remained unchanged but timestamp changed,
+            // assume we missed the first half of a button press/release (or
+            // release/press) cycle
+            if prev_button_id == next_button_id
+                && prev_button_state == next_button_state
+                && prev_lastupdated != next_lastupdated
+            {
+                updates.push(BridgeSensor::ZLLSwitch {
+                    state: ZLLSwitchState {
+                        buttonevent: Some(to_buttonevent(
+                            prev_button_id.clone(),
+                            !prev_button_state,
+                        )),
+                        lastupdated: next_lastupdated.clone(),
+                    },
+                    name: name.clone(),
+                });
             }
 
-            events
+            // button ID has changed and the old button state was left pressed,
+            // release it
+            if prev_button_id != next_button_id && prev_button_state == true {
+                updates.push(BridgeSensor::ZLLSwitch {
+                    state: ZLLSwitchState {
+                        buttonevent: Some(to_buttonevent(prev_button_id.clone(), false)),
+                        lastupdated: next_lastupdated.clone(),
+                    },
+                    name: name.clone(),
+                });
+            }
+
+            // button ID has changed and the new button state is released,
+            // assume we missed a button press event
+            if prev_button_id != next_button_id && next_button_state == false {
+                updates.push(BridgeSensor::ZLLSwitch {
+                    state: ZLLSwitchState {
+                        buttonevent: Some(to_buttonevent(next_button_id.clone(), true)),
+                        lastupdated: next_lastupdated.clone(),
+                    },
+                    name: name.clone(),
+                });
+            }
+
+            // push most recent button event last
+            updates.push(next_bridge_sensor);
+
+            updates
         }
         _ => Vec::new(),
     }
+}
+
+fn to_buttonevent(button_id: DimmerSwitchButtonId, button_state: bool) -> u32 {
+    let mut s = String::new();
+
+    s.push(match button_id {
+        DimmerSwitchButtonId::On => '1',
+        DimmerSwitchButtonId::Up => '2',
+        DimmerSwitchButtonId::Down => '3',
+        DimmerSwitchButtonId::Off => '4',
+        _ => '0',
+    });
+    s.push('0');
+    s.push('0');
+    s.push(match button_state {
+        true => '0',  // INITIAL_PRESSED
+        false => '2', // SHORT_RELEASED
+    });
+
+    s.parse::<u32>().unwrap()
 }

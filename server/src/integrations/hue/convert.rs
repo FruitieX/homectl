@@ -1,9 +1,6 @@
-use super::{
-    bridge::{BridgeLight, BridgeSensor},
-    utils::{cmp_button_id, DimmerSwitchButtonId},
-};
+use super::bridge::BridgeLight;
 
-use crate::homectl_core::device::{Light, SensorKind};
+use crate::homectl_core::device::Light;
 use palette::{Hsl, IntoColor, Lch};
 
 pub fn to_palette(bridge_light: BridgeLight) -> Option<Lch> {
@@ -26,20 +23,5 @@ pub fn to_light(bridge_light: BridgeLight) -> Light {
         power: bridge_light.state.on,
         brightness: None,
         color: to_palette(bridge_light.clone()),
-    }
-}
-
-pub fn to_sensor(bridge_sensor: BridgeSensor) -> SensorKind {
-    match bridge_sensor {
-        BridgeSensor::ZLLPresence { name, state } => SensorKind::OnOffSensor {
-            value: state.presence,
-        },
-        BridgeSensor::ZLLSwitch { name, state } => SensorKind::DimmerSwitch {
-            on: false,
-            up: false,
-            down: false,
-            off: false,
-        },
-        _ => SensorKind::Unknown,
     }
 }
