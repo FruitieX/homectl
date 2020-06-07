@@ -6,7 +6,7 @@ pub mod utils;
 
 use crate::homectl_core::{
     device::Device,
-    events::TxEventChannel,
+    events::{Message, TxEventChannel},
     integration::{Integration, IntegrationId},
 };
 use async_trait::async_trait;
@@ -14,8 +14,10 @@ use bridge::BridgeState;
 use serde::Deserialize;
 use std::error::Error;
 
+use convert::bridge_light_to_device;
 use lights::poll_lights;
 use sensors::poll_sensors;
+use utils::bridge_sensor_to_device;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {
@@ -52,9 +54,18 @@ impl Integration for Hue {
         .json()
         .await?;
 
-        self.bridge_state = Some(bridge_state);
+        self.bridge_state = Some(bridge_state.clone());
 
-        println!("{:#?}", self.bridge_state);
+        for (id, bridge_light) in bridge_state.lights {
+            let device = bridge_light_to_device(id, self.id.clone(), bridge_light);
+            self.sender.send(Message::DeviceRefresh { device }).unwrap();
+        }
+
+        for (id, bridge_sensor) in bridge_state.sensors {
+            let device = bridge_sensor_to_device(id, self.id.clone(), bridge_sensor);
+            self.sender.send(Message::DeviceRefresh { device }).unwrap();
+        }
+
         println!("registered hue integration");
 
         Ok(())

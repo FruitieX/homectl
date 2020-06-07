@@ -48,10 +48,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(())
     };
 
-    // TODO :)
-    // find some other way to keep the main thread alive
-    // thread::sleep(std::time::Duration::new(10000, 0));
-
     loop {
         let msg = receiver.recv()?;
 
