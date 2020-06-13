@@ -12,8 +12,24 @@ pub struct OnOffDevice {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Light {
     pub power: bool,
+
+    /// Current brightness, if supported
     pub brightness: Option<f64>,
+
+    /// Current color, if supported
     pub color: Option<Lch>,
+}
+
+/// lights with multiple individually adjustable light sources
+#[derive(Clone, Debug, PartialEq)]
+pub struct MultiSourceLight {
+    pub power: bool,
+
+    /// Global brightness control for all lights in this MultiSourceLight
+    pub brightness: f64,
+
+    /// List of colors, one for each light in this MultiSourceLight
+    pub lights: Vec<Lch>,
 }
 
 /// button sensors, motion sensors
@@ -35,6 +51,7 @@ pub enum SensorKind {
 pub enum DeviceKind {
     OnOffDevice(OnOffDevice),
     Light(Light),
+    MultiSourceLight(MultiSourceLight),
     Sensor(SensorKind),
 }
 
