@@ -28,41 +28,33 @@ impl DevicesManager {
         if expected_state != Some(device.clone()) {
             let kind = device.kind.clone();
 
-            match (kind, expected_state) {
-                // Device was seen for the first time
-                (_, None) => {
-                    println!("Discovered device: {:?}", device);
-                    self.sender
-                        .send(Message::DeviceUpdate {
+            self.sender
+                .send(match (kind, expected_state) {
+                    // Device was seen for the first time
+                    (_, None) => {
+                        println!("Discovered device: {:?}", device);
+                        Message::DeviceUpdate {
                             old: None,
                             new: device,
-                        })
-                        .unwrap();
-                }
+                        }
+                    }
 
-                // Sensor state has changed, defer handling of this update to
-                // other subsystems
-                (DeviceKind::Sensor(_), Some(old)) => {
-                    self.sender
-                        .send(Message::DeviceUpdate {
-                            old: Some(old),
-                            new: device,
-                        })
-                        .unwrap();
-                }
+                    // Sensor state has changed, defer handling of this update
+                    // to other subsystems
+                    (DeviceKind::Sensor(_), Some(old)) => Message::DeviceUpdate {
+                        old: Some(old),
+                        new: device,
+                    },
 
-                // Device state does not match expected state, maybe the device
-                // missed a state update or forgot its state? Try fixing this by
-                // emitting a SetIntegrationDeviceState message back to
-                // integration
-                (_, Some(expected_state)) => {
-                    self.sender
-                        .send(Message::SetIntegrationDeviceState {
-                            device: expected_state,
-                        })
-                        .unwrap();
-                }
-            }
+                    // Device state does not match expected state, maybe the
+                    // device missed a state update or forgot its state? Try
+                    // fixing this by emitting a SetIntegrationDeviceState
+                    // message back to integration
+                    (_, Some(expected_state)) => Message::SetIntegrationDeviceState {
+                        device: expected_state,
+                    },
+                })
+                .unwrap();
         }
     }
 
@@ -79,7 +71,7 @@ impl DevicesManager {
         self.state.clone()
     }
 
-    /// Adjusts stored state for given device
+    /// Sets stored state for given device
     pub fn set_device_state(&mut self, device: &Device) {
         self.state.insert(device.id.clone(), device.clone());
     }
