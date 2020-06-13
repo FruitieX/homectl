@@ -69,14 +69,14 @@ impl IntegrationsManager {
         Ok(())
     }
 
-    pub fn set_device_state(&self, device: Device) {
+    pub fn set_integration_device_state(&self, device: Device) {
         let mut integrations = self.integrations.lock().unwrap();
 
         let integration = integrations.get_mut(&device.integration_id);
 
         match integration {
             Some(integration) => {
-                integration.set_device_state(device);
+                integration.set_integration_device_state(device);
             }
             None => {}
         }

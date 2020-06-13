@@ -54,11 +54,15 @@ async fn main() -> Result<(), Box<dyn Error>> {
         println!("got msg: {:?}", msg);
 
         match msg {
-            Message::DeviceRefresh { device } => devices_manager.handle_device_refresh(device),
+            Message::IntegrationDeviceRefresh { device } => {
+                devices_manager.handle_integration_device_refresh(device)
+            }
             Message::DeviceUpdate { old, new } => rules_engine.handle_device_update(old, new),
             Message::SetDeviceState { device } => {
-                devices_manager.set_device_state(device.clone());
-                integrations_manager.set_device_state(device);
+                devices_manager.set_device_state(&device);
+            }
+            Message::SetIntegrationDeviceState { device } => {
+                integrations_manager.set_integration_device_state(device);
             }
         }
     }

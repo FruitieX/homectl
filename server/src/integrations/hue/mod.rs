@@ -1,8 +1,8 @@
 pub mod bridge;
-pub mod lights;
 pub mod light_utils;
-pub mod sensors;
+pub mod lights;
 pub mod sensor_utils;
+pub mod sensors;
 
 use crate::homectl_core::{
     device::Device,
@@ -16,8 +16,8 @@ use std::error::Error;
 
 use light_utils::bridge_light_to_device;
 use lights::poll_lights;
-use sensors::poll_sensors;
 use sensor_utils::bridge_sensor_to_device;
+use sensors::poll_sensors;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {
@@ -58,12 +58,16 @@ impl Integration for Hue {
 
         for (id, bridge_light) in bridge_state.lights {
             let device = bridge_light_to_device(id, self.id.clone(), bridge_light);
-            self.sender.send(Message::DeviceRefresh { device }).unwrap();
+            self.sender
+                .send(Message::IntegrationDeviceRefresh { device })
+                .unwrap();
         }
 
         for (id, bridge_sensor) in bridge_state.sensors {
             let device = bridge_sensor_to_device(id, self.id.clone(), bridge_sensor);
-            self.sender.send(Message::DeviceRefresh { device }).unwrap();
+            self.sender
+                .send(Message::IntegrationDeviceRefresh { device })
+                .unwrap();
         }
 
         println!("registered hue integration");
@@ -89,7 +93,7 @@ impl Integration for Hue {
         Ok(())
     }
 
-    fn set_device_state(&mut self, device: Device) {
+    fn set_integration_device_state(&mut self, device: Device) {
         println!("hue: would set_device_state {:?}", device);
     }
 }

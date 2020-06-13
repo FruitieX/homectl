@@ -18,7 +18,7 @@ impl RulesEngine {
         // TODO: decide whether to emit SetDeviceState based on rules
         if old.is_some() {
             self.sender
-                .send(Message::SetDeviceState { device: new })
+                .send(Message::SetIntegrationDeviceState { device: new })
                 .unwrap();
         }
     }

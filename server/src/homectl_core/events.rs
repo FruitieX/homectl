@@ -3,15 +3,20 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug)]
 pub enum Message {
-    /// Information about current device state was gathered (usually through
-    /// polling), need to determine whether values have actually changed or not
-    DeviceRefresh { device: Device },
+    /// An integration has gathered information about current device state
+    /// through some means (usually polling). Note that state might not actually
+    /// have changed.
+    IntegrationDeviceRefresh { device: Device },
 
-    /// Device values have changed, need to take any appropriate actions
+    /// Internal device state update was detected, need to take any appropriate
+    /// actions.
     DeviceUpdate { old: Option<Device>, new: Device },
 
-    /// Triggers state change for device
+    /// Tell devices_manager to update internal device state.
     SetDeviceState { device: Device },
+
+    /// Tell integration to trigger state change for the device.
+    SetIntegrationDeviceState { device: Device },
 }
 
 pub type TxEventChannel = Sender<Message>;

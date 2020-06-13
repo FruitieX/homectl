@@ -48,7 +48,7 @@ pub async fn do_refresh_sensors(
 
         let events = extrapolate_sensor_updates(prev_bridge_sensor, bridge_sensor)
             .into_iter()
-            .map(|bridge_sensor| Message::DeviceRefresh {
+            .map(|bridge_sensor| Message::IntegrationDeviceRefresh {
                 device: bridge_sensor_to_device(
                     sensor_id.clone(),
                     integration_id.clone(),

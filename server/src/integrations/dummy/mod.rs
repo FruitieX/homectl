@@ -42,7 +42,7 @@ impl Integration for Dummy {
         Ok(())
     }
 
-    fn set_device_state(&mut self, device: Device) {
+    fn set_integration_device_state(&mut self, device: Device) {
         self.devices.insert(device.id.clone(), device);
     }
 }

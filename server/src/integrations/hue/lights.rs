@@ -33,7 +33,7 @@ pub async fn do_refresh_lights(
             kind: DeviceKind::Light(kind),
         };
 
-        sender.send(Message::DeviceRefresh { device }).unwrap();
+        sender.send(Message::IntegrationDeviceRefresh { device }).unwrap();
     }
 
     Ok(())
