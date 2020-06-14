@@ -31,12 +31,26 @@ pub fn color_config_as_lch(color_config: ColorConfig) -> Lch {
     }
 }
 
-// TODO: this needs to be an enum which contains either an inline device or a "link" to another device
+/// Link to another device, means the scene should read current state from
+/// another device
 #[derive(Clone, Deserialize, Debug)]
-pub struct SceneDeviceConfig {
+pub struct SceneDeviceLink {
+    pub integration_id: IntegrationId,
+    pub device_id: DeviceId,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct SceneDeviceState {
     pub power: bool,
     pub color: Option<ColorConfig>,
     pub brightness: Option<f64>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum SceneDeviceConfig {
+    SceneDeviceLink(SceneDeviceLink),
+    SceneDeviceState(SceneDeviceState),
 }
 
 pub type SceneDevicesConfig = HashMap<DeviceId, SceneDeviceConfig>;
