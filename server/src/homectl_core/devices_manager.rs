@@ -1,21 +1,24 @@
 use super::{
-    device::{Device, DeviceKind},
+    device::{Device, DeviceState},
     events::{Message, TxEventChannel},
+    scenes_manager::ScenesManager,
 };
 use std::collections::HashMap;
 
-type State = HashMap<String, Device>;
+pub type DevicesState = HashMap<String, Device>;
 
 pub struct DevicesManager {
     sender: TxEventChannel,
-    state: State,
+    state: DevicesState,
+    scenes_manager: ScenesManager,
 }
 
 impl DevicesManager {
-    pub fn new(sender: TxEventChannel) -> Self {
+    pub fn new(sender: TxEventChannel, scenes_manager: ScenesManager) -> Self {
         DevicesManager {
             sender,
             state: HashMap::new(),
+            scenes_manager,
         }
     }
 
@@ -26,7 +29,7 @@ impl DevicesManager {
 
         // Take action if the device state has changed from stored state
         if expected_state != Some(device.clone()) {
-            let kind = device.kind.clone();
+            let kind = device.state.clone();
 
             self.sender
                 .send(match (kind, expected_state) {
@@ -41,7 +44,7 @@ impl DevicesManager {
 
                     // Sensor state has changed, defer handling of this update
                     // to other subsystems
-                    (DeviceKind::Sensor(_), Some(old)) => Message::DeviceUpdate {
+                    (DeviceState::Sensor(_), Some(old)) => Message::DeviceUpdate {
                         old: Some(old),
                         new: device,
                     },
@@ -61,13 +64,16 @@ impl DevicesManager {
     /// Returns expected state for given device based on prev_state and possibly
     /// active scene
     fn get_expected_state(&self, device: &Device) -> Option<Device> {
-        let prev_state = &self.state;
-        let expected_state = prev_state.get(&device.id);
+        let expected_state = self.state.get(&device.id);
+
+        let scene_device_state = self
+            .scenes_manager
+            .find_scene_device_state(device, &self.state);
 
         expected_state.cloned()
     }
 
-    pub fn get_devices(&self) -> State {
+    pub fn get_devices(&self) -> DevicesState {
         self.state.clone()
     }
 

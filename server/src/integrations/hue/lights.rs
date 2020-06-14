@@ -1,5 +1,5 @@
 use crate::homectl_core::{
-    device::{Device, DeviceKind},
+    device::{Device, DeviceState},
     events::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -30,7 +30,7 @@ pub async fn do_refresh_lights(
             name: bridge_light.name.clone(),
             integration_id: integration_id.clone(),
             scene: None,
-            kind: DeviceKind::Light(kind),
+            state: DeviceState::Light(kind),
         };
 
         sender.send(Message::IntegrationDeviceRefresh { device }).unwrap();

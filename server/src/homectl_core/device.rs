@@ -1,4 +1,4 @@
-use super::integration::IntegrationId;
+use super::{integration::IntegrationId, scene::SceneId};
 use palette::Lch;
 use std::time::Instant;
 
@@ -48,7 +48,7 @@ pub enum SensorKind {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum DeviceKind {
+pub enum DeviceState {
     OnOffDevice(OnOffDevice),
     Light(Light),
     MultiSourceLight(MultiSourceLight),
@@ -58,18 +58,18 @@ pub enum DeviceKind {
 /// active scene that's controlling the device state, if any
 #[derive(Clone, Debug, PartialEq)]
 pub struct DeviceSceneState {
-    scene_name: String,
-    activation_time: Instant,
+    pub scene_id: SceneId,
+    pub activation_time: Instant,
 }
 
 /// unique identifier for the Device
 type DeviceId = String;
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Device<T = DeviceKind> {
+pub struct Device<T = DeviceState> {
     pub id: DeviceId,
     pub name: String,
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
-    pub kind: T,
+    pub state: T,
 }

@@ -2,7 +2,7 @@ use super::bridge::{
     BridgeButtonEvent, BridgeSensor, BridgeSensorId, BridgeSensors, ZLLSwitchState,
 };
 use crate::homectl_core::{
-    device::{Device, DeviceKind, SensorKind},
+    device::{Device, DeviceState, SensorKind},
     integration::IntegrationId,
     integrations_manager::DeviceId,
 };
@@ -100,7 +100,7 @@ pub fn bridge_sensor_to_device(
 
     match bridge_sensor {
         BridgeSensor::ZLLPresence { state, .. } => {
-            let kind = DeviceKind::Sensor(SensorKind::OnOffSensor {
+            let kind = DeviceState::Sensor(SensorKind::OnOffSensor {
                 value: state.presence,
             });
 
@@ -109,12 +109,12 @@ pub fn bridge_sensor_to_device(
                 name,
                 integration_id,
                 scene,
-                kind,
+                state: kind,
             }
         }
 
         BridgeSensor::ZLLSwitch { state, .. } => {
-            let kind = DeviceKind::Sensor(SensorKind::DimmerSwitch {
+            let kind = DeviceState::Sensor(SensorKind::DimmerSwitch {
                 on: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::On),
                 up: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::Up),
                 down: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::Down),
@@ -126,19 +126,19 @@ pub fn bridge_sensor_to_device(
                 name,
                 integration_id,
                 scene,
-                kind,
+                state: kind,
             }
         }
 
         _ => {
-            let kind = DeviceKind::Sensor(SensorKind::Unknown);
+            let kind = DeviceState::Sensor(SensorKind::Unknown);
 
             Device {
                 id,
                 name,
                 integration_id,
                 scene,
-                kind,
+                state: kind,
             }
         }
     }

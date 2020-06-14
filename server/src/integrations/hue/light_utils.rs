@@ -1,7 +1,7 @@
 use super::bridge::BridgeLight;
 
 use crate::homectl_core::{
-    device::{Device, DeviceKind, Light},
+    device::{Device, DeviceState, Light},
     integration::IntegrationId,
     integrations_manager::DeviceId,
 };
@@ -39,13 +39,13 @@ pub fn bridge_light_to_device(
     bridge_light: BridgeLight,
 ) -> Device {
     let name = bridge_light.name.clone();
-    let kind = DeviceKind::Light(to_light(bridge_light));
+    let kind = DeviceState::Light(to_light(bridge_light));
 
     Device {
         id,
         name,
         integration_id,
         scene: None,
-        kind,
+        state: kind,
     }
 }

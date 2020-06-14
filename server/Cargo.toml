@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 config = "0.9"
 serde = { version = "1.0", features = ["derive"] }
-palette = "0.5"
+palette = { version = "0.5", features= ["serializing"] }
 diesel = { version = "1.0.0", features = ["postgres"] }
 async-trait = "0.1.31"
 reqwest = { version = "0.10", features = ["json"] }

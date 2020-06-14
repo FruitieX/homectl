@@ -1,4 +1,6 @@
 extern crate config;
+use super::{integration::IntegrationId, integrations_manager::DeviceId, scene::SceneId};
+use palette::{rgb::Rgb, Hsv, Lch};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -11,12 +13,49 @@ pub struct IntegrationConfig {
     // deserialized by the integration itself
 }
 
-#[derive(Deserialize, Debug)]
-pub struct Config {
-    pub integrations: HashMap<String, IntegrationConfig>,
+pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum ColorConfig {
+    Lch(Lch),
+    Hsv(Hsv),
+    Rgb(Rgb),
 }
 
-type OpaqueIntegrationsConfigs = HashMap<String, config::Value>;
+pub fn color_config_as_lch(color_config: ColorConfig) -> Lch {
+    match color_config {
+        ColorConfig::Lch(lch) => lch.into(),
+        ColorConfig::Hsv(hsv) => hsv.into(),
+        ColorConfig::Rgb(rgb) => rgb.into(),
+    }
+}
+
+// TODO: this needs to be an enum which contains either an inline device or a "link" to another device
+#[derive(Clone, Deserialize, Debug)]
+pub struct SceneDeviceConfig {
+    pub power: bool,
+    pub color: Option<ColorConfig>,
+    pub brightness: Option<f64>,
+}
+
+pub type SceneDevicesConfig = HashMap<DeviceId, SceneDeviceConfig>;
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct SceneConfig {
+    pub name: String,
+    pub devices: SceneDevicesConfig,
+}
+
+pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
+
+#[derive(Deserialize, Debug)]
+pub struct Config {
+    pub integrations: IntegrationsConfig,
+    pub scenes: ScenesConfig,
+}
+
+type OpaqueIntegrationsConfigs = HashMap<IntegrationId, config::Value>;
 
 pub fn read_config() -> (Config, OpaqueIntegrationsConfigs) {
     let mut settings = config::Config::default();

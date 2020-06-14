@@ -1,5 +1,10 @@
+use std::collections::HashMap;
+
+pub type SceneId = String;
+
+#[derive(Clone)]
 pub struct Scene {
-  id: String,
-  name: String,
-  
+    name: String,
 }
+
+pub type Scenes = HashMap<SceneId, Scene>;

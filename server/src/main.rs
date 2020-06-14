@@ -10,7 +10,7 @@ mod integrations;
 use db::{actions::find_floorplans, establish_connection};
 use homectl_core::{
     devices_manager::DevicesManager, events::*, integrations_manager::IntegrationsManager,
-    rules_engine::RulesEngine,
+    rules_engine::RulesEngine, scenes_manager::ScenesManager,
 };
 use std::error::Error;
 
@@ -25,7 +25,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (sender, receiver) = mk_channel();
 
     let integrations_manager = IntegrationsManager::new(sender.clone());
-    let mut devices_manager = DevicesManager::new(sender.clone());
+    let scenes_manager = ScenesManager::new(config.scenes);
+    let mut devices_manager = DevicesManager::new(sender.clone(), scenes_manager);
     let rules_engine = RulesEngine::new(sender.clone());
 
     for (id, integration_config) in &config.integrations {
