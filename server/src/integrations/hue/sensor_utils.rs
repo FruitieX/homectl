@@ -2,9 +2,8 @@ use super::bridge::{
     BridgeButtonEvent, BridgeSensor, BridgeSensorId, BridgeSensors, ZLLSwitchState,
 };
 use crate::homectl_core::{
-    device::{Device, DeviceState, SensorKind},
+    device::{Device, DeviceState, SensorKind, DeviceId},
     integration::IntegrationId,
-    integrations_manager::DeviceId,
 };
 
 #[derive(Clone, PartialEq)]

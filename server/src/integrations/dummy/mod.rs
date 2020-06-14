@@ -1,8 +1,7 @@
 use crate::homectl_core::{
-    device::Device,
+    device::{DeviceId, Device},
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
-    integrations_manager::DeviceId,
 };
 use async_trait::async_trait;
 use serde::Deserialize;

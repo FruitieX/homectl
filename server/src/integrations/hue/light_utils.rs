@@ -1,9 +1,8 @@
 use super::bridge::BridgeLight;
 
 use crate::homectl_core::{
-    device::{Device, DeviceState, Light},
+    device::{Device, DeviceId, DeviceState, Light},
     integration::IntegrationId,
-    integrations_manager::DeviceId,
 };
 use palette::{Hsl, IntoColor, Lch};
 

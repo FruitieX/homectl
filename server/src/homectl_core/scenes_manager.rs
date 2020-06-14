@@ -1,7 +1,7 @@
 use super::{
     config::{color_config_as_lch, SceneDeviceConfig, ScenesConfig},
     device::{Device, DeviceState, Light},
-    devices_manager::DevicesState,
+    devices_manager::{get_device_state_key, DevicesState},
 };
 
 pub struct ScenesManager {
@@ -24,7 +24,7 @@ impl ScenesManager {
 
         let state = match scene_device {
             SceneDeviceConfig::SceneDeviceLink(link) => {
-                let device = devices.get(&link.device_id)?;
+                let device = devices.get(&(link.integration_id.clone(), link.device_id.clone()))?;
                 let state = device.state.clone();
                 state
             }

@@ -10,8 +10,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-pub type DeviceId = String;
-
 pub type IntegrationsTree = HashMap<IntegrationId, Box<dyn Integration>>;
 pub type Integrations = Arc<Mutex<IntegrationsTree>>;
 

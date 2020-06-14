@@ -63,7 +63,7 @@ pub struct DeviceSceneState {
 }
 
 /// unique identifier for the Device
-type DeviceId = String;
+pub type DeviceId = String;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Device<T = DeviceState> {

@@ -1,5 +1,5 @@
 extern crate config;
-use super::{integration::IntegrationId, integrations_manager::DeviceId, scene::SceneId};
+use super::{integration::IntegrationId, scene::SceneId, device::DeviceId};
 use palette::{rgb::Rgb, Hsv, Lch};
 use serde::Deserialize;
 use std::collections::HashMap;

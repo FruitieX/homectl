@@ -1,11 +1,17 @@
 use super::{
-    device::{Device, DeviceState},
+    device::{Device, DeviceId, DeviceState},
     events::{Message, TxEventChannel},
+    integration::IntegrationId,
     scenes_manager::ScenesManager,
 };
 use std::collections::HashMap;
 
-pub type DevicesState = HashMap<String, Device>;
+pub type DeviceStateKey = (IntegrationId, DeviceId);
+pub type DevicesState = HashMap<DeviceStateKey, Device>;
+
+pub fn get_device_state_key(device: &Device) -> DeviceStateKey {
+    (device.integration_id.clone(), device.id.clone())
+}
 
 pub struct DevicesManager {
     sender: TxEventChannel,
@@ -64,7 +70,7 @@ impl DevicesManager {
     /// Returns expected state for given device based on prev_state and possibly
     /// active scene
     fn get_expected_state(&self, device: &Device) -> Option<Device> {
-        let expected_state = self.state.get(&device.id);
+        let expected_state = self.state.get(&get_device_state_key(device));
 
         let scene_device_state = self
             .scenes_manager
@@ -79,6 +85,7 @@ impl DevicesManager {
 
     /// Sets stored state for given device
     pub fn set_device_state(&mut self, device: &Device) {
-        self.state.insert(device.id.clone(), device.clone());
+        self.state
+            .insert(get_device_state_key(device), device.clone());
     }
 }
