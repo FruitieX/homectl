@@ -1,8 +1,10 @@
 use super::{
-    config::{color_config_as_lch, SceneDeviceConfig, ScenesConfig},
+    config::{color_config_as_lch, GroupDeviceLink, SceneDeviceConfig, ScenesConfig},
     device::{Device, DeviceSceneState, DeviceState, Light},
     devices_manager::DevicesState,
+    groups_manager::GroupsManager,
 };
+use std::collections::HashMap;
 
 pub struct ScenesManager {
     config: ScenesConfig,
@@ -17,10 +19,33 @@ impl ScenesManager {
         &self,
         device: &Device,
         devices: &DevicesState,
+        groups_manager: &GroupsManager,
     ) -> Option<DeviceState> {
         let scene_id = &device.scene.as_ref()?.scene_id;
         let scene = self.config.get(scene_id)?;
-        let scene_devices = scene.devices.clone()?;
+
+        let mut scene_devices = scene.devices.clone()?;
+        let scene_groups = scene.groups.clone()?;
+
+        // merge in devices from scene_groups
+        for (group_id, scene_device_config) in scene_groups {
+            let group_devices = groups_manager.find_group_device_links(&group_id);
+
+            for GroupDeviceLink {
+                integration_id,
+                device_id,
+            } in group_devices
+            {
+                let empty_devices_integrations = HashMap::new();
+                let mut scene_devices_integrations = scene_devices
+                    .get(&integration_id)
+                    .unwrap_or(&empty_devices_integrations)
+                    .to_owned();
+                scene_devices_integrations.insert(device_id, scene_device_config.clone());
+                scene_devices.insert(integration_id, scene_devices_integrations.clone());
+            }
+        }
+
         let scene_device = scene_devices.get(&device.id)?.get(&device.integration_id)?;
 
         match scene_device {
@@ -40,7 +65,7 @@ impl ScenesManager {
                     }),
                     ..device.clone()
                 };
-                self.find_scene_device_state(&device, devices)
+                self.find_scene_device_state(&device, devices, groups_manager)
             }
 
             SceneDeviceConfig::SceneDeviceState(scene_device) => Some(DeviceState::Light(Light {

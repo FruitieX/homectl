@@ -1,8 +1,5 @@
 extern crate config;
-use super::{
-    device::DeviceId, devices_manager::DeviceStateKey, group::GroupId, integration::IntegrationId,
-    scene::SceneId,
-};
+use super::{device::DeviceId, group::GroupId, integration::IntegrationId, scene::SceneId};
 use palette::{rgb::Rgb, Hsv, Lch};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -78,10 +75,35 @@ pub struct SceneConfig {
 
 pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
 
+#[derive(Clone, Deserialize, Debug)]
+pub struct GroupDeviceLink {
+    pub integration_id: IntegrationId,
+    pub device_id: DeviceId,
+}
+
+pub type GroupDevicesConfig = Vec<GroupDeviceLink>;
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct GroupLink {
+    pub group_id: GroupId,
+}
+
+pub type GroupLinksConfig = Vec<GroupLink>;
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct GroupConfig {
+    pub name: String,
+    pub devices: Option<GroupDevicesConfig>,
+    pub groups: Option<GroupLinksConfig>,
+}
+
+pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
+
 #[derive(Deserialize, Debug)]
 pub struct Config {
     pub integrations: IntegrationsConfig,
     pub scenes: ScenesConfig,
+    pub groups: GroupsConfig,
 }
 
 type OpaqueIntegrationsConfigs = HashMap<IntegrationId, config::Value>;

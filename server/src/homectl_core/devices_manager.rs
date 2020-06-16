@@ -1,6 +1,7 @@
 use super::{
     device::{Device, DeviceId, DeviceState},
     events::{Message, TxEventChannel},
+    groups_manager::GroupsManager,
     integration::IntegrationId,
     scenes_manager::ScenesManager,
 };
@@ -17,14 +18,20 @@ pub struct DevicesManager {
     sender: TxEventChannel,
     state: DevicesState,
     scenes_manager: ScenesManager,
+    groups_manager: GroupsManager,
 }
 
 impl DevicesManager {
-    pub fn new(sender: TxEventChannel, scenes_manager: ScenesManager) -> Self {
+    pub fn new(
+        sender: TxEventChannel,
+        scenes_manager: ScenesManager,
+        groups_manager: GroupsManager,
+    ) -> Self {
         DevicesManager {
             sender,
             state: HashMap::new(),
             scenes_manager,
+            groups_manager,
         }
     }
 
@@ -72,9 +79,9 @@ impl DevicesManager {
     fn get_expected_state(&self, device: &Device) -> Option<Device> {
         let expected_state = self.state.get(&get_device_state_key(device));
 
-        let scene_device_state = self
-            .scenes_manager
-            .find_scene_device_state(device, &self.state);
+        let scene_device_state =
+            self.scenes_manager
+                .find_scene_device_state(device, &self.state, &self.groups_manager);
 
         expected_state.cloned()
     }

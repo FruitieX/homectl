@@ -3,6 +3,7 @@ pub mod device;
 pub mod devices_manager;
 pub mod events;
 pub mod group;
+pub mod groups_manager;
 pub mod integration;
 pub mod integrations_manager;
 pub mod rule;
