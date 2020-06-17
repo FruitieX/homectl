@@ -1,6 +1,5 @@
 use super::{
-    config::{GroupDeviceLink, GroupsConfig},
-    group::GroupId,
+    group::{GroupsConfig, GroupId, GroupDeviceLink},
 };
 
 pub struct GroupsManager {

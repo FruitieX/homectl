@@ -1,10 +1,23 @@
 use super::{
     device::Device,
     events::{Message, TxEventChannel},
+    scene::SceneId,
 };
+use serde::Deserialize;
 
 pub struct RulesEngine {
     sender: TxEventChannel,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub enum ActionId {
+    ActivateScene,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct Action {
+    action: ActionId,
+    scene_id: SceneId,
 }
 
 impl RulesEngine {

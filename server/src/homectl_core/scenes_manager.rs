@@ -1,8 +1,7 @@
 use super::{
-    config::{color_config_as_lch, GroupDeviceLink, SceneDeviceConfig, ScenesConfig},
     device::{Device, DeviceSceneState, DeviceState, Light},
     devices_manager::DevicesState,
-    groups_manager::GroupsManager,
+    groups_manager::GroupsManager, scene::{SceneDeviceConfig, ScenesConfig, color_config_as_lch}, group::GroupDeviceLink,
 };
 use std::collections::HashMap;
 
@@ -27,6 +26,7 @@ impl ScenesManager {
         let mut scene_devices = scene.devices.clone()?;
         let scene_groups = scene.groups.clone()?;
 
+        // TODO: extract this part into a separate function to reduce clutter
         // merge in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
             let group_devices = groups_manager.find_group_device_links(&group_id);
