@@ -48,27 +48,21 @@ impl RulesEngine {
     }
 
     fn find_matching_actions(&self, old_state: DevicesState, new_state: DevicesState) -> Actions {
-        let prev_triggered_routine_ids: HashSet<RoutineId> = self
-            .config
-            .clone()
-            .into_iter()
-            .filter(|(_, routine)| is_routine_triggered(&old_state, routine).unwrap())
-            .map(|(routine_id, _)| routine_id)
-            .collect();
+        // if states are equal we can bail out early
+        if old_state == new_state {
+            return vec![];
+        }
 
-        let new_triggered_routine_ids: HashSet<RoutineId> = self
-            .config
-            .clone()
-            .into_iter()
-            .filter(|(_, routine)| is_routine_triggered(&new_state, routine).unwrap())
-            .map(|(routine_id, _)| routine_id)
-            .collect();
+        let prev_triggered_routine_ids = get_triggered_routine_ids(&self.config, &old_state);
+        let new_triggered_routine_ids = get_triggered_routine_ids(&self.config, &new_state);
 
         let triggered_routine_ids =
             new_triggered_routine_ids.difference(&prev_triggered_routine_ids);
 
         triggered_routine_ids
             .map(|id| {
+                // .unwrap() should be safe here because triggered_routine_ids
+                // contains only existing routine_ids
                 let routine = self.config.get(id).unwrap();
                 routine.actions.clone()
             })
@@ -77,12 +71,33 @@ impl RulesEngine {
     }
 }
 
+fn get_triggered_routine_ids(
+    routines: &RoutinesConfig,
+    state: &DevicesState,
+) -> HashSet<RoutineId> {
+    let triggered_routine_ids: HashSet<RoutineId> = routines
+        .iter()
+        .filter(|(_, routine)| match is_routine_triggered(state, routine) {
+            Ok(triggered) => triggered,
+            Err(e) => {
+                println!("Error while checking routine {:?} rules: {}", routine, e);
+                false
+            }
+        })
+        .map(|(routine_id, _)| routine_id.clone())
+        .collect();
+
+    triggered_routine_ids
+}
+
 fn is_routine_triggered(state: &DevicesState, routine: &Routine) -> Result<bool, String> {
-    Ok(routine
+    let result = routine
         .rules
         .iter()
-        // FIXME: unsafe .unwrap()
-        .all(|rule| is_rule_triggered(state, rule).unwrap()))
+        .map(|rule| is_rule_triggered(state, rule))
+        .all(|result| result == Ok(true));
+
+    Ok(result)
 }
 
 fn get_device_sensor_kind(device: &Device) -> Option<SensorKind> {
