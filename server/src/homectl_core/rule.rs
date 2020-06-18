@@ -28,9 +28,9 @@ pub enum SensorRuleState {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Rule {
-    integration_id: IntegrationId,
-    device_id: DeviceId,
-    state: SensorRuleState,
+    pub integration_id: IntegrationId,
+    pub device_id: DeviceId,
+    pub state: SensorRuleState,
 }
 
 pub type Rules = Vec<Rule>;

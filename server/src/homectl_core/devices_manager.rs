@@ -5,7 +5,7 @@ use super::{
     scene::SceneId,
     scenes_manager::ScenesManager,
 };
-use std::{collections::HashMap, error::Error, time::Instant};
+use std::{collections::HashMap, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
 pub type DevicesState = HashMap<DeviceStateKey, Device>;
@@ -50,8 +50,7 @@ impl DevicesManager {
 
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
-                (DeviceState::Sensor(_), Some(old)) => {
-                    let old_state = self.state.clone();
+                (DeviceState::Sensor(_), Some(_)) => {
                     self.set_device_state(&device);
                 }
 
@@ -92,10 +91,6 @@ impl DevicesManager {
         Some(expected_state.clone())
     }
 
-    pub fn get_devices(&self) -> DevicesState {
-        self.state.clone()
-    }
-
     /// Sets stored state for given device and dispatches DeviceUpdate
     pub fn set_device_state(&mut self, device: &Device) {
         let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
@@ -133,9 +128,13 @@ impl DevicesManager {
 
         for (integration_id, devices) in scene_devices_config {
             for (device_id, _) in devices {
-                let mut device = self.get_device(&integration_id, &device_id)?.clone();
-                device.scene = device_scene_state.clone();
-                self.set_device_state(&device);
+                let _: Option<Device> = try {
+                    let mut device = self.get_device(&integration_id, &device_id)?.clone();
+                    device.scene = device_scene_state.clone();
+                    self.set_device_state(&device);
+
+                    device
+                };
             }
         }
 

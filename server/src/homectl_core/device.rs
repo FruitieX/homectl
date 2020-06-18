@@ -73,3 +73,7 @@ pub struct Device<T = DeviceState> {
     pub scene: Option<DeviceSceneState>,
     pub state: T,
 }
+
+pub fn format_device_name(device: &Device) -> String {
+    format!("{}, ({} / {})", device.name, device.integration_id, device.id)
+}
