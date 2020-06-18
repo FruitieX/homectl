@@ -10,7 +10,7 @@ mod integrations;
 use db::{actions::find_floorplans, establish_connection};
 use homectl_core::{
     devices_manager::DevicesManager, events::*, groups_manager::GroupsManager,
-    integrations_manager::IntegrationsManager, rules_engine::RulesEngine,
+    integrations_manager::IntegrationsManager, rules_engine::RulesEngine, scene::SceneDescriptor,
     scenes_manager::ScenesManager,
 };
 use std::error::Error;
@@ -27,9 +27,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let integrations_manager = IntegrationsManager::new(sender.clone());
     let groups_manager = GroupsManager::new(config.groups);
-    let scenes_manager = ScenesManager::new(config.scenes);
-    let mut devices_manager = DevicesManager::new(sender.clone(), scenes_manager, groups_manager);
-    let rules_engine = RulesEngine::new(sender.clone());
+    let scenes_manager = ScenesManager::new(config.scenes, groups_manager);
+    let mut devices_manager = DevicesManager::new(sender.clone(), scenes_manager);
+    let rules_engine = RulesEngine::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {
         let opaque_integration_config: &config::Value =
@@ -60,12 +60,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
             Message::IntegrationDeviceRefresh { device } => {
                 devices_manager.handle_integration_device_refresh(device)
             }
-            Message::DeviceUpdate { old, new } => rules_engine.handle_device_update(old, new),
+            Message::DeviceUpdate {
+                old_state,
+                new_state,
+                old,
+                new,
+            } => rules_engine.handle_device_update(old_state, new_state, old, new),
             Message::SetDeviceState { device } => {
                 devices_manager.set_device_state(&device);
             }
             Message::SetIntegrationDeviceState { device } => {
                 integrations_manager.set_integration_device_state(device);
+            }
+            Message::ActivateScene(SceneDescriptor { scene_id }) => {
+                devices_manager.activate_scene(&scene_id);
             }
         }
     }

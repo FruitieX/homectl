@@ -1,35 +1,41 @@
 use super::{
     device::{Device, DeviceSceneState, DeviceState, Light},
     devices_manager::DevicesState,
-    groups_manager::GroupsManager, scene::{SceneDeviceConfig, ScenesConfig, color_config_as_lch}, group::GroupDeviceLink,
+    group::GroupDeviceLink,
+    groups_manager::GroupsManager,
+    scene::{
+        color_config_as_lch, SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneId,
+        ScenesConfig,
+    },
 };
 use std::collections::HashMap;
 
 pub struct ScenesManager {
     config: ScenesConfig,
+    groups_manager: GroupsManager,
 }
 
 impl ScenesManager {
-    pub fn new(config: ScenesConfig) -> Self {
-        ScenesManager { config }
+    pub fn new(config: ScenesConfig, groups_manager: GroupsManager) -> Self {
+        ScenesManager {
+            config,
+            groups_manager,
+        }
     }
 
-    pub fn find_scene_device_state(
-        &self,
-        device: &Device,
-        devices: &DevicesState,
-        groups_manager: &GroupsManager,
-    ) -> Option<DeviceState> {
-        let scene_id = &device.scene.as_ref()?.scene_id;
-        let scene = self.config.get(scene_id)?;
+    pub fn find_scene(&self, scene_id: &SceneId) -> Option<&SceneConfig> {
+        self.config.get(scene_id)
+    }
+
+    pub fn find_scene_devices_config(&self, scene_id: &SceneId) -> Option<SceneDevicesConfig> {
+        let scene = self.find_scene(&scene_id)?;
 
         let mut scene_devices = scene.devices.clone()?;
         let scene_groups = scene.groups.clone()?;
 
-        // TODO: extract this part into a separate function to reduce clutter
-        // merge in devices from scene_groups
+        // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
-            let group_devices = groups_manager.find_group_device_links(&group_id);
+            let group_devices = self.groups_manager.find_group_device_links(&group_id);
 
             for GroupDeviceLink {
                 integration_id,
@@ -46,6 +52,17 @@ impl ScenesManager {
             }
         }
 
+        Some(scene_devices)
+    }
+
+    pub fn find_scene_device_state(
+        &self,
+        device: &Device,
+        devices: &DevicesState,
+    ) -> Option<DeviceState> {
+        let scene_id = &device.scene.as_ref()?.scene_id;
+
+        let scene_devices = self.find_scene_devices_config(scene_id)?;
         let scene_device = scene_devices.get(&device.id)?.get(&device.integration_id)?;
 
         match scene_device {
@@ -65,7 +82,7 @@ impl ScenesManager {
                     }),
                     ..device.clone()
                 };
-                self.find_scene_device_state(&device, devices, groups_manager)
+                self.find_scene_device_state(&device, devices)
             }
 
             SceneDeviceConfig::SceneDeviceState(scene_device) => Some(DeviceState::Light(Light {

@@ -20,8 +20,6 @@ pub fn color_config_as_lch(color_config: ColorConfig) -> Lch {
     }
 }
 
-/// Link to another device, means the scene should read current state from
-/// another device
 #[derive(Clone, Deserialize, Debug)]
 pub struct SceneDeviceLink {
     pub integration_id: IntegrationId,
@@ -29,14 +27,11 @@ pub struct SceneDeviceLink {
     pub brightness: Option<f64>, // allow overriding brightness
 }
 
-/// Link to another scene, means the scene should merge all state from another
-/// scene
 #[derive(Clone, Deserialize, Debug)]
-pub struct SceneLink {
+pub struct SceneDescriptor {
     pub scene_id: SceneId,
 }
 
-/// State to be applied to a device
 #[derive(Clone, Deserialize, Debug)]
 pub struct SceneDeviceState {
     pub power: bool,
@@ -47,8 +42,15 @@ pub struct SceneDeviceState {
 #[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum SceneDeviceConfig {
+    /// Link to another device, means the scene should read current state from
+    /// another device
     SceneDeviceLink(SceneDeviceLink),
-    SceneLink(SceneLink),
+
+    /// Link to another scene, means the scene should merge all state from another
+    /// scene
+    SceneLink(SceneDescriptor),
+
+    /// State to be applied to a device
     SceneDeviceState(SceneDeviceState),
 }
 

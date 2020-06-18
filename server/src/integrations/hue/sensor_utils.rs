@@ -2,7 +2,7 @@ use super::bridge::{
     BridgeButtonEvent, BridgeSensor, BridgeSensorId, BridgeSensors, ZLLSwitchState,
 };
 use crate::homectl_core::{
-    device::{Device, DeviceState, SensorKind, DeviceId},
+    device::{Device, DeviceId, DeviceState, SensorKind},
     integration::IntegrationId,
 };
 
@@ -72,9 +72,7 @@ pub fn find_bridge_sensor(
     bridge_sensors: &BridgeSensors,
     sensor_id: &BridgeSensorId,
 ) -> Option<BridgeSensor> {
-    bridge_sensors
-        .get(sensor_id)
-        .map(|bridge_sensor| bridge_sensor.clone())
+    bridge_sensors.get(sensor_id).cloned()
 }
 
 /// Returns name of BridgeSensor
