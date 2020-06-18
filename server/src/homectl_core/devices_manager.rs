@@ -35,6 +35,8 @@ impl DevicesManager {
 
     /// Checks whether device values were changed or not due to refresh
     pub fn handle_integration_device_refresh(&mut self, device: Device) {
+        // recompute expected_state here as it may have changed since we last
+        // computed it
         let expected_state = self.get_expected_state(&device);
 
         // Take action if the device state has changed from stored state
@@ -96,16 +98,17 @@ impl DevicesManager {
         let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
 
         let old_state = self.state.clone();
+        let expected_state = self.get_expected_state(&device).unwrap_or(device.clone());
 
         self.state
-            .insert(get_device_state_key(device), device.clone());
+            .insert(get_device_state_key(device), expected_state.clone());
 
         self.sender
             .send(Message::DeviceUpdate {
                 old_state,
                 new_state: self.state.clone(),
                 old,
-                new: device.clone(),
+                new: expected_state.clone(),
             })
             .unwrap();
     }
