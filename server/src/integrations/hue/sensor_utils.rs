@@ -92,6 +92,7 @@ pub fn bridge_sensor_to_device(
     integration_id: IntegrationId,
     bridge_sensor: BridgeSensor,
 ) -> Device {
+    let id = format!("sensors/{}", id);
     let name = get_bridge_sensor_name(bridge_sensor.clone());
     let scene = None;
 

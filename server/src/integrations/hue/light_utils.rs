@@ -41,7 +41,7 @@ pub fn bridge_light_to_device(
     let kind = DeviceState::Light(to_light(bridge_light));
 
     Device {
-        id,
+        id: format!("lights/{}", id),
         name,
         integration_id,
         scene: None,
