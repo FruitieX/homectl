@@ -3,7 +3,7 @@ use super::{
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
-use crate::integrations::{dummy::Dummy, hue::Hue};
+use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue};
 use std::{
     collections::HashMap,
     error::Error,
@@ -81,7 +81,7 @@ impl IntegrationsManager {
     }
 }
 
-// integrations will perhaps one day be loaded dynamically:
+// TODO: Load integrations dynamically as plugins:
 // https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html
 fn load_integration(
     module_name: &String,
@@ -90,6 +90,7 @@ fn load_integration(
     sender: TxEventChannel,
 ) -> Result<Box<dyn Integration>, String> {
     match module_name.as_str() {
+        "circadian" => Ok(Box::new(Circadian::new(id, config, sender))),
         "dummy" => Ok(Box::new(Dummy::new(id, config, sender))),
         "hue" => Ok(Box::new(Hue::new(id, config, sender))),
         _ => Err(format!("Unknown module name {}!", module_name)),
