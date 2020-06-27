@@ -67,6 +67,7 @@ impl Integration for Lifx {
             let res = match res {
                 Ok(lifx_msg) => {
                     let target = match lifx_msg.clone() {
+                        LifxMsg::Get(addr) => addr,
                         LifxMsg::SetColor(state) => state.addr,
                         LifxMsg::State(state) => state.addr,
                         LifxMsg::SetPower(state) => state.addr,
