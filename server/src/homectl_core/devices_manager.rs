@@ -99,11 +99,11 @@ impl DevicesManager {
 
         let old_state = self.state.clone();
 
-        // TODO: we never update state here for devices with a set scene 
+        // TODO: we never update state here for devices with a set scene
         let expected_state = self.get_expected_state(&device).unwrap_or(device.clone());
 
         if !set_scene {
-            // expected_state.scene = 
+            // expected_state.scene =
         }
 
         self.state
@@ -137,13 +137,16 @@ impl DevicesManager {
 
         for (integration_id, devices) in scene_devices_config {
             for (device_id, _) in devices {
-                let _: Option<Device> = try {
-                    let mut device = self.get_device(&integration_id, &device_id)?.clone();
-                    device.scene = device_scene_state.clone();
-                    self.set_device_state(&device, true);
+                let device = self.get_device(&integration_id, &device_id).clone();
 
-                    device
-                };
+                match device {
+                    Some(device) => {
+                        let mut device = device.clone();
+                        device.scene = device_scene_state.clone();
+                        self.set_device_state(&device, true);
+                    }
+                    None => {}
+                }
             }
         }
 

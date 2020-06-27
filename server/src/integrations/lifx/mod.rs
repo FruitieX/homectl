@@ -97,16 +97,22 @@ impl Integration for Lifx {
     }
 
     fn set_integration_device_state(&mut self, device: Device) {
-        let _: Result<(), Box<dyn Error>> = try {
-            let lifx_state = to_lifx_state(device)?;
+        let lifx_state = to_lifx_state(device);
 
-            self.udp_sender_tx
-                .send(LifxMsg::SetPower(lifx_state.clone()))?;
+        match lifx_state {
+            Ok(lifx_state) => {
+                self.udp_sender_tx
+                    .send(LifxMsg::SetPower(lifx_state.clone()))
+                    .unwrap_or(());
 
-            // don't bother setting color if power is off
-            if lifx_state.power != 65535 {
-                self.udp_sender_tx.send(LifxMsg::SetColor(lifx_state))?;
+                // don't bother setting color if power is off
+                if lifx_state.power != 65535 {
+                    self.udp_sender_tx
+                        .send(LifxMsg::SetColor(lifx_state))
+                        .unwrap_or(());
+                }
             }
-        };
+            Err(_) => {}
+        }
     }
 }
