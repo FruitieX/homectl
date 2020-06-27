@@ -23,7 +23,7 @@ pub type Socket = (RecvHalf, SendHalf);
 
 pub async fn init_udp_socket(config: LifxConfig) -> io::Result<Socket> {
     // Setup the UDP socket. LIFX uses port 56700.
-    let addr = "127.0.0.1:56700".parse::<SocketAddr>().unwrap();
+    let addr = "0.0.0.0:56700".parse::<SocketAddr>().unwrap();
 
     let socket = UdpSocket::bind(addr).await?;
     socket
@@ -52,17 +52,18 @@ pub fn listen_udp_stream(
 ) {
     let mut buf: [u8; MAX_UDP_PACKET_SIZE] = [0; MAX_UDP_PACKET_SIZE];
     tokio::spawn(async move {
-        let asd = recv_half.recv_from(&mut buf);
-        let res = asd.await;
+        loop {
+            let res = recv_half.recv_from(&mut buf).await;
 
-        match res {
-            // FIXME: should probably do some sanity checks on bytes_read
-            Ok((_bytes_read, addr)) => {
-                let msg = read_lifx_msg(&buf, addr);
+            match res {
+                // FIXME: should probably do some sanity checks on bytes_read
+                Ok((_bytes_read, addr)) => {
+                    let msg = read_lifx_msg(&buf, addr);
 
-                handle_lifx_msg(msg, integration_id.clone(), sender.clone());
+                    handle_lifx_msg(msg, integration_id.clone(), sender.clone());
+                }
+                Err(e) => { println!("Error in udp recv_from {}", e); }
             }
-            Err(_) => {}
         }
     });
 }

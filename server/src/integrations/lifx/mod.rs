@@ -59,32 +59,34 @@ impl Integration for Lifx {
         tokio::spawn(async move { poll_lights(udp_sender_tx).await });
 
         tokio::spawn(async move {
-            let res = {
-                let udp_sender_rx = udp_sender_rx.lock().unwrap();
-                udp_sender_rx.recv()
-            };
+            loop {
+                let res = {
+                    let udp_sender_rx = udp_sender_rx.lock().unwrap();
+                    udp_sender_rx.recv()
+                };
 
-            let res = match res {
-                Ok(lifx_msg) => {
-                    let target = match lifx_msg.clone() {
-                        LifxMsg::Get(addr) => addr,
-                        LifxMsg::SetColor(state) => state.addr,
-                        LifxMsg::State(state) => state.addr,
-                        LifxMsg::SetPower(state) => state.addr,
-                        _ => panic!("Send unknown LifxMsg not supported"),
-                    };
+                let res = match res {
+                    Ok(lifx_msg) => {
+                        let target = match lifx_msg.clone() {
+                            LifxMsg::Get(addr) => addr,
+                            LifxMsg::SetColor(state) => state.addr,
+                            LifxMsg::State(state) => state.addr,
+                            LifxMsg::SetPower(state) => state.addr,
+                            _ => panic!("Send unknown LifxMsg not supported"),
+                        };
 
-                    let msg = mk_lifx_udp_msg(lifx_msg);
-                    match send_half.send_to(&msg.clone(), &target).await {
-                        Ok(_) => {}
-                        Err(_) => {}
-                    };
-                    Ok(())
-                }
-                Err(e) => Err(e),
-            };
+                        let msg = mk_lifx_udp_msg(lifx_msg);
+                        match send_half.send_to(&msg.clone(), &target).await {
+                            Ok(_size) => {}
+                            Err(e) => { println!("Error while sending UDP packet {}", e); }
+                        };
+                        Ok(())
+                    }
+                    Err(e) => Err(e),
+                };
 
-            res
+                res.unwrap_or(());
+            }
         });
 
         Ok(())
