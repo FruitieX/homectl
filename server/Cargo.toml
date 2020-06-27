@@ -7,11 +7,15 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+byteorder = "1"
+bytes = "0.5"
 chrono = "0.4"
 config = "0.9"
+futures = "0.3"
 serde = { version = "1.0", features = ["derive"] }
 palette = { version = "0.5", features= ["serializing"] }
 diesel = { version = "1.0.0", features = ["postgres"] }
 async-trait = "0.1.31"
 reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
+tokio-util = { version = "0.3", features = ["codec", "udp"] }

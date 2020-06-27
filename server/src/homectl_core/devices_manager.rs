@@ -47,13 +47,13 @@ impl DevicesManager {
                 // Device was seen for the first time
                 (_, None) => {
                     println!("Discovered device: {:?}", device);
-                    self.set_device_state(&device);
+                    self.set_device_state(&device, false);
                 }
 
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
                 (DeviceState::Sensor(_), Some(_)) => {
-                    self.set_device_state(&device);
+                    self.set_device_state(&device, false);
                 }
 
                 // Device state does not match expected state, maybe the
@@ -94,11 +94,17 @@ impl DevicesManager {
     }
 
     /// Sets stored state for given device and dispatches DeviceUpdate
-    pub fn set_device_state(&mut self, device: &Device) {
+    pub fn set_device_state(&mut self, device: &Device, set_scene: bool) {
         let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
 
         let old_state = self.state.clone();
+
+        // TODO: we never update state here for devices with a set scene 
         let expected_state = self.get_expected_state(&device).unwrap_or(device.clone());
+
+        if !set_scene {
+            // expected_state.scene = 
+        }
 
         self.state
             .insert(get_device_state_key(device), expected_state.clone());
@@ -134,7 +140,7 @@ impl DevicesManager {
                 let _: Option<Device> = try {
                     let mut device = self.get_device(&integration_id, &device_id)?.clone();
                     device.scene = device_scene_state.clone();
-                    self.set_device_state(&device);
+                    self.set_device_state(&device, true);
 
                     device
                 };

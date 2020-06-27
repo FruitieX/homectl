@@ -38,13 +38,13 @@ pub fn bridge_light_to_device(
     bridge_light: BridgeLight,
 ) -> Device {
     let name = bridge_light.name.clone();
-    let kind = DeviceState::Light(to_light(bridge_light));
+    let state = DeviceState::Light(to_light(bridge_light));
 
     Device {
         id: format!("lights/{}", id),
         name,
         integration_id,
         scene: None,
-        state: kind,
+        state,
     }
 }

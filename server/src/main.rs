@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     loop {
         let msg = receiver.recv()?;
 
-        println!("got msg: {:?}", msg);
+        // println!("got msg: {:?}", msg);
 
         match msg {
             Message::IntegrationDeviceRefresh { device } => {
@@ -67,7 +67,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 new,
             } => rules_engine.handle_device_update(old_state, new_state, old, new),
             Message::SetDeviceState { device } => {
-                devices_manager.set_device_state(&device);
+                devices_manager.set_device_state(&device, false);
             }
             Message::SetIntegrationDeviceState { device } => {
                 integrations_manager.set_integration_device_state(device);

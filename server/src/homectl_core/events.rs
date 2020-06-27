@@ -15,6 +15,8 @@ pub enum Message {
     DeviceUpdate {
         old_state: DevicesState,
         new_state: DevicesState,
+
+        // TODO: these two are unused?
         old: Option<Device>,
         new: Device,
     },
