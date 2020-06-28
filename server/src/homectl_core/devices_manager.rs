@@ -35,24 +35,27 @@ impl DevicesManager {
 
     /// Checks whether device values were changed or not due to refresh
     pub fn handle_integration_device_refresh(&mut self, device: Device) {
+        println!("handle_integration_device_refresh {:?}", device);
+        let state_device = self.get_device(&device.integration_id, &device.id);
+
         // recompute expected_state here as it may have changed since we last
         // computed it
         let expected_state = self.get_expected_state(&device);
 
         // Take action if the device state has changed from stored state
-        if expected_state != Some(device.clone()) {
+        if Some(&device) != state_device || expected_state != device.state {
             let kind = device.state.clone();
 
-            match (kind, expected_state) {
+            match (kind, state_device, expected_state) {
                 // Device was seen for the first time
-                (_, None) => {
+                (_, None, _) => {
                     println!("Discovered device: {:?}", device);
                     self.set_device_state(&device, false);
                 }
 
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
-                (DeviceState::Sensor(_), Some(_)) => {
+                (DeviceState::Sensor(_), Some(_), _) => {
                     self.set_device_state(&device, false);
                 }
 
@@ -60,16 +63,18 @@ impl DevicesManager {
                 // device missed a state update or forgot its state? Try
                 // fixing this by emitting a SetIntegrationDeviceState
                 // message back to integration
-                (_, Some(expected_state)) => {
+                (_, _, expected_state) => {
                     println!(
                         "Device state mismatch detected: (was: {:?}, expected: {:?})",
                         device, expected_state
                     );
+
+                    let mut device = device.clone();
+                    device.state = expected_state;
+
                     self.sender
                         .clone()
-                        .send(Message::SetIntegrationDeviceState {
-                            device: expected_state,
-                        })
+                        .send(Message::SetIntegrationDeviceState { device })
                         .unwrap();
                 }
             }
@@ -78,43 +83,56 @@ impl DevicesManager {
 
     /// Returns expected state for given device based on prev_state and possibly
     /// active scene
-    fn get_expected_state(&self, device: &Device) -> Option<Device> {
-        // TODO: need to account for brightness
-        let mut expected_state = self.state.get(&get_device_state_key(device))?.clone();
+    fn get_expected_state(&self, device: &Device) -> DeviceState {
+        match device.state {
+            // Sensors should always use the most recent sensor reading
+            DeviceState::Sensor(_) => device.state.clone(),
 
-        let scene_device_state = self
-            .scenes_manager
-            .find_scene_device_state(device, &self.state);
+            _ => {
+                // TODO: need to account for brightness here?
+                let device = self
+                    .state
+                    .get(&get_device_state_key(device))
+                    .unwrap_or(device)
+                    .clone();
 
-        scene_device_state.map(|s| {
-            expected_state.state = s;
-        });
+                let scene_device_state = self
+                    .scenes_manager
+                    .find_scene_device_state(&device, &self.state);
 
-        Some(expected_state.clone())
+                scene_device_state.unwrap_or(device.state)
+            }
+        }
     }
 
     /// Sets stored state for given device and dispatches DeviceUpdate
     pub fn set_device_state(&mut self, device: &Device, set_scene: bool) {
         let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
-
         let old_state = self.state.clone();
 
-        // TODO: we never update state here for devices with a set scene
-        let expected_state = self.get_expected_state(&device).unwrap_or(device.clone());
+        let mut device = device.clone();
 
-        if !set_scene {
-            // expected_state.scene =
+        // Restore scene if set_scene is false
+        match (set_scene, old.clone()) {
+            (false, Some(old)) => {
+                device.scene = old.scene;
+            }
+            _ => {}
         }
 
+        // Allow active scene to override device state
+        let expected_state = self.get_expected_state(&device);
+        device.state = expected_state;
+
         self.state
-            .insert(get_device_state_key(device), expected_state.clone());
+            .insert(get_device_state_key(&device), device.clone());
 
         self.sender
             .send(Message::DeviceUpdate {
                 old_state,
                 new_state: self.state.clone(),
                 old,
-                new: expected_state.clone(),
+                new: device,
             })
             .unwrap();
     }
