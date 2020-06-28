@@ -5,7 +5,10 @@ use crate::homectl_core::{
 };
 
 use super::bridge::BridgeLights;
-use super::{light_utils::to_light, HueConfig};
+use super::{light_utils::bridge_light_to_device, HueConfig};
+use palette::{Hsv, Yxy};
+use reqwest::Client;
+use serde::{Deserialize, Serialize};
 use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
 
@@ -23,17 +26,11 @@ pub async fn do_refresh_lights(
     .await?;
 
     for (light_id, bridge_light) in bridge_lights {
-        let kind = to_light(bridge_light.clone());
+        let device = bridge_light_to_device(light_id, integration_id.clone(), bridge_light);
 
-        let device = Device {
-            id: light_id,
-            name: bridge_light.name.clone(),
-            integration_id: integration_id.clone(),
-            scene: None,
-            state: DeviceState::Light(kind),
-        };
-
-        sender.send(Message::IntegrationDeviceRefresh { device }).unwrap();
+        sender
+            .send(Message::IntegrationDeviceRefresh { device })
+            .unwrap();
     }
 
     Ok(())
@@ -55,4 +52,81 @@ pub async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sende
             Err(e) => println!("Error while polling lights: {:?}", e),
         }
     }
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct OnOffDeviceMsg {
+    on: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct LightMsg {
+    on: bool,
+    bri: u32,
+    xy: Vec<f32>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum HueMsg {
+    OnOffDeviceMsg(OnOffDeviceMsg),
+    LightMsg(LightMsg),
+}
+
+pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), Box<dyn Error>> {
+    let body = match device.state {
+        DeviceState::OnOffDevice(state) => {
+            Ok(HueMsg::OnOffDeviceMsg(OnOffDeviceMsg { on: state.power }))
+        }
+        DeviceState::Light(state) => {
+            Ok(match state.color {
+                Some(color) => {
+                    let color: Yxy = color.into();
+
+                    // palette hue value is [0, 360[, Hue uses [0, 65536[
+                    // let hue = ((color.hue.to_positive_degrees() / 360.0) * 65536.0).floor() as u16;
+
+                    // palette sat value is [0, 1], Hue uses [0, 254]
+                    // let sat = (f32::min(color.saturation * 254.0, 1.0)).floor() as u16;
+
+                    // palette bri value is [0, 1], Hue uses [0, 254]
+                    // let bri = (f32::min(color.value, 1.0) * 254.0).floor() as u16;
+
+                    let x = color.x;
+                    let y = color.y;
+
+                    let xy = vec![x, y];
+                    let bri = (color.luma * 254.0 * state.brightness.unwrap_or(1.0) as f32).floor()
+                        as u32;
+
+                    HueMsg::LightMsg(LightMsg {
+                        on: state.power,
+                        xy,
+                        bri,
+                    })
+                }
+                None => HueMsg::OnOffDeviceMsg(OnOffDeviceMsg { on: state.power }),
+            })
+
+            // TODO: transition support
+            // body.insert("transitiontime", state.);
+        }
+        _ => Err("Unsupported device type encountered in hue set_device_state"),
+    }?;
+
+    let res = Client::builder()
+        .build()?
+        .put(&format!(
+            "http://{}/api/{}/{}/state",
+            config.addr, config.username, device.id
+        ))
+        .json(&body)
+        .send()
+        .await?
+        .text()
+        .await?;
+
+    println!("{}", res);
+
+    Ok(())
 }

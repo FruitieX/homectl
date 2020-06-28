@@ -68,7 +68,7 @@ impl Integration for Circadian {
         Ok(())
     }
 
-    fn set_integration_device_state(&mut self, _device: Device) {
+    async fn set_integration_device_state(&mut self, _device: Device) {
         // do nothing
     }
 }

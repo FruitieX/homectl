@@ -98,7 +98,7 @@ impl Integration for Lifx {
         Ok(())
     }
 
-    fn set_integration_device_state(&mut self, device: Device) {
+    async fn set_integration_device_state(&mut self, device: Device) {
         let lifx_state = to_lifx_state(device);
 
         match lifx_state {

@@ -15,7 +15,7 @@ use serde::Deserialize;
 use std::error::Error;
 
 use light_utils::bridge_light_to_device;
-use lights::poll_lights;
+use lights::{poll_lights, set_device_state};
 use sensor_utils::bridge_sensor_to_device;
 use sensors::poll_sensors;
 
@@ -93,7 +93,12 @@ impl Integration for Hue {
         Ok(())
     }
 
-    fn set_integration_device_state(&mut self, device: Device) {
-        println!("hue: would set_device_state {:?}", device);
+    async fn set_integration_device_state(&mut self, device: Device) {
+        match set_device_state(self.config.clone(), device).await {
+            Ok(_) => {}
+            Err(e) => {
+                println!("Error while setting hue state: {}", e);
+            }
+        }
     }
 }

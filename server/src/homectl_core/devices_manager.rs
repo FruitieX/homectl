@@ -5,6 +5,7 @@ use super::{
     scene::SceneId,
     scenes_manager::ScenesManager,
 };
+use palette::Lch;
 use std::{collections::HashMap, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
@@ -22,6 +23,76 @@ pub struct DevicesManager {
     sender: TxEventChannel,
     state: DevicesState,
     scenes_manager: ScenesManager,
+}
+
+fn cmp_lch_state(a: &Option<Lch>, b: &Option<Lch>) -> bool {
+    let delta_l = 1.1;
+    let delta_hue = 1.5;
+    let delta_chroma = 1.2;
+
+    match (a, b) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(_), None) => false,
+        (Some(a), Some(b)) => {
+            if f32::abs(a.l - b.l) > delta_l {
+                return false;
+            }
+            if f32::abs(a.hue.to_positive_degrees() - b.hue.to_positive_degrees()) > delta_hue {
+                return false;
+            }
+            if f32::abs(a.chroma - b.chroma) > delta_chroma {
+                return false;
+            }
+
+            true
+        }
+    }
+}
+
+fn cmp_light_brightness(a: Option<f64>, b: Option<f64>) -> bool {
+    let delta_brightness = 0.02;
+
+    match (a, b) {
+        (None, None) => true,
+        (None, Some(_)) => false,
+        (Some(_), None) => false,
+        (Some(a), Some(b)) => f64::abs(a - b) <= delta_brightness,
+    }
+}
+
+fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
+    match (a, b) {
+        (DeviceState::OnOffDevice(a), DeviceState::OnOffDevice(b)) => a.power == b.power,
+        (DeviceState::Light(a), DeviceState::Light(b)) => {
+            if a.power != b.power {
+                return false;
+            }
+            // If both lights are turned off, state matches
+            if a.power == false && b.power == false {
+                return true;
+            }
+            // TODO: need to account for brightness here, because hardware doesn't have a brightness param while we do
+            if !cmp_light_brightness(a.brightness, b.brightness) {
+                return false;
+            }
+            return cmp_lch_state(&a.color, &b.color);
+        }
+        (DeviceState::MultiSourceLight(a), DeviceState::MultiSourceLight(b)) => {
+            if a.power != b.power {
+                return false;
+            }
+            if !cmp_light_brightness(a.brightness, b.brightness) {
+                return false;
+            }
+            a.lights
+                .iter()
+                .zip(b.lights.iter())
+                .map(|(a, b)| cmp_lch_state(&Some(a.clone()), &Some(b.clone())))
+                .all(|value| value)
+        }
+        _ => false,
+    }
 }
 
 impl DevicesManager {
@@ -64,9 +135,13 @@ impl DevicesManager {
                 // fixing this by emitting a SetIntegrationDeviceState
                 // message back to integration
                 (_, _, expected_state) => {
+                    if cmp_device_states(&device.state, &expected_state) {
+                        return;
+                    }
+
                     println!(
-                        "Device state mismatch detected: (was: {:?}, expected: {:?})",
-                        device, expected_state
+                        "Device state mismatch detected ({}/{}): (was: {:?}, expected: {:?})",
+                        device.integration_id, device.id, device.state, expected_state
                     );
 
                     let mut device = device.clone();
@@ -89,7 +164,6 @@ impl DevicesManager {
             DeviceState::Sensor(_) => device.state.clone(),
 
             _ => {
-                // TODO: need to account for brightness here?
                 let scene_device_state = self
                     .scenes_manager
                     .find_scene_device_state(&device, &self.state);

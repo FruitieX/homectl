@@ -5,7 +5,7 @@ use std::time::Instant;
 /// simple on/off devices such as relays, lights
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct OnOffDevice {
-    power: bool,
+    pub power: bool,
 }
 
 /// lights with adjustable brightness and/or color
@@ -26,7 +26,7 @@ pub struct MultiSourceLight {
     pub power: bool,
 
     /// Global brightness control for all lights in this MultiSourceLight
-    pub brightness: f64,
+    pub brightness: Option<f64>,
 
     /// List of colors, one for each light in this MultiSourceLight
     pub lights: Vec<Lch>,
@@ -72,8 +72,4 @@ pub struct Device<T = DeviceState> {
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
     pub state: T,
-}
-
-pub fn format_device_name(device: &Device) -> String {
-    format!("{}, ({} / {})", device.name, device.integration_id, device.id)
 }

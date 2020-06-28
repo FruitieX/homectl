@@ -68,7 +68,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 devices_manager.set_device_state(&device, false);
             }
             Message::SetIntegrationDeviceState { device } => {
-                integrations_manager.set_integration_device_state(device);
+                integrations_manager
+                    .set_integration_device_state(device)
+                    .await;
             }
             Message::ActivateScene(SceneDescriptor { scene_id }) => {
                 devices_manager.activate_scene(&scene_id);

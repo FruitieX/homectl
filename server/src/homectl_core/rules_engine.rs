@@ -1,6 +1,6 @@
 use super::{
     device::{Device, DeviceState, SensorKind},
-    devices_manager::{find_device, mk_device_state_key, DevicesState},
+    devices_manager::{find_device, DevicesState},
     events::{Message, TxEventChannel},
     rule::{Action, Actions, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState},
 };
@@ -21,10 +21,10 @@ impl RulesEngine {
         old_state: DevicesState,
         new_state: DevicesState,
         old: Option<Device>,
-        new: Device,
+        _new: Device,
     ) {
         match old {
-            Some(old) => {
+            Some(_) => {
                 // println!("device_updated {:?} (was: {:?})", new, old);
 
                 let matching_actions = self.find_matching_actions(old_state, new_state);

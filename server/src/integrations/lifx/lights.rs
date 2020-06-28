@@ -21,7 +21,7 @@ const MAX_UDP_PACKET_SIZE: usize = 1 << 16;
 
 pub type Socket = (RecvHalf, SendHalf);
 
-pub async fn init_udp_socket(config: LifxConfig) -> io::Result<Socket> {
+pub async fn init_udp_socket(_config: LifxConfig) -> io::Result<Socket> {
     // Setup the UDP socket. LIFX uses port 56700.
     let addr = "0.0.0.0:56700".parse::<SocketAddr>().unwrap();
 
@@ -62,7 +62,9 @@ pub fn listen_udp_stream(
 
                     handle_lifx_msg(msg, integration_id.clone(), sender.clone());
                 }
-                Err(e) => { println!("Error in udp recv_from {}", e); }
+                Err(e) => {
+                    println!("Error in udp recv_from {}", e);
+                }
             }
         }
     });
