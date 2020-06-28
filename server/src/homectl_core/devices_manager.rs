@@ -35,7 +35,7 @@ impl DevicesManager {
 
     /// Checks whether device values were changed or not due to refresh
     pub fn handle_integration_device_refresh(&mut self, device: Device) {
-        println!("handle_integration_device_refresh {:?}", device);
+        // println!("handle_integration_device_refresh {:?}", device);
         let state_device = self.get_device(&device.integration_id, &device.id);
 
         // recompute expected_state here as it may have changed since we last
@@ -90,23 +90,25 @@ impl DevicesManager {
 
             _ => {
                 // TODO: need to account for brightness here?
-                let device = self
-                    .state
-                    .get(&get_device_state_key(device))
-                    .unwrap_or(device)
-                    .clone();
-
                 let scene_device_state = self
                     .scenes_manager
                     .find_scene_device_state(&device, &self.state);
 
-                scene_device_state.unwrap_or(device.state)
+                scene_device_state.unwrap_or_else(|| {
+                    let device = self
+                        .state
+                        .get(&get_device_state_key(device))
+                        .unwrap_or(device)
+                        .clone();
+
+                    device.state
+                })
             }
         }
     }
 
     /// Sets stored state for given device and dispatches DeviceUpdate
-    pub fn set_device_state(&mut self, device: &Device, set_scene: bool) {
+    pub fn set_device_state(&mut self, device: &Device, set_scene: bool) -> Device {
         let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
         let old_state = self.state.clone();
 
@@ -132,9 +134,11 @@ impl DevicesManager {
                 old_state,
                 new_state: self.state.clone(),
                 old,
-                new: device,
+                new: device.clone(),
             })
             .unwrap();
+
+        device
     }
 
     pub fn get_device(
@@ -147,7 +151,9 @@ impl DevicesManager {
     }
 
     pub fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
-        let scene_devices_config = self.scenes_manager.find_scene_devices_config(scene_id)?;
+        let scene_devices_config = self
+            .scenes_manager
+            .find_scene_devices_config(&self.state, scene_id)?;
         let device_scene_state = Some(DeviceSceneState {
             scene_id: scene_id.to_owned(),
             activation_time: Instant::now(),
@@ -155,13 +161,18 @@ impl DevicesManager {
 
         for (integration_id, devices) in scene_devices_config {
             for (device_id, _) in devices {
-                let device = self.get_device(&integration_id, &device_id).clone();
+                let device = self.get_device(&integration_id, &device_id);
 
                 match device {
                     Some(device) => {
                         let mut device = device.clone();
                         device.scene = device_scene_state.clone();
-                        self.set_device_state(&device, true);
+                        let device = self.set_device_state(&device, true);
+
+                        self.sender
+                            .clone()
+                            .send(Message::SetIntegrationDeviceState { device })
+                            .unwrap();
                     }
                     None => {}
                 }
@@ -170,4 +181,31 @@ impl DevicesManager {
 
         Some(true)
     }
+}
+
+pub fn find_device(
+    devices: &DevicesState,
+    integration_id: &IntegrationId,
+    device_id: Option<&DeviceId>,
+    name: Option<&String>,
+) -> Option<Device> {
+    let (_, device) = devices.iter().find(
+        |((candidate_integration_id, candidate_device_id), candidate_device)| {
+            if integration_id != candidate_integration_id {
+                return false;
+            }
+            if device_id.is_some() && device_id != Some(candidate_device_id) {
+                return false;
+            }
+
+            // TODO: regex matches
+            if name.is_some() && name != Some(&candidate_device.name) {
+                return false;
+            }
+
+            true
+        },
+    )?;
+
+    Some(device.clone())
 }

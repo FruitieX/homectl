@@ -23,7 +23,8 @@ pub fn color_config_as_lch(color_config: ColorConfig) -> Lch {
 #[derive(Clone, Deserialize, Debug)]
 pub struct SceneDeviceLink {
     pub integration_id: IntegrationId,
-    pub device_id: DeviceId,
+    pub device_id: Option<DeviceId>,
+    pub name: Option<String>,
     pub brightness: Option<f64>, // allow overriding brightness
 }
 

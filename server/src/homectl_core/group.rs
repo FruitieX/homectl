@@ -10,7 +10,8 @@ use std::collections::HashMap;
 #[derive(Clone, Deserialize, Debug)]
 pub struct GroupDeviceLink {
     pub integration_id: IntegrationId,
-    pub device_id: DeviceId,
+    pub device_id: Option<DeviceId>,
+    pub name: Option<String>,
 }
 
 pub type GroupDevicesConfig = Vec<GroupDeviceLink>;

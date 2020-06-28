@@ -1,6 +1,6 @@
 use super::{
     device::{Device, DeviceState, SensorKind},
-    devices_manager::{mk_device_state_key, DevicesState},
+    devices_manager::{find_device, mk_device_state_key, DevicesState},
     events::{Message, TxEventChannel},
     rule::{Action, Actions, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState},
 };
@@ -25,7 +25,7 @@ impl RulesEngine {
     ) {
         match old {
             Some(old) => {
-                println!("device_updated {:?} (was: {:?})", new, old);
+                // println!("device_updated {:?} (was: {:?})", new, old);
 
                 let matching_actions = self.find_matching_actions(old_state, new_state);
 
@@ -182,14 +182,19 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
 }
 
 fn is_rule_triggered(state: &DevicesState, rule: &Rule) -> Result<bool, String> {
-    let device = state
-        .get(&mk_device_state_key(&rule.integration_id, &rule.device_id))
-        .ok_or(format!(
-            "Could not find device: {} / {}",
-            rule.integration_id, rule.device_id
-        ))?;
+    // Try finding matching device
+    let device = find_device(
+        state,
+        &rule.integration_id,
+        rule.device_id.as_ref(),
+        rule.name.as_ref(),
+    )
+    .ok_or(format!(
+        "Could not find matching device for rule: {:?}",
+        rule
+    ))?;
 
-    let triggered = compare_rule_device_state(rule, device)?;
+    let triggered = compare_rule_device_state(rule, &device)?;
 
     Ok(triggered)
 }
