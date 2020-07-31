@@ -35,6 +35,27 @@ impl ScenesManager {
         let scene = self.find_scene(&scene_id)?;
 
         let mut scene_devices = scene.devices.clone().unwrap_or(HashMap::new());
+
+        // replace device names by device_ids in device_configs
+        scene_devices = scene_devices
+            .iter()
+            .map(|(integration_id, device_configs)| {
+                (
+                    integration_id.clone(),
+                    device_configs
+                        .iter()
+                        .map(|(device_name, device_config)| {
+                            let device =
+                                find_device(devices, &integration_id, None, Some(device_name));
+
+                            let device_id = device.map(|d| d.id).unwrap_or(String::from("N/A"));
+                            (device_id, device_config.clone())
+                        })
+                        .collect(),
+                )
+            })
+            .collect();
+
         let scene_groups = scene.groups.clone().unwrap_or(HashMap::new());
 
         // merges in devices from scene_groups
@@ -57,7 +78,12 @@ impl ScenesManager {
                             .get(&integration_id)
                             .unwrap_or(&empty_devices_integrations)
                             .to_owned();
-                        scene_devices_integrations.insert(device.id, scene_device_config.clone());
+
+                        // only insert device config if it did not exist yet
+                        if !scene_devices_integrations.contains_key(&device.id) {
+                            scene_devices_integrations
+                                .insert(device.id, scene_device_config.clone());
+                        }
                         scene_devices.insert(integration_id, scene_devices_integrations.clone());
                     }
                     None => {}
