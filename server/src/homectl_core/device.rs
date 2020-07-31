@@ -1,5 +1,5 @@
 use super::{integration::IntegrationId, scene::SceneId};
-use palette::Lch;
+use palette::{Lch, Hsv};
 use std::time::Instant;
 
 /// simple on/off devices such as relays, lights
@@ -7,6 +7,8 @@ use std::time::Instant;
 pub struct OnOffDevice {
     pub power: bool,
 }
+
+pub type DeviceColor = Lch;
 
 /// lights with adjustable brightness and/or color
 #[derive(Clone, Debug, PartialEq)]
@@ -17,7 +19,7 @@ pub struct Light {
     pub brightness: Option<f64>,
 
     /// Current color, if supported
-    pub color: Option<Lch>,
+    pub color: Option<DeviceColor>,
 }
 
 /// lights with multiple individually adjustable light sources
@@ -29,7 +31,7 @@ pub struct MultiSourceLight {
     pub brightness: Option<f64>,
 
     /// List of colors, one for each light in this MultiSourceLight
-    pub lights: Vec<Lch>,
+    pub lights: Vec<DeviceColor>,
 }
 
 /// button sensors, motion sensors

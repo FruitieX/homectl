@@ -1,11 +1,11 @@
 use super::{
-    device::{Device, DeviceId, DeviceSceneState, DeviceState},
+    device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState},
     events::{Message, TxEventChannel},
     integration::IntegrationId,
     scene::SceneId,
     scenes_manager::ScenesManager,
 };
-use palette::Lch;
+use palette::rgb::Rgb;
 use std::{collections::HashMap, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
@@ -25,39 +25,42 @@ pub struct DevicesManager {
     scenes_manager: ScenesManager,
 }
 
-fn cmp_lch_state(a: &Option<Lch>, b: &Option<Lch>) -> bool {
-    let delta_l = 1.1;
-    let delta_hue = 1.5;
-    let delta_chroma = 1.2;
+fn cmp_light_state(
+    a: &Option<DeviceColor>,
+    a_bri: &Option<f64>,
+    b: &Option<DeviceColor>,
+    b_bri: &Option<f64>,
+) -> bool {
+    let delta = 0.05;
 
     match (a, b) {
         (None, None) => true,
         (None, Some(_)) => false,
         (Some(_), None) => false,
         (Some(a), Some(b)) => {
-            if f32::abs(a.l - b.l) > delta_l {
+            let mut a_rgb: Rgb = a.clone().into();
+            let mut b_rgb: Rgb = b.clone().into();
+
+            a_rgb.red = a_rgb.red * (a_bri.unwrap_or(1.0) as f32);
+            a_rgb.green = a_rgb.green * (a_bri.unwrap_or(1.0) as f32);
+            a_rgb.blue = a_rgb.blue * (a_bri.unwrap_or(1.0) as f32);
+
+            b_rgb.red = b_rgb.red * (b_bri.unwrap_or(1.0) as f32);
+            b_rgb.green = b_rgb.green * (b_bri.unwrap_or(1.0) as f32);
+            b_rgb.blue = b_rgb.blue * (b_bri.unwrap_or(1.0) as f32);
+
+            if f32::abs(a_rgb.red - b_rgb.red) > delta {
                 return false;
             }
-            if f32::abs(a.hue.to_positive_degrees() - b.hue.to_positive_degrees()) > delta_hue {
+            if f32::abs(a_rgb.green - b_rgb.green) > delta {
                 return false;
             }
-            if f32::abs(a.chroma - b.chroma) > delta_chroma {
+            if f32::abs(a_rgb.blue - b_rgb.blue) > delta {
                 return false;
             }
 
             true
         }
-    }
-}
-
-fn cmp_light_brightness(a: Option<f64>, b: Option<f64>) -> bool {
-    let delta_brightness = 0.02;
-
-    match (a, b) {
-        (None, None) => true,
-        (None, Some(_)) => false,
-        (Some(_), None) => false,
-        (Some(a), Some(b)) => f64::abs(a - b) <= delta_brightness,
     }
 }
 
@@ -72,23 +75,23 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
             if a.power == false && b.power == false {
                 return true;
             }
-            // TODO: need to account for brightness here, because hardware doesn't have a brightness param while we do
-            if !cmp_light_brightness(a.brightness, b.brightness) {
-                return false;
-            }
-            return cmp_lch_state(&a.color, &b.color);
+            return cmp_light_state(&a.color, &a.brightness, &b.color, &b.brightness);
         }
         (DeviceState::MultiSourceLight(a), DeviceState::MultiSourceLight(b)) => {
             if a.power != b.power {
                 return false;
             }
-            if !cmp_light_brightness(a.brightness, b.brightness) {
-                return false;
-            }
             a.lights
                 .iter()
                 .zip(b.lights.iter())
-                .map(|(a, b)| cmp_lch_state(&Some(a.clone()), &Some(b.clone())))
+                .map(|(light_a, light_b)| {
+                    cmp_light_state(
+                        &Some(light_a.clone()),
+                        &a.brightness,
+                        &Some(light_b.clone()),
+                        &b.brightness,
+                    )
+                })
                 .all(|value| value)
         }
         _ => false,

@@ -1,5 +1,5 @@
 pub type SceneId = String;
-use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
+use super::{device::{DeviceColor, DeviceId}, group::GroupId, integration::IntegrationId};
 use palette::{rgb::Rgb, Hsv, Lch};
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ pub enum ColorConfig {
     Rgb(Rgb),
 }
 
-pub fn color_config_as_lch(color_config: ColorConfig) -> Lch {
+pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
     match color_config {
         ColorConfig::Lch(lch) => lch.into(),
         ColorConfig::Hsv(hsv) => hsv.into(),

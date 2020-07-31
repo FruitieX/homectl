@@ -1,25 +1,30 @@
 use super::bridge::BridgeLight;
 
 use crate::homectl_core::{
-    device::{Device, DeviceId, DeviceState, Light},
+    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::{Hsl, IntoColor, Lch};
+use palette::Yxy;
 
 /// Convert BridgeLight color into Lch
-pub fn to_palette(bridge_light: BridgeLight) -> Option<Lch> {
-    let hue: f32 = bridge_light.state.hue? as f32;
-    let saturation: f32 = bridge_light.state.sat? as f32;
-    let lightness: f32 = bridge_light.state.bri? as f32;
+pub fn to_palette(bridge_light: BridgeLight) -> Option<DeviceColor> {
+    // let hue: f32 = bridge_light.state.hue? as f32;
+    // let saturation: f32 = bridge_light.state.sat? as f32;
+    // let lightness: f32 = bridge_light.state.bri? as f32;
 
-    let hsl = Hsl::new(
-        (hue / 65536.0) * 360.0,
-        saturation / 254.0,
-        lightness / 254.0,
-    );
-    let lch: Lch = hsl.into_lch();
+    // let hsv = Hsv::new(
+    //     (hue / 65536.0) * 360.0,
+    //     saturation / 254.0,
+    //     lightness / 254.0,
+    // );
+    // let device_color: DeviceColor = hsv.into();
 
-    Some(lch)
+    let xy = bridge_light.state.xy?;
+    let brightness: f32 = bridge_light.state.bri? as f32;
+    let hsv = Yxy::new(xy.0, xy.1, brightness / 254.0);
+    let device_color: DeviceColor = hsv.into();
+
+    Some(device_color)
 }
 
 /// Constructs Light kind from BridgeLight

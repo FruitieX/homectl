@@ -6,7 +6,7 @@ use crate::homectl_core::{
 
 use super::bridge::BridgeLights;
 use super::{light_utils::bridge_light_to_device, HueConfig};
-use palette::{Hsv, Yxy};
+use palette::Yxy;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, time::Duration};

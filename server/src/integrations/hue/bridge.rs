@@ -7,6 +7,7 @@ pub struct BridgeLightState {
     pub bri: Option<u32>,
     pub hue: Option<u32>,
     pub sat: Option<u32>,
+    pub xy: Option<(f32, f32)>,
     pub transitiontime: Option<u32>,
     pub reachable: Option<bool>,
 }

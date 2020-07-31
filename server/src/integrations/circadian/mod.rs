@@ -1,11 +1,11 @@
 use crate::homectl_core::{
-    device::{Device, DeviceState, Light},
+    device::{Device, DeviceColor, DeviceState, Light},
     events::{Message, TxEventChannel},
     integration::{Integration, IntegrationId},
-    scene::{color_config_as_lch, ColorConfig},
+    scene::{color_config_as_device_color, ColorConfig},
 };
 use async_trait::async_trait;
-use palette::{Gradient, Lch};
+use palette::Gradient;
 use serde::Deserialize;
 use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
@@ -26,8 +26,8 @@ pub struct Circadian {
     id: String,
     config: CircadianConfig,
     sender: TxEventChannel,
-    converted_day_color: Lch,
-    converted_night_color: Lch,
+    converted_day_color: DeviceColor,
+    converted_night_color: DeviceColor,
 }
 
 #[async_trait]
@@ -39,8 +39,8 @@ impl Integration for Circadian {
             id: id.clone(),
             config: config.clone(),
             sender,
-            converted_day_color: color_config_as_lch(config.day_color),
-            converted_night_color: color_config_as_lch(config.night_color),
+            converted_day_color: color_config_as_device_color(config.day_color),
+            converted_night_color: color_config_as_device_color(config.night_color),
         }
     }
 
@@ -108,7 +108,7 @@ fn get_night_fade(circadian: &Circadian) -> f32 {
     }
 }
 
-fn get_circadian_color(circadian: &Circadian) -> Lch {
+fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
     let gradient = Gradient::new(vec![
         circadian.converted_day_color,
         circadian.converted_night_color,

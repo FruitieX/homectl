@@ -4,7 +4,7 @@ use super::{
     group::GroupDeviceLink,
     groups_manager::GroupsManager,
     scene::{
-        color_config_as_lch, SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneId,
+        color_config_as_device_color, SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneId,
         ScenesConfig,
     },
 };
@@ -109,7 +109,7 @@ impl ScenesManager {
             SceneDeviceConfig::SceneDeviceState(scene_device) => Some(DeviceState::Light(Light {
                 // Use state from scene_device
                 brightness: scene_device.brightness,
-                color: scene_device.color.clone().map(color_config_as_lch),
+                color: scene_device.color.clone().map(color_config_as_device_color),
                 power: scene_device.power,
             })),
         }
