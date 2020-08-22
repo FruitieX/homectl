@@ -31,9 +31,9 @@ fn cmp_light_state(
     b: &Option<DeviceColor>,
     b_bri: &Option<f64>,
 ) -> bool {
-    let hue_delta = 3.0;
-    let sat_delta = 0.05;
-    let val_delta = 0.05;
+    let hue_delta = 2.0;
+    let sat_delta = 0.03;
+    let val_delta = 0.03;
 
     match (a, b) {
         (None, None) => true,
@@ -111,10 +111,12 @@ impl DevicesManager {
 
         // recompute expected_state here as it may have changed since we last
         // computed it
-        let expected_state = self.get_expected_state(&device);
+        let expected_state = state_device.map(|d| {
+            self.get_expected_state(&d, false)
+        });
 
         // Take action if the device state has changed from stored state
-        if Some(&device) != state_device || expected_state != device.state {
+        if Some(&device) != state_device || expected_state != Some(device.state.clone()) {
             let kind = device.state.clone();
 
             match (kind, state_device, expected_state) {
@@ -134,7 +136,7 @@ impl DevicesManager {
                 // device missed a state update or forgot its state? Try
                 // fixing this by emitting a SetIntegrationDeviceState
                 // message back to integration
-                (_, _, expected_state) => {
+                (_, _, Some(expected_state)) => {
                     if cmp_device_states(&device.state, &expected_state) {
                         return;
                     }
@@ -152,13 +154,19 @@ impl DevicesManager {
                         .send(Message::SetIntegrationDeviceState { device })
                         .unwrap();
                 }
+
+                // Expected device state was not found
+                (_, _, None) => {
+                    self.set_device_state(&device, false);
+                }
             }
         }
     }
 
-    /// Returns expected state for given device based on prev_state and possibly
-    /// active scene
-    fn get_expected_state(&self, device: &Device) -> DeviceState {
+    /// Returns expected state for given device based on possible active scene.
+    /// If no scene active and set_state is false, previous device state is returned.
+    /// If no scene active and set_state is true, passed device state is returned.
+    fn get_expected_state(&self, device: &Device, set_state: bool) -> DeviceState {
         match device.state {
             // Sensors should always use the most recent sensor reading
             DeviceState::Sensor(_) => device.state.clone(),
@@ -169,13 +177,18 @@ impl DevicesManager {
                     .find_scene_device_state(&device, &self.state);
 
                 scene_device_state.unwrap_or_else(|| {
-                    let device = self
-                        .state
-                        .get(&get_device_state_key(device))
-                        .unwrap_or(device)
-                        .clone();
+                    // TODO: why would we ever want to do this
+                    if set_state {
+                        device.state.clone()
+                    } else {
+                        let device = self
+                            .state
+                            .get(&get_device_state_key(device))
+                            .unwrap_or(device)
+                            .clone();
 
-                    device.state
+                        device.state
+                    }
                 })
             }
         }
@@ -197,7 +210,7 @@ impl DevicesManager {
         }
 
         // Allow active scene to override device state
-        let expected_state = self.get_expected_state(&device);
+        let expected_state = self.get_expected_state(&device, true);
         device.state = expected_state;
 
         self.state
