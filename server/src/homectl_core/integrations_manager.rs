@@ -3,7 +3,7 @@ use super::{
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
-use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx};
+use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, random::Random};
 use std::{
     collections::HashMap,
     error::Error,
@@ -91,6 +91,7 @@ fn load_integration(
 ) -> Result<Box<dyn Integration>, String> {
     match module_name.as_str() {
         "circadian" => Ok(Box::new(Circadian::new(id, config, sender))),
+        "random" => Ok(Box::new(Random::new(id, config, sender))),
         "dummy" => Ok(Box::new(Dummy::new(id, config, sender))),
         "lifx" => Ok(Box::new(Lifx::new(id, config, sender))),
         "hue" => Ok(Box::new(Hue::new(id, config, sender))),

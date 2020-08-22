@@ -19,3 +19,4 @@ async-trait = "0.1.31"
 reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
 tokio-util = { version = "0.3", features = ["codec", "udp"] }
+rand = "0.7"
