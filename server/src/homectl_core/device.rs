@@ -1,5 +1,5 @@
 use super::{integration::IntegrationId, scene::SceneId};
-use palette::{Lch, Hsv};
+use palette::Hsv;
 use std::time::Instant;
 
 /// simple on/off devices such as relays, lights
@@ -8,7 +8,8 @@ pub struct OnOffDevice {
     pub power: bool,
 }
 
-pub type DeviceColor = Lch;
+// TODO: use Lch?
+pub type DeviceColor = Hsv;
 
 /// lights with adjustable brightness and/or color
 #[derive(Clone, Debug, PartialEq)]

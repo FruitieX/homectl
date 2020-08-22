@@ -5,7 +5,7 @@ use super::{
     scene::SceneId,
     scenes_manager::ScenesManager,
 };
-use palette::rgb::Rgb;
+use palette::Hsv;
 use std::{collections::HashMap, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
@@ -31,31 +31,28 @@ fn cmp_light_state(
     b: &Option<DeviceColor>,
     b_bri: &Option<f64>,
 ) -> bool {
-    let delta = 0.05;
+    let hue_delta = 3.0;
+    let sat_delta = 0.05;
+    let val_delta = 0.05;
 
     match (a, b) {
         (None, None) => true,
         (None, Some(_)) => false,
         (Some(_), None) => false,
         (Some(a), Some(b)) => {
-            let mut a_rgb: Rgb = a.clone().into();
-            let mut b_rgb: Rgb = b.clone().into();
+            let mut a_hsv: Hsv = a.clone().into();
+            let mut b_hsv: Hsv = b.clone().into();
 
-            a_rgb.red = a_rgb.red * (a_bri.unwrap_or(1.0) as f32);
-            a_rgb.green = a_rgb.green * (a_bri.unwrap_or(1.0) as f32);
-            a_rgb.blue = a_rgb.blue * (a_bri.unwrap_or(1.0) as f32);
+            a_hsv.value = a_hsv.value * (a_bri.unwrap_or(1.0) as f32);
+            b_hsv.value = b_hsv.value * (b_bri.unwrap_or(1.0) as f32);
 
-            b_rgb.red = b_rgb.red * (b_bri.unwrap_or(1.0) as f32);
-            b_rgb.green = b_rgb.green * (b_bri.unwrap_or(1.0) as f32);
-            b_rgb.blue = b_rgb.blue * (b_bri.unwrap_or(1.0) as f32);
-
-            if f32::abs(a_rgb.red - b_rgb.red) > delta {
+            if f32::abs(a_hsv.hue.to_degrees() - b_hsv.hue.to_degrees()) > hue_delta {
                 return false;
             }
-            if f32::abs(a_rgb.green - b_rgb.green) > delta {
+            if f32::abs(a_hsv.saturation - b_hsv.saturation) > sat_delta {
                 return false;
             }
-            if f32::abs(a_rgb.blue - b_rgb.blue) > delta {
+            if f32::abs(a_hsv.value - b_hsv.value) > val_delta {
                 return false;
             }
 
@@ -228,6 +225,8 @@ impl DevicesManager {
     }
 
     pub fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
+        println!("Activating scene {:?}", scene_id);
+
         let scene_devices_config = self
             .scenes_manager
             .find_scene_devices_config(&self.state, scene_id)?;

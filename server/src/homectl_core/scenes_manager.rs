@@ -102,7 +102,8 @@ impl ScenesManager {
         let scene_id = &device.scene.as_ref()?.scene_id;
 
         let scene_devices = self.find_scene_devices_config(devices, scene_id)?;
-        let scene_device = scene_devices.get(&device.integration_id)?.get(&device.id)?;
+        let integration_devices = scene_devices.get(&device.integration_id)?;
+        let scene_device = integration_devices.get(&device.id)?;
 
         match scene_device {
             SceneDeviceConfig::SceneDeviceLink(link) => {
@@ -117,6 +118,21 @@ impl ScenesManager {
                 )?;
 
                 let state = device.state.clone();
+
+                // Brightness override
+                let state = match state {
+                    DeviceState::Light(mut state) => {
+                        state.brightness = link.brightness.or(state.brightness);
+                        DeviceState::Light(state)
+                    }
+                    DeviceState::MultiSourceLight(mut state) => {
+                        state.brightness = link.brightness.or(state.brightness);
+                        DeviceState::MultiSourceLight(state)
+                    }
+                    DeviceState::OnOffDevice(state) => DeviceState::OnOffDevice(state),
+                    DeviceState::Sensor(state) => DeviceState::Sensor(state),
+                };
+
                 Some(state)
             }
 

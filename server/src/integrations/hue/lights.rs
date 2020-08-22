@@ -81,6 +81,7 @@ pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), B
         DeviceState::Light(state) => {
             Ok(match state.color {
                 Some(color) => {
+                    let hsv = color;
                     let color: Yxy = color.into();
 
                     // palette hue value is [0, 360[, Hue uses [0, 65536[
@@ -96,7 +97,9 @@ pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), B
                     let y = color.y;
 
                     let xy = vec![x, y];
-                    let bri = (color.luma * 254.0 * state.brightness.unwrap_or(1.0) as f32).floor()
+                    // let bri = (color.luma * 254.0 * state.brightness.unwrap_or(1.0) as f32).floor()
+                    //     as u32;
+                    let bri = (hsv.value * 254.0 * (state.brightness.unwrap_or(1.0) as f32)).floor()
                         as u32;
 
                     HueMsg::LightMsg(LightMsg {
@@ -125,8 +128,6 @@ pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), B
         .await?
         .text()
         .await?;
-
-    println!("{}", res);
 
     Ok(())
 }

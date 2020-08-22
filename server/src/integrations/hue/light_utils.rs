@@ -22,7 +22,8 @@ pub fn to_palette(bridge_light: BridgeLight) -> Option<DeviceColor> {
     let xy = bridge_light.state.xy?;
     let brightness: f32 = bridge_light.state.bri? as f32;
     let hsv = Yxy::new(xy.0, xy.1, brightness / 254.0);
-    let device_color: DeviceColor = hsv.into();
+    let mut device_color: DeviceColor = hsv.into();
+    device_color.value = brightness / 254.0;
 
     Some(device_color)
 }
