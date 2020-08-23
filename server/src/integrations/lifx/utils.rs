@@ -35,7 +35,7 @@ pub fn lifx_msg_type_to_u16(msg_type: LifxMsg) -> u16 {
 
 fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
     match lifx_msg {
-        LifxMsg::SetColor(state) => {
+        LifxMsg::SetPower(state) => {
             let mut buf: [u8; 16 + 32] = [0; 16 + 32];
 
             LittleEndian::write_u16(&mut buf, state.power);
@@ -46,7 +46,7 @@ fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
 
             Some(buf.to_vec())
         }
-        LifxMsg::SetPower(state) => {
+        LifxMsg::SetColor(state) => {
             let mut buf: [u8; 8 + 16 * 4 + 32] = [0; 8 + 16 * 4 + 32];
 
             LittleEndian::write_u16(&mut buf[1..], state.hue);
@@ -94,9 +94,10 @@ pub fn mk_lifx_udp_msg(lifx_msg: LifxMsg) -> Vec<u8> {
     // protocol header
     // https://lan.developer.lifx.com/docs/header-description#protocol-header
     let mut protocol_header: [u8; 12] = [0; 12];
+    let msg_type = lifx_msg_type_to_u16(lifx_msg.clone());
     LittleEndian::write_u16(
         &mut protocol_header[8..],
-        lifx_msg_type_to_u16(lifx_msg.clone()),
+        msg_type
     );
 
     let payload = mk_lifx_msg_payload(lifx_msg.clone());

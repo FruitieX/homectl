@@ -78,7 +78,9 @@ impl Integration for Lifx {
                         let msg = mk_lifx_udp_msg(lifx_msg);
                         match send_half.send_to(&msg.clone(), &target).await {
                             Ok(_size) => {}
-                            Err(e) => { println!("Error while sending UDP packet {}", e); }
+                            Err(e) => {
+                                println!("Error while sending UDP packet {}", e);
+                            }
                         };
                         Ok(())
                     }
@@ -108,13 +110,13 @@ impl Integration for Lifx {
                     .unwrap_or(());
 
                 // don't bother setting color if power is off
-                if lifx_state.power != 65535 {
+                if lifx_state.power != 0 {
                     self.udp_sender_tx
                         .send(LifxMsg::SetColor(lifx_state))
                         .unwrap_or(());
                 }
             }
-            Err(_) => {}
+            Err(e) => println!("Error in lifx set_integration_device_state {:?}", e),
         }
     }
 }
