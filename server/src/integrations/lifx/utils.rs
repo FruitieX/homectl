@@ -173,7 +173,7 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
     });
 
     let device = Device {
-        id: lifx_state.addr.ip().to_string(),
+        id: lifx_state.addr.to_string(),
         name: lifx_state.label.clone(),
         integration_id: integration_id.clone(),
         scene: None,
