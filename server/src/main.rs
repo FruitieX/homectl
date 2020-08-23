@@ -5,10 +5,14 @@ mod db;
 mod homectl_core;
 mod integrations;
 
-use db::{actions::find_floorplans, establish_connection};
+// use db::{actions::find_floorplans, establish_connection};
 use homectl_core::{
-    devices_manager::DevicesManager, events::*, groups_manager::GroupsManager,
-    integrations_manager::IntegrationsManager, rules_engine::RulesEngine, scene::{CycleScenesDescriptor, SceneDescriptor},
+    devices_manager::DevicesManager,
+    events::*,
+    groups_manager::GroupsManager,
+    integrations_manager::IntegrationsManager,
+    rules_engine::RulesEngine,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
     scenes_manager::ScenesManager,
 };
 use std::error::Error;
@@ -18,8 +22,8 @@ use std::error::Error;
 async fn main() -> Result<(), Box<dyn Error>> {
     let (config, opaque_integrations_configs) = homectl_core::config::read_config();
 
-    println!("Using config:");
-    println!("{:#?}", config);
+    // println!("Using config:");
+    // println!("{:#?}", config);
 
     let (sender, receiver) = mk_channel();
 
@@ -38,9 +42,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .unwrap();
     }
 
-    let connection = establish_connection();
-    let results = find_floorplans(&connection);
-    println!("Floorplans in DB: {:?}", results);
+    // let connection = establish_connection();
+    // let results = find_floorplans(&connection);
+    // println!("Floorplans in DB: {:?}", results);
 
     let _result: Result<(), ()> = {
         integrations_manager.run_register_pass().await?;
