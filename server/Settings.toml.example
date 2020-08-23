@@ -7,15 +7,14 @@ plugin = "hue"
 addr = "192.168.1.123"
 poll_rate_lights = 10000
 poll_rate_sensors = 100
-
-[integrations.lifx]
-plugin = "lifx"
-network_interface = "enp0s31f6"
-
 # This can be obtained by pressing the link button on a Hue bridge
 # and within 30s running (replace IP with your Hue bridge IP):
 # curl -X POST 192.168.1.123/api -d '{"devicetype": "homectl#homectl"}'
 username = "<hue username string here>"
+
+[integrations.lifx]
+plugin = "lifx"
+network_interface = "enp0s31f6"
 
 [integrations.circadian]
 plugin = "circadian"
