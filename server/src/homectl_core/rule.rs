@@ -1,4 +1,4 @@
-use super::{device::DeviceId, integration::IntegrationId, scene::SceneDescriptor};
+use super::{device::DeviceId, integration::IntegrationId, scene::{CycleScenesDescriptor, SceneDescriptor}};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -8,6 +8,7 @@ pub type RoutineId = String;
 #[serde(tag = "action")]
 pub enum Action {
     ActivateScene(SceneDescriptor),
+    CycleScenes(CycleScenesDescriptor),
 }
 
 /// button sensors, motion sensors

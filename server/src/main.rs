@@ -8,7 +8,7 @@ mod integrations;
 use db::{actions::find_floorplans, establish_connection};
 use homectl_core::{
     devices_manager::DevicesManager, events::*, groups_manager::GroupsManager,
-    integrations_manager::IntegrationsManager, rules_engine::RulesEngine, scene::SceneDescriptor,
+    integrations_manager::IntegrationsManager, rules_engine::RulesEngine, scene::{CycleScenesDescriptor, SceneDescriptor},
     scenes_manager::ScenesManager,
 };
 use std::error::Error;
@@ -74,6 +74,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
             Message::ActivateScene(SceneDescriptor { scene_id }) => {
                 devices_manager.activate_scene(&scene_id);
+            }
+            Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
+                devices_manager.cycle_scenes(&scenes);
             }
         }
     }

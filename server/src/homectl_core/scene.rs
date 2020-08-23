@@ -34,6 +34,11 @@ pub struct SceneDescriptor {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct CycleScenesDescriptor {
+    pub scenes: Vec<SceneDescriptor>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
 pub struct SceneDeviceState {
     pub power: bool,
     pub color: Option<ColorConfig>,

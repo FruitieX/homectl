@@ -1,4 +1,8 @@
-use super::{device::Device, devices_manager::DevicesState, scene::SceneDescriptor};
+use super::{
+    device::Device,
+    devices_manager::DevicesState,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
+};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug)]
@@ -6,9 +10,7 @@ pub enum Message {
     /// An integration has gathered information about current device state
     /// through some means (usually polling). Note that state might not actually
     /// have changed.
-    IntegrationDeviceRefresh {
-        device: Device,
-    },
+    IntegrationDeviceRefresh { device: Device },
 
     /// Internal device state update was detected, need to take any appropriate
     /// actions.
@@ -20,16 +22,16 @@ pub enum Message {
     },
 
     /// Tell devices_manager to update internal device state.
-    SetDeviceState {
-        device: Device,
-    },
+    SetDeviceState { device: Device },
 
     /// Tell integration to trigger state change for the device.
-    SetIntegrationDeviceState {
-        device: Device,
-    },
+    SetIntegrationDeviceState { device: Device },
 
+    /// Request to activate given scene.
     ActivateScene(SceneDescriptor),
+
+    /// Request to cycle between given scenes.
+    CycleScenes(CycleScenesDescriptor),
 }
 
 pub type TxEventChannel = Sender<Message>;

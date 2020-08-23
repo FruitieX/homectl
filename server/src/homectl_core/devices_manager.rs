@@ -2,7 +2,7 @@ use super::{
     device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState},
     events::{Message, TxEventChannel},
     integration::IntegrationId,
-    scene::SceneId,
+    scene::{SceneDescriptor, SceneId},
     scenes_manager::ScenesManager,
 };
 use palette::Hsv;
@@ -111,9 +111,7 @@ impl DevicesManager {
 
         // recompute expected_state here as it may have changed since we last
         // computed it
-        let expected_state = state_device.map(|d| {
-            self.get_expected_state(&d, false)
-        });
+        let expected_state = state_device.map(|d| self.get_expected_state(&d, false));
 
         // Take action if the device state has changed from stored state
         if Some(&device) != state_device || expected_state != Some(device.state.clone()) {
@@ -267,6 +265,46 @@ impl DevicesManager {
                 }
             }
         }
+
+        Some(true)
+    }
+
+    pub fn cycle_scenes(&mut self, scene_descriptors: &Vec<SceneDescriptor>) -> Option<bool> {
+        let active_scene_index = scene_descriptors.iter().position(|sd| {
+            let scene_devices_config = self
+                .scenes_manager
+                .find_scene_devices_config(&self.state, &sd.scene_id);
+
+            // try finding any device in scene_devices_config that has this scene active
+            match scene_devices_config {
+                Some(integrations) => integrations
+                    .iter()
+                    .find(|(integration_id, devices)| {
+                        devices
+                            .iter()
+                            .find(|(device_id, _)| {
+                                let device =
+                                    find_device(&self.state, integration_id, Some(device_id), None);
+                                let device_scene = device.map(|d| d.scene).flatten();
+
+                                device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
+                            })
+                            .is_some()
+                    })
+                    .is_some(),
+                None => false,
+            }
+        });
+
+        let next_scene = match active_scene_index {
+            Some(index) => {
+                let next_scene_index = (index + 1) % scene_descriptors.len();
+                scene_descriptors.iter().nth(next_scene_index)
+            }
+            None => scene_descriptors.first(),
+        }?;
+
+        self.activate_scene(&next_scene.scene_id);
 
         Some(true)
     }

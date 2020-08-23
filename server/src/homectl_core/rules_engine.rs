@@ -43,6 +43,11 @@ impl RulesEngine {
                 self.sender
                     .send(Message::ActivateScene(action.clone()))
                     .unwrap();
+            },
+            Action::CycleScenes(action) => {
+                self.sender
+                    .send(Message::CycleScenes(action.clone()))
+                    .unwrap();
             }
         }
     }
