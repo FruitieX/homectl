@@ -5,4 +5,95 @@ asd = "foo"
 [integrations.hue1]
 plugin = "hue"
 addr = "192.168.1.123"
+poll_rate_lights = 10000
+poll_rate_sensors = 100
+
+[integrations.lifx]
+plugin = "lifx"
+network_interface = "enp0s31f6"
+
+# This can be obtained by pressing the link button on a Hue bridge
+# and within 30s running (replace IP with your Hue bridge IP):
+# curl -X POST 192.168.1.123/api -d '{"devicetype": "homectl#homectl"}'
 username = "<hue username string here>"
+
+[integrations.circadian]
+plugin = "circadian"
+device_name = "Circadian rhythm"
+day_color = { hue = 25, saturation = 0.35, value = 1 }
+day_fade_start = "06:00"
+day_fade_duration_hours = 4
+night_color = { hue = 17, saturation = 1.0, value = 0.5 }
+night_fade_start = "18:00"
+night_fade_duration_hours = 1
+
+# Define as many groups as you want.
+# These can be referred from [scenes.<scene_name>.groups] and groups can even
+# refer other groups
+
+[groups.office]
+name = "Office lights"
+devices = [
+  { integration_id = "hue1", name = "Office" },
+  { integration_id = "hue1", name = "Hue play R" }
+]
+
+# Example of group referring other groups
+[groups.all]
+name = "All lights"
+devices = [
+  { integration_id = "hue1", name = "Outdoor lightstrip" },
+]
+groups = [
+  { group_id = "office" }
+]
+
+# Define a couple scenes that can be triggered from routines Note that scenes
+# can "link" a device/group to another device, meaning the state should be
+# copied over from the target device. (see [scenes.office_on.groups])
+
+[scenes.office_on]
+name = "Office on"
+
+  [scenes.office_on.groups]
+  office = { integration_id = "circadian", device_id = "color" }
+
+  [scenes.office_on.devices.hue1]
+  "Hue play L" = { power = true, color = { hue = 0, saturation = 1, value = 1 }, brightness = 0.5 }
+
+[scenes.office_off]
+name = "Office off"
+
+  [scenes.office_off.groups]
+  office = { power = false }
+
+  [scenes.office_off.devices.hue1]
+  "Hue play L" = { power = false }
+
+[scenes.test]
+name = "Test scene"
+
+  [scenes.test.devices.hue1]
+  "Hue play L" = { power = true, color = { hue = 100, saturation = 1, value = 1 } }
+
+# Define routines that tell which actions to trigger based on sensor rules. All
+# given rules have to match (logical and) for the given actions to be
+# triggered.
+
+[routines.office_on]
+name = "Office on"
+rules = [
+  { integration_id = "hue1", name = "Office switch", state = { on = true } }
+]
+actions = [
+  { action = "CycleScenes", scenes = [ { scene_id = "office_on" }, { scene_id = "test" } ] }
+]
+
+[routines.office_off]
+name = "Office off"
+rules = [
+  { integration_id = "hue1", name = "Office switch", state = { off = true } }
+]
+actions = [
+  { action = "ActivateScene", scene_id = "office_off" }
+]
