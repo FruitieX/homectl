@@ -270,6 +270,44 @@ impl DevicesManager {
     }
 
     pub fn cycle_scenes(&mut self, scene_descriptors: &Vec<SceneDescriptor>) -> Option<bool> {
+        let mut scenes_common_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
+
+        // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
+        let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_descriptors
+            .iter()
+            .map(|sd| {
+                let scene_devices_config = self
+                    .scenes_manager
+                    .find_scene_devices_config(&self.state, &sd.scene_id);
+
+                let mut scene_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
+                match scene_devices_config {
+                    Some(integrations) => {
+                        for (integration_id, integration) in integrations {
+                            for (device_id, _) in integration {
+                                scene_devices.push((integration_id.clone(), device_id));
+                            }
+                        }
+                    }
+                    None => {}
+                }
+
+                scene_devices
+            })
+            .collect();
+
+        // gather devices which exist in all cycled scenes into scenes_common_devices
+        scenes_devices.first().map(|first_scene_devices| {
+            for scene_device in first_scene_devices {
+                if scenes_devices
+                    .iter()
+                    .all(|scene_devices| scene_devices.contains(scene_device))
+                {
+                    scenes_common_devices.push(scene_device.clone());
+                }
+            }
+        });
+
         let active_scene_index = scene_descriptors.iter().position(|sd| {
             let scene_devices_config = self
                 .scenes_manager
@@ -283,6 +321,13 @@ impl DevicesManager {
                         devices
                             .iter()
                             .find(|(device_id, _)| {
+                                // only consider devices which are common across all cycled scenes
+                                if !scenes_common_devices
+                                    .contains(&(integration_id.to_string(), device_id.to_string()))
+                                {
+                                    return false;
+                                }
+
                                 let device =
                                     find_device(&self.state, integration_id, Some(device_id), None);
                                 let device_scene = device.map(|d| d.scene).flatten();
