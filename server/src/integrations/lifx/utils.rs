@@ -1,5 +1,6 @@
 use crate::homectl_core::device::{Device, DeviceState, Light};
 use byteorder::{ByteOrder, LittleEndian};
+use num_traits::pow::Pow;
 use palette::Hsv;
 use std::{error::Error, net::SocketAddr};
 
@@ -95,10 +96,7 @@ pub fn mk_lifx_udp_msg(lifx_msg: LifxMsg) -> Vec<u8> {
     // https://lan.developer.lifx.com/docs/header-description#protocol-header
     let mut protocol_header: [u8; 12] = [0; 12];
     let msg_type = lifx_msg_type_to_u16(lifx_msg.clone());
-    LittleEndian::write_u16(
-        &mut protocol_header[8..],
-        msg_type
-    );
+    LittleEndian::write_u16(&mut protocol_header[8..], msg_type);
 
     let payload = mk_lifx_msg_payload(lifx_msg.clone());
     let payload_size = payload.clone().map(|p| p.len()).unwrap_or(0);
@@ -159,7 +157,7 @@ pub fn read_lifx_msg(buf: &[u8], addr: SocketAddr) -> LifxMsg {
 }
 
 pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device {
-    let hue = (f32::from(lifx_state.hue) / 65535.0) * 360.0;
+    let hue = from_lifx_hue((f32::from(lifx_state.hue) / 65535.0) * 360.0);
     let sat = f32::from(lifx_state.sat) / 65535.0;
     let bri = f32::from(lifx_state.bri) / 65535.0;
 
@@ -203,7 +201,7 @@ pub fn to_lifx_state(device: Device) -> Result<LifxState, Box<dyn Error>> {
         .map(|color| color.into())
         .unwrap_or(Hsv::new(0.0, 255.0, 255.0));
 
-    let hue = ((color.hue.to_positive_degrees() / 360.0) * 65535.0).floor() as u16;
+    let hue = ((to_lifx_hue(color.hue.to_positive_degrees()) / 360.0) * 65535.0).floor() as u16;
     let sat = (color.saturation * 65535.0).floor() as u16;
     let bri = (color.value * 65535.0).floor() as u16;
 
@@ -218,4 +216,24 @@ pub fn to_lifx_state(device: Device) -> Result<LifxState, Box<dyn Error>> {
         addr: device.id.parse()?,
         transition: Some(500),
     })
+}
+
+// NOTE: this is complete trial-and-error, but seems to produce a wider range of
+// yellow hues which matches my other HA systems better.
+pub fn to_lifx_hue(h: f32) -> f32 {
+    if h > 0.0 && h < 60.0 {
+        let p = h / 60.0;
+        f32::pow(p, 1.3) * 60.0
+    } else {
+        h
+    }
+}
+
+pub fn from_lifx_hue(h: f32) -> f32 {
+    if h > 0.0 && h < 60.0 {
+        let p = h / 60.0;
+        f32::pow(p, 1.0 / 1.3) * 60.0
+    } else {
+        h
+    }
 }
