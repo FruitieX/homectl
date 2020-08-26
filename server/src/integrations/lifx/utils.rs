@@ -223,7 +223,7 @@ pub fn to_lifx_state(device: Device) -> Result<LifxState, Box<dyn Error>> {
 pub fn to_lifx_hue(h: f32) -> f32 {
     if h > 0.0 && h < 60.0 {
         let p = h / 60.0;
-        f32::pow(p, 1.3) * 60.0
+        f32::pow(p, 1.0 / 2.0) * 60.0
     } else {
         h
     }
@@ -232,7 +232,7 @@ pub fn to_lifx_hue(h: f32) -> f32 {
 pub fn from_lifx_hue(h: f32) -> f32 {
     if h > 0.0 && h < 60.0 {
         let p = h / 60.0;
-        f32::pow(p, 1.0 / 1.3) * 60.0
+        f32::pow(p, 2.0 / 1.0) * 60.0
     } else {
         h
     }
