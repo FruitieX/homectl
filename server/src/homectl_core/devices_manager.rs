@@ -31,9 +31,9 @@ fn cmp_light_state(
     b: &Option<DeviceColor>,
     b_bri: &Option<f64>,
 ) -> bool {
-    let hue_delta = 2.0;
-    let sat_delta = 0.03;
-    let val_delta = 0.03;
+    let hue_delta = 0.5;
+    let sat_delta = 0.02;
+    let val_delta = 0.02;
 
     match (a, b) {
         (None, None) => true,
