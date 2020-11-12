@@ -7,19 +7,31 @@ use crate::homectl_core::{
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use palette::Gradient;
-use serde::Deserialize;
+use serde::{de, Deserialize};
 use std::time::Duration;
 use tokio::time::{interval_at, Instant};
+
+fn from_hh_mm<'de, D>(d: D) -> Result<chrono::NaiveTime, D::Error>
+where
+    D: de::Deserializer<'de>,
+{
+    let str = String::deserialize(d)?;
+    chrono::NaiveTime::parse_from_str(&str, "%H:%M").map_err(serde::de::Error::custom)
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CircadianConfig {
     device_name: String,
-    day_color: ColorConfig,
-    day_fade_start: String,
+
+    #[serde(deserialize_with = "from_hh_mm")]
+    day_fade_start: chrono::NaiveTime,
     day_fade_duration_hours: i64,
-    night_color: ColorConfig,
-    night_fade_start: String,
+    day_color: ColorConfig,
+
+    #[serde(deserialize_with = "from_hh_mm")]
+    night_fade_start: chrono::NaiveTime,
     night_fade_duration_hours: i64,
+    night_color: ColorConfig,
 }
 
 #[derive(Clone)]
@@ -80,13 +92,11 @@ impl Integration for Circadian {
 fn get_night_fade(circadian: &Circadian) -> f32 {
     let local = chrono::Local::now().naive_local().time();
 
-    let day_fade_start =
-        chrono::NaiveTime::parse_from_str(&circadian.config.day_fade_start, "%H:%M").unwrap();
+    let day_fade_start = circadian.config.day_fade_start;
     let day_fade_duration = chrono::Duration::hours(circadian.config.day_fade_duration_hours);
     let day_fade_end = day_fade_start + day_fade_duration;
 
-    let night_fade_start =
-        chrono::NaiveTime::parse_from_str(&circadian.config.night_fade_start, "%H:%M").unwrap();
+    let night_fade_start = circadian.config.night_fade_start;
     let night_fade_duration = chrono::Duration::hours(circadian.config.night_fade_duration_hours);
     let night_fade_end = night_fade_start + night_fade_duration;
 
