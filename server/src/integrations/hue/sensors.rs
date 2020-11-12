@@ -10,6 +10,7 @@ use crate::homectl_core::{
 use async_std::sync::Mutex;
 use std::{error::Error, sync::Arc, time::Duration};
 use tokio::time::{interval_at, Instant};
+use tokio_compat_02::FutureExt;
 
 pub struct SensorsState {
     pub bridge_sensors: BridgeSensors,
@@ -33,8 +34,10 @@ pub async fn do_refresh_sensors(
         "http://{}/api/{}/sensors",
         config.addr, config.username
     ))
+    .compat()
     .await?
     .json()
+    .compat()
     .await?;
 
     let mut sensors_state = sensors_state.lock().await;

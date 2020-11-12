@@ -11,6 +11,7 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
+use tokio_compat_02::FutureExt;
 
 pub async fn do_refresh_lights(
     config: HueConfig,
@@ -21,8 +22,10 @@ pub async fn do_refresh_lights(
         "http://{}/api/{}/lights",
         config.addr, config.username
     ))
+    .compat()
     .await?
     .json()
+    .compat()
     .await?;
 
     for (light_id, bridge_light) in bridge_lights {

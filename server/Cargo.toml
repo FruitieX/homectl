@@ -22,3 +22,4 @@ rand = "0.7.3"
 num-traits = "0.2.14"
 async-std = { version = "1.7.0", features = ["unstable"] }
 anyhow = "1.0.34"
+tokio-compat-02 = "0.1.2"

@@ -18,6 +18,7 @@ use light_utils::bridge_light_to_device;
 use lights::{poll_lights, set_device_state};
 use sensor_utils::bridge_sensor_to_device;
 use sensors::poll_sensors;
+use tokio_compat_02::FutureExt;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {
@@ -55,8 +56,10 @@ impl Integration for Hue {
             "http://{}/api/{}",
             self.config.addr, self.config.username
         ))
+        .compat()
         .await?
         .json()
+        .compat()
         .await?;
 
         self.bridge_state = Some(bridge_state.clone());
