@@ -1,12 +1,22 @@
-use diesel::Queryable;
+use super::schema::devices;
+use diesel::{Insertable, Queryable};
 
 #[derive(Debug, Queryable)]
 pub struct Device {
     pub id: i32,
-    pub serial: String,
     pub name: String,
-    pub path: String,
-    pub image: Option<Vec<u8>>,
+    pub integration_id: String,
+    pub device_id: String,
+    pub scene_id: Option<String>,
+}
+
+#[derive(Debug, Insertable, AsChangeset)]
+#[table_name = "devices"]
+pub struct NewDevice<'a> {
+    pub name: &'a str,
+    pub integration_id: &'a str,
+    pub device_id: &'a str,
+    pub scene_id: Option<&'a str>,
 }
 
 #[derive(Debug, Queryable)]

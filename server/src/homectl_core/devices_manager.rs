@@ -1,3 +1,5 @@
+use crate::db::actions::db_update_device;
+
 use super::{
     device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState},
     events::{Message, TxEventChannel},
@@ -5,6 +7,7 @@ use super::{
     scene::{SceneDescriptor, SceneId},
     scenes_manager::ScenesManager,
 };
+use diesel::PgConnection;
 use palette::Hsv;
 use std::{collections::HashMap, time::Instant};
 
@@ -20,6 +23,7 @@ pub fn mk_device_state_key(integration_id: &IntegrationId, device_id: &DeviceId)
 }
 
 pub struct DevicesManager {
+    db_connection: PgConnection,
     sender: TxEventChannel,
     state: DevicesState,
     scenes_manager: ScenesManager,
@@ -96,8 +100,13 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
 }
 
 impl DevicesManager {
-    pub fn new(sender: TxEventChannel, scenes_manager: ScenesManager) -> Self {
+    pub fn new(
+        db_connection: PgConnection,
+        sender: TxEventChannel,
+        scenes_manager: ScenesManager,
+    ) -> Self {
         DevicesManager {
+            db_connection,
             sender,
             state: HashMap::new(),
             scenes_manager,
@@ -122,6 +131,7 @@ impl DevicesManager {
                 (_, None, _) => {
                     println!("Discovered device: {:?}", device);
                     self.set_device_state(&device, false).await;
+                    db_update_device(&self.db_connection, &device).ok();
                 }
 
                 // Sensor state has changed, defer handling of this update
@@ -254,6 +264,8 @@ impl DevicesManager {
                         let mut device = device.clone();
                         device.scene = device_scene_state.clone();
                         let device = self.set_device_state(&device, true).await;
+
+                        db_update_device(&self.db_connection, &device).ok();
 
                         self.sender
                             .clone()

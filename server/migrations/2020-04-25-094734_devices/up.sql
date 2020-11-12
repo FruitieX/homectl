@@ -1,10 +1,10 @@
 CREATE TABLE devices (
   id serial PRIMARY KEY NOT NULL,
 
-  serial text NOT NULL,
   name text NOT NULL,
-  path text NOT NULL,
-  image bytea,
+  integration_id text NOT NULL,
+  device_id text NOT NULL,
+  scene_id text,
 
-  UNIQUE(serial)
+  UNIQUE(integration_id, device_id)
 );

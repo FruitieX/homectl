@@ -1,10 +1,10 @@
 table! {
     devices (id) {
         id -> Int4,
-        serial -> Text,
         name -> Text,
-        path -> Text,
-        image -> Nullable<Bytea>,
+        integration_id -> Text,
+        device_id -> Text,
+        scene_id -> Nullable<Text>,
     }
 }
 
