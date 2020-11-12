@@ -87,14 +87,14 @@ fn load_integration(
     module_name: &String,
     id: &IntegrationId,
     config: &config::Value,
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
 ) -> Result<Box<dyn Integration>> {
     match module_name.as_str() {
-        "circadian" => Ok(Box::new(Circadian::new(id, config, sender)?)),
-        "random" => Ok(Box::new(Random::new(id, config, sender)?)),
-        "dummy" => Ok(Box::new(Dummy::new(id, config, sender)?)),
-        "lifx" => Ok(Box::new(Lifx::new(id, config, sender)?)),
-        "hue" => Ok(Box::new(Hue::new(id, config, sender)?)),
+        "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
+        "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
+        "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
+        "lifx" => Ok(Box::new(Lifx::new(id, config, event_tx)?)),
+        "hue" => Ok(Box::new(Hue::new(id, config, event_tx)?)),
         _ => Err(anyhow!("Unknown module name {}!", module_name)),
     }
 }

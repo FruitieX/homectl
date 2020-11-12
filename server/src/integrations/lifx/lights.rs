@@ -7,13 +7,13 @@ use crate::homectl_core::{
 
 use super::{
     utils::{from_lifx_state, read_lifx_msg, LifxMsg},
-    LifxConfig, UdpSenderMsg,
+    LifxConfig,
 };
 // use mio::net::UdpSocket;
 // use mio::{Events, Interest, Poll, Token};
-use async_std::net::UdpSocket;
-use std::{sync::Arc, io};
-use std::{net::SocketAddr, sync::mpsc::Sender, time::Duration};
+use async_std::{net::UdpSocket, sync::Sender};
+use std::sync::Arc;
+use std::{net::SocketAddr, time::Duration};
 use tokio::time::{interval_at, Instant};
 
 const MAX_UDP_PACKET_SIZE: usize = 1 << 16;
@@ -67,19 +67,19 @@ pub fn listen_udp_stream(
     });
 }
 
-pub async fn poll_lights(udp_sender_tx: Sender<UdpSenderMsg>) -> io::Result<()> {
+pub async fn poll_lights(udp_sender_tx: Sender<LifxMsg>) -> Result<()> {
     let poll_rate = Duration::from_millis(1000);
     let start = Instant::now() + poll_rate;
     let mut interval = interval_at(start, poll_rate);
 
     // TODO: find and use the subnet broadcast address instead
-    let broadcast_addr = "255.255.255.255:56700".parse::<SocketAddr>().unwrap();
+    let broadcast_addr: SocketAddr = "255.255.255.255:56700".parse()?;
 
     let msg = LifxMsg::Get(broadcast_addr);
 
     loop {
         interval.tick().await;
 
-        udp_sender_tx.send(msg.clone()).unwrap();
+        udp_sender_tx.send(msg.clone()).await;
     }
 }

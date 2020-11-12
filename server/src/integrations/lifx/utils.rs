@@ -1,8 +1,9 @@
 use crate::homectl_core::device::{Device, DeviceState, Light};
+use anyhow::{anyhow, Result};
 use byteorder::{ByteOrder, LittleEndian};
 use num_traits::pow::Pow;
 use palette::Hsv;
-use std::{error::Error, net::SocketAddr};
+use std::net::SocketAddr;
 
 #[derive(Clone)]
 pub struct LifxState {
@@ -182,7 +183,7 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
     device
 }
 
-pub fn to_lifx_state(device: Device) -> Result<LifxState, Box<dyn Error>> {
+pub fn to_lifx_state(device: Device) -> Result<LifxState> {
     let light_state = match device.state {
         DeviceState::Light(Light {
             brightness,
@@ -193,7 +194,7 @@ pub fn to_lifx_state(device: Device) -> Result<LifxState, Box<dyn Error>> {
             brightness,
             color,
         }),
-        _ => Err("Unsupported device state"),
+        _ => Err(anyhow!("Unsupported device state")),
     }?;
 
     let color = light_state

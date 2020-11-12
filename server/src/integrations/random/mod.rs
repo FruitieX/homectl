@@ -20,12 +20,12 @@ pub struct RandomConfig {
 pub struct Random {
     id: String,
     config: RandomConfig,
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
 }
 
 #[async_trait]
 impl Integration for Random {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: RandomConfig = config
             .clone()
             .try_into()
@@ -34,14 +34,14 @@ impl Integration for Random {
         Ok(Random {
             id: id.clone(),
             config: config.clone(),
-            sender,
+            event_tx,
         })
     }
 
     async fn register(&mut self) -> Result<()> {
         let device = mk_random_device(self);
 
-        self.sender
+        self.event_tx
             .send(Message::IntegrationDeviceRefresh { device })
             .await;
 
@@ -86,7 +86,7 @@ async fn poll_sensor(random: Random) {
     loop {
         interval.tick().await;
 
-        let sender = random.sender.clone();
+        let sender = random.event_tx.clone();
 
         let device = mk_random_device(&random);
         sender.send(Message::SetDeviceState { device }).await;

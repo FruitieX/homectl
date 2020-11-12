@@ -22,7 +22,7 @@ pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
 #[async_trait]
 pub trait Integration {
     // rustc --explain E0038
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self>
+    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self>
     where
         Self: Sized;
 

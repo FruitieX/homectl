@@ -148,7 +148,6 @@ impl DevicesManager {
                     device.state = expected_state;
 
                     self.sender
-                        .clone()
                         .send(Message::SetIntegrationDeviceState { device })
                         .await;
                 }

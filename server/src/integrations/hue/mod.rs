@@ -30,14 +30,14 @@ pub struct HueConfig {
 
 pub struct Hue {
     id: String,
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
     config: HueConfig,
     bridge_state: Option<BridgeState>,
 }
 
 #[async_trait]
 impl Integration for Hue {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()
             .try_into()
@@ -46,7 +46,7 @@ impl Integration for Hue {
         Ok(Hue {
             id: id.clone(),
             config,
-            sender,
+            event_tx,
             bridge_state: None,
         })
     }
@@ -66,14 +66,14 @@ impl Integration for Hue {
 
         for (id, bridge_light) in bridge_state.lights {
             let device = bridge_light_to_device(id, self.id.clone(), bridge_light);
-            self.sender
+            self.event_tx
                 .send(Message::IntegrationDeviceRefresh { device })
                 .await;
         }
 
         for (id, bridge_sensor) in bridge_state.sensors {
             let device = bridge_sensor_to_device(id, self.id.clone(), bridge_sensor);
-            self.sender
+            self.event_tx
                 .send(Message::IntegrationDeviceRefresh { device })
                 .await;
         }
@@ -94,7 +94,7 @@ impl Integration for Hue {
                 .sensors;
             let config = self.config.clone();
             let integration_id = self.id.clone();
-            let sender = self.sender.clone();
+            let sender = self.event_tx.clone();
 
             tokio::spawn(async {
                 poll_sensors(config, integration_id, sender, init_bridge_sensors).await
@@ -104,7 +104,7 @@ impl Integration for Hue {
         {
             let config = self.config.clone();
             let integration_id = self.id.clone();
-            let sender = self.sender.clone();
+            let sender = self.event_tx.clone();
 
             tokio::spawn(async { poll_lights(config, integration_id, sender).await });
         }

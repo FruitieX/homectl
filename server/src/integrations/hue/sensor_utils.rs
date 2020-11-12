@@ -162,7 +162,9 @@ fn to_buttonevent(button_id: DimmerSwitchButtonId, button_state: bool) -> Bridge
         false => '2', // SHORT_RELEASED
     });
 
-    s.parse::<BridgeButtonEvent>().unwrap()
+    let buttonevent: BridgeButtonEvent = s.parse().unwrap_or(1000);
+
+    buttonevent
 }
 
 /// Do some extrapolation on old and new bridge_sensor states to try and figure

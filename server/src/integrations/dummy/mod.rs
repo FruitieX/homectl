@@ -21,7 +21,7 @@ pub struct Dummy {
 
 #[async_trait]
 impl Integration for Dummy {
-    fn new(id: &IntegrationId, _config: &config::Value, _sender: TxEventChannel) -> Result<Self> {
+    fn new(id: &IntegrationId, _config: &config::Value, _event_tx: TxEventChannel) -> Result<Self> {
         Ok(Dummy {
             id: id.clone(),
             devices: HashMap::new(),
