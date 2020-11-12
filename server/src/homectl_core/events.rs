@@ -1,9 +1,10 @@
+use async_std::sync::{channel, Receiver, Sender};
+
 use super::{
     device::Device,
     devices_manager::DevicesState,
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
-use std::sync::mpsc::{channel, Receiver, Sender};
 
 #[derive(Debug)]
 pub enum Message {
@@ -38,5 +39,5 @@ pub type TxEventChannel = Sender<Message>;
 pub type RxEventChannel = Receiver<Message>;
 
 pub fn mk_channel() -> (TxEventChannel, RxEventChannel) {
-    channel::<Message>()
+    channel::<Message>(10)
 }

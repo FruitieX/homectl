@@ -4,10 +4,11 @@ use crate::homectl_core::{
     integration::{Integration, IntegrationId},
     scene::{color_config_as_device_color, ColorConfig},
 };
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use palette::Gradient;
 use serde::Deserialize;
-use std::{error::Error, time::Duration};
+use std::time::Duration;
 use tokio::time::{interval_at, Instant};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -32,31 +33,34 @@ pub struct Circadian {
 
 #[async_trait]
 impl Integration for Circadian {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
-        let config: CircadianConfig = config.clone().try_into().unwrap();
+    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+        let config: CircadianConfig = config
+            .clone()
+            .try_into()
+            .context("Failed to deserialize config of Circadian integration")?;
 
-        Circadian {
+        Ok(Circadian {
             id: id.clone(),
             config: config.clone(),
             sender,
             converted_day_color: color_config_as_device_color(config.day_color),
             converted_night_color: color_config_as_device_color(config.night_color),
-        }
+        })
     }
 
-    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn register(&mut self) -> Result<()> {
         let device = mk_circadian_device(self);
 
         self.sender
             .send(Message::IntegrationDeviceRefresh { device })
-            .unwrap();
+            .await;
 
         println!("registered circadian integration {}", self.id);
 
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<()> {
         println!("started circadian integration {}", self.id);
 
         let circadian = self.clone();
@@ -130,7 +134,7 @@ async fn poll_sensor(circadian: Circadian) {
         let sender = circadian.sender.clone();
 
         let device = mk_circadian_device(&circadian);
-        sender.send(Message::SetDeviceState { device }).unwrap();
+        sender.send(Message::SetDeviceState { device }).await;
     }
 }
 

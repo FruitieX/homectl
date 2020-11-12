@@ -105,7 +105,7 @@ impl DevicesManager {
     }
 
     /// Checks whether device values were changed or not due to refresh
-    pub fn handle_integration_device_refresh(&mut self, device: Device) {
+    pub async fn handle_integration_device_refresh(&mut self, device: Device) {
         // println!("handle_integration_device_refresh {:?}", device);
         let state_device = self.get_device(&device.integration_id, &device.id);
 
@@ -121,13 +121,13 @@ impl DevicesManager {
                 // Device was seen for the first time
                 (_, None, _) => {
                     println!("Discovered device: {:?}", device);
-                    self.set_device_state(&device, false);
+                    self.set_device_state(&device, false).await;
                 }
 
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
                 (DeviceState::Sensor(_), Some(_), _) => {
-                    self.set_device_state(&device, false);
+                    self.set_device_state(&device, false).await;
                 }
 
                 // Device state does not match expected state, maybe the
@@ -150,12 +150,12 @@ impl DevicesManager {
                     self.sender
                         .clone()
                         .send(Message::SetIntegrationDeviceState { device })
-                        .unwrap();
+                        .await;
                 }
 
                 // Expected device state was not found
                 (_, _, None) => {
-                    self.set_device_state(&device, false);
+                    self.set_device_state(&device, false).await;
                 }
             }
         }
@@ -193,7 +193,7 @@ impl DevicesManager {
     }
 
     /// Sets stored state for given device and dispatches DeviceUpdate
-    pub fn set_device_state(&mut self, device: &Device, set_scene: bool) -> Device {
+    pub async fn set_device_state(&mut self, device: &Device, set_scene: bool) -> Device {
         let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
         let old_state = self.state.clone();
 
@@ -221,7 +221,7 @@ impl DevicesManager {
                 old,
                 new: device.clone(),
             })
-            .unwrap();
+            .await;
 
         device
     }
@@ -235,7 +235,7 @@ impl DevicesManager {
             .get(&mk_device_state_key(&integration_id, &device_id))
     }
 
-    pub fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
+    pub async fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
         println!("Activating scene {:?}", scene_id);
 
         let scene_devices_config = self
@@ -254,12 +254,12 @@ impl DevicesManager {
                     Some(device) => {
                         let mut device = device.clone();
                         device.scene = device_scene_state.clone();
-                        let device = self.set_device_state(&device, true);
+                        let device = self.set_device_state(&device, true).await;
 
                         self.sender
                             .clone()
                             .send(Message::SetIntegrationDeviceState { device })
-                            .unwrap();
+                            .await;
                     }
                     None => {}
                 }
@@ -269,7 +269,7 @@ impl DevicesManager {
         Some(true)
     }
 
-    pub fn cycle_scenes(&mut self, scene_descriptors: &Vec<SceneDescriptor>) -> Option<bool> {
+    pub async fn cycle_scenes(&mut self, scene_descriptors: &Vec<SceneDescriptor>) -> Option<bool> {
         let mut scenes_common_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
 
         // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
@@ -349,7 +349,7 @@ impl DevicesManager {
             None => scene_descriptors.first(),
         }?;
 
-        self.activate_scene(&next_scene.scene_id);
+        self.activate_scene(&next_scene.scene_id).await;
 
         Some(true)
     }

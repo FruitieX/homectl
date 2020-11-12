@@ -3,11 +3,12 @@ use crate::homectl_core::{
     events::{Message, TxEventChannel},
     integration::{Integration, IntegrationId},
 };
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use palette::rgb::Rgb;
 use rand::prelude::*;
 use serde::Deserialize;
-use std::{error::Error, time::Duration};
+use std::time::Duration;
 use tokio::time::{interval_at, Instant};
 
 #[derive(Clone, Debug, Deserialize)]
@@ -24,29 +25,32 @@ pub struct Random {
 
 #[async_trait]
 impl Integration for Random {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
-        let config: RandomConfig = config.clone().try_into().unwrap();
+    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+        let config: RandomConfig = config
+            .clone()
+            .try_into()
+            .context("Failed to deserialize config of Random integration")?;
 
-        Random {
+        Ok(Random {
             id: id.clone(),
             config: config.clone(),
             sender,
-        }
+        })
     }
 
-    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn register(&mut self) -> Result<()> {
         let device = mk_random_device(self);
 
         self.sender
             .send(Message::IntegrationDeviceRefresh { device })
-            .unwrap();
+            .await;
 
         println!("registered random integration {}", self.id);
 
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<()> {
         println!("started random integration {}", self.id);
 
         let random = self.clone();
@@ -85,7 +89,7 @@ async fn poll_sensor(random: Random) {
         let sender = random.sender.clone();
 
         let device = mk_random_device(&random);
-        sender.send(Message::SetDeviceState { device }).unwrap();
+        sender.send(Message::SetDeviceState { device }).await;
     }
 }
 

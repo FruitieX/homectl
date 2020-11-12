@@ -6,13 +6,14 @@ use crate::homectl_core::{
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
+use async_std::sync::Mutex;
 use async_trait::async_trait;
 use lights::{init_udp_socket, listen_udp_stream, poll_lights};
 use mpsc::{Receiver, Sender};
 use serde::Deserialize;
-use std::error::Error;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{mpsc, Arc};
 use utils::{mk_lifx_udp_msg, to_lifx_state, LifxMsg};
+use anyhow::{Context, Result};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct LifxConfig {
@@ -31,19 +32,20 @@ pub struct Lifx {
 
 #[async_trait]
 impl Integration for Lifx {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
+    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+        let config = config.clone().try_into().context("Failed to deserialize config of Lifx integration")?;
         let (udp_sender, udp_receiver) = mpsc::channel();
 
-        Lifx {
+        Ok(Lifx {
             id: id.clone(),
-            config: config.clone().try_into().unwrap(),
+            config,
             sender,
             udp_sender_tx: udp_sender,
             udp_sender_rx: Arc::new(Mutex::new(udp_receiver)),
-        }
+        })
     }
 
-    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn register(&mut self) -> Result<()> {
         println!("registered lifx integration {}", self.id);
 
         let config = self.config.clone();
@@ -52,16 +54,17 @@ impl Integration for Lifx {
         let udp_sender_tx = self.udp_sender_tx.clone();
         let udp_sender_rx = self.udp_sender_rx.clone();
 
-        let (recv_half, mut send_half) = init_udp_socket(config.clone()).await?;
+        let socket = init_udp_socket(&config).await?;
+        let socket = Arc::new(socket);
 
-        listen_udp_stream(recv_half, integration_id, sender);
+        listen_udp_stream(Arc::clone(&socket), integration_id, sender);
 
         tokio::spawn(async move { poll_lights(udp_sender_tx).await });
 
         tokio::spawn(async move {
             loop {
                 let res = {
-                    let udp_sender_rx = udp_sender_rx.lock().unwrap();
+                    let udp_sender_rx = udp_sender_rx.lock().await;
                     udp_sender_rx.recv()
                 };
 
@@ -76,7 +79,7 @@ impl Integration for Lifx {
                         };
 
                         let msg = mk_lifx_udp_msg(lifx_msg);
-                        match send_half.send_to(&msg.clone(), &target).await {
+                        match socket.send_to(&msg.clone(), &target).await {
                             Ok(_size) => {}
                             Err(e) => {
                                 println!("Error while sending UDP packet {}", e);
@@ -94,7 +97,7 @@ impl Integration for Lifx {
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<()> {
         println!("started lifx integration {}", self.id);
 
         Ok(())

@@ -30,7 +30,7 @@ pub async fn do_refresh_lights(
 
         sender
             .send(Message::IntegrationDeviceRefresh { device })
-            .unwrap();
+            .await;
     }
 
     Ok(())
@@ -117,7 +117,7 @@ pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), B
         _ => Err("Unsupported device type encountered in hue set_device_state"),
     }?;
 
-    let res = Client::builder()
+    let _ = Client::builder()
         .build()?
         .put(&format!(
             "http://{}/api/{}/{}/state",

@@ -3,12 +3,12 @@ use super::{
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
-use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, random::Random};
-use std::{
-    collections::HashMap,
-    error::Error,
-    sync::{Arc, Mutex},
+use crate::integrations::{
+    circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, random::Random,
 };
+use anyhow::{anyhow, Result};
+use async_std::sync::Mutex;
+use std::{collections::HashMap, sync::Arc};
 
 pub type IntegrationsTree = HashMap<IntegrationId, Box<dyn Integration>>;
 pub type Integrations = Arc<Mutex<IntegrationsTree>>;
@@ -28,27 +28,27 @@ impl IntegrationsManager {
         }
     }
 
-    pub fn load_integration(
+    pub async fn load_integration(
         &self,
         module_name: &String,
         integration_id: &IntegrationId,
         config: &config::Value,
-    ) -> Result<(), String> {
+    ) -> Result<()> {
         println!("loading integration with module_name {}", module_name);
 
         let integration =
             load_integration(module_name, integration_id, config, self.sender.clone())?;
 
         {
-            let mut integrations = self.integrations.lock().unwrap();
+            let mut integrations = self.integrations.lock().await;
             integrations.insert(integration_id.clone(), integration);
         }
 
         Ok(())
     }
 
-    pub async fn run_register_pass(&self) -> Result<(), Box<dyn Error>> {
-        let mut integrations = self.integrations.lock().unwrap();
+    pub async fn run_register_pass(&self) -> Result<()> {
+        let mut integrations = self.integrations.lock().await;
 
         for (_integration_id, integration) in integrations.iter_mut() {
             integration.register().await?;
@@ -57,8 +57,8 @@ impl IntegrationsManager {
         Ok(())
     }
 
-    pub async fn run_start_pass(&self) -> Result<(), Box<dyn Error>> {
-        let mut integrations = self.integrations.lock().unwrap();
+    pub async fn run_start_pass(&self) -> Result<()> {
+        let mut integrations = self.integrations.lock().await;
 
         for (_integration_id, integration) in integrations.iter_mut() {
             integration.start().await?;
@@ -68,7 +68,7 @@ impl IntegrationsManager {
     }
 
     pub async fn set_integration_device_state(&self, device: Device) {
-        let mut integrations = self.integrations.lock().unwrap();
+        let mut integrations = self.integrations.lock().await;
 
         let integration = integrations.get_mut(&device.integration_id);
 
@@ -88,13 +88,13 @@ fn load_integration(
     id: &IntegrationId,
     config: &config::Value,
     sender: TxEventChannel,
-) -> Result<Box<dyn Integration>, String> {
+) -> Result<Box<dyn Integration>> {
     match module_name.as_str() {
-        "circadian" => Ok(Box::new(Circadian::new(id, config, sender))),
-        "random" => Ok(Box::new(Random::new(id, config, sender))),
-        "dummy" => Ok(Box::new(Dummy::new(id, config, sender))),
-        "lifx" => Ok(Box::new(Lifx::new(id, config, sender))),
-        "hue" => Ok(Box::new(Hue::new(id, config, sender))),
-        _ => Err(format!("Unknown module name {}!", module_name)),
+        "circadian" => Ok(Box::new(Circadian::new(id, config, sender)?)),
+        "random" => Ok(Box::new(Random::new(id, config, sender)?)),
+        "dummy" => Ok(Box::new(Dummy::new(id, config, sender)?)),
+        "lifx" => Ok(Box::new(Lifx::new(id, config, sender)?)),
+        "hue" => Ok(Box::new(Hue::new(id, config, sender)?)),
+        _ => Err(anyhow!("Unknown module name {}!", module_name)),
     }
 }

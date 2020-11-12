@@ -1,11 +1,12 @@
 use crate::homectl_core::{
-    device::{DeviceId, Device},
+    device::{Device, DeviceId},
     events::TxEventChannel,
     integration::{Integration, IntegrationId},
 };
+use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
-use std::{collections::HashMap, error::Error};
+use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 pub struct DummyConfig {
@@ -19,14 +20,14 @@ pub struct Dummy {
 
 #[async_trait]
 impl Integration for Dummy {
-    fn new(id: &IntegrationId, _config: &config::Value, _sender: TxEventChannel) -> Self {
-        Dummy {
+    fn new(id: &IntegrationId, _config: &config::Value, _sender: TxEventChannel) -> Result<Self> {
+        Ok(Dummy {
             id: id.clone(),
             devices: HashMap::new(),
-        }
+        })
     }
 
-    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn register(&mut self) -> Result<()> {
         let resp: HashMap<String, String> =
             reqwest::get("https://httpbin.org/ip").await?.json().await?;
         println!("{:#?}", resp);
@@ -35,7 +36,7 @@ impl Integration for Dummy {
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<()> {
         println!("started dummy integration {}", self.id);
 
         Ok(())

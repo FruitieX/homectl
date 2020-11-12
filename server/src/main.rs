@@ -6,6 +6,7 @@ mod homectl_core;
 mod integrations;
 
 // use db::{actions::find_floorplans, establish_connection};
+use anyhow::{Context, Result};
 use homectl_core::{
     devices_manager::DevicesManager,
     events::*,
@@ -20,7 +21,7 @@ use std::error::Error;
 // https://github.com/actix/examples/blob/master/diesel/src/main.rs
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let (config, opaque_integrations_configs) = homectl_core::config::read_config();
+    let (config, opaque_integrations_configs) = homectl_core::config::read_config()?;
 
     // println!("Using config:");
     // println!("{:#?}", config);
@@ -34,19 +35,20 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rules_engine = RulesEngine::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {
-        let opaque_integration_config: &config::Value =
-            opaque_integrations_configs.get(id).unwrap();
+        let opaque_integration_config: &config::Value = opaque_integrations_configs
+            .get(id)
+            .with_context(|| format!("Expected to find config for integration with id {}", id))?;
 
         integrations_manager
             .load_integration(&integration_config.plugin, id, opaque_integration_config)
-            .unwrap();
+            .await?;
     }
 
     // let connection = establish_connection();
     // let results = find_floorplans(&connection);
     // println!("Floorplans in DB: {:?}", results);
 
-    let _result: Result<(), ()> = {
+    let _: Result<()> = {
         integrations_manager.run_register_pass().await?;
         integrations_manager.run_start_pass().await?;
 
@@ -54,22 +56,28 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     loop {
-        let msg = receiver.recv()?;
+        let msg = receiver.recv().await?;
 
         // println!("got msg: {:?}", msg);
 
         match msg {
             Message::IntegrationDeviceRefresh { device } => {
-                devices_manager.handle_integration_device_refresh(device)
+                devices_manager
+                    .handle_integration_device_refresh(device)
+                    .await
             }
             Message::DeviceUpdate {
                 old_state,
                 new_state,
                 old,
                 new,
-            } => rules_engine.handle_device_update(old_state, new_state, old, new),
+            } => {
+                rules_engine
+                    .handle_device_update(old_state, new_state, old, new)
+                    .await
+            }
             Message::SetDeviceState { device } => {
-                devices_manager.set_device_state(&device, false);
+                devices_manager.set_device_state(&device, false).await;
             }
             Message::SetIntegrationDeviceState { device } => {
                 integrations_manager
@@ -77,10 +85,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .await;
             }
             Message::ActivateScene(SceneDescriptor { scene_id }) => {
-                devices_manager.activate_scene(&scene_id);
+                devices_manager.activate_scene(&scene_id).await;
             }
             Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
-                devices_manager.cycle_scenes(&scenes);
+                devices_manager.cycle_scenes(&scenes).await;
             }
         }
     }

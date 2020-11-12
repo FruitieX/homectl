@@ -7,11 +7,8 @@ use crate::homectl_core::{
     events::{Message, TxEventChannel},
     integration::IntegrationId,
 };
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use async_std::sync::Mutex;
+use std::{error::Error, sync::Arc, time::Duration};
 use tokio::time::{interval_at, Instant};
 
 pub struct SensorsState {
@@ -27,7 +24,7 @@ pub async fn do_refresh_sensors(
     // NOTE: we can't hold onto this mutex lock across the following .await
     // statements
     let prev_bridge_sensors = {
-        let sensors_state = sensors_state.lock().unwrap();
+        let sensors_state = sensors_state.lock().await;
         let bridge_sensors = sensors_state.bridge_sensors.clone();
         bridge_sensors
     };
@@ -40,7 +37,7 @@ pub async fn do_refresh_sensors(
     .json()
     .await?;
 
-    let mut sensors_state = sensors_state.lock().unwrap();
+    let mut sensors_state = sensors_state.lock().await;
     sensors_state.bridge_sensors = result.clone();
 
     for (sensor_id, bridge_sensor) in result {
@@ -57,7 +54,7 @@ pub async fn do_refresh_sensors(
             });
 
         for event in events {
-            sender.send(event).unwrap();
+            sender.send(event).await;
         }
     }
 

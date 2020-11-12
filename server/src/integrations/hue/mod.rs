@@ -9,10 +9,10 @@ use crate::homectl_core::{
     events::{Message, TxEventChannel},
     integration::{Integration, IntegrationId},
 };
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bridge::BridgeState;
 use serde::Deserialize;
-use std::error::Error;
 
 use light_utils::bridge_light_to_device;
 use lights::{poll_lights, set_device_state};
@@ -36,16 +36,21 @@ pub struct Hue {
 
 #[async_trait]
 impl Integration for Hue {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Self {
-        Hue {
+    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+        let config = config
+            .clone()
+            .try_into()
+            .context("Failed to deserialize config of Hue integration")?;
+
+        Ok(Hue {
             id: id.clone(),
-            config: config.clone().try_into().unwrap(),
+            config,
             sender,
             bridge_state: None,
-        }
+        })
     }
 
-    async fn register(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn register(&mut self) -> Result<()> {
         let bridge_state: BridgeState = reqwest::get(&format!(
             "http://{}/api/{}",
             self.config.addr, self.config.username
@@ -60,14 +65,14 @@ impl Integration for Hue {
             let device = bridge_light_to_device(id, self.id.clone(), bridge_light);
             self.sender
                 .send(Message::IntegrationDeviceRefresh { device })
-                .unwrap();
+                .await;
         }
 
         for (id, bridge_sensor) in bridge_state.sensors {
             let device = bridge_sensor_to_device(id, self.id.clone(), bridge_sensor);
             self.sender
                 .send(Message::IntegrationDeviceRefresh { device })
-                .unwrap();
+                .await;
         }
 
         println!("registered hue integration");
@@ -75,20 +80,31 @@ impl Integration for Hue {
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<(), Box<dyn Error>> {
+    async fn start(&mut self) -> Result<()> {
         println!("started hue integration");
 
-        // FIXME: how to do this in a not stupid way
-        let sensors = self.bridge_state.clone().unwrap().sensors;
-        let config1 = self.config.clone();
-        let config2 = self.config.clone();
-        let integration_id1 = self.id.clone();
-        let integration_id2 = self.id.clone();
-        let sender1 = self.sender.clone();
-        let sender2 = self.sender.clone();
+        {
+            let init_bridge_sensors = self
+                .bridge_state
+                .clone()
+                .context("Expected BridgeState to exist when Hue::start() is called")?
+                .sensors;
+            let config = self.config.clone();
+            let integration_id = self.id.clone();
+            let sender = self.sender.clone();
 
-        tokio::spawn(async { poll_sensors(config1, integration_id1, sender1, sensors).await });
-        tokio::spawn(async { poll_lights(config2, integration_id2, sender2).await });
+            tokio::spawn(async {
+                poll_sensors(config, integration_id, sender, init_bridge_sensors).await
+            });
+        }
+
+        {
+            let config = self.config.clone();
+            let integration_id = self.id.clone();
+            let sender = self.sender.clone();
+
+            tokio::spawn(async { poll_lights(config, integration_id, sender).await });
+        }
 
         Ok(())
     }

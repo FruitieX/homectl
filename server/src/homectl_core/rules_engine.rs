@@ -16,7 +16,7 @@ impl RulesEngine {
         RulesEngine { config, sender }
     }
 
-    pub fn handle_device_update(
+    pub async fn handle_device_update(
         &self,
         old_state: DevicesState,
         new_state: DevicesState,
@@ -30,24 +30,22 @@ impl RulesEngine {
                 let matching_actions = self.find_matching_actions(old_state, new_state);
 
                 for action in matching_actions {
-                    self.run_action(&action);
+                    self.run_action(&action).await;
                 }
             }
             None => {}
         }
     }
 
-    fn run_action(&self, action: &Action) {
+    async fn run_action(&self, action: &Action) {
         match action {
             Action::ActivateScene(action) => {
                 self.sender
                     .send(Message::ActivateScene(action.clone()))
-                    .unwrap();
-            },
+                    .await;
+            }
             Action::CycleScenes(action) => {
-                self.sender
-                    .send(Message::CycleScenes(action.clone()))
-                    .unwrap();
+                self.sender.send(Message::CycleScenes(action.clone())).await;
             }
         }
     }
@@ -66,9 +64,10 @@ impl RulesEngine {
 
         triggered_routine_ids
             .map(|id| {
-                // .unwrap() should be safe here because triggered_routine_ids
-                // contains only existing routine_ids
-                let routine = self.config.get(id).unwrap();
+                let routine = self
+                    .config
+                    .get(id)
+                    .expect("Expected triggered_routine_ids to only contain ids of routines existing in the RoutinesConfig");
                 routine.actions.clone()
             })
             .flatten()
