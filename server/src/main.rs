@@ -1,13 +1,15 @@
 #[macro_use]
 extern crate diesel;
 
+#[macro_use]
+extern crate lazy_static;
+
 mod db;
 mod homectl_core;
 mod integrations;
 
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
-use db::establish_db_connection;
 use homectl_core::{
     devices_manager::DevicesManager,
     events::*,
@@ -23,7 +25,6 @@ use std::error::Error;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let (config, opaque_integrations_configs) = homectl_core::config::read_config()?;
-    let db_connection = establish_db_connection();
 
     // println!("Using config:");
     // println!("{:#?}", config);
@@ -33,7 +34,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let integrations_manager = IntegrationsManager::new(sender.clone());
     let groups_manager = GroupsManager::new(config.groups);
     let scenes_manager = ScenesManager::new(config.scenes, groups_manager);
-    let mut devices_manager = DevicesManager::new(db_connection, sender.clone(), scenes_manager);
+    let mut devices_manager = DevicesManager::new(sender.clone(), scenes_manager);
     let rules_engine = RulesEngine::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {

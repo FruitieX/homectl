@@ -14,7 +14,7 @@ config = "0.10.1"
 futures = "0.3.8"
 serde = { version = "1.0.117", features = ["derive"] }
 palette = { version = "0.5.0", features = ["serializing"] }
-diesel = { version = "1.4.5", features = ["postgres"] }
+diesel = { version = "1.4.5", features = ["postgres", "r2d2"] }
 async-trait = "0.1.41"
 reqwest = { version = "0.10.8", features = ["json"] }
 tokio = { version = "0.3.3", features = ["full"] }
@@ -23,3 +23,4 @@ num-traits = "0.2.14"
 async-std = { version = "1.7.0", features = ["unstable"] }
 anyhow = "1.0.34"
 tokio-compat-02 = "0.1.2"
+lazy_static = "1.4.0"
