@@ -68,7 +68,7 @@ and also other similar solutions to homectl:
 
 ## Setup
 
-- Install rust: https://rustup.rs/ (might need unstable for now)
+- Install rust: https://rustup.rs/ (beta should be good)
 - Clone this repo
 - `cp Settings.toml.example Settings.toml`
 - `$EDITOR Settings.toml`

@@ -1,12 +1,12 @@
 pub mod config;
 pub mod device;
-pub mod devices_manager;
+pub mod devices;
 pub mod events;
 pub mod group;
-pub mod groups_manager;
+pub mod groups;
 pub mod integration;
-pub mod integrations_manager;
+pub mod integrations;
 pub mod rule;
-pub mod rules_engine;
+pub mod rules;
 pub mod scene;
-pub mod scenes_manager;
+pub mod scenes;

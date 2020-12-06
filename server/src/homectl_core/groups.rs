@@ -1,14 +1,12 @@
-use super::{
-    group::{GroupsConfig, GroupId, GroupDeviceLink},
-};
+use super::group::{GroupDeviceLink, GroupId, GroupsConfig};
 
-pub struct GroupsManager {
+pub struct Groups {
     config: GroupsConfig,
 }
 
-impl GroupsManager {
+impl Groups {
     pub fn new(config: GroupsConfig) -> Self {
-        GroupsManager { config }
+        Groups { config }
     }
 
     /// Returns all GroupDeviceLinks that belong to given group

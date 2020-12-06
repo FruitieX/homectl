@@ -11,18 +11,17 @@ use async_std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
 pub type IntegrationsTree = HashMap<IntegrationId, Box<dyn Integration>>;
-pub type Integrations = Arc<Mutex<IntegrationsTree>>;
 
-pub struct IntegrationsManager {
-    pub integrations: Integrations,
+pub struct Integrations {
+    pub integrations: Arc<Mutex<IntegrationsTree>>,
     sender: TxEventChannel,
 }
 
-impl IntegrationsManager {
+impl Integrations {
     pub fn new(sender: TxEventChannel) -> Self {
-        let integrations: Integrations = Arc::new(Mutex::new(HashMap::new()));
+        let integrations = Arc::new(Mutex::new(HashMap::new()));
 
-        IntegrationsManager {
+        Integrations {
             integrations,
             sender,
         }

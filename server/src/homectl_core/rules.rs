@@ -1,19 +1,19 @@
 use super::{
     device::{Device, DeviceState, SensorKind},
-    devices_manager::{find_device, DevicesState},
+    devices::{find_device, DevicesState},
     events::{Message, TxEventChannel},
     rule::{Action, Actions, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState},
 };
 use std::collections::HashSet;
 
-pub struct RulesEngine {
+pub struct Rules {
     config: RoutinesConfig,
     sender: TxEventChannel,
 }
 
-impl RulesEngine {
+impl Rules {
     pub fn new(config: RoutinesConfig, sender: TxEventChannel) -> Self {
-        RulesEngine { config, sender }
+        Rules { config, sender }
     }
 
     pub async fn handle_device_update(

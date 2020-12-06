@@ -1,8 +1,8 @@
 use super::{
     device::{Device, DeviceSceneState, DeviceState, Light},
-    devices_manager::{find_device, DevicesState},
+    devices::{find_device, DevicesState},
     group::GroupDeviceLink,
-    groups_manager::GroupsManager,
+    groups::Groups,
     scene::{
         color_config_as_device_color, SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneId,
         ScenesConfig,
@@ -10,17 +10,14 @@ use super::{
 };
 use std::collections::HashMap;
 
-pub struct ScenesManager {
+pub struct Scenes {
     config: ScenesConfig,
-    groups_manager: GroupsManager,
+    groups: Groups,
 }
 
-impl ScenesManager {
-    pub fn new(config: ScenesConfig, groups_manager: GroupsManager) -> Self {
-        ScenesManager {
-            config,
-            groups_manager,
-        }
+impl Scenes {
+    pub fn new(config: ScenesConfig, groups: Groups) -> Self {
+        Scenes { config, groups }
     }
 
     pub fn find_scene(&self, scene_id: &SceneId) -> Option<&SceneConfig> {
@@ -60,7 +57,7 @@ impl ScenesManager {
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
-            let group_devices = self.groups_manager.find_group_device_links(&group_id);
+            let group_devices = self.groups.find_group_device_links(&group_id);
 
             for GroupDeviceLink {
                 integration_id,

@@ -2,7 +2,7 @@ use async_std::sync::{channel, Receiver, Sender};
 
 use super::{
     device::Device,
-    devices_manager::DevicesState,
+    devices::DevicesState,
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
@@ -22,7 +22,7 @@ pub enum Message {
         new: Device,
     },
 
-    /// Tell devices_manager to update internal device state.
+    /// Tell devices to update internal device state.
     SetDeviceState { device: Device },
 
     /// Tell integration to trigger state change for the device.

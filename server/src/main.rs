@@ -11,13 +11,13 @@ mod integrations;
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
 use homectl_core::{
-    devices_manager::DevicesManager,
+    devices::Devices,
     events::*,
-    groups_manager::GroupsManager,
-    integrations_manager::IntegrationsManager,
-    rules_engine::RulesEngine,
+    groups::Groups,
+    integrations::Integrations,
+    rules::Rules,
     scene::{CycleScenesDescriptor, SceneDescriptor},
-    scenes_manager::ScenesManager,
+    scenes::Scenes,
 };
 use std::error::Error;
 
@@ -31,25 +31,25 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let (sender, receiver) = mk_channel();
 
-    let integrations_manager = IntegrationsManager::new(sender.clone());
-    let groups_manager = GroupsManager::new(config.groups);
-    let scenes_manager = ScenesManager::new(config.scenes, groups_manager);
-    let mut devices_manager = DevicesManager::new(sender.clone(), scenes_manager);
-    let rules_engine = RulesEngine::new(config.routines, sender.clone());
+    let integrations = Integrations::new(sender.clone());
+    let groups = Groups::new(config.groups);
+    let scenes = Scenes::new(config.scenes, groups);
+    let mut devices = Devices::new(sender.clone(), scenes);
+    let rules_engine = Rules::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
             .get(id)
             .with_context(|| format!("Expected to find config for integration with id {}", id))?;
 
-        integrations_manager
+        integrations
             .load_integration(&integration_config.plugin, id, opaque_integration_config)
             .await?;
     }
 
     let _: Result<()> = {
-        integrations_manager.run_register_pass().await?;
-        integrations_manager.run_start_pass().await?;
+        integrations.run_register_pass().await?;
+        integrations.run_start_pass().await?;
 
         Ok(())
     };
@@ -61,9 +61,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         match msg {
             Message::IntegrationDeviceRefresh { device } => {
-                devices_manager
-                    .handle_integration_device_refresh(device)
-                    .await
+                devices.handle_integration_device_refresh(device).await
             }
             Message::DeviceUpdate {
                 old_state,
@@ -76,18 +74,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     .await
             }
             Message::SetDeviceState { device } => {
-                devices_manager.set_device_state(&device, false).await;
+                devices.set_device_state(&device, false).await;
             }
             Message::SetIntegrationDeviceState { device } => {
-                integrations_manager
-                    .set_integration_device_state(device)
-                    .await;
+                integrations.set_integration_device_state(device).await;
             }
             Message::ActivateScene(SceneDescriptor { scene_id }) => {
-                devices_manager.activate_scene(&scene_id).await;
+                devices.activate_scene(&scene_id).await;
             }
             Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
-                devices_manager.cycle_scenes(&scenes).await;
+                devices.cycle_scenes(&scenes).await;
             }
         }
     }

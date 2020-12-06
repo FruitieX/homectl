@@ -5,7 +5,7 @@ use super::{
     events::{Message, TxEventChannel},
     integration::IntegrationId,
     scene::{SceneDescriptor, SceneId},
-    scenes_manager::ScenesManager,
+    scenes::Scenes,
 };
 use palette::Hsv;
 use std::{collections::HashMap, time::Instant};
@@ -21,10 +21,10 @@ pub fn mk_device_state_key(integration_id: &IntegrationId, device_id: &DeviceId)
     (integration_id.clone(), device_id.clone())
 }
 
-pub struct DevicesManager {
+pub struct Devices {
     sender: TxEventChannel,
     state: DevicesState,
-    scenes_manager: ScenesManager,
+    scenes: Scenes,
 }
 
 fn cmp_light_state(
@@ -97,15 +97,15 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
     }
 }
 
-impl DevicesManager {
+impl Devices {
     pub fn new(
         sender: TxEventChannel,
-        scenes_manager: ScenesManager,
+        scenes: Scenes,
     ) -> Self {
-        DevicesManager {
+        Devices {
             sender,
             state: HashMap::new(),
-            scenes_manager,
+            scenes,
         }
     }
 
@@ -176,7 +176,7 @@ impl DevicesManager {
 
             _ => {
                 let scene_device_state = self
-                    .scenes_manager
+                    .scenes
                     .find_scene_device_state(&device, &self.state);
 
                 scene_device_state.unwrap_or_else(|| {
@@ -244,7 +244,7 @@ impl DevicesManager {
         println!("Activating scene {:?}", scene_id);
 
         let scene_devices_config = self
-            .scenes_manager
+            .scenes
             .find_scene_devices_config(&self.state, scene_id)?;
         let device_scene_state = Some(DeviceSceneState {
             scene_id: scene_id.to_owned(),
@@ -284,7 +284,7 @@ impl DevicesManager {
             .iter()
             .map(|sd| {
                 let scene_devices_config = self
-                    .scenes_manager
+                    .scenes
                     .find_scene_devices_config(&self.state, &sd.scene_id);
 
                 let mut scene_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
@@ -317,7 +317,7 @@ impl DevicesManager {
 
         let active_scene_index = scene_descriptors.iter().position(|sd| {
             let scene_devices_config = self
-                .scenes_manager
+                .scenes
                 .find_scene_devices_config(&self.state, &sd.scene_id);
 
             // try finding any device in scene_devices_config that has this scene active
