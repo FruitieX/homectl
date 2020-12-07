@@ -39,5 +39,6 @@ pub type TxEventChannel = Sender<Message>;
 pub type RxEventChannel = Receiver<Message>;
 
 pub fn mk_channel() -> (TxEventChannel, RxEventChannel) {
-    channel::<Message>(10)
+    // NOTE: this might get full
+    channel::<Message>(100)
 }

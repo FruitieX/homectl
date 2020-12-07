@@ -52,6 +52,8 @@ impl Integration for Hue {
     }
 
     async fn register(&mut self) -> Result<()> {
+        println!("registering hue integration");
+
         let bridge_state: BridgeState = reqwest::get(&format!(
             "http://{}/api/{}",
             self.config.addr, self.config.username
