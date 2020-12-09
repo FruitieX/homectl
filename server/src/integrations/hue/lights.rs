@@ -128,8 +128,10 @@ pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), B
         ))
         .json(&body)
         .send()
+        .compat()
         .await?
         .text()
+        .compat()
         .await?;
 
     Ok(())
