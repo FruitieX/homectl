@@ -1,14 +1,8 @@
 use crate::db::actions::db_update_device;
 
-use super::{
-    device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState},
-    events::{Message, TxEventChannel},
-    integration::IntegrationId,
-    scene::{SceneDescriptor, SceneId},
-    scenes::Scenes,
-};
+use super::{device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState}, events::{Message, TxEventChannel}, integration::IntegrationId, scene::{SceneDescriptor, SceneDevicesConfig, SceneId}, scenes::Scenes};
 use palette::Hsv;
-use std::{collections::HashMap, time::Instant};
+use std::{collections::HashMap, sync::{Arc, Mutex}, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
 pub type DevicesState = HashMap<DeviceStateKey, Device>;
@@ -24,7 +18,7 @@ pub fn mk_device_state_key(integration_id: &IntegrationId, device_id: &DeviceId)
 pub struct Devices {
     sender: TxEventChannel,
     state: DevicesState,
-    scenes: Scenes,
+    scenes: Arc<Mutex<Scenes>>,
 }
 
 fn cmp_light_state(
@@ -34,8 +28,8 @@ fn cmp_light_state(
     b_bri: &Option<f64>,
 ) -> bool {
     let hue_delta = 0.5;
-    let sat_delta = 0.02;
-    let val_delta = 0.02;
+    let sat_delta = 0.005;
+    let val_delta = 0.005;
 
     match (a, b) {
         (None, None) => true,
@@ -49,16 +43,14 @@ fn cmp_light_state(
             b_hsv.value = b_hsv.value * (b_bri.unwrap_or(1.0) as f32);
 
             if f32::abs(a_hsv.hue.to_degrees() - b_hsv.hue.to_degrees()) > hue_delta {
-                return false;
+                false
+            } else if f32::abs(a_hsv.saturation - b_hsv.saturation) > sat_delta {
+                false
+            } else if f32::abs(a_hsv.value - b_hsv.value) > val_delta {
+                false
+            } else {
+                true
             }
-            if f32::abs(a_hsv.saturation - b_hsv.saturation) > sat_delta {
-                return false;
-            }
-            if f32::abs(a_hsv.value - b_hsv.value) > val_delta {
-                return false;
-            }
-
-            true
         }
     }
 }
@@ -100,7 +92,7 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
 impl Devices {
     pub fn new(
         sender: TxEventChannel,
-        scenes: Scenes,
+        scenes: Arc<Mutex<Scenes>>,
     ) -> Self {
         Devices {
             sender,
@@ -110,7 +102,7 @@ impl Devices {
     }
 
     /// Checks whether device values were changed or not due to refresh
-    pub async fn handle_integration_device_refresh(&mut self, device: Device) {
+    pub async fn handle_integration_device_refresh(&mut self, device: &Device) {
         // println!("handle_integration_device_refresh {:?}", device);
         let state_device = self.get_device(&device.integration_id, &device.id);
 
@@ -119,7 +111,7 @@ impl Devices {
         let expected_state = state_device.map(|d| self.get_expected_state(&d, false));
 
         // Take action if the device state has changed from stored state
-        if Some(&device) != state_device || expected_state != Some(device.state.clone()) {
+        if Some(device) != state_device || expected_state != Some(device.state.clone()) {
             let kind = device.state.clone();
 
             match (kind, state_device, expected_state) {
@@ -175,8 +167,8 @@ impl Devices {
             DeviceState::Sensor(_) => device.state.clone(),
 
             _ => {
-                let scene_device_state = self
-                    .scenes
+                let scenes = self.scenes.lock().unwrap();
+                let scene_device_state = scenes
                     .find_scene_device_state(&device, &self.state);
 
                 scene_device_state.unwrap_or_else(|| {
@@ -240,12 +232,16 @@ impl Devices {
             .get(&mk_device_state_key(&integration_id, &device_id))
     }
 
+    fn find_scene_devices_config(&self, scene_id: &SceneId) -> Option<SceneDevicesConfig> {
+        let scenes = self.scenes.lock().unwrap();
+        scenes.find_scene_devices_config(&self.state, scene_id)
+    }
+
     pub async fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
         println!("Activating scene {:?}", scene_id);
 
-        let scene_devices_config = self
-            .scenes
-            .find_scene_devices_config(&self.state, scene_id)?;
+        let scene_devices_config = self.find_scene_devices_config(scene_id)?;
+
         let device_scene_state = Some(DeviceSceneState {
             scene_id: scene_id.to_owned(),
             activation_time: Instant::now(),
@@ -283,9 +279,7 @@ impl Devices {
         let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_descriptors
             .iter()
             .map(|sd| {
-                let scene_devices_config = self
-                    .scenes
-                    .find_scene_devices_config(&self.state, &sd.scene_id);
+                let scene_devices_config = self.find_scene_devices_config(&sd.scene_id);
 
                 let mut scene_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
                 match scene_devices_config {
@@ -316,9 +310,7 @@ impl Devices {
         });
 
         let active_scene_index = scene_descriptors.iter().position(|sd| {
-            let scene_devices_config = self
-                .scenes
-                .find_scene_devices_config(&self.state, &sd.scene_id);
+            let scene_devices_config = self.find_scene_devices_config(&sd.scene_id);
 
             // try finding any device in scene_devices_config that has this scene active
             match scene_devices_config {

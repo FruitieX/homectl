@@ -8,15 +8,15 @@ use super::{
         ScenesConfig,
     },
 };
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 pub struct Scenes {
     config: ScenesConfig,
-    groups: Groups,
+    groups: Arc<Mutex<Groups>>,
 }
 
 impl Scenes {
-    pub fn new(config: ScenesConfig, groups: Groups) -> Self {
+    pub fn new(config: ScenesConfig, groups: Arc<Mutex<Groups>>) -> Self {
         Scenes { config, groups }
     }
 
@@ -57,7 +57,10 @@ impl Scenes {
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
-            let group_devices = self.groups.find_group_device_links(&group_id);
+            let group_devices = {
+                let groups = self.groups.lock().unwrap();
+                groups.find_group_device_links(&group_id)
+            };
 
             for GroupDeviceLink {
                 integration_id,

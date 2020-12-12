@@ -6,7 +6,7 @@ use super::{
 use crate::integrations::{
     circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, random::Random,
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
@@ -66,17 +66,12 @@ impl Integrations {
         Ok(())
     }
 
-    pub async fn set_integration_device_state(&self, device: Device) {
+    pub async fn set_integration_device_state(&self, device: &Device) -> Result<()> {
         let mut integrations = self.integrations.lock().await;
 
-        let integration = integrations.get_mut(&device.integration_id);
+        let integration = integrations.get_mut(&device.integration_id).context(format!("Expected to find integration by id {}", device.integration_id))?;
 
-        match integration {
-            Some(integration) => {
-                integration.set_integration_device_state(device).await;
-            }
-            None => {}
-        }
+        integration.set_integration_device_state(device).await
     }
 }
 

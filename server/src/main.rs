@@ -19,7 +19,15 @@ use homectl_core::{
     scene::{CycleScenesDescriptor, SceneDescriptor},
     scenes::Scenes,
 };
-use std::error::Error;
+use std::{error::Error, sync::{Arc, Mutex}};
+
+struct State {
+    integrations: Arc<Mutex<Integrations>>,
+    groups: Arc<Mutex<Groups>>,
+    scenes: Arc<Mutex<Scenes>>,
+    devices: Arc<Mutex<Devices>>,
+    rules: Arc<Mutex<Rules>>,
+}
 
 // https://github.com/actix/examples/blob/master/diesel/src/main.rs
 #[tokio::main]
@@ -32,10 +40,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (sender, receiver) = mk_channel();
 
     let integrations = Integrations::new(sender.clone());
-    let groups = Groups::new(config.groups);
-    let scenes = Scenes::new(config.scenes, groups);
-    let mut devices = Devices::new(sender.clone(), scenes);
-    let rules_engine = Rules::new(config.routines, sender.clone());
+    let groups = Arc::new(Mutex::new(Groups::new(config.groups)));
+    let scenes = Arc::new(Mutex::new(Scenes::new(config.scenes, Arc::clone(&groups))));
+    let devices = Devices::new(sender.clone(), Arc::clone(&scenes));
+    let rules = Rules::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
@@ -54,14 +62,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(())
     };
 
+    let state = State {
+        integrations: Arc::new(Mutex::new(integrations)),
+        groups,
+        scenes,
+        devices: Arc::new(Mutex::new(devices)),
+        rules: Arc::new(Mutex::new(rules)),
+    };
+
     loop {
         let msg = receiver.recv().await?;
 
         // println!("got msg: {:?}", msg);
 
-        match msg {
+        let result: Result<()> = match &msg {
             Message::IntegrationDeviceRefresh { device } => {
-                devices.handle_integration_device_refresh(device).await
+                let mut devices = state.devices.lock().unwrap();
+                devices.handle_integration_device_refresh(device).await;
+                Ok(())
             }
             Message::DeviceUpdate {
                 old_state,
@@ -69,22 +87,40 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 old,
                 new,
             } => {
-                rules_engine
+                let rules = state.rules.lock().unwrap();
+                rules
                     .handle_device_update(old_state, new_state, old, new)
-                    .await
+                    .await;
+                Ok(())
             }
             Message::SetDeviceState { device } => {
+                let mut devices = state.devices.lock().unwrap();
                 devices.set_device_state(&device, false).await;
+                Ok(())
             }
             Message::SetIntegrationDeviceState { device } => {
-                integrations.set_integration_device_state(device).await;
+                let integrations = state.integrations.lock().unwrap();
+                integrations.set_integration_device_state(device).await
             }
             Message::ActivateScene(SceneDescriptor { scene_id }) => {
+                let mut devices = state.devices.lock().unwrap();
                 devices.activate_scene(&scene_id).await;
+                Ok(())
             }
             Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
+                let mut devices = state.devices.lock().unwrap();
                 devices.cycle_scenes(&scenes).await;
+                Ok(())
             }
+        };
+
+        match result {
+            Err(err) => {
+                println!("Error while handling message:");
+                println!("Msg: {:#?}", msg);
+                println!("Error: {:#?}", err);
+            },
+            _ => {}
         }
     }
 }

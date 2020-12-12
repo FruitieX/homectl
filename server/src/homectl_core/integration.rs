@@ -28,5 +28,5 @@ pub trait Integration {
 
     async fn register(&mut self) -> Result<()>;
     async fn start(&mut self) -> Result<()>;
-    async fn set_integration_device_state(&mut self, device: Device);
+    async fn set_integration_device_state(&mut self, device: &Device) -> Result<()>;
 }

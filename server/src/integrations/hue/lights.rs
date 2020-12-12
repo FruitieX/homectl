@@ -76,8 +76,8 @@ pub enum HueMsg {
     LightMsg(LightMsg),
 }
 
-pub async fn set_device_state(config: HueConfig, device: Device) -> Result<(), Box<dyn Error>> {
-    let body = match device.state {
+pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), Box<dyn Error>> {
+    let body = match &device.state {
         DeviceState::OnOffDevice(state) => {
             Ok(HueMsg::OnOffDeviceMsg(OnOffDeviceMsg { on: state.power }))
         }

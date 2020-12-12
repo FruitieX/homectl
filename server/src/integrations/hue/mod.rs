@@ -114,12 +114,14 @@ impl Integration for Hue {
         Ok(())
     }
 
-    async fn set_integration_device_state(&mut self, device: Device) {
+    async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         match set_device_state(self.config.clone(), device).await {
             Ok(_) => {}
             Err(e) => {
                 println!("Error while setting hue state: {}", e);
             }
         }
+
+        Ok(())
     }
 }

@@ -47,7 +47,8 @@ impl Integration for Dummy {
         Ok(())
     }
 
-    async fn set_integration_device_state(&mut self, device: Device) {
-        self.devices.insert(device.id.clone(), device);
+    async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
+        self.devices.insert(device.id.clone(), device.clone());
+        Ok(())
     }
 }

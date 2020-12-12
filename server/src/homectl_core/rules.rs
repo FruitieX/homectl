@@ -18,10 +18,10 @@ impl Rules {
 
     pub async fn handle_device_update(
         &self,
-        old_state: DevicesState,
-        new_state: DevicesState,
-        old: Option<Device>,
-        _new: Device,
+        old_state: &DevicesState,
+        new_state: &DevicesState,
+        old: &Option<Device>,
+        _new: &Device,
     ) {
         match old {
             Some(_) => {
@@ -50,7 +50,7 @@ impl Rules {
         }
     }
 
-    fn find_matching_actions(&self, old_state: DevicesState, new_state: DevicesState) -> Actions {
+    fn find_matching_actions(&self, old_state: &DevicesState, new_state: &DevicesState) -> Actions {
         // if states are equal we can bail out early
         if old_state == new_state {
             return vec![];

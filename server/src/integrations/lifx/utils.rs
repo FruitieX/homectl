@@ -183,7 +183,7 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
     device
 }
 
-pub fn to_lifx_state(device: Device) -> Result<LifxState> {
+pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
     let light_state = match device.state {
         DeviceState::Light(Light {
             brightness,
@@ -213,7 +213,7 @@ pub fn to_lifx_state(device: Device) -> Result<LifxState> {
         sat,
         bri,
         power,
-        label: device.name,
+        label: device.name.clone(),
         addr: device.id.parse()?,
         transition: Some(500),
     })

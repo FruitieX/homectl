@@ -62,8 +62,9 @@ impl Integration for Random {
         Ok(())
     }
 
-    async fn set_integration_device_state(&mut self, _device: Device) {
+    async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
         // do nothing
+        Ok(())
     }
 }
 

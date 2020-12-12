@@ -101,7 +101,7 @@ impl Integration for Lifx {
         Ok(())
     }
 
-    async fn set_integration_device_state(&mut self, device: Device) {
+    async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let lifx_state = to_lifx_state(device);
 
         match lifx_state {
@@ -117,5 +117,7 @@ impl Integration for Lifx {
             }
             Err(e) => println!("Error in lifx set_integration_device_state {:?}", e),
         }
+
+        Ok(())
     }
 }
