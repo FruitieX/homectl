@@ -6,27 +6,26 @@ use crate::homectl_core::{
 
 use super::bridge::BridgeLights;
 use super::{light_utils::bridge_light_to_device, HueConfig};
+use anyhow::anyhow;
 use palette::Yxy;
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, time::Duration};
 use tokio::time::{interval_at, Instant};
-use tokio_compat_02::FutureExt;
 
 pub async fn do_refresh_lights(
     config: HueConfig,
     integration_id: IntegrationId,
     sender: TxEventChannel,
 ) -> Result<(), Box<dyn Error>> {
-    let bridge_lights: BridgeLights = reqwest::get(&format!(
+    let bridge_lights: BridgeLights = surf::get(&format!(
         "http://{}/api/{}/lights",
         config.addr, config.username
     ))
-    .compat()
-    .await?
-    .json()
-    .compat()
-    .await?;
+    .await
+    .map_err(|err| anyhow!(err))?
+    .body_json()
+    .await
+    .map_err(|err| anyhow!(err))?;
 
     for (light_id, bridge_light) in bridge_lights {
         let device = bridge_light_to_device(light_id, integration_id.clone(), bridge_light);
@@ -120,19 +119,16 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
         _ => Err("Unsupported device type encountered in hue set_device_state"),
     }?;
 
-    let _ = Client::builder()
-        .build()?
-        .put(&format!(
-            "http://{}/api/{}/{}/state",
-            config.addr, config.username, device.id
-        ))
-        .json(&body)
-        .send()
-        .compat()
-        .await?
-        .text()
-        .compat()
-        .await?;
+    let _ = surf::put(&format!(
+        "http://{}/api/{}/{}/state",
+        config.addr, config.username, device.id
+    ))
+    .body(surf::Body::from_json(&body).map_err(|err| anyhow!(err))?)
+    .await
+    .map_err(|err| anyhow!(err))?
+    .body_string()
+    .await
+    .map_err(|err| anyhow!(err))?;
 
     Ok(())
 }

@@ -34,9 +34,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (sender, receiver) = mk_channel();
 
     let mut integrations = Integrations::new(sender.clone());
-    let groups = Arc::new(Mutex::new(Groups::new(config.groups)));
-    let scenes = Arc::new(Mutex::new(Scenes::new(config.scenes, Arc::clone(&groups))));
-    let devices = Devices::new(sender.clone(), Arc::clone(&scenes));
+    let groups = Groups::new(config.groups);
+    let scenes = Scenes::new(config.scenes, groups);
+    let mut devices = Devices::new(sender.clone(), scenes);
     let rules = Rules::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {
@@ -56,13 +56,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(())
     };
 
-    let state = State {
-        integrations: Arc::new(Mutex::new(integrations)),
-        groups,
-        scenes,
-        devices: Arc::new(Mutex::new(devices)),
-        rules: Arc::new(Mutex::new(rules)),
-    };
+    // let state = State {
+    //     integrations: Arc::new(Mutex::new(integrations)),
+    //     groups,
+    //     scenes,
+    //     devices: Arc::new(Mutex::new(devices)),
+    //     rules: Arc::new(Mutex::new(rules)),
+    // };
 
     loop {
         let msg = receiver.recv().await?;
@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // tokio::task::spawn(async move {
             let result: Result<()> = match &msg {
                 Message::IntegrationDeviceRefresh { device } => {
-                    let mut devices = state.devices.lock().unwrap();
+                    // let mut devices = state.devices.lock().unwrap();
                     devices.handle_integration_device_refresh(device).await;
                     Ok(())
                 }
@@ -86,33 +86,33 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     old,
                     new,
                 } => {
-                    let rules = state.rules.lock().unwrap();
+                    // let rules = state.rules.lock().unwrap();
                     rules
                         .handle_device_update(old_state, new_state, old, new)
                         .await;
                     Ok(())
                 }
-                Message::SetDeviceState { device } => {
-                    let mut devices = state.devices.lock().unwrap();
-                    devices.set_device_state(&device, false).await;
+                Message::SetDeviceState { device, set_scene } => {
+                    // let mut devices = state.devices.lock().unwrap();
+                    devices.set_device_state(&device, *set_scene).await;
                     Ok(())
                 }
                 Message::SetIntegrationDeviceState { device } => {
-                    let mut integrations = state.integrations.lock().unwrap();
+                    // let mut integrations = state.integrations.lock().unwrap();
                     integrations.set_integration_device_state(device).await
                 }
                 Message::ActivateScene(SceneDescriptor { scene_id }) => {
-                    let mut devices = state.devices.lock().unwrap();
+                    // let mut devices = state.devices.lock().unwrap();
                     devices.activate_scene(&scene_id).await;
                     Ok(())
                 }
                 Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
-                    let mut devices = state.devices.lock().unwrap();
+                    // let mut devices = state.devices.lock().unwrap();
                     devices.cycle_scenes(&scenes).await;
                     Ok(())
                 }
                 Message::RunIntegrationAction(IntegrationActionDescriptor { integration_id, payload }) => {
-                    let mut integrations = state.integrations.lock().unwrap();
+                    // let mut integrations = state.integrations.lock().unwrap();
                     integrations.run_integration_action(integration_id, payload).await
                 }
             };

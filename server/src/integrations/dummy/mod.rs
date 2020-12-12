@@ -1,9 +1,12 @@
-use crate::homectl_core::{device::{Device, DeviceId}, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
-use anyhow::Result;
+use crate::homectl_core::{
+    device::{Device, DeviceId},
+    events::TxEventChannel,
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
+use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use serde::Deserialize;
 use std::collections::HashMap;
-use tokio_compat_02::FutureExt;
 
 #[derive(Debug, Deserialize)]
 pub struct DummyConfig {
@@ -25,12 +28,13 @@ impl Integration for Dummy {
     }
 
     async fn register(&mut self) -> Result<()> {
-        let resp: HashMap<String, String> = reqwest::get("https://httpbin.org/ip")
-            .compat()
-            .await?
-            .json()
-            .compat()
-            .await?;
+        let resp: HashMap<String, String> = surf::get("https://httpbin.org/ip")
+            .await
+            .map_err(|err| anyhow!(err))?
+            .body_json()
+            .await
+            .map_err(|err| anyhow!(err))?;
+
         println!("{:#?}", resp);
         println!("registered dummy integration {}", self.id);
 

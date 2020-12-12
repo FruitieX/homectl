@@ -19,7 +19,7 @@ pub enum Message {
     },
 
     /// Tell devices to update internal device state.
-    SetDeviceState { device: Device },
+    SetDeviceState { device: Device, set_scene: bool },
 
     /// Tell integration to trigger state change for the device.
     SetIntegrationDeviceState { device: Device },

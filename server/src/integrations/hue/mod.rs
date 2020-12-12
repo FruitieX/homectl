@@ -4,8 +4,12 @@ pub mod lights;
 pub mod sensor_utils;
 pub mod sensors;
 
-use crate::homectl_core::{device::Device, events::{Message, TxEventChannel}, integration::{Integration, IntegrationActionPayload, IntegrationId}};
-use anyhow::{Context, Result};
+use crate::homectl_core::{
+    device::Device,
+    events::{Message, TxEventChannel},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
+use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use bridge::BridgeState;
 use serde::Deserialize;
@@ -14,7 +18,6 @@ use light_utils::bridge_light_to_device;
 use lights::{poll_lights, set_device_state};
 use sensor_utils::bridge_sensor_to_device;
 use sensors::poll_sensors;
-use tokio_compat_02::FutureExt;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct HueConfig {
@@ -50,15 +53,15 @@ impl Integration for Hue {
     async fn register(&mut self) -> Result<()> {
         println!("registering hue integration");
 
-        let bridge_state: BridgeState = reqwest::get(&format!(
+        let bridge_state: BridgeState = surf::get(&format!(
             "http://{}/api/{}",
             self.config.addr, self.config.username
         ))
-        .compat()
-        .await?
-        .json()
-        .compat()
-        .await?;
+        .await
+        .map_err(|err| anyhow!(err))?
+        .body_json()
+        .await
+        .map_err(|err| anyhow!(err))?;
 
         self.bridge_state = Some(bridge_state.clone());
 

@@ -1,8 +1,14 @@
 use crate::db::actions::db_update_device;
 
-use super::{device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState}, events::{Message, TxEventChannel}, integration::IntegrationId, scene::{SceneDescriptor, SceneDevicesConfig, SceneId}, scenes::Scenes};
+use super::{
+    device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState},
+    events::{Message, TxEventChannel},
+    integration::IntegrationId,
+    scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
+    scenes::Scenes,
+};
 use palette::Hsv;
-use std::{collections::HashMap, sync::{Arc, Mutex}, time::Instant};
+use std::{collections::HashMap, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
 pub type DevicesState = HashMap<DeviceStateKey, Device>;
@@ -18,7 +24,7 @@ pub fn mk_device_state_key(integration_id: &IntegrationId, device_id: &DeviceId)
 pub struct Devices {
     sender: TxEventChannel,
     state: DevicesState,
-    scenes: Arc<Mutex<Scenes>>,
+    scenes: Scenes,
 }
 
 fn cmp_light_state(
@@ -90,10 +96,7 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
 }
 
 impl Devices {
-    pub fn new(
-        sender: TxEventChannel,
-        scenes: Arc<Mutex<Scenes>>,
-    ) -> Self {
+    pub fn new(sender: TxEventChannel, scenes: Scenes) -> Self {
         Devices {
             sender,
             state: HashMap::new(),
@@ -167,9 +170,7 @@ impl Devices {
             DeviceState::Sensor(_) => device.state.clone(),
 
             _ => {
-                let scenes = self.scenes.lock().unwrap();
-                let scene_device_state = scenes
-                    .find_scene_device_state(&device, &self.state);
+                let scene_device_state = self.scenes.find_scene_device_state(&device, &self.state);
 
                 scene_device_state.unwrap_or_else(|| {
                     // TODO: why would we ever want to do this
@@ -233,8 +234,7 @@ impl Devices {
     }
 
     fn find_scene_devices_config(&self, scene_id: &SceneId) -> Option<SceneDevicesConfig> {
-        let scenes = self.scenes.lock().unwrap();
-        scenes.find_scene_devices_config(&self.state, scene_id)
+        self.scenes.find_scene_devices_config(&self.state, scene_id)
     }
 
     pub async fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {

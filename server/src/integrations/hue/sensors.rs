@@ -7,10 +7,10 @@ use crate::homectl_core::{
     events::{Message, TxEventChannel},
     integration::IntegrationId,
 };
+use anyhow::anyhow;
 use async_std::sync::Mutex;
 use std::{error::Error, sync::Arc, time::Duration};
 use tokio::time::{interval_at, Instant};
-use tokio_compat_02::FutureExt;
 
 pub struct SensorsState {
     pub bridge_sensors: BridgeSensors,
@@ -30,15 +30,15 @@ pub async fn do_refresh_sensors(
         bridge_sensors
     };
 
-    let result: BridgeSensors = reqwest::get(&format!(
+    let result: BridgeSensors = surf::get(&format!(
         "http://{}/api/{}/sensors",
         config.addr, config.username
     ))
-    .compat()
-    .await?
-    .json()
-    .compat()
-    .await?;
+    .await
+    .map_err(|err| anyhow!(err))?
+    .body_json()
+    .await
+    .map_err(|err| anyhow!(err))?;
 
     let mut sensors_state = sensors_state.lock().await;
     sensors_state.bridge_sensors = result.clone();

@@ -8,15 +8,15 @@ use super::{
         ScenesConfig,
     },
 };
-use std::{collections::HashMap, sync::{Arc, Mutex}};
+use std::collections::HashMap;
 
 pub struct Scenes {
     config: ScenesConfig,
-    groups: Arc<Mutex<Groups>>,
+    groups: Groups,
 }
 
 impl Scenes {
-    pub fn new(config: ScenesConfig, groups: Arc<Mutex<Groups>>) -> Self {
+    pub fn new(config: ScenesConfig, groups: Groups) -> Self {
         Scenes { config, groups }
     }
 
@@ -45,7 +45,13 @@ impl Scenes {
                             let device =
                                 find_device(devices, &integration_id, None, Some(device_name));
 
-                            let device_id = device.map(|d| d.id).unwrap_or(String::from("N/A"));
+                            let device_id = device.map(|d| d.id).unwrap_or({
+                                println!(
+                                    "Could not find device_id for {} device with name {}",
+                                    integration_id, device_name
+                                );
+                                String::from("N/A")
+                            });
                             (device_id, device_config.clone())
                         })
                         .collect(),
@@ -57,10 +63,7 @@ impl Scenes {
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
-            let group_devices = {
-                let groups = self.groups.lock().unwrap();
-                groups.find_group_device_links(&group_id)
-            };
+            let group_devices = { self.groups.find_group_device_links(&group_id) };
 
             for GroupDeviceLink {
                 integration_id,

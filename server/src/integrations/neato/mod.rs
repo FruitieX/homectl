@@ -42,7 +42,7 @@ impl Integration for Neato {
         let config = config
             .clone()
             .try_into()
-            .context("Failed to deserialize config of Lifx integration")?;
+            .context("Failed to deserialize config of Neato integration")?;
         Ok(Neato { config, prev_run: None })
     }
 

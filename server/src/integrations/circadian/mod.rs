@@ -138,7 +138,7 @@ async fn poll_sensor(circadian: Circadian) {
         let sender = circadian.sender.clone();
 
         let device = mk_circadian_device(&circadian);
-        sender.send(Message::SetDeviceState { device }).await;
+        sender.send(Message::SetDeviceState { device, set_scene: false }).await;
     }
 }
 

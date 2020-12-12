@@ -91,7 +91,7 @@ async fn poll_sensor(random: Random) {
         let sender = random.event_tx.clone();
 
         let device = mk_random_device(&random);
-        sender.send(Message::SetDeviceState { device }).await;
+        sender.send(Message::SetDeviceState { device, set_scene: false }).await;
     }
 }
 
