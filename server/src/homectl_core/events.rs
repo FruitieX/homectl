@@ -1,10 +1,6 @@
 use async_std::sync::{channel, Receiver, Sender};
 
-use super::{
-    device::Device,
-    devices::DevicesState,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
-};
+use super::{device::Device, devices::DevicesState, integration::IntegrationActionDescriptor, scene::{CycleScenesDescriptor, SceneDescriptor}};
 
 #[derive(Debug)]
 pub enum Message {
@@ -33,6 +29,9 @@ pub enum Message {
 
     /// Request to cycle between given scenes.
     CycleScenes(CycleScenesDescriptor),
+
+    /// Runs an integration action
+    RunIntegrationAction(IntegrationActionDescriptor)
 }
 
 pub type TxEventChannel = Sender<Message>;

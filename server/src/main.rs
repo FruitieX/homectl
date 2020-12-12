@@ -7,18 +7,11 @@ extern crate lazy_static;
 mod db;
 mod homectl_core;
 mod integrations;
+mod utils;
 
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
-use homectl_core::{
-    devices::Devices,
-    events::*,
-    groups::Groups,
-    integrations::Integrations,
-    rules::Rules,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
-    scenes::Scenes,
-};
+use homectl_core::{devices::Devices, events::*, groups::Groups, integration::IntegrationActionDescriptor, integrations::Integrations, rules::Rules, scene::{CycleScenesDescriptor, SceneDescriptor}, scenes::Scenes};
 use std::{error::Error, sync::{Arc, Mutex}};
 
 struct State {
@@ -111,6 +104,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 let mut devices = state.devices.lock().unwrap();
                 devices.cycle_scenes(&scenes).await;
                 Ok(())
+            }
+            Message::RunIntegrationAction(IntegrationActionDescriptor { integration_id, payload }) => {
+                let integrations = state.integrations.lock().unwrap();
+                integrations.run_integration_action(integration_id, payload).await
             }
         };
 

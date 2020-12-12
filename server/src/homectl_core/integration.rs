@@ -19,6 +19,14 @@ pub struct IntegrationConfig {
 
 pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
 
+pub type IntegrationActionPayload = String;
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct IntegrationActionDescriptor {
+    pub integration_id: IntegrationId,
+    pub payload: IntegrationActionPayload
+}
+
 #[async_trait]
 pub trait Integration {
     // rustc --explain E0038
@@ -29,4 +37,5 @@ pub trait Integration {
     async fn register(&mut self) -> Result<()>;
     async fn start(&mut self) -> Result<()>;
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()>;
+    async fn run_integration_action(&mut self, payload: &IntegrationActionPayload) -> Result<()>;
 }

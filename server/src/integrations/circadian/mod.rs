@@ -1,23 +1,11 @@
-use crate::homectl_core::{
-    device::{Device, DeviceColor, DeviceState, Light},
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationId},
-    scene::{color_config_as_device_color, ColorConfig},
-};
+use crate::homectl_core::{device::{Device, DeviceColor, DeviceState, Light}, events::{Message, TxEventChannel}, integration::{Integration, IntegrationActionPayload, IntegrationId}, scene::{color_config_as_device_color, ColorConfig}};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use palette::Gradient;
-use serde::{de, Deserialize};
+use serde::Deserialize;
 use std::time::Duration;
 use tokio::time::{interval_at, Instant};
-
-fn from_hh_mm<'de, D>(d: D) -> Result<chrono::NaiveTime, D::Error>
-where
-    D: de::Deserializer<'de>,
-{
-    let str = String::deserialize(d)?;
-    chrono::NaiveTime::parse_from_str(&str, "%H:%M").map_err(serde::de::Error::custom)
-}
+use crate::utils::from_hh_mm;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CircadianConfig {
@@ -85,6 +73,11 @@ impl Integration for Circadian {
     }
 
     async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
+        // do nothing
+        Ok(())
+    }
+
+    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
         // do nothing
         Ok(())
     }

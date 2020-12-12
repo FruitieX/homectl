@@ -1,8 +1,4 @@
-use crate::homectl_core::{
-    device::{Device, DeviceId},
-    events::TxEventChannel,
-    integration::{Integration, IntegrationId},
-};
+use crate::homectl_core::{device::{Device, DeviceId}, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use anyhow::Result;
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -49,6 +45,11 @@ impl Integration for Dummy {
 
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         self.devices.insert(device.id.clone(), device.clone());
+        Ok(())
+    }
+
+    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
+        // do nothing
         Ok(())
     }
 }

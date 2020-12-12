@@ -1,8 +1,4 @@
-use crate::homectl_core::{
-    device::{Device, DeviceColor, DeviceState, Light},
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationId},
-};
+use crate::homectl_core::{device::{Device, DeviceColor, DeviceState, Light}, events::{Message, TxEventChannel}, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use palette::rgb::Rgb;
@@ -63,6 +59,11 @@ impl Integration for Random {
     }
 
     async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
+        // do nothing
+        Ok(())
+    }
+
+    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
         // do nothing
         Ok(())
     }

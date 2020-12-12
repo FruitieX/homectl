@@ -1,11 +1,7 @@
 pub mod lights;
 pub mod utils;
 
-use crate::homectl_core::{
-    device::Device,
-    events::TxEventChannel,
-    integration::{Integration, IntegrationId},
-};
+use crate::homectl_core::{device::Device, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use anyhow::{Context, Result};
 use async_std::sync::channel;
 use async_std::sync::{Receiver, Sender};
@@ -118,6 +114,11 @@ impl Integration for Lifx {
             Err(e) => println!("Error in lifx set_integration_device_state {:?}", e),
         }
 
+        Ok(())
+    }
+
+    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
+        // do nothing
         Ok(())
     }
 }

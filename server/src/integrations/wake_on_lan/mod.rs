@@ -1,4 +1,4 @@
-use crate::homectl_core::{device::{Device, DeviceState, OnOffDevice}, events::TxEventChannel, integration::{Integration, IntegrationId}};
+use crate::homectl_core::{device::{Device, DeviceState, OnOffDevice}, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use anyhow::{Context, Result, anyhow};
 use async_trait::async_trait;
 
@@ -26,6 +26,11 @@ impl Integration for WakeOnLan {
             _ => { Err(anyhow!(""))}
         }?;
 
+        Ok(())
+    }
+
+    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
+        // do nothing
         Ok(())
     }
 }

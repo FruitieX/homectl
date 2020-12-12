@@ -1,11 +1,5 @@
-use super::{
-    device::Device,
-    events::TxEventChannel,
-    integration::{Integration, IntegrationId},
-};
-use crate::integrations::{
-    circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, random::Random,
-};
+use super::{device::Device, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
+use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random, wake_on_lan::WakeOnLan};
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
@@ -73,6 +67,14 @@ impl Integrations {
 
         integration.set_integration_device_state(device).await
     }
+
+    pub async fn run_integration_action(&self, integration_id: &IntegrationId, payload: &IntegrationActionPayload) -> Result<()> {
+        let mut integrations = self.integrations.lock().await;
+
+        let integration = integrations.get_mut(integration_id).context(format!("Expected to find integration by id {}", integration_id))?;
+
+        integration.run_integration_action(payload).await
+    }
 }
 
 // TODO: Load integrations dynamically as plugins:
@@ -89,6 +91,8 @@ fn load_integration(
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
         "lifx" => Ok(Box::new(Lifx::new(id, config, event_tx)?)),
         "hue" => Ok(Box::new(Hue::new(id, config, event_tx)?)),
+        "neato" => Ok(Box::new(Neato::new(id, config, event_tx)?)),
+        "wake_on_lan" => Ok(Box::new(WakeOnLan::new(id, config, event_tx)?)),
         _ => Err(anyhow!("Unknown module name {}!", module_name)),
     }
 }

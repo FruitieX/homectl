@@ -4,11 +4,7 @@ pub mod lights;
 pub mod sensor_utils;
 pub mod sensors;
 
-use crate::homectl_core::{
-    device::Device,
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationId},
-};
+use crate::homectl_core::{device::Device, events::{Message, TxEventChannel}, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use bridge::BridgeState;
@@ -122,6 +118,11 @@ impl Integration for Hue {
             }
         }
 
+        Ok(())
+    }
+
+    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
+        // do nothing
         Ok(())
     }
 }

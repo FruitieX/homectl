@@ -47,6 +47,9 @@ impl Rules {
             Action::CycleScenes(action) => {
                 self.sender.send(Message::CycleScenes(action.clone())).await;
             }
+            Action::IntegrationAction(action) => {
+                self.sender.send(Message::RunIntegrationAction(action.clone())).await;
+            }
         }
     }
 
