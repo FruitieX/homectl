@@ -3,7 +3,7 @@ pub mod utils;
 
 use crate::homectl_core::{device::Device, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use anyhow::{Context, Result};
-use async_std::sync::channel;
+use async_std::{sync::channel, task};
 use async_std::sync::{Receiver, Sender};
 use async_trait::async_trait;
 use lights::{init_udp_socket, listen_udp_stream, poll_lights};
@@ -56,9 +56,9 @@ impl Integration for Lifx {
 
         listen_udp_stream(Arc::clone(&socket), integration_id, sender);
 
-        tokio::spawn(async move { poll_lights(udp_sender_tx).await });
+        task::spawn(async move { poll_lights(udp_sender_tx).await });
 
-        tokio::spawn(async move {
+        task::spawn(async move {
             loop {
                 let res = { udp_sender_rx.recv().await };
 

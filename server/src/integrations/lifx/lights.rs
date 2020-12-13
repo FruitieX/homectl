@@ -11,10 +11,10 @@ use super::{
 };
 // use mio::net::UdpSocket;
 // use mio::{Events, Interest, Poll, Token};
-use async_std::{net::UdpSocket, sync::Sender};
+use async_std::prelude::*;
+use async_std::{net::UdpSocket, stream, sync::Sender, task};
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
-use tokio::time::{interval_at, Instant};
 
 const MAX_UDP_PACKET_SIZE: usize = 1 << 16;
 
@@ -35,8 +35,7 @@ pub async fn handle_lifx_msg(msg: LifxMsg, integration_id: IntegrationId, sender
         LifxMsg::State(state) => {
             let device = from_lifx_state(state, integration_id.clone());
             sender
-                .send(Message::IntegrationDeviceRefresh { device })
-                .await;
+                .send(Message::IntegrationDeviceRefresh { device });
         }
         _ => {}
     }
@@ -48,7 +47,7 @@ pub fn listen_udp_stream(
     sender: TxEventChannel,
 ) {
     let mut buf: [u8; MAX_UDP_PACKET_SIZE] = [0; MAX_UDP_PACKET_SIZE];
-    tokio::spawn(async move {
+    task::spawn(async move {
         loop {
             let res = socket.recv_from(&mut buf).await;
 
@@ -69,8 +68,7 @@ pub fn listen_udp_stream(
 
 pub async fn poll_lights(udp_sender_tx: Sender<LifxMsg>) -> Result<()> {
     let poll_rate = Duration::from_millis(1000);
-    let start = Instant::now() + poll_rate;
-    let mut interval = interval_at(start, poll_rate);
+    let mut interval = stream::interval(poll_rate);
 
     // TODO: find and use the subnet broadcast address instead
     let broadcast_addr: SocketAddr = "255.255.255.255:56700".parse()?;
@@ -78,7 +76,7 @@ pub async fn poll_lights(udp_sender_tx: Sender<LifxMsg>) -> Result<()> {
     let msg = LifxMsg::Get(broadcast_addr);
 
     loop {
-        interval.tick().await;
+        interval.next().await;
 
         udp_sender_tx.send(msg.clone()).await;
     }

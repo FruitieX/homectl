@@ -10,6 +10,7 @@ use crate::homectl_core::{
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use anyhow::{anyhow, Context, Result};
+use async_std::task;
 use async_trait::async_trait;
 use bridge::BridgeState;
 use serde::Deserialize;
@@ -68,15 +69,13 @@ impl Integration for Hue {
         for (id, bridge_light) in bridge_state.lights {
             let device = bridge_light_to_device(id, self.id.clone(), bridge_light);
             self.event_tx
-                .send(Message::IntegrationDeviceRefresh { device })
-                .await;
+                .send(Message::IntegrationDeviceRefresh { device });
         }
 
         for (id, bridge_sensor) in bridge_state.sensors {
             let device = bridge_sensor_to_device(id, self.id.clone(), bridge_sensor);
             self.event_tx
-                .send(Message::IntegrationDeviceRefresh { device })
-                .await;
+                .send(Message::IntegrationDeviceRefresh { device });
         }
 
         println!("registered hue integration");
@@ -97,7 +96,7 @@ impl Integration for Hue {
             let integration_id = self.id.clone();
             let sender = self.event_tx.clone();
 
-            tokio::spawn(async {
+            task::spawn(async {
                 poll_sensors(config, integration_id, sender, init_bridge_sensors).await
             });
         }
@@ -107,7 +106,7 @@ impl Integration for Hue {
             let integration_id = self.id.clone();
             let sender = self.event_tx.clone();
 
-            tokio::spawn(async { poll_lights(config, integration_id, sender).await });
+            task::spawn(async { poll_lights(config, integration_id, sender).await });
         }
 
         Ok(())

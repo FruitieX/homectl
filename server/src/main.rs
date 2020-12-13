@@ -11,8 +11,21 @@ mod utils;
 
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
-use homectl_core::{devices::Devices, events::*, groups::Groups, integration::IntegrationActionDescriptor, integrations::Integrations, rules::Rules, scene::{CycleScenesDescriptor, SceneDescriptor}, scenes::Scenes};
-use std::{error::Error, sync::{Arc, Mutex}};
+use async_std::prelude::*;
+use homectl_core::{
+    devices::Devices,
+    events::*,
+    groups::Groups,
+    integration::IntegrationActionDescriptor,
+    integrations::Integrations,
+    rules::Rules,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
+    scenes::Scenes,
+};
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+};
 
 #[derive(Clone)]
 struct State {
@@ -23,15 +36,14 @@ struct State {
     rules: Arc<Mutex<Rules>>,
 }
 
-// https://github.com/actix/examples/blob/master/diesel/src/main.rs
-#[tokio::main]
+#[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let (config, opaque_integrations_configs) = homectl_core::config::read_config()?;
 
     // println!("Using config:");
     // println!("{:#?}", config);
 
-    let (sender, receiver) = mk_channel();
+    let (sender, mut receiver) = mk_channel();
 
     let mut integrations = Integrations::new(sender.clone());
     let groups = Groups::new(config.groups);
@@ -65,7 +77,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // };
 
     loop {
-        let msg = receiver.recv().await?;
+        let msg = receiver
+            .next()
+            .await
+            .expect("Expected sender end of channel to never be dropped");
 
         // println!("got msg: {:#?}", msg);
 
@@ -73,58 +88,61 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // state across .await points
 
         // let state = state.clone();
-        // tokio::task::spawn(async move {
-            let result: Result<()> = match &msg {
-                Message::IntegrationDeviceRefresh { device } => {
-                    // let mut devices = state.devices.lock().unwrap();
-                    devices.handle_integration_device_refresh(device).await;
-                    Ok(())
-                }
-                Message::DeviceUpdate {
-                    old_state,
-                    new_state,
-                    old,
-                    new,
-                } => {
-                    // let rules = state.rules.lock().unwrap();
-                    rules
-                        .handle_device_update(old_state, new_state, old, new)
-                        .await;
-                    Ok(())
-                }
-                Message::SetDeviceState { device, set_scene } => {
-                    // let mut devices = state.devices.lock().unwrap();
-                    devices.set_device_state(&device, *set_scene).await;
-                    Ok(())
-                }
-                Message::SetIntegrationDeviceState { device } => {
-                    // let mut integrations = state.integrations.lock().unwrap();
-                    integrations.set_integration_device_state(device).await
-                }
-                Message::ActivateScene(SceneDescriptor { scene_id }) => {
-                    // let mut devices = state.devices.lock().unwrap();
-                    devices.activate_scene(&scene_id).await;
-                    Ok(())
-                }
-                Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
-                    // let mut devices = state.devices.lock().unwrap();
-                    devices.cycle_scenes(&scenes).await;
-                    Ok(())
-                }
-                Message::RunIntegrationAction(IntegrationActionDescriptor { integration_id, payload }) => {
-                    // let mut integrations = state.integrations.lock().unwrap();
-                    integrations.run_integration_action(integration_id, payload).await
-                }
-            };
-
-            match result {
-                Err(err) => {
-                    println!("Error while handling message:");
-                    println!("Msg: {:#?}", msg);
-                    println!("Error: {:#?}", err);
-                },
-                _ => {}
+        let result: Result<()> = match &msg {
+            Message::IntegrationDeviceRefresh { device } => {
+                // let mut devices = state.devices.lock().unwrap();
+                devices.handle_integration_device_refresh(device).await;
+                Ok(())
             }
-        // });
+            Message::DeviceUpdate {
+                old_state,
+                new_state,
+                old,
+                new,
+            } => {
+                // let rules = state.rules.lock().unwrap();
+                rules
+                    .handle_device_update(old_state, new_state, old, new)
+                    .await;
+                Ok(())
+            }
+            Message::SetDeviceState { device, set_scene } => {
+                // let mut devices = state.devices.lock().unwrap();
+                devices.set_device_state(&device, *set_scene).await;
+                Ok(())
+            }
+            Message::SetIntegrationDeviceState { device } => {
+                // let mut integrations = state.integrations.lock().unwrap();
+                integrations.set_integration_device_state(device).await
+            }
+            Message::ActivateScene(SceneDescriptor { scene_id }) => {
+                // let mut devices = state.devices.lock().unwrap();
+                devices.activate_scene(&scene_id).await;
+                Ok(())
+            }
+            Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
+                // let mut devices = state.devices.lock().unwrap();
+                devices.cycle_scenes(&scenes).await;
+                Ok(())
+            }
+            Message::RunIntegrationAction(IntegrationActionDescriptor {
+                integration_id,
+                payload,
+            }) => {
+                // let mut integrations = state.integrations.lock().unwrap();
+                integrations
+                    .run_integration_action(integration_id, payload)
+                    .await
+            }
+        };
+
+        match result {
+            Err(err) => {
+                println!("Error while handling message:");
+                println!("Msg: {:#?}", msg);
+                println!("Error: {:#?}", err);
+            }
+            _ => {}
+        }
     }
 }

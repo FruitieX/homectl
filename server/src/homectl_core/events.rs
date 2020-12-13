@@ -1,8 +1,13 @@
-use async_std::sync::{channel, Receiver, Sender};
+use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use super::{device::Device, devices::DevicesState, integration::IntegrationActionDescriptor, scene::{CycleScenesDescriptor, SceneDescriptor}};
+use super::{
+    device::Device,
+    devices::DevicesState,
+    integration::IntegrationActionDescriptor,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
+};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum Message {
     /// An integration has gathered information about current device state
     /// through some means (usually polling). Note that state might not actually
@@ -31,13 +36,29 @@ pub enum Message {
     CycleScenes(CycleScenesDescriptor),
 
     /// Runs an integration action
-    RunIntegrationAction(IntegrationActionDescriptor)
+    RunIntegrationAction(IntegrationActionDescriptor),
+}
+
+#[derive(Clone)]
+pub struct Sender<T> {
+    sender: UnboundedSender<T>,
+}
+
+impl<T> Sender<T> {
+    pub fn send(&self, msg: T) {
+        self.sender
+            .unbounded_send(msg)
+            .expect("Receiver end of channel closed");
+    }
 }
 
 pub type TxEventChannel = Sender<Message>;
-pub type RxEventChannel = Receiver<Message>;
+pub type RxEventChannel = UnboundedReceiver<Message>;
 
 pub fn mk_channel() -> (TxEventChannel, RxEventChannel) {
-    // NOTE: this might get full
-    channel::<Message>(100)
+    let (tx, rx) = mpsc::unbounded::<Message>();
+
+    let sender = Sender { sender: tx };
+
+    (sender, rx)
 }

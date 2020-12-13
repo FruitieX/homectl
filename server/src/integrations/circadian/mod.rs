@@ -1,10 +1,11 @@
 use crate::homectl_core::{device::{Device, DeviceColor, DeviceState, Light}, events::{Message, TxEventChannel}, integration::{Integration, IntegrationActionPayload, IntegrationId}, scene::{color_config_as_device_color, ColorConfig}};
 use anyhow::{Context, Result};
+use async_std::{stream, task};
 use async_trait::async_trait;
+use async_std::prelude::*;
 use palette::Gradient;
 use serde::Deserialize;
 use std::time::Duration;
-use tokio::time::{interval_at, Instant};
 use crate::utils::from_hh_mm;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -52,8 +53,7 @@ impl Integration for Circadian {
         let device = mk_circadian_device(self);
 
         self.sender
-            .send(Message::IntegrationDeviceRefresh { device })
-            .await;
+            .send(Message::IntegrationDeviceRefresh { device });
 
         println!("registered circadian integration {}", self.id);
 
@@ -67,7 +67,7 @@ impl Integration for Circadian {
 
         // FIXME: can we restructure the integrations / devices systems such
         // that polling is not needed here?
-        tokio::spawn(async { poll_sensor(circadian).await });
+        task::spawn(async { poll_sensor(circadian).await });
 
         Ok(())
     }
@@ -129,16 +129,15 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
 
 async fn poll_sensor(circadian: Circadian) {
     let poll_rate = Duration::from_millis(60 * 1000);
-    let start = Instant::now() + poll_rate;
-    let mut interval = interval_at(start, poll_rate);
+    let mut interval = stream::interval(poll_rate);
 
     loop {
-        interval.tick().await;
+        interval.next().await;
 
         let sender = circadian.sender.clone();
 
         let device = mk_circadian_device(&circadian);
-        sender.send(Message::SetDeviceState { device, set_scene: false }).await;
+        sender.send(Message::SetDeviceState { device, set_scene: false });
     }
 }
 

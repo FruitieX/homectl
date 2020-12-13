@@ -149,8 +149,7 @@ impl Devices {
                     device.state = expected_state;
 
                     self.sender
-                        .send(Message::SetIntegrationDeviceState { device })
-                        .await;
+                        .send(Message::SetIntegrationDeviceState { device });
                 }
 
                 // Expected device state was not found
@@ -218,8 +217,7 @@ impl Devices {
                 new_state: self.state.clone(),
                 old,
                 new: device.clone(),
-            })
-            .await;
+            });
 
         device
     }
@@ -261,8 +259,7 @@ impl Devices {
 
                         self.sender
                             .clone()
-                            .send(Message::SetIntegrationDeviceState { device })
-                            .await;
+                            .send(Message::SetIntegrationDeviceState { device });
                     }
                     None => {}
                 }

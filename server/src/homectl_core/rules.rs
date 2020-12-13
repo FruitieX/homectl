@@ -41,14 +41,13 @@ impl Rules {
         match action {
             Action::ActivateScene(action) => {
                 self.sender
-                    .send(Message::ActivateScene(action.clone()))
-                    .await;
+                    .send(Message::ActivateScene(action.clone()));
             }
             Action::CycleScenes(action) => {
-                self.sender.send(Message::CycleScenes(action.clone())).await;
+                self.sender.send(Message::CycleScenes(action.clone()));
             }
             Action::IntegrationAction(action) => {
-                self.sender.send(Message::RunIntegrationAction(action.clone())).await;
+                self.sender.send(Message::RunIntegrationAction(action.clone()));
             }
         }
     }

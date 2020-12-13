@@ -8,9 +8,9 @@ use crate::homectl_core::{
     integration::IntegrationId,
 };
 use anyhow::anyhow;
-use async_std::sync::Mutex;
+use async_std::{stream, sync::Mutex};
 use std::{error::Error, sync::Arc, time::Duration};
-use tokio::time::{interval_at, Instant};
+use async_std::prelude::*;
 
 pub struct SensorsState {
     pub bridge_sensors: BridgeSensors,
@@ -40,8 +40,10 @@ pub async fn do_refresh_sensors(
     .await
     .map_err(|err| anyhow!(err))?;
 
-    let mut sensors_state = sensors_state.lock().await;
-    sensors_state.bridge_sensors = result.clone();
+    {
+        let mut sensors_state = sensors_state.lock().await;
+        sensors_state.bridge_sensors = result.clone();
+    }
 
     for (sensor_id, bridge_sensor) in result {
         let prev_bridge_sensor = find_bridge_sensor(&prev_bridge_sensors, &sensor_id);
@@ -57,7 +59,7 @@ pub async fn do_refresh_sensors(
             });
 
         for event in events {
-            sender.send(event).await;
+            sender.send(event);
         }
     }
 
@@ -71,8 +73,7 @@ pub async fn poll_sensors(
     init_bridge_sensors: BridgeSensors,
 ) {
     let poll_rate = Duration::from_millis(config.poll_rate_sensors);
-    let start = Instant::now() + poll_rate;
-    let mut interval = interval_at(start, poll_rate);
+    let mut interval = stream::interval(poll_rate);
 
     // Stores values from previous iteration, used for later comparisons
     let bridge_sensors: Arc<Mutex<SensorsState>> = Arc::new(Mutex::new(SensorsState {
@@ -80,7 +81,7 @@ pub async fn poll_sensors(
     }));
 
     loop {
-        interval.tick().await;
+        interval.next().await;
 
         let sender = sender.clone();
         let result = do_refresh_sensors(

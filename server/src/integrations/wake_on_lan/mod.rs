@@ -6,6 +6,7 @@ use crate::homectl_core::{
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use anyhow::{anyhow, Context, Result};
+use async_std::{future, task};
 use async_trait::async_trait;
 use serde::Deserialize;
 
@@ -58,8 +59,7 @@ impl Integration for WakeOnLan {
             };
 
             self.sender
-                .send(Message::IntegrationDeviceRefresh { device })
-                .await;
+                .send(Message::IntegrationDeviceRefresh { device });
         }
 
         Ok(())
@@ -93,9 +93,9 @@ impl Integration for WakeOnLan {
         } else if let Some(sleep_on_lan) = &wol_machine.sleep_on_lan {
             let endpoint = sleep_on_lan.clone();
 
-            tokio::spawn(async move {
+            task::spawn(async move {
                 // This timing out is normal... Responding host gets shut down after all
-                async_std::future::timeout(Duration::from_secs(1), do_sleep_on_lan(endpoint))
+                future::timeout(Duration::from_secs(1), do_sleep_on_lan(endpoint))
                     .await
                     .ok();
             });
@@ -119,5 +119,3 @@ async fn do_sleep_on_lan(endpoint: String) -> Result<()> {
 
     Ok(())
 }
-
-// https://github.com/LesnyRumcajs/wakey
