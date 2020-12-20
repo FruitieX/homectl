@@ -95,8 +95,8 @@ impl Integration for Neato {
                 }
             }
 
-            let result = clean_house(&self.config).await;
             self.prev_run = Some(local);
+            let result = clean_house(&self.config).await;
             result
         } else {
             Ok(())
