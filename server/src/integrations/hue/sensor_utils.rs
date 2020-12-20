@@ -18,7 +18,7 @@ pub enum DimmerSwitchButtonId {
 /// Returns which DimmerSwitchButtonId is referred to in BridgeButtonEvent
 fn get_button_id(buttonevent: BridgeButtonEvent) -> DimmerSwitchButtonId {
     let str = buttonevent.to_string();
-    let button_id = str.chars().nth(0);
+    let button_id = str.chars().next();
 
     match button_id {
         Some('1') => DimmerSwitchButtonId::On,
@@ -181,7 +181,7 @@ pub fn extrapolate_sensor_updates(
         return vec![];
     }
 
-    match (prev_bridge_sensor.clone(), next_bridge_sensor.clone()) {
+    match (prev_bridge_sensor, next_bridge_sensor.clone()) {
         // ZLLPresence sensor updates are infrequent enough that we should not
         // need to worry about missing out on updates
         (_, BridgeSensor::ZLLPresence { .. }) => vec![next_bridge_sensor],
@@ -235,7 +235,7 @@ pub fn extrapolate_sensor_updates(
 
             // button ID has changed and the old button state was left pressed,
             // release it
-            if prev_button_id != next_button_id && prev_button_state == true {
+            if prev_button_id != next_button_id && prev_button_state {
                 updates.push(BridgeSensor::ZLLSwitch {
                     state: ZLLSwitchState {
                         buttonevent: Some(to_buttonevent(prev_button_id.clone(), false)),
@@ -247,13 +247,13 @@ pub fn extrapolate_sensor_updates(
 
             // button ID has changed and the new button state is released,
             // assume we missed a button press event
-            if prev_button_id != next_button_id && next_button_state == false {
+            if prev_button_id != next_button_id && !next_button_state {
                 updates.push(BridgeSensor::ZLLSwitch {
                     state: ZLLSwitchState {
-                        buttonevent: Some(to_buttonevent(next_button_id.clone(), true)),
-                        lastupdated: next_lastupdated.clone(),
+                        buttonevent: Some(to_buttonevent(next_button_id, true)),
+                        lastupdated: next_lastupdated,
                     },
-                    name: name.clone(),
+                    name,
                 });
             }
 

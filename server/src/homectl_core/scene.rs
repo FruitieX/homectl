@@ -15,7 +15,7 @@ pub enum ColorConfig {
 pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
     match color_config {
         ColorConfig::Lch(lch) => lch.into(),
-        ColorConfig::Hsv(hsv) => hsv.into(),
+        ColorConfig::Hsv(hsv) => hsv,
         ColorConfig::Rgb(rgb) => rgb.into(),
     }
 }

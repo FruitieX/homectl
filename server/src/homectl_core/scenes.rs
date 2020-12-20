@@ -31,7 +31,7 @@ impl Scenes {
     ) -> Option<SceneDevicesConfig> {
         let scene = self.find_scene(&scene_id)?;
 
-        let mut scene_devices = scene.devices.clone().unwrap_or(HashMap::new());
+        let mut scene_devices = scene.devices.clone().unwrap_or_default();
 
         // replace device names by device_ids in device_configs
         scene_devices = scene_devices
@@ -59,7 +59,7 @@ impl Scenes {
             })
             .collect();
 
-        let scene_groups = scene.groups.clone().unwrap_or(HashMap::new());
+        let scene_groups = scene.groups.clone().unwrap_or_default();
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
@@ -74,22 +74,16 @@ impl Scenes {
                 let device =
                     find_device(devices, &integration_id, device_id.as_ref(), name.as_ref());
 
-                match device {
-                    Some(device) => {
-                        let empty_devices_integrations = HashMap::new();
-                        let mut scene_devices_integrations = scene_devices
-                            .get(&integration_id)
-                            .unwrap_or(&empty_devices_integrations)
-                            .to_owned();
+                if let Some(device) = device {
+                    let empty_devices_integrations = HashMap::new();
+                    let mut scene_devices_integrations = scene_devices
+                        .get(&integration_id)
+                        .unwrap_or(&empty_devices_integrations)
+                        .to_owned();
 
-                        // only insert device config if it did not exist yet
-                        if !scene_devices_integrations.contains_key(&device.id) {
-                            scene_devices_integrations
-                                .insert(device.id, scene_device_config.clone());
-                        }
-                        scene_devices.insert(integration_id, scene_devices_integrations.clone());
-                    }
-                    None => {}
+                    // only insert device config if it did not exist yet
+                    scene_devices_integrations.entry(device.id).or_insert_with(|| scene_device_config.clone());
+                    scene_devices.insert(integration_id, scene_devices_integrations.clone());
                 }
             }
         }
@@ -120,7 +114,7 @@ impl Scenes {
                     link.name.as_ref(),
                 )?;
 
-                let state = device.state.clone();
+                let state = device.state;
 
                 // Brightness override
                 let state = match state {

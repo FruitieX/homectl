@@ -17,11 +17,11 @@ impl Groups {
         let results = group.map(|group| {
             let mut results = vec![];
 
-            for device_link in group.devices.clone().unwrap_or(vec![]) {
+            for device_link in group.devices.clone().unwrap_or_default() {
                 results.push(device_link);
             }
 
-            for group_link in group.groups.clone().unwrap_or(vec![]) {
+            for group_link in group.groups.clone().unwrap_or_default() {
                 let mut device_links = self.find_group_device_links(&group_link.group_id);
                 results.append(device_links.as_mut());
             }
@@ -29,6 +29,6 @@ impl Groups {
             results
         });
 
-        results.unwrap_or(vec![])
+        results.unwrap_or_default()
     }
 }

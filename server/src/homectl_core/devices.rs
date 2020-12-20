@@ -33,30 +33,25 @@ fn cmp_light_state(
     b: &Option<DeviceColor>,
     b_bri: &Option<f64>,
 ) -> bool {
-    let hue_delta = 0.5;
-    let sat_delta = 0.005;
-    let val_delta = 0.005;
+    let hue_delta = 1.0;
+    let sat_delta = 0.01;
+    let val_delta = 0.01;
 
     match (a, b) {
         (None, None) => true,
         (None, Some(_)) => false,
         (Some(_), None) => false,
         (Some(a), Some(b)) => {
-            let mut a_hsv: Hsv = a.clone().into();
-            let mut b_hsv: Hsv = b.clone().into();
+            let mut a_hsv: Hsv = *a;
+            let mut b_hsv: Hsv = *b;
 
-            a_hsv.value = a_hsv.value * (a_bri.unwrap_or(1.0) as f32);
-            b_hsv.value = b_hsv.value * (b_bri.unwrap_or(1.0) as f32);
+            a_hsv.value *= a_bri.unwrap_or(1.0) as f32;
+            b_hsv.value *= b_bri.unwrap_or(1.0) as f32;
 
-            if f32::abs(a_hsv.hue.to_degrees() - b_hsv.hue.to_degrees()) > hue_delta {
-                false
-            } else if f32::abs(a_hsv.saturation - b_hsv.saturation) > sat_delta {
-                false
-            } else if f32::abs(a_hsv.value - b_hsv.value) > val_delta {
-                false
-            } else {
-                true
-            }
+            // Light state is equal if all components differ by less than a given delta
+            (f32::abs(a_hsv.hue.to_degrees() - b_hsv.hue.to_degrees()) <= hue_delta)
+                && (f32::abs(a_hsv.saturation - b_hsv.saturation) <= sat_delta)
+                && (f32::abs(a_hsv.value - b_hsv.value) <= val_delta)
         }
     }
 }
@@ -68,11 +63,13 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
             if a.power != b.power {
                 return false;
             }
+
             // If both lights are turned off, state matches
-            if a.power == false && b.power == false {
+            if !a.power && !b.power {
                 return true;
             }
-            return cmp_light_state(&a.color, &a.brightness, &b.color, &b.brightness);
+
+            cmp_light_state(&a.color, &a.brightness, &b.color, &b.brightness)
         }
         (DeviceState::MultiSourceLight(a), DeviceState::MultiSourceLight(b)) => {
             if a.power != b.power {
@@ -83,9 +80,9 @@ fn cmp_device_states(a: &DeviceState, b: &DeviceState) -> bool {
                 .zip(b.lights.iter())
                 .map(|(light_a, light_b)| {
                     cmp_light_state(
-                        &Some(light_a.clone()),
+                        &Some(*light_a),
                         &a.brightness,
-                        &Some(light_b.clone()),
+                        &Some(*light_b),
                         &b.brightness,
                     )
                 })
@@ -197,11 +194,8 @@ impl Devices {
         let mut device = device.clone();
 
         // Restore scene if set_scene is false
-        match (set_scene, old.clone()) {
-            (false, Some(old)) => {
-                device.scene = old.scene;
-            }
-            _ => {}
+        if let (false, Some(old)) = (set_scene, old.clone()) {
+            device.scene = old.scene;
         }
 
         // Allow active scene to override device state
@@ -211,13 +205,12 @@ impl Devices {
         self.state
             .insert(get_device_state_key(&device), device.clone());
 
-        self.sender
-            .send(Message::DeviceUpdate {
-                old_state,
-                new_state: self.state.clone(),
-                old,
-                new: device.clone(),
-            });
+        self.sender.send(Message::DeviceUpdate {
+            old_state,
+            new_state: self.state.clone(),
+            old,
+            new: device.clone(),
+        });
 
         device
     }
@@ -249,19 +242,16 @@ impl Devices {
             for (device_id, _) in devices {
                 let device = self.get_device(&integration_id, &device_id);
 
-                match device {
-                    Some(device) => {
-                        let mut device = device.clone();
-                        device.scene = device_scene_state.clone();
-                        let device = self.set_device_state(&device, true).await;
+                if let Some(device) = device {
+                    let mut device = device.clone();
+                    device.scene = device_scene_state.clone();
+                    let device = self.set_device_state(&device, true).await;
 
-                        db_update_device(&device).ok();
+                    db_update_device(&device).ok();
 
-                        self.sender
-                            .clone()
-                            .send(Message::SetIntegrationDeviceState { device });
-                    }
-                    None => {}
+                    self.sender
+                        .clone()
+                        .send(Message::SetIntegrationDeviceState { device });
                 }
             }
         }
@@ -269,7 +259,7 @@ impl Devices {
         Some(true)
     }
 
-    pub async fn cycle_scenes(&mut self, scene_descriptors: &Vec<SceneDescriptor>) -> Option<bool> {
+    pub async fn cycle_scenes(&mut self, scene_descriptors: &[SceneDescriptor]) -> Option<bool> {
         let mut scenes_common_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
 
         // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
@@ -279,15 +269,12 @@ impl Devices {
                 let scene_devices_config = self.find_scene_devices_config(&sd.scene_id);
 
                 let mut scene_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
-                match scene_devices_config {
-                    Some(integrations) => {
-                        for (integration_id, integration) in integrations {
-                            for (device_id, _) in integration {
-                                scene_devices.push((integration_id.clone(), device_id));
-                            }
+                if let Some(integrations) = scene_devices_config {
+                    for (integration_id, integration) in integrations {
+                        for (device_id, _) in integration {
+                            scene_devices.push((integration_id.clone(), device_id));
                         }
                     }
-                    None => {}
                 }
 
                 scene_devices
@@ -295,7 +282,7 @@ impl Devices {
             .collect();
 
         // gather devices which exist in all cycled scenes into scenes_common_devices
-        scenes_devices.first().map(|first_scene_devices| {
+        if let Some(first_scene_devices) = scenes_devices.first() {
             for scene_device in first_scene_devices {
                 if scenes_devices
                     .iter()
@@ -304,43 +291,42 @@ impl Devices {
                     scenes_common_devices.push(scene_device.clone());
                 }
             }
-        });
+        }
 
         let active_scene_index = scene_descriptors.iter().position(|sd| {
             let scene_devices_config = self.find_scene_devices_config(&sd.scene_id);
 
             // try finding any device in scene_devices_config that has this scene active
-            match scene_devices_config {
-                Some(integrations) => integrations
-                    .iter()
-                    .find(|(integration_id, devices)| {
-                        devices
-                            .iter()
-                            .find(|(device_id, _)| {
-                                // only consider devices which are common across all cycled scenes
-                                if !scenes_common_devices
-                                    .contains(&(integration_id.to_string(), device_id.to_string()))
-                                {
-                                    return false;
-                                }
+            if let Some(integrations) = scene_devices_config {
+                integrations
+                .iter()
+                .any(|(integration_id, devices)| {
+                    devices
+                        .iter()
+                        .any(|(device_id, _)| {
+                            // only consider devices which are common across all cycled scenes
+                            if !scenes_common_devices
+                                .contains(&(integration_id.to_string(), device_id.to_string()))
+                            {
+                                return false;
+                            }
 
-                                let device =
-                                    find_device(&self.state, integration_id, Some(device_id), None);
-                                let device_scene = device.map(|d| d.scene).flatten();
+                            let device =
+                                find_device(&self.state, integration_id, Some(device_id), None);
+                            let device_scene = device.map(|d| d.scene).flatten();
 
-                                device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
-                            })
-                            .is_some()
-                    })
-                    .is_some(),
-                None => false,
+                            device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
+                        })
+                })
+            } else {
+                false
             }
         });
 
         let next_scene = match active_scene_index {
             Some(index) => {
                 let next_scene_index = (index + 1) % scene_descriptors.len();
-                scene_descriptors.iter().nth(next_scene_index)
+                scene_descriptors.get(next_scene_index)
             }
             None => scene_descriptors.first(),
         }?;

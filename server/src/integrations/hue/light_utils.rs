@@ -33,7 +33,7 @@ pub fn to_light(bridge_light: BridgeLight) -> Light {
     Light {
         power: bridge_light.state.on,
         brightness: None,
-        color: to_palette(bridge_light.clone()),
+        color: to_palette(bridge_light),
     }
 }
 

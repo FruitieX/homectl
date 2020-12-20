@@ -136,13 +136,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
             }
         };
 
-        match result {
-            Err(err) => {
-                println!("Error while handling message:");
-                println!("Msg: {:#?}", msg);
-                println!("Error: {:#?}", err);
-            }
-            _ => {}
+        if let Err(err) = result {
+            println!("Error while handling message:");
+            println!("Msg: {:#?}", msg);
+            println!("Error: {:#?}", err);
         }
     }
 }

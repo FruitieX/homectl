@@ -88,7 +88,7 @@ impl Integration for WakeOnLan {
                 device.id
             ))?;
 
-        if power == true {
+        if power {
             wakey::WolPacket::from_string(&wol_machine.mac, ':').send_magic()?;
         } else if let Some(sleep_on_lan) = &wol_machine.sleep_on_lan {
             let endpoint = sleep_on_lan.clone();

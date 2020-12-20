@@ -110,9 +110,8 @@ fn get_night_fade(circadian: &Circadian) -> f32 {
     } else {
         // fading from day to night
         let d = local - night_fade_start;
-        let p = d.num_milliseconds() as f32 / night_fade_duration.num_milliseconds() as f32;
-
-        p
+        
+        d.num_milliseconds() as f32 / night_fade_duration.num_milliseconds() as f32
     }
 }
 
@@ -148,13 +147,11 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         color: Some(get_circadian_color(circadian)),
     });
 
-    let device = Device {
+    Device {
         id: "color".into(),
         name: circadian.config.device_name.clone(),
         integration_id: circadian.id.clone(),
         scene: None,
         state,
-    };
-
-    device
+    }
 }

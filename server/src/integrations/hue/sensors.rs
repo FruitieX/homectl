@@ -26,8 +26,7 @@ pub async fn do_refresh_sensors(
     // statements
     let prev_bridge_sensors = {
         let sensors_state = sensors_state.lock().await;
-        let bridge_sensors = sensors_state.bridge_sensors.clone();
-        bridge_sensors
+        sensors_state.bridge_sensors.clone()
     };
 
     let result: BridgeSensors = surf::get(&format!(

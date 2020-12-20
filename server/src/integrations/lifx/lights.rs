@@ -31,13 +31,10 @@ pub async fn init_udp_socket(_config: &LifxConfig) -> Result<UdpSocket> {
 }
 
 pub async fn handle_lifx_msg(msg: LifxMsg, integration_id: IntegrationId, sender: TxEventChannel) {
-    match msg {
-        LifxMsg::State(state) => {
-            let device = from_lifx_state(state, integration_id.clone());
-            sender
-                .send(Message::IntegrationDeviceRefresh { device });
-        }
-        _ => {}
+    if let LifxMsg::State(state) = msg {
+        let device = from_lifx_state(state, integration_id);
+        sender
+            .send(Message::IntegrationDeviceRefresh { device });
     }
 }
 

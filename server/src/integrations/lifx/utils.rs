@@ -42,9 +42,9 @@ fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
 
             LittleEndian::write_u16(&mut buf, state.power);
 
-            state
-                .transition
-                .map(|t| LittleEndian::write_u16(&mut buf[2..], t));
+            if let Some(t) = state.transition {
+                LittleEndian::write_u16(&mut buf[2..], t)
+            }
 
             Some(buf.to_vec())
         }
@@ -56,9 +56,9 @@ fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
             LittleEndian::write_u16(&mut buf[5..], state.bri);
             LittleEndian::write_u16(&mut buf[7..], 6500); // lifx requires this weird color temperature parameter?
 
-            state
-                .transition
-                .map(|t| LittleEndian::write_u16(&mut buf[9..], t));
+            if let Some(t) = state.transition {
+                LittleEndian::write_u16(&mut buf[9..], t)
+            }
 
             Some(buf.to_vec())
         }
@@ -99,7 +99,7 @@ pub fn mk_lifx_udp_msg(lifx_msg: LifxMsg) -> Vec<u8> {
     let msg_type = lifx_msg_type_to_u16(lifx_msg.clone());
     LittleEndian::write_u16(&mut protocol_header[8..], msg_type);
 
-    let payload = mk_lifx_msg_payload(lifx_msg.clone());
+    let payload = mk_lifx_msg_payload(lifx_msg);
     let payload_size = payload.clone().map(|p| p.len()).unwrap_or(0);
     let msg_size = frame.len() + frame_address.len() + protocol_header.len() + payload_size;
 
@@ -111,11 +111,8 @@ pub fn mk_lifx_udp_msg(lifx_msg: LifxMsg) -> Vec<u8> {
     msg.append(&mut frame_address.to_vec());
     msg.append(&mut protocol_header.to_vec());
 
-    match payload {
-        Some(payload) => {
-            msg.append(&mut payload.to_vec());
-        }
-        None => {}
+    if let Some(payload) = payload {
+        msg.append(&mut payload.to_vec());
     };
 
     msg
@@ -169,18 +166,16 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
     let state = DeviceState::Light(Light {
         power,
         brightness: None,
-        color: Some(color.into()),
+        color: Some(color),
     });
 
-    let device = Device {
+    Device {
         id: lifx_state.addr.to_string(),
-        name: lifx_state.label.clone(),
-        integration_id: integration_id.clone(),
+        name: lifx_state.label,
+        integration_id,
         scene: None,
         state,
-    };
-
-    device
+    }
 }
 
 pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
@@ -199,8 +194,7 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
 
     let color = light_state
         .color
-        .map(|color| color.into())
-        .unwrap_or(Hsv::new(0.0, 255.0, 255.0));
+        .unwrap_or_else(|| Hsv::new(0.0, 255.0, 255.0));
 
     let hue = ((to_lifx_hue(color.hue.to_positive_degrees()) / 360.0) * 65535.0).floor() as u16;
     let sat = (color.saturation * 65535.0).floor() as u16;
