@@ -34,7 +34,7 @@ impl Integration for Random {
 
         Ok(Random {
             id: id.clone(),
-            config: config.clone(),
+            config,
             event_tx,
         })
     }
@@ -94,11 +94,10 @@ async fn poll_sensor(random: Random) {
         let sender = random.event_tx.clone();
 
         let device = mk_random_device(&random);
-        sender
-            .send(Message::SetDeviceState {
-                device,
-                set_scene: false,
-            });
+        sender.send(Message::SetDeviceState {
+            device,
+            set_scene: false,
+        });
     }
 }
 
@@ -109,13 +108,11 @@ fn mk_random_device(random: &Random) -> Device {
         color: Some(get_random_color()),
     });
 
-    let device = Device {
+    Device {
         id: "color".into(),
         name: random.config.device_name.clone(),
         integration_id: random.id.clone(),
         scene: None,
         state,
-    };
-
-    device
+    }
 }

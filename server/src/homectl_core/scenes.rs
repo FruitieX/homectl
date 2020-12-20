@@ -46,7 +46,7 @@ impl Scenes {
                             let device =
                                 find_device(devices, &integration_id, None, Some(device_name));
 
-                            let device_id = device.map(|d| d.id).unwrap_or({
+                            let device_id = device.map(|d| d.id).unwrap_or_else(|| {
                                 println!(
                                     "Could not find device_id for {} device with name {}",
                                     integration_id, device_name

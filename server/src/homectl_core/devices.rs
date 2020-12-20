@@ -367,23 +367,26 @@ pub fn find_device(
     device_id: Option<&DeviceId>,
     name: Option<&String>,
 ) -> Option<Device> {
-    let (_, device) = devices.iter().find(
-        |((candidate_integration_id, candidate_device_id), candidate_device)| {
-            if integration_id != candidate_integration_id {
-                return false;
-            }
-            if device_id.is_some() && device_id != Some(candidate_device_id) {
-                return false;
-            }
+    let device = devices
+        .iter()
+        .find(
+            |((candidate_integration_id, candidate_device_id), candidate_device)| {
+                if integration_id != candidate_integration_id {
+                    return false;
+                }
+                if device_id.is_some() && device_id != Some(candidate_device_id) {
+                    return false;
+                }
 
-            // TODO: regex matches
-            if name.is_some() && name != Some(&candidate_device.name) {
-                return false;
-            }
+                // TODO: regex matches
+                if name.is_some() && name != Some(&candidate_device.name) {
+                    return false;
+                }
 
-            true
-        },
-    )?;
+                true
+            },
+        )
+        .map(|(_, device)| device)?;
 
     Some(device.clone())
 }
