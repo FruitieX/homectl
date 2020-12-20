@@ -1,5 +1,6 @@
 use super::group::{GroupDeviceLink, GroupId, GroupsConfig};
 
+#[derive(Clone)]
 pub struct Groups {
     config: GroupsConfig,
 }

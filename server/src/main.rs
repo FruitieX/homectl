@@ -29,8 +29,8 @@ use std::{
 
 #[derive(Clone)]
 struct State {
-    integrations: Arc<Mutex<Integrations>>,
-    groups: Arc<Mutex<Groups>>,
+    integrations: Integrations,
+    groups: Groups,
     scenes: Arc<Mutex<Scenes>>,
     devices: Arc<Mutex<Devices>>,
     rules: Arc<Mutex<Rules>>,

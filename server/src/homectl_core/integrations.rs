@@ -1,10 +1,12 @@
 use super::{device::Device, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
 use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random, wake_on_lan::WakeOnLan};
 use anyhow::{anyhow, Context, Result};
-use std::collections::HashMap;
+use async_std::sync::Mutex;
+use std::{collections::HashMap, sync::Arc};
 
-pub type IntegrationsTree = HashMap<IntegrationId, Box<dyn Integration>>;
+pub type IntegrationsTree = HashMap<IntegrationId, Arc<Mutex<Box<dyn Integration>>>>;
 
+#[derive(Clone)]
 pub struct Integrations {
     integrations: IntegrationsTree,
     sender: TxEventChannel,
@@ -12,7 +14,7 @@ pub struct Integrations {
 
 impl Integrations {
     pub fn new(sender: TxEventChannel) -> Self {
-        let integrations = HashMap::new();
+        let integrations = Default::default();
 
         Integrations {
             integrations,
@@ -30,6 +32,7 @@ impl Integrations {
 
         let integration =
             load_integration(module_name, integration_id, config, self.sender.clone())?;
+        let integration = Arc::new(Mutex::new(integration));
 
         self.integrations.insert(integration_id.clone(), integration);
 
@@ -38,6 +41,8 @@ impl Integrations {
 
     pub async fn run_register_pass(&mut self) -> Result<()> {
         for (_integration_id, integration) in self.integrations.iter_mut() {
+            let mut integration = integration.lock().await;
+
             integration.register().await?;
         }
 
@@ -46,6 +51,8 @@ impl Integrations {
 
     pub async fn run_start_pass(&mut self) -> Result<()> {
         for (_integration_id, integration) in self.integrations.iter_mut() {
+            let mut integration = integration.lock().await;
+
             integration.start().await?;
         }
 
@@ -54,12 +61,14 @@ impl Integrations {
 
     pub async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let integration = self.integrations.get_mut(&device.integration_id).context(format!("Expected to find integration by id {}", device.integration_id))?;
+        let mut integration = integration.lock().await;
 
         integration.set_integration_device_state(device).await
     }
 
     pub async fn run_integration_action(&mut self, integration_id: &IntegrationId, payload: &IntegrationActionPayload) -> Result<()> {
         let integration = self.integrations.get_mut(integration_id).context(format!("Expected to find integration by id {}", integration_id))?;
+        let mut integration = integration.lock().await;
 
         integration.run_integration_action(payload).await
     }
