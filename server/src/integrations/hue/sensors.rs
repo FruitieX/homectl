@@ -8,9 +8,9 @@ use crate::homectl_core::{
     integration::IntegrationId,
 };
 use anyhow::anyhow;
-use async_std::{stream, sync::Mutex};
-use std::{error::Error, sync::Arc, time::Duration};
 use async_std::prelude::*;
+use async_std::stream;
+use std::{error::Error, sync::{Arc, Mutex}, time::Duration};
 
 pub struct SensorsState {
     pub bridge_sensors: BridgeSensors,
@@ -25,7 +25,7 @@ pub async fn do_refresh_sensors(
     // NOTE: we can't hold onto this mutex lock across the following .await
     // statements
     let prev_bridge_sensors = {
-        let sensors_state = sensors_state.lock().await;
+        let sensors_state = sensors_state.lock().unwrap();
         sensors_state.bridge_sensors.clone()
     };
 
@@ -40,7 +40,7 @@ pub async fn do_refresh_sensors(
     .map_err(|err| anyhow!(err))?;
 
     {
-        let mut sensors_state = sensors_state.lock().await;
+        let mut sensors_state = sensors_state.lock().unwrap();
         sensors_state.bridge_sensors = result.clone();
     }
 

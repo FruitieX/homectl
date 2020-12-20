@@ -11,7 +11,7 @@ mod utils;
 
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
-use async_std::prelude::*;
+use async_std::{prelude::*, task};
 use homectl_core::{
     devices::Devices,
     events::*,
@@ -22,18 +22,15 @@ use homectl_core::{
     scene::{CycleScenesDescriptor, SceneDescriptor},
     scenes::Scenes,
 };
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-};
+use std::error::Error;
 
 #[derive(Clone)]
 struct State {
     integrations: Integrations,
     groups: Groups,
-    scenes: Arc<Mutex<Scenes>>,
-    devices: Arc<Mutex<Devices>>,
-    rules: Arc<Mutex<Rules>>,
+    scenes: Scenes,
+    devices: Devices,
+    rules: Rules,
 }
 
 #[async_std::main]
@@ -48,7 +45,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut integrations = Integrations::new(sender.clone());
     let groups = Groups::new(config.groups);
     let scenes = Scenes::new(config.scenes, groups);
-    let mut devices = Devices::new(sender.clone(), scenes);
+    let devices = Devices::new(sender.clone(), scenes);
     let rules = Rules::new(config.routines, sender.clone());
 
     for (id, integration_config) in &config.integrations {
@@ -88,58 +85,64 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // state across .await points
 
         // let state = state.clone();
-        let result: Result<()> = match &msg {
-            Message::IntegrationDeviceRefresh { device } => {
-                // let mut devices = state.devices.lock().unwrap();
-                devices.handle_integration_device_refresh(device).await;
-                Ok(())
-            }
-            Message::DeviceUpdate {
-                old_state,
-                new_state,
-                old,
-                new,
-            } => {
-                // let rules = state.rules.lock().unwrap();
-                rules
-                    .handle_device_update(old_state, new_state, old, new)
-                    .await;
-                Ok(())
-            }
-            Message::SetDeviceState { device, set_scene } => {
-                // let mut devices = state.devices.lock().unwrap();
-                devices.set_device_state(&device, *set_scene).await;
-                Ok(())
-            }
-            Message::SetIntegrationDeviceState { device } => {
-                // let mut integrations = state.integrations.lock().unwrap();
-                integrations.set_integration_device_state(device).await
-            }
-            Message::ActivateScene(SceneDescriptor { scene_id }) => {
-                // let mut devices = state.devices.lock().unwrap();
-                devices.activate_scene(&scene_id).await;
-                Ok(())
-            }
-            Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
-                // let mut devices = state.devices.lock().unwrap();
-                devices.cycle_scenes(&scenes).await;
-                Ok(())
-            }
-            Message::RunIntegrationAction(IntegrationActionDescriptor {
-                integration_id,
-                payload,
-            }) => {
-                // let mut integrations = state.integrations.lock().unwrap();
-                integrations
-                    .run_integration_action(integration_id, payload)
-                    .await
-            }
-        };
 
-        if let Err(err) = result {
-            println!("Error while handling message:");
-            println!("Msg: {:#?}", msg);
-            println!("Error: {:#?}", err);
-        }
+        // Maybe instead of cloning all these structs we should pass state
+        // around in an Arc<Mutex<>> and only lock it when necessary
+        let mut devices = devices.clone();
+        let rules = rules.clone();
+        let mut integrations = integrations.clone();
+
+        task::spawn(async move {
+            let result: Result<()> = match &msg {
+                Message::IntegrationDeviceRefresh { device } => {
+                    devices.handle_integration_device_refresh(device).await;
+                    Ok(())
+                }
+                Message::DeviceUpdate {
+                    old_state,
+                    new_state,
+                    old,
+                    new,
+                } => {
+                    rules
+                        .handle_device_update(old_state, new_state, old, new)
+                        .await;
+
+                    Ok(())
+                }
+                Message::SetDeviceState { device, set_scene } => {
+                    devices.set_device_state(&device, *set_scene).await;
+
+                    Ok(())
+                }
+                Message::SetIntegrationDeviceState { device } => {
+                    integrations.set_integration_device_state(&device).await
+                }
+                Message::ActivateScene(SceneDescriptor { scene_id }) => {
+                    devices.activate_scene(&scene_id).await;
+
+                    Ok(())
+                }
+                Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
+                    devices.cycle_scenes(&scenes).await;
+
+                    Ok(())
+                }
+                Message::RunIntegrationAction(IntegrationActionDescriptor {
+                    integration_id,
+                    payload,
+                }) => {
+                    integrations
+                        .run_integration_action(integration_id, payload)
+                        .await
+                }
+            };
+
+            if let Err(err) = result {
+                println!("Error while handling message:");
+                println!("Msg: {:#?}", msg);
+                println!("Error: {:#?}", err);
+            }
+        });
     }
 }

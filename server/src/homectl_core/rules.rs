@@ -6,6 +6,7 @@ use super::{
 };
 use std::collections::HashSet;
 
+#[derive(Clone)]
 pub struct Rules {
     config: RoutinesConfig,
     sender: TxEventChannel,

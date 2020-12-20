@@ -10,6 +10,7 @@ use super::{
 };
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct Scenes {
     config: ScenesConfig,
     groups: Groups,

@@ -7,8 +7,10 @@ use super::{
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
     scenes::Scenes,
 };
+use futures::future::join_all;
 use palette::Hsv;
-use std::{collections::HashMap, time::Instant};
+use std::sync::Mutex;
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
 pub type DevicesState = HashMap<DeviceStateKey, Device>;
@@ -21,9 +23,10 @@ pub fn mk_device_state_key(integration_id: &IntegrationId, device_id: &DeviceId)
     (integration_id.clone(), device_id.clone())
 }
 
+#[derive(Clone)]
 pub struct Devices {
     sender: TxEventChannel,
-    state: DevicesState,
+    state: Arc<Mutex<DevicesState>>,
     scenes: Scenes,
 }
 
@@ -96,7 +99,7 @@ impl Devices {
     pub fn new(sender: TxEventChannel, scenes: Scenes) -> Self {
         Devices {
             sender,
-            state: HashMap::new(),
+            state: Default::default(),
             scenes,
         }
     }
@@ -108,10 +111,14 @@ impl Devices {
 
         // recompute expected_state here as it may have changed since we last
         // computed it
-        let expected_state = state_device.map(|d| self.get_expected_state(&d, false));
+        let expected_state = if let Some(ref d) = state_device {
+            Some(self.get_expected_state(&d, false))
+        } else {
+            None
+        };
 
         // Take action if the device state has changed from stored state
-        if Some(device) != state_device || expected_state != Some(device.state.clone()) {
+        if Some(device) != state_device.as_ref() || expected_state != Some(device.state.clone()) {
             let kind = device.state.clone();
 
             match (kind, state_device, expected_state) {
@@ -166,15 +173,15 @@ impl Devices {
             DeviceState::Sensor(_) => device.state.clone(),
 
             _ => {
-                let scene_device_state = self.scenes.find_scene_device_state(&device, &self.state);
+                let state = self.state.lock().unwrap();
+                let scene_device_state = self.scenes.find_scene_device_state(&device, &state);
 
                 scene_device_state.unwrap_or_else(|| {
                     // TODO: why would we ever want to do this
                     if set_state {
                         device.state.clone()
                     } else {
-                        let device = self
-                            .state
+                        let device = state
                             .get(&get_device_state_key(device))
                             .unwrap_or(device)
                             .clone();
@@ -188,8 +195,8 @@ impl Devices {
 
     /// Sets stored state for given device and dispatches DeviceUpdate
     pub async fn set_device_state(&mut self, device: &Device, set_scene: bool) -> Device {
-        let old: Option<Device> = self.get_device(&device.integration_id, &device.id).cloned();
-        let old_state = self.state.clone();
+        let old: Option<Device> = self.get_device(&device.integration_id, &device.id);
+        let old_state = { self.state.lock().unwrap().clone() };
 
         let mut device = device.clone();
 
@@ -202,12 +209,13 @@ impl Devices {
         let expected_state = self.get_expected_state(&device, true);
         device.state = expected_state;
 
-        self.state
-            .insert(get_device_state_key(&device), device.clone());
+        let mut state = self.state.lock().unwrap();
+
+        state.insert(get_device_state_key(&device), device.clone());
 
         self.sender.send(Message::DeviceUpdate {
             old_state,
-            new_state: self.state.clone(),
+            new_state: state.clone(),
             old,
             new: device.clone(),
         });
@@ -219,13 +227,17 @@ impl Devices {
         &self,
         integration_id: &IntegrationId,
         device_id: &DeviceId,
-    ) -> Option<&Device> {
+    ) -> Option<Device> {
         self.state
+            .lock()
+            .unwrap()
             .get(&mk_device_state_key(&integration_id, &device_id))
+            .cloned()
     }
 
     fn find_scene_devices_config(&self, scene_id: &SceneId) -> Option<SceneDevicesConfig> {
-        self.scenes.find_scene_devices_config(&self.state, scene_id)
+        self.scenes
+            .find_scene_devices_config(&*self.state.lock().unwrap(), scene_id)
     }
 
     pub async fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
@@ -262,17 +274,30 @@ impl Devices {
     pub async fn cycle_scenes(&mut self, scene_descriptors: &[SceneDescriptor]) -> Option<bool> {
         let mut scenes_common_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
 
-        // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
-        let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_descriptors
-            .iter()
-            .map(|sd| {
-                let scene_devices_config = self.find_scene_devices_config(&sd.scene_id);
+        // If using async mutexes
 
+        // let scene_devices_configs = join_all(scene_descriptors.iter().map(|sd| {
+        //     let sd = sd.clone();
+        //     let scene_id = sd.scene_id.clone();
+        //     let devices = self.clone();
+        //     async move { (sd, devices.find_scene_devices_config(&scene_id).await) }
+        // })).await;
+
+        let scene_devices_configs: Vec<(&SceneDescriptor, Option<SceneDevicesConfig>)> =
+            scene_descriptors
+                .iter()
+                .map(|sd| (sd, self.find_scene_devices_config(&sd.scene_id)))
+                .collect();
+
+        // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
+        let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_devices_configs
+            .iter()
+            .map(|(_, scene_devices_config)| {
                 let mut scene_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
                 if let Some(integrations) = scene_devices_config {
                     for (integration_id, integration) in integrations {
-                        for (device_id, _) in integration {
-                            scene_devices.push((integration_id.clone(), device_id));
+                        for device_id in integration.keys() {
+                            scene_devices.push((integration_id.clone(), device_id.clone()));
                         }
                     }
                 }
@@ -293,35 +318,34 @@ impl Devices {
             }
         }
 
-        let active_scene_index = scene_descriptors.iter().position(|sd| {
-            let scene_devices_config = self.find_scene_devices_config(&sd.scene_id);
+        let state = self.state.lock().unwrap().clone();
 
-            // try finding any device in scene_devices_config that has this scene active
-            if let Some(integrations) = scene_devices_config {
-                integrations
+        let active_scene_index =
+            scene_devices_configs
                 .iter()
-                .any(|(integration_id, devices)| {
-                    devices
-                        .iter()
-                        .any(|(device_id, _)| {
-                            // only consider devices which are common across all cycled scenes
-                            if !scenes_common_devices
-                                .contains(&(integration_id.to_string(), device_id.to_string()))
-                            {
-                                return false;
-                            }
+                .position(|(sd, scene_devices_config)| {
+                    // try finding any device in scene_devices_config that has this scene active
+                    if let Some(integrations) = scene_devices_config {
+                        integrations.iter().any(|(integration_id, devices)| {
+                            devices.iter().any(|(device_id, _)| {
+                                // only consider devices which are common across all cycled scenes
+                                if !scenes_common_devices
+                                    .contains(&(integration_id.to_string(), device_id.to_string()))
+                                {
+                                    return false;
+                                }
 
-                            let device =
-                                find_device(&self.state, integration_id, Some(device_id), None);
-                            let device_scene = device.map(|d| d.scene).flatten();
+                                let device =
+                                    find_device(&state, integration_id, Some(device_id), None);
+                                let device_scene = device.map(|d| d.scene).flatten();
 
-                            device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
+                                device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
+                            })
                         })
-                })
-            } else {
-                false
-            }
-        });
+                    } else {
+                        false
+                    }
+                });
 
         let next_scene = match active_scene_index {
             Some(index) => {

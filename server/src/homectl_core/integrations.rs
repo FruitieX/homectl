@@ -1,10 +1,17 @@
-use super::{device::Device, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
-use crate::integrations::{circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random, wake_on_lan::WakeOnLan};
+use super::{
+    device::Device,
+    events::TxEventChannel,
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
+use crate::integrations::{
+    circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random,
+    wake_on_lan::WakeOnLan,
+};
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
-pub type IntegrationsTree = HashMap<IntegrationId, Arc<Mutex<Box<dyn Integration>>>>;
+pub type IntegrationsTree = HashMap<IntegrationId, Arc<Mutex<Box<dyn Integration + Send>>>>;
 
 #[derive(Clone)]
 pub struct Integrations {
@@ -34,7 +41,8 @@ impl Integrations {
             load_integration(module_name, integration_id, config, self.sender.clone())?;
         let integration = Arc::new(Mutex::new(integration));
 
-        self.integrations.insert(integration_id.clone(), integration);
+        self.integrations
+            .insert(integration_id.clone(), integration);
 
         Ok(())
     }
@@ -60,14 +68,29 @@ impl Integrations {
     }
 
     pub async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
-        let integration = self.integrations.get_mut(&device.integration_id).context(format!("Expected to find integration by id {}", device.integration_id))?;
+        let integration = self
+            .integrations
+            .get(&device.integration_id)
+            .context(format!(
+                "Expected to find integration by id {}",
+                device.integration_id
+            ))?;
         let mut integration = integration.lock().await;
 
-        integration.set_integration_device_state(device).await
+        integration
+            .set_integration_device_state(&device.clone())
+            .await
     }
 
-    pub async fn run_integration_action(&mut self, integration_id: &IntegrationId, payload: &IntegrationActionPayload) -> Result<()> {
-        let integration = self.integrations.get_mut(integration_id).context(format!("Expected to find integration by id {}", integration_id))?;
+    pub async fn run_integration_action(
+        &mut self,
+        integration_id: &IntegrationId,
+        payload: &IntegrationActionPayload,
+    ) -> Result<()> {
+        let integration = self.integrations.get(integration_id).context(format!(
+            "Expected to find integration by id {}",
+            integration_id
+        ))?;
         let mut integration = integration.lock().await;
 
         integration.run_integration_action(payload).await
@@ -81,7 +104,7 @@ fn load_integration(
     id: &IntegrationId,
     config: &config::Value,
     event_tx: TxEventChannel,
-) -> Result<Box<dyn Integration>> {
+) -> Result<Box<dyn Integration + Send>> {
     match module_name.as_str() {
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
