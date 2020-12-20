@@ -72,4 +72,6 @@ and also other similar solutions to homectl:
 - Clone this repo
 - `cp Settings.toml.example Settings.toml`
 - `$EDITOR Settings.toml`
+- `cargo install diesel_cli`
+- `diesel setup`
 - `cargo run`
