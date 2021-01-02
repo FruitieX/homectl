@@ -1,7 +1,7 @@
 let
-  moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/4521bc6.tar.gz);
+  moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/8c007b60731c07dd7a052cce508de3bb1ae849b4.tar.gz);
   nixpkgs = import <nixpkgs> { overlays = [ moz_overlay ]; };
-  rust-moz-overlay = (nixpkgs.latest.rustChannels.beta.rust.override { extensions = [ "rust-src" "rls-preview" "rust-analysis" "rustfmt-preview" ];});
+  rust-moz-overlay = (nixpkgs.latest.rustChannels.nightly.rust.override { extensions = [ "rust-src" "rust-analysis" "rustfmt-preview" ];});
 in
   with nixpkgs;
   stdenv.mkDerivation {
