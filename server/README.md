@@ -68,10 +68,8 @@ and also other similar solutions to homectl:
 
 ## Setup
 
-- Install rust: https://rustup.rs/ (beta should be good)
+- Install `docker` and `docker-compose`
 - Clone this repo
 - `cp Settings.toml.example Settings.toml`
 - `$EDITOR Settings.toml`
-- `cargo install diesel_cli`
-- `diesel setup`
-- `cargo run`
+- docker-compose up

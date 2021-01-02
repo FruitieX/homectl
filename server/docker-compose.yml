@@ -8,3 +8,10 @@ services:
     ports:
             - "0.0.0.0:5432:5432"
     command: ["postgres", "-c", "log_statement=all"]
+  homectl:
+    container_name: "homectl"
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "postgres://postgres@postgres-homectl/homectl"

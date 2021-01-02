@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use async_std::{prelude::*, task};
 use homectl_core::{
     device::Device,
-    devices::{Devices, DevicesState},
+    devices::Devices,
     events::*,
     groups::Groups,
     integration::IntegrationActionDescriptor,
