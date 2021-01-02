@@ -1,3 +1,5 @@
+#![feature(proc_macro_hygiene, decl_macro)]
+
 #[macro_use]
 extern crate diesel;
 
@@ -13,7 +15,8 @@ mod utils;
 use anyhow::{Context, Result};
 use async_std::{prelude::*, task};
 use homectl_core::{
-    devices::Devices,
+    device::Device,
+    devices::{Devices, DevicesState},
     events::*,
     groups::Groups,
     integration::IntegrationActionDescriptor,
@@ -25,12 +28,31 @@ use homectl_core::{
 use std::{error::Error, sync::Arc};
 
 #[derive(Clone)]
-struct State {
+struct AppState {
     integrations: Integrations,
     groups: Groups,
     scenes: Scenes,
     devices: Devices,
     rules: Rules,
+}
+
+#[macro_use]
+extern crate rocket;
+use rocket::{State};
+use rocket_contrib::json::Json;
+
+#[derive(serde::Serialize)]
+struct DevicesResponse {
+    devices: Vec<Device>,
+}
+
+#[get("/devices")]
+fn hello(state: State<Arc<AppState>>) -> Json<DevicesResponse> {
+    let devices = state.devices.get_devices();
+    let response = DevicesResponse {
+        devices: devices.values().cloned().collect(),
+    };
+    Json(response)
 }
 
 #[async_std::main]
@@ -65,7 +87,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         Ok(())
     };
 
-    let state = State {
+    let state = AppState {
         integrations,
         groups,
         scenes,
@@ -74,6 +96,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     };
 
     let state = Arc::new(state);
+
+    {
+        let state = Arc::clone(&state);
+
+        task::spawn(async move {
+            rocket::ignite()
+                .manage(state)
+                .mount("/", routes![hello])
+                .launch();
+        });
+    }
 
     loop {
         let msg = receiver
@@ -106,7 +139,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     old,
                     new,
                 } => {
-                    state.rules
+                    state
+                        .rules
                         .handle_device_update(old_state, new_state, old, new)
                         .await;
 

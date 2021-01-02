@@ -27,3 +27,6 @@ async-std = { version = "1.7.0", features = ["attributes", "unstable"] }
 anyhow = "1.0.34"
 lazy_static = "1.4.0"
 wakey = "0.1.2"
+rocket = "0.4.6"
+
+rocket_contrib = { version = "0.4.6", default-features = false, features = ["json"] }

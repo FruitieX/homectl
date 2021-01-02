@@ -1,9 +1,10 @@
 use super::{integration::IntegrationId, scene::SceneId};
 use palette::Hsv;
 use std::time::Instant;
+use serde::Serialize;
 
 /// simple on/off devices such as relays, lights
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub struct OnOffDevice {
     pub power: bool,
 }
@@ -12,7 +13,7 @@ pub struct OnOffDevice {
 pub type DeviceColor = Hsv;
 
 /// lights with adjustable brightness and/or color
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Light {
     pub power: bool,
 
@@ -24,7 +25,7 @@ pub struct Light {
 }
 
 /// lights with multiple individually adjustable light sources
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct MultiSourceLight {
     pub power: bool,
 
@@ -36,7 +37,7 @@ pub struct MultiSourceLight {
 }
 
 /// button sensors, motion sensors
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
 pub enum SensorKind {
     OnOffSensor {
         value: bool,
@@ -50,7 +51,7 @@ pub enum SensorKind {
     Unknown,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub enum DeviceState {
     OnOffDevice(OnOffDevice),
     Light(Light),
@@ -59,16 +60,18 @@ pub enum DeviceState {
 }
 
 /// active scene that's controlling the device state, if any
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct DeviceSceneState {
     pub scene_id: SceneId,
+
+    #[serde(skip)]
     pub activation_time: Instant,
 }
 
 /// unique identifier for the Device
 pub type DeviceId = String;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct Device<T = DeviceState> {
     pub id: DeviceId,
     pub name: String,

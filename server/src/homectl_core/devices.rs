@@ -7,7 +7,6 @@ use super::{
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
     scenes::Scenes,
 };
-use futures::future::join_all;
 use palette::Hsv;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc, time::Instant};
@@ -102,6 +101,10 @@ impl Devices {
             state: Default::default(),
             scenes,
         }
+    }
+
+    pub fn get_devices(&self) -> DevicesState {
+        self.state.lock().unwrap().clone()
     }
 
     /// Checks whether device values were changed or not due to refresh
