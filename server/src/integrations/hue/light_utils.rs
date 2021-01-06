@@ -52,5 +52,6 @@ pub fn bridge_light_to_device(
         integration_id,
         scene: None,
         state,
+        locked: false
     }
 }

@@ -14,7 +14,6 @@ username = "<hue username string here>"
 
 [integrations.lifx]
 plugin = "lifx"
-network_interface = "enp0s31f6"
 
 [integrations.circadian]
 plugin = "circadian"

@@ -78,4 +78,5 @@ pub struct Device<T = DeviceState> {
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
     pub state: T,
+    pub locked: bool
 }

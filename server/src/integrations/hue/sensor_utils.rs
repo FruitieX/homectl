@@ -108,6 +108,7 @@ pub fn bridge_sensor_to_device(
                 integration_id,
                 scene,
                 state: kind,
+                locked: false
             }
         }
 
@@ -125,6 +126,7 @@ pub fn bridge_sensor_to_device(
                 integration_id,
                 scene,
                 state: kind,
+                locked: false
             }
         }
 
@@ -137,6 +139,7 @@ pub fn bridge_sensor_to_device(
                 integration_id,
                 scene,
                 state: kind,
+                locked: false
             }
         }
     }

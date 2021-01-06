@@ -153,5 +153,6 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         integration_id: circadian.id.clone(),
         scene: None,
         state,
+        locked: false
     }
 }

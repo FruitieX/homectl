@@ -38,7 +38,7 @@ struct AppState {
 
 #[macro_use]
 extern crate rocket;
-use rocket::{State};
+use rocket::State;
 use rocket_contrib::json::Json;
 
 #[derive(serde::Serialize)]
@@ -156,9 +156,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let mut integrations = state.integrations.clone();
                     integrations.set_integration_device_state(&device).await
                 }
-                Message::ActivateScene(SceneDescriptor { scene_id }) => {
+                Message::ActivateScene(SceneDescriptor {
+                    scene_id,
+                    skip_locked_devices,
+                }) => {
                     let mut devices = state.devices.clone();
-                    devices.activate_scene(&scene_id).await;
+                    devices
+                        .activate_scene(&scene_id, skip_locked_devices.unwrap_or(false))
+                        .await;
 
                     Ok(())
                 }

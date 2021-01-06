@@ -13,7 +13,6 @@ use utils::{mk_lifx_udp_msg, to_lifx_state, LifxMsg};
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct LifxConfig {
-    network_interface: String,
 }
 
 pub struct Lifx {
