@@ -10,3 +10,4 @@ pub mod rule;
 pub mod rules;
 pub mod scene;
 pub mod scenes;
+pub mod state;

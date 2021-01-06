@@ -6,6 +6,10 @@ extern crate diesel;
 #[macro_use]
 extern crate lazy_static;
 
+#[macro_use]
+extern crate rocket;
+
+mod api;
 mod db;
 mod homectl_core;
 mod integrations;
@@ -13,47 +17,11 @@ mod utils;
 
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
+use api::init_api;
 use async_std::{prelude::*, task};
-use homectl_core::{
-    device::Device,
-    devices::Devices,
-    events::*,
-    groups::Groups,
-    integration::IntegrationActionDescriptor,
-    integrations::Integrations,
-    rules::Rules,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
-    scenes::Scenes,
-};
+use homectl_core::{devices::Devices, events::*, groups::Groups, integration::IntegrationActionDescriptor, integrations::Integrations, rules::Rules, scene::{CycleScenesDescriptor, SceneDescriptor}, scenes::Scenes, state::AppState};
 use std::{error::Error, sync::Arc};
 
-#[derive(Clone)]
-struct AppState {
-    integrations: Integrations,
-    groups: Groups,
-    scenes: Scenes,
-    devices: Devices,
-    rules: Rules,
-}
-
-#[macro_use]
-extern crate rocket;
-use rocket::State;
-use rocket_contrib::json::Json;
-
-#[derive(serde::Serialize)]
-struct DevicesResponse {
-    devices: Vec<Device>,
-}
-
-#[get("/devices")]
-fn hello(state: State<Arc<AppState>>) -> Json<DevicesResponse> {
-    let devices = state.devices.get_devices();
-    let response = DevicesResponse {
-        devices: devices.values().cloned().collect(),
-    };
-    Json(response)
-}
 
 #[async_std::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -93,20 +61,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
         scenes,
         devices,
         rules,
+        sender: sender.clone(),
     };
 
     let state = Arc::new(state);
 
-    {
-        let state = Arc::clone(&state);
-
-        task::spawn(async move {
-            rocket::ignite()
-                .manage(state)
-                .mount("/", routes![hello])
-                .launch();
-        });
-    }
+    init_api(&state);
 
     loop {
         let msg = receiver
