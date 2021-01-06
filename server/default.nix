@@ -7,6 +7,7 @@ in
   stdenv.mkDerivation {
     name = "env";
     buildInputs = [
+      docker-compose
       rust-moz-overlay
       openssl
       pkg-config
