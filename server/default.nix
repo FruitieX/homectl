@@ -20,5 +20,6 @@ in
       docker-compose
       openssl
       pkg-config
+      postgresql
     ];
   }
