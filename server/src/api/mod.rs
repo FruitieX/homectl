@@ -1,5 +1,7 @@
-use async_std::task;
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    sync::Arc,
+};
 
 use crate::AppState;
 
@@ -8,13 +10,17 @@ mod devices;
 use devices::*;
 
 use anyhow::Result;
-use rocket::config::{Config, Environment, LoggingLevel};
 use rocket::fairing::{Fairing, Info, Kind};
 use rocket::http::Header;
+use rocket::{
+    config::{Config, LogLevel},
+    tokio,
+};
 use rocket::{Request, Response};
 
 pub struct CORS();
 
+#[async_trait]
 impl Fairing for CORS {
     fn info(&self) -> Info {
         Info {
@@ -23,33 +29,36 @@ impl Fairing for CORS {
         }
     }
 
-    fn on_response(&self, request: &Request, response: &mut Response) {
-        response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
-        response.set_header(Header::new(
+    async fn on_response<'r>(&self, _req: &'r Request<'_>, res: &mut Response<'r>) {
+        res.set_header(Header::new("Access-Control-Allow-Origin", "*"));
+        res.set_header(Header::new(
             "Access-Control-Allow-Methods",
             "POST, PUT, GET, PATCH, DELETE, OPTIONS",
         ));
-        response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
-        response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
+        res.set_header(Header::new("Access-Control-Allow-Headers", "*"));
+        res.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
     }
 }
 
 pub fn init_api(state: &Arc<AppState>) -> Result<()> {
     let state = Arc::clone(state);
 
-    let config = Config::build(Environment::Staging)
-        .address("0.0.0.0")
-        .port(45289)
-        // Without this there's a lot of spam when polling HA system state
-        .log_level(LoggingLevel::Critical)
-        .finalize()?;
+    let config = Config {
+        address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
+        port: 45289,
+        log_level: LogLevel::Critical,
+        ctrlc: false,
+        ..Config::default()
+    };
 
-    task::spawn(async move {
+    tokio::spawn(async move {
         rocket::custom(config)
             .attach(CORS())
             .manage(state)
             .mount("/", routes![get_devices])
-            .launch();
+            .launch()
+            .await
+            .expect("Failed to start Rocket server");
     });
 
     Ok(())

@@ -1,10 +1,11 @@
 use super::{integration::IntegrationId, scene::SceneId};
+use chrono::{DateTime, NaiveDateTime, Utc};
 use palette::Hsv;
-use std::time::Instant;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::time::{Instant, SystemTime};
 
 /// simple on/off devices such as relays, lights
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct OnOffDevice {
     pub power: bool,
 }
@@ -13,7 +14,7 @@ pub struct OnOffDevice {
 pub type DeviceColor = Hsv;
 
 /// lights with adjustable brightness and/or color
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Light {
     pub power: bool,
 
@@ -25,7 +26,7 @@ pub struct Light {
 }
 
 /// lights with multiple individually adjustable light sources
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct MultiSourceLight {
     pub power: bool,
 
@@ -37,7 +38,7 @@ pub struct MultiSourceLight {
 }
 
 /// button sensors, motion sensors
-#[derive(Copy, Clone, Debug, PartialEq, Serialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum SensorKind {
     OnOffSensor {
         value: bool,
@@ -51,7 +52,7 @@ pub enum SensorKind {
     Unknown,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum DeviceState {
     OnOffDevice(OnOffDevice),
     Light(Light),
@@ -60,23 +61,22 @@ pub enum DeviceState {
 }
 
 /// active scene that's controlling the device state, if any
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct DeviceSceneState {
     pub scene_id: SceneId,
 
-    #[serde(skip)]
-    pub activation_time: Instant,
+    pub activation_time: DateTime<Utc>,
 }
 
 /// unique identifier for the Device
 pub type DeviceId = String;
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Device<T = DeviceState> {
     pub id: DeviceId,
     pub name: String,
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
     pub state: T,
-    pub locked: bool
+    pub locked: bool,
 }

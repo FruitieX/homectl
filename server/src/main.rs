@@ -19,11 +19,21 @@ mod utils;
 use anyhow::{Context, Result};
 use api::init_api;
 use async_std::{prelude::*, task};
-use homectl_core::{devices::Devices, events::*, groups::Groups, integration::IntegrationActionDescriptor, integrations::Integrations, rules::Rules, scene::{CycleScenesDescriptor, SceneDescriptor}, scenes::Scenes, state::AppState};
+use homectl_core::{
+    devices::Devices,
+    events::*,
+    groups::Groups,
+    integration::IntegrationActionDescriptor,
+    integrations::Integrations,
+    rules::Rules,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
+    scenes::Scenes,
+    state::AppState,
+};
 use std::{error::Error, sync::Arc};
 
-
-#[async_std::main]
+// #[async_std::main]
+#[rocket::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     let (config, opaque_integrations_configs) = homectl_core::config::read_config()?;
 
@@ -66,7 +76,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let state = Arc::new(state);
 
-    init_api(&state);
+    init_api(&state).expect("Expected init_api to return Ok(())");
 
     loop {
         let msg = receiver

@@ -7,6 +7,7 @@ use super::{
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
     scenes::Scenes,
 };
+use chrono::{DateTime, NaiveDateTime, Utc};
 use palette::Hsv;
 use std::sync::Mutex;
 use std::{collections::HashMap, sync::Arc, time::Instant};
@@ -254,7 +255,7 @@ impl Devices {
 
         let device_scene_state = Some(DeviceSceneState {
             scene_id: scene_id.to_owned(),
-            activation_time: Instant::now(),
+            activation_time: Utc::now(),
         });
 
         for (integration_id, devices) in scene_devices_config {
