@@ -57,6 +57,7 @@ pub async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sende
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OnOffDeviceMsg {
     on: bool,
+    transitiontime: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -76,10 +77,16 @@ pub enum HueMsg {
 
 pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), Box<dyn Error>> {
     let body = match &device.state {
-        DeviceState::OnOffDevice(state) => {
-            Ok(HueMsg::OnOffDeviceMsg(OnOffDeviceMsg { on: state.power }))
-        }
+        DeviceState::OnOffDevice(state) => Ok(HueMsg::OnOffDeviceMsg(OnOffDeviceMsg {
+            on: state.power,
+            transitiontime: None,
+        })),
         DeviceState::Light(state) => {
+            // Hue repserents transition times as multiples of 100 ms
+            let transitiontime = state
+                .transition_ms
+                .map(|transition_ms| ((transition_ms as f64) / 100.0) as u32);
+
             Ok(match state.color {
                 Some(color) => {
                     let hsv = color;
@@ -103,11 +110,6 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                     let bri = (hsv.value * 254.0 * (state.brightness.unwrap_or(1.0) as f32)).floor()
                         as u32;
 
-                    // Hue repserents transition times as multiples of 100 ms
-                    let transitiontime = state
-                        .transition_ms
-                        .map(|transition_ms| ((transition_ms as f64) / 100.0) as u32);
-
                     HueMsg::LightMsg(LightMsg {
                         on: state.power,
                         xy,
@@ -115,7 +117,10 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                         transitiontime,
                     })
                 }
-                None => HueMsg::OnOffDeviceMsg(OnOffDeviceMsg { on: state.power }),
+                None => HueMsg::OnOffDeviceMsg(OnOffDeviceMsg {
+                    on: state.power,
+                    transitiontime,
+                }),
             })
 
             // TODO: transition support
@@ -124,7 +129,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
         _ => Err("Unsupported device type encountered in hue set_device_state"),
     }?;
 
-    // println!("setting light state: {:?}", body);
+    // println!("setting light \"{}\" state: {:?}", device.name, body);
 
     let _ = surf::put(&format!(
         "http://{}/api/{}/{}/state",
