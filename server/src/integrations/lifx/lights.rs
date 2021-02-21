@@ -12,7 +12,7 @@ use super::{
 // use mio::net::UdpSocket;
 // use mio::{Events, Interest, Poll, Token};
 use async_std::prelude::*;
-use async_std::{net::UdpSocket, stream, sync::Sender, task};
+use async_std::{channel::Sender, net::UdpSocket, stream, task};
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
 
@@ -33,8 +33,7 @@ pub async fn init_udp_socket(_config: &LifxConfig) -> Result<UdpSocket> {
 pub async fn handle_lifx_msg(msg: LifxMsg, integration_id: IntegrationId, sender: TxEventChannel) {
     if let LifxMsg::State(state) = msg {
         let device = from_lifx_state(state, integration_id);
-        sender
-            .send(Message::IntegrationDeviceRefresh { device });
+        sender.send(Message::IntegrationDeviceRefresh { device });
     }
 }
 
@@ -75,6 +74,9 @@ pub async fn poll_lights(udp_sender_tx: Sender<LifxMsg>) -> Result<()> {
     loop {
         interval.next().await;
 
-        udp_sender_tx.send(msg.clone()).await;
+        udp_sender_tx
+            .send(msg.clone())
+            .await
+            .expect("Expected to be able to send to lifx channel");
     }
 }

@@ -1,10 +1,14 @@
 pub mod lights;
 pub mod utils;
 
-use crate::homectl_core::{device::Device, events::TxEventChannel, integration::{Integration, IntegrationActionPayload, IntegrationId}};
+use crate::homectl_core::{
+    device::Device,
+    events::TxEventChannel,
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use anyhow::{Context, Result};
-use async_std::{sync::channel, task};
-use async_std::sync::{Receiver, Sender};
+use async_std::channel::{Receiver, Sender};
+use async_std::{channel, task};
 use async_trait::async_trait;
 use lights::{init_udp_socket, listen_udp_stream, poll_lights};
 use serde::Deserialize;
@@ -12,8 +16,7 @@ use std::sync::Arc;
 use utils::{mk_lifx_udp_msg, to_lifx_state, LifxMsg};
 
 #[derive(Clone, Debug, Deserialize)]
-pub struct LifxConfig {
-}
+pub struct LifxConfig {}
 
 pub struct Lifx {
     id: String,
@@ -30,7 +33,7 @@ impl Integration for Lifx {
             .clone()
             .try_into()
             .context("Failed to deserialize config of Lifx integration")?;
-        let (udp_sender, udp_receiver) = channel(10);
+        let (udp_sender, udp_receiver) = channel::unbounded();
 
         Ok(Lifx {
             id: id.clone(),
@@ -103,11 +106,11 @@ impl Integration for Lifx {
             Ok(lifx_state) => {
                 self.udp_tx
                     .send(LifxMsg::SetPower(lifx_state.clone()))
-                    .await;
+                    .await.expect("Expected to be able to send to lifx channel");
 
                 // don't bother setting color if power is off
                 if lifx_state.power != 0 {
-                    self.udp_tx.send(LifxMsg::SetColor(lifx_state)).await;
+                    self.udp_tx.send(LifxMsg::SetColor(lifx_state)).await.expect("Expected to be able to send to lifx channel");
                 }
             }
             Err(e) => println!("Error in lifx set_integration_device_state {:?}", e),
