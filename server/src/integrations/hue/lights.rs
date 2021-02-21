@@ -31,8 +31,7 @@ pub async fn do_refresh_lights(
     for (light_id, bridge_light) in bridge_lights {
         let device = bridge_light_to_device(light_id, integration_id.clone(), bridge_light);
 
-        sender
-            .send(Message::IntegrationDeviceRefresh { device });
+        sender.send(Message::IntegrationDeviceRefresh { device });
     }
 
     Ok(())
@@ -65,6 +64,7 @@ pub struct LightMsg {
     on: bool,
     bri: u32,
     xy: Vec<f32>,
+    transitiontime: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -103,10 +103,16 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                     let bri = (hsv.value * 254.0 * (state.brightness.unwrap_or(1.0) as f32)).floor()
                         as u32;
 
+                    // Hue repserents transition times as multiples of 100 ms
+                    let transitiontime = state
+                        .transition_ms
+                        .map(|transition_ms| ((transition_ms as f64) / 100.0) as u32);
+
                     HueMsg::LightMsg(LightMsg {
                         on: state.power,
                         xy,
                         bri,
+                        transitiontime,
                     })
                 }
                 None => HueMsg::OnOffDeviceMsg(OnOffDeviceMsg { on: state.power }),
@@ -117,6 +123,8 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
         }
         _ => Err("Unsupported device type encountered in hue set_device_state"),
     }?;
+
+    // println!("setting light state: {:?}", body);
 
     let _ = surf::put(&format!(
         "http://{}/api/{}/{}/state",

@@ -169,20 +169,25 @@ impl Devices {
     }
 
     /// Returns expected state for given device based on possible active scene.
-    /// If no scene active and set_state is false, previous device state is returned.
-    /// If no scene active and set_state is true, passed device state is returned.
-    fn get_expected_state(&self, device: &Device, set_state: bool) -> DeviceState {
+    /// If no scene active and use_passed_state is false, previous device state is returned.
+    /// If no scene active and use_passed_state is true, passed device state is returned.
+    fn get_expected_state(&self, device: &Device, use_passed_state: bool) -> DeviceState {
         match device.state {
             // Sensors should always use the most recent sensor reading
             DeviceState::Sensor(_) => device.state.clone(),
 
             _ => {
                 let state = self.state.lock().unwrap();
-                let scene_device_state = self.scenes.find_scene_device_state(&device, &state);
+
+                // Ignore transition specified by scene if we're setting state
+                let ignore_transition = use_passed_state;
+                let scene_device_state =
+                    self.scenes
+                        .find_scene_device_state(&device, &state, ignore_transition);
 
                 scene_device_state.unwrap_or_else(|| {
                     // TODO: why would we ever want to do this
-                    if set_state {
+                    if use_passed_state {
                         device.state.clone()
                     } else {
                         let device = state

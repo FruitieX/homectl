@@ -30,10 +30,16 @@ pub fn to_palette(bridge_light: BridgeLight) -> Option<DeviceColor> {
 
 /// Constructs Light kind from BridgeLight
 pub fn to_light(bridge_light: BridgeLight) -> Light {
+    let transition_ms = bridge_light
+        .state
+        .transitiontime
+        .map(|transitiontime| (transitiontime * 100) as u64);
+
     Light {
         power: bridge_light.state.on,
         brightness: None,
         color: to_palette(bridge_light),
+        transition_ms,
     }
 }
 
@@ -52,6 +58,6 @@ pub fn bridge_light_to_device(
         integration_id,
         scene: None,
         state,
-        locked: false
+        locked: false,
     }
 }

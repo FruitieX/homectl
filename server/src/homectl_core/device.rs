@@ -23,6 +23,9 @@ pub struct Light {
 
     /// Current color, if supported
     pub color: Option<DeviceColor>,
+
+    /// Transition time in milliseconds
+    pub transition_ms: Option<u64>
 }
 
 /// lights with multiple individually adjustable light sources

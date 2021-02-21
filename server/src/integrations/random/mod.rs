@@ -106,6 +106,7 @@ fn mk_random_device(random: &Random) -> Device {
         power: true,
         brightness: Some(1.0),
         color: Some(get_random_color()),
+        transition_ms: Some(500),
     });
 
     Device {
@@ -114,6 +115,6 @@ fn mk_random_device(random: &Random) -> Device {
         integration_id: random.id.clone(),
         scene: None,
         state,
-        locked: false
+        locked: false,
     }
 }

@@ -24,8 +24,8 @@ pub struct FloorplanDevice {
     pub id: i32,
     pub floorplan_id: i32,
     pub device_id: i32,
-    pub x: f32,
-    pub y: f32,
+    pub x: f64,
+    pub y: f64,
 }
 
 #[derive(Debug, Queryable)]

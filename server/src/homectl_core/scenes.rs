@@ -83,7 +83,9 @@ impl Scenes {
                         .to_owned();
 
                     // only insert device config if it did not exist yet
-                    scene_devices_integrations.entry(device.id).or_insert_with(|| scene_device_config.clone());
+                    scene_devices_integrations
+                        .entry(device.id)
+                        .or_insert_with(|| scene_device_config.clone());
                     scene_devices.insert(integration_id, scene_devices_integrations.clone());
                 }
             }
@@ -96,6 +98,7 @@ impl Scenes {
         &self,
         device: &Device,
         devices: &DevicesState,
+        ignore_transition: bool,
     ) -> Option<DeviceState> {
         let scene_id = &device.scene.as_ref()?.scene_id;
 
@@ -131,6 +134,15 @@ impl Scenes {
                     DeviceState::Sensor(state) => DeviceState::Sensor(state),
                 };
 
+                // Ignore device's transition_ms value
+                let state = match (ignore_transition, state.clone()) {
+                    (true, DeviceState::Light(mut state)) => {
+                        state.transition_ms = None;
+                        DeviceState::Light(state)
+                    }
+                    _ => state,
+                };
+
                 Some(state)
             }
 
@@ -143,7 +155,7 @@ impl Scenes {
                     }),
                     ..device.clone()
                 };
-                self.find_scene_device_state(&device, devices)
+                self.find_scene_device_state(&device, devices, ignore_transition)
             }
 
             SceneDeviceConfig::SceneDeviceState(scene_device) => Some(DeviceState::Light(Light {
@@ -151,6 +163,7 @@ impl Scenes {
                 brightness: scene_device.brightness,
                 color: scene_device.color.clone().map(color_config_as_device_color),
                 power: scene_device.power,
+                transition_ms: scene_device.transition_ms,
             })),
         }
     }

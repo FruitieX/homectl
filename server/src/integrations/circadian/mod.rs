@@ -1,12 +1,17 @@
-use crate::homectl_core::{device::{Device, DeviceColor, DeviceState, Light}, events::{Message, TxEventChannel}, integration::{Integration, IntegrationActionPayload, IntegrationId}, scene::{color_config_as_device_color, ColorConfig}};
+use crate::homectl_core::{
+    device::{Device, DeviceColor, DeviceState, Light},
+    events::{Message, TxEventChannel},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    scene::{color_config_as_device_color, ColorConfig},
+};
+use crate::utils::from_hh_mm;
 use anyhow::{Context, Result};
+use async_std::prelude::*;
 use async_std::{stream, task};
 use async_trait::async_trait;
-use async_std::prelude::*;
 use palette::Gradient;
 use serde::Deserialize;
 use std::time::Duration;
-use crate::utils::from_hh_mm;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CircadianConfig {
@@ -110,8 +115,9 @@ fn get_night_fade(circadian: &Circadian) -> f32 {
     } else {
         // fading from day to night
         let d = local - night_fade_start;
-        
-        d.num_milliseconds() as f32 / night_fade_duration.num_milliseconds() as f32
+
+        let p = d.num_milliseconds() as f32 / night_fade_duration.num_milliseconds() as f32;
+        f32::sin(p * std::f32::consts::PI / 2.0)
     }
 }
 
@@ -126,8 +132,10 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
     gradient.get(i)
 }
 
+static POLL_RATE: u64 = 60 * 1000;
+
 async fn poll_sensor(circadian: Circadian) {
-    let poll_rate = Duration::from_millis(60 * 1000);
+    let poll_rate = Duration::from_millis(POLL_RATE);
     let mut interval = stream::interval(poll_rate);
 
     loop {
@@ -136,7 +144,10 @@ async fn poll_sensor(circadian: Circadian) {
         let sender = circadian.sender.clone();
 
         let device = mk_circadian_device(&circadian);
-        sender.send(Message::SetDeviceState { device, set_scene: false });
+        sender.send(Message::SetDeviceState {
+            device,
+            set_scene: false,
+        });
     }
 }
 
@@ -145,6 +156,7 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         power: true,
         brightness: Some(1.0),
         color: Some(get_circadian_color(circadian)),
+        transition_ms: Some(POLL_RATE),
     });
 
     Device {
@@ -153,6 +165,6 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         integration_id: circadian.id.clone(),
         scene: None,
         state,
-        locked: false
+        locked: false,
     }
 }

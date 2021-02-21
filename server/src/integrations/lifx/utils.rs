@@ -163,10 +163,13 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
 
     let color = Hsv::new(hue, sat, bri);
 
+    let transition_ms = lifx_state.transition.map(|transition| transition as u64);
+
     let state = DeviceState::Light(Light {
         power,
         brightness: None,
         color: Some(color),
+        transition_ms,
     });
 
     Device {
@@ -175,7 +178,7 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
         integration_id,
         scene: None,
         state,
-        locked: false
+        locked: false,
     }
 }
 
@@ -185,10 +188,12 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
             brightness,
             color,
             power,
+            transition_ms,
         }) => Ok(Light {
             power,
             brightness,
             color,
+            transition_ms,
         }),
         _ => Err(anyhow!("Unsupported device state")),
     }?;
@@ -200,6 +205,9 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
     let hue = ((to_lifx_hue(color.hue.to_positive_degrees()) / 360.0) * 65535.0).floor() as u16;
     let sat = (color.saturation * 65535.0).floor() as u16;
     let bri = (color.value * 65535.0).floor() as u16;
+    let transition = light_state
+        .transition_ms
+        .map(|transition_ms| transition_ms as u16);
 
     let power = if light_state.power { 65535 } else { 0 };
 
@@ -210,7 +218,7 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
         power,
         label: device.name.clone(),
         addr: device.id.parse()?,
-        transition: Some(500),
+        transition,
     })
 }
 

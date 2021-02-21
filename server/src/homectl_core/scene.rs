@@ -44,6 +44,7 @@ pub struct SceneDeviceState {
     pub power: bool,
     pub color: Option<ColorConfig>,
     pub brightness: Option<f64>,
+    pub transition_ms: Option<u64>
 }
 
 #[derive(Clone, Deserialize, Debug)]
