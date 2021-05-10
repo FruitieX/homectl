@@ -83,6 +83,10 @@ fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
         BridgeSensor::ZLLPresence { name, .. } => name,
         BridgeSensor::ZLLSwitch { name, .. } => name,
         BridgeSensor::ZLLTemperature { name } => name,
+        BridgeSensor::CLIPPresence { name } => name,
+        BridgeSensor::CLIPGenericStatus { name } => name,
+        BridgeSensor::CLIPGenericFlag { name } => name,
+        _ => String::from("Unsupported"),
     }
 }
 
@@ -99,7 +103,7 @@ pub fn bridge_sensor_to_device(
     match bridge_sensor {
         BridgeSensor::ZLLPresence { state, .. } => {
             let kind = DeviceState::Sensor(SensorKind::OnOffSensor {
-                value: state.presence,
+                value: state.presence.unwrap_or_default(),
             });
 
             Device {

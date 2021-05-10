@@ -68,8 +68,12 @@ and also other similar solutions to homectl:
 
 ## Setup
 
-- Install `docker` and `docker-compose`
+- Install `docker` and `docker-compose` (`docker-compose` comes with nix if using the bundled `default.nix` nix config)
 - Clone this repo
-- `cp Settings.toml.example Settings.toml`
-- `$EDITOR Settings.toml`
-- docker-compose up
+
+``` bash
+cp Settings.toml.example Settings.toml
+$EDITOR Settings.toml
+cargo generate-lockfile # to generate the Cargo.lock file
+docker-compose up
+```

@@ -54,15 +54,17 @@ impl Integration for Hue {
     async fn register(&mut self) -> Result<()> {
         println!("registering hue integration");
 
-        let bridge_state: BridgeState = surf::get(&format!(
+        let response = surf::get(&format!(
             "http://{}/api/{}",
             self.config.addr, self.config.username
         ))
         .await
         .map_err(|err| anyhow!(err))?
-        .body_json()
+        .body_string()
         .await
         .map_err(|err| anyhow!(err))?;
+
+        let bridge_state: BridgeState = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(&response))?;
 
         self.bridge_state = Some(bridge_state.clone());
 
