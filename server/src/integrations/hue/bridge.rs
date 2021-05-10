@@ -23,7 +23,7 @@ pub type BridgeLights = HashMap<BridgeLightId, BridgeLight>;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct ZLLPresenceState {
-    pub presence: bool,
+    pub presence: Option<bool>,
     pub lastupdated: String,
 }
 
@@ -54,6 +54,15 @@ pub enum BridgeSensor {
         state: ZLLSwitchState,
     },
     ZLLTemperature {
+        name: String,
+    },
+    CLIPPresence {
+        name: String,
+    },
+    CLIPGenericStatus {
+        name: String,
+    },
+    CLIPGenericFlag {
         name: String,
     },
 }

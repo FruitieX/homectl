@@ -47,7 +47,6 @@ pub fn init_api(state: &Arc<AppState>) -> Result<()> {
         address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
         port: 45289,
         log_level: LogLevel::Critical,
-        ctrlc: false,
         ..Config::default()
     };
 

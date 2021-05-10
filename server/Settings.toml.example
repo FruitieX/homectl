@@ -28,6 +28,9 @@ night_fade_duration_hours = 1
 # Define as many groups as you want.
 # These can be referred from [scenes.<scene_name>.groups] and groups can even
 # refer other groups
+# integration_id should equal the id given the integration,
+# which is "hue1" in this example settings ([integrations.hue1]).
+# The "name" property is the device name as used in the Hue app.
 
 [groups.office]
 name = "Office lights"
@@ -53,9 +56,11 @@ groups = [
 [scenes.office_on]
 name = "Office on"
 
+# Note the difference between adding groups to the scene
   [scenes.office_on.groups]
   office = { integration_id = "circadian", device_id = "color" }
 
+# and adding devices to the scene.
   [scenes.office_on.devices.hue1]
   "Hue play L" = { power = true, color = { hue = 0, saturation = 1, value = 1 }, brightness = 0.5 }
 
