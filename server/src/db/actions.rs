@@ -1,24 +1,25 @@
-use crate::homectl_core::device;
-
 use super::models::*;
 use super::PG_POOL;
 use anyhow::Result;
 use diesel::prelude::*;
+use homectl_types::device;
 
-pub fn find_floorplans(conn: &PgConnection) -> Result<Vec<Floorplan>> {
-    use super::schema::floorplans::dsl::*;
+// pub fn find_floorplans(conn: &PgConnection) -> Result<Vec<Floorplan>> {
+//     use super::schema::floorplans::dsl::*;
 
-    let result = floorplans.load::<Floorplan>(conn)?;
+//     let result = floorplans.load::<Floorplan>(conn)?;
 
-    Ok(result)
-}
+//     Ok(result)
+// }
 
 pub fn db_update_device(device: &device::Device) -> Result<usize> {
+    let scene_id_ = device.scene.clone().map(|scene| scene.scene_id.to_string());
+
     let db_device = NewDevice {
         name: device.name.as_str(),
-        integration_id: device.integration_id.as_str(),
-        device_id: device.id.as_str(),
-        scene_id: device.scene.as_ref().map(|scene| scene.scene_id.as_str()),
+        integration_id: &device.integration_id.to_string(),
+        device_id: &device.id.to_string(),
+        scene_id: scene_id_.as_deref(),
     };
 
     use super::schema::devices;

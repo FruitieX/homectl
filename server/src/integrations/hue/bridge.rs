@@ -1,3 +1,4 @@
+use homectl_types::device::DeviceId;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -18,7 +19,7 @@ pub struct BridgeLight {
     pub name: String,
 }
 
-pub type BridgeLightId = String;
+pub type BridgeLightId = DeviceId;
 pub type BridgeLights = HashMap<BridgeLightId, BridgeLight>;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -67,7 +68,7 @@ pub enum BridgeSensor {
     },
 }
 
-pub type BridgeSensorId = String;
+pub type BridgeSensorId = DeviceId;
 pub type BridgeSensors = HashMap<BridgeSensorId, BridgeSensor>;
 
 #[derive(Clone, Debug, Deserialize)]

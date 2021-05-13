@@ -1,4 +1,4 @@
-use super::group::{GroupDeviceLink, GroupId, GroupsConfig};
+use homectl_types::group::{GroupDeviceLink, GroupId, GroupsConfig};
 
 #[derive(Clone)]
 pub struct Groups {

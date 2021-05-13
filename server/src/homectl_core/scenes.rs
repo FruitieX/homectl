@@ -1,13 +1,13 @@
-use super::{
-    device::{Device, DeviceSceneState, DeviceState, Light},
-    devices::{find_device, DevicesState},
+use homectl_types::{
+    device::{Device, DeviceId, DeviceSceneState, DeviceState, DevicesState, Light},
     group::GroupDeviceLink,
-    groups::Groups,
     scene::{
         color_config_as_device_color, SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneId,
         ScenesConfig,
     },
 };
+
+use super::{devices::find_device, groups::Groups};
 use std::collections::HashMap;
 
 #[derive(Clone)]
@@ -32,10 +32,10 @@ impl Scenes {
     ) -> Option<SceneDevicesConfig> {
         let scene = self.find_scene(&scene_id)?;
 
-        let mut scene_devices = scene.devices.clone().unwrap_or_default();
+        let scene_devices_search_config = scene.devices.clone().unwrap_or_default();
 
         // replace device names by device_ids in device_configs
-        scene_devices = scene_devices
+        let mut scene_devices_config: SceneDevicesConfig = scene_devices_search_config
             .iter()
             .map(|(integration_id, device_configs)| {
                 (
@@ -51,7 +51,7 @@ impl Scenes {
                                     "Could not find device_id for {} device with name {}",
                                     integration_id, device_name
                                 );
-                                String::from("N/A")
+                                DeviceId::new("N/A")
                             });
                             (device_id, device_config.clone())
                         })
@@ -77,7 +77,7 @@ impl Scenes {
 
                 if let Some(device) = device {
                     let empty_devices_integrations = HashMap::new();
-                    let mut scene_devices_integrations = scene_devices
+                    let mut scene_devices_integrations = scene_devices_config
                         .get(&integration_id)
                         .unwrap_or(&empty_devices_integrations)
                         .to_owned();
@@ -86,12 +86,12 @@ impl Scenes {
                     scene_devices_integrations
                         .entry(device.id)
                         .or_insert_with(|| scene_device_config.clone());
-                    scene_devices.insert(integration_id, scene_devices_integrations.clone());
+                    scene_devices_config.insert(integration_id, scene_devices_integrations.clone());
                 }
             }
         }
 
-        Some(scene_devices)
+        Some(scene_devices_config)
     }
 
     pub fn find_scene_device_state(

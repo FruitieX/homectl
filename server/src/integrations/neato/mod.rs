@@ -1,12 +1,12 @@
-use crate::homectl_core::{
-    device::Device,
-    events::TxEventChannel,
-    integration::{Integration, IntegrationId},
-};
 use crate::utils::from_hh_mm;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{Datelike, Weekday};
+use homectl_types::{
+    device::Device,
+    event::TxEventChannel,
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use serde::Deserialize;
 
 mod api;
@@ -65,14 +65,11 @@ impl Integration for Neato {
         Ok(())
     }
 
-    async fn run_integration_action(
-        &mut self,
-        payload: &crate::homectl_core::integration::IntegrationActionPayload,
-    ) -> Result<()> {
-        if payload == "clean_house" {
+    async fn run_integration_action(&mut self, payload: &IntegrationActionPayload) -> Result<()> {
+        if payload.to_string() == "clean_house" {
             let local = chrono::Local::now().naive_local();
 
-            if (!self.config.dummy) {
+            if !self.config.dummy {
                 let weekday = local.weekday();
 
                 if !self.config.cleaning_days.contains(&weekday) {

@@ -1,14 +1,14 @@
-use crate::homectl_core::{
-    device::{Device, DeviceColor, DeviceState, Light},
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
-    scene::{color_config_as_device_color, ColorConfig},
-};
 use crate::utils::from_hh_mm;
 use anyhow::{Context, Result};
 use async_std::prelude::*;
 use async_std::{stream, task};
 use async_trait::async_trait;
+use homectl_types::{
+    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    event::{Message, TxEventChannel},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    scene::{color_config_as_device_color, ColorConfig},
+};
 use palette::Gradient;
 use serde::Deserialize;
 use std::time::Duration;
@@ -30,7 +30,7 @@ pub struct CircadianConfig {
 
 #[derive(Clone)]
 pub struct Circadian {
-    id: String,
+    id: IntegrationId,
     config: CircadianConfig,
     sender: TxEventChannel,
     converted_day_color: DeviceColor,
@@ -160,7 +160,7 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
     });
 
     Device {
-        id: "color".into(),
+        id: DeviceId::new("color"),
         name: circadian.config.device_name.clone(),
         integration_id: circadian.id.clone(),
         scene: None,

@@ -1,6 +1,6 @@
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use super::{actions::Action, device::Device, devices::DevicesState};
+use super::{action::Action, device::Device, device::DevicesState};
 
 #[derive(Clone, Debug)]
 pub enum Message {

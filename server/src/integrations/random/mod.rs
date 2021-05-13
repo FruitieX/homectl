@@ -1,12 +1,12 @@
-use crate::homectl_core::{
-    device::{Device, DeviceColor, DeviceState, Light},
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
-};
 use anyhow::{Context, Result};
 use async_std::prelude::*;
 use async_std::{stream, task};
 use async_trait::async_trait;
+use homectl_types::{
+    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    event::{Message, TxEventChannel},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use palette::rgb::Rgb;
 use rand::prelude::*;
 use serde::Deserialize;
@@ -19,7 +19,7 @@ pub struct RandomConfig {
 
 #[derive(Clone)]
 pub struct Random {
-    id: String,
+    id: IntegrationId,
     config: RandomConfig,
     event_tx: TxEventChannel,
 }
@@ -110,7 +110,7 @@ fn mk_random_device(random: &Random) -> Device {
     });
 
     Device {
-        id: "color".into(),
+        id: DeviceId::new("color"),
         name: random.config.device_name.clone(),
         integration_id: random.id.clone(),
         scene: None,

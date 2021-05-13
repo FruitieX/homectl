@@ -3,14 +3,18 @@ use super::{
     sensor_utils::{bridge_sensor_to_device, extrapolate_sensor_updates, find_bridge_sensor},
     HueConfig,
 };
-use crate::homectl_core::{
-    events::{Message, TxEventChannel},
-    integration::IntegrationId,
-};
 use anyhow::anyhow;
 use async_std::prelude::*;
 use async_std::stream;
-use std::{error::Error, sync::{Arc, Mutex}, time::Duration};
+use homectl_types::{
+    event::{Message, TxEventChannel},
+    integration::IntegrationId,
+};
+use std::{
+    error::Error,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
 pub struct SensorsState {
     pub bridge_sensors: BridgeSensors,

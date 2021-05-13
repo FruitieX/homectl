@@ -1,14 +1,14 @@
-use super::{
-    device::Device,
-    events::TxEventChannel,
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
-};
 use crate::integrations::{
     circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random,
     wake_on_lan::WakeOnLan,
 };
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
+use homectl_types::{
+    device::Device,
+    event::TxEventChannel,
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use std::{collections::HashMap, sync::Arc};
 
 pub type IntegrationsTree = HashMap<IntegrationId, Arc<Mutex<Box<dyn Integration + Send>>>>;
@@ -31,7 +31,7 @@ impl Integrations {
 
     pub async fn load_integration(
         &mut self,
-        module_name: &String,
+        module_name: &str,
         integration_id: &IntegrationId,
         config: &config::Value,
     ) -> Result<()> {
@@ -100,12 +100,12 @@ impl Integrations {
 // TODO: Load integrations dynamically as plugins:
 // https://michael-f-bryan.github.io/rust-ffi-guide/dynamic_loading.html
 fn load_integration(
-    module_name: &String,
+    module_name: &str,
     id: &IntegrationId,
     config: &config::Value,
     event_tx: TxEventChannel,
 ) -> Result<Box<dyn Integration + Send>> {
-    match module_name.as_str() {
+    match module_name {
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),

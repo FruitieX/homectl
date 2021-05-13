@@ -1,8 +1,9 @@
-use super::{
+use serde::Deserialize;
+
+use crate::{
     integration::IntegrationActionDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
-use serde::Deserialize;
 
 #[derive(Clone, Deserialize, Debug)]
 #[serde(tag = "action")]

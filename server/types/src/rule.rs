@@ -1,8 +1,11 @@
-use super::{actions::Actions, device::DeviceId, integration::IntegrationId};
-use serde::Deserialize;
+use super::{action::Actions, device::DeviceId, integration::IntegrationId};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub type RoutineId = String;
+macro_attr! {
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    pub struct RoutineId(String);
+}
 
 /// button sensors, motion sensors
 #[derive(Clone, Deserialize, Debug)]

@@ -1,6 +1,6 @@
-use crate::homectl_core::{
+use homectl_types::{
     device::{Device, DeviceState},
-    events::{Message, TxEventChannel},
+    event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
 

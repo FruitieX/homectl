@@ -1,11 +1,11 @@
-pub type GroupId = String;
-
-use super::{
-    device::DeviceId,
-    integration::IntegrationId,
-};
-use serde::Deserialize;
+use super::{device::DeviceId, integration::IntegrationId};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+macro_attr! {
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    pub struct GroupId(String);
+}
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct GroupDeviceLink {

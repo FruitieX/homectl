@@ -1,7 +1,21 @@
+use std::collections::HashMap;
+
 use super::{integration::IntegrationId, scene::SceneId};
 use chrono::{DateTime, Utc};
 use palette::Hsv;
 use serde::{Deserialize, Serialize};
+
+macro_attr! {
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    /// unique identifier for the Device
+    pub struct DeviceId(String);
+}
+
+impl DeviceId {
+    pub fn new(id: &str) -> DeviceId {
+        DeviceId(String::from(id))
+    }
+}
 
 /// simple on/off devices such as relays, lights
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -70,9 +84,6 @@ pub struct DeviceSceneState {
     pub activation_time: DateTime<Utc>,
 }
 
-/// unique identifier for the Device
-pub type DeviceId = String;
-
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Device<T = DeviceState> {
     pub id: DeviceId,
@@ -82,3 +93,6 @@ pub struct Device<T = DeviceState> {
     pub state: T,
     pub locked: bool,
 }
+
+pub type DeviceStateKey = (IntegrationId, DeviceId);
+pub type DevicesState = HashMap<DeviceStateKey, Device>;

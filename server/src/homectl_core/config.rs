@@ -1,5 +1,5 @@
 extern crate config;
-use super::{
+use homectl_types::{
     group::GroupsConfig,
     integration::{IntegrationId, IntegrationsConfig},
     rule::RoutinesConfig,

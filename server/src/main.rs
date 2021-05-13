@@ -18,16 +18,15 @@ use anyhow::{Context, Result};
 use api::init_api;
 use async_std::{prelude::*, task};
 use homectl_core::{
-    actions::Action,
-    devices::Devices,
-    events::*,
-    groups::Groups,
-    integration::IntegrationActionDescriptor,
-    integrations::Integrations,
-    rules::Rules,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
-    scenes::Scenes,
+    devices::Devices, groups::Groups, integrations::Integrations, rules::Rules, scenes::Scenes,
     state::AppState,
+};
+use homectl_types::event::mk_channel;
+use homectl_types::{
+    action::Action,
+    event::*,
+    integration::IntegrationActionDescriptor,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 use std::{error::Error, sync::Arc};
 

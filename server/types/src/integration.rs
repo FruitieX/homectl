@@ -1,12 +1,17 @@
+extern crate config;
+
 use async_trait::async_trait;
 // https://doc.rust-lang.org/std/sync/mpsc/fn.channel.html
 
-use super::{device::Device, events::TxEventChannel};
+use super::{device::Device, event::TxEventChannel};
 use anyhow::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-pub type IntegrationId = String;
+macro_attr! {
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    pub struct IntegrationId(String);
+}
 
 #[derive(Deserialize, Debug)]
 pub struct IntegrationConfig {
@@ -19,12 +24,15 @@ pub struct IntegrationConfig {
 
 pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
 
-pub type IntegrationActionPayload = String;
+macro_attr! {
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    pub struct IntegrationActionPayload(String);
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct IntegrationActionDescriptor {
     pub integration_id: IntegrationId,
-    pub payload: IntegrationActionPayload
+    pub payload: IntegrationActionPayload,
 }
 
 #[async_trait]

@@ -1,13 +1,13 @@
 use std::time::Duration;
 
-use crate::homectl_core::{
-    device::{Device, DeviceState, Light, OnOffDevice},
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
-};
 use anyhow::{anyhow, Context, Result};
 use async_std::{future, task};
 use async_trait::async_trait;
+use homectl_types::{
+    device::{Device, DeviceId, DeviceState, Light, OnOffDevice},
+    event::{Message, TxEventChannel},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use serde::Deserialize;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -51,12 +51,12 @@ impl Integration for WakeOnLan {
             let state = DeviceState::OnOffDevice(OnOffDevice { power: true });
 
             let device = Device {
-                id: machine.id.clone(),
+                id: DeviceId::new(&machine.id),
                 name: machine.id.clone(),
                 integration_id: self.id.clone(),
                 scene: None,
                 state,
-                locked: false
+                locked: false,
             };
 
             self.sender
@@ -83,7 +83,7 @@ impl Integration for WakeOnLan {
             .config
             .machines
             .iter()
-            .find(|machine| machine.id == device.id)
+            .find(|machine| machine.id == device.id.to_string())
             .context(format!(
                 "Expected to find WOL device with matching id {}",
                 device.id

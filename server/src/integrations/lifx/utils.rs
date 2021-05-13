@@ -1,6 +1,7 @@
-use crate::homectl_core::device::{Device, DeviceState, Light};
 use anyhow::{anyhow, Result};
 use byteorder::{ByteOrder, LittleEndian};
+use homectl_types::device::{Device, DeviceId, DeviceState, Light};
+use homectl_types::integration::IntegrationId;
 use num_traits::pow::Pow;
 use palette::Hsv;
 use std::net::SocketAddr;
@@ -154,7 +155,7 @@ pub fn read_lifx_msg(buf: &[u8], addr: SocketAddr) -> LifxMsg {
     }
 }
 
-pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device {
+pub fn from_lifx_state(lifx_state: LifxState, integration_id: IntegrationId) -> Device {
     let hue = from_lifx_hue((f32::from(lifx_state.hue) / 65535.0) * 360.0);
     let sat = f32::from(lifx_state.sat) / 65535.0;
     let bri = f32::from(lifx_state.bri) / 65535.0;
@@ -173,7 +174,7 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: String) -> Device 
     });
 
     Device {
-        id: lifx_state.addr.to_string(),
+        id: DeviceId::new(&lifx_state.addr.to_string()),
         name: lifx_state.label,
         integration_id,
         scene: None,
@@ -217,7 +218,7 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
         bri,
         power,
         label: device.name.clone(),
-        addr: device.id.parse()?,
+        addr: device.id.to_string().parse()?,
         transition,
     })
 }

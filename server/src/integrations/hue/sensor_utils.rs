@@ -1,7 +1,7 @@
 use super::bridge::{
     BridgeButtonEvent, BridgeSensor, BridgeSensorId, BridgeSensors, ZLLSwitchState,
 };
-use crate::homectl_core::{
+use homectl_types::{
     device::{Device, DeviceId, DeviceState, SensorKind},
     integration::IntegrationId,
 };
@@ -86,7 +86,6 @@ fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
         BridgeSensor::CLIPPresence { name } => name,
         BridgeSensor::CLIPGenericStatus { name } => name,
         BridgeSensor::CLIPGenericFlag { name } => name,
-        _ => String::from("Unsupported"),
     }
 }
 
@@ -96,7 +95,7 @@ pub fn bridge_sensor_to_device(
     integration_id: IntegrationId,
     bridge_sensor: BridgeSensor,
 ) -> Device {
-    let id = format!("sensors/{}", id);
+    let id = DeviceId::new(&format!("sensors/{}", id));
     let name = get_bridge_sensor_name(bridge_sensor.clone());
     let scene = None;
 
@@ -112,7 +111,7 @@ pub fn bridge_sensor_to_device(
                 integration_id,
                 scene,
                 state: kind,
-                locked: false
+                locked: false,
             }
         }
 
@@ -130,7 +129,7 @@ pub fn bridge_sensor_to_device(
                 integration_id,
                 scene,
                 state: kind,
-                locked: false
+                locked: false,
             }
         }
 
@@ -143,7 +142,7 @@ pub fn bridge_sensor_to_device(
                 integration_id,
                 scene,
                 state: kind,
-                locked: false
+                locked: false,
             }
         }
     }

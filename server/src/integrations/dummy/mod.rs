@@ -1,10 +1,10 @@
-use crate::homectl_core::{
-    device::{Device, DeviceId},
-    events::TxEventChannel,
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
-};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use homectl_types::{
+    device::{Device, DeviceId},
+    event::TxEventChannel,
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -14,7 +14,7 @@ pub struct DummyConfig {
 }
 
 pub struct Dummy {
-    id: String,
+    id: IntegrationId,
     devices: HashMap<DeviceId, Device>,
 }
 

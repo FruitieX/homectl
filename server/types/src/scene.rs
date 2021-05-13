@@ -1,8 +1,16 @@
-pub type SceneId = String;
-use super::{device::{DeviceColor, DeviceId}, group::GroupId, integration::IntegrationId};
+use super::{
+    device::{DeviceColor, DeviceId},
+    group::GroupId,
+    integration::IntegrationId,
+};
 use palette::{rgb::Rgb, Hsv, Lch};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+
+macro_attr! {
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    pub struct SceneId(String);
+}
 
 #[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
@@ -31,7 +39,7 @@ pub struct SceneDeviceLink {
 #[derive(Clone, Deserialize, Debug)]
 pub struct SceneDescriptor {
     pub scene_id: SceneId,
-    pub skip_locked_devices: Option<bool>
+    pub skip_locked_devices: Option<bool>,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -44,7 +52,7 @@ pub struct SceneDeviceState {
     pub power: bool,
     pub color: Option<ColorConfig>,
     pub brightness: Option<f64>,
-    pub transition_ms: Option<u64>
+    pub transition_ms: Option<u64>,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -65,10 +73,13 @@ pub enum SceneDeviceConfig {
 pub type SceneDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, SceneDeviceConfig>>;
 pub type SceneGroupsConfig = HashMap<GroupId, SceneDeviceConfig>;
 
+/// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
+pub type SceneDevicesSearchConfig = HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>;
+
 #[derive(Clone, Deserialize, Debug)]
 pub struct SceneConfig {
     pub name: String,
-    pub devices: Option<SceneDevicesConfig>,
+    pub devices: Option<SceneDevicesSearchConfig>,
     pub groups: Option<SceneGroupsConfig>,
 }
 

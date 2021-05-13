@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 
-use crate::homectl_core::{
-    events::{Message, TxEventChannel},
+use homectl_types::{
+    event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
 

@@ -1,19 +1,17 @@
 use crate::db::actions::db_update_device;
 
-use super::{
-    device::{Device, DeviceColor, DeviceId, DeviceSceneState, DeviceState},
-    events::{Message, TxEventChannel},
+use super::scenes::Scenes;
+use chrono::Utc;
+use homectl_types::device::DeviceId;
+use homectl_types::{
+    device::{Device, DeviceColor, DeviceSceneState, DeviceState, DeviceStateKey, DevicesState},
+    event::{Message, TxEventChannel},
     integration::IntegrationId,
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
-    scenes::Scenes,
 };
-use chrono::Utc;
 use palette::Hsv;
+use std::sync::Arc;
 use std::sync::Mutex;
-use std::{collections::HashMap, sync::Arc};
-
-pub type DeviceStateKey = (IntegrationId, DeviceId);
-pub type DevicesState = HashMap<DeviceStateKey, Device>;
 
 pub fn get_device_state_key(device: &Device) -> DeviceStateKey {
     (device.integration_id.clone(), device.id.clone())
@@ -115,11 +113,9 @@ impl Devices {
 
         // recompute expected_state here as it may have changed since we last
         // computed it
-        let expected_state = if let Some(ref d) = state_device {
-            Some(self.get_expected_state(&d, false))
-        } else {
-            None
-        };
+        let expected_state = state_device
+            .as_ref()
+            .map(|d| self.get_expected_state(&d, false));
 
         // Take action if the device state has changed from stored state
         if Some(device) != state_device.as_ref() || expected_state != Some(device.state.clone()) {
@@ -348,7 +344,7 @@ impl Devices {
                             devices.iter().any(|(device_id, _)| {
                                 // only consider devices which are common across all cycled scenes
                                 if !scenes_common_devices
-                                    .contains(&(integration_id.to_string(), device_id.to_string()))
+                                    .contains(&(integration_id.clone(), device_id.clone()))
                                 {
                                     return false;
                                 }

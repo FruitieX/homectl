@@ -4,15 +4,15 @@ pub mod lights;
 pub mod sensor_utils;
 pub mod sensors;
 
-use crate::homectl_core::{
-    device::Device,
-    events::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
-};
 use anyhow::{anyhow, Context, Result};
 use async_std::task;
 use async_trait::async_trait;
 use bridge::BridgeState;
+use homectl_types::{
+    device::Device,
+    event::{Message, TxEventChannel},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
+};
 use serde::Deserialize;
 
 use light_utils::bridge_light_to_device;
@@ -29,7 +29,7 @@ pub struct HueConfig {
 }
 
 pub struct Hue {
-    id: String,
+    id: IntegrationId,
     event_tx: TxEventChannel,
     config: HueConfig,
     bridge_state: Option<BridgeState>,
@@ -64,7 +64,8 @@ impl Integration for Hue {
         .await
         .map_err(|err| anyhow!(err))?;
 
-        let bridge_state: BridgeState = serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(&response))?;
+        let bridge_state: BridgeState =
+            serde_path_to_error::deserialize(&mut serde_json::Deserializer::from_str(&response))?;
 
         self.bridge_state = Some(bridge_state.clone());
 

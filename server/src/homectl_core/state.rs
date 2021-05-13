@@ -1,4 +1,8 @@
-use super::{devices::Devices, events::TxEventChannel, groups::Groups, integrations::Integrations, rules::Rules, scenes::Scenes};
+use homectl_types::event::TxEventChannel;
+
+use super::{
+    devices::Devices, groups::Groups, integrations::Integrations, rules::Rules, scenes::Scenes,
+};
 
 #[derive(Clone)]
 pub struct AppState {
