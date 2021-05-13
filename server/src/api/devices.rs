@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use homectl_types::device::Device;
+use homectl_types::device::{Device, DeviceId};
 use rocket::State;
 use rocket::{get, put};
 use rocket_contrib::json::Json;
@@ -23,11 +23,12 @@ pub fn get_devices(app_state: &State<Arc<AppState>>) -> Json<DevicesResponse> {
 
 #[put("/devices/<device_id>", data = "<device>")]
 pub async fn put_device(
-    device_id: String,
+    device_id: DeviceId,
     device: Json<Device>,
     app_state: &State<Arc<AppState>>,
 ) -> Json<DevicesResponse> {
-    if device_id != device.0.id.to_string() {
+    // Make sure device_id matches with provided device
+    if device_id != device.0.id {
         return Json(DevicesResponse { devices: vec![] });
     }
 

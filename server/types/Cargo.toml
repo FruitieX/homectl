@@ -14,3 +14,4 @@ async-trait = "0.1.42"
 config = "0.10.1"
 futures = "0.3.8"
 anyhow = "1.0.34"
+rocket = { git = "https://github.com/SergioBenitez/Rocket", branch = "master" }

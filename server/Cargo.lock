@@ -1021,6 +1021,7 @@ dependencies = [
  "macro-attr",
  "newtype_derive",
  "palette",
+ "rocket",
  "serde 1.0.126",
 ]
 

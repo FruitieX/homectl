@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use super::{integration::IntegrationId, scene::SceneId};
 use chrono::{DateTime, Utc};
 use palette::Hsv;
+use rocket::request::FromParam;
 use serde::{Deserialize, Serialize};
 
 macro_attr! {
@@ -14,6 +15,14 @@ macro_attr! {
 impl DeviceId {
     pub fn new(id: &str) -> DeviceId {
         DeviceId(String::from(id))
+    }
+}
+
+impl<'a> FromParam<'a> for DeviceId {
+    type Error = ();
+
+    fn from_param(param: &'a str) -> Result<Self, Self::Error> {
+        Ok(DeviceId::new(param))
     }
 }
 
