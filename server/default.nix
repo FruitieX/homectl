@@ -14,7 +14,6 @@ in
   stdenv.mkDerivation {
     name = "env";
     buildInputs = [
-      # (nixpkgs.rustChannelOf { rustToolchain = ./rust-toolchain; }).rust
       rustStableChannel
 
       docker-compose
