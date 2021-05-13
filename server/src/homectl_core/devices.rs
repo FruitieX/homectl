@@ -7,10 +7,10 @@ use super::{
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
     scenes::Scenes,
 };
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::Utc;
 use palette::Hsv;
 use std::sync::Mutex;
-use std::{collections::HashMap, sync::Arc, time::Instant};
+use std::{collections::HashMap, sync::Arc};
 
 pub type DeviceStateKey = (IntegrationId, DeviceId);
 pub type DevicesState = HashMap<DeviceStateKey, Device>;

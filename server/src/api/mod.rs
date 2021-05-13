@@ -5,8 +5,10 @@ use std::{
 
 use crate::AppState;
 
+mod actions;
 mod devices;
 
+use actions::*;
 use devices::*;
 
 use anyhow::Result;
@@ -58,7 +60,7 @@ pub fn init_api(state: &Arc<AppState>) -> Result<()> {
         rocket::custom(config)
             .attach(Cors())
             .manage(state)
-            .mount("/", routes![get_devices])
+            .mount("/", routes![get_devices, put_device, post_action])
             .launch()
             .await
             .expect("Failed to start Rocket server");

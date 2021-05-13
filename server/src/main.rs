@@ -18,6 +18,7 @@ use anyhow::{Context, Result};
 use api::init_api;
 use async_std::{prelude::*, task};
 use homectl_core::{
+    actions::Action,
     devices::Devices,
     events::*,
     groups::Groups,
@@ -124,10 +125,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                     let mut integrations = state.integrations.clone();
                     integrations.set_integration_device_state(&device).await
                 }
-                Message::ActivateScene(SceneDescriptor {
+                Message::Action(Action::ActivateScene(SceneDescriptor {
                     scene_id,
                     skip_locked_devices,
-                }) => {
+                })) => {
                     let mut devices = state.devices.clone();
                     devices
                         .activate_scene(&scene_id, skip_locked_devices.unwrap_or(false))
@@ -135,16 +136,16 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
                     Ok(())
                 }
-                Message::CycleScenes(CycleScenesDescriptor { scenes }) => {
+                Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes })) => {
                     let mut devices = state.devices.clone();
                     devices.cycle_scenes(&scenes).await;
 
                     Ok(())
                 }
-                Message::RunIntegrationAction(IntegrationActionDescriptor {
+                Message::Action(Action::IntegrationAction(IntegrationActionDescriptor {
                     integration_id,
                     payload,
-                }) => {
+                })) => {
                     let mut integrations = state.integrations.clone();
                     integrations
                         .run_integration_action(integration_id, payload)

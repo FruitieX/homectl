@@ -1,18 +1,15 @@
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 
-use super::{
-    device::Device,
-    devices::DevicesState,
-    integration::IntegrationActionDescriptor,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
-};
+use super::{actions::Action, device::Device, devices::DevicesState};
 
 #[derive(Clone, Debug)]
 pub enum Message {
     /// An integration has gathered information about current device state
     /// through some means (usually polling). Note that state might not actually
     /// have changed.
-    IntegrationDeviceRefresh { device: Device },
+    IntegrationDeviceRefresh {
+        device: Device,
+    },
 
     /// Internal device state update was detected, need to take any appropriate
     /// actions.
@@ -24,19 +21,17 @@ pub enum Message {
     },
 
     /// Tell devices to update internal device state.
-    SetDeviceState { device: Device, set_scene: bool },
+    SetDeviceState {
+        device: Device,
+        set_scene: bool,
+    },
 
     /// Tell integration to trigger state change for the device.
-    SetIntegrationDeviceState { device: Device },
+    SetIntegrationDeviceState {
+        device: Device,
+    },
 
-    /// Request to activate given scene.
-    ActivateScene(SceneDescriptor),
-
-    /// Request to cycle between given scenes.
-    CycleScenes(CycleScenesDescriptor),
-
-    /// Runs an integration action
-    RunIntegrationAction(IntegrationActionDescriptor),
+    Action(Action),
 }
 
 #[derive(Clone)]

@@ -1,8 +1,7 @@
 use super::{integration::IntegrationId, scene::SceneId};
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use palette::Hsv;
 use serde::{Deserialize, Serialize};
-use std::time::{Instant, SystemTime};
 
 /// simple on/off devices such as relays, lights
 #[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -25,7 +24,7 @@ pub struct Light {
     pub color: Option<DeviceColor>,
 
     /// Transition time in milliseconds
-    pub transition_ms: Option<u64>
+    pub transition_ms: Option<u64>,
 }
 
 /// lights with multiple individually adjustable light sources

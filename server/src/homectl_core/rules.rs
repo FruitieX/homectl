@@ -1,8 +1,9 @@
 use super::{
+    actions::{Action, Actions},
     device::{Device, DeviceState, SensorKind},
     devices::{find_device, DevicesState},
     events::{Message, TxEventChannel},
-    rule::{Action, Actions, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState},
+    rule::{Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState},
 };
 use std::collections::HashSet;
 
@@ -39,18 +40,7 @@ impl Rules {
     }
 
     async fn run_action(&self, action: &Action) {
-        match action {
-            Action::ActivateScene(action) => {
-                self.sender
-                    .send(Message::ActivateScene(action.clone()));
-            }
-            Action::CycleScenes(action) => {
-                self.sender.send(Message::CycleScenes(action.clone()));
-            }
-            Action::IntegrationAction(action) => {
-                self.sender.send(Message::RunIntegrationAction(action.clone()));
-            }
-        }
+        self.sender.send(Message::Action(action.clone()));
     }
 
     fn find_matching_actions(&self, old_state: &DevicesState, new_state: &DevicesState) -> Actions {

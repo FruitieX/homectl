@@ -1,16 +1,8 @@
-use super::{device::DeviceId, integration::{IntegrationActionDescriptor, IntegrationId}, scene::{CycleScenesDescriptor, SceneDescriptor}};
+use super::{actions::Actions, device::DeviceId, integration::IntegrationId};
 use serde::Deserialize;
 use std::collections::HashMap;
 
 pub type RoutineId = String;
-
-#[derive(Clone, Deserialize, Debug)]
-#[serde(tag = "action")]
-pub enum Action {
-    ActivateScene(SceneDescriptor),
-    CycleScenes(CycleScenesDescriptor),
-    IntegrationAction(IntegrationActionDescriptor)
-}
 
 /// button sensors, motion sensors
 #[derive(Clone, Deserialize, Debug)]
@@ -37,7 +29,6 @@ pub struct Rule {
 }
 
 pub type Rules = Vec<Rule>;
-pub type Actions = Vec<Action>;
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct Routine {
