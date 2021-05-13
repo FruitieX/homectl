@@ -11,17 +11,17 @@ use devices::*;
 
 use anyhow::Result;
 use rocket::fairing::{Fairing, Info, Kind};
-use rocket::http::Header;
+use rocket::{config::Shutdown, http::Header};
 use rocket::{
     config::{Config, LogLevel},
     tokio,
 };
 use rocket::{Request, Response};
 
-pub struct CORS();
+pub struct Cors();
 
 #[async_trait]
-impl Fairing for CORS {
+impl Fairing for Cors {
     fn info(&self) -> Info {
         Info {
             name: "Add CORS headers to requests",
@@ -47,12 +47,16 @@ pub fn init_api(state: &Arc<AppState>) -> Result<()> {
         address: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
         port: 45289,
         log_level: LogLevel::Critical,
+        shutdown: Shutdown {
+            ctrlc: false,
+            ..Shutdown::default()
+        },
         ..Config::default()
     };
 
     tokio::spawn(async move {
         rocket::custom(config)
-            .attach(CORS())
+            .attach(Cors())
             .manage(state)
             .mount("/", routes![get_devices])
             .launch()

@@ -15,7 +15,7 @@ pub struct DevicesResponse {
 }
 
 #[get("/devices")]
-pub fn get_devices(app_state: State<Arc<AppState>>) -> Json<DevicesResponse> {
+pub fn get_devices(app_state: &State<Arc<AppState>>) -> Json<DevicesResponse> {
     let devices = app_state.devices.get_devices();
     let response = DevicesResponse {
         devices: devices.values().cloned().collect(),
@@ -27,7 +27,7 @@ pub fn get_devices(app_state: State<Arc<AppState>>) -> Json<DevicesResponse> {
 pub async fn put_device(
     device_id: DeviceId,
     device: Json<Device>,
-    app_state: State<'_, Arc<AppState>>,
+    app_state: &State<Arc<AppState>>,
 ) -> Json<DevicesResponse> {
     let mut devices = app_state.devices.clone();
     devices.set_device_state(&device.0, true).await;
