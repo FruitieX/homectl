@@ -1,6 +1,6 @@
 use crate::integrations::{
     circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random,
-    wake_on_lan::WakeOnLan,
+    timer::Timer, wake_on_lan::WakeOnLan,
 };
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
@@ -108,6 +108,7 @@ fn load_integration(
     match module_name {
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
+        "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
         "lifx" => Ok(Box::new(Lifx::new(id, config, event_tx)?)),
         "hue" => Ok(Box::new(Hue::new(id, config, event_tx)?)),
