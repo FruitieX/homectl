@@ -1,3 +1,4 @@
+pub mod boolean;
 pub mod circadian;
 pub mod random;
 pub mod dummy;

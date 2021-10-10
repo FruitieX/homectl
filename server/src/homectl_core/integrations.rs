@@ -1,7 +1,4 @@
-use crate::integrations::{
-    circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random,
-    timer::Timer, wake_on_lan::WakeOnLan,
-};
+use crate::integrations::{boolean::Boolean, circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random, timer::Timer, wake_on_lan::WakeOnLan};
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
 use homectl_types::{
@@ -106,6 +103,7 @@ fn load_integration(
     event_tx: TxEventChannel,
 ) -> Result<Box<dyn Integration + Send>> {
     match module_name {
+        "boolean" => Ok(Box::new(Boolean::new(id, config, event_tx)?)),
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
         "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
