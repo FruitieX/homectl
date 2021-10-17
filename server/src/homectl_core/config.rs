@@ -1,11 +1,11 @@
 extern crate config;
+use anyhow::{Context, Result};
 use homectl_types::{
     group::GroupsConfig,
     integration::{IntegrationId, IntegrationsConfig},
     rule::RoutinesConfig,
     scene::ScenesConfig,
 };
-use anyhow::{Context, Result};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -26,7 +26,7 @@ pub fn read_config() -> Result<(Config, OpaqueIntegrationsConfigs)> {
         .merge(config::File::with_name("Settings"))
         .context("Failed to load Settings.toml config file")?;
 
-    let config = settings.clone().try_into::<Config>().context(
+    let config: Config = serde_path_to_error::deserialize(settings.clone()).context(
         "Failed to deserialize config, compare your config file to Settings.toml.example!",
     )?;
 
