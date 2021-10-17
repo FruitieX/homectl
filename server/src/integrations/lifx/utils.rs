@@ -128,7 +128,7 @@ pub fn read_lifx_msg(buf: &[u8], addr: SocketAddr) -> LifxMsg {
             // State (107) message, response to Get (101)
             // https://lan.developer.lifx.com/docs/light-messages#section-state-107
 
-            let hue = LittleEndian::read_u16(&payload);
+            let hue = LittleEndian::read_u16(payload);
             let sat = LittleEndian::read_u16(&payload[2..]);
             let bri = LittleEndian::read_u16(&payload[4..]);
 

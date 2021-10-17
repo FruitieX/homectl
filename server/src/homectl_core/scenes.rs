@@ -30,7 +30,7 @@ impl Scenes {
         devices: &DevicesState,
         scene_id: &SceneId,
     ) -> Option<SceneDevicesConfig> {
-        let scene = self.find_scene(&scene_id)?;
+        let scene = self.find_scene(scene_id)?;
 
         let scene_devices_search_config = scene.devices.clone().unwrap_or_default();
 
@@ -44,7 +44,7 @@ impl Scenes {
                         .iter()
                         .map(|(device_name, device_config)| {
                             let device =
-                                find_device(devices, &integration_id, None, Some(device_name));
+                                find_device(devices, integration_id, None, Some(device_name));
 
                             let device_id = device.map(|d| d.id).unwrap_or_else(|| {
                                 println!(
