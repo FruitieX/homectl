@@ -115,7 +115,7 @@ impl Devices {
         // computed it
         let expected_state = state_device
             .as_ref()
-            .map(|d| self.get_expected_state(&d, false));
+            .map(|d| self.get_expected_state(d, false));
 
         // Take action if the device state has changed from stored state
         if Some(device) != state_device.as_ref() || expected_state != Some(device.state.clone()) {
@@ -125,14 +125,14 @@ impl Devices {
                 // Device was seen for the first time
                 (_, None, _) => {
                     println!("Discovered device: {:?}", device);
-                    self.set_device_state(&device, false).await;
-                    db_update_device(&device).ok();
+                    self.set_device_state(device, false).await;
+                    db_update_device(device).ok();
                 }
 
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
                 (DeviceState::Sensor(_), Some(_), _) => {
-                    self.set_device_state(&device, false).await;
+                    self.set_device_state(device, false).await;
                 }
 
                 // Device state does not match expected state, maybe the
@@ -158,7 +158,7 @@ impl Devices {
 
                 // Expected device state was not found
                 (_, _, None) => {
-                    self.set_device_state(&device, false).await;
+                    self.set_device_state(device, false).await;
                 }
             }
         }
@@ -179,7 +179,7 @@ impl Devices {
                 let ignore_transition = use_passed_state;
                 let scene_device_state =
                     self.scenes
-                        .find_scene_device_state(&device, &state, ignore_transition);
+                        .find_scene_device_state(device, &state, ignore_transition);
 
                 scene_device_state.unwrap_or_else(|| {
                     // TODO: why would we ever want to do this
@@ -236,7 +236,7 @@ impl Devices {
         self.state
             .lock()
             .unwrap()
-            .get(&mk_device_state_key(&integration_id, &device_id))
+            .get(&mk_device_state_key(integration_id, device_id))
             .cloned()
     }
 

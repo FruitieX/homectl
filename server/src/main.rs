@@ -116,13 +116,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Message::SetDeviceState { device, set_scene } => {
                     let mut devices = state.devices.clone();
-                    devices.set_device_state(&device, *set_scene).await;
+                    devices.set_device_state(device, *set_scene).await;
 
                     Ok(())
                 }
                 Message::SetIntegrationDeviceState { device } => {
                     let mut integrations = state.integrations.clone();
-                    integrations.set_integration_device_state(&device).await
+                    integrations.set_integration_device_state(device).await
                 }
                 Message::Action(Action::ActivateScene(SceneDescriptor {
                     scene_id,
@@ -130,14 +130,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 })) => {
                     let mut devices = state.devices.clone();
                     devices
-                        .activate_scene(&scene_id, skip_locked_devices.unwrap_or(false))
+                        .activate_scene(scene_id, skip_locked_devices.unwrap_or(false))
                         .await;
 
                     Ok(())
                 }
                 Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes })) => {
                     let mut devices = state.devices.clone();
-                    devices.cycle_scenes(&scenes).await;
+                    devices.cycle_scenes(scenes).await;
 
                     Ok(())
                 }

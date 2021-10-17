@@ -45,8 +45,8 @@ impl Rules {
             return vec![];
         }
 
-        let prev_triggered_routine_ids = get_triggered_routine_ids(&self.config, &old_state);
-        let new_triggered_routine_ids = get_triggered_routine_ids(&self.config, &new_state);
+        let prev_triggered_routine_ids = get_triggered_routine_ids(&self.config, old_state);
+        let new_triggered_routine_ids = get_triggered_routine_ids(&self.config, new_state);
 
         let triggered_routine_ids =
             new_triggered_routine_ids.difference(&prev_triggered_routine_ids);
