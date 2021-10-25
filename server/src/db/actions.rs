@@ -1,5 +1,6 @@
 use super::models::*;
 use super::PG_POOL;
+use anyhow::Context;
 use anyhow::Result;
 use diesel::prelude::*;
 use homectl_types::device;
@@ -24,8 +25,8 @@ pub fn db_update_device(device: &device::Device) -> Result<usize> {
 
     use super::schema::devices;
     use super::schema::devices::dsl::*;
-
-    let conn = PG_POOL.get()?;
+    let pgpool = PG_POOL.as_ref().context("Pg pool not found")?;
+    let conn = pgpool.get()?;
 
     let result = diesel::insert_into(devices::table)
         .values(&db_device)
