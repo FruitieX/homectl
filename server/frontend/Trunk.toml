@@ -1,0 +1,7 @@
+[[proxy]]
+rewrite = "/api/v1"
+backend = "http://localhost:45289/api/v1"
+
+[[proxy]]
+backend = "ws://localhost:45289/api/ws"
+ws = true

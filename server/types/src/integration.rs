@@ -6,11 +6,19 @@ use async_trait::async_trait;
 use super::{device::Device, event::TxEventChannel};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr, convert::Infallible};
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
     pub struct IntegrationId(String);
+}
+
+impl FromStr for IntegrationId {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(IntegrationId(s.to_string()))
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -29,7 +37,7 @@ macro_attr! {
     pub struct IntegrationActionPayload(String);
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct IntegrationActionDescriptor {
     pub integration_id: IntegrationId,
     pub payload: IntegrationActionPayload,

@@ -1,3 +1,5 @@
+use crate::device::CorrelatedColorTemperature;
+
 use super::{
     device::{DeviceColor, DeviceId},
     group::GroupId,
@@ -12,7 +14,7 @@ macro_attr! {
     pub struct SceneId(String);
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, Serialize)]
 #[serde(untagged)]
 pub enum ColorConfig {
     Lch(Lch),
@@ -28,34 +30,35 @@ pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
     }
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, Serialize)]
 pub struct SceneDeviceLink {
     pub integration_id: IntegrationId,
     pub device_id: Option<DeviceId>,
     pub name: Option<String>,
-    pub brightness: Option<f64>, // allow overriding brightness
+    pub brightness: Option<f32>, // allow overriding brightness
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct SceneDescriptor {
     pub scene_id: SceneId,
     pub skip_locked_devices: Option<bool>,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<SceneDescriptor>,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, Serialize)]
 pub struct SceneDeviceState {
     pub power: bool,
     pub color: Option<ColorConfig>,
-    pub brightness: Option<f64>,
+    pub brightness: Option<f32>,
+    pub cct: Option<CorrelatedColorTemperature>,
     pub transition_ms: Option<u64>,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, Serialize)]
 #[serde(untagged)]
 pub enum SceneDeviceConfig {
     /// Link to another device, means the scene should read current state from
@@ -76,7 +79,7 @@ pub type SceneGroupsConfig = HashMap<GroupId, SceneDeviceConfig>;
 /// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
 pub type SceneDevicesSearchConfig = HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>;
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug, Serialize)]
 pub struct SceneConfig {
     pub name: String,
     pub devices: Option<SceneDevicesSearchConfig>,

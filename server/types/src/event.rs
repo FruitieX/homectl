@@ -1,8 +1,10 @@
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use serde::{Deserialize, Serialize};
 
 use super::{action::Action, device::Device, device::DevicesState};
 
-#[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub enum Message {
     /// An integration has gathered information about current device state
     /// through some means (usually polling). Note that state might not actually
