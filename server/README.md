@@ -1,11 +1,17 @@
 # homectl
 
+Discord: https://discord.gg/xP2s6EY8rd
+
 🚧 WORK IN PROGRESS 🚧
 
-Note: this project is still in very early stages, and I've only recently
-started using it as my own "daily driver". This is also my first "real" Rust
-project, which brings with it the usual caveats. Expect to find bugs and when
-you do, please report them :-)
+Note: this project is still in quite early stages. Regardless, I've been using
+this as a daily driver for over a year now. This is also my first "real" Rust
+project, which brings with it the usual caveats. The architecture isn't
+necessarily the best, but luckily refactoring Rust code is a fairly pleasant
+experience.
+
+If you're not ready to get your hands dirty with Rust code, I would suggest
+trying out other alternatives for now.
 
 ## Description
 
@@ -68,12 +74,13 @@ and also other similar solutions to homectl:
 
 ## Setup
 
-- Install `docker` and `docker-compose` (`docker-compose` comes with nix if using the bundled `default.nix` nix config)
-- Clone this repo
 
-``` bash
-cp Settings.toml.example Settings.toml
-$EDITOR Settings.toml
-cargo generate-lockfile # to generate the Cargo.lock file
-docker-compose up
-```
+
+- Copy `backend/Settings.toml.example` into `backend/Settings.toml`, edit it to match your setup. TODO: Better documentation over this process. If you need help/tips, you can ping me on Discord.
+- Setup PostgreSQL on your host.
+
+NOTE: If you use the [Nix package manager](https://nixos.org/download.html) there's a default.nix shell in the repo root. You shouldn't need any other setup. If not, continue:
+
+- Install the Rust toolchain using [`rustup`](https://rustup.rs/)
+- Run `./start-backend.sh`
+- Optional: Run `./start-frontend.sh`
