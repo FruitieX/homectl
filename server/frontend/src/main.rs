@@ -28,7 +28,7 @@ fn app(cx: Scope) -> Element {
     {
         let set_devices = set_devices.clone();
         let set_scenes = set_scenes.clone();
-        use_ws_context_provider_json(&cx, "ws://localhost:45289/ws", move |msg| match msg {
+        use_ws_context_provider_json(&cx, "ws://localhost:8080/ws", move |msg| match msg {
             WebSocketResponse::State(state) => {
                 set_devices(state.devices);
                 set_scenes(state.scenes);
