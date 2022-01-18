@@ -33,5 +33,5 @@ homectl_types = { path = "../types" }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3.19"
 tokio-stream = "0.1.8"
-rust-tuyapi = { git = "https://github.com/EmilSodergren/rust-tuyapi" }
+rust-tuyapi = { git = "https://github.com/FruitieX/rust-tuyapi" }
 env_logger = "0.9.0"

@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use async_std::sync::Mutex;
+use async_std::sync::{Mutex, RwLock};
 use async_std::task;
 use async_std::{stream, task::JoinHandle};
 use async_trait::async_trait;
@@ -45,6 +45,7 @@ pub struct Tuya {
     event_tx: TxEventChannel,
     config: TuyaConfig,
     device_mutexes: HashMap<DeviceId, DeviceMutex>,
+    device_expected_states: Arc<RwLock<HashMap<DeviceId, Device>>>,
     poll_handle: Option<JoinHandle<()>>,
 }
 
@@ -61,6 +62,7 @@ impl Integration for Tuya {
             config,
             event_tx,
             device_mutexes: HashMap::new(),
+            device_expected_states: Arc::new(RwLock::new(HashMap::new())),
             poll_handle: None,
         })
     }
@@ -79,7 +81,13 @@ impl Integration for Tuya {
                 .entry(device_id.clone())
                 .or_insert_with(|| Arc::new(Mutex::new(())));
 
+            // TODO: don't crash if tuya device not found here
             let device = get_tuya_state(device_id, &self.id, device_config, device_mutex).await?;
+
+            {
+                let mut device_expected_states = self.device_expected_states.write().await;
+                device_expected_states.insert(device_id.clone(), device.clone());
+            }
 
             self.event_tx
                 .send(Message::IntegrationDeviceRefresh { device });
@@ -93,73 +101,21 @@ impl Integration for Tuya {
     async fn start(&mut self) -> Result<()> {
         println!("starting tuya integration {}", self.id);
 
-        // let current_time = SystemTime::now()
-        //     .duration_since(SystemTime::UNIX_EPOCH)
-        //     .unwrap()
-        //     .as_secs() as u32;
-
-        // // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
-        // // device.
-        // let tuya_device = TuyaDevice::create(
-        //     "3.3",
-        //     Some("6b1c2505fbff4edc"),
-        //     IpAddr::from_str("192.168.1.210").unwrap(),
-        // )?;
-
-        // // Create the payload to be sent, this will be serialized to the JSON format
-        // let payload = Payload::Struct(PayloadStruct {
-        //     dev_id: "17862520c82b966b102f".to_string(),
-        //     gw_id: Some("17862520c82b966b102f".to_string()),
-        //     uid: Some("17862520c82b966b102f".to_string()),
-        //     t: Some(current_time),
-        //     dp_id: None,
-        //     dps: Some(HashMap::new()),
-        // });
-
-        // dbg!(tuya_device.get(payload, 0))?;
-
-        // let mut dps = HashMap::new();
-        // dps.insert("22".to_string(), json!(10));
-
-        // // Create the payload to be sent, this will be serialized to the JSON format
-        // let payload = Payload::Struct(PayloadStruct {
-        //     dev_id: "17862520c82b966b102f".to_string(),
-        //     gw_id: None,
-        //     uid: Some("17862520c82b966b102f".to_string()),
-        //     t: Some(current_time),
-        //     dp_id: None,
-        //     dps: Some(dps),
-        // });
-
-        // dbg!(tuya_device.set(payload, 0))?;
-
-        // tokio::time::sleep(tokio::time::Duration::from_millis(1000)).await;
-
-        // let mut dps = HashMap::new();
-        // dps.insert("22".to_string(), json!(10));
-
-        // let payload = Payload::Struct(PayloadStruct {
-        //     dev_id: "17862520c82b966b102f".to_string(),
-        //     gw_id: None,
-        //     uid: Some("17862520c82b966b102f".to_string()),
-        //     t: Some(current_time),
-        //     dp_id: None,
-        //     dps: Some(dps),
-        // });
-
-        // dbg!(tuya_device.set(payload, 2))?;
-
-        // Set the payload state on the Tuya device, an error here will contain
-        // the error message received from the device.
-        // tuya_device.set(payload, 1)?;
-
         let config = self.config.clone();
         let integration_id = self.id.clone();
         let sender = self.event_tx.clone();
         let device_mutexes = self.device_mutexes.clone();
+        let device_expected_states = self.device_expected_states.clone();
 
         self.poll_handle = Some(task::spawn(async {
-            poll_lights(config, integration_id, sender, device_mutexes).await
+            poll_lights(
+                config,
+                integration_id,
+                sender,
+                device_mutexes,
+                device_expected_states,
+            )
+            .await
         }));
 
         println!("started tuya integration {}", self.id);
@@ -168,6 +124,11 @@ impl Integration for Tuya {
     }
 
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
+        {
+            let mut device_expected_states = self.device_expected_states.write().await;
+            device_expected_states.insert(device.id.clone(), device.clone());
+        }
+
         if let Some(poll_handle) = self.poll_handle.take() {
             poll_handle.cancel().await;
         }
@@ -176,9 +137,17 @@ impl Integration for Tuya {
         let integration_id = self.id.clone();
         let sender = self.event_tx.clone();
         let device_mutexes = self.device_mutexes.clone();
+        let device_expected_states = self.device_expected_states.clone();
 
         self.poll_handle = Some(task::spawn(async {
-            poll_lights(config, integration_id, sender, device_mutexes).await
+            poll_lights(
+                config,
+                integration_id,
+                sender,
+                device_mutexes,
+                device_expected_states,
+            )
+            .await
         }));
 
         let device_config = self.config.devices.get(&device.id).context(format!(
@@ -266,40 +235,42 @@ async fn set_tuya_state(
         .unwrap()
         .as_secs() as u32;
 
-    // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
-    // device.
-    let tuya_device = TuyaDevice::create(
-        "3.3",
-        Some(&device_config.local_key),
-        IpAddr::from_str(&device_config.ip).unwrap(),
-    )?;
+    {
+        // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
+        // device.
+        let tuya_device = TuyaDevice::create(
+            "3.3",
+            Some(&device_config.local_key),
+            IpAddr::from_str(&device_config.ip).unwrap(),
+        )?;
 
-    let mut dps = HashMap::new();
-    dps.insert(
-        device_config.power_on_field.clone(),
-        json!(tuya_state.power_on),
-    );
-    dps.insert(
-        device_config.brightness_field.clone(),
-        json!(tuya_state.brightness),
-    );
-    dps.insert(
-        device_config.color_temp_field.clone(),
-        json!(tuya_state.color_temperature),
-    );
+        let mut dps = HashMap::new();
+        dps.insert(
+            device_config.power_on_field.clone(),
+            json!(tuya_state.power_on),
+        );
+        dps.insert(
+            device_config.brightness_field.clone(),
+            json!(tuya_state.brightness),
+        );
+        dps.insert(
+            device_config.color_temp_field.clone(),
+            json!(tuya_state.color_temperature),
+        );
 
-    // Create the payload to be sent, this will be serialized to the JSON format
-    let payload = Payload::Struct(PayloadStruct {
-        dev_id: device.id.to_string(),
-        // gw_id: None,
-        gw_id: Some(device.id.to_string()),
-        uid: Some(device.id.to_string()),
-        t: Some(current_time),
-        dp_id: None,
-        dps: Some(dps),
-    });
+        // Create the payload to be sent, this will be serialized to the JSON format
+        let payload = Payload::Struct(PayloadStruct {
+            dev_id: device.id.to_string(),
+            // gw_id: None,
+            gw_id: Some(device.id.to_string()),
+            uid: Some(device.id.to_string()),
+            t: Some(current_time),
+            dp_id: None,
+            dps: Some(dps),
+        });
 
-    tuya_device.set(payload, 0)?;
+        tuya_device.set(payload, 0)?;
+    }
 
     drop(device_mutex);
 
@@ -318,25 +289,29 @@ async fn get_tuya_state(
         .unwrap()
         .as_secs() as u32;
 
-    // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
-    // device.
-    let tuya_device = TuyaDevice::create(
-        "3.3",
-        Some(&device_config.local_key),
-        IpAddr::from_str(&device_config.ip).unwrap(),
-    )?;
+    let response = {
+        // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
+        // device.
+        let tuya_device = TuyaDevice::create(
+            "3.3",
+            Some(&device_config.local_key),
+            IpAddr::from_str(&device_config.ip).unwrap(),
+        )?;
 
-    // Create the payload to be sent, this will be serialized to the JSON format
-    let payload = Payload::Struct(PayloadStruct {
-        dev_id: device_id.to_string(),
-        gw_id: Some(device_id.to_string()),
-        uid: Some(device_id.to_string()),
-        t: Some(current_time),
-        dp_id: None,
-        dps: Some(HashMap::new()),
-    });
+        // Create the payload to be sent, this will be serialized to the JSON format
+        let payload = Payload::Struct(PayloadStruct {
+            dev_id: device_id.to_string(),
+            gw_id: Some(device_id.to_string()),
+            uid: Some(device_id.to_string()),
+            t: Some(current_time),
+            dp_id: None,
+            dps: Some(HashMap::new()),
+        });
 
-    let response = tuya_device.get(payload, 0)?;
+        tuya_device
+            .get(payload, 0)
+            .context(format!("Error while polling {}", device_config.name))?
+    };
 
     drop(device_mutex);
 
@@ -408,20 +383,54 @@ async fn get_tuya_state(
 
 pub async fn do_refresh_lights(
     config: TuyaConfig,
-    integration_id: IntegrationId,
-    sender: TxEventChannel,
+    _integration_id: IntegrationId,
+    _sender: TxEventChannel,
     device_mutexes: &HashMap<DeviceId, DeviceMutex>,
+    device_expected_states: &Arc<RwLock<HashMap<DeviceId, Device>>>,
 ) -> Result<()> {
-    for (device_id, device_config) in &config.devices {
-        let device_mutex = device_mutexes.get(device_id).unwrap();
-        let device =
-            get_tuya_state(device_id, &integration_id, device_config, device_mutex).await?;
+    // for (device_id, device_config) in &config.devices {
+    // let device_mutex = device_mutexes.get(device_id).unwrap();
+    // let device =
+    //     get_tuya_state(device_id, &integration_id, device_config, device_mutex).await?;
 
-        // Tuya devices seem to only be able to handle one TCP connection at once.
-        // Keeping track of this using Mutexes seems to not be enough
-        async_std::task::sleep(Duration::from_millis(100)).await;
+    // Tuya devices seem to only be able to handle one TCP connection at once.
+    // Keeping track of this using Mutexes seems to not be enough
+    // async_std::task::sleep(Duration::from_millis(100)).await;
 
-        sender.send(Message::IntegrationDeviceRefresh { device });
+    // HACK:
+    // Instead of polling for current state which seems to cause the devices
+    // to lock up (no idea why), let's spam them with expected state once
+    // every poll interval by lying to homectl about their current state
+    // let impossible_cct = Some(CorrelatedColorTemperature::new(
+    //     100000.0,
+    //     Range {
+    //         start: 0.0,
+    //         end: 0.0,
+    //     },
+    // ));
+    // let device = Device {
+    //     id: device_id.clone(),
+    //     name: device_config.name.clone(),
+    //     integration_id: integration_id.clone(),
+    //     scene: None,
+    //     state: DeviceState::Light(Light::new_with_cct(true, None, impossible_cct, None)),
+    //     locked: false,
+    // };
+    // sender.send(Message::IntegrationDeviceRefresh { device });
+
+    // }
+
+    let device_expected_states = { device_expected_states.read().await.clone() };
+
+    for device in device_expected_states.values() {
+        let device_config = config.devices.get(&device.id).context(format!(
+            "Could not find TuyaDeviceConfig for device with id {}",
+            device.id,
+        ))?;
+        let device_mutex = device_mutexes.get(&device.id).unwrap();
+        set_tuya_state(device, device_config, device_mutex)
+            .await
+            .ok();
     }
 
     Ok(())
@@ -432,6 +441,7 @@ pub async fn poll_lights(
     integration_id: IntegrationId,
     sender: TxEventChannel,
     device_mutexes: HashMap<DeviceId, DeviceMutex>,
+    device_expected_states: Arc<RwLock<HashMap<DeviceId, Device>>>,
 ) {
     let poll_rate = Duration::from_millis(1000);
     let mut interval = stream::interval(poll_rate);
@@ -439,12 +449,14 @@ pub async fn poll_lights(
     loop {
         interval.next().await;
 
+        println!("{:?}: polling tuya devices", SystemTime::now());
         let sender = sender.clone();
         let result = do_refresh_lights(
             config.clone(),
             integration_id.clone(),
             sender,
             &device_mutexes,
+            &device_expected_states,
         )
         .await;
 

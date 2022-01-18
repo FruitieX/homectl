@@ -2278,8 +2278,8 @@ checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
 
 [[package]]
 name = "rust-tuyapi"
-version = "0.8.0"
-source = "git+https://github.com/EmilSodergren/rust-tuyapi#3dbcb459f7d4973f987c319fae897cc604105640"
+version = "0.8.1"
+source = "git+https://github.com/FruitieX/rust-tuyapi#00067fb8e833de9ead69d3f209c0a749b756b513"
 dependencies = [
  "atomic-counter",
  "base64",
