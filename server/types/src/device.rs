@@ -192,6 +192,18 @@ impl Display for DeviceState {
     }
 }
 
+impl DeviceState {
+    pub fn is_powered_on(&self) -> Option<bool> {
+        match self {
+            DeviceState::OnOffDevice(device) => Some(device.power),
+            DeviceState::Light(device) => Some(device.power),
+            DeviceState::MultiSourceLight(device) => Some(device.power),
+            // Doesn't make sense for sensors
+            DeviceState::Sensor(_) => None,
+        }
+    }
+}
+
 /// active scene that's controlling the device state, if any
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct DeviceSceneState {

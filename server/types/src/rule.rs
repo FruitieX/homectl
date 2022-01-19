@@ -1,3 +1,5 @@
+use crate::{group::GroupId, scene::SceneId};
+
 use super::{action::Actions, device::DeviceId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -24,11 +26,36 @@ pub enum SensorRuleState {
 }
 
 #[derive(Clone, Deserialize, Debug)]
-pub struct Rule {
+pub struct SensorRule {
     pub integration_id: IntegrationId,
     pub device_id: Option<DeviceId>,
     pub name: Option<String>,
     pub state: SensorRuleState,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct DeviceRule {
+    pub integration_id: IntegrationId,
+    pub device_id: Option<DeviceId>,
+    pub name: Option<String>,
+    pub power: Option<bool>,
+    pub scene: Option<SceneId>,
+}
+
+
+#[derive(Clone, Deserialize, Debug)]
+pub struct GroupRule {
+    pub group_id: GroupId,
+    pub power: Option<bool>,
+    pub scene: Option<SceneId>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum Rule {
+    Sensor(SensorRule),
+    Device(DeviceRule),
+    Group(GroupRule),
 }
 
 pub type Rules = Vec<Rule>;

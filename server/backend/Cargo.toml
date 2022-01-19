@@ -35,3 +35,4 @@ futures-util = "0.3.19"
 tokio-stream = "0.1.8"
 rust-tuyapi = { git = "https://github.com/FruitieX/rust-tuyapi" }
 env_logger = "0.9.0"
+itertools = "0.10.3"

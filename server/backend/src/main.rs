@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let groups = Groups::new(config.groups);
     let scenes = Scenes::new(config.scenes, groups.clone());
     let devices = Devices::new(sender.clone(), scenes.clone());
-    let rules = Rules::new(config.routines, sender.clone());
+    let rules = Rules::new(config.routines, groups.clone(), sender.clone());
 
     for (id, integration_config) in &config.integrations {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         devices,
         rules,
         sender: sender.clone(),
-        ws: Default::default()
+        ws: Default::default(),
     };
 
     let state = Arc::new(state);
