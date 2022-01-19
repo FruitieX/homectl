@@ -75,14 +75,29 @@ impl Integration for Tuya {
             .map(|device_id| (device_id.clone(), Arc::new(Mutex::new(()))))
             .collect();
 
+        let integration_id = self.id.clone();
+
         for (device_id, device_config) in &self.config.devices {
             let device_mutex = self
                 .device_mutexes
                 .entry(device_id.clone())
                 .or_insert_with(|| Arc::new(Mutex::new(())));
 
+            let integration_id = integration_id.clone();
             // TODO: don't crash if tuya device not found here
-            let device = get_tuya_state(device_id, &self.id, device_config, device_mutex).await?;
+            let device = get_tuya_state(device_id, &self.id, device_config, device_mutex).await;
+            let device = device.unwrap_or_else(|_| {
+                println!("Failed to get initial state of Tuya device {}, creating Device with default state", device_config.name);
+
+                Device {
+                    id: device_id.clone(),
+                    name: device_config.name.clone(),
+                    integration_id,
+                    scene: None,
+                    state: DeviceState::Light(Light { power: false, brightness: None, color: None, cct: None, transition_ms: None }),
+                    locked: false
+                }
+            });
 
             {
                 let mut device_expected_states = self.device_expected_states.write().await;
@@ -384,42 +399,25 @@ async fn get_tuya_state(
 pub async fn do_refresh_lights(
     config: TuyaConfig,
     _integration_id: IntegrationId,
-    _sender: TxEventChannel,
+    sender: TxEventChannel,
     device_mutexes: &HashMap<DeviceId, DeviceMutex>,
     device_expected_states: &Arc<RwLock<HashMap<DeviceId, Device>>>,
 ) -> Result<()> {
     // for (device_id, device_config) in &config.devices {
-    // let device_mutex = device_mutexes.get(device_id).unwrap();
-    // let device =
-    //     get_tuya_state(device_id, &integration_id, device_config, device_mutex).await?;
+    //     let device_mutex = device_mutexes.get(device_id).unwrap();
+    //     let device =
+    //         get_tuya_state(device_id, &integration_id, device_config, device_mutex).await?;
+
+    //     sender.send(Message::IntegrationDeviceRefresh { device });
+    // }
 
     // Tuya devices seem to only be able to handle one TCP connection at once.
     // Keeping track of this using Mutexes seems to not be enough
     // async_std::task::sleep(Duration::from_millis(100)).await;
 
     // HACK:
-    // Instead of polling for current state which seems to cause the devices
-    // to lock up (no idea why), let's spam them with expected state once
-    // every poll interval by lying to homectl about their current state
-    // let impossible_cct = Some(CorrelatedColorTemperature::new(
-    //     100000.0,
-    //     Range {
-    //         start: 0.0,
-    //         end: 0.0,
-    //     },
-    // ));
-    // let device = Device {
-    //     id: device_id.clone(),
-    //     name: device_config.name.clone(),
-    //     integration_id: integration_id.clone(),
-    //     scene: None,
-    //     state: DeviceState::Light(Light::new_with_cct(true, None, impossible_cct, None)),
-    //     locked: false,
-    // };
-    // sender.send(Message::IntegrationDeviceRefresh { device });
-
-    // }
-
+    // Polling state seems to cause Tuya devices to lose WiFi connection more
+    // often than if we just spam them with expected state, so let's do that.
     let device_expected_states = { device_expected_states.read().await.clone() };
 
     for device in device_expected_states.values() {
@@ -431,6 +429,12 @@ pub async fn do_refresh_lights(
         set_tuya_state(device, device_config, device_mutex)
             .await
             .ok();
+    }
+
+    // We still need to send our version of the device state to homectl core, in
+    // case it has gone stale.
+    for (_, device) in device_expected_states.into_iter() {
+        sender.send(Message::IntegrationDeviceRefresh { device });
     }
 
     Ok(())
@@ -449,7 +453,7 @@ pub async fn poll_lights(
     loop {
         interval.next().await;
 
-        println!("{:?}: polling tuya devices", SystemTime::now());
+        // println!("{:?}: polling tuya devices", SystemTime::now());
         let sender = sender.clone();
         let result = do_refresh_lights(
             config.clone(),
