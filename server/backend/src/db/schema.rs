@@ -50,10 +50,4 @@ joinable!(floorplan_devices -> devices (device_id));
 joinable!(floorplan_devices -> floorplans (floorplan_id));
 joinable!(scene_state -> scenes (scene_id));
 
-allow_tables_to_appear_in_same_query!(
-    devices,
-    floorplan_devices,
-    floorplans,
-    scene_state,
-    scenes,
-);
+allow_tables_to_appear_in_same_query!(devices, floorplan_devices, floorplans, scene_state, scenes,);

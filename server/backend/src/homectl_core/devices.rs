@@ -71,12 +71,13 @@ fn cmp_device_states(device: &DeviceState, expected: &DeviceState) -> bool {
                     &expected.brightness,
                 );
             }
-
             // Else compare color temperature if supported
             else if let (Some(device_cct), Some(expected_cct)) = (&device.cct, &expected.cct) {
                 // First scale expected_cct to within device's supported range
                 let supported_range = device_cct.get_device_range();
-                let expected = expected_cct.get_cct().clamp(supported_range.start, supported_range.end);
+                let expected = expected_cct
+                    .get_cct()
+                    .clamp(supported_range.start, supported_range.end);
                 let actual = device_cct.get_cct();
 
                 // Accept an error of 10 kelvin

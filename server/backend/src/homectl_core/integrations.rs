@@ -1,4 +1,7 @@
-use crate::integrations::{boolean::Boolean, circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato, random::Random, timer::Timer, wake_on_lan::WakeOnLan, tuya::Tuya};
+use crate::integrations::{
+    boolean::Boolean, circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato,
+    random::Random, timer::Timer, tuya::Tuya, wake_on_lan::WakeOnLan,
+};
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
 use homectl_types::{

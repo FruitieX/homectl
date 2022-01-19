@@ -10,9 +10,9 @@ type PgPool = Pool<ConnectionManager<PgConnection>>;
 type PgPoolOpt = Option<PgPool>;
 
 lazy_static! {
-    pub static ref PG_POOL: PgPoolOpt= {
+    pub static ref PG_POOL: PgPoolOpt = {
         let database_url = env::var("DATABASE_URL").ok()?;
-        
+
         PgPool::builder()
             .max_size(10)
             .build(ConnectionManager::new(&database_url))
