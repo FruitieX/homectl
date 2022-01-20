@@ -137,7 +137,6 @@ impl Integration for Tuya {
             let device_expected_state = self.device_expected_states.get(&device.id).unwrap();
             let mut device_expected_state = device_expected_state.write().await;
             *device_expected_state = device.clone();
-            dbg!(device_expected_state);
         }
 
         let mut device_poll_handle = self.device_poll_handles.remove(&device.id);
