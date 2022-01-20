@@ -11,10 +11,10 @@ use std::collections::HashMap;
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
-    pub integrations: IntegrationsConfig,
-    pub scenes: ScenesConfig,
-    pub groups: GroupsConfig,
-    pub routines: RoutinesConfig,
+    pub integrations: Option<IntegrationsConfig>,
+    pub scenes: Option<ScenesConfig>,
+    pub groups: Option<GroupsConfig>,
+    pub routines: Option<RoutinesConfig>,
 }
 
 type OpaqueIntegrationsConfigs = HashMap<IntegrationId, config::Value>;

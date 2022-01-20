@@ -39,12 +39,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let (sender, mut receiver) = mk_channel();
 
     let mut integrations = Integrations::new(sender.clone());
-    let groups = Groups::new(config.groups);
-    let scenes = Scenes::new(config.scenes, groups.clone());
+    let groups = Groups::new(config.groups.unwrap_or_default());
+    let scenes = Scenes::new(config.scenes.unwrap_or_default(), groups.clone());
     let devices = Devices::new(sender.clone(), scenes.clone());
-    let rules = Rules::new(config.routines, groups.clone(), sender.clone());
+    let rules = Rules::new(config.routines.unwrap_or_default(), groups.clone(), sender.clone());
 
-    for (id, integration_config) in &config.integrations {
+    for (id, integration_config) in &config.integrations.unwrap_or_default() {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
             .get(id)
             .with_context(|| format!("Expected to find config for integration with id {}", id))?;
