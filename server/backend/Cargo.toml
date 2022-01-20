@@ -23,7 +23,7 @@ async-trait = "0.1.42"
 surf = "2.1.0"
 rand = "0.7.3"
 num-traits = "0.2.14"
-async-std = { version = "1.7.0", features = ["attributes", "unstable"] }
+async-std = { version = "1.7.0", features = ["attributes", "unstable", "tokio1"] }
 anyhow = "1.0.34"
 lazy_static = "1.4.0"
 wakey = "0.1.2"
@@ -33,6 +33,6 @@ homectl_types = { path = "../types" }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3.19"
 tokio-stream = "0.1.8"
-rust-tuyapi = { git = "https://github.com/FruitieX/rust-tuyapi" }
+rust-async-tuyapi = "0.8.1"
 env_logger = "0.9.0"
 itertools = "0.10.3"

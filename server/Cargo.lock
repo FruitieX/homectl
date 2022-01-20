@@ -150,6 +150,7 @@ dependencies = [
  "futures-lite",
  "num_cpus",
  "once_cell",
+ "tokio",
 ]
 
 [[package]]
@@ -753,6 +754,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
 
 [[package]]
+name = "either"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
+
+[[package]]
 name = "encoding_rs"
 version = "0.8.30"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1135,11 +1142,12 @@ dependencies = [
  "hex 0.4.3",
  "hmac",
  "homectl_types",
+ "itertools",
  "lazy_static",
  "num-traits 0.2.14",
  "palette",
  "rand 0.7.3",
- "rust-tuyapi",
+ "rust-async-tuyapi",
  "serde 1.0.132",
  "serde_json",
  "serde_path_to_error",
@@ -1388,6 +1396,15 @@ dependencies = [
  "tracing-futures",
  "url",
  "waker-fn",
+]
+
+[[package]]
+name = "itertools"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9a9d19fa1e79b6215ff29b9d6880b706147f16e9b1dbb1e4e5947b5b02bc5e3"
+dependencies = [
+ "either",
 ]
 
 [[package]]
@@ -2271,15 +2288,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust-ini"
-version = "0.13.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
-
-[[package]]
-name = "rust-tuyapi"
+name = "rust-async-tuyapi"
 version = "0.8.1"
-source = "git+https://github.com/FruitieX/rust-tuyapi#00067fb8e833de9ead69d3f209c0a749b756b513"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d4382c4a87ed428ea3212a9aa399efb04fe22fafa990d2191b9a048d5a99c50"
 dependencies = [
  "atomic-counter",
  "base64",
@@ -2296,7 +2308,14 @@ dependencies = [
  "serde 1.0.132",
  "serde_json",
  "thiserror",
+ "tokio",
 ]
+
+[[package]]
+name = "rust-ini"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3e52c148ef37f8c375d49d5a73aa70713125b7f19095948a923f80afdeb22ec2"
 
 [[package]]
 name = "rustc-demangle"
