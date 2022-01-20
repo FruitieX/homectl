@@ -95,7 +95,6 @@ impl Integration for Tuya {
                     integration_id,
                     scene: None,
                     state: DeviceState::Light(Light { power: false, brightness: None, color: None, cct: None, transition_ms: None }),
-                    locked: false
                 }
             });
 
@@ -387,7 +386,6 @@ async fn get_tuya_state(
             integration_id: integration_id.clone(),
             scene: None,
             state,
-            locked: false,
         };
 
         Ok(device)
