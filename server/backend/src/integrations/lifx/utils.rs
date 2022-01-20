@@ -179,7 +179,6 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: IntegrationId) -> 
         integration_id,
         scene: None,
         state,
-        locked: false,
     }
 }
 

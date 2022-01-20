@@ -110,10 +110,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
         move |_| {
             let scene_id = scene_id.clone();
             ws.send_json(&WebSocketRequest::Message(Message::Action(
-                Action::ActivateScene(SceneDescriptor {
-                    scene_id,
-                    skip_locked_devices: None,
-                }),
+                Action::ActivateScene(SceneDescriptor { scene_id }),
             )))
         }
     };

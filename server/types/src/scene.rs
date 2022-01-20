@@ -41,7 +41,6 @@ pub struct SceneDeviceLink {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct SceneDescriptor {
     pub scene_id: SceneId,
-    pub skip_locked_devices: Option<bool>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]

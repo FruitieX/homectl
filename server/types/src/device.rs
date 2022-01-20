@@ -219,7 +219,6 @@ pub struct Device {
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
     pub state: DeviceState,
-    pub locked: bool,
 }
 
 impl Device {
@@ -235,7 +234,6 @@ impl Device {
             integration_id,
             scene: None,
             state,
-            locked: false,
         }
     }
 

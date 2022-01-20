@@ -87,6 +87,5 @@ fn mk_boolean_device(id: &IntegrationId, config: &BooleanConfig, value: Option<b
         integration_id: id.clone(),
         scene: None,
         state,
-        locked: false,
     }
 }

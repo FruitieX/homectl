@@ -56,7 +56,6 @@ impl Integration for WakeOnLan {
                 integration_id: self.id.clone(),
                 scene: None,
                 state,
-                locked: false,
             };
 
             self.sender

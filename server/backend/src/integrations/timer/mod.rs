@@ -97,6 +97,5 @@ fn mk_timer_device(id: &IntegrationId, config: &TimerConfig, value: bool) -> Dev
         integration_id: id.clone(),
         scene: None,
         state,
-        locked: false,
     }
 }

@@ -254,11 +254,7 @@ impl Devices {
             .find_scene_devices_config(&*self.state.lock().unwrap(), scene_id)
     }
 
-    pub async fn activate_scene(
-        &mut self,
-        scene_id: &SceneId,
-        skip_locked_devices: bool,
-    ) -> Option<bool> {
+    pub async fn activate_scene(&mut self, scene_id: &SceneId) -> Option<bool> {
         println!("Activating scene {:?}", scene_id);
 
         let scene_devices_config = self.find_scene_devices_config(scene_id)?;
@@ -274,11 +270,6 @@ impl Devices {
                     self.get_device(&DeviceStateKey::new(integration_id.clone(), device_id));
 
                 if let Some(device) = device {
-                    // Skip locked device
-                    if device.locked && skip_locked_devices {
-                        continue;
-                    }
-
                     let mut device = device.clone();
                     device.scene = device_scene_state.clone();
                     let device = self.set_device_state(&device, true).await;
@@ -379,11 +370,7 @@ impl Devices {
             None => scene_descriptors.first(),
         }?;
 
-        self.activate_scene(
-            &next_scene.scene_id,
-            next_scene.skip_locked_devices.unwrap_or(false),
-        )
-        .await;
+        self.activate_scene(&next_scene.scene_id).await;
 
         Some(true)
     }

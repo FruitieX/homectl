@@ -125,11 +125,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
                 Message::Action(Action::ActivateScene(SceneDescriptor {
                     scene_id,
-                    skip_locked_devices,
                 })) => {
                     let mut devices = state.devices.clone();
                     devices
-                        .activate_scene(scene_id, skip_locked_devices.unwrap_or(false))
+                        .activate_scene(scene_id)
                         .await;
 
                     Ok(())

@@ -323,7 +323,7 @@ actions = [
 ]
 ```
 
-### Enable a motion sensor only when lights controlled by it are in a certain state
+### Enable a motion sensor only when lights controlled by it are in a certain state:
 
 ```
 # Activates `normal_upstairs` scene when motion is detected in staircase only if
