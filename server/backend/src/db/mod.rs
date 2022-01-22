@@ -1,21 +1,34 @@
-use diesel::pg::PgConnection;
-use std::env;
+use once_cell::sync::OnceCell;
+use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use std::{env, time::Duration};
 
 pub mod actions;
-pub mod models;
-pub mod schema;
+pub mod entities;
 
-use diesel::r2d2::{ConnectionManager, Pool};
-type PgPool = Pool<ConnectionManager<PgConnection>>;
-type PgPoolOpt = Option<PgPool>;
+static DB_CONNECTION: OnceCell<DatabaseConnection> = OnceCell::new();
 
-lazy_static! {
-    pub static ref PG_POOL: PgPoolOpt = {
-        let database_url = env::var("DATABASE_URL").ok()?;
+pub async fn init_db() -> Option<()> {
+    let database_url = env::var("DATABASE_URL").ok();
 
-        PgPool::builder()
-            .max_size(10)
-            .build(ConnectionManager::new(&database_url))
-            .ok()
-    };
+    if database_url.is_none() {
+        eprintln!("DATABASE_URL environment variable not set, skipping PostgreSQL initialization.")
+    }
+
+    let database_url = database_url?;
+
+    let mut opt = ConnectOptions::new(database_url);
+    opt.connect_timeout(Duration::from_secs(3));
+
+    println!("Connecting to PostgreSQL...");
+    let db = Database::connect(opt)
+        .await
+        .expect("Could not open DB connection");
+
+    DB_CONNECTION.set(db).unwrap();
+
+    Some(())
+}
+
+pub async fn get_db_connection<'a>() -> Option<&'a DatabaseConnection> {
+    DB_CONNECTION.get()
 }

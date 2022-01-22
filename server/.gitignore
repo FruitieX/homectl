@@ -1,2 +1,3 @@
 target/
 frontend/dist/
+.envrc

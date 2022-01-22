@@ -17,7 +17,7 @@ use serde::{
 use std::str::FromStr;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
     /// unique identifier for the Device
     pub struct DeviceId(String);
 }
@@ -212,6 +212,15 @@ pub struct DeviceSceneState {
     pub activation_time: DateTime<Utc>,
 }
 
+impl DeviceSceneState {
+    pub fn new(scene_id: SceneId) -> DeviceSceneState {
+        DeviceSceneState {
+            scene_id,
+            activation_time: Utc::now(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Device {
     pub id: DeviceId,
@@ -242,6 +251,10 @@ impl Device {
             integration_id: self.integration_id.clone(),
             device_id: self.id.clone(),
         }
+    }
+
+    pub fn get_scene_id(&self) -> Option<&SceneId> {
+        self.scene.as_ref().map(|scene| &scene.scene_id)
     }
 }
 

@@ -74,13 +74,19 @@ and also other similar solutions to homectl:
 
 ## Setup
 
+### Environment variables (optional):
+
+- `DATABASE_URL`: Used by the backend to connect to a PostgreSQL database. If
+  not provided, functionalities requiring a database connection will be
+  disabled.
+
+- `WS_ENDPOINT`: Read at compile time to decide what WebSocket endpoint the
+  frontend attempts connecting to. Defaults to `ws://localhost:8080/ws`.
+
+### Quick start
+
 - Copy `backend/Settings.toml.example` into `backend/Settings.toml`, edit it to
   match your setup. See configuration tips below.
-- Setup PostgreSQL on your host. This is currently required even though it's not
-  really used for anything useful.
-
-NOTE: If you use the [Nix package manager](https://nixos.org/download.html) there's a default.nix shell in the repo root. You shouldn't need any other setup. If not, continue:
-
 - Install the Rust toolchain using [`rustup`](https://rustup.rs/)
 - Run `./start-backend.sh`
 - Optional: Run `./start-frontend.sh`

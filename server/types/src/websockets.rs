@@ -1,21 +1,20 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{event::Message, device::{DevicesState, Device}, scene::ScenesConfig};
+use crate::{device::DevicesState, event::Message, group::GroupDeviceLinks, scene::ScenesConfig};
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum WebSocketRequest {
-	Message(Message)
+    Message(Message),
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct StateUpdate {
     pub devices: DevicesState,
     pub scenes: ScenesConfig,
+    pub groups: GroupDeviceLinks,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub enum WebSocketResponse {
-  State(StateUpdate),
-  Device(Device)
+    State(StateUpdate),
 }
-

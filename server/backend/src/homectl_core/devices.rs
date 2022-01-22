@@ -1,7 +1,7 @@
-use crate::db::actions::db_update_device;
+use crate::db::actions::{db_find_device, db_update_device};
 
 use super::scenes::Scenes;
-use chrono::Utc;
+use async_std::task;
 use homectl_types::device::DeviceId;
 use homectl_types::{
     device::{Device, DeviceColor, DeviceSceneState, DeviceState, DeviceStateKey, DevicesState},
@@ -140,15 +140,32 @@ impl Devices {
             match (kind, state_device, expected_state) {
                 // Device was seen for the first time
                 (_, None, _) => {
-                    println!("Discovered device: {:?}", device);
-                    self.set_device_state(device, false).await;
-                    db_update_device(device).ok();
+                    let db_device = db_find_device(&device.get_state_key()).await.ok();
+
+                    match db_device {
+                        Some(db_device) => {
+                            println!("Restored device from DB: {:?}", device);
+                            let device = Device {
+                                // Don't restore name from DB as this prevents us from changing it
+                                name: device.name.clone(),
+
+                                ..db_device
+                            };
+
+                            self.set_device_state(&device, true, true).await;
+                        }
+                        None => {
+                            println!("Discovered device: {:?}", device);
+                            self.set_device_state(device, true, false).await;
+                            db_update_device(device).await.ok();
+                        }
+                    }
                 }
 
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
                 (DeviceState::Sensor(_), Some(_), _) => {
-                    self.set_device_state(device, false).await;
+                    self.set_device_state(device, false, false).await;
                 }
 
                 // Device state does not match expected state, maybe the
@@ -174,7 +191,7 @@ impl Devices {
 
                 // Expected device state was not found
                 (_, _, None) => {
-                    self.set_device_state(device, false).await;
+                    self.set_device_state(device, false, false).await;
                 }
             }
         }
@@ -216,7 +233,7 @@ impl Devices {
     }
 
     /// Sets stored state for given device and dispatches DeviceUpdate
-    pub async fn set_device_state(&mut self, device: &Device, set_scene: bool) -> Device {
+    pub async fn set_device_state(&mut self, device: &Device, set_scene: bool, skip_db: bool) -> Device {
         let old: Option<Device> = self.get_device(&device.get_state_key());
         let old_state = { self.state.lock().unwrap().clone() };
 
@@ -235,12 +252,22 @@ impl Devices {
 
         state.0.insert(device.get_state_key(), device.clone());
 
+        let state_changed = old_state != *state;
+
         self.sender.send(Message::DeviceUpdate {
             old_state,
             new_state: state.clone(),
             old,
             new: device.clone(),
         });
+
+        if state_changed && !skip_db {
+            // FIXME: compiler error without task::spawn()
+            let device = device.clone();
+            task::spawn(async move {
+                db_update_device(&device).await.ok();
+            });
+        }
 
         device
     }
@@ -259,10 +286,7 @@ impl Devices {
 
         let scene_devices_config = self.find_scene_devices_config(scene_id)?;
 
-        let device_scene_state = Some(DeviceSceneState {
-            scene_id: scene_id.to_owned(),
-            activation_time: Utc::now(),
-        });
+        let device_scene_state = Some(DeviceSceneState::new(scene_id.to_owned()));
 
         for (integration_id, devices) in scene_devices_config {
             for (device_id, _) in devices {
@@ -272,9 +296,7 @@ impl Devices {
                 if let Some(device) = device {
                     let mut device = device.clone();
                     device.scene = device_scene_state.clone();
-                    let device = self.set_device_state(&device, true).await;
-
-                    db_update_device(&device).ok();
+                    let device = self.set_device_state(&device, true, false).await;
 
                     self.sender
                         .clone()

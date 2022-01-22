@@ -22,10 +22,25 @@ impl WebSockets {
         self.users.write().await.remove(&user_id);
     }
 
-    pub async fn user_message(&self, user_id: usize, message: &WebSocketResponse) -> Option<()> {
-        let user = self.users.read().await.get(&user_id).cloned()?;
+    pub async fn send(&self, user_id: Option<usize>, message: &WebSocketResponse) -> Option<()> {
         let s = serde_json::to_string(message).unwrap();
         let msg = warp::ws::Message::text(s);
-        user.send(msg).ok()
+
+        let users = self.users.read().await;
+
+        match user_id {
+            Some(user_id) => {
+                let user = users.get(&user_id).cloned()?;
+                user.send(msg).ok()
+            }
+            None => {
+                let users = users.clone();
+                for (_, user) in users {
+                    user.send(msg.clone()).ok();
+                }
+
+                Some(())
+            }
+        }
     }
 }

@@ -1,4 +1,4 @@
-use homectl_types::group::{GroupDeviceLink, GroupId, GroupsConfig};
+use homectl_types::group::{GroupDeviceLink, GroupDeviceLinks, GroupId, GroupsConfig};
 
 #[derive(Clone)]
 pub struct Groups {
@@ -8,6 +8,13 @@ pub struct Groups {
 impl Groups {
     pub fn new(config: GroupsConfig) -> Self {
         Groups { config }
+    }
+
+    pub fn get_groups(&self) -> GroupDeviceLinks {
+        self.config
+            .keys()
+            .map(|group_id| (group_id.clone(), self.find_group_device_links(group_id)))
+            .collect()
     }
 
     /// Returns all GroupDeviceLinks that belong to given group

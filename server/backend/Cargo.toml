@@ -18,14 +18,12 @@ hmac = "0.10.1"
 sha2 = "0.9.2"
 hex = "0.4.2"
 palette = { version = "0.5.0", features = ["serializing"] }
-diesel = { version = "1.4.5", features = ["postgres", "r2d2"] }
 async-trait = "0.1.42"
 surf = "2.1.0"
 rand = "0.7.3"
 num-traits = "0.2.14"
 async-std = { version = "1.7.0", features = ["attributes", "unstable", "tokio1"] }
 anyhow = "1.0.34"
-lazy_static = "1.4.0"
 wakey = "0.1.2"
 warp = "0.3"
 serde_path_to_error = "0.1"
@@ -36,3 +34,5 @@ tokio-stream = "0.1.8"
 rust-async-tuyapi = "0.8.1"
 env_logger = "0.9.0"
 itertools = "0.10.3"
+sea-orm = { version = "^0", features = [ "sqlx-postgres", "runtime-tokio-rustls" ] }
+once_cell = "1.9.0"

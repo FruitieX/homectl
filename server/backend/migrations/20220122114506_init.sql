@@ -6,5 +6,7 @@ CREATE TABLE devices (
   device_id text NOT NULL,
   scene_id text,
 
+  state text NOT NULL,
+
   UNIQUE(integration_id, device_id)
 );

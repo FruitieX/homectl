@@ -1,39 +1,71 @@
-use super::models::*;
-use super::PG_POOL;
+use super::entities::devices;
+use super::entities::prelude::*;
+use super::get_db_connection;
 use anyhow::Context;
 use anyhow::Result;
-use diesel::prelude::*;
-use homectl_types::device;
+use homectl_types::device::Device;
+use homectl_types::device::DeviceSceneState;
+use homectl_types::device::DeviceStateKey;
+use sea_orm::entity::prelude::*;
+use sea_orm::ActiveValue::Set;
 
-// pub fn find_floorplans(conn: &PgConnection) -> Result<Vec<Floorplan>> {
-//     use super::schema::floorplans::dsl::*;
+pub async fn db_update_device(device: &Device) -> Result<()> {
+    let db = get_db_connection()
+        .await
+        .context("Not connected to database")?;
+    let scene_id = device.get_scene_id().map(|scene_id| scene_id.to_string());
 
-//     let result = floorplans.load::<Floorplan>(conn)?;
+    let model = Devices::find()
+        .filter(devices::Column::IntegrationId.eq(String::from(device.integration_id.clone())))
+        .filter(devices::Column::DeviceId.eq(String::from(device.id.clone())))
+        .one(db)
+        .await?;
 
-//     Ok(result)
-// }
-
-pub fn db_update_device(device: &device::Device) -> Result<usize> {
-    let scene_id_ = device.scene.clone().map(|scene| scene.scene_id.to_string());
-
-    let db_device = NewDevice {
-        name: device.name.as_str(),
-        integration_id: &device.integration_id.to_string(),
-        device_id: &device.id.to_string(),
-        scene_id: scene_id_.as_deref(),
+    let active_model = devices::ActiveModel {
+        name: Set(device.name.to_string()),
+        integration_id: Set(device.integration_id.to_string()),
+        device_id: Set(device.id.to_string()),
+        scene_id: Set(scene_id),
+        state: Set(serde_json::to_string(&device.state).unwrap()),
+        ..Default::default()
     };
 
-    use super::schema::devices;
-    use super::schema::devices::dsl::*;
-    let pgpool = PG_POOL.as_ref().context("Pg pool not found")?;
-    let conn = pgpool.get()?;
+    // Manual upsert until https://github.com/SeaQL/sea-orm/issues/187
+    if model.is_some() {
+        devices::Entity::update_many()
+            .set(active_model)
+            .filter(devices::Column::IntegrationId.eq(String::from(device.integration_id.clone())))
+            .filter(devices::Column::DeviceId.eq(String::from(device.id.clone())))
+            .exec(db)
+            .await?;
+    } else {
+        active_model.insert(db).await?;
+    }
 
-    let result = diesel::insert_into(devices::table)
-        .values(&db_device)
-        .on_conflict((integration_id, device_id))
-        .do_update()
-        .set(&db_device)
-        .execute(&conn)?;
+    Ok(())
+}
 
-    Ok(result)
+pub async fn db_find_device(key: &DeviceStateKey) -> Result<Device> {
+    let db = get_db_connection()
+        .await
+        .context("Not connected to database")?;
+
+    let model = Devices::find()
+        .filter(devices::Column::IntegrationId.eq(String::from(key.integration_id.clone())))
+        .filter(devices::Column::DeviceId.eq(String::from(key.device_id.clone())))
+        .one(db)
+        .await?
+        .context("Device not found in DB")?;
+
+    let device = Device {
+        id: model.device_id.into(),
+        name: model.name,
+        integration_id: model.integration_id.into(),
+        scene: model
+            .scene_id
+            .map(|scene_id| DeviceSceneState::new(scene_id.into())),
+        state: serde_json::from_str(&model.state).unwrap(),
+    };
+
+    Ok(device)
 }

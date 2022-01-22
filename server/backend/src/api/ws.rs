@@ -2,7 +2,7 @@ use super::with_state;
 use crate::AppState;
 use futures::SinkExt;
 use futures_util::{StreamExt, TryFutureExt};
-use homectl_types::websockets::{StateUpdate, WebSocketRequest, WebSocketResponse};
+use homectl_types::websockets::WebSocketRequest;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
@@ -55,17 +55,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<AppState>) {
     app_state.ws.user_connected(my_id, tx).await;
 
     // Send snapshot of current state
-    {
-        let devices = app_state.devices.get_devices();
-        let scenes = app_state.scenes.get_scenes();
-        app_state
-            .ws
-            .user_message(
-                my_id,
-                &WebSocketResponse::State(StateUpdate { devices, scenes }),
-            )
-            .await;
-    }
+    app_state.send_state_ws(Some(my_id)).await;
 
     // Let AppState handle incoming user messages
     while let Some(result) = user_ws_rx.next().await {
