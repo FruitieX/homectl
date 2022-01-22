@@ -3,20 +3,12 @@
 use sea_orm::entity::prelude::*;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
-#[sea_orm(table_name = "devices")]
+#[sea_orm(table_name = "integration_neato")]
 pub struct Model {
-    #[sea_orm(primary_key)]
-    pub id: i32,
-    #[sea_orm(column_type = "Text")]
-    pub name: String,
-    #[sea_orm(column_type = "Text")]
+    #[sea_orm(primary_key, auto_increment = false, column_type = "Text")]
     pub integration_id: String,
     #[sea_orm(column_type = "Text")]
-    pub device_id: String,
-    #[sea_orm(column_type = "Text", nullable)]
-    pub scene_id: Option<String>,
-    #[sea_orm(column_type = "Text")]
-    pub state: String,
+    pub last_run: String,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter)]

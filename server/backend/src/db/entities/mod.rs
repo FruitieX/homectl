@@ -3,3 +3,4 @@
 pub mod prelude;
 
 pub mod devices;
+pub mod integration_neato;

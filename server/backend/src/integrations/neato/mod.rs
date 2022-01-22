@@ -1,4 +1,7 @@
-use crate::utils::from_hh_mm;
+use crate::{
+    db::actions::{db_get_neato_last_run, db_set_neato_last_run},
+    utils::from_hh_mm,
+};
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{Datelike, Weekday};
@@ -34,26 +37,38 @@ pub struct NeatoConfig {
 }
 
 pub struct Neato {
+    integration_id: IntegrationId,
+
     config: NeatoConfig,
 
-    // TODO: persist this in db
     prev_run: Option<chrono::NaiveDateTime>,
 }
 
 #[async_trait]
 impl Integration for Neato {
-    fn new(_id: &IntegrationId, config: &config::Value, _: TxEventChannel) -> Result<Neato> {
+    fn new(
+        integration_id: &IntegrationId,
+        config: &config::Value,
+        _: TxEventChannel,
+    ) -> Result<Neato> {
         let config = config
             .clone()
             .try_into()
             .context("Failed to deserialize config of Neato integration")?;
         Ok(Neato {
+            integration_id: integration_id.clone(),
             config,
             prev_run: None,
         })
     }
 
     async fn register(&mut self) -> anyhow::Result<()> {
+        let prev_run = db_get_neato_last_run(&self.integration_id).await;
+
+        if let Ok(prev_run) = prev_run {
+            self.prev_run = Some(prev_run);
+        }
+
         Ok(())
     }
 
@@ -94,6 +109,11 @@ impl Integration for Neato {
 
             self.prev_run = Some(local);
             let result = clean_house(&self.config).await;
+
+            db_set_neato_last_run(&self.integration_id, local)
+                .await
+                .ok();
+
             result
         } else {
             Ok(())

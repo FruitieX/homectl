@@ -1,3 +1,4 @@
+use anyhow::{Context, Result};
 use once_cell::sync::OnceCell;
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use std::{env, time::Duration};
@@ -29,6 +30,6 @@ pub async fn init_db() -> Option<()> {
     Some(())
 }
 
-pub async fn get_db_connection<'a>() -> Option<&'a DatabaseConnection> {
-    DB_CONNECTION.get()
+pub async fn get_db_connection<'a>() -> Result<&'a DatabaseConnection> {
+    DB_CONNECTION.get().context("Not connected to database")
 }
