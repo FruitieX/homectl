@@ -42,7 +42,7 @@ fn cmp_light_color(
             b_hsv.value *= b_bri.unwrap_or(1.0);
 
             // Light state is equal if all components differ by less than a given delta
-            (f32::abs(a_hsv.hue.to_degrees() - b_hsv.hue.to_degrees()) <= hue_delta)
+            (f32::abs(a_hsv.hue.to_positive_degrees() - b_hsv.hue.to_positive_degrees()) <= hue_delta)
                 && (f32::abs(a_hsv.saturation - b_hsv.saturation) <= sat_delta)
                 && (f32::abs(a_hsv.value - b_hsv.value) <= val_delta)
         }

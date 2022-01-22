@@ -22,3 +22,4 @@ futures = "0.3.8"
 dioxus = { version = "0.1.7", features = ["web"] }
 fermi = { git = "https://github.com/dioxuslabs/fermi" }
 dioxus-websocket-hooks = "0.0.2"
+palette = { version = "0.5.0", features = ["serializing"] }

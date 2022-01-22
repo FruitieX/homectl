@@ -1332,6 +1332,7 @@ dependencies = [
  "homectl_console",
  "homectl_types",
  "js-sys",
+ "palette",
  "reqwasm",
  "reqwest",
  "serde 1.0.132",

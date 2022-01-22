@@ -172,7 +172,7 @@ impl Display for DeviceState {
                 } else if let Some(color) = light.color {
                     format!(
                         "hsv({}, {}, {})",
-                        color.hue.to_degrees(),
+                        color.hue.to_positive_degrees(),
                         color.saturation,
                         color.value
                     )
@@ -199,6 +199,15 @@ impl DeviceState {
             DeviceState::Light(device) => Some(device.power),
             DeviceState::MultiSourceLight(device) => Some(device.power),
             // Doesn't make sense for sensors
+            DeviceState::Sensor(_) => None,
+        }
+    }
+
+    pub fn get_color(&self) -> Option<Hsv> {
+        match self {
+            DeviceState::OnOffDevice(_) => None,
+            DeviceState::Light(state) => state.color,
+            DeviceState::MultiSourceLight(_) => None,
             DeviceState::Sensor(_) => None,
         }
     }
