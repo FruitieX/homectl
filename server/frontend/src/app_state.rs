@@ -6,13 +6,15 @@ use homectl_types::{
     websockets::WebSocketResponse,
 };
 
+pub static DISABLE_SCROLL_ATOM: Atom<bool> = |_| false;
+
 pub static DEVICES_ATOM: Atom<DevicesState> = |_| DevicesState::default();
 pub static SCENES_ATOM: Atom<ScenesConfig> = |_| Default::default();
 pub static GROUPS_ATOM: Atom<GroupDeviceLinks> = |_| Default::default();
 
 const WS_ENDPOINT: Option<&'static str> = option_env!("WS_ENDPOINT");
 
-pub fn use_app_state(cx: &Scope) {
+pub fn use_init_app_state(cx: &Scope) {
     use_init_atom_root(cx);
     let set_devices = use_set(cx, DEVICES_ATOM);
     let set_scenes = use_set(cx, SCENES_ATOM);

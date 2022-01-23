@@ -77,16 +77,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
             .expect("Expected sender end of channel to never be dropped");
 
-        // println!("got msg: {:#?}", msg);
-
-        // TODO: Need to figure out a way of not locking such large chunks of
-        // state across .await points
-
-        // let state = state.clone();
-
-        // Maybe instead of cloning all these structs we should pass state
-        // around to functions in an Arc<Mutex<>> and only lock it when
-        // necessary
         let state = Arc::clone(&state);
 
         task::spawn(async move {

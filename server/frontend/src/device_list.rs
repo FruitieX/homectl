@@ -1,50 +1,20 @@
 use dioxus::prelude::*;
 use fermi::use_read;
 use homectl_types::device::Device;
-use palette::{Hsl, Hsv};
+use crate::color_swatch::ColorSwatch;
 
-use crate::app_state::DEVICES_ATOM;
-
-#[derive(Props, PartialEq)]
-struct ColorSwatchProps {
-    color: Option<Hsv>,
-}
-
-#[allow(non_snake_case)]
-fn ColorSwatch(cx: Scope<ColorSwatchProps>) -> Element {
-    let hsv = cx.props.color.unwrap_or_else(|| Hsv::new(0.0, 0.0, 1.0));
-    let hsl: Hsl = hsv.into();
-    let background_color = format!(
-        "hsl({}, {}%, {}%)",
-        hsl.hue.to_positive_degrees(),
-        (hsl.saturation * 100.0).floor(),
-        (hsl.lightness * 100.0).floor()
-    );
-
-    let size = 1.5;
-    let border_radius = size / 2.0;
-
-    cx.render(rsx! {
-        span {
-            width: "{size}rem",
-            height: "{size}rem",
-            border_radius: "{border_radius}rem",
-            background_color: "{background_color}",
-            border: "1px solid #cccccc",
-            flex_shrink: "0",
-        }
-    })
-}
+use crate::{app_state::DEVICES_ATOM, device_modal::DeviceModal};
 
 #[derive(Props, PartialEq)]
-struct DeviceRowProps<'a> {
+struct DeviceTileProps<'a> {
     device: &'a Device,
 }
 
 #[allow(non_snake_case)]
-fn DeviceTile<'a>(cx: Scope<'a, DeviceRowProps<'a>>) -> Element<'a> {
+fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
     let name = &cx.props.device.name;
     let color = cx.props.device.state.get_color();
+    let modal_open = use_state(&cx, || false);
 
     cx.render(rsx! {
         div {
@@ -58,6 +28,7 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceRowProps<'a>>) -> Element<'a> {
             border: "1px solid #cccccc",
             padding: "0.5rem",
             box_shadow: "0px 0.25rem 0.5rem 0px rgba(0,0,0,0.1)",
+            onclick: move |_| modal_open.set(true),
 
             ColorSwatch { color: color },
 
@@ -66,6 +37,11 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceRowProps<'a>>) -> Element<'a> {
                 overflow: "hidden",
                 max_height: "100%",
                 "{name}"
+            },
+
+            DeviceModal {
+                device: cx.props.device,
+                modal_open: modal_open
             }
         }
     })
@@ -86,14 +62,17 @@ pub fn DeviceList(cx: Scope) -> Element {
     });
 
     cx.render(rsx! {
-        h2 { margin_bottom: "1rem", "Devices:" }
         div {
-            style: "gap: 0.5rem;",
-            max_width: "40rem",
-            display: "flex",
-            flex_direction: "row",
-            flex_wrap: "wrap",
-            devices
+            margin: "1rem",
+            h2 { margin_bottom: "1rem", "Devices:" }
+            div {
+                style: "gap: 0.5rem;",
+                max_width: "40rem",
+                display: "flex",
+                flex_direction: "row",
+                flex_wrap: "wrap",
+                devices
+            }
         }
     })
 }
