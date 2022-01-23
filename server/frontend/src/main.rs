@@ -12,6 +12,7 @@ mod color_swatch;
 mod device_list;
 mod device_modal;
 mod scene_list;
+mod util;
 
 fn main() {
     dioxus::web::launch(app);

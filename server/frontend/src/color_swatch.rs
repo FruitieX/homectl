@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use palette::{Hsl, Hsv};
+use palette::Hsv;
+
+use crate::util::hsv_to_css_hsl_str;
 
 #[derive(Props, PartialEq)]
 pub struct ColorSwatchProps {
@@ -8,14 +10,7 @@ pub struct ColorSwatchProps {
 
 #[allow(non_snake_case)]
 pub fn ColorSwatch(cx: Scope<ColorSwatchProps>) -> Element {
-    let hsv = cx.props.color.unwrap_or_else(|| Hsv::new(0.0, 0.0, 1.0));
-    let hsl: Hsl = hsv.into();
-    let background_color = format!(
-        "hsl({}, {}%, {}%)",
-        hsl.hue.to_positive_degrees(),
-        (hsl.saturation * 100.0).floor(),
-        (hsl.lightness * 100.0).floor()
-    );
+    let background_color = hsv_to_css_hsl_str(&cx.props.color);
 
     let size = 2.0;
     let border_radius = size / 2.0;
