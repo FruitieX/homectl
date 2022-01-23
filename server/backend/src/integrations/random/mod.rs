@@ -85,7 +85,7 @@ fn get_random_color() -> DeviceColor {
 }
 
 async fn poll_sensor(random: Random) {
-    let poll_rate = Duration::from_millis(100);
+    let poll_rate = Duration::from_millis(1000);
     let mut interval = stream::interval(poll_rate);
 
     loop {

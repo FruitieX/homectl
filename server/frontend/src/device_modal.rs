@@ -1,6 +1,10 @@
-use dioxus::{events::MouseEvent, prelude::*};
+use dioxus::{
+    events::{FormEvent, MouseEvent},
+    prelude::*,
+};
+use dioxus_websocket_hooks::use_ws_context;
 use fermi::use_set;
-use homectl_types::device::Device;
+use homectl_types::{device::Device, event::Message, websockets::WebSocketRequest};
 
 use crate::{app_state::DISABLE_SCROLL_ATOM, color_swatch::ColorSwatch};
 
@@ -12,6 +16,8 @@ pub struct DeviceModalProps<'a> {
 
 #[allow(non_snake_case)]
 pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
+    let ws = use_ws_context(&cx);
+
     let set_disable_scroll = use_set(&cx, DISABLE_SCROLL_ATOM);
 
     let cancel_bubble = move |evt: MouseEvent| {
@@ -31,6 +37,20 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
     };
 
     let color = cx.props.device.state.get_color();
+
+    let set_hue = move |evt: FormEvent| {
+        let hue: Option<f32> = evt.data.value.parse().ok();
+
+        if let Some(hue) = hue {
+            let mut device = cx.props.device.clone();
+            device.state.set_hue(hue);
+            device.scene = None;
+            ws.send_json(&WebSocketRequest::Message(Message::SetDeviceState {
+                device,
+                set_scene: true,
+            }))
+        }
+    };
 
     if *cx.props.modal_open {
         set_disable_scroll(true);
@@ -92,7 +112,30 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                         }
                     }
 
-                    ColorSwatch { color: color },
+                    div {
+                        style: "gap: 1rem;",
+                        display: "flex",
+                        flex_direction: "column",
+
+                        "Color:",
+                        ColorSwatch { color: color },
+
+                        "Hue:",
+                        style {
+                            ".hue-slider::-webkit-slider-runnable-track {{
+                                background: linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+                                border-radius: 0.5rem;
+                                border: 1px solid #cccccc;
+                            }}"
+                        }
+                        input {
+                            class: "hue-slider",
+                            r#type: "range",
+                            min: "0",
+                            max: "360",
+                            onchange: set_hue
+                        }
+                    }
 
                     button {
                         onclick: toggle_debug,

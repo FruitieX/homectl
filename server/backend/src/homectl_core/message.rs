@@ -33,7 +33,7 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
         }
         Message::SetDeviceState { device, set_scene } => {
             let mut devices = state.devices.clone();
-            devices.set_device_state(device, *set_scene, false).await;
+            devices.set_device_state(device, *set_scene, false, false).await;
 
             Ok(())
         }

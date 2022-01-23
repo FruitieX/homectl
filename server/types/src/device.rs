@@ -211,6 +211,21 @@ impl DeviceState {
             DeviceState::Sensor(_) => None,
         }
     }
+
+    pub fn set_hue(&mut self, hue: f32) {
+        match self {
+            DeviceState::OnOffDevice(_) => {}
+            DeviceState::Light(state) => {
+                let old_color = state.color.unwrap_or_else(|| Hsv::new(0.0, 0.0, 1.0));
+                let saturation = old_color.saturation;
+                let value = old_color.value;
+                let color = Some(Hsv::new(hue, saturation, value));
+                state.color = color
+            }
+            DeviceState::MultiSourceLight(_) => {}
+            DeviceState::Sensor(_) => {}
+        }
+    }
 }
 
 /// active scene that's controlling the device state, if any

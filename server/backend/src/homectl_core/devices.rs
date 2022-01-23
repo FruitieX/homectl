@@ -156,11 +156,11 @@ impl Devices {
                                 ..db_device
                             };
 
-                            self.set_device_state(&device, true, true).await;
+                            self.set_device_state(&device, true, true, false).await;
                         }
                         None => {
                             println!("Discovered device: {:?}", device);
-                            self.set_device_state(device, true, false).await;
+                            self.set_device_state(device, true, false, true).await;
                             db_update_device(device).await.ok();
                         }
                     }
@@ -169,7 +169,7 @@ impl Devices {
                 // Sensor state has changed, defer handling of this update
                 // to other subsystems
                 (DeviceState::Sensor(_), Some(_), _) => {
-                    self.set_device_state(device, false, false).await;
+                    self.set_device_state(device, false, false, true).await;
                 }
 
                 // Device state does not match expected state, maybe the
@@ -197,7 +197,7 @@ impl Devices {
 
                 // Expected device state was not found
                 (_, _, None) => {
-                    self.set_device_state(device, false, false).await;
+                    self.set_device_state(device, false, false, true).await;
                 }
             }
         }
@@ -244,7 +244,8 @@ impl Devices {
         device: &Device,
         set_scene: bool,
         skip_db: bool,
-    ) -> (Device, bool) {
+        skip_integration: bool,
+    ) -> Device {
         let old: Option<Device> = self.get_device(&device.get_state_key());
         let old_states = { self.state.lock().unwrap().clone() };
 
@@ -280,7 +281,14 @@ impl Devices {
             });
         }
 
-        (device, state_changed)
+        if !skip_integration {
+            self.sender.send(Message::SetIntegrationDeviceState {
+                device: device.clone(),
+                state_changed,
+            });
+        }
+
+        device
     }
 
     pub fn get_device(&self, state_key: &DeviceStateKey) -> Option<Device> {
@@ -307,14 +315,7 @@ impl Devices {
                 if let Some(device) = device {
                     let mut device = device.clone();
                     device.scene = device_scene_state.clone();
-                    let (device, state_changed) = self.set_device_state(&device, true, false).await;
-
-                    self.sender
-                        .clone()
-                        .send(Message::SetIntegrationDeviceState {
-                            device,
-                            state_changed,
-                        });
+                    self.set_device_state(&device, true, false, false).await;
                 }
             }
         }
