@@ -42,7 +42,8 @@ fn cmp_light_color(
             b_hsv.value *= b_bri.unwrap_or(1.0);
 
             // Light state is equal if all components differ by less than a given delta
-            (f32::abs(a_hsv.hue.to_positive_degrees() - b_hsv.hue.to_positive_degrees()) <= hue_delta)
+            (f32::abs(a_hsv.hue.to_positive_degrees() - b_hsv.hue.to_positive_degrees())
+                <= hue_delta)
                 && (f32::abs(a_hsv.saturation - b_hsv.saturation) <= sat_delta)
                 && (f32::abs(a_hsv.value - b_hsv.value) <= val_delta)
         }
@@ -144,6 +145,9 @@ impl Devices {
 
                     match db_device {
                         Some(db_device) => {
+                            // Note that we only restore a device from DB once it has been
+                            // discovered by the integration. This way we don't end up with a lot
+                            // of possibly old/stale devices.
                             println!("Restored device from DB: {:?}", device);
                             let device = Device {
                                 // Don't restore name from DB as this prevents us from changing it
@@ -185,8 +189,10 @@ impl Devices {
                     let mut device = device.clone();
                     device.state = expected_state;
 
-                    self.sender
-                        .send(Message::SetIntegrationDeviceState { device });
+                    self.sender.send(Message::SetIntegrationDeviceState {
+                        device,
+                        state_changed: true,
+                    });
                 }
 
                 // Expected device state was not found
@@ -233,9 +239,14 @@ impl Devices {
     }
 
     /// Sets stored state for given device and dispatches DeviceUpdate
-    pub async fn set_device_state(&mut self, device: &Device, set_scene: bool, skip_db: bool) -> Device {
+    pub async fn set_device_state(
+        &mut self,
+        device: &Device,
+        set_scene: bool,
+        skip_db: bool,
+    ) -> (Device, bool) {
         let old: Option<Device> = self.get_device(&device.get_state_key());
-        let old_state = { self.state.lock().unwrap().clone() };
+        let old_states = { self.state.lock().unwrap().clone() };
 
         let mut device = device.clone();
 
@@ -248,15 +259,15 @@ impl Devices {
         let expected_state = self.get_expected_state(&device, true);
         device.state = expected_state;
 
-        let mut state = self.state.lock().unwrap();
+        let mut states = self.state.lock().unwrap();
 
-        state.0.insert(device.get_state_key(), device.clone());
+        states.0.insert(device.get_state_key(), device.clone());
 
-        let state_changed = old_state != *state;
+        let state_changed = old.as_ref() != Some(&device);
 
         self.sender.send(Message::DeviceUpdate {
-            old_state,
-            new_state: state.clone(),
+            old_state: old_states,
+            new_state: states.clone(),
             old,
             new: device.clone(),
         });
@@ -269,7 +280,7 @@ impl Devices {
             });
         }
 
-        device
+        (device, state_changed)
     }
 
     pub fn get_device(&self, state_key: &DeviceStateKey) -> Option<Device> {
@@ -296,11 +307,14 @@ impl Devices {
                 if let Some(device) = device {
                     let mut device = device.clone();
                     device.scene = device_scene_state.clone();
-                    let device = self.set_device_state(&device, true, false).await;
+                    let (device, state_changed) = self.set_device_state(&device, true, false).await;
 
                     self.sender
                         .clone()
-                        .send(Message::SetIntegrationDeviceState { device });
+                        .send(Message::SetIntegrationDeviceState {
+                            device,
+                            state_changed,
+                        });
                 }
             }
         }

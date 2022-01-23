@@ -37,9 +37,19 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
 
             Ok(())
         }
-        Message::SetIntegrationDeviceState { device } => {
+        Message::SetIntegrationDeviceState {
+            device,
+            state_changed,
+        } => {
             let mut integrations = state.integrations.clone();
-            integrations.set_integration_device_state(device).await
+            let res = integrations.set_integration_device_state(device).await;
+
+            // Only send state update to WS peers if state actually changed
+            if *state_changed {
+                state.send_state_ws(None).await;
+            }
+
+            res
         }
         Message::Action(Action::ActivateScene(SceneDescriptor { scene_id })) => {
             let mut devices = state.devices.clone();

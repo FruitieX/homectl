@@ -31,6 +31,7 @@ pub enum Message {
     /// Tell integration to trigger state change for the device.
     SetIntegrationDeviceState {
         device: Device,
+        state_changed: bool,
     },
 
     Action(Action),

@@ -75,7 +75,6 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceRowProps<'a>>) -> Element<'a> {
 pub fn DeviceList(cx: Scope) -> Element {
     let devices = use_read(&cx, DEVICES_ATOM);
     let devices = devices.0.values().map(|device| {
-        dbg!(&device);
         let key = device.get_state_key().to_string();
 
         rsx! {
