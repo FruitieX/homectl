@@ -6,9 +6,8 @@ Discord: https://discord.gg/xP2s6EY8rd
 
 Note: this project is still in quite early stages. Regardless, I've been using
 this as a daily driver for over a year now. This is also my first "real" Rust
-project, which brings with it the usual caveats. The architecture isn't
-necessarily the best, but luckily refactoring Rust code is a fairly pleasant
-experience.
+project, which brings with it the usual caveats. Luckily refactoring Rust code
+is a fairly pleasant experience.
 
 If you're not ready to get your hands dirty with Rust code, I would suggest
 trying out other alternatives for now.
