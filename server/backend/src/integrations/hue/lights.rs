@@ -126,7 +126,14 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
             // TODO: transition support
             // body.insert("transitiontime", state.);
         }
-        _ => Err("Unsupported device type encountered in hue set_device_state"),
+        DeviceState::Sensor(_) => {
+            // Do nothing
+            return Ok(())
+        }
+        _ => Err(format!(
+            "Unsupported device type encountered in hue set_device_state: {:?}",
+            device.state
+        )),
     }?;
 
     // println!("setting light \"{}\" state: {:?}", device.name, body);

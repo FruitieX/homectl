@@ -27,12 +27,12 @@ anyhow = "1.0.34"
 wakey = "0.1.2"
 warp = "0.3"
 serde_path_to_error = "0.1"
-homectl_types = { path = "../types" }
+homectl_types = { path = "../types", features = ["backend"] }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3.19"
 tokio-stream = "0.1.8"
 rust-async-tuyapi = "0.8.1"
 env_logger = "0.9.0"
 itertools = "0.10.3"
-sea-orm = { version = "^0", features = [ "sqlx-postgres", "runtime-tokio-rustls" ] }
+sqlx = { version = "0.5", features = [ "runtime-tokio-rustls", "postgres", "json" ] }
 once_cell = "1.9.0"

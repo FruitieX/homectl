@@ -1,12 +1,11 @@
 use anyhow::{Context, Result};
 use once_cell::sync::OnceCell;
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
+use sqlx::{pool::PoolOptions, PgPool};
 use std::{env, time::Duration};
 
 pub mod actions;
-pub mod entities;
 
-static DB_CONNECTION: OnceCell<DatabaseConnection> = OnceCell::new();
+static DB_CONNECTION: OnceCell<PgPool> = OnceCell::new();
 
 pub async fn init_db() -> Option<()> {
     let database_url = env::var("DATABASE_URL").ok();
@@ -17,11 +16,11 @@ pub async fn init_db() -> Option<()> {
 
     let database_url = database_url?;
 
-    let mut opt = ConnectOptions::new(database_url);
-    opt.connect_timeout(Duration::from_secs(3));
+    let opt = PoolOptions::new().connect_timeout(Duration::from_secs(3));
 
     println!("Connecting to PostgreSQL...");
-    let db = Database::connect(opt)
+    let db = opt
+        .connect(&database_url)
         .await
         .expect("Could not open DB connection");
 
@@ -30,6 +29,6 @@ pub async fn init_db() -> Option<()> {
     Some(())
 }
 
-pub async fn get_db_connection<'a>() -> Result<&'a DatabaseConnection> {
+pub async fn get_db_connection<'a>() -> Result<&'a PgPool> {
     DB_CONNECTION.get().context("Not connected to database")
 }

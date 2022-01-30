@@ -246,7 +246,7 @@ impl DeviceState {
                 } else {
                     state.color
                 }
-            },
+            }
             DeviceState::MultiSourceLight(_) => None,
             DeviceState::Sensor(_) => None,
         }
@@ -336,6 +336,15 @@ impl DeviceSceneState {
     }
 }
 
+#[cfg(feature = "backend")]
+pub struct DeviceRow {
+    pub device_id: String,
+    pub name: String,
+    pub integration_id: String,
+    pub scene_id: Option<String>,
+    pub state: sqlx::types::Json<DeviceState>,
+}
+
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct Device {
     pub id: DeviceId,
@@ -343,6 +352,19 @@ pub struct Device {
     pub integration_id: IntegrationId,
     pub scene: Option<DeviceSceneState>,
     pub state: DeviceState,
+}
+
+#[cfg(feature = "backend")]
+impl From<DeviceRow> for Device {
+    fn from(row: DeviceRow) -> Self {
+        Device {
+            id: row.device_id.into(),
+            name: row.name,
+            integration_id: row.integration_id.into(),
+            scene: row.scene_id.map(SceneId::new).map(DeviceSceneState::new),
+            state: row.state.0,
+        }
+    }
 }
 
 impl Device {

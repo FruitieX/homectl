@@ -1,4 +1,4 @@
-CREATE TABLE integration_neato (
-  integration_id text PRIMARY KEY NOT NULL,
-	last_run text NOT NULL
+create table integration_neato (
+  integration_id text primary key not null,
+	last_run text not null
 );

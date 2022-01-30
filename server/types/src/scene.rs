@@ -14,6 +14,12 @@ macro_attr! {
     pub struct SceneId(String);
 }
 
+impl SceneId {
+    pub fn new(scene_id: String) -> SceneId {
+        SceneId(scene_id)
+    }
+}
+
 #[derive(Clone, Deserialize, Debug, Serialize)]
 #[serde(untagged)]
 pub enum ColorConfig {

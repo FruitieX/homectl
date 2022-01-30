@@ -1,12 +1,12 @@
-CREATE TABLE devices (
-  id serial PRIMARY KEY NOT NULL,
+create table devices (
+  id serial primary key not null,
 
-  name text NOT NULL,
-  integration_id text NOT NULL,
-  device_id text NOT NULL,
+  name text not null,
+  integration_id text not null,
+  device_id text not null,
   scene_id text,
 
-  state text NOT NULL,
+  state jsonb not null,
 
-  UNIQUE(integration_id, device_id)
+  unique(integration_id, device_id)
 );
