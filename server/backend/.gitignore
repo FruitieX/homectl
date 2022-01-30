@@ -7,7 +7,3 @@
 
 # homectl settings file
 Settings.toml
-.vscode
-*.json
-
-.direnv

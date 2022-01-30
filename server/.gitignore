@@ -1,3 +1,5 @@
 target/
 frontend/dist/
 .envrc
+.vscode
+.direnv
