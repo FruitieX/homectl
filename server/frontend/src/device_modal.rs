@@ -31,15 +31,24 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
     };
 
     let show_debug = use_state(&cx, || false);
-    let toggle_debug = move |_| {
-        let mut show_debug = show_debug.modify();
-        *show_debug = !*show_debug;
-    };
+    // let toggle_debug = move |_: MouseEvent| {
+    //     let mut show_debug = show_debug.modify();
+    //     *show_debug = !*show_debug;
+    // };
 
+    let power = cx.props.device.state.is_powered_on().unwrap_or_default();
     let color = cx.props.device.state.get_color();
+
     let hue = color.unwrap_or_default().hue.to_positive_degrees();
     let saturation = color.unwrap_or_default().saturation;
     let value = color.unwrap_or_default().value;
+    let cct = cx
+        .props
+        .device
+        .state
+        .get_cct()
+        .unwrap_or_default()
+        .get_cct();
 
     let sat_min = {
         let mut color = color.unwrap_or_default();
@@ -65,6 +74,23 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
         let mut color = color.unwrap_or_default();
         color.value = 1.0;
         hsv_to_css_hsl_str(&Some(color))
+    };
+
+    let set_power = {
+        let ws = ws.clone();
+        move |evt: FormEvent| {
+            let power: Option<bool> = evt.data.value.parse().ok();
+
+            if let Some(power) = power {
+                let mut device = cx.props.device.clone();
+                device.state.set_power(power);
+                device.scene = None;
+                ws.send_json(&WebSocketRequest::Message(Message::SetDeviceState {
+                    device,
+                    set_scene: true,
+                }))
+            }
+        }
     };
 
     let set_hue = {
@@ -101,12 +127,29 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
         }
     };
 
-    let set_value = move |evt: FormEvent| {
-        let value: Option<f32> = evt.data.value.parse().ok();
+    let set_value = {
+        let ws = ws.clone();
+        move |evt: FormEvent| {
+            let value: Option<f32> = evt.data.value.parse().ok();
 
-        if let Some(value) = value {
+            if let Some(value) = value {
+                let mut device = cx.props.device.clone();
+                device.state.set_value(value);
+                device.scene = None;
+                ws.send_json(&WebSocketRequest::Message(Message::SetDeviceState {
+                    device,
+                    set_scene: true,
+                }))
+            }
+        }
+    };
+
+    let set_cct = move |evt: FormEvent| {
+        let cct: Option<f32> = evt.data.value.parse().ok();
+
+        if let Some(cct) = cct {
             let mut device = cx.props.device.clone();
-            device.state.set_value(value);
+            device.state.set_cct(cct);
             device.scene = None;
             ws.send_json(&WebSocketRequest::Message(Message::SetDeviceState {
                 device,
@@ -149,6 +192,7 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                     padding: "1rem",
                     display: "flex",
                     flex_direction: "column",
+                    overflow_y: "auto",
 
                     onclick: cancel_bubble,
 
@@ -180,6 +224,13 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                         display: "flex",
                         flex_direction: "column",
                         flex: "1",
+
+                        "Power on:"
+                        input {
+                            r#type: "checkbox",
+                            checked: "{power}",
+                            onchange: set_power
+                        }
 
                         "Color:",
                         ColorSwatch { color: color },
@@ -239,16 +290,32 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                             value: "{value}",
                             onchange: set_value
                         }
+
+                        "Color temperature:",
+                        style {
+                            ".cct-slider::-webkit-slider-runnable-track {{
+                                background: linear-gradient(to right, #ffbb7b 0%, #ffffff 50%, #9db4ff 100%);
+                                border-radius: 0.5rem;
+                                height: 1rem;
+                                border: 1px solid #cccccc;
+                            }}"
+                        }
+                        input {
+                            class: "cct-slider",
+                            r#type: "range",
+                            min: "2000",
+                            max: "6500",
+                            step: "1",
+                            value: "{cct}",
+                            onchange: set_cct
+                        }
                     }
 
-                    button {
-                        onclick: toggle_debug,
-                        "Toggle debug info"
-                    }
                     show_debug.then(|| rsx! {
                         div {
                             flex: "1",
                             overflow: "auto",
+                            min_height: "300px",
 
                             pre {
                                 margin: "0",
@@ -256,6 +323,10 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                             }
                         }
                     })
+                    // button {
+                    //     onclick: toggle_debug,
+                    //     "Toggle debug info"
+                    // }
                 }
             }
         })
