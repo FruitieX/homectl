@@ -8,6 +8,8 @@ use homectl_types::{
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
+use crate::db::actions::db_store_scene;
+
 use super::state::AppState;
 
 pub async fn handle_message(state: Arc<AppState>, msg: Message) {
@@ -33,7 +35,9 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
         }
         Message::SetDeviceState { device, set_scene } => {
             let mut devices = state.devices.clone();
-            devices.set_device_state(device, *set_scene, false, false).await;
+            devices
+                .set_device_state(device, *set_scene, false, false)
+                .await;
 
             Ok(())
         }
@@ -50,6 +54,13 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             }
 
             res
+        }
+        Message::StoreScene { scene_id, config } => {
+            db_store_scene(scene_id, config).await.ok();
+            state.scenes.refresh_db_scenes().await;
+            state.send_state_ws(None).await;
+
+            Ok(())
         }
         Message::Action(Action::ActivateScene(SceneDescriptor { scene_id })) => {
             let mut devices = state.devices.clone();

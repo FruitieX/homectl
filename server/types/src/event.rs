@@ -1,6 +1,8 @@
 use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use serde::{Deserialize, Serialize};
 
+use crate::scene::{SceneId, SceneConfig};
+
 use super::{action::Action, device::Device, device::DevicesState};
 
 #[allow(clippy::large_enum_variant)]
@@ -32,6 +34,12 @@ pub enum Message {
     SetIntegrationDeviceState {
         device: Device,
         state_changed: bool,
+    },
+
+    /// Store new scene in DB
+    StoreScene {
+        scene_id: SceneId,
+        config: SceneConfig
     },
 
     Action(Action),

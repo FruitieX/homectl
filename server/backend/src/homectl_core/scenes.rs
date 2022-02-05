@@ -7,26 +7,44 @@ use homectl_types::{
     },
 };
 
+use crate::db::actions::db_get_scenes;
+
 use super::{devices::find_device, groups::Groups};
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 #[derive(Clone)]
 pub struct Scenes {
     config: ScenesConfig,
     groups: Groups,
+    db_scenes: Arc<RwLock<ScenesConfig>>,
 }
 
 impl Scenes {
     pub fn new(config: ScenesConfig, groups: Groups) -> Self {
-        Scenes { config, groups }
+        Scenes {
+            config,
+            groups,
+            db_scenes: Default::default(),
+        }
+    }
+
+    pub async fn refresh_db_scenes(&self) {
+        let db_scenes = db_get_scenes().await.unwrap_or_default();
+        let mut rw_lock = self.db_scenes.write().unwrap();
+        *rw_lock = db_scenes;
     }
 
     pub fn get_scenes(&self) -> ScenesConfig {
-        self.config.clone()
+        let mut db_scenes = self.db_scenes.read().unwrap().clone();
+        db_scenes.extend(self.config.clone().into_iter());
+        db_scenes
     }
 
-    pub fn find_scene(&self, scene_id: &SceneId) -> Option<&SceneConfig> {
-        self.config.get(scene_id)
+    pub fn find_scene(&self, scene_id: &SceneId) -> Option<SceneConfig> {
+        Some(self.get_scenes().get(scene_id)?.clone())
     }
 
     pub fn find_scene_devices_config(
@@ -64,7 +82,7 @@ impl Scenes {
             })
             .collect();
 
-        let scene_groups = scene.groups.clone().unwrap_or_default();
+        let scene_groups = scene.groups.unwrap_or_default();
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
@@ -159,6 +177,7 @@ impl Scenes {
                     }),
                     ..device.clone()
                 };
+
                 self.find_scene_device_state(&device, devices, ignore_transition)
             }
 

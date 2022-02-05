@@ -33,6 +33,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let mut integrations = Integrations::new(sender.clone());
     let groups = Groups::new(config.groups.unwrap_or_default());
     let scenes = Scenes::new(config.scenes.unwrap_or_default(), groups.clone());
+    scenes.refresh_db_scenes().await;
     let devices = Devices::new(sender.clone(), scenes.clone());
     let rules = Rules::new(
         config.routines.unwrap_or_default(),
