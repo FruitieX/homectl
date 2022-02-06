@@ -92,6 +92,7 @@ and also other similar solutions to homectl:
 - Set `DATABASE_URL` according to above instructions.
 - Run migrations:
   - `cargo install sqlx-cli`
+  - `cd backend`
   - `sqlx database create`
   - `sqlx migrate run`
 
