@@ -252,6 +252,15 @@ impl DeviceState {
         }
     }
 
+    pub fn get_brightness(&self) -> Option<f32> {
+        match self {
+            DeviceState::OnOffDevice(_) => None,
+            DeviceState::Light(state) => state.brightness,
+            DeviceState::MultiSourceLight(_) => None,
+            DeviceState::Sensor(_) => None,
+        }
+    }
+
     pub fn set_hue(&mut self, hue: f32) {
         match self {
             DeviceState::OnOffDevice(_) => {}

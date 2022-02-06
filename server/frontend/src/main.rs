@@ -18,6 +18,8 @@ mod device_list;
 mod device_modal;
 mod group_device_list;
 mod group_list;
+mod modal;
+mod save_scene_modal;
 mod scene_list;
 mod util;
 

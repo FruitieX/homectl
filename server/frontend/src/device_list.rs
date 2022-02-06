@@ -1,4 +1,4 @@
-use crate::color_swatch::ColorSwatch;
+use crate::{color_swatch::ColorSwatch, save_scene_modal::SaveSceneModal};
 use dioxus::prelude::*;
 use fermi::use_read;
 use homectl_types::device::{Device, DeviceId};
@@ -77,6 +77,8 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
         })
     });
 
+    let (save_scene_modal_open, set_save_scene_modal_open) = use_state(&cx, || false);
+
     cx.render(rsx! {
         div {
             margin: "1rem",
@@ -88,6 +90,16 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
                 flex_direction: "row",
                 flex_wrap: "wrap",
                 devices
+            }
+            h2 { margin_bottom: "1rem", "Options:" }
+            button {
+                onclick: move |_| set_save_scene_modal_open(true),
+                "Save scene"
+            }
+            SaveSceneModal {
+                filters: &cx.props.filters,
+                modal_open: save_scene_modal_open,
+                set_modal_open: set_save_scene_modal_open
             }
         }
     })

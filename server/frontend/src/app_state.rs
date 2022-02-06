@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use dioxus_websocket_hooks::use_ws_context_provider_json;
-use fermi::{use_init_atom_root, use_set, Atom, use_read};
+use fermi::{use_init_atom_root, use_set, Atom};
 use homectl_types::{
     device::DevicesState, group::FlattenedGroupsConfig, scene::ScenesConfig,
     websockets::WebSocketResponse,
@@ -19,11 +19,6 @@ pub fn use_init_app_state(cx: &Scope) {
     let set_devices = use_set(cx, DEVICES_ATOM);
     let set_scenes = use_set(cx, SCENES_ATOM);
     let set_groups = use_set(cx, GROUPS_ATOM);
-
-    // TODO: why does app state break without these "useless" use_read calls
-    use_read(cx, DEVICES_ATOM);
-    use_read(cx, SCENES_ATOM);
-    use_read(cx, GROUPS_ATOM);
 
     {
         let set_devices = set_devices.clone();

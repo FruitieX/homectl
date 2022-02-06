@@ -24,3 +24,5 @@ dioxus-router = { git = "https://github.com/DioxusLabs/dioxus" }
 fermi = { git = "https://github.com/dioxuslabs/fermi" }
 dioxus-websocket-hooks = { git = "https://github.com/FruitieX/dioxus-websocket-hooks" }
 palette = { version = "0.5.0", features = ["serializing"] }
+convert_case = "0.5.0"
+itertools = "0.10.3"

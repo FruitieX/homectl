@@ -148,6 +148,10 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
         r#"
             insert into scenes (scene_id, config)
             values ($1, $2)
+
+            on conflict (scene_id)
+            do update set
+                config = excluded.config
         "#,
         scene_id.to_string(),
         Json(config) as _
