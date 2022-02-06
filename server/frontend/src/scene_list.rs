@@ -4,7 +4,7 @@ use fermi::use_read;
 use homectl_types::{
     action::Action,
     event::Message,
-    scene::{SceneDescriptor, SceneId},
+    scene::{SceneConfig, SceneDescriptor, SceneId},
     websockets::WebSocketRequest,
 };
 
@@ -44,6 +44,13 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
 #[allow(non_snake_case)]
 pub fn SceneList(cx: Scope) -> Element {
     let scenes = use_read(&cx, SCENES_ATOM);
+
+    let mut scenes: Vec<(SceneId, SceneConfig)> = scenes
+        .iter()
+        .map(|(scene_id, config)| (scene_id.clone(), config.clone()))
+        .collect();
+
+    scenes.sort_by(|a, b| a.1.name.cmp(&b.1.name));
 
     let scenes = scenes.iter().map(|(key, scene)| {
         rsx! {

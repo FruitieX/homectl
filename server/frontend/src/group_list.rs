@@ -30,6 +30,13 @@ fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
 pub fn GroupList(cx: Scope) -> Element {
     let groups = use_read(&cx, GROUPS_ATOM);
 
+    let mut groups: Vec<(GroupId, FlattenedGroupConfig)> = groups
+        .iter()
+        .map(|(group_id, config)| (group_id.clone(), config.clone()))
+        .collect();
+
+    groups.sort_by(|a, b| a.1.name.cmp(&b.1.name));
+
     let groups = groups.iter().map(|(key, group)| {
         rsx! {
             GroupRow {
