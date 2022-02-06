@@ -78,9 +78,22 @@ and also other similar solutions to homectl:
 - `DATABASE_URL`: Used by the backend to connect to a PostgreSQL database. If
   not provided, functionalities requiring a database connection will be
   disabled.
+  
+  For example: `DATABASE_URL=postgres://user:password@localhost/homectl`
 
 - `WS_ENDPOINT`: Read at compile time to decide what WebSocket endpoint the
-  frontend attempts connecting to. Defaults to `ws://localhost:8080/ws`.
+  frontend attempts connecting to.
+  
+  Defaults to `ws://localhost:8080/ws`.
+
+### Database setup (optional)
+
+- Install PostgreSQL.
+- Set `DATABASE_URL` according to above instructions.
+- Run migrations:
+  - `cargo install sqlx-cli`
+  - `sqlx database create`
+  - `sqlx migrate run`
 
 ### Quick start
 
