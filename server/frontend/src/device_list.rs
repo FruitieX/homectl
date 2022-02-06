@@ -1,7 +1,7 @@
+use crate::color_swatch::ColorSwatch;
 use dioxus::prelude::*;
 use fermi::use_read;
-use homectl_types::device::Device;
-use crate::color_swatch::ColorSwatch;
+use homectl_types::device::{Device, DeviceId};
 
 use crate::{app_state::DEVICES_ATOM, device_modal::DeviceModal};
 
@@ -14,7 +14,7 @@ struct DeviceTileProps<'a> {
 fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
     let name = &cx.props.device.name;
     let color = cx.props.device.state.get_color();
-    let modal_open = use_state(&cx, || false);
+    let (modal_open, set_modal_open) = use_state(&cx, || false);
 
     cx.render(rsx! {
         div {
@@ -28,7 +28,7 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
             border: "1px solid #cccccc",
             padding: "0.5rem",
             box_shadow: "0px 0.25rem 0.5rem 0px rgba(0,0,0,0.1)",
-            onclick: move |_| modal_open.set(true),
+            onclick: move |_| set_modal_open(true),
 
             ColorSwatch { color: color },
 
@@ -42,23 +42,37 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
             DeviceModal {
                 device: cx.props.device,
                 modal_open: modal_open
+                set_modal_open: set_modal_open
             }
         }
     })
 }
 
+#[derive(Props, PartialEq)]
+pub struct DeviceListProps {
+    filters: Option<Vec<DeviceId>>,
+}
+
 #[allow(non_snake_case)]
-pub fn DeviceList(cx: Scope) -> Element {
+pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
     let devices = use_read(&cx, DEVICES_ATOM);
-    let devices = devices.0.values().map(|device| {
+
+    dbg!(&devices);
+    let devices = devices.0.values().filter_map(|device| {
+        if let Some(filters) = &cx.props.filters {
+            if !filters.contains(&device.id) {
+                return None;
+            }
+        }
+
         let key = device.get_state_key().to_string();
 
-        rsx! {
+        Some(rsx! {
             DeviceTile {
                 key: "{key}",
                 device: device,
             }
-        }
+        })
     });
 
     cx.render(rsx! {

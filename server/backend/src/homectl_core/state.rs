@@ -25,7 +25,7 @@ impl AppState {
     pub async fn send_state_ws(&self, user_id: Option<usize>) {
         let devices = self.devices.get_devices();
         let scenes = self.scenes.get_scenes();
-        let groups = self.groups.get_groups();
+        let groups = self.groups.get_flattened_groups(&devices);
 
         let message = WebSocketResponse::State(StateUpdate {
             devices,

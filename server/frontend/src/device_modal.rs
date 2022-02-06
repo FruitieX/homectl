@@ -11,7 +11,8 @@ use crate::{app_state::DISABLE_SCROLL_ATOM, color_swatch::ColorSwatch, util::hsv
 #[derive(Props)]
 pub struct DeviceModalProps<'a> {
     device: &'a Device,
-    modal_open: UseState<'a, bool>,
+    modal_open: &'a bool,
+    set_modal_open: &'a UseState<bool>,
 }
 
 #[allow(non_snake_case)]
@@ -26,11 +27,11 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
 
     let close_modal = move |evt: MouseEvent| {
         evt.cancel_bubble();
-        cx.props.modal_open.set(false);
+        (cx.props.set_modal_open)(false);
         set_disable_scroll(false);
     };
 
-    let show_debug = use_state(&cx, || false);
+    let (show_debug, _set_show_debug) = use_state(&cx, || false);
     // let toggle_debug = move |_: MouseEvent| {
     //     let mut show_debug = show_debug.modify();
     //     *show_debug = !*show_debug;

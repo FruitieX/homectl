@@ -2,15 +2,22 @@
 #[macro_use]
 extern crate homectl_console;
 
-use crate::{device_list::DeviceList, scene_list::SceneList};
+use crate::{
+    dashboard::Dashboard, device_list::DeviceList, group_device_list::GroupDeviceList,
+    group_list::GroupList, scene_list::SceneList,
+};
 use app_state::{use_init_app_state, DISABLE_SCROLL_ATOM};
 use dioxus::prelude::*;
+use dioxus_router::{Route, Router};
 use fermi::use_read;
 
 mod app_state;
 mod color_swatch;
+mod dashboard;
 mod device_list;
 mod device_modal;
+mod group_device_list;
+mod group_list;
 mod scene_list;
 mod util;
 
@@ -39,8 +46,13 @@ fn app(cx: Scope) -> Element {
             }}"
         }
         main {
-            DeviceList {}
-            SceneList {}
+            Router {
+                Route { to: "/", Dashboard {} },
+                Route { to: "/devices", DeviceList { filters: None } },
+                Route { to: "/groups", GroupList {} },
+                Route { to: "/groups/:group_id", GroupDeviceList {} },
+                Route { to: "/scenes", SceneList {} }
+            }
         }
     ))
 }

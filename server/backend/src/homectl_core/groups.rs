@@ -1,4 +1,9 @@
-use homectl_types::group::{GroupDeviceLink, GroupDeviceLinks, GroupId, GroupsConfig};
+use homectl_types::{
+    device::{Device, DevicesState},
+    group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupDeviceLink, GroupId, GroupsConfig},
+};
+
+use super::devices::find_device;
 
 #[derive(Clone)]
 pub struct Groups {
@@ -10,10 +15,22 @@ impl Groups {
         Groups { config }
     }
 
-    pub fn get_groups(&self) -> GroupDeviceLinks {
+    pub fn get_flattened_groups(&self, devices: &DevicesState) -> FlattenedGroupsConfig {
         self.config
-            .keys()
-            .map(|group_id| (group_id.clone(), self.find_group_device_links(group_id)))
+            .iter()
+            .map(|(group_id, group)| {
+                (
+                    group_id.clone(),
+                    FlattenedGroupConfig {
+                        name: group.name.clone(),
+                        device_ids: self
+                            .find_group_devices(devices, group_id)
+                            .into_iter()
+                            .map(|device| device.id)
+                            .collect(),
+                    },
+                )
+            })
             .collect()
     }
 
@@ -37,5 +54,20 @@ impl Groups {
         });
 
         results.unwrap_or_default()
+    }
+
+    pub fn find_group_devices(&self, devices: &DevicesState, group_id: &GroupId) -> Vec<Device> {
+        let group_device_links = self.find_group_device_links(group_id);
+        group_device_links
+            .iter()
+            .filter_map(|gdl| {
+                find_device(
+                    devices,
+                    &gdl.integration_id,
+                    gdl.device_id.as_ref(),
+                    gdl.name.as_ref(),
+                )
+            })
+            .collect()
     }
 }

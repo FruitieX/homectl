@@ -1,13 +1,21 @@
 use super::{device::DeviceId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::{collections::HashMap, convert::Infallible};
 
 macro_attr! {
     #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
     pub struct GroupId(String);
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+impl std::str::FromStr for GroupId {
+    type Err = Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(GroupId(s.to_string()))
+    }
+}
+
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub struct GroupDeviceLink {
     pub integration_id: IntegrationId,
     pub device_id: Option<DeviceId>,
@@ -32,3 +40,11 @@ pub struct GroupConfig {
 }
 
 pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
+
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+pub struct FlattenedGroupConfig {
+    pub name: String,
+    pub device_ids: Vec<DeviceId>,
+}
+
+pub type FlattenedGroupsConfig = HashMap<GroupId, FlattenedGroupConfig>;

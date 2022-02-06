@@ -23,7 +23,7 @@ surf = "2.1.0"
 rand = "0.7.3"
 num-traits = "0.2.14"
 async-std = { version = "1.7.0", features = ["attributes", "unstable", "tokio1"] }
-anyhow = "1.0.34"
+anyhow = "1.0.53"
 wakey = "0.1.2"
 warp = "0.3"
 serde_path_to_error = "0.1"
