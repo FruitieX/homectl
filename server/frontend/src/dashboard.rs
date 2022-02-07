@@ -14,15 +14,15 @@ pub fn Dashboard(cx: Scope) -> Element {
 
             Link {
                 to: "/scenes",
-                Tile { contents: cx.render(rsx! { "Scenes" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "Scenes" }) }
             }
             Link {
                 to: "/groups",
-                Tile { contents: cx.render(rsx! { "Groups" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "Groups" }) }
             }
             Link {
                 to: "/devices",
-                Tile { contents: cx.render(rsx! { "Devices" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "Devices" }) }
             }
         }
     })

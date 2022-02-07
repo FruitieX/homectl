@@ -21,7 +21,7 @@ fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
         div {
             Link {
                 to: "/groups/{group_id}",
-                Tile { contents: cx.render(rsx! { "{name}" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "{name}" }) }
             }
         }
     })

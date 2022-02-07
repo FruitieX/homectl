@@ -43,6 +43,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
     cx.render(rsx! {
         div {
             Tile {
+                full_width: true, 
                 onclick: activate_scene,
                 contents: cx.render(rsx! {
                     div {

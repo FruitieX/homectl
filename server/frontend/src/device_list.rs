@@ -86,10 +86,12 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
                 devices
             }
             h2 { margin_bottom: "1rem", "Options:" }
-            button {
+            Tile {
+                full_width: true,
                 onclick: move |_| set_save_scene_modal_open(true),
-                "Save scene"
+                contents: cx.render(rsx! { "Save scene" })
             }
+            div { height: "1rem" }
             SaveSceneModal {
                 filters: &cx.props.filters,
                 modal_open: save_scene_modal_open,
