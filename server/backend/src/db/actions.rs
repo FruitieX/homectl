@@ -161,3 +161,19 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
 
     Ok(())
 }
+
+pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
+    let db = get_db_connection().await?;
+
+    sqlx::query!(
+        r#"
+            delete from scenes
+            where scene_id = $1
+        "#,
+        scene_id.to_string(),
+    )
+    .fetch_one(db)
+    .await?;
+
+    Ok(())
+}

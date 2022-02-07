@@ -8,7 +8,7 @@ use homectl_types::{
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
-use crate::db::actions::db_store_scene;
+use crate::db::actions::{db_delete_scene, db_store_scene};
 
 use super::state::AppState;
 
@@ -57,6 +57,13 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
         }
         Message::StoreScene { scene_id, config } => {
             db_store_scene(scene_id, config).await.ok();
+            state.scenes.refresh_db_scenes().await;
+            state.send_state_ws(None).await;
+
+            Ok(())
+        }
+        Message::DeleteScene { scene_id } => {
+            db_delete_scene(scene_id).await.ok();
             state.scenes.refresh_db_scenes().await;
             state.send_state_ws(None).await;
 

@@ -1,4 +1,4 @@
-use dioxus::prelude::*;
+use dioxus::{events::MouseEvent, prelude::*};
 use dioxus_websocket_hooks::use_ws_context;
 use fermi::use_read;
 use homectl_types::{
@@ -7,8 +7,9 @@ use homectl_types::{
     scene::{SceneConfig, SceneDescriptor, SceneId},
     websockets::WebSocketRequest,
 };
+use itertools::Itertools;
 
-use crate::app_state::SCENES_ATOM;
+use crate::{app_state::SCENES_ATOM, edit_scene_modal::EditSceneModal, tile::Tile};
 
 #[derive(Props, PartialEq)]
 struct SceneRowProps {
@@ -31,11 +32,40 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
         }
     };
 
+    let (edit_modal_open, set_edit_modal_open) = use_state(&cx, || false);
+    let edit_scene = {
+        move |evt: MouseEvent| {
+            evt.cancel_bubble();
+            set_edit_modal_open(true);
+        }
+    };
+
     cx.render(rsx! {
         div {
-            button {
+            Tile {
                 onclick: activate_scene,
-                "{name}"
+                contents: cx.render(rsx! {
+                    div {
+                        flex: "1",
+                        "{name}"
+                    }
+                    button {
+                        border: "none",
+                        background: "none",
+                        height: "2rem",
+                        width: "2rem",
+                        font_size: "1.5rem",
+                        line_height: "1",
+                        cursor: "pointer",
+                        onclick: edit_scene,
+                        "✎"
+                    }
+                })
+            }
+            EditSceneModal {
+                scene_id: scene_id,
+                modal_open: edit_modal_open,
+                set_modal_open: set_edit_modal_open,
             }
         }
     })
@@ -45,12 +75,11 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
 pub fn SceneList(cx: Scope) -> Element {
     let scenes = use_read(&cx, SCENES_ATOM);
 
-    let mut scenes: Vec<(SceneId, SceneConfig)> = scenes
+    let scenes: Vec<(SceneId, SceneConfig)> = scenes
         .iter()
         .map(|(scene_id, config)| (scene_id.clone(), config.clone()))
+        .sorted_by(|a, b| a.1.name.cmp(&b.1.name))
         .collect();
-
-    scenes.sort_by(|a, b| a.1.name.cmp(&b.1.name));
 
     let scenes = scenes.iter().map(|(key, scene)| {
         rsx! {
@@ -63,7 +92,12 @@ pub fn SceneList(cx: Scope) -> Element {
     });
 
     cx.render(rsx! {
-        h2 { margin_bottom: "1rem", "Scenes:" }
-        scenes
+        div {
+            display: "flex",
+            flex_direction: "column",
+            margin: "1rem",
+            gap: "1rem",
+            scenes
+        }
     })
 }

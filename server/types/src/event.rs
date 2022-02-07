@@ -42,6 +42,10 @@ pub enum Message {
         config: SceneConfig
     },
 
+    DeleteScene {
+        scene_id: SceneId,
+    },
+
     Action(Action),
 }
 

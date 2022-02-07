@@ -13,7 +13,7 @@ anyhow = "1.0.53"
 homectl_types = { path = "../types" }
 homectl_console = { path = "../console" }
 js-sys = "0.3.55"
-web-sys = "0.3.55"
+web-sys = { version = "0.3.55", features = ["History"] }
 reqwest = { version = "0.11", features = ["json"] }
 wasm-bindgen = "0.2.78"
 wasm-bindgen-futures = "0.4.28"

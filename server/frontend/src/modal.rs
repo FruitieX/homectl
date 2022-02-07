@@ -34,6 +34,7 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
     } else {
         cx.render(rsx! {
             div {
+                cursor: "default",
                 position: "fixed",
                 top: "0",
                 left: "0",
@@ -77,6 +78,7 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
                             height: "1.5rem",
                             font_size: "1.5rem",
                             color: "#444444",
+                            cursor: "pointer",
 
                             onclick: close_modal,
 

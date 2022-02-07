@@ -7,6 +7,12 @@ macro_attr! {
     pub struct GroupId(String);
 }
 
+impl GroupId {
+    pub fn new(id: String) -> GroupId {
+        GroupId(id)
+    }
+}
+
 impl std::str::FromStr for GroupId {
     type Err = Infallible;
 
