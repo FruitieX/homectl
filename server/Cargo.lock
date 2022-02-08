@@ -1445,7 +1445,6 @@ dependencies = [
  "newtype_derive",
  "once_cell",
  "palette",
- "regex",
  "serde 1.0.136",
  "sqlx",
 ]

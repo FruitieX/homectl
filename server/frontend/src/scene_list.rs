@@ -5,7 +5,6 @@ use homectl_types::{
     action::Action,
     event::Message,
     scene::{FlattenedSceneConfig, SceneDescriptor, SceneId},
-    utils::cct_to_rgb,
     websockets::WebSocketRequest,
 };
 use itertools::Itertools;
@@ -15,7 +14,7 @@ use crate::{
     app_state::SCENES_ATOM,
     edit_scene_modal::EditSceneModal,
     tile::Tile,
-    util::{hsv_to_css_hsl_str, scale_hsv_value_to_display},
+    util::{cmp_hsv, get_device_state_color, scale_hsv_value_to_display},
 };
 
 #[derive(Props, PartialEq)]
@@ -33,42 +32,12 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
 
     let scene_colors: Vec<Hsv> = scene
         .devices
-        .iter()
-        .filter_map(|(_, device)| match (device.get_color(), device.get_cct()) {
-            (Some(color), _) => Some(color),
-            (_, Some(cct)) => {
-                let rgb = cct_to_rgb(cct.get_cct());
-                let hsv: Hsv = rgb.into();
-                Some(hsv)
-            }
-            (_, _) => None,
-        })
+        .values()
+        .filter_map(get_device_state_color)
         .map(scale_hsv_value_to_display)
-        .sorted_by(|a, b| {
-            let a = hsv_to_css_hsl_str(&Some(*a));
-            let b = hsv_to_css_hsl_str(&Some(*b));
-
-            a.cmp(&b)
-        })
+        .sorted_by(cmp_hsv)
         .dedup()
         .collect();
-
-    let scene_colors_hsl = scene_colors
-        .iter()
-        .map(|hsv| hsv_to_css_hsl_str(&Some(*hsv)))
-        .collect_vec();
-
-    let scene_colors_hsl = if scene_colors_hsl.len() == 1 {
-        vec![scene_colors_hsl[0].clone(), scene_colors_hsl[0].clone()]
-    } else {
-        scene_colors_hsl
-    };
-
-    let background = format!("linear-gradient(90deg, {})", scene_colors_hsl.join(", "));
-
-    if scene_id == &SceneId::new("office_on".to_string()) {
-        dbg!(&background);
-    }
 
     let activate_scene = {
         move |_| {
@@ -92,7 +61,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
             Tile {
                 full_width: true,
                 onclick: activate_scene,
-                background: background,
+                gradient: scene_colors,
                 contents: cx.render(rsx! {
                     div {
                         flex: "1",

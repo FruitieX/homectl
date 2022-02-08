@@ -1,7 +1,4 @@
-use crate::{
-    color_swatch::ColorSwatch, save_scene_modal::SaveSceneModal, tile::Tile,
-    util::scale_hsv_value_to_display,
-};
+use crate::{save_scene_modal::SaveSceneModal, tile::Tile, util::scale_hsv_value_to_display};
 use dioxus::prelude::*;
 use fermi::use_read;
 use homectl_types::device::{Device, DeviceStateKey};
@@ -25,17 +22,28 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
         .map(scale_hsv_value_to_display);
     let (modal_open, set_modal_open) = use_state(&cx, || false);
 
+    let gradient = if let Some(color) = color {
+        vec![color]
+    } else {
+        vec![]
+    };
+
     cx.render(rsx! {
         Tile {
+            gradient: gradient,
             contents: cx.render(rsx! {
-                ColorSwatch { color: color },
-
-                span {
-                    text_overflow: "ellipsis",
-                    overflow: "hidden",
-                    max_height: "100%",
-                    "{name}"
-                },
+                div {
+                    flex: "1",
+                    span {
+                        padding: "0.5rem",
+                        border_radius: "0.5rem",
+                        background_color: "rgba(255, 255, 255, 0.5)",
+                        text_overflow: "ellipsis",
+                        overflow: "hidden",
+                        max_height: "100%",
+                        "{name}"
+                    }
+                }
 
                 DeviceModal {
                     device: cx.props.device,

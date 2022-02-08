@@ -48,6 +48,7 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
     };
 
     let disable_back_button = segments.is_empty();
+    let cursor = if disable_back_button { "default" } else { "pointer" };
     let back_button_opacity = if disable_back_button { 0.0 } else { 1.0 };
 
     cx.render(rsx! {
@@ -72,6 +73,7 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
                 border: "none",
                 background: "none",
                 disabled: "{disable_back_button}",
+                cursor: "{cursor}",
                 opacity: "{back_button_opacity}",
                 onclick: move |_| { history.back().unwrap() },
 

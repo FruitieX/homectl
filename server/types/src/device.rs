@@ -9,12 +9,10 @@ use crate::utils::xy_to_cct;
 use super::{integration::IntegrationId, scene::SceneId};
 use chrono::{DateTime, Utc};
 use palette::{Hsv, Yxy};
-use regex::Regex;
 use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Serialize,
 };
-use std::str::FromStr;
 
 macro_attr! {
     #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
@@ -447,20 +445,11 @@ impl<'de> Visitor<'de> for DeviceStateKeyVisitor {
     where
         E: de::Error,
     {
-        static RE: once_cell::sync::OnceCell<Regex> = once_cell::sync::OnceCell::new();
-        let re = RE.get_or_init(|| Regex::new(r"(.+)/(.+)").unwrap());
+        if let Some((integration_id, device_id)) = s.split_once("/") {
+            let integration_id = IntegrationId::from(integration_id.to_string());
+            let device_id = DeviceId::from(device_id.to_string());
 
-        let mut captures = re.captures_iter(s);
-
-        if let Some(nums) = captures.next() {
-            let integration_id = IntegrationId::from(nums[1].to_string());
-
-            // nums[0] is the whole match, so we must skip that
-            if let Ok(device_id) = DeviceId::from_str(&nums[2]) {
-                Ok(DeviceStateKey::new(integration_id, device_id))
-            } else {
-                Err(de::Error::invalid_value(Unexpected::Str(s), &self))
-            }
+            Ok(DeviceStateKey::new(integration_id, device_id))
         } else {
             Err(de::Error::invalid_value(Unexpected::Str(s), &self))
         }
