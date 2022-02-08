@@ -20,10 +20,16 @@ pub fn Tile<'a>(cx: Scope<'a, TileProps<'a>>) -> Element<'a> {
         "calc(50% - 1.5rem)"
     };
 
+    let style = r#"
+        -webkit-tap-highlight-color: transparent;
+    "#;
+
     cx.render(rsx! {
         div {
-            style: "gap: 0.5rem;",
+            style: "{style}",
+            gap: "0.5rem",
             width: "{width}",
+            max_width: "16rem",
             height: "2.5rem",
             display: "flex",
             flex_direction: "row",

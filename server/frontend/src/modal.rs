@@ -47,7 +47,7 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
                 onclick: close_modal,
 
                 div {
-                    style: "gap: 1rem;",
+                    gap: "1rem",
                     background_color: "white",
                     width: "20rem",
                     max_width: "80vw",
@@ -59,11 +59,12 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
                     display: "flex",
                     flex_direction: "column",
                     overflow_y: "auto",
+                    position: "relative",
 
                     onclick: cancel_bubble,
 
                     div {
-                        style: "gap: 1rem;",
+                        gap: "1rem",
                         display: "flex",
                         flex_direction: "row",
 

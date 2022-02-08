@@ -54,7 +54,7 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
         div {
             position: "sticky",
             top: "0",
-            height: "3rem",
+            height: "4rem",
             background_color: "rgb(240, 240, 240)",
             box_shadow: "0px 0px 6px 3px rgba(0, 0, 0, 0.2)",
             display: "flex",

@@ -3,6 +3,24 @@
 <head>
   <meta charset="utf-8" http-equiv="Content-Type" name="viewport"
     content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" charset="UTF-8">
+  <link data-trunk rel="copy-file" href="manifest.webmanifest">
+  <link data-trunk rel="copy-file" href="service-worker.js">
+  <link rel="manifest" href="manifest.webmanifest">
+  <script>
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/service-worker.js');
+    });
+  </script>
+  <style>
+    body {
+      /* Disables pull-to-refresh and overscroll effects. */
+      overscroll-behavior-y: none;
+    }
+
+    a {
+      text-decoration: none;
+    }
+  </style>
 </head>
 
 <body>

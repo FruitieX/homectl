@@ -17,11 +17,19 @@ fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
     let group_id = &cx.props.group_id;
     let name = &cx.props.name;
 
+    let arrow_styles = r#"
+        text-align: right;
+        margin-right: 0.5rem;
+        line-height: 1;
+        font-size: 2rem;
+        flex: 1;
+    "#;
+
     cx.render(rsx! {
         div {
             Link {
                 to: "/groups/{group_id}",
-                Tile { full_width: true, contents: cx.render(rsx! { "{name}" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "{name}", div { style: "{arrow_styles}", ">" } }) }
             }
         }
     })

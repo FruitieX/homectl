@@ -109,7 +109,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
             set_modal_open: cx.props.set_modal_open,
             contents: cx.render(rsx! {
                 div {
-                    style: "gap: 1rem;",
+                    gap: "1rem",
                     display: "flex",
                     flex_direction: "column",
                     flex: "1",

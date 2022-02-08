@@ -5,6 +5,14 @@ use crate::tile::Tile;
 
 #[allow(non_snake_case)]
 pub fn Dashboard(cx: Scope) -> Element {
+    let arrow_styles = r#"
+        text-align: right;
+        margin-right: 0.5rem;
+        line-height: 1;
+        font-size: 2rem;
+        flex: 1;
+    "#;
+
     cx.render(rsx! {
         div {
             display: "flex",
@@ -14,15 +22,15 @@ pub fn Dashboard(cx: Scope) -> Element {
 
             Link {
                 to: "/scenes",
-                Tile { full_width: true, contents: cx.render(rsx! { "Scenes" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "Scenes", div { style: "{arrow_styles}", ">" } }) }
             }
             Link {
                 to: "/groups",
-                Tile { full_width: true, contents: cx.render(rsx! { "Groups" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "Groups", div { style: "{arrow_styles}", ">" } }) }
             }
             Link {
                 to: "/devices",
-                Tile { full_width: true, contents: cx.render(rsx! { "Devices" }) }
+                Tile { full_width: true, contents: cx.render(rsx! { "Devices", div { style: "{arrow_styles}", ">" } }) }
             }
         }
     })

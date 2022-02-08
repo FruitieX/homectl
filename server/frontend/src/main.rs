@@ -4,7 +4,7 @@ extern crate homectl_console;
 
 use crate::{
     dashboard::Dashboard, device_list::DeviceList, group_device_list::GroupDeviceList,
-    group_list::GroupList, scene_list::SceneList, header::Header,
+    group_list::GroupList, scene_list::SceneList, header::Header, redirect::Redirect,
 };
 use app_state::{use_init_app_state, DISABLE_SCROLL_ATOM};
 use dioxus::prelude::*;
@@ -21,6 +21,7 @@ mod group_device_list;
 mod group_list;
 mod header;
 mod modal;
+mod redirect;
 mod save_scene_modal;
 mod scene_list;
 mod tile;
@@ -50,10 +51,13 @@ fn app(cx: Scope) -> Element {
                 overflow: {disable_scroll_css};
             }}"
         }
-        main {
-            Router {
-                Header {}
+        Router {
+            Header {}
+            main {
+                padding_bottom: "1rem",
+
                 Route { to: "/", Dashboard {} },
+                Route { to: "/index.html", Redirect { to: "/" } },
                 Route { to: "/devices", DeviceList { filters: None } },
                 Route { to: "/groups", GroupList {} },
                 Route { to: "/groups/:group_id", GroupDeviceList {} },
