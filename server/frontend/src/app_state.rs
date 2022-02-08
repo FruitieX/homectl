@@ -2,14 +2,14 @@ use dioxus::prelude::*;
 use dioxus_websocket_hooks::use_ws_context_provider_json;
 use fermi::{use_init_atom_root, use_set, Atom};
 use homectl_types::{
-    device::DevicesState, group::FlattenedGroupsConfig, scene::ScenesConfig,
+    device::DevicesState, group::FlattenedGroupsConfig, scene::FlattenedScenesConfig,
     websockets::WebSocketResponse,
 };
 
 pub static DISABLE_SCROLL_ATOM: Atom<bool> = |_| false;
 
 pub static DEVICES_ATOM: Atom<DevicesState> = |_| DevicesState::default();
-pub static SCENES_ATOM: Atom<ScenesConfig> = |_| Default::default();
+pub static SCENES_ATOM: Atom<FlattenedScenesConfig> = |_| Default::default();
 pub static GROUPS_ATOM: Atom<FlattenedGroupsConfig> = |_| Default::default();
 
 const WS_ENDPOINT: Option<&'static str> = option_env!("WS_ENDPOINT");

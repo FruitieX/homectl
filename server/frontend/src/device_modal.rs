@@ -2,7 +2,11 @@ use dioxus::{events::FormEvent, prelude::*};
 use dioxus_websocket_hooks::use_ws_context;
 use homectl_types::{device::Device, event::Message, websockets::WebSocketRequest};
 
-use crate::{color_swatch::ColorSwatch, modal::Modal, util::hsv_to_css_hsl_str};
+use crate::{
+    color_swatch::ColorSwatch,
+    modal::Modal,
+    util::{hsv_to_css_hsl_str, scale_hsv_value_to_display},
+};
 
 #[derive(Props)]
 pub struct DeviceModalProps<'a> {
@@ -51,7 +55,7 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
 
     let val_min = {
         let mut color = color.unwrap_or_default();
-        color.value = 0.0;
+        color.value = 0.5;
         hsv_to_css_hsl_str(&Some(color))
     };
 
@@ -165,7 +169,7 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                     }
 
                     "Color:",
-                    ColorSwatch { color: color },
+                    ColorSwatch { color: color.map(scale_hsv_value_to_display) },
 
                     "Hue:",
                     style {

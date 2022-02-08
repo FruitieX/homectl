@@ -7,6 +7,9 @@ pub struct TileProps<'a> {
     #[props(optional)]
     full_width: Option<bool>,
 
+    #[props(optional)]
+    background: Option<String>,
+
     #[props(default)]
     onclick: EventHandler<'a, MouseEvent>,
 }
@@ -19,6 +22,12 @@ pub fn Tile<'a>(cx: Scope<'a, TileProps<'a>>) -> Element<'a> {
     } else {
         "calc(50% - 1.5rem)"
     };
+
+    let background = cx
+        .props
+        .background
+        .clone()
+        .unwrap_or_else(|| String::from("#fff"));
 
     let style = r#"
         -webkit-tap-highlight-color: transparent;
@@ -39,6 +48,7 @@ pub fn Tile<'a>(cx: Scope<'a, TileProps<'a>>) -> Element<'a> {
             padding: "0.5rem",
             box_shadow: "0px 0.25rem 0.5rem 0px rgba(0,0,0,0.1)",
             cursor: "pointer",
+            background: "{background}",
             color: "#000",
             text_decoration_line: "none",
             prevent_default: "onclick",

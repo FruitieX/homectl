@@ -4,24 +4,71 @@ use fermi::use_read;
 use homectl_types::{
     action::Action,
     event::Message,
-    scene::{SceneConfig, SceneDescriptor, SceneId},
+    scene::{FlattenedSceneConfig, SceneDescriptor, SceneId},
+    utils::cct_to_rgb,
     websockets::WebSocketRequest,
 };
 use itertools::Itertools;
+use palette::Hsv;
 
-use crate::{app_state::SCENES_ATOM, edit_scene_modal::EditSceneModal, tile::Tile};
+use crate::{
+    app_state::SCENES_ATOM,
+    edit_scene_modal::EditSceneModal,
+    tile::Tile,
+    util::{hsv_to_css_hsl_str, scale_hsv_value_to_display},
+};
 
 #[derive(Props, PartialEq)]
 struct SceneRowProps {
     scene_id: SceneId,
-    name: String,
+    scene: FlattenedSceneConfig,
 }
 
 #[allow(non_snake_case)]
 fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
     let ws = use_ws_context(&cx);
-    let name = &cx.props.name;
+    let name = &cx.props.scene.name;
     let scene_id = &cx.props.scene_id;
+    let scene = &cx.props.scene;
+
+    let scene_colors: Vec<Hsv> = scene
+        .devices
+        .iter()
+        .filter_map(|(_, device)| match (device.get_color(), device.get_cct()) {
+            (Some(color), _) => Some(color),
+            (_, Some(cct)) => {
+                let rgb = cct_to_rgb(cct.get_cct());
+                let hsv: Hsv = rgb.into();
+                Some(hsv)
+            }
+            (_, _) => None,
+        })
+        .map(scale_hsv_value_to_display)
+        .sorted_by(|a, b| {
+            let a = hsv_to_css_hsl_str(&Some(*a));
+            let b = hsv_to_css_hsl_str(&Some(*b));
+
+            a.cmp(&b)
+        })
+        .dedup()
+        .collect();
+
+    let scene_colors_hsl = scene_colors
+        .iter()
+        .map(|hsv| hsv_to_css_hsl_str(&Some(*hsv)))
+        .collect_vec();
+
+    let scene_colors_hsl = if scene_colors_hsl.len() == 1 {
+        vec![scene_colors_hsl[0].clone(), scene_colors_hsl[0].clone()]
+    } else {
+        scene_colors_hsl
+    };
+
+    let background = format!("linear-gradient(90deg, {})", scene_colors_hsl.join(", "));
+
+    if scene_id == &SceneId::new("office_on".to_string()) {
+        dbg!(&background);
+    }
 
     let activate_scene = {
         move |_| {
@@ -43,12 +90,18 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
     cx.render(rsx! {
         div {
             Tile {
-                full_width: true, 
+                full_width: true,
                 onclick: activate_scene,
+                background: background,
                 contents: cx.render(rsx! {
                     div {
                         flex: "1",
-                        "{name}"
+                        span {
+                            padding: "0.5rem",
+                            border_radius: "0.5rem",
+                            background_color: "rgba(255, 255, 255, 0.5)",
+                            "{name}"
+                        }
                     }
                     button {
                         border: "none",
@@ -76,7 +129,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
 pub fn SceneList(cx: Scope) -> Element {
     let scenes = use_read(&cx, SCENES_ATOM);
 
-    let scenes: Vec<(SceneId, SceneConfig)> = scenes
+    let scenes: Vec<(SceneId, FlattenedSceneConfig)> = scenes
         .iter()
         .map(|(scene_id, config)| (scene_id.clone(), config.clone()))
         .sorted_by(|a, b| a.1.name.cmp(&b.1.name))
@@ -87,7 +140,7 @@ pub fn SceneList(cx: Scope) -> Element {
             SceneRow {
                 key: "{key}",
                 scene_id: key.clone(),
-                name: scene.name.clone()
+                scene: scene.clone()
             }
         }
     });

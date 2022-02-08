@@ -1,7 +1,10 @@
-use crate::{color_swatch::ColorSwatch, save_scene_modal::SaveSceneModal, tile::Tile};
+use crate::{
+    color_swatch::ColorSwatch, save_scene_modal::SaveSceneModal, tile::Tile,
+    util::scale_hsv_value_to_display,
+};
 use dioxus::prelude::*;
 use fermi::use_read;
-use homectl_types::device::{Device, DeviceId};
+use homectl_types::device::{Device, DeviceStateKey};
 use itertools::Itertools;
 
 use crate::{app_state::DEVICES_ATOM, device_modal::DeviceModal};
@@ -14,7 +17,12 @@ struct DeviceTileProps<'a> {
 #[allow(non_snake_case)]
 fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
     let name = &cx.props.device.name;
-    let color = cx.props.device.state.get_color();
+    let color = cx
+        .props
+        .device
+        .state
+        .get_color()
+        .map(scale_hsv_value_to_display);
     let (modal_open, set_modal_open) = use_state(&cx, || false);
 
     cx.render(rsx! {
@@ -42,7 +50,7 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
 
 #[derive(Props, PartialEq)]
 pub struct DeviceListProps {
-    filters: Option<Vec<DeviceId>>,
+    filters: Option<Vec<DeviceStateKey>>,
 }
 
 #[allow(non_snake_case)]
@@ -57,7 +65,7 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
 
     let devices = devices.into_iter().filter_map(|device| {
         if let Some(filters) = &cx.props.filters {
-            if !filters.contains(&device.id) {
+            if !filters.contains(&device.get_state_key()) {
                 return None;
             }
         }

@@ -22,6 +22,10 @@ impl WebSockets {
         self.users.write().await.remove(&user_id);
     }
 
+    pub async fn num_users(&self) -> usize {
+        self.users.read().await.len()
+    }
+
     pub async fn send(&self, user_id: Option<usize>, message: &WebSocketResponse) -> Option<()> {
         let s = serde_json::to_string(message).unwrap();
         let msg = warp::ws::Message::text(s);

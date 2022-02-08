@@ -1,9 +1,11 @@
 use homectl_types::{
-    device::{Device, DeviceId, DeviceSceneState, DeviceState, DevicesState, Light},
+    device::{
+        Device, DeviceId, DeviceSceneState, DeviceState, DeviceStateKey, DevicesState, Light,
+    },
     group::GroupDeviceLink,
     scene::{
-        color_config_as_device_color, SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneId,
-        ScenesConfig,
+        color_config_as_device_color, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
+        SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId, ScenesConfig,
     },
 };
 
@@ -116,6 +118,7 @@ impl Scenes {
         Some(scene_devices_config)
     }
 
+    /// Finds current state of given device in its current scene
     pub fn find_scene_device_state(
         &self,
         device: &Device,
@@ -190,5 +193,62 @@ impl Scenes {
                 cct: scene_device.cct.clone(),
             })),
         }
+    }
+
+    pub fn get_flattened_scenes(&self, devices: &DevicesState) -> FlattenedScenesConfig {
+        let scenes = self.get_scenes();
+
+        scenes
+            .into_iter()
+            .filter_map(|(scene_id, config)| {
+                let devices_config = self.find_scene_devices_config(devices, &scene_id)?;
+
+                let devices: SceneDeviceStates = devices_config
+                    .iter()
+                    .map({
+                        let scene_id = scene_id.clone();
+
+                        move |(integration_id, device_configs)| {
+                            device_configs.iter().filter_map({
+                                let scene_id = scene_id.clone();
+
+                                move |(device_id, _)| {
+                                    let state_key = DeviceStateKey::new(
+                                        integration_id.clone(),
+                                        device_id.clone(),
+                                    );
+
+                                    let device = devices.0.get(&state_key)?;
+                                    let device = Device {
+                                        scene: Some(DeviceSceneState {
+                                            scene_id: scene_id.clone(),
+                                            ..device.scene.clone()?
+                                        }),
+                                        ..device.clone()
+                                    };
+
+                                    let device_state = self.find_scene_device_state(
+                                        &device,
+                                        devices,
+                                        false,
+                                    )?;
+
+                                    Some((state_key, device_state))
+                                }
+                            })
+                        }
+                    })
+                    .flatten()
+                    .collect();
+
+                Some((
+                    scene_id,
+                    FlattenedSceneConfig {
+                        name: config.name,
+                        devices,
+                    },
+                ))
+            })
+            .collect()
     }
 }

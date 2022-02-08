@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    device::DevicesState, event::Message, group::FlattenedGroupsConfig, scene::ScenesConfig,
+    device::DevicesState, event::Message, group::FlattenedGroupsConfig,
+    scene::FlattenedScenesConfig,
 };
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -12,7 +13,7 @@ pub enum WebSocketRequest {
 #[derive(Deserialize, Serialize, Debug)]
 pub struct StateUpdate {
     pub devices: DevicesState,
-    pub scenes: ScenesConfig,
+    pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
 }
 

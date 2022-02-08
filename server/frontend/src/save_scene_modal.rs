@@ -1,10 +1,16 @@
-use crate::{app_state::{DEVICES_ATOM, DISABLE_SCROLL_ATOM}, modal::Modal};
+use crate::{
+    app_state::{DEVICES_ATOM, DISABLE_SCROLL_ATOM},
+    modal::Modal,
+};
 use convert_case::{Case, Casing};
-use dioxus::{events::{FormEvent, MouseEvent}, prelude::*};
+use dioxus::{
+    events::{FormEvent, MouseEvent},
+    prelude::*,
+};
 use dioxus_websocket_hooks::use_ws_context;
 use fermi::{use_read, use_set};
 use homectl_types::{
-    device::{Device, DeviceId},
+    device::{Device, DeviceStateKey},
     event::Message,
     scene::{
         ColorConfig, SceneConfig, SceneDeviceConfig, SceneDeviceState, SceneDevicesSearchConfig,
@@ -16,7 +22,7 @@ use itertools::Itertools;
 
 #[derive(Props)]
 pub struct SaveSceneModalProps<'a> {
-    filters: &'a Option<Vec<DeviceId>>,
+    filters: &'a Option<Vec<DeviceStateKey>>,
     modal_open: &'a bool,
     set_modal_open: &'a UseState<bool>,
 }
@@ -50,7 +56,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
                 .filter(|device| {
                     filters
                         .as_ref()
-                        .map(|filters| filters.contains(&device.id))
+                        .map(|filters| filters.contains(&device.get_state_key()))
                         .unwrap_or(true)
                 })
                 .cloned()

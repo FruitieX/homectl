@@ -15,6 +15,7 @@ pub fn Dashboard(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
+            "data-testid": "my-test",
             display: "flex",
             flex_direction: "column",
             gap: "1rem",
