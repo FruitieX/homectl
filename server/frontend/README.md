@@ -1,4 +1,5 @@
 # homectl frontend
+![image](https://user-images.githubusercontent.com/3673134/153074908-cf22ea04-de06-44ff-8548-5fe4fb294504.png)
 
 ## Setup
 
