@@ -164,14 +164,26 @@
       ]
     }
   },
-  "e17f53f782e93a868cba4f2388c06cf364c0a621d7581bb8dec0f1779aa7a072": {
-    "query": "\n            insert into scenes (scene_id, config)\n            values ($1, $2)\n        ",
+  "878b76d50a28cbd6ce1cb6fecc837a14cc946681e431ff4e4d41ab2c77cede0e": {
+    "query": "\n            insert into scenes (scene_id, config)\n            values ($1, $2)\n\n            on conflict (scene_id)\n            do update set\n                config = excluded.config\n        ",
     "describe": {
       "columns": [],
       "parameters": {
         "Left": [
           "Text",
           "Jsonb"
+        ]
+      },
+      "nullable": []
+    }
+  },
+  "d5852ad31712142776bc6c6056c64341fd345eb9559bad55f71bb1523910da35": {
+    "query": "\n            delete from scenes\n            where scene_id = $1\n        ",
+    "describe": {
+      "columns": [],
+      "parameters": {
+        "Left": [
+          "Text"
         ]
       },
       "nullable": []
