@@ -7,7 +7,7 @@ use homectl_types::{
     scene::ScenesConfig,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub struct Config {
@@ -21,6 +21,20 @@ type OpaqueIntegrationsConfigs = HashMap<IntegrationId, config::Value>;
 
 pub fn read_config() -> Result<(Config, OpaqueIntegrationsConfigs)> {
     let mut settings = config::Config::default();
+
+    let root = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+
+    let sample_path = format!("{root}/Settings.toml.example");
+    let sample_path = Path::new(&sample_path);
+
+    let path = format!("{root}/Settings.toml");
+    let path = Path::new(&path);
+
+    if !path.exists() && std::env::var("SKIP_SAMPLE_CONFIG").is_err() {
+        println!("Settings.toml not found, generating sample configuration.");
+        println!("Set SKIP_SAMPLE_CONFIG environment variable to opt out of this behavior.");
+        std::fs::copy(sample_path, path).unwrap();
+    }
 
     settings
         .merge(config::File::with_name("Settings"))

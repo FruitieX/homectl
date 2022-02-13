@@ -12,6 +12,19 @@ is a fairly pleasant experience.
 If you're not ready to get your hands dirty with Rust code, I would suggest
 trying out other alternatives for now.
 
+### Quick start
+
+- Install the Rust toolchain using [`rustup`](https://rustup.rs/)
+- Run `./start-backend.sh`
+- In a separate terminal, run `./start-frontend.sh`
+- Navigate to `http://localhost:8080`
+
+You should now have a demo/dummy homectl environment running.
+
+To control your home automation systems, you need to edit the generated
+configuration file in `backend/Settings.toml`. See below sections for
+configuration instructions and examples.
+
 ## Description
 
 This project aims to unify home automation (HA) systems from different
@@ -21,50 +34,50 @@ and also other similar solutions to homectl:
 
 - A common interface for configuring everything in one place (plaintext config file for now).
 
-  * (Hopefully) no more figuring out obscure schedule/rule/condition/action
+  - (Hopefully) no more figuring out obscure schedule/rule/condition/action
     configuration that vary per HA supplier. (Instead you have homectl's
     obscure configuration file format for now, but this will be improved upon
     later! :-))
 
 - Allow complete control of actions performed when sensors/buttons are triggered.
 
-  * Because homectl only reads sensor values from HA systems, we are not
+  - Because homectl only reads sensor values from HA systems, we are not
     limited by what actions can be programmed into the individual HA system
     controllers.
 
-  * For example, you can put your computer to sleep/wake when you turn off/on
+  - For example, you can put your computer to sleep/wake when you turn off/on
     the lights to your office.
 
-  * Or you could start a robot vacuum when leaving your home between certain
+  - Or you could start a robot vacuum when leaving your home between certain
     times of the day.
 
-  * You can also control other manufacturers devices than the one that made the
+  - You can also control other manufacturers devices than the one that made the
     light switch you pressed
 
 - Don't trust that the HA systems always do what you want
 
-  * Some HA systems are not as reliable as you would hope, and may for example
+  - Some HA systems are not as reliable as you would hope, and may for example
     miss a command that you send them.
 
-  * Or a device might simply forget its state due to an accidental power cycle.
+  - Or a device might simply forget its state due to an accidental power cycle.
 
-  * Due to this, homectl will keep track of the expected state for each device,
+  - Due to this, homectl will keep track of the expected state for each device,
     and actively poll devices for their current state, automatically correcting
     any incorrect state it might find.
 
 - An advanced scenes system allow controlling a large amount of devices to preset states.
 
-  * Because homectl keeps track of a device's active scene, we can perform
+  - Because homectl keeps track of a device's active scene, we can perform
     certain actions only when a device is in a certain scene. For example, we
     can bind a light switch to multiple scenes and cycle between the scenes.
-  
-  * Scenes may "link" state from other devices: "go look up what the state of
+
+  - Scenes may "link" state from other devices: "go look up what the state of
     this device is and copy the state from there".
 
-  * These devices can be "virtual" devices, such as a device that returns the
+  - These devices can be "virtual" devices, such as a device that returns the
     approximate color of the sky.
 
-  * Combine these facts and you can e.g. have your lights smoothly follow a
+  - Combine these facts and you can e.g. have your lights smoothly follow a
     circadian rhythm. These transitions will be so smooth that you won't
     notice them. Every time homectl polls your lights their expected state is
     calculated and compared against the actual state. If the difference is
@@ -78,12 +91,12 @@ and also other similar solutions to homectl:
 - `DATABASE_URL`: Used by the backend to connect to a PostgreSQL database. If
   not provided, functionalities requiring a database connection will be
   disabled.
-  
+
   For example: `DATABASE_URL=postgres://user:password@localhost/homectl`
 
 - `WS_ENDPOINT`: Read at compile time to decide what WebSocket endpoint the
   frontend attempts connecting to.
-  
+
   Defaults to `ws://localhost:8080/ws`.
 
 ### Database setup (optional)
@@ -95,14 +108,6 @@ and also other similar solutions to homectl:
   - `cd backend`
   - `sqlx database create`
   - `sqlx migrate run`
-
-### Quick start
-
-- Copy `backend/Settings.toml.example` into `backend/Settings.toml`, edit it to
-  match your setup. See configuration tips below.
-- Install the Rust toolchain using [`rustup`](https://rustup.rs/)
-- Run `./start-backend.sh`
-- Optional: Run `./start-frontend.sh`
 
 ## Sample configs for supported integrations:
 
