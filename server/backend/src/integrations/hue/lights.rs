@@ -1,5 +1,5 @@
 use homectl_types::{
-    device::{Device, DeviceState},
+    device::{Device, DeviceColor, DeviceState},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -88,7 +88,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                 .map(|transition_ms| ((transition_ms as f64) / 100.0) as u32);
 
             Ok(match state.color {
-                Some(color) => {
+                Some(DeviceColor::Color(color)) => {
                     let hsv = color;
                     let color: Yxy = color.into();
 
@@ -117,6 +117,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                         transitiontime,
                     })
                 }
+                Some(_) => todo!(),
                 None => HueMsg::OnOffDeviceMsg(OnOffDeviceMsg {
                     on: state.power,
                     transitiontime,
@@ -128,7 +129,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
         }
         DeviceState::Sensor(_) => {
             // Do nothing
-            return Ok(())
+            return Ok(());
         }
         _ => Err(format!(
             "Unsupported device type encountered in hue set_device_state: {:?}",

@@ -191,7 +191,6 @@ impl Scenes {
                 color: scene_device.color.clone().map(color_config_as_device_color),
                 power: scene_device.power,
                 transition_ms: scene_device.transition_ms,
-                cct: scene_device.cct.clone(),
             })),
         }
     }

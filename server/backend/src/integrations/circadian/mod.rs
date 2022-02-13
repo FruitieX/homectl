@@ -122,14 +122,20 @@ fn get_night_fade(circadian: &Circadian) -> f32 {
 }
 
 fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
-    let gradient = Gradient::new(vec![
-        circadian.converted_day_color,
-        circadian.converted_night_color,
-    ]);
+    match (
+        circadian.converted_day_color.clone(),
+        circadian.converted_night_color.clone(),
+    ) {
+        (DeviceColor::Color(day), DeviceColor::Color(night)) => {
+            let gradient = Gradient::new(vec![day, night]);
 
-    let i = get_night_fade(circadian);
+            let i = get_night_fade(circadian);
 
-    gradient.get(i)
+            DeviceColor::Color(gradient.get(i))
+        }
+        (DeviceColor::Cct(_), DeviceColor::Cct(_)) => todo!(),
+        _ => panic!("Mixed color types not supported"),
+    }
 }
 
 static POLL_RATE: u64 = 60 * 1000;
@@ -152,7 +158,7 @@ async fn poll_sensor(circadian: Circadian) {
 }
 
 fn mk_circadian_device(circadian: &Circadian) -> Device {
-    let state = DeviceState::Light(Light::new_with_color(
+    let state = DeviceState::Light(Light::new(
         true,
         Some(1.0),
         Some(get_circadian_color(circadian)),

@@ -4,11 +4,9 @@ use std::{
     ops::Range,
 };
 
-use crate::utils::xy_to_cct;
-
 use super::{integration::IntegrationId, scene::SceneId};
 use chrono::{DateTime, Utc};
-use palette::{Hsv, Yxy};
+use palette::{Hsv};
 use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Serialize,
@@ -40,8 +38,12 @@ pub struct OnOffDevice {
     pub power: bool,
 }
 
-// TODO: use Lch?
-pub type DeviceColor = Hsv;
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub enum DeviceColor {
+    // TODO: use Lch, or Yxy?
+    Color(Hsv),
+    Cct(CorrelatedColorTemperature),
+}
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub struct CorrelatedColorTemperature {
@@ -92,52 +94,21 @@ pub struct Light {
     /// Current color, if supported
     pub color: Option<DeviceColor>,
 
-    /// Current color temperature, if supported
-    pub cct: Option<CorrelatedColorTemperature>,
-
     /// Transition time in milliseconds
     pub transition_ms: Option<u64>,
 }
 
 impl Light {
-    pub fn new_with_color(
+    pub fn new(
         power: bool,
         brightness: Option<f32>,
         color: Option<DeviceColor>,
         transition_ms: Option<u64>,
     ) -> Light {
-        let xy: Option<Yxy> = color.map(|c| c.into());
-        let cct = xy.as_ref().map(|xy| {
-            let cct = xy_to_cct(xy);
-            CorrelatedColorTemperature::new(
-                cct,
-                Range {
-                    start: 2000.0,
-                    end: 6500.0,
-                },
-            )
-        });
-
         Light {
             power,
             brightness,
             color,
-            cct,
-            transition_ms,
-        }
-    }
-
-    pub fn new_with_cct(
-        power: bool,
-        brightness: Option<f32>,
-        cct: Option<CorrelatedColorTemperature>,
-        transition_ms: Option<u64>,
-    ) -> Light {
-        Light {
-            power,
-            brightness,
-            color: None,
-            cct,
             transition_ms,
         }
     }
@@ -185,14 +156,14 @@ impl Display for DeviceState {
             DeviceState::Light(light) => {
                 if !light.power {
                     "off".to_string()
-                } else if let Some(color) = light.color {
+                } else if let Some(DeviceColor::Color(color)) = light.color {
                     format!(
                         "hsv({}, {}, {})",
                         color.hue.to_positive_degrees(),
                         color.saturation,
                         color.value
                     )
-                } else if let Some(cct) = &light.cct {
+                } else if let Some(DeviceColor::Cct(cct)) = &light.color {
                     format!("cct({})", cct.get_cct())
                 } else if let Some(bri) = light.brightness {
                     format!("bri({})", bri)
@@ -241,8 +212,10 @@ impl DeviceState {
             DeviceState::Light(state) => {
                 if !state.power {
                     Some(Hsv::new(0.0, 0.0, 0.0))
+                } else if let Some(DeviceColor::Color(color)) = state.color {
+                    Some(color)
                 } else {
-                    state.color
+                    None
                 }
             }
             DeviceState::MultiSourceLight(_) => None,
@@ -263,11 +236,11 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                let old_color = state.color.unwrap_or_else(|| Hsv::new(0.0, 0.0, 1.0));
-                let saturation = old_color.saturation;
-                let value = old_color.value;
-                let color = Some(Hsv::new(hue, saturation, value));
-                state.color = color
+                if let Some(DeviceColor::Color(mut color)) = state.color {
+                    color.hue = hue.into();
+                } else {
+                    state.color = Some(DeviceColor::Color(Hsv::new(hue, 0.0, 1.0)));
+                }
             }
             DeviceState::MultiSourceLight(_) => {}
             DeviceState::Sensor(_) => {}
@@ -278,11 +251,11 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                let old_color = state.color.unwrap_or_else(|| Hsv::new(0.0, 0.0, 1.0));
-                let hue = old_color.hue;
-                let value = old_color.value;
-                let color = Some(Hsv::new(hue, saturation, value));
-                state.color = color
+                if let Some(DeviceColor::Color(mut color)) = state.color {
+                    color.saturation = saturation;
+                } else {
+                    state.color = Some(DeviceColor::Color(Hsv::new(0.0, saturation, 1.0)));
+                }
             }
             DeviceState::MultiSourceLight(_) => {}
             DeviceState::Sensor(_) => {}
@@ -293,11 +266,11 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                let old_color = state.color.unwrap_or_else(|| Hsv::new(0.0, 0.0, 1.0));
-                let hue = old_color.hue;
-                let saturation = old_color.saturation;
-                let color = Some(Hsv::new(hue, saturation, value));
-                state.color = color
+                if let Some(DeviceColor::Color(mut color)) = state.color {
+                    color.value = value;
+                } else {
+                    state.color = Some(DeviceColor::Color(Hsv::new(0.0, 0.0, value)));
+                }
             }
             DeviceState::MultiSourceLight(_) => {}
             DeviceState::Sensor(_) => {}
@@ -306,10 +279,11 @@ impl DeviceState {
 
     pub fn get_cct(&self) -> Option<CorrelatedColorTemperature> {
         match self {
-            DeviceState::OnOffDevice(_) => None,
-            DeviceState::Light(state) => state.cct.clone(),
-            DeviceState::MultiSourceLight(_) => None,
-            DeviceState::Sensor(_) => None,
+            DeviceState::Light(Light {
+                color: Some(DeviceColor::Cct(cct)),
+                ..
+            }) => Some(cct.clone()),
+            _ => None,
         }
     }
 
@@ -317,8 +291,12 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                let old_cct = state.cct.clone().unwrap_or_default();
-                state.cct = Some(old_cct.set_cct(cct))
+                if let Some(DeviceColor::Cct(state)) = &mut state.color {
+                    *state = state.set_cct(cct);
+                } else {
+                    let cct_default = CorrelatedColorTemperature::default();
+                    state.color = Some(DeviceColor::Cct(cct_default.set_cct(cct)));
+                }
             }
             DeviceState::MultiSourceLight(_) => {}
             DeviceState::Sensor(_) => {}

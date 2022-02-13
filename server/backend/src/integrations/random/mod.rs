@@ -81,7 +81,7 @@ fn get_random_color() -> DeviceColor {
     let b: f32 = rng.gen();
 
     let rgb: Rgb = Rgb::new(r, g, b);
-    rgb.into()
+    DeviceColor::Color(rgb.into())
 }
 
 async fn poll_sensor(random: Random) {
@@ -102,7 +102,7 @@ async fn poll_sensor(random: Random) {
 }
 
 fn mk_random_device(random: &Random) -> Device {
-    let state = DeviceState::Light(Light::new_with_color(
+    let state = DeviceState::Light(Light::new(
         true,
         Some(1.0),
         Some(get_random_color()),

@@ -29,11 +29,11 @@ pub enum ColorConfig {
 }
 
 pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
-    match color_config {
+    DeviceColor::Color(match color_config {
         ColorConfig::Lch(lch) => lch.into(),
         ColorConfig::Hsv(hsv) => hsv,
         ColorConfig::Rgb(rgb) => rgb.into(),
-    }
+    })
 }
 
 #[derive(Clone, Deserialize, Debug, Serialize)]
@@ -98,6 +98,6 @@ pub type SceneDeviceStates = HashMap<DeviceStateKey, DeviceState>;
 #[derive(Clone, Deserialize, Debug, Serialize, PartialEq)]
 pub struct FlattenedSceneConfig {
     pub name: String,
-    pub devices: SceneDeviceStates
+    pub devices: SceneDeviceStates,
 }
 pub type FlattenedScenesConfig = HashMap<SceneId, FlattenedSceneConfig>;

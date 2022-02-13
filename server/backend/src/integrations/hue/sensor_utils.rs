@@ -15,6 +15,13 @@ pub enum DimmerSwitchButtonId {
     Unknown,
 }
 
+#[derive(Clone, PartialEq)]
+pub enum DimmerSwitchButtonPressType {
+    NotUsed,
+    Short,
+    Long,
+}
+
 /// Returns which DimmerSwitchButtonId is referred to in BridgeButtonEvent
 fn get_button_id(buttonevent: BridgeButtonEvent) -> DimmerSwitchButtonId {
     let str = buttonevent.to_string();
@@ -37,16 +44,16 @@ pub fn cmp_button_id(buttonevent: BridgeButtonEvent, button_id: DimmerSwitchButt
 }
 
 /// Returns whether BridgeButtonEvent is in a pressed state or not
-fn get_button_state(buttonevent: BridgeButtonEvent) -> bool {
+fn get_button_state(buttonevent: BridgeButtonEvent) -> DimmerSwitchButtonPressType {
     let str = buttonevent.to_string();
     let state = str.chars().nth(3);
 
     match state {
-        Some('0') => true,  // INITIAL_PRESSED
-        Some('1') => true,  // HOLD
-        Some('2') => false, // SHORT_RELEASED
-        Some('3') => false, // LONG_RELEASED
-        _ => true,
+        Some('0') => DimmerSwitchButtonPressType::NotUsed, // INITIAL_PRESSED
+        Some('1') => DimmerSwitchButtonPressType::NotUsed, // HOLD
+        Some('2') => DimmerSwitchButtonPressType::Short,   // SHORT_RELEASED
+        Some('3') => DimmerSwitchButtonPressType::Long,    // LONG_RELEASED
+        _ => DimmerSwitchButtonPressType::NotUsed,
     }
 }
 
@@ -55,15 +62,16 @@ fn get_button_state(buttonevent: BridgeButtonEvent) -> bool {
 pub fn is_button_pressed(
     buttonevent: Option<BridgeButtonEvent>,
     button_id: DimmerSwitchButtonId,
+    button_type: DimmerSwitchButtonPressType,
 ) -> bool {
     match buttonevent {
         Some(buttonevent) => {
             let button_id_match = cmp_button_id(buttonevent, button_id);
             let pressed = get_button_state(buttonevent);
 
-            button_id_match && pressed
+            button_id_match && button_type == pressed
         }
-        _ => false,
+        None => false,
     }
 }
 
@@ -116,10 +124,26 @@ pub fn bridge_sensor_to_device(
 
         BridgeSensor::ZLLSwitch { state, .. } => {
             let kind = DeviceState::Sensor(SensorKind::DimmerSwitch {
-                on: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::On),
-                up: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::Up),
-                down: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::Down),
-                off: is_button_pressed(state.buttonevent, DimmerSwitchButtonId::Off),
+                on: is_button_pressed(
+                    state.buttonevent,
+                    DimmerSwitchButtonId::On,
+                    DimmerSwitchButtonPressType::Short,
+                ),
+                up: is_button_pressed(
+                    state.buttonevent,
+                    DimmerSwitchButtonId::Up,
+                    DimmerSwitchButtonPressType::Short,
+                ),
+                down: is_button_pressed(
+                    state.buttonevent,
+                    DimmerSwitchButtonId::Down,
+                    DimmerSwitchButtonPressType::Short,
+                ),
+                off: is_button_pressed(
+                    state.buttonevent,
+                    DimmerSwitchButtonId::Off,
+                    DimmerSwitchButtonPressType::Short,
+                ),
             });
 
             Device {
@@ -228,7 +252,7 @@ pub fn extrapolate_sensor_updates(
                     state: ZLLSwitchState {
                         buttonevent: Some(to_buttonevent(
                             prev_button_id.clone(),
-                            !prev_button_state,
+                            prev_button_state.ne(&DimmerSwitchButtonPressType::NotUsed),
                         )),
                         lastupdated: next_lastupdated.clone(),
                     },
@@ -238,7 +262,9 @@ pub fn extrapolate_sensor_updates(
 
             // button ID has changed and the old button state was left pressed,
             // release it
-            if prev_button_id != next_button_id && prev_button_state {
+            if prev_button_id != next_button_id
+                && prev_button_state.ne(&DimmerSwitchButtonPressType::NotUsed)
+            {
                 updates.push(BridgeSensor::ZLLSwitch {
                     state: ZLLSwitchState {
                         buttonevent: Some(to_buttonevent(prev_button_id.clone(), false)),
@@ -250,7 +276,9 @@ pub fn extrapolate_sensor_updates(
 
             // button ID has changed and the new button state is released,
             // assume we missed a button press event
-            if prev_button_id != next_button_id && !next_button_state {
+            if prev_button_id != next_button_id
+                && next_button_state.ne(&DimmerSwitchButtonPressType::NotUsed)
+            {
                 updates.push(BridgeSensor::ZLLSwitch {
                     state: ZLLSwitchState {
                         buttonevent: Some(to_buttonevent(next_button_id, true)),

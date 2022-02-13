@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use byteorder::{ByteOrder, LittleEndian};
-use homectl_types::device::{Device, DeviceId, DeviceState, Light};
+use homectl_types::device::{Device, DeviceColor, DeviceId, DeviceState, Light};
 use homectl_types::integration::IntegrationId;
 use num_traits::pow::Pow;
 use palette::Hsv;
@@ -166,10 +166,10 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: IntegrationId) -> 
 
     let transition_ms = lifx_state.transition.map(|transition| transition as u64);
 
-    let state = DeviceState::Light(Light::new_with_color(
+    let state = DeviceState::Light(Light::new(
         power,
         None,
-        Some(color),
+        Some(DeviceColor::Color(color)),
         transition_ms,
     ));
 
@@ -183,43 +183,47 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: IntegrationId) -> 
 }
 
 pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
-    let light_state = match device.state {
+    let light_state = match device.state.clone() {
         DeviceState::Light(Light {
             brightness,
             color,
             power,
             transition_ms,
-            ref cct,
         }) => Ok(Light {
             power,
             brightness,
             color,
             transition_ms,
-            cct: cct.clone(),
         }),
         _ => Err(anyhow!("Unsupported device state")),
     }?;
 
-    let color = light_state.color.unwrap_or_else(|| Hsv::new(0.0, 1.0, 1.0));
+    match light_state.color {
+        Some(DeviceColor::Color(color)) => {
+            let hue =
+                ((to_lifx_hue(color.hue.to_positive_degrees()) / 360.0) * 65535.0).floor() as u16;
+            let sat = (color.saturation * 65535.0).floor() as u16;
+            let bri =
+                (light_state.brightness.unwrap_or(1.0) * color.value * 65535.0).floor() as u16;
+            let transition = light_state
+                .transition_ms
+                .map(|transition_ms| transition_ms as u16);
 
-    let hue = ((to_lifx_hue(color.hue.to_positive_degrees()) / 360.0) * 65535.0).floor() as u16;
-    let sat = (color.saturation * 65535.0).floor() as u16;
-    let bri = (light_state.brightness.unwrap_or(1.0) * color.value * 65535.0).floor() as u16;
-    let transition = light_state
-        .transition_ms
-        .map(|transition_ms| transition_ms as u16);
+            let power = if light_state.power { 65535 } else { 0 };
 
-    let power = if light_state.power { 65535 } else { 0 };
-
-    Ok(LifxState {
-        hue,
-        sat,
-        bri,
-        power,
-        label: device.name.clone(),
-        addr: device.id.to_string().parse()?,
-        transition,
-    })
+            Ok(LifxState {
+                hue,
+                sat,
+                bri,
+                power,
+                label: device.name.clone(),
+                addr: device.id.to_string().parse()?,
+                transition,
+            })
+        }
+        Some(DeviceColor::Cct(_)) => todo!(),
+        None => todo!(),
+    }
 }
 
 // NOTE: this is complete trial-and-error, but seems to produce a wider range of

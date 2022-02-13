@@ -1,6 +1,6 @@
 use crate::integrations::{
     boolean::Boolean, circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, neato::Neato,
-    random::Random, timer::Timer, tuya::Tuya, wake_on_lan::WakeOnLan,
+    random::Random, timer::Timer, tuya::Tuya, wake_on_lan::WakeOnLan, ping::Ping
 };
 use anyhow::{anyhow, Context, Result};
 use async_std::sync::Mutex;
@@ -114,6 +114,7 @@ fn load_integration(
         "lifx" => Ok(Box::new(Lifx::new(id, config, event_tx)?)),
         "hue" => Ok(Box::new(Hue::new(id, config, event_tx)?)),
         "neato" => Ok(Box::new(Neato::new(id, config, event_tx)?)),
+        "ping" => Ok(Box::new(Ping::new(id, config, event_tx)?)),
         "tuya" => Ok(Box::new(Tuya::new(id, config, event_tx)?)),
         "wake_on_lan" => Ok(Box::new(WakeOnLan::new(id, config, event_tx)?)),
         _ => Err(anyhow!("Unknown module name {}!", module_name)),

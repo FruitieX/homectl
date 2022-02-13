@@ -42,7 +42,6 @@ pub struct DeviceRule {
     pub scene: Option<SceneId>,
 }
 
-
 #[derive(Clone, Deserialize, Debug)]
 pub struct GroupRule {
     pub group_id: GroupId,

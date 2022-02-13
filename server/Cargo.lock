@@ -1388,6 +1388,7 @@ dependencies = [
  "palette",
  "rand 0.7.3",
  "rust-async-tuyapi",
+ "scan_fmt",
  "serde 1.0.136",
  "serde_json",
  "serde_path_to_error",
@@ -2627,6 +2628,15 @@ name = "safemem"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef703b7cb59335eae2eb93ceb664c0eb7ea6bf567079d843e09420219668e072"
+
+[[package]]
+name = "scan_fmt"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b53b0a5db882a8e2fdaae0a43f7b39e7e9082389e978398bdf223a55b581248"
+dependencies = [
+ "regex",
+]
 
 [[package]]
 name = "schannel"

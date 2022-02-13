@@ -29,12 +29,13 @@ fn cmp_light_color(
     let hue_delta = 1.0;
     let sat_delta = 0.01;
     let val_delta = 0.01;
+    let cct_delta = 10.0;
 
     match (a, b) {
         (None, None) => true,
         (None, Some(_)) => false,
         (Some(_), None) => false,
-        (Some(a), Some(b)) => {
+        (Some(DeviceColor::Color(a)), Some(DeviceColor::Color(b))) => {
             let mut a_hsv: Hsv = *a;
             let mut b_hsv: Hsv = *b;
 
@@ -47,6 +48,16 @@ fn cmp_light_color(
                 && (f32::abs(a_hsv.saturation - b_hsv.saturation) <= sat_delta)
                 && (f32::abs(a_hsv.value - b_hsv.value) <= val_delta)
         }
+        (Some(DeviceColor::Cct(a)), Some(DeviceColor::Cct(b))) => {
+            let supported_range = a.get_device_range();
+            let expected = b
+                .get_cct()
+                .clamp(supported_range.start, supported_range.end);
+            let actual = a.get_cct();
+
+            f32::abs(expected - actual) <= cct_delta
+        }
+        (_, _) => false,
     }
 }
 
@@ -72,20 +83,6 @@ fn cmp_device_states(device: &DeviceState, expected: &DeviceState) -> bool {
                     &expected.brightness,
                 );
             }
-            // Else compare color temperature if supported
-            else if let (Some(device_cct), Some(expected_cct)) = (&device.cct, &expected.cct) {
-                // First scale expected_cct to within device's supported range
-                let supported_range = device_cct.get_device_range();
-                let expected = expected_cct
-                    .get_cct()
-                    .clamp(supported_range.start, supported_range.end);
-                let actual = device_cct.get_cct();
-
-                // Accept an error of 10 kelvin
-                let epsilon = 10.0;
-
-                return f32::abs(expected - actual) <= epsilon;
-            }
 
             true
         }
@@ -98,9 +95,9 @@ fn cmp_device_states(device: &DeviceState, expected: &DeviceState) -> bool {
                 .zip(b.lights.iter())
                 .map(|(light_a, light_b)| {
                     cmp_light_color(
-                        &Some(*light_a),
+                        &Some(light_a.clone()),
                         &a.brightness,
-                        &Some(*light_b),
+                        &Some(light_b.clone()),
                         &b.brightness,
                     )
                 })

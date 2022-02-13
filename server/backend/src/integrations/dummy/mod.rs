@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
-    device::{Device, DeviceId, DeviceState, Light},
+    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
@@ -45,10 +45,10 @@ impl Integration for Dummy {
 
     async fn register(&mut self) -> Result<()> {
         for (id, device) in &self.config.devices {
-            let state = DeviceState::Light(Light::new_with_color(
+            let state = DeviceState::Light(Light::new(
                 true,
                 Some(1.0),
-                Some(device.init_state),
+                Some(DeviceColor::Color(device.init_state)),
                 None,
             ));
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);

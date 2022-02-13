@@ -4,7 +4,7 @@ use homectl_types::{
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::Yxy;
+use palette::{Yxy, Hsv};
 
 /// Convert BridgeLight color into Lch
 pub fn to_palette(bridge_light: BridgeLight) -> Option<DeviceColor> {
@@ -22,10 +22,10 @@ pub fn to_palette(bridge_light: BridgeLight) -> Option<DeviceColor> {
     let (x, y) = bridge_light.state.xy?;
     let brightness: f32 = bridge_light.state.bri? as f32;
     let hsv = Yxy::new(x, y, brightness / 254.0);
-    let mut device_color: DeviceColor = hsv.into();
+    let mut device_color: Hsv = hsv.into();
     device_color.value = brightness / 254.0;
 
-    Some(device_color)
+    Some(DeviceColor::Color(device_color))
 }
 
 /// Constructs Light kind from BridgeLight
@@ -35,7 +35,7 @@ pub fn to_light(bridge_light: BridgeLight) -> Light {
         .transitiontime
         .map(|transitiontime| (transitiontime * 100) as u64);
 
-    Light::new_with_color(
+    Light::new(
         bridge_light.state.on,
         None,
         to_palette(bridge_light),
