@@ -1,3 +1,4 @@
+use chrono::Utc;
 use homectl_types::{
     device::{
         Device, DeviceId, DeviceSceneState, DeviceState, DeviceStateKey, DevicesState, Light,
@@ -222,16 +223,17 @@ impl Scenes {
                                     let device = Device {
                                         scene: Some(DeviceSceneState {
                                             scene_id: scene_id.clone(),
-                                            ..device.scene.clone()?
+                                            activation_time: device
+                                                .scene
+                                                .clone()
+                                                .map(|s| s.activation_time)
+                                                .unwrap_or_else(Utc::now),
                                         }),
                                         ..device.clone()
                                     };
 
-                                    let device_state = self.find_scene_device_state(
-                                        &device,
-                                        devices,
-                                        false,
-                                    )?;
+                                    let device_state =
+                                        self.find_scene_device_state(&device, devices, false)?;
 
                                     Some((state_key, device_state))
                                 }
