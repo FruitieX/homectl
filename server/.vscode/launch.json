@@ -1,0 +1,120 @@
+{
+	// Use IntelliSense to learn about possible attributes.
+	// Hover to view descriptions of existing attributes.
+	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'homectl'",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=homectl",
+					"--package=homectl"
+				],
+				"filter": {
+					"name": "homectl",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}/backend"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in executable 'homectl'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--bin=homectl",
+					"--package=homectl"
+				],
+				"filter": {
+					"name": "homectl",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}/backend"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in library 'homectl_types'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--lib",
+					"--package=homectl_types"
+				],
+				"filter": {
+					"name": "homectl_types",
+					"kind": "lib"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug executable 'homectl-ui'",
+			"cargo": {
+				"args": [
+					"build",
+					"--bin=homectl-ui",
+					"--package=homectl-ui"
+				],
+				"filter": {
+					"name": "homectl-ui",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in executable 'homectl-ui'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--bin=homectl-ui",
+					"--package=homectl-ui"
+				],
+				"filter": {
+					"name": "homectl-ui",
+					"kind": "bin"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		},
+		{
+			"type": "lldb",
+			"request": "launch",
+			"name": "Debug unit tests in library 'homectl_console'",
+			"cargo": {
+				"args": [
+					"test",
+					"--no-run",
+					"--lib",
+					"--package=homectl_console"
+				],
+				"filter": {
+					"name": "homectl_console",
+					"kind": "lib"
+				}
+			},
+			"args": [],
+			"cwd": "${workspaceFolder}"
+		}
+	]
+}
