@@ -18,21 +18,21 @@
 [integrations.dummy_ha1]
 plugin = "dummy"
 
-  [integration.dummy_ha1.devices]
+  [integrations.dummy_ha1.devices]
   1 = { name = "Kitchen ceiling light", init_state = { hue = 0, saturation = 0, value = 1 } }
   2 = { name = "Living room", init_state = { hue = 25, saturation = 0.35, value = 1 } }
   3 = { name = "Entryway", init_state = { hue = 25, saturation = 0.35, value = 1 } }
   4 = { name = "Office", init_state = { hue = 0, saturation = 0, value = 0 } }
   5 = { name = "Bedroom", init_state = { hue = 0, saturation = 0, value = 0 } }
   6 = { name = "Outdoor spot", init_state = { hue = 100, saturation = 0.75, value = 1 } }
-  7 = { name = "Starcase", init_state = { hue = 0, saturation = 0, value = 0 } }
+  7 = { name = "Staircase", init_state = { hue = 0, saturation = 0, value = 0 } }
 
 # Set up another dummy home automation system, which our imaginary LED strips
 # are controlled by.
 [integrations.dummy_ha2]
 plugin = "dummy"
 
-  [integration.dummy_ha2.devices]
+  [integrations.dummy_ha2.devices]
   1 = { name = "Kitchen cabinet LED", init_state = { hue = 0, saturation = 0, value = 1 } }
   2 = { name = "Bathroom LED", init_state = { hue = 25, saturation = 0.35, value = 1 } }
 
@@ -146,7 +146,7 @@ name = "All off"
   # individual lights.
   #
   # Slowly fade out entryway light so we can still see
-  [scenes.leave.devices.dummy_ha1]
+  [scenes.off.devices.dummy_ha1]
   "Entryway" = { power = false, transition_ms = 180000 }
 
 # Default scene for upstairs lights
@@ -181,5 +181,7 @@ name = "Night light"
 
   # Leave these lights on with very low brightness
   [scenes.night_light.devices.dummy_ha1]
-  "Bathroom LED" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
   "Staircase" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
+
+  [scenes.night_light.devices.dummy_ha2]
+  "Bathroom LED" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
