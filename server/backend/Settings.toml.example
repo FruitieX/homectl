@@ -1,20 +1,43 @@
-[integrations.dummy_test]
+###############################################################################
+#
+# Start by configuring integrations to your home automation systems.
+#
+# To keep things simple and easy for anybody to try out, this sample file uses
+# the dummy integration to build the configuration for an imaginary house with
+# some imaginary dummy devices.
+#
+# Find out how to configure integrations for supported home automation systems
+# at:
+# https://github.com/FruitieX/homectl#sample-configs-for-supported-integrations
+#
+###############################################################################
+
+# Set up a dummy home automation system, which can manage most of our imaginary
+# lights. Note that normally integrations are able to auto-discover lights.
+# That's not possible for our dummy integration, so we need to list them here.
+[integrations.dummy_ha1]
 plugin = "dummy"
-asd = "foo"
 
-[integrations.hue1]
-plugin = "hue"
-addr = "192.168.1.123"
-poll_rate_lights = 10000
-poll_rate_sensors = 100
-# This can be obtained by pressing the link button on a Hue bridge
-# and within 30s running (replace IP with your Hue bridge IP):
-# curl -X POST 192.168.1.123/api -d '{"devicetype": "homectl#homectl"}'
-username = "<hue username string here>"
+  [integration.dummy_ha1.devices]
+  1 = { name = "Kitchen ceiling light", init_state = { hue = 0, saturation = 0, value = 1 } }
+  2 = { name = "Living room", init_state = { hue = 25, saturation = 0.35, value = 1 } }
+  3 = { name = "Entryway", init_state = { hue = 25, saturation = 0.35, value = 1 } }
+  4 = { name = "Office", init_state = { hue = 0, saturation = 0, value = 0 } }
+  5 = { name = "Bedroom", init_state = { hue = 0, saturation = 0, value = 0 } }
+  6 = { name = "Outdoor spot", init_state = { hue = 100, saturation = 0.75, value = 1 } }
+  7 = { name = "Starcase", init_state = { hue = 0, saturation = 0, value = 0 } }
 
-[integrations.lifx]
-plugin = "lifx"
+# Set up another dummy home automation system, which our imaginary LED strips
+# are controlled by.
+[integrations.dummy_ha2]
+plugin = "dummy"
 
+  [integration.dummy_ha2.devices]
+  1 = { name = "Kitchen cabinet LED", init_state = { hue = 0, saturation = 0, value = 1 } }
+  2 = { name = "Bathroom LED", init_state = { hue = 25, saturation = 0.35, value = 1 } }
+
+# This integration creates a fake device that transitions its color between
+# presets for day and night.
 [integrations.circadian]
 plugin = "circadian"
 device_name = "Circadian rhythm"
@@ -25,78 +48,138 @@ night_color = { hue = 17, saturation = 1.0, value = 0.5 }
 night_fade_start = "18:00"
 night_fade_duration_hours = 1
 
-# Define as many groups as you want.
-# These can be referred from [scenes.<scene_name>.groups] and groups can even
-# refer other groups
-# integration_id should equal the id given the integration,
-# which is "hue1" in this example settings ([integrations.hue1]).
-# The "name" property is the device name as used in the Hue app.
+###############################################################################
+#
+# The next step is to configure any groups, scenes and routines according to
+# your needs.
+#
+# Continuing with our example, we will:
+#
+# - Group lights by room or whether they are upstairs / downstairs. For
+#   convenience, we will also create a group containing all lights.
+# - Create commonly used scenes such as "default", "night light",
+#   "all off", "party mode".
+#
+# We wont configure any routines since these won't work out of the box without
+# a few sensors (light switches, motion detectors, etc.) configured.
+#
+# Note that even without routines, you can still activate scenes and change
+# device states via the homectl UI.
+#
+# Find more information and tips on the remaining configuration sections at:
+# https://github.com/FruitieX/homectl#configuration-tips
+#
+###############################################################################
 
-[groups.office]
-name = "Office lights"
+##########
+# Groups #
+##########
+
+# Group together all kitchen lights from different HA systems
+[groups.kitchen]
+name = "Kitchen"
 devices = [
-  { integration_id = "hue1", name = "Office" },
-  { integration_id = "hue1", name = "Hue play R" }
+  { integration_id = "dummy_ha1", name = "Kitchen ceiling light"},
+  { integration_id = "dummy_ha2", name = "Kitchen cabinet LED"},
 ]
 
-# Example of group referring other groups
+# Group together all downstairs lights, including lights from
+# the above kitchen group
+[groups.downstairs]
+name = "Downstairs"
+devices = [
+  { integration_id = "dummy_ha1", name = "Living room" },
+  { integration_id = "dummy_ha1", name = "Entryway" },
+]
+groups = [ { group_id = "kitchen"} ]
+
+# Group together all upstairs lights
+[groups.upstairs]
+name = "Upstairs"
+devices = [
+  { integration_id = "dummy_ha1", name = "Office"},
+  { integration_id = "dummy_ha1", name = "Bedroom"},
+  { integration_id = "dummy_ha1", name = "Staircase"},
+  { integration_id = "dummy_ha2", name = "Bathroom LED"},
+]
+
+# Group together all lights in (and outside) the house
 [groups.all]
 name = "All lights"
 devices = [
-  { integration_id = "hue1", name = "Outdoor lightstrip" },
+  { integration_id = "dummy_ha1", name = "Outdoor spot" }
 ]
 groups = [
-  { group_id = "office" }
+  { group_id = "downstairs" },
+  { group_id = "upstairs" }
 ]
 
-# Define a couple scenes that can be triggered from routines Note that scenes
-# can "link" a device/group to another device, meaning the state should be
-# copied over from the target device. (see [scenes.office_on.groups])
+##########
+# Scenes #
+##########
 
-[scenes.office_on]
-name = "Office on"
+# First, define a scene with lots of individual colors per light.
+#
+# Note that we are not including all devices, and the result is that only some
+# devices will be affected by the scene.
+[scenes.party]
+name = "Party"
 
-# Note the difference between adding groups to the scene
-  [scenes.office_on.groups]
-  office = { integration_id = "circadian", device_id = "color" }
+  # Individual light states are configured per integration with each light's name
+  [scenes.party.devices.dummy_ha1]
+  "Living room" = { power = true, color = { hue = 130, saturation = 1.0, value = 1.0 }}
+  "Entryway" = { power = true, color = { hue = 30, saturation = 1.0, value = 1.0 }}
+  "Kitchen ceiling light" = { power = true, color = { hue = 240, saturation = 1.0, value = 1.0 }}
 
-# and adding devices to the scene.
-  [scenes.office_on.devices.hue1]
-  "Hue play L" = { power = true, color = { hue = 0, saturation = 1, value = 1 }, brightness = 0.5 }
+  [scenes.party.devices.dummy_ha2]
+  "Kitchen cabinet LED" = { power = true, color = { hue = 300, saturation = 1.0, value = 1.0 }}
 
-[scenes.office_off]
-name = "Office off"
+# Turn all lights off, useful when leaving house
+[scenes.off]
+name = "All off"
 
-  [scenes.office_off.groups]
-  office = { power = false }
+  # We can set state on entire groups
+  [scenes.off.groups]
+  all = { power = false }
 
-  [scenes.office_off.devices.hue1]
-  "Hue play L" = { power = false }
+  # homectl processes devices after groups so we can override state of
+  # individual lights.
+  #
+  # Slowly fade out entryway light so we can still see
+  [scenes.leave.devices.dummy_ha1]
+  "Entryway" = { power = false, transition_ms = 180000 }
 
-[scenes.test]
-name = "Test scene"
+# Default scene for upstairs lights
+[scenes.default_upstairs]
+name = "Default (upstairs)"
+  
+  # We can also "link" devices or entire groups to the state of another device.
+  # In this example we copy state from a virtual `circadian/color` device into
+  # every device in the upstairs group.
+  [scenes.default_upstairs.groups]
+  upstairs = { integration_id = "circadian", device_id = "color" }
 
-  [scenes.test.devices.hue1]
-  "Hue play L" = { power = true, color = { hue = 100, saturation = 1, value = 1 } }
+# Default scene for downstairs lights
+[scenes.default_downstairs]
+name = "Default (downstairs)"
 
-# Define routines that tell which actions to trigger based on sensor rules. All
-# given rules have to match (logical and) for the given actions to be
-# triggered.
+  # Do the same linking trick for downstairs devices
+  [scenes.default_downstairs.groups]
+  downstairs = { integration_id = "circadian", device_id = "color" }
 
-[routines.office_on]
-name = "Office on"
-rules = [
-  { integration_id = "hue1", name = "Office switch", state = { on = true } }
-]
-actions = [
-  { action = "CycleScenes", scenes = [ { scene_id = "office_on" }, { scene_id = "test" } ] }
-]
+  # And set the outdoor spot to a certain color
+  [scenes.default_downstairs.devices.dummy_ha1]
+  "Outdoor spot" = { power = true, color = { hue = 100, saturation = 0.75, value = 1 } }
 
-[routines.office_off]
-name = "Office off"
-rules = [
-  { integration_id = "hue1", name = "Office switch", state = { off = true } }
-]
-actions = [
-  { action = "ActivateScene", scene_id = "office_off" }
-]
+# Night light scene
+[scenes.night_light]
+name = "Night light"
+
+  # Turn off all lights
+  [scenes.night_light.groups]
+  all = { power = false }
+
+  # Leave these lights on with very low brightness
+  [scenes.night_light.devices.dummy_ha1]
+  "Bathroom LED" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
+  "Staircase" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }

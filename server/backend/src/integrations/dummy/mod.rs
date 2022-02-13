@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
     device::{Device, DeviceId, DeviceState, Light},
@@ -44,15 +44,6 @@ impl Integration for Dummy {
     }
 
     async fn register(&mut self) -> Result<()> {
-        let resp: HashMap<String, String> = surf::get("https://httpbin.org/ip")
-            .await
-            .map_err(|err| anyhow!(err))?
-            .body_json()
-            .await
-            .map_err(|err| anyhow!(err))?;
-
-        println!("{:#?}", resp);
-
         for (id, device) in &self.config.devices {
             let state = DeviceState::Light(Light::new_with_color(
                 true,
