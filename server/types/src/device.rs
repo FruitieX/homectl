@@ -6,7 +6,7 @@ use std::{
 
 use super::{integration::IntegrationId, scene::SceneId};
 use chrono::{DateTime, Utc};
-use palette::{Hsv};
+use palette::{Hsv, RgbHue};
 use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Serialize,
@@ -232,12 +232,21 @@ impl DeviceState {
         }
     }
 
+    pub fn set_brightness(&mut self, brightness: f32) {
+        match self {
+            DeviceState::OnOffDevice(_) => {}
+            DeviceState::Light(state) => state.brightness = Some(brightness),
+            DeviceState::MultiSourceLight(_) => {}
+            DeviceState::Sensor(_) => {}
+        }
+    }
+
     pub fn set_hue(&mut self, hue: f32) {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                if let Some(DeviceColor::Color(mut color)) = state.color {
-                    color.hue = hue.into();
+                if let Some(DeviceColor::Color(color)) = &mut state.color {
+                    color.hue = RgbHue::from_degrees(hue);
                 } else {
                     state.color = Some(DeviceColor::Color(Hsv::new(hue, 0.0, 1.0)));
                 }
@@ -251,7 +260,7 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                if let Some(DeviceColor::Color(mut color)) = state.color {
+                if let Some(DeviceColor::Color(color)) = &mut state.color {
                     color.saturation = saturation;
                 } else {
                     state.color = Some(DeviceColor::Color(Hsv::new(0.0, saturation, 1.0)));
@@ -266,7 +275,7 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                if let Some(DeviceColor::Color(mut color)) = state.color {
+                if let Some(DeviceColor::Color(color)) = &mut state.color {
                     color.value = value;
                 } else {
                     state.color = Some(DeviceColor::Color(Hsv::new(0.0, 0.0, value)));

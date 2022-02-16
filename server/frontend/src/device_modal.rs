@@ -25,12 +25,12 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
     //     *show_debug = !*show_debug;
     // };
 
+    let brightness = cx.props.device.state.get_brightness().unwrap_or_default();
     let power = cx.props.device.state.is_powered_on().unwrap_or_default();
     let color = cx.props.device.state.get_color();
 
     let hue = color.unwrap_or_default().hue.to_positive_degrees();
     let saturation = color.unwrap_or_default().saturation;
-    let value = color.unwrap_or_default().value;
     let cct = cx
         .props
         .device
@@ -53,13 +53,13 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
         hsv_to_css_hsl_str(&Some(color))
     };
 
-    let val_min = {
+    let bri_min = {
         let mut color = color.unwrap_or_default();
         color.value = 0.5;
         hsv_to_css_hsl_str(&Some(color))
     };
 
-    let val_max = {
+    let bri_max = {
         let mut color = color.unwrap_or_default();
         color.value = 1.0;
         hsv_to_css_hsl_str(&Some(color))
@@ -116,14 +116,14 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
         }
     };
 
-    let set_value = {
+    let set_brightness = {
         let ws = ws.clone();
         move |evt: FormEvent| {
             let value: Option<f32> = evt.data.value.parse().ok();
 
             if let Some(value) = value {
                 let mut device = cx.props.device.clone();
-                device.state.set_value(value);
+                device.state.set_brightness(value);
                 device.scene = None;
                 ws.send_json(&WebSocketRequest::Message(Message::SetDeviceState {
                     device,
@@ -208,23 +208,23 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
                         onchange: set_saturation
                     }
 
-                    "Value:",
+                    "Brightness:",
                     style {
-                        ".value-slider::-webkit-slider-runnable-track {{
-                            background: linear-gradient(to right, {val_min} 0%, {val_max} 100%);
+                        ".brightness-slider::-webkit-slider-runnable-track {{
+                            background: linear-gradient(to right, {bri_min} 0%, {bri_max} 100%);
                             border-radius: 0.5rem;
                             height: 1rem;
                             border: 1px solid #cccccc;
                         }}"
                     }
                     input {
-                        class: "value-slider",
+                        class: "brightness-slider",
                         r#type: "range",
                         min: "0",
                         max: "1",
                         step: "0.01",
-                        value: "{value}",
-                        onchange: set_value
+                        value: "{brightness}",
+                        onchange: set_brightness
                     }
 
                     "Color temperature:",

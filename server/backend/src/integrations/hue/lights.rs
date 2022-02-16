@@ -57,15 +57,22 @@ pub async fn poll_lights(config: HueConfig, integration_id: IntegrationId, sende
 #[derive(Debug, Deserialize, Serialize)]
 pub struct OnOffDeviceMsg {
     on: bool,
-    transitiontime: Option<u32>,
+    transitiontime: Option<u16>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct LightMsg {
     on: bool,
-    bri: u32,
-    xy: Vec<f32>,
-    transitiontime: Option<u32>,
+    bri: u8,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    xy: Option<Vec<f32>>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ct: Option<u16>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    transitiontime: Option<u16>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -85,7 +92,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
             // Hue repserents transition times as multiples of 100 ms
             let transitiontime = state
                 .transition_ms
-                .map(|transition_ms| ((transition_ms as f64) / 100.0) as u32);
+                .map(|transition_ms| ((transition_ms as f64) / 100.0) as u16);
 
             Ok(match state.color {
                 Some(DeviceColor::Color(color)) => {
@@ -104,28 +111,36 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                     let x = color.x;
                     let y = color.y;
 
-                    let xy = vec![x, y];
+                    let xy = Some(vec![x, y]);
                     // let bri = (color.luma * 254.0 * state.brightness.unwrap_or(1.0) as f32).floor()
                     //     as u32;
                     let bri = (hsv.value * 254.0 * (state.brightness.unwrap_or(1.0) as f32)).floor()
-                        as u32;
+                        as u8;
 
                     HueMsg::LightMsg(LightMsg {
                         on: state.power,
                         xy,
+                        ct: None,
                         bri,
                         transitiontime,
                     })
                 }
-                Some(_) => todo!(),
+                Some(DeviceColor::Cct(ref ct)) => {
+                    let bri = (254.0 * (state.brightness.unwrap_or(1.0) as f32)).floor() as u8;
+
+                    HueMsg::LightMsg(LightMsg {
+                        on: state.power,
+                        xy: None,
+                        ct: Some(f32::floor(1000000.0 / ct.get_cct()) as u16),
+                        bri,
+                        transitiontime,
+                    })
+                }
                 None => HueMsg::OnOffDeviceMsg(OnOffDeviceMsg {
                     on: state.power,
                     transitiontime,
                 }),
             })
-
-            // TODO: transition support
-            // body.insert("transitiontime", state.);
         }
         DeviceState::Sensor(_) => {
             // Do nothing
@@ -137,9 +152,9 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
         )),
     }?;
 
-    // println!("setting light \"{}\" state: {:?}", device.name, body);
+    // println!("setting light \"{}\" state: {:?}", device.name, serde_json::to_string(&body));
 
-    let _ = surf::put(&format!(
+    surf::put(&format!(
         "http://{}/api/{}/{}/state",
         config.addr, config.username, device.id
     ))

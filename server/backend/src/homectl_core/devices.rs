@@ -178,10 +178,10 @@ impl Devices {
                         return;
                     }
 
-                    // println!(
-                    //     "Device state mismatch detected ({}/{}): (was: {:?}, expected: {:?})",
-                    //     device.integration_id, device.id, device.state, expected_state
-                    // );
+                    println!(
+                        "Device state mismatch detected ({}/{}): (was: {:?}, expected: {:?})",
+                        device.integration_id, device.id, device.state, expected_state
+                    );
 
                     let mut device = device.clone();
                     device.state = expected_state;

@@ -3,13 +3,27 @@ use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, Deserialize)]
+pub enum ColorMode {
+    #[serde(rename = "hs")]
+    Hs,
+
+    #[serde(rename = "xy")]
+    Xy,
+
+    #[serde(rename = "ct")]
+    Ct
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct BridgeLightState {
     pub on: bool,
-    pub bri: Option<u32>,
-    pub hue: Option<u32>,
-    pub sat: Option<u32>,
+    pub bri: Option<u8>,
+    pub hue: Option<u16>,
+    pub sat: Option<u8>,
     pub xy: Option<(f32, f32)>,
-    pub transitiontime: Option<u32>,
+    pub ct: Option<u16>,
+    pub colormode: Option<ColorMode>,
+    pub transitiontime: Option<u16>,
     pub reachable: Option<bool>,
 }
 

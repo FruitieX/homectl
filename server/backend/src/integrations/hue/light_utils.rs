@@ -1,46 +1,52 @@
-use super::bridge::BridgeLight;
+use super::bridge::{BridgeLight, ColorMode};
 
 use homectl_types::{
-    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    device::{CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::{Yxy, Hsv};
+use palette::{Hsv, Yxy};
 
-/// Convert BridgeLight color into Lch
-pub fn to_palette(bridge_light: BridgeLight) -> Option<DeviceColor> {
-    // let hue: f32 = bridge_light.state.hue? as f32;
-    // let saturation: f32 = bridge_light.state.sat? as f32;
-    // let lightness: f32 = bridge_light.state.bri? as f32;
-
-    // let hsv = Hsv::new(
-    //     (hue / 65536.0) * 360.0,
-    //     saturation / 254.0,
-    //     lightness / 254.0,
-    // );
-    // let device_color: DeviceColor = hsv.into();
-
-    let (x, y) = bridge_light.state.xy?;
-    let brightness: f32 = bridge_light.state.bri? as f32;
-    let hsv = Yxy::new(x, y, brightness / 254.0);
-    let mut device_color: Hsv = hsv.into();
-    device_color.value = brightness / 254.0;
-
-    Some(DeviceColor::Color(device_color))
-}
-
-/// Constructs Light kind from BridgeLight
 pub fn to_light(bridge_light: BridgeLight) -> Light {
+    let power = bridge_light.state.on;
+    let xy = bridge_light.state.xy;
+    let ct = bridge_light.state.ct.map(|ct| 1_000_000.0 / ct as f32);
+    let hue = bridge_light.state.hue.map(|hue| hue as f32 / 65535.0);
+    let sat = bridge_light.state.sat.map(|sat| sat as f32 / 254.0);
+    let brightness = bridge_light.state.bri.map(|bri| bri as f32 / 254.0);
     let transition_ms = bridge_light
         .state
         .transitiontime
         .map(|transitiontime| (transitiontime * 100) as u64);
 
-    Light::new(
-        bridge_light.state.on,
-        None,
-        to_palette(bridge_light),
+    let color = match bridge_light.state.colormode {
+        Some(ColorMode::Ct) => (move || {
+            let ct = ct?;
+            let cct = CorrelatedColorTemperature::new(ct, 2000.0..6500.0);
+            Some(DeviceColor::Cct(cct))
+        })(),
+        Some(ColorMode::Xy) => (move || {
+            let (x, y) = xy?;
+            let hsv = Yxy::new(x, y, 1.0);
+            let mut device_color: Hsv = hsv.into();
+            device_color.value = 1.0;
+            Some(DeviceColor::Color(device_color))
+        })(),
+        Some(ColorMode::Hs) => (move || {
+            let hue = hue?;
+            let sat = sat?;
+
+            let device_color = Hsv::new(hue, sat, 1.0);
+            Some(DeviceColor::Color(device_color))
+        })(),
+        None => None,
+    };
+
+    Light {
+        power,
+        brightness,
+        color,
         transition_ms,
-    )
+    }
 }
 
 /// Converts BridgeLight into Device
