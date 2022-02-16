@@ -221,8 +221,8 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
                 transition,
             })
         }
-        Some(DeviceColor::Cct(_)) => todo!(),
-        None => todo!(),
+        Some(DeviceColor::Cct(_)) => Err(anyhow!("Support for Lifx color temperature mode not implemented")),
+        None => Err(anyhow!("Support for Lifx devices without color not implemented")),
     }
 }
 
