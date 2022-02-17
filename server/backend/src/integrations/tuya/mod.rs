@@ -261,7 +261,8 @@ fn to_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<Tu
                 let xy: Yxy = color.into();
                 let ct = xy_to_cct(&xy);
 
-                let state = ct_to_tuya(light_state.power, light_state.brightness, ct);
+                let brightness = color.value * light_state.brightness.unwrap_or(1.0);
+                let state = ct_to_tuya(light_state.power, Some(brightness), ct);
                 Ok(state)
             } else {
                 // No color support at all
