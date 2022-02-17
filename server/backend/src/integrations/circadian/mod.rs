@@ -21,11 +21,13 @@ pub struct CircadianConfig {
     day_fade_start: chrono::NaiveTime,
     day_fade_duration_hours: i64,
     day_color: ColorConfig,
+    day_brightness: Option<f32>,
 
     #[serde(deserialize_with = "from_hh_mm")]
     night_fade_start: chrono::NaiveTime,
     night_fade_duration_hours: i64,
     night_color: ColorConfig,
+    night_brightness: Option<f32>,
 }
 
 #[derive(Clone)]
@@ -138,6 +140,22 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
     }
 }
 
+fn get_circadian_brightness(circadian: &Circadian) -> Option<f32> {
+    match (
+        circadian.config.day_brightness,
+        circadian.config.night_brightness,
+    ) {
+        (Some(day), Some(night)) => {
+            let i = get_night_fade(circadian);
+
+            let brightness = (1.0 - i) * day + i * night;
+
+            Some(brightness)
+        }
+        (_, _) => None,
+    }
+}
+
 static POLL_RATE: u64 = 60 * 1000;
 
 async fn poll_sensor(circadian: Circadian) {
@@ -160,7 +178,7 @@ async fn poll_sensor(circadian: Circadian) {
 fn mk_circadian_device(circadian: &Circadian) -> Device {
     let state = DeviceState::Light(Light::new(
         true,
-        Some(1.0),
+        get_circadian_brightness(circadian),
         Some(get_circadian_color(circadian)),
         Some(POLL_RATE),
     ));
