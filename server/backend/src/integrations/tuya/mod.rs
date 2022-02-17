@@ -5,12 +5,13 @@ use async_std::{stream, task::JoinHandle};
 use async_trait::async_trait;
 use futures::StreamExt;
 use homectl_types::device::{CorrelatedColorTemperature, DeviceColor};
+use homectl_types::utils::{cct_to_rgb, xy_to_cct};
 use homectl_types::{
     device::{Device, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
-use palette::Hsv;
+use palette::{Hsv, Yxy};
 use rust_async_tuyapi::{tuyadevice::TuyaDevice, Payload, PayloadStruct};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -174,6 +175,56 @@ impl Integration for Tuya {
     }
 }
 
+fn hsv_to_tuya(power: bool, brightness: Option<f32>, hsv: Hsv) -> TuyaState {
+    let hue: f32 = hsv.hue.to_positive_degrees();
+    let saturation = (hsv.saturation as f32) * 1000.0;
+    let value = brightness.unwrap_or(1.0) * (hsv.value as f32) * 1000.0;
+    let tuya_color_string = format!(
+        "{:0>4x}{:0>4x}{:0>4x}",
+        hue as i32, saturation as i32, value as i32
+    );
+
+    TuyaState {
+        power_on: power,
+        color: Some(tuya_color_string),
+        brightness: None,
+        color_temperature: None,
+    }
+}
+
+fn ct_to_tuya(power: bool, brightness: Option<f32>, ct: f32) -> TuyaState {
+    // Range of my bulbs is from 2700K - 4100K (and they express this as a
+    // 0-1000 range), this is very likely not true for all Tuya bulbs
+    let min_supported_temp = 2700.0;
+    let max_supported_temp = 4100.0;
+
+    // Scale the value into 0.0 - 1.0 range
+    let q = (ct - min_supported_temp) / (max_supported_temp - min_supported_temp);
+    let q = q.clamp(0.0, 1.0);
+
+    // Scale the value into 0 - 1000 range
+    let color_temperature = f32::floor(q * 1000.0) as u32;
+
+    // Brightness goes from 10 to 1000 ¯\_(ツ)_/¯
+    let brightness = brightness.map(|bri| f32::floor(bri * 990.0) as u32 + 10);
+
+    TuyaState {
+        power_on: power,
+        color: None,
+        brightness,
+        color_temperature: Some(color_temperature),
+    }
+}
+
+fn power_to_tuya(power: bool) -> TuyaState {
+    TuyaState {
+        power_on: power,
+        brightness: None,
+        color_temperature: None,
+        color: None,
+    }
+}
+
 #[derive(Debug)]
 struct TuyaState {
     power_on: bool,
@@ -182,7 +233,7 @@ struct TuyaState {
     color: Option<String>,
 }
 
-fn to_tuya_state(device: &Device) -> Result<TuyaState> {
+fn to_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<TuyaState> {
     let light_state = match device.state.clone() {
         DeviceState::Light(Light {
             brightness,
@@ -198,59 +249,56 @@ fn to_tuya_state(device: &Device) -> Result<TuyaState> {
         _ => Err(anyhow!("Unsupported device state")),
     }?;
 
-    // Brightness goes from 10 to 1000 ¯\_(ツ)_/¯
-    let brightness = light_state
-        .brightness
-        .map(|bri| f32::floor(bri * 990.0) as u32 + 10);
-
+    // TODO: do this kind of conversion for the integrations in homectl core
     match light_state.color {
         Some(DeviceColor::Color(color)) => {
-            let hue: f32 = color.hue.to_positive_degrees();
-            let saturation = (color.saturation as f32) * 1000.0;
-            let value = (color.value as f32) * 1000.0;
-            let tuya_color_string = format!(
-                "{:0>4x}{:0>4x}{:0>4x}",
-                hue as i32, saturation as i32, value as i32
-            );
+            if device_config.color_field.is_some() {
+                // Received color and device supports color
+                let state = hsv_to_tuya(light_state.power, light_state.brightness, color);
+                Ok(state)
+            } else if device_config.color_temp_field.is_some() {
+                // Received color but device only supports color temperature, do conversion
+                let xy: Yxy = color.into();
+                let ct = xy_to_cct(&xy);
 
-            let state = TuyaState {
-                power_on: light_state.power,
-                color: Some(tuya_color_string),
-                brightness: None,
-                color_temperature: None,
-            };
-
-            Ok(state)
+                let state = ct_to_tuya(light_state.power, light_state.brightness, ct);
+                Ok(state)
+            } else {
+                // No color support at all
+                Ok(power_to_tuya(light_state.power))
+            }
         }
         Some(DeviceColor::Cct(cct)) => {
-            // Range of my bulbs is from 2700K - 4100K (and they express this as a
-            // 0-1000 range), this is very likely not true for all Tuya bulbs
-            let min_supported_temp = 2700.0;
-            let max_supported_temp = 4100.0;
+            if device_config.color_temp_field.is_some() {
+                // Received color temperature and device supports color temperatures
+                let state = ct_to_tuya(light_state.power, light_state.brightness, cct.get_cct());
 
-            // Scale the value into 0.0 - 1.0 range
-            let q =
-                (cct.get_cct() - min_supported_temp) / (max_supported_temp - min_supported_temp);
-            let q = q.clamp(0.0, 1.0);
+                Ok(state)
+            } else if device_config.color_field.is_some() {
+                // Received color temperature but device only supports colors, do conversion
+                let rgb = cct_to_rgb(cct.get_cct());
+                let hsv: Hsv = rgb.into();
+                let state = hsv_to_tuya(light_state.power, light_state.brightness, hsv);
 
-            // Scale the value into 0 - 1000 range
-            let color_temperature = f32::floor(q * 1000.0) as u32;
+                Ok(state)
+            } else {
+                // No color support at all
+                Ok(power_to_tuya(light_state.power))
+            }
+        }
+        None => {
+            // Brightness goes from 10 to 1000 ¯\_(ツ)_/¯
+            let brightness = light_state
+                .brightness
+                .map(|bri| f32::floor(bri * 990.0) as u32 + 10);
 
-            let state = TuyaState {
+            Ok(TuyaState {
                 power_on: light_state.power,
                 color: None,
                 brightness,
-                color_temperature: Some(color_temperature),
-            };
-
-            Ok(state)
+                color_temperature: None,
+            })
         }
-        None => Ok(TuyaState {
-            power_on: light_state.power,
-            color: None,
-            brightness,
-            color_temperature: None,
-        }),
     }
 }
 
@@ -270,7 +318,7 @@ fn read_payload_from_json(json: &str) -> PayloadStruct {
 
 async fn set_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<()> {
     // println!("setting tuya state: {:?} {}", device.state, device.name);
-    let tuya_state = to_tuya_state(device)?;
+    let tuya_state = to_tuya_state(device, device_config)?;
 
     let current_time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)

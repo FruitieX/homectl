@@ -6,7 +6,7 @@ use num_traits::pow::Pow;
 use palette::Hsv;
 use std::net::SocketAddr;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LifxState {
     pub hue: u16,
     pub sat: u16,
@@ -14,7 +14,7 @@ pub struct LifxState {
     pub power: u16,
     pub label: String,
     pub addr: SocketAddr,
-    pub transition: Option<u16>,
+    pub transition: Option<u32>,
 }
 
 #[derive(Clone)]
@@ -37,6 +37,13 @@ pub fn lifx_msg_type_to_u16(msg_type: LifxMsg) -> u16 {
 }
 
 fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
+    // TODO: might have to do some trickery here with comparing to a device's
+    // old state to figure out whether we should apply transitions only to
+    // SetPower or SetColor message.
+    //
+    // Currently simultaneously powering on and switching a light's color will
+    // first transition the light to its old state, then transition from the old
+    // state to the desired state.
     match lifx_msg {
         LifxMsg::SetPower(state) => {
             let mut buf: [u8; 16 + 32] = [0; 16 + 32];
@@ -44,7 +51,7 @@ fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
             LittleEndian::write_u16(&mut buf, state.power);
 
             if let Some(t) = state.transition {
-                LittleEndian::write_u16(&mut buf[2..], t)
+                LittleEndian::write_u32(&mut buf[2..], t)
             }
 
             Some(buf.to_vec())
@@ -57,9 +64,8 @@ fn mk_lifx_msg_payload(lifx_msg: LifxMsg) -> Option<Vec<u8>> {
             LittleEndian::write_u16(&mut buf[5..], state.bri);
             LittleEndian::write_u16(&mut buf[7..], 6500); // lifx requires this weird color temperature parameter?
 
-            if let Some(t) = state.transition {
-                LittleEndian::write_u16(&mut buf[9..], t)
-            }
+            let t = state.transition.unwrap_or(500);
+            LittleEndian::write_u32(&mut buf[9..], t);
 
             Some(buf.to_vec())
         }
@@ -198,6 +204,11 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
         _ => Err(anyhow!("Unsupported device state")),
     }?;
 
+    let power = if light_state.power { 65535 } else { 0 };
+    let transition = light_state
+        .transition_ms
+        .map(|transition_ms| transition_ms as u32);
+
     match light_state.color {
         Some(DeviceColor::Color(color)) => {
             let hue =
@@ -205,11 +216,6 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
             let sat = (color.saturation * 65535.0).floor() as u16;
             let bri =
                 (light_state.brightness.unwrap_or(1.0) * color.value * 65535.0).floor() as u16;
-            let transition = light_state
-                .transition_ms
-                .map(|transition_ms| transition_ms as u16);
-
-            let power = if light_state.power { 65535 } else { 0 };
 
             Ok(LifxState {
                 hue,
@@ -221,8 +227,20 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
                 transition,
             })
         }
-        Some(DeviceColor::Cct(_)) => Err(anyhow!("Support for Lifx color temperature mode not implemented")),
-        None => Err(anyhow!("Support for Lifx devices without color not implemented")),
+        Some(DeviceColor::Cct(_)) => Err(anyhow!(
+            // TODO: https://community.lifx.com/t/lan-protocol-switching-between-colour-and-white/1383
+            // https://lan.developer.lifx.com/docs/representing-color-with-hsbk
+            "Support for Lifx color temperature mode not implemented"
+        )),
+        None => Ok(LifxState {
+            hue: 0,
+            sat: 0,
+            bri: 0,
+            power,
+            label: device.name.clone(),
+            addr: device.id.to_string().parse()?,
+            transition,
+        }),
     }
 }
 
