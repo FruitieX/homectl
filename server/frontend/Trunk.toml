@@ -5,3 +5,15 @@ backend = "http://localhost:45289/api/v1"
 [[proxy]]
 backend = "ws://localhost:45289/ws"
 ws = true
+
+# From:
+# https://github.com/autarch/blog.urth.org/blob/next-post/content/posts/2022-02-14-frontend-rust-without-node.md#tailwindcss
+[[hooks]]
+stage = "build"
+# I'm not sure why we can't just invoke tailwindcss directly, but that doesn't
+# seem to work for some reason.
+command = "sh"
+command_arguments = [
+    "-c",
+    "tailwindcss -i tailwindcss.css -o index.css"
+]

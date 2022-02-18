@@ -115,15 +115,20 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
             set_modal_open: cx.props.set_modal_open,
             contents: cx.render(rsx! {
                 div {
-                    gap: "1rem",
-                    display: "flex",
-                    flex_direction: "column",
-                    flex: "1",
+                    class: "gap-4 flex flex-col flex-1",
 
-                    "Name:"
-                    input {
-                        value: "{name}",
-                        onchange: onchange
+                    div {
+                        class: "flex flex-col",
+
+                        span {
+                            class: "text-slate-700 text-sm",
+                            "Name:"
+                        }
+                        input {
+                            class: "border rounded border-slate-300 px-1",
+                            value: "{name}",
+                            onchange: onchange
+                        }
                     }
 
                     button {

@@ -33,14 +33,11 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
             gradient: gradient,
             contents: cx.render(rsx! {
                 div {
-                    flex: "1",
+                    class: "flex-1",
+
                     span {
-                        padding: "0.5rem",
-                        border_radius: "0.5rem",
-                        background_color: "rgba(255, 255, 255, 0.5)",
-                        text_overflow: "ellipsis",
-                        overflow: "hidden",
-                        max_height: "100%",
+                        class: "px-2 py-1 rounded-lg bg-white bg-opacity-50 overflow-ellipsis overflow-hidden max-h-full whitespace-nowrap",
+
                         "{name}"
                     }
                 }
@@ -92,22 +89,20 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
 
     cx.render(rsx! {
         div {
-            margin: "1rem",
+            class: "m-4",
+
             div {
-                gap: "0.5rem",
-                max_width: "40rem",
-                display: "flex",
-                flex_direction: "row",
-                flex_wrap: "wrap",
+                class: "gap-2 max-w-[60rem] flex flex-row flex-wrap",
+
                 devices
             }
-            h2 { margin_bottom: "1rem", "Options:" }
+            h2 { class: "mt-4", "Options:" }
             Tile {
                 full_width: true,
                 onclick: move |_| set_save_scene_modal_open(true),
                 contents: cx.render(rsx! { "Save scene" })
             }
-            div { height: "1rem" }
+            div { class: "h-4" }
             SaveSceneModal {
                 filters: &cx.props.filters,
                 modal_open: save_scene_modal_open,

@@ -55,15 +55,20 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
             set_modal_open: cx.props.set_modal_open,
             contents: cx.render(rsx! {
                 div {
-                    gap: "1rem",
-                    display: "flex",
-                    flex_direction: "column",
-                    flex: "1",
+                    class: "gap-4 flex flex-col flex-1",
 
-                    "Name:"
-                    input {
-                        value: "{name}",
-                        onchange: onchange
+                    div {
+                        class: "flex flex-col",
+
+                        span {
+                            class: "text-slate-700 text-sm",
+                            "Name:"
+                        }
+                        input {
+                            class: "border rounded border-slate-300 px-1",
+                            value: "{name}",
+                            onchange: onchange
+                        }
                     }
 
                     button {
@@ -75,15 +80,18 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
                     { if *confirm_delete_visible {
                         rsx! {
                             div {
-                                width: "100%",
+                                class: "w-full",
+
                                 button {
-                                    width: "50%",
+                                    class: "w-1/2 bg-slate-100",
                                     onclick: move |_| {set_confirm_delete_visible(false)},
+
                                     "Cancel"
                                 }
                                 button {
-                                    width: "50%",
+                                    class: "w-1/2 bg-rose-600 text-white",
                                     onclick: delete_scene,
+
                                     "Confirm"
                                 }
                             }
@@ -91,7 +99,9 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
                     } else {
                         rsx! {
                             button {
+                                class: "bg-slate-100", 
                                 onclick: move |_| {set_confirm_delete_visible(true)},
+
                                 "Delete scene"
                             }
                         }

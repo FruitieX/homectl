@@ -8,7 +8,7 @@ use palette::Hsv;
 use crate::{
     app_state::{DEVICES_ATOM, GROUPS_ATOM},
     tile::Tile,
-    util::{cmp_hsv, get_device_state_color, scale_hsv_value_to_display},
+    util::{cmp_hsv, get_device_state_color, scale_hsv_value_to_display, ARROW_STYLES},
 };
 
 #[derive(Props, PartialEq)]
@@ -21,13 +21,6 @@ struct GroupRowProps {
 fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
     let group_id = &cx.props.group_id;
     let name = &cx.props.name;
-
-    let arrow_styles = r#"
-        text-align: right;
-        margin-right: 0.5rem;
-        line-height: 1;
-        font-size: 2rem;
-    "#;
 
     let groups = use_read(&cx, GROUPS_ATOM);
     let devices = use_read(&cx, DEVICES_ATOM);
@@ -60,15 +53,15 @@ fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
                     gradient: group_colors,
                     contents: cx.render(rsx! {
                         div {
-                            flex: "1",
+                            class: "flex-1",
+
                             span {
-                                padding: "0.5rem",
-                                border_radius: "0.5rem",
-                                background_color: "rgba(255, 255, 255, 0.5)",
+                                class: "px-2 py-1 rounded-lg bg-white bg-opacity-50 whitespace-nowrap",
+
                                 "{name}"
                             }
                         }
-                        div { style: "{arrow_styles}", ">" }
+                        div { class: "{ARROW_STYLES}", ">" }
                     })
                 }
             }

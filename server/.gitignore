@@ -1,5 +1,7 @@
 target/
 frontend/dist/
+frontend/index.css
+frontend/node_modules/
 .envrc
 .vscode
 .direnv

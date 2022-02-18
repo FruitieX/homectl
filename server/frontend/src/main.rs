@@ -54,7 +54,7 @@ fn app(cx: Scope) -> Element {
         Router {
             Header {}
             main {
-                padding_bottom: "1rem",
+                class: "pb-4",
 
                 Route { to: "/", Dashboard {} },
                 Route { to: "/index.html", Redirect { to: "/" } },

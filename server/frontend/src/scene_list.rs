@@ -64,22 +64,17 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
                 gradient: scene_colors,
                 contents: cx.render(rsx! {
                     div {
-                        flex: "1",
+                        class: "flex-1",
+
                         span {
-                            padding: "0.5rem",
-                            border_radius: "0.5rem",
-                            background_color: "rgba(255, 255, 255, 0.5)",
+                            class: "px-2 py-1 rounded-lg bg-white bg-opacity-50 whitespace-nowrap",
+
                             "{name}"
                         }
                     }
                     button {
-                        border: "none",
-                        background: "none",
-                        height: "2rem",
-                        width: "2rem",
-                        font_size: "1.5rem",
-                        line_height: "1",
-                        cursor: "pointer",
+                        class: "h-8 w-8 text-2xl leading-4 cursor-pointer",
+
                         onclick: edit_scene,
                         "✎"
                     }
@@ -116,10 +111,8 @@ pub fn SceneList(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
-            display: "flex",
-            flex_direction: "column",
-            margin: "1rem",
-            gap: "1rem",
+            class: "flex flex-col m-4 gap-4",
+
             scenes
         }
     })

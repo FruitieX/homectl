@@ -4,7 +4,7 @@ use fermi::use_read;
 use homectl_types::group::GroupId;
 use itertools::Itertools;
 
-use crate::app_state::GROUPS_ATOM;
+use crate::{app_state::GROUPS_ATOM, util::tw};
 
 #[derive(PartialEq, Props)]
 pub struct HeaderProps {}
@@ -48,33 +48,26 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
     };
 
     let disable_back_button = segments.is_empty();
-    let cursor = if disable_back_button { "default" } else { "pointer" };
-    let back_button_opacity = if disable_back_button { 0.0 } else { 1.0 };
+
+    let cursor = if disable_back_button {
+        tw("cursor-default")
+    } else {
+        tw("cursor-pointer")
+    };
+
+    let back_button_opacity = if disable_back_button {
+        tw("opacity-0")
+    } else {
+        tw("opacity-100")
+    };
 
     cx.render(rsx! {
         div {
-            position: "sticky",
-            top: "0",
-            height: "4rem",
-            background_color: "rgb(240, 240, 240)",
-            box_shadow: "0px 0px 6px 3px rgba(0, 0, 0, 0.2)",
-            display: "flex",
-            flex_direction: "row",
-            align_items: "center",
-            gap: "1rem",
-            padding_left: "0.5rem",
-            padding_right: "0.5rem",
+            class: "sticky top-0 h-12 bg-stone-100 shadow-md flex flex-row items-center gap-4 px-2",
 
             button {
-                width: "2rem",
-                height: "2rem",
-                font_size: "1.5rem",
-                line_height: "1",
-                border: "none",
-                background: "none",
+                class: "w-8 h-8 text-2xl leading-4 {cursor} {back_button_opacity} hover:text-slate-500",
                 disabled: "{disable_back_button}",
-                cursor: "{cursor}",
-                opacity: "{back_button_opacity}",
                 onclick: move |_| { history.back().unwrap() },
 
                 "<"

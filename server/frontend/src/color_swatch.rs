@@ -12,17 +12,10 @@ pub struct ColorSwatchProps {
 pub fn ColorSwatch(cx: Scope<ColorSwatchProps>) -> Element {
     let background_color = hsv_to_css_hsl_str(&cx.props.color);
 
-    let size = 2.0;
-    let border_radius = size / 2.0;
-
     cx.render(rsx! {
         span {
-            width: "{size}rem",
-            height: "{size}rem",
-            border_radius: "{border_radius}rem",
+            class: "h-8 w-8 rounded-full border border-slate-300 flex-shrink-0",
             background_color: "{background_color}",
-            border: "1px solid #cccccc",
-            flex_shrink: "0",
         }
     })
 }

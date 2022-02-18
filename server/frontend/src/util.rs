@@ -38,3 +38,10 @@ pub fn cmp_hsv(a: &Hsv, b: &Hsv) -> Ordering {
 
     a.cmp(&b)
 }
+
+pub const ARROW_STYLES: &str = tw("text-right mr-2 leading-4 text-4xl flex-1");
+
+/// Annotates tailwindcss utilities to be picked up by editor tooling.
+pub const fn tw(class: &str) -> &str {
+    class
+}

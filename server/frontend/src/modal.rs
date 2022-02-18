@@ -34,53 +34,23 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
     } else {
         cx.render(rsx! {
             div {
-                cursor: "default",
-                position: "fixed",
-                top: "0",
-                left: "0",
-                width: "100vw",
-                height: "100vh",
-                background_color: "rgba(0, 0, 0, 0.5)",
-                display: "flex",
-                align_items: "center",
-                justify_content: "center",
+                class: "cursor-default fixed top-0 left-0 w-screen h-screen bg-black bg-opacity-50 flex items-center justify-center",
                 onclick: close_modal,
 
                 div {
-                    gap: "1rem",
-                    background_color: "white",
-                    width: "20rem",
-                    max_width: "80vw",
-                    height: "35rem",
-                    max_height: "80vh",
-                    border_radius: "0.5rem",
-                    border: "1px solid #cccccc",
-                    padding: "1rem",
-                    display: "flex",
-                    flex_direction: "column",
-                    overflow_y: "auto",
-                    position: "relative",
-
+                    class: "gap-4 bg-white w-80 max-w-[80vw] h-[35rem] max-h-[80vh] rounded-lg border border-slate-300 p-4 flex flex-col overflow-y-auto relative",
                     onclick: cancel_bubble,
 
                     div {
-                        gap: "1rem",
-                        display: "flex",
-                        flex_direction: "row",
+                        class: "gap-4 flex flex-row",
 
                         h2 {
-                            flex: "1",
-                            margin: "0",
+                            class: "flex-1 m-0",
+
                             "{cx.props.title}"
                         }
                         button {
-                            border: "none",
-                            background_color: "transparent",
-                            height: "1.5rem",
-                            font_size: "1.5rem",
-                            color: "#444444",
-                            cursor: "pointer",
-
+                            class: "h-6 text-2xl text-slate-700 cursor-pointer",
                             onclick: close_modal,
 
                             "X"
