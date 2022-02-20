@@ -26,6 +26,8 @@ in
       pkg-config
       postgresql
 
+      nodejs
+
       clang
       unstable.mold
     ];
