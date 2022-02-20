@@ -4,5 +4,5 @@
 cargo install trunk
 cd frontend
 npm install
-tailwindcss -i tailwindcss.css -o index.css
+node_modules/.bin/tailwindcss -i tailwindcss.css -o index.css
 trunk serve
