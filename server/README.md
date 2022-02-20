@@ -22,7 +22,7 @@ trying out other alternatives for now.
 You should now have a demo/dummy homectl environment running.
 
 To control your home automation systems, you need to edit the generated
-configuration file in `backend/Settings.toml`. See below sections for
+configuration file in `/Settings.toml`. See below sections for
 configuration instructions and examples.
 
 ## Description
@@ -111,7 +111,7 @@ and also other similar solutions to homectl:
 
 ## Sample configs for supported integrations:
 
-You can refer to the [sample config](/backend/Settings.toml.example) for an
+You can refer to the [sample config](/Settings.toml.example) for an
 example on how to put these concepts together.
 
 ### Tuya

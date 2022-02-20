@@ -1,8 +1,9 @@
-.cargo/
-target/
-frontend/dist/
-frontend/index.css
-frontend/node_modules/
-.envrc
-.vscode
-.direnv
+/backend/.cargo/
+/target/
+/frontend/dist/
+/frontend/index.css
+/frontend/node_modules/
+/.envrc
+/.vscode
+/.direnv
+/Settings.toml

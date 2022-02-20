@@ -22,14 +22,7 @@ type OpaqueIntegrationsConfigs = HashMap<IntegrationId, config::Value>;
 pub fn read_config() -> Result<(Config, OpaqueIntegrationsConfigs)> {
     let mut settings = config::Config::default();
 
-    let cwd = std::env::current_dir();
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR");
-
-    let root = match manifest_dir {
-        Ok(path) => vec![path].iter().collect(),
-        Err(_) => cwd.unwrap(),
-    };
-
+    let root = std::env::current_dir().unwrap();
     let sample_path = root.join("Settings.toml.example");
 
     let path = root.join("Settings.toml");
