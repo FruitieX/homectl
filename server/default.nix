@@ -1,4 +1,5 @@
 let
+  unstable = import (fetchTarball https://nixos.org/channels/nixos-unstable/nixexprs.tar.xz) { };
   moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz );
   nixpkgs = import <nixpkgs> { overlays = [ moz_overlay ]; };
   rustStableChannel = (nixpkgs.rustChannels.stable).rust.override {
@@ -24,5 +25,18 @@ in
       openssl
       pkg-config
       postgresql
+
+      clang
+      unstable.mold
     ];
+
+    # Make cargo use the mold linker for this project
+    shellHook = ''
+      mkdir -p .cargo
+      cat << EOF > .cargo/config.toml
+      [target.x86_64-unknown-linux-gnu]
+      linker = "clang"
+      rustflags = ["-C", "link-arg=-fuse-ld=${unstable.mold}/bin/mold"]
+      EOF
+    '';
   }
