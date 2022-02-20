@@ -1,7 +1,5 @@
 use crate::utils::from_hh_mm;
 use anyhow::{Context, Result};
-use async_std::prelude::*;
-use async_std::{stream, task};
 use async_trait::async_trait;
 use homectl_types::{
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
@@ -12,6 +10,7 @@ use homectl_types::{
 use palette::Gradient;
 use serde::Deserialize;
 use std::time::Duration;
+use tokio::time;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct CircadianConfig {
@@ -74,7 +73,7 @@ impl Integration for Circadian {
 
         // FIXME: can we restructure the integrations / devices systems such
         // that polling is not needed here?
-        task::spawn(async { poll_sensor(circadian).await });
+        tokio::spawn(async { poll_sensor(circadian).await });
 
         Ok(())
     }
@@ -160,10 +159,10 @@ static POLL_RATE: u64 = 60 * 1000;
 
 async fn poll_sensor(circadian: Circadian) {
     let poll_rate = Duration::from_millis(POLL_RATE);
-    let mut interval = stream::interval(poll_rate);
+    let mut interval = time::interval(poll_rate);
 
     loop {
-        interval.next().await;
+        interval.tick().await;
 
         let sender = circadian.sender.clone();
 

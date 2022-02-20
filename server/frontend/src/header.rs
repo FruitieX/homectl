@@ -63,7 +63,7 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
 
     cx.render(rsx! {
         div {
-            class: "sticky top-0 h-12 bg-stone-100 shadow-md flex flex-row items-center gap-4 px-2",
+            class: "sticky top-0 h-14 bg-stone-100 shadow-md flex flex-row items-center gap-4 px-2",
 
             button {
                 class: "w-8 h-8 text-2xl leading-4 {cursor} {back_button_opacity} hover:text-slate-500",

@@ -1,5 +1,4 @@
 use anyhow::{Context, Result};
-use async_std::task::{self, sleep, JoinHandle};
 use async_trait::async_trait;
 use homectl_types::{
     device::{Device, DeviceId, DeviceState, SensorKind},
@@ -8,6 +7,8 @@ use homectl_types::{
 };
 use serde::Deserialize;
 use std::time::Duration;
+use tokio::task::JoinHandle;
+use tokio::time;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct TimerConfig {
@@ -70,16 +71,16 @@ impl Integration for Timer {
         let sender = self.event_tx.clone();
         let id = self.id.clone();
         let config = self.config.clone();
-        let timer_task = task::spawn(async move {
+        let timer_task = tokio::spawn(async move {
             let sleep_duration = Duration::from_millis(timeout_ms);
-            sleep(sleep_duration).await;
+            time::sleep(sleep_duration).await;
 
             let device = mk_timer_device(&id, &config, false);
             sender.send(Message::IntegrationDeviceRefresh { device });
         });
 
         if let Some(timer_task) = self.timer_task.take() {
-            timer_task.cancel().await;
+            timer_task.abort();
         }
 
         self.timer_task = Some(timer_task);

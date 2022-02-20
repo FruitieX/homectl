@@ -55,7 +55,7 @@ fn app(cx: Scope) -> Element {
         Router {
             Header {}
             main {
-                class: "m-2 pb-8",
+                class: "m-2 pb-8 pt-0.5",
 
                 Route { to: "/", Dashboard {} },
                 Route { to: "/index.html", Redirect { to: "/" } },

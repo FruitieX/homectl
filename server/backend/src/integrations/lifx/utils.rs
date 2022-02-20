@@ -2,7 +2,6 @@ use anyhow::{anyhow, Result};
 use byteorder::{ByteOrder, LittleEndian};
 use homectl_types::device::{Device, DeviceColor, DeviceId, DeviceState, Light};
 use homectl_types::integration::IntegrationId;
-use num_traits::pow::Pow;
 use palette::Hsv;
 use std::net::SocketAddr;
 
@@ -17,7 +16,7 @@ pub struct LifxState {
     pub transition: Option<u32>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum LifxMsg {
     Get(SocketAddr),
     SetColor(LifxState),
@@ -249,7 +248,7 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
 pub fn to_lifx_hue(h: f32) -> f32 {
     if h > 0.0 && h < 60.0 {
         let p = h / 60.0;
-        f32::pow(p, 1.0 / 2.0) * 60.0
+        f32::powf(p, 1.0 / 2.0) * 60.0
     } else {
         h
     }
@@ -258,7 +257,7 @@ pub fn to_lifx_hue(h: f32) -> f32 {
 pub fn from_lifx_hue(h: f32) -> f32 {
     if h > 0.0 && h < 60.0 {
         let p = h / 60.0;
-        f32::pow(p, 2.0 / 1.0) * 60.0
+        f32::powf(p, 2.0 / 1.0) * 60.0
     } else {
         h
     }

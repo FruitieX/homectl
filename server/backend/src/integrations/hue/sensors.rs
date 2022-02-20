@@ -4,8 +4,6 @@ use super::{
     HueConfig,
 };
 use anyhow::anyhow;
-use async_std::prelude::*;
-use async_std::stream;
 use homectl_types::{
     event::{Message, TxEventChannel},
     integration::IntegrationId,
@@ -15,6 +13,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
+use tokio::time;
 
 pub struct SensorsState {
     pub bridge_sensors: BridgeSensors,
@@ -76,7 +75,7 @@ pub async fn poll_sensors(
     init_bridge_sensors: BridgeSensors,
 ) {
     let poll_rate = Duration::from_millis(config.poll_rate_sensors);
-    let mut interval = stream::interval(poll_rate);
+    let mut interval = time::interval(poll_rate);
 
     // Stores values from previous iteration, used for later comparisons
     let bridge_sensors: Arc<Mutex<SensorsState>> = Arc::new(Mutex::new(SensorsState {
@@ -84,7 +83,7 @@ pub async fn poll_sensors(
     }));
 
     loop {
-        interval.next().await;
+        interval.tick().await;
 
         let sender = sender.clone();
         let result = do_refresh_sensors(

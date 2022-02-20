@@ -1,4 +1,4 @@
-use futures::channel::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use serde::{Deserialize, Serialize};
 
 use crate::scene::{SceneId, SceneConfig};
@@ -54,10 +54,10 @@ pub struct Sender<T> {
     sender: UnboundedSender<T>,
 }
 
-impl<T> Sender<T> {
+impl<T: std::fmt::Debug> Sender<T> {
     pub fn send(&self, msg: T) {
         self.sender
-            .unbounded_send(msg)
+            .send(msg)
             .expect("Receiver end of channel closed");
     }
 }
@@ -66,7 +66,7 @@ pub type TxEventChannel = Sender<Message>;
 pub type RxEventChannel = UnboundedReceiver<Message>;
 
 pub fn mk_channel() -> (TxEventChannel, RxEventChannel) {
-    let (tx, rx) = mpsc::unbounded::<Message>();
+    let (tx, rx) = unbounded_channel::<Message>();
 
     let sender = Sender { sender: tx };
 

@@ -1,6 +1,4 @@
 use anyhow::{Context, Result};
-use async_std::prelude::*;
-use async_std::{stream, task};
 use async_trait::async_trait;
 use homectl_types::{
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
@@ -11,6 +9,7 @@ use palette::rgb::Rgb;
 use rand::prelude::*;
 use serde::Deserialize;
 use std::time::Duration;
+use tokio::time;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct RandomConfig {
@@ -57,7 +56,7 @@ impl Integration for Random {
 
         // FIXME: can we restructure the integrations / devices systems such
         // that polling is not needed here?
-        task::spawn(async { poll_sensor(random).await });
+        tokio::spawn(async { poll_sensor(random).await });
 
         Ok(())
     }
@@ -86,10 +85,10 @@ fn get_random_color() -> DeviceColor {
 
 async fn poll_sensor(random: Random) {
     let poll_rate = Duration::from_millis(1000);
-    let mut interval = stream::interval(poll_rate);
+    let mut interval = time::interval(poll_rate);
 
     loop {
-        interval.next().await;
+        interval.tick().await;
 
         let sender = random.event_tx.clone();
 

@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use anyhow::{anyhow, Context, Result};
-use async_std::{future, task};
 use async_trait::async_trait;
 use homectl_types::{
     device::{Device, DeviceId, DeviceState, Light, OnOffDevice},
@@ -9,6 +8,7 @@ use homectl_types::{
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
+use tokio::time;
 
 #[derive(Clone, Debug, Deserialize)]
 struct WakeOnLanMachine {
@@ -93,9 +93,10 @@ impl Integration for WakeOnLan {
         } else if let Some(sleep_on_lan) = &wol_machine.sleep_on_lan {
             let endpoint = sleep_on_lan.clone();
 
-            task::spawn(async move {
+            tokio::spawn(async move {
                 // This timing out is normal... Responding host gets shut down after all
-                future::timeout(Duration::from_secs(1), do_sleep_on_lan(endpoint))
+
+                time::timeout(Duration::from_secs(1), do_sleep_on_lan(endpoint))
                     .await
                     .ok();
             });

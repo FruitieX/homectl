@@ -2,16 +2,15 @@ use std::process::Command;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use async_std::{stream, task};
 use async_trait::async_trait;
 
-use futures::StreamExt;
 use homectl_types::{
     device::{Device, DeviceId, DeviceState, OnOffDevice},
     event::{Message, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
+use tokio::time;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct PingConfig {
@@ -61,13 +60,13 @@ impl Integration for Ping {
                 .send(Message::IntegrationDeviceRefresh { device });
         }
 
-        task::spawn(async move {
+        tokio::spawn(async move {
             loop {
                 let poll_rate = Duration::from_millis(10000);
-                let mut interval = stream::interval(poll_rate);
+                let mut interval = time::interval(poll_rate);
 
                 for device in &config.machines {
-                    interval.next().await;
+                    interval.tick().await;
                     let status = Command::new("sh")
                         .arg("-c")
                         .arg("ping")

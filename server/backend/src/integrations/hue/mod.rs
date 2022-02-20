@@ -5,7 +5,6 @@ pub mod sensor_utils;
 pub mod sensors;
 
 use anyhow::{anyhow, Context, Result};
-use async_std::task;
 use async_trait::async_trait;
 use bridge::BridgeState;
 use homectl_types::{
@@ -99,7 +98,7 @@ impl Integration for Hue {
             let integration_id = self.id.clone();
             let sender = self.event_tx.clone();
 
-            task::spawn(async {
+            tokio::spawn(async {
                 poll_sensors(config, integration_id, sender, init_bridge_sensors).await
             });
         }
@@ -109,7 +108,7 @@ impl Integration for Hue {
             let integration_id = self.id.clone();
             let sender = self.event_tx.clone();
 
-            task::spawn(async { poll_lights(config, integration_id, sender).await });
+            tokio::spawn(async { poll_lights(config, integration_id, sender).await });
         }
 
         Ok(())

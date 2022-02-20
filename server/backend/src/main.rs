@@ -7,7 +7,6 @@ mod utils;
 // use db::{actions::find_floorplans, establish_connection};
 use anyhow::{Context, Result};
 use api::init_api;
-use async_std::{prelude::*, task};
 use db::init_db;
 use homectl_core::{
     devices::Devices, groups::Groups, integrations::Integrations, message::handle_message,
@@ -77,13 +76,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     loop {
         let msg = receiver
-            .next()
+            .recv()
             .await
             .expect("Expected sender end of channel to never be dropped");
 
         let state = Arc::clone(&state);
 
-        task::spawn(async move {
+        tokio::spawn(async move {
             handle_message(state, msg).await;
         });
     }

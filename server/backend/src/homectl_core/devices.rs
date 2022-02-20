@@ -1,7 +1,6 @@
 use crate::db::actions::{db_find_device, db_update_device};
 
 use super::scenes::Scenes;
-use async_std::task;
 use homectl_types::device::DeviceId;
 use homectl_types::{
     device::{Device, DeviceColor, DeviceKey, DeviceSceneState, DeviceState, DevicesState},
@@ -273,7 +272,7 @@ impl Devices {
         if state_changed && !skip_db {
             // FIXME: compiler error without task::spawn()
             let device = device.clone();
-            task::spawn(async move {
+            tokio::spawn(async move {
                 db_update_device(&device).await.ok();
             });
         }

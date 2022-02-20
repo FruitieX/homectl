@@ -1,9 +1,5 @@
 use anyhow::{anyhow, Context, Result};
-use async_std::sync::RwLock;
-use async_std::task;
-use async_std::{stream, task::JoinHandle};
 use async_trait::async_trait;
-use futures::StreamExt;
 use homectl_types::device::{CorrelatedColorTemperature, DeviceColor};
 use homectl_types::utils::{cct_to_rgb, xy_to_cct};
 use homectl_types::{
@@ -22,6 +18,9 @@ use std::{
     sync::Arc,
     time::{Duration, SystemTime},
 };
+use tokio::sync::RwLock;
+use tokio::task::JoinHandle;
+use tokio::time;
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct TuyaDeviceConfig {
@@ -120,7 +119,7 @@ impl Integration for Tuya {
             let device_expected_state = device_expected_states.get(device_id).unwrap().clone();
             let sender = self.event_tx.clone();
 
-            let handle = task::spawn(async move {
+            let handle = tokio::spawn(async move {
                 poll_light(&device_config, sender, device_expected_state).await
             });
 
@@ -141,7 +140,7 @@ impl Integration for Tuya {
 
         let mut device_poll_handle = self.device_poll_handles.remove(&device.id);
         if let Some(poll_handle) = device_poll_handle.take() {
-            poll_handle.cancel().await;
+            poll_handle.abort();
         }
 
         let config = self.config.clone();
@@ -159,7 +158,7 @@ impl Integration for Tuya {
 
         let handle = {
             let device_config = device_config.clone();
-            task::spawn(
+            tokio::spawn(
                 async move { poll_light(&device_config, sender, device_expected_state).await },
             )
         };
@@ -512,10 +511,10 @@ pub async fn poll_light(
     device_expected_state: Arc<RwLock<Device>>,
 ) {
     let poll_rate = Duration::from_millis(1000);
-    let mut interval = stream::interval(poll_rate);
+    let mut interval = time::interval(poll_rate);
 
     loop {
-        interval.next().await;
+        interval.tick().await;
 
         let device_expected_state = { device_expected_state.read().await.clone() };
         let result = set_tuya_state(&device_expected_state, device_config).await;

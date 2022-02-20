@@ -3,12 +3,12 @@ use crate::integrations::{
     random::Random, timer::Timer, tuya::Tuya, wake_on_lan::WakeOnLan, ping::Ping
 };
 use anyhow::{anyhow, Context, Result};
-use async_std::sync::Mutex;
 use homectl_types::{
     device::Device,
     event::TxEventChannel,
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
+use tokio::sync::Mutex;
 use std::{collections::HashMap, sync::Arc};
 
 pub type IntegrationsTree = HashMap<IntegrationId, Arc<Mutex<Box<dyn Integration + Send>>>>;
