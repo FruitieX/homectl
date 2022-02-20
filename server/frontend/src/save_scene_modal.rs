@@ -10,7 +10,7 @@ use dioxus::{
 use dioxus_websocket_hooks::use_ws_context;
 use fermi::{use_read, use_set};
 use homectl_types::{
-    device::{Device, DeviceStateKey},
+    device::{Device, DeviceKey},
     event::Message,
     scene::{
         ColorConfig, SceneConfig, SceneDeviceConfig, SceneDeviceState, SceneDevicesSearchConfig,
@@ -22,7 +22,7 @@ use itertools::Itertools;
 
 #[derive(Props)]
 pub struct SaveSceneModalProps<'a> {
-    filters: &'a Option<Vec<DeviceStateKey>>,
+    filters: &'a Option<Vec<DeviceKey>>,
     modal_open: &'a bool,
     set_modal_open: &'a UseState<bool>,
 }
@@ -56,7 +56,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
                 .filter(|device| {
                     filters
                         .as_ref()
-                        .map(|filters| filters.contains(&device.get_state_key()))
+                        .map(|filters| filters.contains(&device.get_device_key()))
                         .unwrap_or(true)
                 })
                 .cloned()

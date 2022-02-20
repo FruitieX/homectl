@@ -1,4 +1,4 @@
-use crate::device::DeviceStateKey;
+use crate::device::DeviceKey;
 
 use super::{device::DeviceId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
@@ -52,7 +52,7 @@ pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
 #[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
 pub struct FlattenedGroupConfig {
     pub name: String,
-    pub device_ids: Vec<DeviceStateKey>,
+    pub device_ids: Vec<DeviceKey>,
 }
 
 pub type FlattenedGroupsConfig = HashMap<GroupId, FlattenedGroupConfig>;

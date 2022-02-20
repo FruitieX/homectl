@@ -1,7 +1,7 @@
 use crate::{save_scene_modal::SaveSceneModal, tile::Tile, util::scale_hsv_value_to_display};
 use dioxus::prelude::*;
 use fermi::use_read;
-use homectl_types::device::{Device, DeviceStateKey};
+use homectl_types::device::{Device, DeviceKey};
 use itertools::Itertools;
 
 use crate::{app_state::DEVICES_ATOM, device_modal::DeviceModal};
@@ -55,7 +55,7 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
 
 #[derive(Props, PartialEq)]
 pub struct DeviceListProps {
-    filters: Option<Vec<DeviceStateKey>>,
+    filters: Option<Vec<DeviceKey>>,
 }
 
 #[allow(non_snake_case)]
@@ -70,12 +70,12 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
 
     let devices = devices.into_iter().filter_map(|device| {
         if let Some(filters) = &cx.props.filters {
-            if !filters.contains(&device.get_state_key()) {
+            if !filters.contains(&device.get_device_key()) {
                 return None;
             }
         }
 
-        let key = device.get_state_key().to_string();
+        let key = device.get_device_key().to_string();
 
         Some(rsx! {
             DeviceTile {
@@ -89,8 +89,6 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
 
     cx.render(rsx! {
         div {
-            class: "m-4",
-
             div {
                 class: "gap-2 max-w-[60rem] flex flex-row flex-wrap",
 
@@ -102,7 +100,6 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
                 onclick: move |_| set_save_scene_modal_open(true),
                 contents: cx.render(rsx! { "Save scene" })
             }
-            div { class: "h-4" }
             SaveSceneModal {
                 filters: &cx.props.filters,
                 modal_open: save_scene_modal_open,

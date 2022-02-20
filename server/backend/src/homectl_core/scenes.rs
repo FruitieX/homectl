@@ -1,8 +1,6 @@
 use chrono::Utc;
 use homectl_types::{
-    device::{
-        Device, DeviceId, DeviceSceneState, DeviceState, DeviceStateKey, DevicesState, Light,
-    },
+    device::{Device, DeviceId, DeviceKey, DeviceSceneState, DeviceState, DevicesState, Light},
     group::GroupDeviceLink,
     scene::{
         color_config_as_device_color, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
@@ -213,12 +211,10 @@ impl Scenes {
                                 let scene_id = scene_id.clone();
 
                                 move |(device_id, _)| {
-                                    let state_key = DeviceStateKey::new(
-                                        integration_id.clone(),
-                                        device_id.clone(),
-                                    );
+                                    let device_key =
+                                        DeviceKey::new(integration_id.clone(), device_id.clone());
 
-                                    let device = devices.0.get(&state_key)?;
+                                    let device = devices.0.get(&device_key)?;
                                     let device = Device {
                                         scene: Some(DeviceSceneState {
                                             scene_id: scene_id.clone(),
@@ -234,7 +230,7 @@ impl Scenes {
                                     let device_state =
                                         self.find_scene_device_state(&device, devices, false)?;
 
-                                    Some((state_key, device_state))
+                                    Some((device_key, device_state))
                                 }
                             })
                         }

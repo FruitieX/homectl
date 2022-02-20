@@ -69,9 +69,12 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
 
             Ok(())
         }
-        Message::Action(Action::ActivateScene(SceneDescriptor { scene_id })) => {
+        Message::Action(Action::ActivateScene(SceneDescriptor {
+            scene_id,
+            device_keys,
+        })) => {
             let mut devices = state.devices.clone();
-            devices.activate_scene(scene_id).await;
+            devices.activate_scene(scene_id, device_keys).await;
 
             Ok(())
         }

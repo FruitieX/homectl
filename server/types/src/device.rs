@@ -377,8 +377,8 @@ impl Device {
         }
     }
 
-    pub fn get_state_key(&self) -> DeviceStateKey {
-        DeviceStateKey {
+    pub fn get_device_key(&self) -> DeviceKey {
+        DeviceKey {
             integration_id: self.integration_id.clone(),
             device_id: self.id.clone(),
         }
@@ -390,27 +390,27 @@ impl Device {
 }
 
 #[derive(Hash, Clone, Debug, PartialEq, Eq)]
-pub struct DeviceStateKey {
+pub struct DeviceKey {
     pub integration_id: IntegrationId,
     pub device_id: DeviceId,
 }
 
-impl DeviceStateKey {
-    pub fn new(integration_id: IntegrationId, device_id: DeviceId) -> DeviceStateKey {
-        DeviceStateKey {
+impl DeviceKey {
+    pub fn new(integration_id: IntegrationId, device_id: DeviceId) -> DeviceKey {
+        DeviceKey {
             integration_id,
             device_id,
         }
     }
 }
 
-impl Display for DeviceStateKey {
+impl Display for DeviceKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{}", self.integration_id, self.device_id)
     }
 }
 
-impl Serialize for DeviceStateKey {
+impl Serialize for DeviceKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -419,10 +419,10 @@ impl Serialize for DeviceStateKey {
     }
 }
 
-struct DeviceStateKeyVisitor;
+struct DeviceKeyVisitor;
 
-impl<'de> Visitor<'de> for DeviceStateKeyVisitor {
-    type Value = DeviceStateKey;
+impl<'de> Visitor<'de> for DeviceKeyVisitor {
+    type Value = DeviceKey;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
         formatter.write_str("a colon-separated pair of integers between 0 and 255")
@@ -436,21 +436,21 @@ impl<'de> Visitor<'de> for DeviceStateKeyVisitor {
             let integration_id = IntegrationId::from(integration_id.to_string());
             let device_id = DeviceId::from(device_id.to_string());
 
-            Ok(DeviceStateKey::new(integration_id, device_id))
+            Ok(DeviceKey::new(integration_id, device_id))
         } else {
             Err(de::Error::invalid_value(Unexpected::Str(s), &self))
         }
     }
 }
 
-impl<'de> Deserialize<'de> for DeviceStateKey {
+impl<'de> Deserialize<'de> for DeviceKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_string(DeviceStateKeyVisitor)
+        deserializer.deserialize_string(DeviceKeyVisitor)
     }
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
-pub struct DevicesState(pub HashMap<DeviceStateKey, Device>);
+pub struct DevicesState(pub HashMap<DeviceKey, Device>);

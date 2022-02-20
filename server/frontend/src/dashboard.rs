@@ -7,8 +7,8 @@ use crate::{tile::Tile, util::ARROW_STYLES};
 pub fn Dashboard(cx: Scope) -> Element {
     cx.render(rsx! {
         div {
+            class: "flex flex-col gap-2",
             "data-testid": "my-test",
-            class: "flex flex-col gap-4 m-4",
 
             Link {
                 to: "/scenes",

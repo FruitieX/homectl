@@ -4,7 +4,7 @@ extern crate homectl_console;
 
 use crate::{
     dashboard::Dashboard, device_list::DeviceList, group_device_list::GroupDeviceList,
-    group_list::GroupList, scene_list::SceneList, header::Header, redirect::Redirect,
+    group_list::GroupList, header::Header, redirect::Redirect, scene_list::SceneList,
 };
 use app_state::{use_init_app_state, DISABLE_SCROLL_ATOM};
 use dioxus::prelude::*;
@@ -48,13 +48,14 @@ fn app(cx: Scope) -> Element {
                 margin: 0;
                 height: 100vh;
                 width: 100%;
-                overflow: {disable_scroll_css};
+                overflow-y: {disable_scroll_css};
+                overflow-x: hidden;
             }}"
         }
         Router {
             Header {}
             main {
-                class: "pb-4",
+                class: "m-2 pb-8",
 
                 Route { to: "/", Dashboard {} },
                 Route { to: "/index.html", Redirect { to: "/" } },

@@ -91,10 +91,7 @@ pub fn GroupList(cx: Scope) -> Element {
 
     cx.render(rsx! {
         div {
-            display: "flex",
-            flex_direction: "column",
-            margin: "1rem",
-            gap: "1rem",
+            class: "flex flex-col gap-2",
             groups
         }
     })

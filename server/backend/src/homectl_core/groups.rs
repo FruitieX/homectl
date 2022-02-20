@@ -26,7 +26,7 @@ impl Groups {
                         device_ids: self
                             .find_group_devices(devices, group_id)
                             .into_iter()
-                            .map(|device| device.get_state_key())
+                            .map(|device| device.get_device_key())
                             .collect(),
                     },
                 )

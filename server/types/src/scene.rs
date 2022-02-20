@@ -1,4 +1,4 @@
-use crate::device::{CorrelatedColorTemperature, DeviceState, DeviceStateKey};
+use crate::device::{CorrelatedColorTemperature, DeviceKey, DeviceState};
 
 use super::{
     device::{DeviceColor, DeviceId},
@@ -47,6 +47,9 @@ pub struct SceneDeviceLink {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct SceneDescriptor {
     pub scene_id: SceneId,
+
+    /// Optionally only apply scene to these devices
+    pub device_keys: Option<Vec<DeviceKey>>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
@@ -93,7 +96,7 @@ pub struct SceneConfig {
 
 pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
 
-pub type SceneDeviceStates = HashMap<DeviceStateKey, DeviceState>;
+pub type SceneDeviceStates = HashMap<DeviceKey, DeviceState>;
 
 #[derive(Clone, Deserialize, Debug, Serialize, PartialEq)]
 pub struct FlattenedSceneConfig {

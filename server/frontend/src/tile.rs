@@ -55,7 +55,7 @@ pub fn Tile<'a>(cx: Scope<'a, TileProps<'a>>) -> Element<'a> {
 
     cx.render(rsx! {
         div {
-            class: "gap-2 max-w-[16rem] h-10 flex flex-row items-center rounded-lg border border-slate-300 p-2 shadow-sm cursor-pointer text-black hover:shadow-md",
+            class: "gap-2 max-w-[16rem] h-12 flex flex-row items-center rounded-lg border border-slate-300 p-2 shadow-sm cursor-pointer text-black hover:shadow-md",
             style: "{style}",
             width: "{width}",
             text_decoration_line: "none",
