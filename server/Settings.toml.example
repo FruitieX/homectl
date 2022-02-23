@@ -67,7 +67,7 @@ night_fade_duration_hours = 1
 # device states via the homectl UI.
 #
 # Find more information and tips on the remaining configuration sections at:
-# https://github.com/FruitieX/homectl#configuration-tips
+# https://github.com/FruitieX/homectl#configuration-tips--recipes
 #
 ###############################################################################
 
