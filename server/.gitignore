@@ -1,5 +1,7 @@
 /backend/.cargo/
+/backend/target/
 /target/
+/frontend/target/
 /frontend/dist/
 /frontend/index.css
 /frontend/node_modules/
