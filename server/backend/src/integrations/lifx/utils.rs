@@ -142,7 +142,7 @@ pub fn read_lifx_msg(buf: &[u8], addr: SocketAddr) -> LifxMsg {
             let label = std::str::from_utf8(&payload[12..(12 + 32)])
                 .unwrap_or("Unknown")
                 .to_owned()
-                .replace("\0", "");
+                .replace('\0', "");
 
             let state = LifxState {
                 hue,

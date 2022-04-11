@@ -65,15 +65,13 @@ impl Rules {
         let triggered_routine_ids =
             new_triggered_routine_ids.difference(&prev_triggered_routine_ids);
 
-        triggered_routine_ids
-            .map(|id| {
+        triggered_routine_ids.flat_map(|id| {
                 let routine = self
                     .config
                     .get(id)
                     .expect("Expected triggered_routine_ids to only contain ids of routines existing in the RoutinesConfig");
                 routine.actions.clone()
             })
-            .flatten()
             .collect()
     }
 }
