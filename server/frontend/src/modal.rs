@@ -7,8 +7,7 @@ use crate::app_state::DISABLE_SCROLL_ATOM;
 pub struct ModalProps<'a> {
     contents: Element<'a>,
     title: &'a str,
-    modal_open: &'a bool,
-    set_modal_open: &'a UseState<bool>,
+    modal_open: &'a UseState<bool>,
 }
 
 #[allow(non_snake_case)]
@@ -21,11 +20,11 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
 
     let close_modal = move |evt: MouseEvent| {
         evt.cancel_bubble();
-        (cx.props.set_modal_open)(false);
+        cx.props.modal_open.set(false);
         set_disable_scroll(false);
     };
 
-    if *cx.props.modal_open {
+    if **cx.props.modal_open {
         set_disable_scroll(true);
     }
 

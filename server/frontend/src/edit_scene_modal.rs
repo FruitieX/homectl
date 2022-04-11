@@ -10,8 +10,7 @@ use homectl_types::{event::Message, scene::SceneId, websockets::WebSocketRequest
 #[derive(Props)]
 pub struct EditSceneModalProps<'a> {
     scene_id: &'a SceneId,
-    modal_open: &'a bool,
-    set_modal_open: &'a UseState<bool>,
+    modal_open: &'a UseState<bool>,
 }
 
 #[allow(non_snake_case)]
@@ -23,18 +22,18 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
 
     let ws = use_ws_context(&cx);
 
-    let (name, set_name) = use_state(&cx, || String::from("New scene"));
+    let name = use_state(&cx, || String::from("New scene"));
 
     let onchange = {
         move |evt: FormEvent| {
-            let name = evt.data.value.clone();
-            set_name(name)
+            let new_name = evt.data.value.clone();
+            name.set(new_name)
         }
     };
 
     let save_scene = { move |_| {} };
 
-    let (confirm_delete_visible, set_confirm_delete_visible) = use_state(&cx, || false);
+    let confirm_delete_visible = use_state(&cx, || false);
     let delete_scene = {
         move |_| {
             ws.send_json(&WebSocketRequest::Message(Message::DeleteScene {
@@ -44,7 +43,7 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
             // Boilerplate for closing modal
             // TODO: make this a shared function
             set_disable_scroll(false);
-            (cx.props.set_modal_open)(false);
+            cx.props.modal_open.set(false);
         }
     };
 
@@ -52,7 +51,6 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
         Modal {
             title: "Edit scene",
             modal_open: cx.props.modal_open,
-            set_modal_open: cx.props.set_modal_open,
             contents: cx.render(rsx! {
                 div {
                     class: "gap-4 flex flex-col flex-1",
@@ -77,14 +75,14 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
                         "Save"
                     }
 
-                    { if *confirm_delete_visible {
+                    { if **confirm_delete_visible {
                         rsx! {
                             div {
                                 class: "w-full",
 
                                 button {
                                     class: "w-1/2 bg-slate-100",
-                                    onclick: move |_| {set_confirm_delete_visible(false)},
+                                    onclick: move |_| {confirm_delete_visible.set(false)},
 
                                     "Cancel"
                                 }
@@ -100,7 +98,7 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
                         rsx! {
                             button {
                                 class: "bg-slate-100", 
-                                onclick: move |_| {set_confirm_delete_visible(true)},
+                                onclick: move |_| {confirm_delete_visible.set(true)},
 
                                 "Delete scene"
                             }

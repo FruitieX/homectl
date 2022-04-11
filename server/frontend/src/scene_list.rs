@@ -22,6 +22,7 @@ use crate::{
 struct SceneRowProps {
     scene_id: SceneId,
     scene: FlattenedSceneConfig,
+    #[props(!optional)]
     device_keys: Option<Vec<DeviceKey>>,
 }
 
@@ -56,11 +57,11 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
         }
     };
 
-    let (edit_modal_open, set_edit_modal_open) = use_state(&cx, || false);
+    let edit_modal_open = use_state(&cx, || false);
     let edit_scene = {
         move |evt: MouseEvent| {
             evt.cancel_bubble();
-            set_edit_modal_open(true);
+            edit_modal_open.set(true);
         }
     };
 
@@ -91,7 +92,6 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
             EditSceneModal {
                 scene_id: scene_id,
                 modal_open: edit_modal_open,
-                set_modal_open: set_edit_modal_open,
             }
         }
     })

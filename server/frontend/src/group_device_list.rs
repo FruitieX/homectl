@@ -7,13 +7,13 @@ use crate::{app_state::GROUPS_ATOM, device_list::DeviceList, scene_list::SceneLi
 
 #[allow(non_snake_case)]
 pub fn GroupDeviceList(cx: Scope) -> Element {
-    let group_id: GroupId = use_route(&cx).segment("group_id")?.ok()?;
+    let group_id: GroupId = GroupId::new(use_route(&cx).segment("group_id")?.to_string());
     let groups = use_read(&cx, GROUPS_ATOM);
 
     let (_, group) = groups
         .iter()
         .find(|(candidate_group_id, _)| *candidate_group_id == &group_id)?;
-    
+
     let name = &group.name;
 
     cx.render(rsx! {

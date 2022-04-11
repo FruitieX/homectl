@@ -23,8 +23,7 @@ use itertools::Itertools;
 #[derive(Props)]
 pub struct SaveSceneModalProps<'a> {
     filters: &'a Option<Vec<DeviceKey>>,
-    modal_open: &'a bool,
-    set_modal_open: &'a UseState<bool>,
+    modal_open: &'a UseState<bool>,
 }
 
 #[allow(non_snake_case)]
@@ -34,12 +33,12 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
 
     let ws = use_ws_context(&cx);
 
-    let (name, set_name) = use_state(&cx, || String::from("New scene"));
+    let name = use_state(&cx, || String::from("New scene"));
 
     let onchange = {
         move |evt: FormEvent| {
-            let name = evt.data.value.clone();
-            set_name(name)
+            let new_name = evt.data.value.clone();
+            name.set(new_name)
         }
     };
 
@@ -104,7 +103,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
             // Boilerplate for closing modal
             // TODO: make this a shared function
             set_disable_scroll(false);
-            (cx.props.set_modal_open)(false);
+            cx.props.modal_open.set(false);
         }
     };
 
@@ -112,7 +111,6 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
         Modal {
             title: "Save scene",
             modal_open: cx.props.modal_open,
-            set_modal_open: cx.props.set_modal_open,
             contents: cx.render(rsx! {
                 div {
                     class: "gap-4 flex flex-col flex-1",

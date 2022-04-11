@@ -11,15 +11,14 @@ use crate::{
 #[derive(Props)]
 pub struct DeviceModalProps<'a> {
     device: &'a Device,
-    modal_open: &'a bool,
-    set_modal_open: &'a UseState<bool>,
+    modal_open: &'a UseState<bool>,
 }
 
 #[allow(non_snake_case)]
 pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
     let ws = use_ws_context(&cx);
 
-    let (show_debug, _set_show_debug) = use_state(&cx, || false);
+    let show_debug = use_state(&cx, || false);
     // let toggle_debug = move |_: MouseEvent| {
     //     let mut show_debug = show_debug.modify();
     //     *show_debug = !*show_debug;
@@ -153,7 +152,6 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
         Modal {
             title: "{cx.props.device.name}",
             modal_open: cx.props.modal_open,
-            set_modal_open: cx.props.set_modal_open,
             contents: cx.render(rsx! {
                 div {
                     class: "gap-4, flex flex-col flex-1",

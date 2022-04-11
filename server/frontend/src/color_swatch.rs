@@ -5,6 +5,7 @@ use crate::util::hsv_to_css_hsl_str;
 
 #[derive(Props, PartialEq)]
 pub struct ColorSwatchProps {
+    #[props(!optional)]
     color: Option<Hsv>,
 }
 

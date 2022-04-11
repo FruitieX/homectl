@@ -20,7 +20,7 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
         .state
         .get_color()
         .map(scale_hsv_value_to_display);
-    let (modal_open, set_modal_open) = use_state(&cx, || false);
+    let modal_open = use_state(&cx, || false);
 
     let gradient = if let Some(color) = color {
         vec![color]
@@ -45,16 +45,16 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
                 DeviceModal {
                     device: cx.props.device,
                     modal_open: modal_open
-                    set_modal_open: set_modal_open
                 }
             })
-            onclick: move |_| set_modal_open(true),
+            onclick: move |_| modal_open.set(true),
         }
     })
 }
 
 #[derive(Props, PartialEq)]
 pub struct DeviceListProps {
+    #[props(!optional)]
     filters: Option<Vec<DeviceKey>>,
 }
 
@@ -85,7 +85,7 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
         })
     });
 
-    let (save_scene_modal_open, set_save_scene_modal_open) = use_state(&cx, || false);
+    let save_scene_modal_open = use_state(&cx, || false);
 
     cx.render(rsx! {
         div {
@@ -97,13 +97,12 @@ pub fn DeviceList(cx: Scope<DeviceListProps>) -> Element {
             h2 { class: "mt-4", "Options:" }
             Tile {
                 full_width: true,
-                onclick: move |_| set_save_scene_modal_open(true),
+                onclick: move |_| save_scene_modal_open.set(true),
                 contents: cx.render(rsx! { "Save scene" })
             }
             SaveSceneModal {
                 filters: &cx.props.filters,
                 modal_open: save_scene_modal_open,
-                set_modal_open: set_save_scene_modal_open
             }
         }
     })
