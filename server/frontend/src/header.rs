@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use dioxus_router::use_route;
+use dioxus_router::{use_route, Link};
 use fermi::use_read;
 use homectl_types::group::GroupId;
 use itertools::Itertools;
@@ -11,9 +11,6 @@ pub struct HeaderProps {}
 
 #[allow(non_snake_case)]
 pub fn Header(cx: Scope<HeaderProps>) -> Element {
-    let window = web_sys::window().unwrap();
-    let history = window.history().unwrap();
-
     let groups = use_read(&cx, GROUPS_ATOM);
 
     let route = use_route(&cx);
@@ -61,17 +58,27 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
         tw("opacity-100")
     };
 
+    let back_href = if segments.is_empty() {
+        String::from("/")
+    } else {
+        String::from("/") + &segments[0..segments.len() - 1].join("/")
+    };
+
     cx.render(rsx! {
         div {
             class: "sticky top-0 h-14 bg-stone-100 shadow-md flex flex-row items-center gap-4 px-2",
 
-            button {
-                class: "w-8 h-8 text-2xl leading-4 {cursor} {back_button_opacity} hover:text-slate-500",
-                disabled: "{disable_back_button}",
-                onclick: move |_| { history.back().unwrap() },
+            (!disable_back_button).then(|| rsx! {
+                Link {
+                    to: "{back_href}",
+                    span {
+                        class: "w-12 h-12 flex justify-center items-center text-2xl leading-4 {cursor} {back_button_opacity} hover:text-slate-500",
 
-                "<"
-            }
+                        "<"
+                    }
+                }
+            })
+
             h2 { "{title}" }
         }
     })
