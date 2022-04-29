@@ -28,6 +28,7 @@ impl Groups {
                             .into_iter()
                             .map(|device| device.get_device_key())
                             .collect(),
+                        hidden: group.hidden,
                     },
                 )
             })

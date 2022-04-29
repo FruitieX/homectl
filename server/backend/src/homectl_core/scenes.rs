@@ -202,7 +202,8 @@ impl Scenes {
                 let devices_config = self.find_scene_devices_config(devices, &scene_id)?;
 
                 let devices: SceneDeviceStates = devices_config
-                    .iter().flat_map({
+                    .iter()
+                    .flat_map({
                         let scene_id = scene_id.clone();
 
                         move |(integration_id, device_configs)| {
@@ -241,6 +242,7 @@ impl Scenes {
                     FlattenedSceneConfig {
                         name: config.name,
                         devices,
+                        hidden: config.hidden,
                     },
                 ))
             })

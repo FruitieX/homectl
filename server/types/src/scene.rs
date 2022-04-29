@@ -92,6 +92,7 @@ pub struct SceneConfig {
     pub name: String,
     pub devices: Option<SceneDevicesSearchConfig>,
     pub groups: Option<SceneGroupsConfig>,
+    pub hidden: Option<bool>,
 }
 
 pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
@@ -102,5 +103,6 @@ pub type SceneDeviceStates = HashMap<DeviceKey, DeviceState>;
 pub struct FlattenedSceneConfig {
     pub name: String,
     pub devices: SceneDeviceStates,
+    pub hidden: Option<bool>,
 }
 pub type FlattenedScenesConfig = HashMap<SceneId, FlattenedSceneConfig>;

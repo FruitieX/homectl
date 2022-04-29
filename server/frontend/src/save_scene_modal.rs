@@ -93,6 +93,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
                 name: name.to_string(),
                 devices: Some(devices),
                 groups: None,
+                hidden: None,
             };
 
             ws.send_json(&WebSocketRequest::Message(Message::StoreScene {

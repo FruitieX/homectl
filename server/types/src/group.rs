@@ -45,6 +45,7 @@ pub struct GroupConfig {
     pub name: String,
     pub devices: Option<GroupDevicesConfig>,
     pub groups: Option<GroupLinksConfig>,
+    pub hidden: Option<bool>,
 }
 
 pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
@@ -53,6 +54,7 @@ pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
 pub struct FlattenedGroupConfig {
     pub name: String,
     pub device_ids: Vec<DeviceKey>,
+    pub hidden: Option<bool>,
 }
 
 pub type FlattenedGroupsConfig = HashMap<GroupId, FlattenedGroupConfig>;

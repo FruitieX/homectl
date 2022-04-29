@@ -5,7 +5,7 @@ use homectl_types::{
     action::Action,
     device::DeviceKey,
     event::Message,
-    scene::{FlattenedSceneConfig, SceneDescriptor, SceneId},
+    scene::{FlattenedSceneConfig, FlattenedScenesConfig, SceneDescriptor, SceneId},
     websockets::WebSocketRequest,
 };
 use itertools::Itertools;
@@ -106,6 +106,11 @@ pub struct SceneListProps {
 #[allow(non_snake_case)]
 pub fn SceneList(cx: Scope<SceneListProps>) -> Element {
     let scenes = use_read(&cx, SCENES_ATOM).clone();
+
+    let scenes: FlattenedScenesConfig = scenes
+        .into_iter()
+        .filter(|(_, config)| config.hidden != Some(true))
+        .collect();
 
     let filtered_scenes = if let Some(filters) = &cx.props.filter_by_device_ids {
         scenes

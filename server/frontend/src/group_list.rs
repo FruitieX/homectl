@@ -75,6 +75,7 @@ pub fn GroupList(cx: Scope) -> Element {
 
     let groups: Vec<(GroupId, FlattenedGroupConfig)> = groups
         .iter()
+        .filter(|(_, config)| config.hidden != Some(true))
         .map(|(group_id, config)| (group_id.clone(), config.clone()))
         .sorted_by(|a, b| a.1.name.cmp(&b.1.name))
         .collect();
