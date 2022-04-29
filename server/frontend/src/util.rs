@@ -33,10 +33,10 @@ pub fn get_device_state_color(state: &DeviceState) -> Option<Hsv> {
 }
 
 pub fn cmp_hsv(a: &Hsv, b: &Hsv) -> Ordering {
-    let a = hsv_to_css_hsl_str(&Some(*a));
-    let b = hsv_to_css_hsl_str(&Some(*b));
-
-    a.cmp(&b)
+    a.hue
+        .to_positive_degrees()
+        .partial_cmp(&b.hue.to_positive_degrees())
+        .unwrap_or(Ordering::Greater)
 }
 
 pub const ARROW_STYLES: &str = tw("text-right mr-2 leading-4 text-4xl flex-1");
