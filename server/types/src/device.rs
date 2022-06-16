@@ -432,7 +432,7 @@ impl<'de> Visitor<'de> for DeviceKeyVisitor {
     where
         E: de::Error,
     {
-        if let Some((integration_id, device_id)) = s.split_once("/") {
+        if let Some((integration_id, device_id)) = s.split_once('/') {
             let integration_id = IntegrationId::from(integration_id.to_string());
             let device_id = DeviceId::from(device_id.to_string());
 

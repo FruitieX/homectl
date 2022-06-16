@@ -4,9 +4,11 @@ use homectl_types::{
     group::GroupDeviceLink,
     scene::{
         color_config_as_device_color, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
-        SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId, ScenesConfig,
+        SceneDescriptor, SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId,
+        ScenesConfig,
     },
 };
+use itertools::Itertools;
 
 use crate::db::actions::db_get_scenes;
 
@@ -51,9 +53,9 @@ impl Scenes {
     pub fn find_scene_devices_config(
         &self,
         devices: &DevicesState,
-        scene_id: &SceneId,
+        sd: &SceneDescriptor,
     ) -> Option<SceneDevicesConfig> {
-        let scene = self.find_scene(scene_id)?;
+        let scene = self.find_scene(&sd.scene_id)?;
 
         let scene_devices_search_config = scene.devices.clone().unwrap_or_default();
 
@@ -65,7 +67,7 @@ impl Scenes {
                     integration_id.clone(),
                     device_configs
                         .iter()
-                        .map(|(device_name, device_config)| {
+                        .filter_map(|(device_name, device_config)| {
                             let device =
                                 find_device(devices, integration_id, None, Some(device_name));
 
@@ -76,7 +78,35 @@ impl Scenes {
                                 );
                                 DeviceId::new("N/A")
                             });
-                            (device_id, device_config.clone())
+                            let device_key =
+                                &DeviceKey::new(integration_id.clone(), device_id.clone());
+
+                            // Skip this device if it's not in device_keys
+                            if let Some(device_keys) = &sd.device_keys {
+                                if !device_keys.contains(device_key) {
+                                    None?
+                                }
+                            }
+
+                            // Skip this device if it's not in group_keys
+                            if let Some(group_keys) = &sd.group_keys {
+                                let device_keys = group_keys
+                                    .iter()
+                                    .flat_map(|group_id| {
+                                        self.groups
+                                            .find_group_devices(devices, group_id)
+                                            .iter()
+                                            .map(|d| d.get_device_key())
+                                            .collect_vec()
+                                    })
+                                    .collect_vec();
+
+                                if !device_keys.contains(device_key) {
+                                    None?
+                                }
+                            }
+
+                            Some((device_id, device_config.clone()))
                         })
                         .collect(),
                 )
@@ -105,9 +135,37 @@ impl Scenes {
                         .unwrap_or(&empty_devices_integrations)
                         .to_owned();
 
+                    let device_id = &device.id;
+                    let device_key = &DeviceKey::new(integration_id.clone(), device_id.clone());
+
+                    // Skip this device if it's not in device_keys
+                    if let Some(device_keys) = &sd.device_keys {
+                        if !device_keys.contains(device_key) {
+                            continue;
+                        }
+                    }
+
+                    // Skip this device if it's not in group_keys
+                    if let Some(group_keys) = &sd.group_keys {
+                        let device_keys = group_keys
+                            .iter()
+                            .flat_map(|group_id| {
+                                self.groups
+                                    .find_group_devices(devices, group_id)
+                                    .iter()
+                                    .map(|d| d.get_device_key())
+                                    .collect_vec()
+                            })
+                            .collect_vec();
+
+                        if !device_keys.contains(device_key) {
+                            continue;
+                        }
+                    }
+
                     // only insert device config if it did not exist yet
                     scene_devices_integrations
-                        .entry(device.id)
+                        .entry(device_id.clone())
                         .or_insert_with(|| scene_device_config.clone());
                     scene_devices_config.insert(integration_id, scene_devices_integrations.clone());
                 }
@@ -126,7 +184,14 @@ impl Scenes {
     ) -> Option<DeviceState> {
         let scene_id = &device.scene.as_ref()?.scene_id;
 
-        let scene_devices = self.find_scene_devices_config(devices, scene_id)?;
+        let scene_devices = self.find_scene_devices_config(
+            devices,
+            &SceneDescriptor {
+                scene_id: scene_id.clone(),
+                device_keys: None,
+                group_keys: None,
+            },
+        )?;
         let integration_devices = scene_devices.get(&device.integration_id)?;
         let scene_device = integration_devices.get(&device.id)?;
 
@@ -199,7 +264,14 @@ impl Scenes {
         scenes
             .into_iter()
             .filter_map(|(scene_id, config)| {
-                let devices_config = self.find_scene_devices_config(devices, &scene_id)?;
+                let devices_config = self.find_scene_devices_config(
+                    devices,
+                    &SceneDescriptor {
+                        scene_id: scene_id.clone(),
+                        device_keys: None,
+                        group_keys: None,
+                    },
+                )?;
 
                 let devices: SceneDeviceStates = devices_config
                     .iter()

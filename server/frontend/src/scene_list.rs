@@ -52,6 +52,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
                 Action::ActivateScene(SceneDescriptor {
                     scene_id,
                     device_keys,
+                    group_keys: None
                 }),
             )))
         }

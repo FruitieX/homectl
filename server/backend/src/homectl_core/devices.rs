@@ -2,12 +2,14 @@ use crate::db::actions::{db_find_device, db_update_device};
 
 use super::scenes::Scenes;
 use homectl_types::device::DeviceId;
+use homectl_types::group::GroupId;
 use homectl_types::{
     device::{Device, DeviceColor, DeviceKey, DeviceSceneState, DeviceState, DevicesState},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
 };
+use itertools::Itertools;
 use palette::Hsv;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -291,32 +293,30 @@ impl Devices {
         self.state.lock().unwrap().0.get(device_key).cloned()
     }
 
-    fn find_scene_devices_config(&self, scene_id: &SceneId) -> Option<SceneDevicesConfig> {
+    fn find_scene_devices_config(&self, sd: &SceneDescriptor) -> Option<SceneDevicesConfig> {
         self.scenes
-            .find_scene_devices_config(&*self.state.lock().unwrap(), scene_id)
+            .find_scene_devices_config(&*self.state.lock().unwrap(), sd)
     }
 
     pub async fn activate_scene(
         &mut self,
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
+        group_keys: &Option<Vec<GroupId>>,
     ) -> Option<bool> {
         println!("Activating scene {:?}", scene_id);
 
-        let scene_devices_config = self.find_scene_devices_config(scene_id)?;
+        let scene_devices_config = self.find_scene_devices_config(&SceneDescriptor {
+            scene_id: scene_id.clone(),
+            device_keys: device_keys.clone(),
+            group_keys: group_keys.clone(),
+        })?;
 
         let device_scene_state = Some(DeviceSceneState::new(scene_id.to_owned()));
 
         for (integration_id, devices) in scene_devices_config {
             for (device_id, _) in devices {
                 let device_key = &DeviceKey::new(integration_id.clone(), device_id);
-
-                // Skip this device if it's not in device_keys
-                if let Some(device_keys) = device_keys {
-                    if !device_keys.contains(device_key) {
-                        continue;
-                    }
-                }
 
                 let device = self.get_device(device_key);
 
@@ -331,23 +331,20 @@ impl Devices {
         Some(true)
     }
 
-    pub async fn cycle_scenes(&mut self, scene_descriptors: &[SceneDescriptor]) -> Option<bool> {
+    pub async fn cycle_scenes(
+        &mut self,
+        scene_descriptors: &[SceneDescriptor],
+        nowrap: bool,
+    ) -> Option<bool> {
         let mut scenes_common_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
-
-        // If using async mutexes
-
-        // let scene_devices_configs = join_all(scene_descriptors.iter().map(|sd| {
-        //     let sd = sd.clone();
-        //     let scene_id = sd.scene_id.clone();
-        //     let devices = self.clone();
-        //     async move { (sd, devices.find_scene_devices_config(&scene_id).await) }
-        // })).await;
 
         let scene_devices_configs: Vec<(&SceneDescriptor, Option<SceneDevicesConfig>)> =
             scene_descriptors
                 .iter()
-                .map(|sd| (sd, self.find_scene_devices_config(&sd.scene_id)))
+                .map(|sd| (sd, self.find_scene_devices_config(sd)))
                 .collect();
+
+        dbg!(&scene_devices_configs);
 
         // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
         let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_devices_configs
@@ -384,9 +381,18 @@ impl Devices {
             scene_devices_configs
                 .iter()
                 .position(|(sd, scene_devices_config)| {
+                    dbg!("Processing", sd);
+                    dbg!("With config", scene_devices_config);
                     // try finding any device in scene_devices_config that has this scene active
                     if let Some(integrations) = scene_devices_config {
                         integrations.iter().any(|(integration_id, devices)| {
+                            dbg!(&devices
+                                .iter()
+                                .map(|(device_id, _)| {
+                                    find_device(&state, integration_id, Some(device_id), None)
+                                        .map(|d| d.name)
+                                })
+                                .collect_vec());
                             devices.iter().any(|(device_id, _)| {
                                 // only consider devices which are common across all cycled scenes
                                 if !scenes_common_devices
@@ -397,7 +403,13 @@ impl Devices {
 
                                 let device =
                                     find_device(&state, integration_id, Some(device_id), None);
-                                let device_scene = device.and_then(|d| d.scene);
+                                let device_scene = device.clone().and_then(|d| d.scene);
+
+                                if let Some(device_scene) = &device_scene {
+                                    if device_scene.scene_id == sd.scene_id {
+                                        dbg!(device);
+                                    }
+                                }
 
                                 device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
                             })
@@ -407,16 +419,26 @@ impl Devices {
                     }
                 });
 
+        dbg!(active_scene_index);
+
         let next_scene = match active_scene_index {
             Some(index) => {
-                let next_scene_index = (index + 1) % scene_descriptors.len();
+                let next_scene_index = if nowrap {
+                    (index + 1).min(scene_descriptors.len() - 1)
+                } else {
+                    (index + 1) % scene_descriptors.len()
+                };
                 scene_descriptors.get(next_scene_index)
             }
             None => scene_descriptors.first(),
         }?;
 
-        self.activate_scene(&next_scene.scene_id, &next_scene.device_keys)
-            .await;
+        self.activate_scene(
+            &next_scene.scene_id,
+            &next_scene.device_keys,
+            &next_scene.group_keys,
+        )
+        .await;
 
         Some(true)
     }

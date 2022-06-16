@@ -20,6 +20,27 @@ pub enum DimmerSwitchButtonPressType {
     NotUsed,
     Short,
     Long,
+    Released,
+}
+
+impl DimmerSwitchButtonPressType {
+    pub fn is_released(&self) -> bool {
+        match self {
+            DimmerSwitchButtonPressType::NotUsed => false,
+            DimmerSwitchButtonPressType::Short => false,
+            DimmerSwitchButtonPressType::Long => false,
+            DimmerSwitchButtonPressType::Released => true,
+        }
+    }
+
+    pub fn is_pressed(&self) -> bool {
+        match self {
+            DimmerSwitchButtonPressType::NotUsed => false,
+            DimmerSwitchButtonPressType::Short => true,
+            DimmerSwitchButtonPressType::Long => true,
+            DimmerSwitchButtonPressType::Released => false,
+        }
+    }
 }
 
 /// Returns which DimmerSwitchButtonId is referred to in BridgeButtonEvent
@@ -46,15 +67,25 @@ pub fn cmp_button_id(buttonevent: BridgeButtonEvent, button_id: DimmerSwitchButt
 /// Returns whether BridgeButtonEvent is in a pressed state or not
 fn get_button_state(buttonevent: BridgeButtonEvent) -> DimmerSwitchButtonPressType {
     let str = buttonevent.to_string();
+    let long = str.chars().nth(2);
     let state = str.chars().nth(3);
 
-    match state {
-        Some('0') => DimmerSwitchButtonPressType::NotUsed, // INITIAL_PRESSED
-        Some('1') => DimmerSwitchButtonPressType::NotUsed, // HOLD
-        Some('2') => DimmerSwitchButtonPressType::Short,   // SHORT_RELEASED
-        Some('3') => DimmerSwitchButtonPressType::Long,    // LONG_RELEASED
+    // TODO: match this against eventtypes in capabilities.inputs.events
+    match (long, state) {
+        (Some('0'), Some('0')) => DimmerSwitchButtonPressType::Short, // initial_press
+        (Some('0'), Some('2')) => DimmerSwitchButtonPressType::Released, // short_release
+        (Some('0'), Some('3')) => DimmerSwitchButtonPressType::Released, // long_release
+        (Some('1'), Some('0')) => DimmerSwitchButtonPressType::Long,  // long_press
         _ => DimmerSwitchButtonPressType::NotUsed,
     }
+
+    // match state {
+    //     Some('0') => DimmerSwitchButtonPressType::NotUsed, // INITIAL_PRESSED
+    //     Some('1') => DimmerSwitchButtonPressType::NotUsed, // HOLD
+    //     Some('2') => DimmerSwitchButtonPressType::Short,   // SHORT_RELEASED
+    //     Some('3') => DimmerSwitchButtonPressType::Long,    // LONG_RELEASED
+    //     _ => DimmerSwitchButtonPressType::NotUsed,
+    // }
 }
 
 /// Returns whether DimmerSwitchButtonId is in a pressed state in the
@@ -252,7 +283,8 @@ pub fn extrapolate_sensor_updates(
                     state: ZLLSwitchState {
                         buttonevent: Some(to_buttonevent(
                             prev_button_id.clone(),
-                            prev_button_state.ne(&DimmerSwitchButtonPressType::NotUsed),
+                            prev_button_state != DimmerSwitchButtonPressType::Released
+                                && prev_button_state != DimmerSwitchButtonPressType::NotUsed,
                         )),
                         lastupdated: next_lastupdated.clone(),
                     },
@@ -263,7 +295,8 @@ pub fn extrapolate_sensor_updates(
             // button ID has changed and the old button state was left pressed,
             // release it
             if prev_button_id != next_button_id
-                && prev_button_state.ne(&DimmerSwitchButtonPressType::NotUsed)
+                && prev_button_state != DimmerSwitchButtonPressType::NotUsed
+                && prev_button_state.is_pressed()
             {
                 updates.push(BridgeSensor::ZLLSwitch {
                     state: ZLLSwitchState {
@@ -277,7 +310,8 @@ pub fn extrapolate_sensor_updates(
             // button ID has changed and the new button state is released,
             // assume we missed a button press event
             if prev_button_id != next_button_id
-                && next_button_state.ne(&DimmerSwitchButtonPressType::NotUsed)
+                && next_button_state != DimmerSwitchButtonPressType::NotUsed
+                && next_button_state.is_released()
             {
                 updates.push(BridgeSensor::ZLLSwitch {
                     state: ZLLSwitchState {

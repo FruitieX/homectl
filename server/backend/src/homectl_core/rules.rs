@@ -2,7 +2,9 @@ use homectl_types::{
     action::{Action, Actions},
     device::{Device, DeviceState, DevicesState, SensorKind},
     event::{Message, TxEventChannel},
-    rule::{DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState},
+    rule::{
+        AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState,
+    },
 };
 use std::collections::HashSet;
 
@@ -100,7 +102,6 @@ fn get_triggered_routine_ids(
 
 fn is_routine_triggered(
     state: &DevicesState,
-
     groups: &Groups,
     routine: &Routine,
 ) -> Result<bool, String> {
@@ -124,6 +125,9 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
     let sensor_kind = get_device_sensor_kind(device);
 
     match rule {
+        Rule::Any(_) => {
+            panic!("compare_rule_device_state() cannot be called directly on Any rule");
+        }
         Rule::Sensor(rule) => {
             // FIXME: there must be a better way
             match (rule.state.clone(), sensor_kind) {
@@ -212,6 +216,14 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
 fn is_rule_triggered(state: &DevicesState, groups: &Groups, rule: &Rule) -> Result<bool, String> {
     // Try finding matching device
     let devices = match rule {
+        Rule::Any(AnyRule { any: rules }) => {
+            let any_triggered = rules
+                .iter()
+                .map(|rule| is_rule_triggered(state, groups, rule))
+                .any(|result| result == Ok(true));
+
+            return Ok(any_triggered);
+        }
         Rule::Sensor(rule) => {
             vec![find_device(
                 state,

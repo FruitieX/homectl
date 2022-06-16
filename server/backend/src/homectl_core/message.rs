@@ -72,15 +72,16 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
         Message::Action(Action::ActivateScene(SceneDescriptor {
             scene_id,
             device_keys,
+            group_keys
         })) => {
             let mut devices = state.devices.clone();
-            devices.activate_scene(scene_id, device_keys).await;
+            devices.activate_scene(scene_id, device_keys, group_keys).await;
 
             Ok(())
         }
-        Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes })) => {
+        Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
             let mut devices = state.devices.clone();
-            devices.cycle_scenes(scenes).await;
+            devices.cycle_scenes(scenes, nowrap.unwrap_or(false)).await;
 
             Ok(())
         }

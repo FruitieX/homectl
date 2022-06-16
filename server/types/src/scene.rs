@@ -50,11 +50,15 @@ pub struct SceneDescriptor {
 
     /// Optionally only apply scene to these devices
     pub device_keys: Option<Vec<DeviceKey>>,
+
+    /// Optionally only apply scene to these groups
+    pub group_keys: Option<Vec<GroupId>>,
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<SceneDescriptor>,
+    pub nowrap: Option<bool>
 }
 
 #[derive(Clone, Deserialize, Debug, Serialize)]

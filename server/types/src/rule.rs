@@ -50,11 +50,17 @@ pub struct GroupRule {
 }
 
 #[derive(Clone, Deserialize, Debug)]
+pub struct AnyRule {
+    pub any: Rules
+}
+
+#[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Rule {
     Sensor(SensorRule),
     Device(DeviceRule),
     Group(GroupRule),
+    Any(AnyRule)
 }
 
 pub type Rules = Vec<Rule>;
