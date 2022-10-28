@@ -16,6 +16,8 @@ mod api;
 
 use api::clean_house;
 
+use self::api::RobotCmd;
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct NeatoConfig {
     email: String,
@@ -81,42 +83,48 @@ impl Integration for Neato {
     }
 
     async fn run_integration_action(&mut self, payload: &IntegrationActionPayload) -> Result<()> {
-        if payload.to_string() == "clean_house" {
-            let local = chrono::Local::now().naive_local();
+        match payload.to_string().as_str() {
+            "clean_house" | "clean_house_force" => {
+                let force = payload.to_string() == "clean_house_force";
+                let local = chrono::Local::now().naive_local();
 
-            if !self.config.dummy {
-                let weekday = local.weekday();
+                if !force && !self.config.dummy {
+                    let weekday = local.weekday();
 
-                if !self.config.cleaning_days.contains(&weekday) {
-                    println!("Skipping cleaning due to wrong weekday");
-                    return Ok(());
-                }
-
-                if !(self.config.cleaning_time_start..self.config.cleaning_time_end)
-                    .contains(&local.time())
-                {
-                    println!("Skipping cleaning due to wrong time of day");
-                    return Ok(());
-                }
-
-                if let Some(prev_run) = self.prev_run {
-                    if prev_run.num_days_from_ce() == local.num_days_from_ce() {
-                        println!("Skipping cleaning due to previous run being today");
+                    if !self.config.cleaning_days.contains(&weekday) {
+                        println!("Skipping cleaning due to wrong weekday");
                         return Ok(());
                     }
+
+                    if !(self.config.cleaning_time_start..self.config.cleaning_time_end)
+                        .contains(&local.time())
+                    {
+                        println!("Skipping cleaning due to wrong time of day");
+                        return Ok(());
+                    }
+
+                    if let Some(prev_run) = self.prev_run {
+                        if prev_run.num_days_from_ce() == local.num_days_from_ce() {
+                            println!("Skipping cleaning due to previous run being today");
+                            return Ok(());
+                        }
+                    }
                 }
+
+                self.prev_run = Some(local);
+                let result = clean_house(&self.config, &RobotCmd::StartCleaning).await;
+
+                db_set_neato_last_run(&self.integration_id, local)
+                    .await
+                    .ok();
+
+                result
             }
-
-            self.prev_run = Some(local);
-            let result = clean_house(&self.config).await;
-
-            db_set_neato_last_run(&self.integration_id, local)
-                .await
-                .ok();
-
-            result
-        } else {
-            Ok(())
+            "stop_cleaning" => {
+                let result = clean_house(&self.config, &RobotCmd::StopCleaning).await;
+                result
+            }
+            _ => Ok(()),
         }
     }
 }

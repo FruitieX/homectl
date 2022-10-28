@@ -49,7 +49,12 @@ const BASE_URL: &str = "https://beehive.neatocloud.com";
 
 type HmacSha256 = Hmac<Sha256>;
 
-pub async fn clean_house(config: &NeatoConfig) -> Result<()> {
+pub enum RobotCmd {
+    StartCleaning,
+    StopCleaning
+}
+
+pub async fn clean_house(config: &NeatoConfig, cmd: &RobotCmd) -> Result<()> {
     let body = AuthBody {
         email: config.email.clone(),
         password: config.password.clone(),
@@ -91,7 +96,10 @@ pub async fn clean_house(config: &NeatoConfig) -> Result<()> {
 
             RobotMessage {
                 req_id: String::from("77"),
-                cmd: String::from("startCleaning"),
+                cmd: match cmd {
+                    RobotCmd::StartCleaning => String::from("startCleaning"),
+                    RobotCmd::StopCleaning => String::from("stopCleaning"),
+                },
                 params,
             }
         };
