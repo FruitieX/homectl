@@ -2351,8 +2351,7 @@ dependencies = [
 [[package]]
 name = "rust-async-tuyapi"
 version = "0.8.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d4382c4a87ed428ea3212a9aa399efb04fe22fafa990d2191b9a048d5a99c50"
+source = "git+https://github.com/FruitieX/rust-async-tuyapi?rev=76718a40abd86c939d5f0fdb74229a405a8bf4e7#76718a40abd86c939d5f0fdb74229a405a8bf4e7"
 dependencies = [
  "atomic-counter",
  "base64",

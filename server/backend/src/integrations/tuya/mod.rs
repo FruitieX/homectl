@@ -27,6 +27,7 @@ pub struct TuyaDeviceConfig {
     name: String,
     local_key: String,
     ip: String,
+    version: Option<String>,
     power_on_field: String,
     brightness_field: Option<String>,
     color_field: Option<String>,
@@ -89,13 +90,19 @@ impl Integration for Tuya {
             let event_tx = self.event_tx.clone();
             let integration_id = integration_id.clone();
 
-            println!("Getting initial state of {}", device_config.name);
-            let device = get_tuya_state(&device_id, &integration_id, &device_config).await;
-            let device = device.unwrap_or_else(|_| {
-                println!("Failed to get initial state of Tuya device {}, creating Device with default state", device_config.name);
+            // println!("Getting initial state of {}", device_config.name);
+            // let device = get_tuya_state(&device_id, &integration_id, &device_config).await;
+            // let device = device.unwrap_or_else(|_| {
+            //     println!("Failed to get initial state of Tuya device {}, creating Device with default state", device_config.name);
 
-                default_device(device_id.clone(), device_config.name.clone(), integration_id)
-            });
+            //     default_device(device_id.clone(), device_config.name.clone(), integration_id)
+            // });
+
+            let device = default_device(
+                device_id.clone(),
+                device_config.name.clone(),
+                integration_id,
+            );
 
             device_expected_states.insert(device_id.clone(), Arc::new(RwLock::new(device.clone())));
 
@@ -320,19 +327,20 @@ async fn set_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Re
     // println!("setting tuya state: {:?} {}", device.state, device.name);
     let tuya_state = to_tuya_state(device, device_config)?;
 
-    let current_time = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .unwrap()
-        .as_secs() as u32;
-
     {
         // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
         // device.
-        let tuya_device = TuyaDevice::create(
-            "3.3",
+        let mut tuya_device = TuyaDevice::new(
+            &device_config
+                .version
+                .clone()
+                .unwrap_or_else(|| String::from("v3.3")),
+            &device.id.to_string(),
             Some(&device_config.local_key),
             IpAddr::from_str(&device_config.ip).unwrap(),
         )?;
+
+        tuya_device.connect().await?;
 
         let mut dps = HashMap::new();
         dps.insert(
@@ -357,18 +365,7 @@ async fn set_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Re
             dps.insert(field, json!(color));
         }
 
-        // Create the payload to be sent, this will be serialized to the JSON format
-        let payload = Payload::Struct(PayloadStruct {
-            dev_id: device.id.to_string(),
-            // gw_id: None,
-            gw_id: Some(device.id.to_string()),
-            uid: Some(device.id.to_string()),
-            t: Some(current_time),
-            dp_id: None,
-            dps: Some(dps),
-        });
-
-        tokio::time::timeout(Duration::from_millis(250), tuya_device.set(payload, 0)).await??
+        tokio::time::timeout(Duration::from_millis(3000), tuya_device.set_values(dps)).await??
     }
 
     Ok(())
@@ -387,23 +384,29 @@ async fn get_tuya_state(
     let response = {
         // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
         // device.
-        let tuya_device = TuyaDevice::create(
-            "3.3",
+        let mut tuya_device = TuyaDevice::new(
+            &device_config
+                .version
+                .clone()
+                .unwrap_or_else(|| String::from("v3.3")),
+            &device_id.to_string(),
             Some(&device_config.local_key),
             IpAddr::from_str(&device_config.ip).unwrap(),
         )?;
+
+        tuya_device.connect().await?;
 
         // Create the payload to be sent, this will be serialized to the JSON format
         let payload = Payload::Struct(PayloadStruct {
             dev_id: device_id.to_string(),
             gw_id: Some(device_id.to_string()),
             uid: Some(device_id.to_string()),
-            t: Some(current_time),
+            t: Some(current_time.to_string()),
             dp_id: None,
             dps: Some(HashMap::new()),
         });
 
-        tokio::time::timeout(Duration::from_millis(250), tuya_device.get(payload, 0))
+        tokio::time::timeout(Duration::from_millis(5000), tuya_device.get(payload))
             .await?
             .context(format!("Error while polling {}", device_config.name))?
     };
@@ -415,6 +418,7 @@ async fn get_tuya_state(
     let payload = match &first.payload {
         Payload::Struct(s) => s.clone(),
         Payload::String(s) => read_payload_from_json(s),
+        _ => return Err(anyhow!("Unexpected Tuya device state struct")),
     };
 
     if let PayloadStruct { dps: Some(dps), .. } = &payload {

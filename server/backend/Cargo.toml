@@ -30,9 +30,15 @@ homectl_types = { path = "../types", features = ["backend"] }
 tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync"] }
 futures-util = "0.3.19"
 tokio-stream = "0.1.8"
-rust-async-tuyapi = "0.8.1"
+# rust-async-tuyapi = "0.8.1"
+rust-async-tuyapi = { git = "https://github.com/FruitieX/rust-async-tuyapi", rev = "76718a40abd86c939d5f0fdb74229a405a8bf4e7" }
 env_logger = "0.9.0"
 itertools = "0.10.3"
-sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "postgres", "json", "offline"] }
+sqlx = { version = "0.5", features = [
+	"runtime-tokio-rustls",
+	"postgres",
+	"json",
+	"offline",
+] }
 once_cell = "1.9.0"
 scan_fmt = "0.2.6"
