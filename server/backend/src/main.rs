@@ -15,9 +15,6 @@ use homectl_core::{
 use homectl_types::event::mk_channel;
 use std::{error::Error, sync::Arc};
 
-#[macro_use]
-extern crate scan_fmt;
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     env_logger::init();

@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, SensorKind},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
 use std::time::Duration;
@@ -23,7 +24,7 @@ pub struct Timer {
 }
 
 #[async_trait]
-impl Integration for Timer {
+impl CustomIntegration for Timer {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: TimerConfig = config
             .clone()

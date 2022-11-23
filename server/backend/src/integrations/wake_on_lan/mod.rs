@@ -3,9 +3,10 @@ use std::time::Duration;
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, Light, OnOffDevice},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
 use tokio::time;
@@ -29,7 +30,7 @@ pub struct WakeOnLan {
 }
 
 #[async_trait]
-impl Integration for WakeOnLan {
+impl CustomIntegration for WakeOnLan {
     fn new(
         id: &IntegrationId,
         config: &config::Value,

@@ -26,7 +26,7 @@ pub fn DeviceModal<'a>(cx: Scope<'a, DeviceModalProps<'a>>) -> Element<'a> {
 
     let brightness = cx.props.device.state.get_brightness().unwrap_or_default();
     let power = cx.props.device.state.is_powered_on().unwrap_or_default();
-    let color = cx.props.device.state.get_color();
+    let color = cx.props.device.state.get_hsv();
 
     let hue = color.unwrap_or_default().hue.to_positive_degrees();
     let saturation = color.unwrap_or_default().saturation;

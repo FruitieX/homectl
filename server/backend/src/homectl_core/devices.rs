@@ -28,15 +28,15 @@ fn cmp_light_color(
     b_bri: &Option<f32>,
 ) -> bool {
     let hue_delta = 1.0;
-    let sat_delta = 0.01;
-    let val_delta = 0.01;
+    let sat_delta = 0.03;
+    let val_delta = 0.03;
     let cct_delta = 10.0;
 
     match (a, b) {
         (None, None) => true,
         (None, Some(_)) => false,
         (Some(_), None) => false,
-        (Some(DeviceColor::Color(a)), Some(DeviceColor::Color(b))) => {
+        (Some(DeviceColor::Hsv(a)), Some(DeviceColor::Hsv(b))) => {
             let mut a_hsv: Hsv = *a;
             let mut b_hsv: Hsv = *b;
 

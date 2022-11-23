@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use palette::Hsv;
 use serde::Deserialize;
@@ -28,7 +29,7 @@ pub struct Dummy {
 }
 
 #[async_trait]
-impl Integration for Dummy {
+impl CustomIntegration for Dummy {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()
@@ -48,7 +49,7 @@ impl Integration for Dummy {
             let state = DeviceState::Light(Light::new(
                 true,
                 Some(1.0),
-                Some(DeviceColor::Color(device.init_state)),
+                Some(DeviceColor::Hsv(device.init_state)),
                 None,
             ));
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);

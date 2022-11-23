@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, SensorKind},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
 
@@ -20,7 +21,7 @@ pub struct Boolean {
 }
 
 #[async_trait]
-impl Integration for Boolean {
+impl CustomIntegration for Boolean {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: BooleanConfig = config
             .clone()

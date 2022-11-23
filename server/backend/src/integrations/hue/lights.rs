@@ -94,7 +94,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                 .map(|transition_ms| ((transition_ms as f64) / 100.0) as u16);
 
             Ok(match state.color {
-                Some(DeviceColor::Color(color)) => {
+                Some(DeviceColor::Hsv(color)) => {
                     let hsv = color;
                     let color: Yxy = color.into();
 

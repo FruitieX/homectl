@@ -29,14 +29,14 @@ pub fn to_light(bridge_light: BridgeLight) -> Light {
             let hsv = Yxy::new(x, y, 1.0);
             let mut device_color: Hsv = hsv.into();
             device_color.value = 1.0;
-            Some(DeviceColor::Color(device_color))
+            Some(DeviceColor::Hsv(device_color))
         })(),
         Some(ColorMode::Hs) => (move || {
             let hue = hue?;
             let sat = sat?;
 
             let device_color = Hsv::new(hue, sat, 1.0);
-            Some(DeviceColor::Color(device_color))
+            Some(DeviceColor::Hsv(device_color))
         })(),
         None => None,
     };

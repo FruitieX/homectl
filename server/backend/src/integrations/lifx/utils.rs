@@ -161,7 +161,7 @@ pub fn read_lifx_msg(buf: &[u8], addr: SocketAddr) -> LifxMsg {
 }
 
 pub fn from_lifx_state(lifx_state: LifxState, integration_id: IntegrationId) -> Device {
-    let hue = from_lifx_hue((f32::from(lifx_state.hue) / 65535.0) * 360.0);
+    let hue = (f32::from(lifx_state.hue) / 65535.0) * 360.0;
     let sat = f32::from(lifx_state.sat) / 65535.0;
     let bri = f32::from(lifx_state.bri) / 65535.0;
 
@@ -174,7 +174,7 @@ pub fn from_lifx_state(lifx_state: LifxState, integration_id: IntegrationId) -> 
     let state = DeviceState::Light(Light::new(
         power,
         None,
-        Some(DeviceColor::Color(color)),
+        Some(DeviceColor::Hsv(color)),
         transition_ms,
     ));
 
@@ -209,9 +209,8 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
         .map(|transition_ms| transition_ms as u32);
 
     match light_state.color {
-        Some(DeviceColor::Color(color)) => {
-            let hue =
-                ((to_lifx_hue(color.hue.to_positive_degrees()) / 360.0) * 65535.0).floor() as u16;
+        Some(DeviceColor::Hsv(color)) => {
+            let hue = ((color.hue.to_positive_degrees() / 360.0) * 65535.0).floor() as u16;
             let sat = (color.saturation * 65535.0).floor() as u16;
             let bri =
                 (light_state.brightness.unwrap_or(1.0) * color.value * 65535.0).floor() as u16;
@@ -240,25 +239,5 @@ pub fn to_lifx_state(device: &Device) -> Result<LifxState> {
             addr: device.id.to_string().parse()?,
             transition,
         }),
-    }
-}
-
-// NOTE: this is complete trial-and-error, but seems to produce a wider range of
-// yellow hues which matches my other HA systems better.
-pub fn to_lifx_hue(h: f32) -> f32 {
-    if h > 0.0 && h < 60.0 {
-        let p = h / 60.0;
-        f32::powf(p, 1.0 / 2.0) * 60.0
-    } else {
-        h
-    }
-}
-
-pub fn from_lifx_hue(h: f32) -> f32 {
-    if h > 0.0 && h < 60.0 {
-        let p = h / 60.0;
-        f32::powf(p, 2.0 / 1.0) * 60.0
-    } else {
-        h
     }
 }

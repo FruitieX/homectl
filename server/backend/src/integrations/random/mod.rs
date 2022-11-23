@@ -1,9 +1,10 @@
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use palette::rgb::Rgb;
 use rand::prelude::*;
@@ -24,7 +25,7 @@ pub struct Random {
 }
 
 #[async_trait]
-impl Integration for Random {
+impl CustomIntegration for Random {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: RandomConfig = config
             .clone()
@@ -80,7 +81,7 @@ fn get_random_color() -> DeviceColor {
     let b: f32 = rng.gen();
 
     let rgb: Rgb = Rgb::new(r, g, b);
-    DeviceColor::Color(rgb.into())
+    DeviceColor::Hsv(rgb.into())
 }
 
 async fn poll_sensor(random: Random) {

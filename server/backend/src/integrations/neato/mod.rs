@@ -6,9 +6,10 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{Datelike, Weekday};
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::Device,
     event::TxEventChannel,
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
 
@@ -47,7 +48,7 @@ pub struct Neato {
 }
 
 #[async_trait]
-impl Integration for Neato {
+impl CustomIntegration for Neato {
     fn new(
         integration_id: &IntegrationId,
         config: &config::Value,

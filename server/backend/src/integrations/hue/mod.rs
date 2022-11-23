@@ -8,9 +8,10 @@ use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
 use bridge::BridgeState;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::Device,
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
 
@@ -35,7 +36,7 @@ pub struct Hue {
 }
 
 #[async_trait]
-impl Integration for Hue {
+impl CustomIntegration for Hue {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()

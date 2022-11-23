@@ -5,9 +5,10 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, OnOffDevice},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use serde::Deserialize;
 use tokio::time;
@@ -30,7 +31,7 @@ pub struct Ping {
 }
 
 #[async_trait]
-impl Integration for Ping {
+impl CustomIntegration for Ping {
     fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Ping> {
         let config = config
             .clone()

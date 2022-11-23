@@ -30,7 +30,7 @@ pub fn init_api(app_state: &Arc<AppState>) -> Result<()> {
     let ws = ws(app_state);
 
     tokio::spawn(async move {
-        warp::serve(ws.or(api)).run(([127, 0, 0, 1], 45289)).await;
+        warp::serve(ws.or(api)).run(([0, 0, 0, 0], 45289)).await;
     });
 
     Ok(())

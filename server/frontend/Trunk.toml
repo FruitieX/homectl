@@ -1,9 +1,9 @@
 [[proxy]]
 rewrite = "/api/v1"
-backend = "http://localhost:45289/api/v1"
+backend = "http://satsuma:45289/api/v1"
 
 [[proxy]]
-backend = "ws://localhost:45289/ws"
+backend = "ws://satsuma:45289/ws"
 ws = true
 
 # From:
@@ -15,3 +15,7 @@ command_arguments = [
     "-c",
     "node_modules/.bin/tailwindcss -i tailwindcss.css -o $TRUNK_STAGING_DIR/index.css"
 ]
+
+[serve]
+address = "0.0.0.0"
+port = 8999

@@ -2,9 +2,10 @@ use crate::utils::from_hh_mm;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
     scene::{color_config_as_device_color, ColorConfig},
 };
 use palette::Gradient;
@@ -39,7 +40,7 @@ pub struct Circadian {
 }
 
 #[async_trait]
-impl Integration for Circadian {
+impl CustomIntegration for Circadian {
     fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
         let config: CircadianConfig = config
             .clone()
@@ -127,12 +128,12 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
         circadian.converted_day_color.clone(),
         circadian.converted_night_color.clone(),
     ) {
-        (DeviceColor::Color(day), DeviceColor::Color(night)) => {
+        (DeviceColor::Hsv(day), DeviceColor::Hsv(night)) => {
             let gradient = Gradient::new(vec![day, night]);
 
             let i = get_night_fade(circadian);
 
-            DeviceColor::Color(gradient.get(i))
+            DeviceColor::Hsv(gradient.get(i))
         }
         (DeviceColor::Cct(_), DeviceColor::Cct(_)) => todo!(),
         _ => panic!("Mixed color types not supported"),

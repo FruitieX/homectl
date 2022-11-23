@@ -4,9 +4,10 @@ pub mod utils;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
+    custom_integration::CustomIntegration,
     device::Device,
     event::TxEventChannel,
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use lights::{init_udp_socket, listen_udp_stream, poll_lights};
 use serde::Deserialize;
@@ -25,7 +26,7 @@ pub struct Lifx {
 }
 
 #[async_trait]
-impl Integration for Lifx {
+impl CustomIntegration for Lifx {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()

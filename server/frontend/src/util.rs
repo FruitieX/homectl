@@ -21,7 +21,7 @@ pub fn scale_hsv_value_to_display(hsv: Hsv) -> Hsv {
 }
 
 pub fn get_device_state_color(state: &DeviceState) -> Option<Hsv> {
-    match (state.get_color(), state.get_cct()) {
+    match (state.get_hsv(), state.get_cct()) {
         (Some(color), _) => Some(color),
         (_, Some(cct)) => {
             let rgb = cct_to_rgb(cct.get_cct());

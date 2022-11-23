@@ -18,7 +18,7 @@ fn DeviceTile<'a>(cx: Scope<'a, DeviceTileProps<'a>>) -> Element<'a> {
         .props
         .device
         .state
-        .get_color()
+        .get_hsv()
         .map(scale_hsv_value_to_display);
     let modal_open = use_state(&cx, || false);
 

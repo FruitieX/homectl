@@ -41,7 +41,7 @@ pub struct OnOffDevice {
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 pub enum DeviceColor {
     // TODO: use Lch, or Yxy?
-    Color(Hsv),
+    Hsv(Hsv),
     Cct(CorrelatedColorTemperature),
 }
 
@@ -156,7 +156,7 @@ impl Display for DeviceState {
             DeviceState::Light(light) => {
                 if !light.power {
                     "off".to_string()
-                } else if let Some(DeviceColor::Color(color)) = light.color {
+                } else if let Some(DeviceColor::Hsv(color)) = light.color {
                     format!(
                         "hsv({}, {}, {})",
                         color.hue.to_positive_degrees(),
@@ -206,13 +206,22 @@ impl DeviceState {
         }
     }
 
-    pub fn get_color(&self) -> Option<Hsv> {
+    pub fn get_color(&self) -> Option<DeviceColor> {
+        match self {
+            DeviceState::OnOffDevice(_) => None,
+            DeviceState::Light(state) => state.color.clone(),
+            DeviceState::MultiSourceLight(_) => None,
+            DeviceState::Sensor(_) => None,
+        }
+    }
+
+    pub fn get_hsv(&self) -> Option<Hsv> {
         match self {
             DeviceState::OnOffDevice(_) => None,
             DeviceState::Light(state) => {
                 if !state.power {
                     Some(Hsv::new(0.0, 0.0, 0.0))
-                } else if let Some(DeviceColor::Color(color)) = state.color {
+                } else if let Some(DeviceColor::Hsv(color)) = state.color {
                     Some(color)
                 } else {
                     None
@@ -245,10 +254,10 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                if let Some(DeviceColor::Color(color)) = &mut state.color {
+                if let Some(DeviceColor::Hsv(color)) = &mut state.color {
                     color.hue = RgbHue::from_degrees(hue);
                 } else {
-                    state.color = Some(DeviceColor::Color(Hsv::new(hue, 0.0, 1.0)));
+                    state.color = Some(DeviceColor::Hsv(Hsv::new(hue, 0.0, 1.0)));
                 }
             }
             DeviceState::MultiSourceLight(_) => {}
@@ -260,10 +269,10 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                if let Some(DeviceColor::Color(color)) = &mut state.color {
+                if let Some(DeviceColor::Hsv(color)) = &mut state.color {
                     color.saturation = saturation;
                 } else {
-                    state.color = Some(DeviceColor::Color(Hsv::new(0.0, saturation, 1.0)));
+                    state.color = Some(DeviceColor::Hsv(Hsv::new(0.0, saturation, 1.0)));
                 }
             }
             DeviceState::MultiSourceLight(_) => {}
@@ -275,10 +284,10 @@ impl DeviceState {
         match self {
             DeviceState::OnOffDevice(_) => {}
             DeviceState::Light(state) => {
-                if let Some(DeviceColor::Color(color)) = &mut state.color {
+                if let Some(DeviceColor::Hsv(color)) = &mut state.color {
                     color.value = value;
                 } else {
-                    state.color = Some(DeviceColor::Color(Hsv::new(0.0, 0.0, value)));
+                    state.color = Some(DeviceColor::Hsv(Hsv::new(0.0, 0.0, value)));
                 }
             }
             DeviceState::MultiSourceLight(_) => {}

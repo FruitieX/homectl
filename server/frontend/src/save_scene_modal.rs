@@ -74,7 +74,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
                             let scene_device_config =
                                 SceneDeviceConfig::SceneDeviceState(SceneDeviceState {
                                     power: device.state.is_powered_on().unwrap_or_default(),
-                                    color: device.state.get_color().map(ColorConfig::Hsv),
+                                    color: device.state.get_hsv().map(ColorConfig::Hsv),
                                     brightness: device.state.get_brightness(),
                                     cct: device.state.get_cct(),
                                     transition_ms: None,

@@ -9,6 +9,8 @@ pub mod device;
 pub mod event;
 pub mod group;
 pub mod integration;
+pub mod polling_integration;
+pub mod custom_integration;
 pub mod rule;
 pub mod scene;
 pub mod utils;

@@ -29,7 +29,7 @@ pub enum ColorConfig {
 }
 
 pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
-    DeviceColor::Color(match color_config {
+    DeviceColor::Hsv(match color_config {
         ColorConfig::Lch(lch) => lch.into(),
         ColorConfig::Hsv(hsv) => hsv,
         ColorConfig::Rgb(rgb) => rgb.into(),
@@ -58,7 +58,7 @@ pub struct SceneDescriptor {
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<SceneDescriptor>,
-    pub nowrap: Option<bool>
+    pub nowrap: Option<bool>,
 }
 
 #[derive(Clone, Deserialize, Debug, Serialize)]
