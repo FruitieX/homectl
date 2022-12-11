@@ -199,24 +199,36 @@ impl Scenes {
             SceneDeviceConfig::SceneDeviceLink(link) => {
                 // Use state from another device
 
-                // Try finding device by integration_id, device_id, name
-                let device = find_device(
+                // Try finding source device by integration_id, device_id, name
+                let source_device = find_device(
                     devices,
                     &link.integration_id,
                     link.device_id.as_ref(),
                     link.name.as_ref(),
                 )?;
 
-                let state = device.state;
+                let state = source_device.state;
 
                 // Brightness override
                 let state = match state {
                     DeviceState::Light(mut state) => {
-                        state.brightness = link.brightness.or(state.brightness);
+                        state.brightness = if link.brightness.is_some()
+                            || state.brightness.is_some()
+                        {
+                            Some(link.brightness.unwrap_or(1.0) * state.brightness.unwrap_or(1.0))
+                        } else {
+                            None
+                        };
                         DeviceState::Light(state)
                     }
                     DeviceState::MultiSourceLight(mut state) => {
-                        state.brightness = link.brightness.or(state.brightness);
+                        state.brightness = if link.brightness.is_some()
+                            || state.brightness.is_some()
+                        {
+                            Some(link.brightness.unwrap_or(1.0) * state.brightness.unwrap_or(1.0))
+                        } else {
+                            None
+                        };
                         DeviceState::MultiSourceLight(state)
                     }
                     DeviceState::OnOffDevice(state) => DeviceState::OnOffDevice(state),

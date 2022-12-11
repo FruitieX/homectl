@@ -181,7 +181,7 @@ impl Devices {
 
                     println!(
                         "Device state mismatch detected ({}/{}): (was: {:?}, expected: {:?})",
-                        device.integration_id, device.id, device.state, expected_state
+                        device.integration_id, device.name, device.state, expected_state
                     );
 
                     let mut device = device.clone();
@@ -344,8 +344,6 @@ impl Devices {
                 .map(|sd| (sd, self.find_scene_devices_config(sd)))
                 .collect();
 
-        dbg!(&scene_devices_configs);
-
         // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
         let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_devices_configs
             .iter()
@@ -381,18 +379,9 @@ impl Devices {
             scene_devices_configs
                 .iter()
                 .position(|(sd, scene_devices_config)| {
-                    dbg!("Processing", sd);
-                    dbg!("With config", scene_devices_config);
                     // try finding any device in scene_devices_config that has this scene active
                     if let Some(integrations) = scene_devices_config {
                         integrations.iter().any(|(integration_id, devices)| {
-                            dbg!(&devices
-                                .iter()
-                                .map(|(device_id, _)| {
-                                    find_device(&state, integration_id, Some(device_id), None)
-                                        .map(|d| d.name)
-                                })
-                                .collect_vec());
                             devices.iter().any(|(device_id, _)| {
                                 // only consider devices which are common across all cycled scenes
                                 if !scenes_common_devices
@@ -405,12 +394,6 @@ impl Devices {
                                     find_device(&state, integration_id, Some(device_id), None);
                                 let device_scene = device.clone().and_then(|d| d.scene);
 
-                                if let Some(device_scene) = &device_scene {
-                                    if device_scene.scene_id == sd.scene_id {
-                                        dbg!(device);
-                                    }
-                                }
-
                                 device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
                             })
                         })
@@ -418,8 +401,6 @@ impl Devices {
                         false
                     }
                 });
-
-        dbg!(active_scene_index);
 
         let next_scene = match active_scene_index {
             Some(index) => {
