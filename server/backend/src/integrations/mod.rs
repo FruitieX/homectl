@@ -3,6 +3,7 @@ pub mod circadian;
 pub mod dummy;
 pub mod hue;
 pub mod lifx;
+pub mod mqtt;
 pub mod neato;
 pub mod ping;
 pub mod random;
