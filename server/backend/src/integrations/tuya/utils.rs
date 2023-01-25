@@ -16,11 +16,13 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-use super::TuyaDeviceConfig;
+use super::{Connection, TuyaDeviceConfig};
 
 const POWER_ON_FIELD: &str = "20";
 const MODE_FIELD: &str = "21";
 const BRIGHTNESS_FIELD: &str = "22";
+const COLOR_TEMP_FIELD: &str = "23";
+const COLOR_FIELD: &str = "24";
 
 fn hsv_to_tuya(power: bool, brightness: Option<f32>, hsv: Hsv) -> TuyaState {
     let hue: f32 = hsv.hue.to_positive_degrees();
@@ -150,25 +152,68 @@ fn to_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<Tu
     }
 }
 
-pub async fn set_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<()> {
+pub fn create_tuya_device(
+    device_id: &DeviceId,
+    device_config: &TuyaDeviceConfig,
+) -> Result<TuyaDevice> {
+    Ok(TuyaDevice::new(
+        &device_config
+            .version
+            .clone()
+            .unwrap_or_else(|| String::from("v3.3")),
+        &device_id.to_string(),
+        Some(&device_config.local_key),
+        IpAddr::from_str(&device_config.ip).unwrap(),
+    )?)
+}
+
+pub async fn ensure_tuya_connection(
+    device_id: &DeviceId,
+    device_config: &TuyaDeviceConfig,
+    connections: &HashMap<DeviceId, Connection>,
+) -> Result<()> {
+    let mut connection = connections.get(device_id).unwrap().write().await;
+
+    match &*connection {
+        Some(_) => {}
+        None => {
+            let mut tuya_device = create_tuya_device(device_id, device_config)?;
+            tuya_device.connect().await?;
+            *connection = Some(tuya_device);
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn terminate_tuya_connection(
+    device_id: &DeviceId,
+    connections: &HashMap<DeviceId, Connection>,
+) -> Result<()> {
+    let mut connection = connections.get(device_id).unwrap().write().await;
+    *connection = None;
+
+    Ok(())
+}
+
+pub async fn set_tuya_state(
+    device: &Device,
+    device_config: &TuyaDeviceConfig,
+    connections: &HashMap<DeviceId, Connection>,
+) -> Result<()> {
     // println!("setting tuya state: {:?} {}", device.state, device.name);
     let tuya_state = to_tuya_state(device, device_config)?;
 
+    ensure_tuya_connection(&device.id, device_config, connections)
+        .await
+        .ok();
+
+    let mut tuya_device = connections.get(&device.id).unwrap().write().await;
+    let tuya_device = tuya_device
+        .as_mut()
+        .context(anyhow!("Expected connected Tuya device"))?;
+
     {
-        // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
-        // device.
-        let mut tuya_device = TuyaDevice::new(
-            &device_config
-                .version
-                .clone()
-                .unwrap_or_else(|| String::from("v3.3")),
-            &device.id.to_string(),
-            Some(&device_config.local_key),
-            IpAddr::from_str(&device_config.ip).unwrap(),
-        )?;
-
-        tuya_device.connect().await?;
-
         let mut dps = HashMap::new();
         dps.insert(POWER_ON_FIELD.to_string(), json!(tuya_state.power_on));
 
@@ -217,26 +262,22 @@ pub async fn get_tuya_state(
     device_id: &DeviceId,
     integration_id: &IntegrationId,
     device_config: &TuyaDeviceConfig,
+    connections: &HashMap<DeviceId, Connection>,
 ) -> Result<Device> {
     let current_time = SystemTime::now()
         .duration_since(SystemTime::UNIX_EPOCH)
         .unwrap()
         .as_secs() as u32;
 
-    let response = {
-        // Create a TuyaDevice, this is the type used to set/get status to/from a Tuya compatible
-        // device.
-        let mut tuya_device = TuyaDevice::new(
-            &device_config
-                .version
-                .clone()
-                .unwrap_or_else(|| String::from("v3.3")),
-            &device_id.to_string(),
-            Some(&device_config.local_key),
-            IpAddr::from_str(&device_config.ip).unwrap(),
-        )?;
+    ensure_tuya_connection(device_id, device_config, connections)
+        .await
+        .ok();
 
-        tuya_device.connect().await?;
+    let response = {
+        let mut tuya_device = connections.get(device_id).unwrap().write().await;
+        let tuya_device = tuya_device
+            .as_mut()
+            .context(anyhow!("Expected connected Tuya device"))?;
 
         // Create the payload to be sent, this will be serialized to the JSON format
         let payload = Payload::Struct(PayloadStruct {

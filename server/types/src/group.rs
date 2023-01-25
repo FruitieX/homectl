@@ -6,6 +6,7 @@ use std::{collections::HashMap, convert::Infallible};
 
 macro_attr! {
     #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[serde(transparent)]
     pub struct GroupId(String);
 }
 

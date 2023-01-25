@@ -1,0 +1,1378 @@
+{
+	"State": {
+		"devices": {
+			"hue1/lights/21": {
+				"id": "lights/21",
+				"name": "Hue outdoor spot 3",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.690169149Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": {
+							"Hsv": {
+								"hue": 6.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf5f098dd975f11c57n5qr": {
+				"id": "bf5f098dd975f11c57n5qr",
+				"name": "Upper bathroom downlight 1",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"circadian_test/color": {
+				"id": "color",
+				"name": "Circadian rhythm (test)",
+				"integration_id": "circadian_test",
+				"scene": null,
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.5,
+						"color": {
+							"Hsv": {
+								"hue": 30.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": 60000
+					}
+				}
+			},
+			"hue1/lights/38": {
+				"id": "lights/38",
+				"name": "Baby changing table",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/31": {
+				"id": "lights/31",
+				"name": "Staircase plug",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.690524252Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.96725714,
+						"color": {
+							"Hsv": {
+								"hue": 24.672571,
+								"saturation": 0.3892914,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf21f1be8a070e81c8dpza": {
+				"id": "bf21f1be8a070e81c8dpza",
+				"name": "Kitchen downlight 1",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.702355305Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf855bcead9cac5686cn1f": {
+				"id": "bf855bcead9cac5686cn1f",
+				"name": "Entryway downlight 3",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.705459774Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf3972e296bc96ce2agldj": {
+				"id": "bf3972e296bc96ce2agldj",
+				"name": "Lower bathroom downlight 2",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.707680712Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/12": {
+				"id": "sensors/12",
+				"name": "Hue temperature sensor 2",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": "Unknown"
+				}
+			},
+			"lifx/192.168.1.40:56700": {
+				"id": "192.168.1.40:56700",
+				"name": "Iittala Lantern 2",
+				"integration_id": "lifx",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/9": {
+				"id": "lights/9",
+				"name": "Entryway table",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.695525696Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf9fb3c867740d3702ufvb": {
+				"id": "bf9fb3c867740d3702ufvb",
+				"name": "Upper bathroom downlight 2",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"circadian/color": {
+				"id": "color",
+				"name": "Circadian rhythm",
+				"integration_id": "circadian",
+				"scene": null,
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.5760662,
+						"color": {
+							"Hsv": {
+								"hue": 20.760662,
+								"saturation": 0.85872054,
+								"value": 1.0
+							}
+						},
+						"transition_ms": 60000
+					}
+				}
+			},
+			"hue1/lights/22": {
+				"id": "lights/22",
+				"name": "Hue outdoor spot 1",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.688388530Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": {
+							"Hsv": {
+								"hue": 263.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/2": {
+				"id": "sensors/2",
+				"name": "Upper bathroom switch",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"hue1/lights/34": {
+				"id": "lights/34",
+				"name": "Kitchen spot 2",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.692954882Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bfbc9be882f9cfa475ndnj": {
+				"id": "bfbc9be882f9cfa475ndnj",
+				"name": "Kitchen downlight 3",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.704215749Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/39": {
+				"id": "lights/39",
+				"name": "Left small bedroom",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/35": {
+				"id": "lights/35",
+				"name": "Kitchen spot 3",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.691383396Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"circadian_tuya_hsv/color": {
+				"id": "color",
+				"name": "Circadian rhythm (tuya hsv)",
+				"integration_id": "circadian_tuya_hsv",
+				"scene": null,
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.26085296,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.8543602,
+								"value": 1.0
+							}
+						},
+						"transition_ms": 60000
+					}
+				}
+			},
+			"twinkly/Staircase Twinkly": {
+				"id": "Staircase Twinkly",
+				"name": "Staircase Twinkly",
+				"integration_id": "twinkly",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.702203763Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/9": {
+				"id": "sensors/9",
+				"name": "Gym switch",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"hue1/lights/15": {
+				"id": "lights/15",
+				"name": "Kitchen lightstrip",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.691381362Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/33": {
+				"id": "lights/33",
+				"name": "Kitchen spot 1",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.692207426Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bfa0ed8b8bc2376903b3f5": {
+				"id": "bfa0ed8b8bc2376903b3f5",
+				"name": "Lower bathroom downlight 1",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.708271770Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/2": {
+				"id": "lights/2",
+				"name": "Hue play L",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.695317628Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/13": {
+				"id": "sensors/13",
+				"name": "Office switch",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"tuya/bf25d876e90e147950dnm2": {
+				"id": "bf25d876e90e147950dnm2",
+				"name": "Entryway downlight 1",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.707526060Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/10": {
+				"id": "sensors/10",
+				"name": "Entryway motion sensor",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"OnOffSensor": {
+							"value": false
+						}
+					}
+				}
+			},
+			"hue1/lights/13": {
+				"id": "lights/13",
+				"name": "Bathroom outdoor lightstrip",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/27": {
+				"id": "lights/27",
+				"name": "Lower bathroom lightstrip",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.696749105Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"wol/office_pc": {
+				"id": "office_pc",
+				"name": "office_pc",
+				"integration_id": "wol",
+				"scene": {
+					"scene_id": "office_on",
+					"activation_time": "2022-12-14T16:17:44.078146024Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"lifx/192.168.1.71:56700": {
+				"id": "192.168.1.71:56700",
+				"name": "Iittala Lantern 1",
+				"integration_id": "lifx",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/8": {
+				"id": "sensors/8",
+				"name": "Hue temperature sensor 1",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": "Unknown"
+				}
+			},
+			"hue1/lights/3": {
+				"id": "lights/3",
+				"name": "Bedroom",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/24": {
+				"id": "lights/24",
+				"name": "Hue outdoor spot 4",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.697104068Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": {
+							"Hsv": {
+								"hue": 6.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/18": {
+				"id": "lights/18",
+				"name": "Staircase",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"circadian_lifx_hsv/color": {
+				"id": "color",
+				"name": "Circadian rhythm (lifx hsv)",
+				"integration_id": "circadian_lifx_hsv",
+				"scene": null,
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.5760662,
+						"color": {
+							"Hsv": {
+								"hue": 46.521324,
+								"saturation": 0.43914706,
+								"value": 1.0
+							}
+						},
+						"transition_ms": 60000
+					}
+				}
+			},
+			"hue1/lights/16": {
+				"id": "lights/16",
+				"name": "Kitchen table",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.689825109Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"twinkly/Curtain": {
+				"id": "Curtain",
+				"name": "Curtain",
+				"integration_id": "twinkly",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.702140899Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/23": {
+				"id": "lights/23",
+				"name": "Hue outdoor spot 2",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.686640573Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": {
+							"Hsv": {
+								"hue": 263.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/30": {
+				"id": "lights/30",
+				"name": "Outdoor lightstrip",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.696068994Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.5,
+						"color": {
+							"Hsv": {
+								"hue": 243.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/11": {
+				"id": "sensors/11",
+				"name": "Hue ambient light sensor 2",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": "Unknown"
+				}
+			},
+			"hue1/lights/20": {
+				"id": "lights/20",
+				"name": "Hue outdoor spot 5",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.693599353Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": {
+							"Hsv": {
+								"hue": 263.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/1": {
+				"id": "lights/1",
+				"name": "Living room",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.690850935Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf82dba90be98238cduevv": {
+				"id": "bf82dba90be98238cduevv",
+				"name": "Upper bathroom downlight 3",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/14": {
+				"id": "lights/14",
+				"name": "Office",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "office_on",
+					"activation_time": "2022-12-14T16:17:44.078146024Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/25": {
+				"id": "lights/25",
+				"name": "Kitchen lightstrip upper",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.675704886Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf0e4c413bb6fb3d3aijz0": {
+				"id": "bf0e4c413bb6fb3d3aijz0",
+				"name": "Living room downlight 2",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.705977244Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf6a89160f95ffd718ou9c": {
+				"id": "bf6a89160f95ffd718ou9c",
+				"name": "Entryway downlight 2",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.708842807Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/36": {
+				"id": "lights/36",
+				"name": "Office desk",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "office_on",
+					"activation_time": "2022-12-14T16:17:44.078146024Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf1ab1ab50ff67dd88rehd": {
+				"id": "bf1ab1ab50ff67dd88rehd",
+				"name": "Kitchen downlight 2",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.706333390Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/7": {
+				"id": "sensors/7",
+				"name": "Hue ambient light sensor 1",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": "Unknown"
+				}
+			},
+			"hue1/lights/19": {
+				"id": "lights/19",
+				"name": "Block lamp",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.689555019Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.33,
+						"color": {
+							"Hsv": {
+								"hue": 227.15753,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"entryway_timer/timer": {
+				"id": "timer",
+				"name": "Entryway timer",
+				"integration_id": "entryway_timer",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"OnOffSensor": {
+							"value": false
+						}
+					}
+				}
+			},
+			"hue1/sensors/14": {
+				"id": "sensors/14",
+				"name": "Entryway switch",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"hue1/lights/4": {
+				"id": "lights/4",
+				"name": "Hue play R",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.694295460Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.92904246,
+						"color": {
+							"Hsv": {
+								"hue": 24.290424,
+								"saturation": 0.435149,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bfe02d8925dd82e5c68n2g": {
+				"id": "bfe02d8925dd82e5c68n2g",
+				"name": "Living room downlight 3",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.702328455Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bfd0c7d0ee112078941hma": {
+				"id": "bfd0c7d0ee112078941hma",
+				"name": "Living room downlight 1",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.702689535Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/40": {
+				"id": "lights/40",
+				"name": "Right small bedroom",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "adas_room_dark",
+					"activation_time": "2022-12-14T16:16:57.691135570Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.15,
+						"color": {
+							"Hsv": {
+								"hue": 13.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bf04559faa8a916656x9wc": {
+				"id": "bf04559faa8a916656x9wc",
+				"name": "Kitchen downlight 4",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.703050127Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/3": {
+				"id": "sensors/3",
+				"name": "Bedroom switch R",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"hue1/sensors/1": {
+				"id": "sensors/1",
+				"name": "Daylight",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": "Unknown"
+				}
+			},
+			"hue1/lights/26": {
+				"id": "lights/26",
+				"name": "Gym devices",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "gym_devices_off",
+					"activation_time": "2022-12-14T16:16:57.692476382Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/29": {
+				"id": "lights/29",
+				"name": "Large outdoor spot",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.691211332Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.5,
+						"color": {
+							"Hsv": {
+								"hue": 6.0,
+								"saturation": 1.0,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/sensors/5": {
+				"id": "sensors/5",
+				"name": "Bedroom switch L",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"hue1/sensors/6": {
+				"id": "sensors/6",
+				"name": "Staircase motion sensor",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"OnOffSensor": {
+							"value": false
+						}
+					}
+				}
+			},
+			"hue1/sensors/4": {
+				"id": "sensors/4",
+				"name": "Living room switch",
+				"integration_id": "hue1",
+				"scene": null,
+				"state": {
+					"Sensor": {
+						"DimmerSwitch": {
+							"on": false,
+							"up": false,
+							"down": false,
+							"off": false
+						}
+					}
+				}
+			},
+			"hue1/lights/37": {
+				"id": "lights/37",
+				"name": "Baby camera",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "baby_cam_on",
+					"activation_time": "2022-12-14T16:16:57.695049462Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			},
+			"tuya/bfe72e721eaf51b1009kkc": {
+				"id": "bfe72e721eaf51b1009kkc",
+				"name": "Living room downlight 4",
+				"integration_id": "tuya",
+				"scene": {
+					"scene_id": "normal",
+					"activation_time": "2022-12-14T16:16:57.704111111Z"
+				},
+				"state": {
+					"Light": {
+						"power": true,
+						"brightness": 0.54323405,
+						"color": {
+							"Hsv": {
+								"hue": 48.0,
+								"saturation": 0.64257455,
+								"value": 1.0
+							}
+						},
+						"transition_ms": null
+					}
+				}
+			},
+			"hue1/lights/17": {
+				"id": "lights/17",
+				"name": "Upper bathroom lightstrip",
+				"integration_id": "hue1",
+				"scene": {
+					"scene_id": "leave",
+					"activation_time": "2022-12-14T17:52:25.722508266Z"
+				},
+				"state": {
+					"Light": {
+						"power": false,
+						"brightness": null,
+						"color": null,
+						"transition_ms": null
+					}
+				}
+			}
+		},
+		"scenes": {},
+		"groups": {}
+	}
+}

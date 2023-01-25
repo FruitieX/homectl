@@ -280,3 +280,69 @@ fn is_rule_triggered(state: &DevicesState, groups: &Groups, rule: &Rule) -> Resu
 
     Ok(true)
 }
+
+#[cfg(test)]
+mod tests {
+    use homectl_types::{
+        group::{GroupId, GroupsConfig},
+        scene::SceneId,
+        websockets::WebSocketResponse,
+    };
+
+    use crate::homectl_core::config::Config;
+
+    use super::*;
+
+    #[test]
+    fn test_is_rule_triggered() {
+        let fixtures_file =
+            std::fs::read_to_string("./src/homectl_core/state-downstairs-on-upstairs-off.json")
+                .unwrap();
+        let msg: WebSocketResponse = serde_json::from_str(&fixtures_file).unwrap();
+        let config: Config = toml::from_str(
+            r#"
+[groups.kitchen]
+name = "Kitchen"
+devices = [
+  { integration_id = "hue1", name = "Kitchen table" },
+  { integration_id = "hue1", name = "Kitchen lightstrip" },
+  { integration_id = "hue1", name = "Kitchen lightstrip upper" },
+  { integration_id = "hue1", name = "Kitchen spot 1" },
+  { integration_id = "hue1", name = "Kitchen spot 2" },
+  { integration_id = "hue1", name = "Kitchen spot 3" },
+  { integration_id = "tuya", name = "Kitchen downlight 1" },
+  { integration_id = "tuya", name = "Kitchen downlight 2" },
+  { integration_id = "tuya", name = "Kitchen downlight 3" },
+  { integration_id = "tuya", name = "Kitchen downlight 4" },
+]
+
+[groups.living_room]
+name = "Living room"
+devices = [
+  { integration_id = "hue1", name = "Living room" },
+  { integration_id = "hue1", name = "Block lamp" },
+  { integration_id = "hue1", name = "Hue play L" },
+  { integration_id = "hue1", name = "Hue play R" },
+  { integration_id = "tuya", name = "Living room downlight 1" },
+  { integration_id = "tuya", name = "Living room downlight 2" },
+  { integration_id = "tuya", name = "Living room downlight 3" },
+  { integration_id = "tuya", name = "Living room downlight 4" },
+]
+        "#,
+        )
+        .unwrap();
+
+        let groups = Groups::new(config.groups.unwrap());
+
+        if let WebSocketResponse::State(update) = msg {
+            let state = update.devices;
+            let rule = Rule::Group(GroupRule {
+                group_id: GroupId::new("living_room".to_string()),
+                power: None,
+                scene: Some(SceneId::new("normal".to_string())),
+            });
+
+            assert!(is_rule_triggered(&state, &groups, &rule).unwrap());
+        }
+    }
+}

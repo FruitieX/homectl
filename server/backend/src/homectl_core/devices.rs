@@ -393,7 +393,7 @@ impl Devices {
                                 let device =
                                     find_device(&state, integration_id, Some(device_id), None);
                                 let device_scene = device.clone().and_then(|d| d.scene);
-
+                            
                                 device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
                             })
                         })

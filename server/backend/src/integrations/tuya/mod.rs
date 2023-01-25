@@ -1,29 +1,21 @@
 pub mod utils;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use async_trait::async_trait;
-use homectl_types::device::{CorrelatedColorTemperature, DeviceColor};
-use homectl_types::utils::{cct_to_rgb, xy_to_cct};
 use homectl_types::{
     custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use palette::{Hsv, Yxy};
-use rust_async_tuyapi::{tuyadevice::TuyaDevice, Payload, PayloadStruct};
+use rust_async_tuyapi::tuyadevice::TuyaDevice;
 use serde::Deserialize;
-use serde_json::{json, Value};
-use std::{
-    collections::HashMap,
-    net::IpAddr,
-    str::FromStr,
-    sync::Arc,
-    time::{Duration, SystemTime},
-};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 use tokio::sync::RwLock;
 use tokio::task::JoinHandle;
 use tokio::time;
+
+use crate::integrations::tuya::utils::terminate_tuya_connection;
 
 use self::utils::{get_tuya_state, set_tuya_state};
 
@@ -43,10 +35,13 @@ pub struct TuyaConfig {
     pub devices: HashMap<DeviceId, TuyaDeviceConfig>,
 }
 
+pub type Connection = Arc<RwLock<Option<TuyaDevice>>>;
+
 pub struct Tuya {
     id: IntegrationId,
     event_tx: TxEventChannel,
     config: TuyaConfig,
+    connections: HashMap<DeviceId, Connection>,
     device_expected_states: HashMap<DeviceId, Arc<RwLock<Device>>>,
     device_poll_handles: HashMap<DeviceId, JoinHandle<()>>,
 }
@@ -74,10 +69,16 @@ impl CustomIntegration for Tuya {
             .try_into()
             .context("Failed to deserialize config of Tuya integration")?;
 
+        let mut connections = HashMap::new();
+        config.devices.iter().for_each(|(device_id, _)| {
+            connections.insert(device_id.clone(), Default::default());
+        });
+
         Ok(Tuya {
             id: id.clone(),
             config,
             event_tx,
+            connections,
             device_expected_states: HashMap::new(),
             device_poll_handles: HashMap::new(),
         })
@@ -130,8 +131,9 @@ impl CustomIntegration for Tuya {
             let device_expected_state = device_expected_states.get(device_id).unwrap().clone();
             let sender = self.event_tx.clone();
 
+            let connections = self.connections.clone();
             let handle = tokio::spawn(async move {
-                poll_light(&device_config, sender, device_expected_state).await
+                poll_light(&device_config, sender, device_expected_state, connections).await
             });
 
             self.device_poll_handles.insert(device_id.clone(), handle);
@@ -169,19 +171,24 @@ impl CustomIntegration for Tuya {
 
         let handle = {
             let device_config = device_config.clone();
-            tokio::spawn(
-                async move { poll_light(&device_config, sender, device_expected_state).await },
-            )
+            let connections = self.connections.clone();
+            tokio::spawn(async move {
+                poll_light(&device_config, sender, device_expected_state, connections).await
+            })
         };
 
         self.device_poll_handles.insert(device.id.clone(), handle);
 
         {
             let device = device.clone();
+            let connections = self.connections.clone();
             tokio::spawn(async move {
-                let result = set_tuya_state(&device, &device_config).await;
+                let result = set_tuya_state(&device, &device_config, &connections).await;
                 if let Err(e) = result {
                     eprintln!("Error while calling set_tuya_state: {}", e);
+                    terminate_tuya_connection(&device.id, &connections)
+                        .await
+                        .ok();
                 }
             });
         }
@@ -198,6 +205,7 @@ pub async fn poll_light(
     device_config: &TuyaDeviceConfig,
     sender: TxEventChannel,
     device_expected_state: Arc<RwLock<Device>>,
+    connections: HashMap<DeviceId, Connection>,
 ) {
     let poll_rate = Duration::from_millis(2000);
     let mut interval = time::interval(poll_rate);
@@ -218,6 +226,7 @@ pub async fn poll_light(
             &device_expected_state.id,
             &device_expected_state.integration_id,
             device_config,
+            &connections,
         )
         .await;
         // let result = set_tuya_state(&device_expected_state, device_config).await;
@@ -231,6 +240,9 @@ pub async fn poll_light(
                     "Error while polling Tuya state for device {}: {:?}",
                     device_expected_state.name, e
                 );
+                terminate_tuya_connection(&device_expected_state.id, &connections)
+                    .await
+                    .ok();
             }
         }
     }
