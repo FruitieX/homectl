@@ -70,19 +70,21 @@ export const ViewportDevice = (props: Props) => {
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
 
-  const touchRegistersAsTap = useRef(true);
+  const touchRegistersAsTap = props.touchRegistersAsTap;
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);
 
   const onDeviceTouchStart = useCallback(() => {
     touchRegistersAsTap.current = true;
     deviceTouchTimer.current = setTimeout(() => {
+      if (touchRegistersAsTap.current === true) {
+        console.log('Opening device color picker');
+        setDeviceModalState(device);
+        setDeviceModalOpen(true);
+      }
       deviceTouchTimer.current = null;
       touchRegistersAsTap.current = false;
-      console.log('Opening device color picker');
-      setDeviceModalState(device);
-      setDeviceModalOpen(true);
     }, 500);
-  }, [device, setDeviceModalOpen, setDeviceModalState]);
+  }, [device, setDeviceModalOpen, setDeviceModalState, touchRegistersAsTap]);
 
   const onDeviceTouchEnd = useCallback(() => {
     if (deviceTouchTimer.current !== null) {
@@ -94,7 +96,7 @@ export const ViewportDevice = (props: Props) => {
       console.log('Setting device color');
       setDeviceColor(device, activeColor);
     }
-  }, [activeColor, device, setDeviceColor]);
+  }, [activeColor, device, setDeviceColor, touchRegistersAsTap]);
 
   useEffect(() => {
     return () => {

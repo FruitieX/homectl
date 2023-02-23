@@ -10,7 +10,6 @@ import {
   useRef,
   useState,
 } from 'react';
-import produce from 'immer';
 
 type Props = {
   visible: boolean;
@@ -82,7 +81,6 @@ export const ColorPickerModal = ({
   const handleValueChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const hsv = latestColor.current.hsv();
-      console.log(hsv);
       const value = Number(event.currentTarget.value);
       const result = Color({
         h: hsv.hue(),
