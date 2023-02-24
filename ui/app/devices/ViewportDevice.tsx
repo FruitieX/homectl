@@ -7,6 +7,7 @@ import { useActiveColor } from '@/hooks/activeColor';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
 import { getDeviceKey } from '@/lib/device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
+import { Portal } from 'react-konva-utils';
 
 const devicePositions: Record<string, Vector2d> = {
   'Kitchen lightstrip upper': { x: 537, y: 700 },
@@ -76,15 +77,14 @@ export const ViewportDevice = (props: Props) => {
   const onDeviceTouchStart = useCallback(() => {
     touchRegistersAsTap.current = true;
     deviceTouchTimer.current = setTimeout(() => {
-      if (touchRegistersAsTap.current === true) {
-        console.log('Opening device color picker');
-        setDeviceModalState(device);
-        setDeviceModalOpen(true);
+      if (activeColor !== null && touchRegistersAsTap.current === true) {
+        console.log('Setting device color');
+        setDeviceColor(device, activeColor);
       }
       deviceTouchTimer.current = null;
       touchRegistersAsTap.current = false;
     }, 500);
-  }, [device, setDeviceModalOpen, setDeviceModalState, touchRegistersAsTap]);
+  }, [activeColor, device, setDeviceColor, touchRegistersAsTap]);
 
   const onDeviceTouchEnd = useCallback(() => {
     if (deviceTouchTimer.current !== null) {
@@ -92,11 +92,12 @@ export const ViewportDevice = (props: Props) => {
       deviceTouchTimer.current = null;
     }
 
-    if (activeColor !== null && touchRegistersAsTap.current === true) {
-      console.log('Setting device color');
-      setDeviceColor(device, activeColor);
+    if (touchRegistersAsTap.current === true) {
+      console.log('Opening device color picker');
+      setDeviceModalState(device);
+      setDeviceModalOpen(true);
     }
-  }, [activeColor, device, setDeviceColor, touchRegistersAsTap]);
+  }, [device, setDeviceModalOpen, setDeviceModalState, touchRegistersAsTap]);
 
   useEffect(() => {
     return () => {
@@ -110,19 +111,42 @@ export const ViewportDevice = (props: Props) => {
     return null;
   }
 
+  const radialGradientRadius = 250;
   return (
-    <Circle
-      key={getDeviceKey(device)}
-      x={position.x}
-      y={position.y}
-      radius={20}
-      fill={color.hsl().string()}
-      stroke={color === activeColor ? 'white' : 'black'}
-      strokeWidth={4}
-      onMouseDown={onDeviceTouchStart}
-      onTouchStart={onDeviceTouchStart}
-      onMouseUp={onDeviceTouchEnd}
-      onTouchEnd={onDeviceTouchEnd}
-    />
+    <>
+      <Portal selector=".bottom-layer" enabled>
+        <Circle
+          key={`${getDeviceKey(device)}-gradient`}
+          x={position.x}
+          y={position.y}
+          radius={radialGradientRadius}
+          fillRadialGradientStartRadius={0}
+          fillRadialGradientEndRadius={radialGradientRadius}
+          fillRadialGradientColorStops={[
+            0,
+            color
+              .value(100)
+              .alpha((0.15 * color.value()) / 100)
+              .hsl()
+              .string(),
+            1,
+            'transparent',
+          ]}
+        />
+      </Portal>
+      <Circle
+        key={getDeviceKey(device)}
+        x={position.x}
+        y={position.y}
+        radius={20}
+        fill={color.desaturate(0.4).hsl().string()}
+        stroke={color === activeColor ? 'white' : 'black'}
+        strokeWidth={4}
+        onMouseDown={onDeviceTouchStart}
+        onTouchStart={onDeviceTouchStart}
+        onMouseUp={onDeviceTouchEnd}
+        onTouchEnd={onDeviceTouchEnd}
+      />
+    </>
   );
 };

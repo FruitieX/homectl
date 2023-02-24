@@ -53,7 +53,7 @@ export default function Page() {
         onChangeComplete={throttledSetDeviceColor}
       />
       <NoSSRViewport />
-      <ColorPickerTray />
+      {/* <ColorPickerTray /> */}
     </>
   );
 }

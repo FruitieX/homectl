@@ -6,7 +6,6 @@ import { useCallback, useRef } from 'react';
 import { useElementSize } from 'usehooks-ts';
 import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from './ViewportDevice';
-import { Stage as KonvaStage } from 'konva/lib/Stage';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 
 const scale = { x: 0.5, y: 0.5 };
@@ -45,10 +44,11 @@ export const Viewport = () => {
         onDragStart={onDragStart}
         ref={(stage) => {
           if (stage !== null) {
-            konvaStageMultiTouchScale(stage);
+            konvaStageMultiTouchScale(stage, onDragStart);
           }
         }}
       >
+        <Layer name="bottom-layer" globalCompositeOperation='lighter' />
         <Layer>
           <Floorplan />
 
