@@ -23,7 +23,7 @@ export default function RootLayout({
         <link rel="icon" type="image/png" href="/homectl-icon.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="flex h-screen flex-col">
+      <body className="flex h-screen flex-col overflow-hidden">
         <Navbar />
         <main className="flex min-h-0 flex-1 flex-col">{children}</main>
         <BottomNavigation />

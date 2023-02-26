@@ -1,13 +1,15 @@
-import { Circle } from 'react-konva';
+import { Circle, Text } from 'react-konva';
 import { Device } from '@/bindings/Device';
 import { Vector2d } from 'konva/lib/types';
 import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
-import { getColor } from '@/lib/colors';
-import { useActiveColor } from '@/hooks/activeColor';
-import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
+import { getBrightness, getColor, getPower } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { Portal } from 'react-konva-utils';
+import {
+  useSelectedDevices,
+  useToggleSelectedDevice,
+} from '@/hooks/selectedDevices';
 
 const devicePositions: Record<string, Vector2d> = {
   'Kitchen lightstrip upper': { x: 537, y: 700 },
@@ -31,9 +33,9 @@ const devicePositions: Record<string, Vector2d> = {
   'Upper bathroom downlight 1': { x: 1350, y: 525 },
   'Upper bathroom downlight 2': { x: 1350, y: 650 },
   'Upper bathroom downlight 3': { x: 1350, y: 775 },
-  'Kitchen spot 1': { x: 320, y: 700 },
-  'Kitchen spot 2': { x: 355, y: 650 },
-  'Kitchen spot 3': { x: 390, y: 700 },
+  'Kitchen spot 1': { x: 390, y: 650 },
+  'Kitchen spot 2': { x: 320, y: 650 },
+  'Kitchen spot 3': { x: 355, y: 700 },
   'Left small bedroom': { x: 1300, y: 1050 },
   'Right small bedroom': { x: 1030, y: 1050 },
   'Kitchen downlight 1': { x: 460, y: 650 },
@@ -58,16 +60,20 @@ type Props = {
   device: Device;
   touchRegistersAsTap: MutableRefObject<boolean>;
   deviceTouchTimer: MutableRefObject<NodeJS.Timeout | null>;
+  selected: boolean;
 };
 
 export const ViewportDevice = (props: Props) => {
-  const [activeColor] = useActiveColor();
   const device = props.device;
   const position = devicePositions[device.name];
 
   const color = getColor(device.state);
+  const brightness = getBrightness(device.state);
+  const power = getPower(device.state);
 
-  const setDeviceColor = useSetDeviceColor();
+  const [selectedDevices] = useSelectedDevices();
+  const toggleSelectedDevice = useToggleSelectedDevice();
+
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
 
@@ -77,14 +83,15 @@ export const ViewportDevice = (props: Props) => {
   const onDeviceTouchStart = useCallback(() => {
     touchRegistersAsTap.current = true;
     deviceTouchTimer.current = setTimeout(() => {
-      if (activeColor !== null && touchRegistersAsTap.current === true) {
-        console.log('Setting device color');
-        setDeviceColor(device, activeColor);
+      if (touchRegistersAsTap.current === true) {
+        console.log('Toggling selected device');
+        toggleSelectedDevice(device);
+        // setDeviceColor(device, activeColor);
       }
       deviceTouchTimer.current = null;
       touchRegistersAsTap.current = false;
     }, 500);
-  }, [activeColor, device, setDeviceColor, touchRegistersAsTap]);
+  }, [device, toggleSelectedDevice, touchRegistersAsTap]);
 
   const onDeviceTouchEnd = useCallback(() => {
     if (deviceTouchTimer.current !== null) {
@@ -93,11 +100,16 @@ export const ViewportDevice = (props: Props) => {
     }
 
     if (touchRegistersAsTap.current === true) {
-      console.log('Opening device color picker');
-      setDeviceModalState(device);
-      setDeviceModalOpen(true);
+      if (selectedDevices.length === 0) {
+        console.log('Opening device color picker');
+        setDeviceModalState([device]);
+        setDeviceModalOpen(true);
+      } else {
+        console.log('Toggling selected device');
+        toggleSelectedDevice(device);
+      }
     }
-  }, [device, setDeviceModalOpen, setDeviceModalState, touchRegistersAsTap]);
+  }, [device, selectedDevices.length, setDeviceModalOpen, setDeviceModalState, toggleSelectedDevice, touchRegistersAsTap]);
 
   useEffect(() => {
     return () => {
@@ -111,42 +123,54 @@ export const ViewportDevice = (props: Props) => {
     return null;
   }
 
-  const radialGradientRadius = 250;
+  const radialGradientRadius = 100 + 200 * brightness;
   return (
     <>
-      <Portal selector=".bottom-layer" enabled>
-        <Circle
-          key={`${getDeviceKey(device)}-gradient`}
-          x={position.x}
-          y={position.y}
-          radius={radialGradientRadius}
-          fillRadialGradientStartRadius={0}
-          fillRadialGradientEndRadius={radialGradientRadius}
-          fillRadialGradientColorStops={[
-            0,
-            color
-              .value(100)
-              .alpha((0.15 * color.value()) / 100)
-              .hsl()
-              .string(),
-            1,
-            'transparent',
-          ]}
-        />
-      </Portal>
+      {power && (
+        <Portal selector=".bottom-layer" enabled>
+          <Circle
+            key={`${getDeviceKey(device)}-gradient`}
+            x={position.x}
+            y={position.y}
+            radius={radialGradientRadius}
+            fillRadialGradientStartRadius={0}
+            fillRadialGradientEndRadius={radialGradientRadius}
+            fillRadialGradientColorStops={[
+              0,
+              color.alpha(0.2).hsl().string(),
+              1,
+              'transparent',
+            ]}
+          />
+        </Portal>
+      )}
       <Circle
         key={getDeviceKey(device)}
         x={position.x}
         y={position.y}
         radius={20}
         fill={color.desaturate(0.4).hsl().string()}
-        stroke={color === activeColor ? 'white' : 'black'}
+        stroke={props.selected ? 'white' : '#111'}
         strokeWidth={4}
         onMouseDown={onDeviceTouchStart}
         onTouchStart={onDeviceTouchStart}
         onMouseUp={onDeviceTouchEnd}
         onTouchEnd={onDeviceTouchEnd}
       />
+      {props.selected && (
+        <Text
+          text="✓"
+          fontSize={24}
+          x={position.x - 10}
+          y={position.y - 10}
+          fill="white"
+          fontStyle="bold"
+          onMouseDown={onDeviceTouchStart}
+          onTouchStart={onDeviceTouchStart}
+          onMouseUp={onDeviceTouchEnd}
+          onTouchEnd={onDeviceTouchEnd}
+        />
+      )}
     </>
   );
 };

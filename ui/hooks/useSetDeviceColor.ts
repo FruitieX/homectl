@@ -8,7 +8,7 @@ import { useCallback } from 'react';
 export const useSetDeviceColor = () => {
   const ws = useWebsocket();
   const setDeviceColor = useCallback(
-    (clickedDevice: Device, color: Color) => {
+    (clickedDevice: Device, color: Color, brightness: number) => {
       const device = produce(clickedDevice, (draft) => {
         if ('Light' in draft.state) {
           const hsv = color.hsv();
@@ -19,6 +19,7 @@ export const useSetDeviceColor = () => {
               value: hsv.value() / 100,
             },
           };
+          draft.state.Light.brightness = brightness;
           draft.scene = null;
         }
       });

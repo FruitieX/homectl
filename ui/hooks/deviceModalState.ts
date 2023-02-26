@@ -3,7 +3,7 @@
 import { Device } from '@/bindings/Device';
 import { atom, useAtom } from 'jotai';
 
-const deviceModalAtom = atom<Device | null>(null);
+const deviceModalAtom = atom<Device[]>([]);
 const deviceModalOpenAtom = atom<boolean>(false);
 
 export const useDeviceModalState = () => {

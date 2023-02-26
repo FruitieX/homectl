@@ -1,11 +1,10 @@
 'use client';
 
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { black, getColor } from '@/lib/colors';
+import { black, getBrightness, getColor } from '@/lib/colors';
 import dynamicImport from 'next/dynamic';
 import { useCallback } from 'react';
 import { ColorPickerModal } from './ColorPickerModal';
-import { ColorPickerTray } from './ColorPickerTray';
 import Color from 'color';
 import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
@@ -18,15 +17,28 @@ export default function Page() {
     open: deviceModalOpen,
     setOpen: setDeviceModalOpen,
   } = useDeviceModalState();
-  const deviceModalTitle = `Set ${deviceModalState?.name} color`;
+  const deviceModalTitle =
+    deviceModalState.length === 1
+      ? `Set ${deviceModalState[0]?.name} color`
+      : `Set color of ${deviceModalState.length} devices`;
   const deviceModalColor =
-    deviceModalState !== null ? getColor(deviceModalState.state) : null;
+    deviceModalState[0] === undefined
+      ? null
+      : getColor(deviceModalState[0].state);
+  const deviceModalBrightness =
+    deviceModalState[0] === undefined
+      ? null
+      : getBrightness(deviceModalState[0].state);
+
+  console.log(deviceModalState);
 
   const setDeviceColor = useSetDeviceColor();
   const partialSetDeviceColor = useCallback(
-    (color: Color) => {
+    (color: Color, brightness: number) => {
       if (deviceModalState !== null) {
-        setDeviceColor(deviceModalState, color);
+        deviceModalState.forEach((device) =>
+          setDeviceColor(device, color, brightness),
+        );
       }
     },
     [deviceModalState, setDeviceColor],
@@ -49,6 +61,7 @@ export default function Page() {
         close={closeDeviceModal}
         title={deviceModalTitle}
         color={deviceModalColor ?? black}
+        brightness={deviceModalBrightness ?? 1}
         onChange={throttledSetDeviceColor}
         onChangeComplete={throttledSetDeviceColor}
       />

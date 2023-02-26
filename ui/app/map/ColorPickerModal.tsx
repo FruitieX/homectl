@@ -15,8 +15,9 @@ type Props = {
   visible: boolean;
   close: () => void;
   color: Color;
-  onChange?: (color: Color) => void;
-  onChangeComplete?: (color: Color) => void;
+  brightness: number;
+  onChange?: (color: Color, brightness: number) => void;
+  onChangeComplete?: (color: Color, brightness: number) => void;
   title: string;
 };
 
@@ -32,6 +33,7 @@ const colorToHsva = (color: Color) => {
 export const ColorPickerModal = ({
   close,
   color,
+  brightness,
   onChange,
   onChangeComplete,
   visible,
@@ -42,6 +44,7 @@ export const ColorPickerModal = ({
   };
 
   const [hsva, setHsva] = useState(colorToHsva(color));
+  const [bri, setBri] = useState(brightness);
 
   const hsvaWithMaxValue = useMemo(() => {
     const result = { ...hsva };
@@ -52,7 +55,8 @@ export const ColorPickerModal = ({
 
   useEffect(() => {
     setHsva(colorToHsva(color));
-  }, [color]);
+    setBri(brightness);
+  }, [color, brightness]);
 
   const latestColor = useRef<Color>(color);
   useEffect(() => {
@@ -69,27 +73,20 @@ export const ColorPickerModal = ({
       });
       latestColor.current = color;
       setHsva(colorToHsva(color));
-      onChange && onChange(color);
+      onChange && onChange(color, bri);
     },
-    [onChange],
+    [bri, onChange],
   );
 
   const handleChangeComplete = useCallback(() => {
-    onChangeComplete && onChangeComplete(latestColor.current);
-  }, [onChangeComplete]);
+    onChangeComplete && onChangeComplete(latestColor.current, bri);
+  }, [bri, onChangeComplete]);
 
-  const handleValueChange = useCallback(
+  const handleBrightnessChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
-      const hsv = latestColor.current.hsv();
-      const value = Number(event.currentTarget.value);
-      const result = Color({
-        h: hsv.hue(),
-        s: hsv.saturationv(),
-        v: value,
-      });
-      latestColor.current = result;
-      setHsva(colorToHsva(result));
-      onChange && onChange(result);
+      const value = Number(event.currentTarget.value) / 100;
+      setBri(value);
+      onChange && onChange(latestColor.current, value);
     },
     [onChange],
   );
@@ -120,12 +117,12 @@ export const ColorPickerModal = ({
         <Range
           className="mt-6"
           size="lg"
-          onChange={handleValueChange}
+          onChange={handleBrightnessChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
           min={0}
           max={100}
-          value={hsva.v}
+          value={bri * 100}
         />
       </Modal.Body>
     </Modal>

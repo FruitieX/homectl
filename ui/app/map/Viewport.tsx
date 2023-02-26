@@ -7,6 +7,7 @@ import { useElementSize } from 'usehooks-ts';
 import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from './ViewportDevice';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
+import { useSelectedDevices } from '@/hooks/selectedDevices';
 
 const scale = { x: 0.5, y: 0.5 };
 
@@ -24,6 +25,7 @@ export const Viewport = () => {
 
   const touchRegistersAsTap = useRef(true);
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);
+  const [selectedDevices] = useSelectedDevices();
 
   const onDragStart = useCallback(() => {
     if (deviceTouchTimer.current !== null) {
@@ -35,7 +37,7 @@ export const Viewport = () => {
   }, []);
 
   return (
-    <div ref={containerRef} className="min-h-0 w-full flex-1">
+    <div ref={containerRef} className="absolute top-0 left-0 h-screen w-screen">
       <Stage
         width={width}
         height={height}
@@ -48,7 +50,7 @@ export const Viewport = () => {
           }
         }}
       >
-        <Layer name="bottom-layer" globalCompositeOperation='lighter' />
+        <Layer name="bottom-layer" />
         <Layer>
           <Floorplan />
 
@@ -58,6 +60,11 @@ export const Viewport = () => {
               device={device}
               touchRegistersAsTap={touchRegistersAsTap}
               deviceTouchTimer={deviceTouchTimer}
+              selected={
+                selectedDevices.find(
+                  (d) => getDeviceKey(d) === getDeviceKey(device),
+                ) !== undefined
+              }
             />
           ))}
         </Layer>
