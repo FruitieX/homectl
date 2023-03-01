@@ -6,6 +6,11 @@ import { useWebsocketState } from '@/hooks/websocket';
 import { Card } from 'react-daisyui';
 
 import dynamicImport from 'next/dynamic';
+import Link from 'next/link';
+import { Device } from '@/bindings/Device';
+import { getDeviceKey } from '@/lib/device';
+import { DevicesState } from '@/bindings/DevicesState';
+import Color from 'color';
 const NoSSRPreview = dynamicImport(() => import('./Preview'), { ssr: false });
 
 export default function Page() {
@@ -15,22 +20,37 @@ export default function Page() {
     state?.groups ?? {},
   );
 
-  const filtered = groups.filter(([, group]) => !group.hidden);
-  filtered.sort((a, b) => a[1].name.localeCompare(b[1].name));
+  const filteredGroups = groups.filter(([, group]) => !group.hidden);
+  filteredGroups.sort((a, b) => a[1].name.localeCompare(b[1].name));
+
+  const devices: Device[] = Object.values(
+    state?.devices ?? ({} as DevicesState),
+  );
 
   return (
     <>
       <div className="flex-1 overflow-y-auto">
-        {filtered.map(([groupId, group]) => (
-          <Card key={groupId} onClick={console.log} className="card-side">
-            <Card.Body>
-              <Card.Title className="truncate">{group.name}</Card.Title>
-            </Card.Body>
-            <div>
-              <NoSSRPreview deviceKeys={group.device_ids} />
-            </div>
-          </Card>
-        ))}
+        {filteredGroups.map(([groupId, group]) => {
+          const filteredDevices = devices.filter((device) =>
+            group.device_ids.includes(getDeviceKey(device)),
+          );
+
+          return (
+            <Link key={groupId} href={`/groups/${groupId}`}>
+              <Card className="card-side">
+                <Card.Body>
+                  <Card.Title className="truncate">{group.name}</Card.Title>
+                </Card.Body>
+                <div>
+                  <NoSSRPreview
+                    devices={filteredDevices}
+                    overrideColor={Color({ h: 35, s: 50, v: 100 })}
+                  />
+                </div>
+              </Card>
+            </Link>
+          );
+        })}
       </div>
     </>
   );

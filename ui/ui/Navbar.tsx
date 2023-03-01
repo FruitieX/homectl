@@ -1,27 +1,33 @@
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { Button } from 'react-daisyui';
-import { X, Edit } from 'lucide-react';
+import { X, Edit, ChevronLeft } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useWebsocketState } from '@/hooks/websocket';
 
 export const Navbar = () => {
+  const router = useRouter();
+
   const pathname = usePathname();
+  const state = useWebsocketState();
 
   let title = 'homectl';
-  switch (pathname) {
-    case '/': {
-      title = 'Dashboard';
-      break;
-    }
-    case '/map': {
-      title = 'Map';
-      break;
-    }
-    case '/groups': {
-      title = 'Groups';
-      break;
-    }
+  let back: string | null = null;
+
+  if (pathname === '/') {
+    title = 'Dashboard';
+  } else if (pathname === '/map') {
+    title = 'Map';
+  } else if (pathname === '/groups') {
+    title = 'Groups';
+  } else if (pathname?.startsWith('/groups/')) {
+    const groupId = pathname.split('/')[2];
+    const group = (state?.groups ?? {})[groupId];
+    const groupName = group?.name ?? '...';
+
+    title = `Scenes for ${groupName}`;
+    back = '/groups';
   }
 
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
@@ -37,8 +43,21 @@ export const Navbar = () => {
     setDeviceModalOpen(true);
   }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
 
+  const navigateBack = useCallback(() => {
+    if (back) {
+      router.replace(back);
+    }
+  }, [back, router]);
+
   return (
     <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur">
+      {back !== null && (
+        <Button
+          color="ghost"
+          startIcon={<ChevronLeft />}
+          onClick={navigateBack}
+        />
+      )}
       {selectedDevices.length === 0 ? (
         <a className="btn-ghost btn text-xl normal-case">{title}</a>
       ) : (
