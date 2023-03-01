@@ -3,8 +3,27 @@ import { Button } from 'react-daisyui';
 import { X, Edit } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
+import { usePathname } from 'next/navigation';
 
 export const Navbar = () => {
+  const pathname = usePathname();
+
+  let title = 'homectl';
+  switch (pathname) {
+    case '/': {
+      title = 'Dashboard';
+      break;
+    }
+    case '/map': {
+      title = 'Map';
+      break;
+    }
+    case '/groups': {
+      title = 'Groups';
+      break;
+    }
+  }
+
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
@@ -21,7 +40,7 @@ export const Navbar = () => {
   return (
     <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur">
       {selectedDevices.length === 0 ? (
-        <a className="btn-ghost btn text-xl normal-case">homectl</a>
+        <a className="btn-ghost btn text-xl normal-case">{title}</a>
       ) : (
         <>
           <Button

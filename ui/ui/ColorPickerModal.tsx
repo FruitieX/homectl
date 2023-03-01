@@ -10,6 +10,10 @@ import {
   useRef,
   useState,
 } from 'react';
+import { useDeviceModalState } from '@/hooks/deviceModalState';
+import { black, getBrightness, getColor } from '@/lib/colors';
+import { useThrottleCallback } from '@react-hook/throttle';
+import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
 
 type Props = {
   visible: boolean;
@@ -30,7 +34,7 @@ const colorToHsva = (color: Color) => {
     a: hsva.alpha(),
   };
 };
-export const ColorPickerModal = ({
+const Component = ({
   close,
   color,
   brightness,
@@ -126,5 +130,59 @@ export const ColorPickerModal = ({
         />
       </Modal.Body>
     </Modal>
+  );
+};
+
+export const ColorPickerModal = () => {
+  const {
+    state: deviceModalState,
+    open: deviceModalOpen,
+    setOpen: setDeviceModalOpen,
+  } = useDeviceModalState();
+  const deviceModalTitle =
+    deviceModalState.length === 1
+      ? `Set ${deviceModalState[0]?.name} color`
+      : `Set color of ${deviceModalState.length} devices`;
+  const deviceModalColor =
+    deviceModalState[0] === undefined
+      ? null
+      : getColor(deviceModalState[0].state);
+  const deviceModalBrightness =
+    deviceModalState[0] === undefined
+      ? null
+      : getBrightness(deviceModalState[0].state);
+
+  const setDeviceColor = useSetDeviceColor();
+  const partialSetDeviceColor = useCallback(
+    (color: Color, brightness: number) => {
+      if (deviceModalState !== null) {
+        deviceModalState.forEach((device) =>
+          setDeviceColor(device, color, brightness),
+        );
+      }
+    },
+    [deviceModalState, setDeviceColor],
+  );
+
+  const throttledSetDeviceColor = useThrottleCallback(
+    partialSetDeviceColor,
+    3,
+    true,
+  );
+
+  const closeDeviceModal = useCallback(() => {
+    setDeviceModalOpen(false);
+  }, [setDeviceModalOpen]);
+
+  return (
+    <Component
+      visible={deviceModalOpen}
+      close={closeDeviceModal}
+      title={deviceModalTitle}
+      color={deviceModalColor ?? black}
+      brightness={deviceModalBrightness ?? 1}
+      onChange={throttledSetDeviceColor}
+      onChangeComplete={throttledSetDeviceColor}
+    />
   );
 };

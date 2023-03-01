@@ -4,6 +4,7 @@
 import { useProvideWebsocketState } from '@/hooks/websocket';
 import '@/styles/globals.css';
 import { BottomNavigation } from '@/ui/BottomNavigation';
+import { ColorPickerModal } from '@/ui/ColorPickerModal';
 import { Navbar } from '@/ui/Navbar';
 
 export default function RootLayout({
@@ -24,6 +25,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="flex h-screen flex-col overflow-hidden">
+        <ColorPickerModal />
         <Navbar />
         <main className="flex min-h-0 flex-1 flex-col">{children}</main>
         <BottomNavigation />

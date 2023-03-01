@@ -5,11 +5,11 @@ import { Device } from '@/bindings/Device';
 import { useCallback, useRef } from 'react';
 import { useElementSize } from 'usehooks-ts';
 import { getDeviceKey } from '@/lib/device';
-import { ViewportDevice } from './ViewportDevice';
+import { ViewportDevice } from '@/ui/ViewportDevice';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 
-const scale = { x: 0.5, y: 0.5 };
+const scale = { x: 0.265, y: 0.265 };
 
 const Floorplan = () => {
   const [image] = useImage('/floorplan.svg');
@@ -42,6 +42,7 @@ export const Viewport = () => {
         width={width}
         height={height}
         scale={scale}
+        offsetY={-800}
         draggable
         onDragStart={onDragStart}
         ref={(stage) => {
@@ -65,6 +66,7 @@ export const Viewport = () => {
                   (d) => getDeviceKey(d) === getDeviceKey(device),
                 ) !== undefined
               }
+              interactive
             />
           ))}
         </Layer>

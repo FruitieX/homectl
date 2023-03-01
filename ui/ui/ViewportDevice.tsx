@@ -10,6 +10,7 @@ import {
   useSelectedDevices,
   useToggleSelectedDevice,
 } from '@/hooks/selectedDevices';
+import Color from 'color';
 
 const devicePositions: Record<string, Vector2d> = {
   'Kitchen lightstrip upper': { x: 537, y: 700 },
@@ -58,18 +59,24 @@ const devicePositions: Record<string, Vector2d> = {
 
 type Props = {
   device: Device;
-  touchRegistersAsTap: MutableRefObject<boolean>;
-  deviceTouchTimer: MutableRefObject<NodeJS.Timeout | null>;
+  touchRegistersAsTap?: MutableRefObject<boolean>;
+  deviceTouchTimer?: MutableRefObject<NodeJS.Timeout | null>;
   selected: boolean;
+  interactive: boolean;
+  overrideColor?: Color;
 };
 
 export const ViewportDevice = (props: Props) => {
+  const interactive = props.interactive;
+
   const device = props.device;
   const position = devicePositions[device.name];
 
-  const color = getColor(device.state);
-  const brightness = getBrightness(device.state);
-  const power = getPower(device.state);
+  const color = props.overrideColor
+    ? props.overrideColor
+    : getColor(device.state);
+  const brightness = props.overrideColor ? 1 : getBrightness(device.state);
+  const power = props.overrideColor ? true : getPower(device.state);
 
   const [selectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
@@ -81,6 +88,9 @@ export const ViewportDevice = (props: Props) => {
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);
 
   const onDeviceTouchStart = useCallback(() => {
+    if (touchRegistersAsTap === undefined) {
+      return;
+    }
     touchRegistersAsTap.current = true;
     deviceTouchTimer.current = setTimeout(() => {
       if (touchRegistersAsTap.current === true) {
@@ -94,6 +104,9 @@ export const ViewportDevice = (props: Props) => {
   }, [device, toggleSelectedDevice, touchRegistersAsTap]);
 
   const onDeviceTouchEnd = useCallback(() => {
+    if (touchRegistersAsTap === undefined) {
+      return;
+    }
     if (deviceTouchTimer.current !== null) {
       clearTimeout(deviceTouchTimer.current);
       deviceTouchTimer.current = null;
@@ -109,7 +122,14 @@ export const ViewportDevice = (props: Props) => {
         toggleSelectedDevice(device);
       }
     }
-  }, [device, selectedDevices.length, setDeviceModalOpen, setDeviceModalState, toggleSelectedDevice, touchRegistersAsTap]);
+  }, [
+    device,
+    selectedDevices.length,
+    setDeviceModalOpen,
+    setDeviceModalState,
+    toggleSelectedDevice,
+    touchRegistersAsTap,
+  ]);
 
   useEffect(() => {
     return () => {
@@ -152,10 +172,14 @@ export const ViewportDevice = (props: Props) => {
         fill={color.desaturate(0.4).hsl().string()}
         stroke={props.selected ? 'white' : '#111'}
         strokeWidth={4}
-        onMouseDown={onDeviceTouchStart}
-        onTouchStart={onDeviceTouchStart}
-        onMouseUp={onDeviceTouchEnd}
-        onTouchEnd={onDeviceTouchEnd}
+        {...(interactive
+          ? {
+              onMouseDown: onDeviceTouchStart,
+              onTouchStart: onDeviceTouchStart,
+              onMouseUp: onDeviceTouchEnd,
+              onTouchEnd: onDeviceTouchEnd,
+            }
+          : {})}
       />
       {props.selected && (
         <Text
@@ -165,10 +189,14 @@ export const ViewportDevice = (props: Props) => {
           y={position.y - 10}
           fill="white"
           fontStyle="bold"
-          onMouseDown={onDeviceTouchStart}
-          onTouchStart={onDeviceTouchStart}
-          onMouseUp={onDeviceTouchEnd}
-          onTouchEnd={onDeviceTouchEnd}
+          {...(interactive
+            ? {
+                onMouseDown: onDeviceTouchStart,
+                onTouchStart: onDeviceTouchStart,
+                onMouseUp: onDeviceTouchEnd,
+                onTouchEnd: onDeviceTouchEnd,
+              }
+            : {})}
         />
       )}
     </>

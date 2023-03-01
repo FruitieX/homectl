@@ -12,7 +12,7 @@ export const BottomNavigation = () => {
       <Link href="/map">
         <Map />
       </Link>
-      <Link href="/list">
+      <Link href="/groups">
         <List />
       </Link>
     </div>
