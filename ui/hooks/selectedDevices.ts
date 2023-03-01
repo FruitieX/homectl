@@ -1,21 +1,19 @@
 'use client';
 
 import { atom, useAtom } from 'jotai';
-import { Device } from '@/bindings/Device';
-import { getDeviceKey } from '@/lib/device';
 
-const baseAtom = atom<Device[]>([]);
-const toggleSelectedDeviceAtom = atom(null, (_get, set, device: Device) => {
+const baseAtom = atom<string[]>([]);
+const toggleSelectedDeviceAtom = atom(null, (_get, set, deviceKey: string) => {
   set(baseAtom, (prev) => {
     const result = [...prev];
     const existingIndex = result.findIndex((d) => {
-      return getDeviceKey(d) === getDeviceKey(device);
+      return d === deviceKey;
     });
-    console.log(existingIndex);
+
     if (existingIndex !== -1) {
       result.splice(existingIndex, 1);
     } else {
-      result.push(device);
+      result.push(deviceKey);
     }
     return result;
   });

@@ -63,7 +63,7 @@ export const Viewport = () => {
               deviceTouchTimer={deviceTouchTimer}
               selected={
                 selectedDevices.find(
-                  (d) => getDeviceKey(d) === getDeviceKey(device),
+                  (deviceKey) => deviceKey === getDeviceKey(device),
                 ) !== undefined
               }
               interactive

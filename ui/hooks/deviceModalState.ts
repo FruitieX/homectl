@@ -1,9 +1,8 @@
 'use client';
 
-import { Device } from '@/bindings/Device';
 import { atom, useAtom } from 'jotai';
 
-const deviceModalAtom = atom<Device[]>([]);
+const deviceModalAtom = atom<string[]>([]);
 const deviceModalOpenAtom = atom<boolean>(false);
 
 export const useDeviceModalState = () => {

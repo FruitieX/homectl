@@ -14,6 +14,8 @@ import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { black, getBrightness, getColor } from '@/lib/colors';
 import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
+import { useWebsocketState } from '@/hooks/websocket';
+import { findDevice } from '@/lib/device';
 
 type Props = {
   visible: boolean;
@@ -43,10 +45,6 @@ const Component = ({
   visible,
   title,
 }: Props) => {
-  const toggleVisible = () => {
-    close();
-  };
-
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
 
@@ -96,12 +94,12 @@ const Component = ({
   );
 
   return (
-    <Modal responsive open={visible} onClickBackdrop={toggleVisible}>
+    <Modal responsive open={visible} onClickBackdrop={close}>
       <Button
         size="sm"
         shape="circle"
         className="absolute right-2 top-2"
-        onClick={toggleVisible}
+        onClick={close}
       >
         ✕
       </Button>
@@ -139,29 +137,34 @@ export const ColorPickerModal = () => {
     open: deviceModalOpen,
     setOpen: setDeviceModalOpen,
   } = useDeviceModalState();
+
+  const state = useWebsocketState();
+
+  const device = state !== null ? findDevice(state, deviceModalState[0]) : null;
+
   const deviceModalTitle =
     deviceModalState.length === 1
-      ? `Set ${deviceModalState[0]?.name} color`
+      ? `Set ${device?.name} color`
       : `Set color of ${deviceModalState.length} devices`;
   const deviceModalColor =
-    deviceModalState[0] === undefined
-      ? null
-      : getColor(deviceModalState[0].state);
+    device?.state === undefined ? null : getColor(device.state);
   const deviceModalBrightness =
-    deviceModalState[0] === undefined
-      ? null
-      : getBrightness(deviceModalState[0].state);
+    device?.state === undefined ? null : getBrightness(device.state);
 
   const setDeviceColor = useSetDeviceColor();
   const partialSetDeviceColor = useCallback(
     (color: Color, brightness: number) => {
       if (deviceModalState !== null) {
-        deviceModalState.forEach((device) =>
-          setDeviceColor(device, color, brightness),
-        );
+        deviceModalState.forEach((deviceKey) => {
+          const match = state !== null ? findDevice(state, deviceKey) : null;
+
+          if (match) {
+            setDeviceColor(match, color, brightness);
+          }
+        });
       }
     },
-    [deviceModalState, setDeviceColor],
+    [deviceModalState, setDeviceColor, state],
   );
 
   const throttledSetDeviceColor = useThrottleCallback(

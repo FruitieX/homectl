@@ -1,10 +1,11 @@
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { Button } from 'react-daisyui';
-import { X, Edit, ChevronLeft } from 'lucide-react';
+import { X, Edit, ChevronLeft, Save } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { usePathname, useRouter } from 'next/navigation';
 import { useWebsocketState } from '@/hooks/websocket';
+import { useSceneModalState } from '@/hooks/sceneModalState';
 
 export const Navbar = () => {
   const router = useRouter();
@@ -34,6 +35,8 @@ export const Navbar = () => {
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
 
+  const { setOpen: setSceneModalOpen } = useSceneModalState();
+
   const clearSelectedDevices = useCallback(() => {
     setSelectedDevices([]);
   }, [setSelectedDevices]);
@@ -42,6 +45,10 @@ export const Navbar = () => {
     setDeviceModalState(selectedDevices);
     setDeviceModalOpen(true);
   }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
+
+  const saveScene = useCallback(() => {
+    setSceneModalOpen(true);
+  }, [setSceneModalOpen]);
 
   const navigateBack = useCallback(() => {
     if (back) {
@@ -72,6 +79,7 @@ export const Navbar = () => {
             {selectedDevices.length === 1 ? 'device' : 'devices'}
           </a>
           <div className="flex-1" />
+          <Button color="ghost" startIcon={<Save />} onClick={saveScene} />
           <Button
             color="ghost"
             startIcon={<Edit />}

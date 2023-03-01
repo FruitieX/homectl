@@ -95,7 +95,7 @@ export const ViewportDevice = (props: Props) => {
     deviceTouchTimer.current = setTimeout(() => {
       if (touchRegistersAsTap.current === true) {
         console.log('Toggling selected device');
-        toggleSelectedDevice(device);
+        toggleSelectedDevice(getDeviceKey(device));
         // setDeviceColor(device, activeColor);
       }
       deviceTouchTimer.current = null;
@@ -115,11 +115,11 @@ export const ViewportDevice = (props: Props) => {
     if (touchRegistersAsTap.current === true) {
       if (selectedDevices.length === 0) {
         console.log('Opening device color picker');
-        setDeviceModalState([device]);
+        setDeviceModalState([getDeviceKey(device)]);
         setDeviceModalOpen(true);
       } else {
         console.log('Toggling selected device');
-        toggleSelectedDevice(device);
+        toggleSelectedDevice(getDeviceKey(device));
       }
     }
   }, [
