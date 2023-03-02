@@ -117,9 +117,6 @@ const Component = (props: Props) => {
         </Modal.Body>
 
         <Modal.Actions>
-          <Button type="submit" onClick={submit}>
-            Save
-          </Button>
           <Button
             color="error"
             onClick={
@@ -127,6 +124,9 @@ const Component = (props: Props) => {
             }
           >
             {askDeleteConfirmation ? 'Confirm?' : 'Delete'}
+          </Button>
+          <Button type="submit" onClick={submit}>
+            Save
           </Button>
         </Modal.Actions>
       </form>
