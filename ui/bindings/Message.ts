@@ -5,4 +5,4 @@ import type { DevicesState } from "./DevicesState";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
 
-export type Message = { IntegrationDeviceRefresh: { device: Device, } } | { DeviceUpdate: { old_state: DevicesState, new_state: DevicesState, old: Device | null, new: Device, } } | { SetDeviceState: { device: Device, set_scene: boolean, } } | { SetIntegrationDeviceState: { device: Device, state_changed: boolean, } } | { StoreScene: { scene_id: SceneId, config: SceneConfig, } } | { DeleteScene: { scene_id: SceneId, } } | { Action: Action };
+export type Message = { IntegrationDeviceRefresh: { device: Device, } } | { DeviceUpdate: { old_state: DevicesState, new_state: DevicesState, old: Device | null, new: Device, } } | { SetDeviceState: { device: Device, set_scene: boolean, } } | { SetIntegrationDeviceState: { device: Device, state_changed: boolean, } } | { StoreScene: { scene_id: SceneId, config: SceneConfig, } } | { EditScene: { scene_id: SceneId, name: string, } } | { DeleteScene: { scene_id: SceneId, } } | { Action: Action };

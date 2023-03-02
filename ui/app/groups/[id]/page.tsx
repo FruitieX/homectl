@@ -10,6 +10,7 @@ import { getDeviceKey } from '@/lib/device';
 import { DeviceState } from '@/bindings/DeviceState';
 import { SceneId } from '@/bindings/SceneId';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
+import { useSceneModalState } from '@/hooks/sceneModalState';
 const NoSSRPreview = dynamicImport(() => import('../Preview'), { ssr: false });
 
 type Props = {
@@ -19,6 +20,9 @@ type Props = {
 export default function Page(props: Props) {
   const ws = useWebsocket();
   const state = useWebsocketState();
+
+  const { setOpen: setSceneModalOpen, setState: setSceneModalState } =
+    useSceneModalState();
 
   const group: FlattenedGroupConfig | undefined =
     state?.groups[props.params.id];
@@ -58,6 +62,13 @@ export default function Page(props: Props) {
     ws?.send(data);
   };
 
+  const openSceneModal =
+    (sceneId: SceneId) => (e: React.MouseEvent<HTMLLIElement>) => {
+      e.preventDefault();
+      setSceneModalState(sceneId);
+      setSceneModalOpen(true);
+    };
+
   return (
     <>
       <Menu className="flex-1 flex-nowrap overflow-y-auto">
@@ -84,7 +95,7 @@ export default function Page(props: Props) {
             <Menu.Item
               key={sceneId}
               onClick={handleSceneClick(sceneId)}
-              onContextMenu={console.log}
+              onContextMenu={openSceneModal(sceneId)}
             >
               <div className="py-0">
                 <div className="flex-1 truncate">{scene.name}</div>

@@ -1,13 +1,8 @@
 import { Button, Input, Modal } from 'react-daisyui';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useSceneModalState } from '@/hooks/sceneModalState';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { SceneConfig } from '@/bindings/SceneConfig';
-import { SceneDeviceState } from '@/bindings/SceneDeviceState';
-import { findDevice } from '@/lib/device';
-import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { SceneDevicesSearchConfig } from '@/bindings/SceneDevicesSearchConfig';
 
 type Props = {
   visible: boolean;
@@ -18,20 +13,23 @@ const Component = (props: Props) => {
   const ws = useWebsocket();
   const state = useWebsocketState();
 
-  const { setOpen: setSceneModalOpen } = useSceneModalState();
+  const {
+    open: sceneModalOpen,
+    setOpen: setSceneModalOpen,
+    state: sceneModalState,
+  } = useSceneModalState();
 
-  const [_selectedDevices, setSelectedDevices] = useSelectedDevices();
-  const selectedDevices = _selectedDevices.flatMap((d) => {
-    const device = state !== null ? findDevice(state, d) : null;
-    if (device !== null && device !== undefined) {
-      return [device];
-    }
-    return [];
-  });
+  const scene =
+    sceneModalState !== null && state?.scenes !== undefined
+      ? state.scenes[sceneModalState]
+      : null;
 
   const { visible, close } = props;
 
-  const [value, setValue] = useState('');
+  const [value, setValue] = useState(scene?.name ?? '');
+  useEffect(() => {
+    setValue(scene?.name ?? '');
+  }, [scene, sceneModalOpen]);
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const newValue = e.currentTarget.value;
@@ -42,62 +40,13 @@ const Component = (props: Props) => {
     (e: React.FormEvent) => {
       e.preventDefault();
 
-      const devicesByKey: (readonly [
-        { integrationId: string; name: string },
-        SceneDeviceState,
-      ])[] = selectedDevices.flatMap((device) => {
-        if ('Light' in device.state) {
-          const light = device.state.Light;
-          let color = { hue: 0, saturation: 0, value: 0 };
-
-          if (light.color !== null && 'Hsv' in light.color) {
-            color = light.color.Hsv;
-          }
-
-          const state: SceneDeviceState = {
-            power: light.power,
-            color: color as any,
-            brightness: light.brightness,
-            cct: null,
-            transition_ms: null,
-          };
-
-          return [
-            [
-              {
-                integrationId: device.integration_id,
-                name: device.name,
-              },
-              state,
-            ] as const,
-          ];
-        } else {
-          return [];
-        }
-      });
-
-      const devicesByIntegration: SceneDevicesSearchConfig = {};
-
-      devicesByKey.forEach(([deviceKey, state]) => {
-        if (devicesByIntegration[deviceKey.integrationId] === undefined) {
-          devicesByIntegration[deviceKey.integrationId] = {};
-        }
-
-        devicesByIntegration[deviceKey.integrationId][deviceKey.name] = state;
-      });
-
-      const config: SceneConfig = {
-        name: value,
-        devices: devicesByIntegration,
-        groups: null,
-        hidden: false,
-      };
+      if (sceneModalState === null) return;
 
       const msg: WebSocketRequest = {
         Message: {
-          StoreScene: {
-            scene_id: value,
-            config,
+          EditScene: {
+            scene_id: sceneModalState,
+            name: value,
           },
         },
       };
@@ -105,9 +54,46 @@ const Component = (props: Props) => {
       const data = JSON.stringify(msg);
       ws?.send(data);
       setSceneModalOpen(false);
-      setSelectedDevices([]);
     },
-    [selectedDevices, setSceneModalOpen, setSelectedDevices, value, ws],
+    [sceneModalState, setSceneModalOpen, value, ws],
+  );
+
+  const [askDeleteConfirmation, setAskDeleteConfirmation] = useState(false);
+
+  useEffect(() => {
+    setAskDeleteConfirmation(false);
+  }, [sceneModalOpen]);
+
+  const handleDelete = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (sceneModalState === null) return;
+
+      const msg: WebSocketRequest = {
+        Message: {
+          DeleteScene: {
+            scene_id: sceneModalState,
+          },
+        },
+      };
+
+      const data = JSON.stringify(msg);
+      ws?.send(data);
+      setSceneModalOpen(false);
+      setAskDeleteConfirmation(false);
+    },
+    [sceneModalState, setSceneModalOpen, ws],
+  );
+
+  const handleAskConfirmation = useCallback(
+    (e: React.MouseEvent<HTMLButtonElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setAskDeleteConfirmation(true);
+    },
+    [],
   );
 
   return (
@@ -120,7 +106,7 @@ const Component = (props: Props) => {
       >
         ✕
       </Button>
-      <Modal.Header className="font-bold">{'Save new scene'}</Modal.Header>
+      <Modal.Header className="font-bold">{`Edit scene ${scene?.name}`}</Modal.Header>
 
       <form onSubmit={submit}>
         <Modal.Body>
@@ -133,6 +119,14 @@ const Component = (props: Props) => {
         <Modal.Actions>
           <Button type="submit" onClick={submit}>
             Save
+          </Button>
+          <Button
+            color="error"
+            onClick={
+              askDeleteConfirmation ? handleDelete : handleAskConfirmation
+            }
+          >
+            {askDeleteConfirmation ? 'Confirm?' : 'Delete'}
           </Button>
         </Modal.Actions>
       </form>

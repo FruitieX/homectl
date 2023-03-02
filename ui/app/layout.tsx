@@ -6,6 +6,7 @@ import '@/styles/globals.css';
 import { BottomNavigation } from '@/ui/BottomNavigation';
 import { ColorPickerModal } from '@/ui/ColorPickerModal';
 import { Navbar } from '@/ui/Navbar';
+import { SaveSceneModal } from '@/ui/SaveSceneModal';
 import { SceneModal } from '@/ui/SceneModal';
 
 export default function RootLayout({
@@ -27,6 +28,7 @@ export default function RootLayout({
       </head>
       <body className="flex h-screen flex-col overflow-hidden">
         <ColorPickerModal />
+        <SaveSceneModal />
         <SceneModal />
         <Navbar />
         <main className="flex min-h-0 flex-1 flex-col">{children}</main>

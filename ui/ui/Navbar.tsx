@@ -5,7 +5,7 @@ import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { usePathname, useRouter } from 'next/navigation';
 import { useWebsocketState } from '@/hooks/websocket';
-import { useSceneModalState } from '@/hooks/sceneModalState';
+import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 
 export const Navbar = () => {
   const router = useRouter();
@@ -35,7 +35,7 @@ export const Navbar = () => {
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
 
-  const { setOpen: setSceneModalOpen } = useSceneModalState();
+  const { setOpen: setSaveSceneModalOpen } = useSaveSceneModalState();
 
   const clearSelectedDevices = useCallback(() => {
     setSelectedDevices([]);
@@ -47,8 +47,8 @@ export const Navbar = () => {
   }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
 
   const saveScene = useCallback(() => {
-    setSceneModalOpen(true);
-  }, [setSceneModalOpen]);
+    setSaveSceneModalOpen(true);
+  }, [setSaveSceneModalOpen]);
 
   const navigateBack = useCallback(() => {
     if (back) {
