@@ -1,6 +1,6 @@
 'use client';
 
-import { Card } from 'react-daisyui';
+import { Menu } from 'react-daisyui';
 
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
@@ -60,7 +60,7 @@ export default function Page(props: Props) {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto">
+      <Menu className="flex-1 flex-nowrap overflow-y-auto">
         {filteredScenes.map(([sceneId, scene]) => {
           const previewDevices = Object.entries(
             scene.devices as Record<string, DeviceState>,
@@ -81,22 +81,21 @@ export default function Page(props: Props) {
           });
 
           return (
-            <Card
+            <Menu.Item
               key={sceneId}
               onClick={handleSceneClick(sceneId)}
               onContextMenu={console.log}
-              className="card-side"
             >
-              <Card.Body>
-                <Card.Title className="truncate">{scene.name}</Card.Title>
-              </Card.Body>
-              <div>
-                <NoSSRPreview devices={previewDevices} />
+              <div className="py-0">
+                <div className="flex-1 truncate">{scene.name}</div>
+                <div className="h-[96px] w-[112px]">
+                  <NoSSRPreview devices={previewDevices} />
+                </div>
               </div>
-            </Card>
+            </Menu.Item>
           );
         })}
-      </div>
+      </Menu>
     </>
   );
 }

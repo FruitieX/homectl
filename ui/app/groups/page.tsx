@@ -3,7 +3,7 @@
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { GroupId } from '@/bindings/GroupId';
 import { useWebsocketState } from '@/hooks/websocket';
-import { Card } from 'react-daisyui';
+import { Menu } from 'react-daisyui';
 
 import dynamicImport from 'next/dynamic';
 import Link from 'next/link';
@@ -29,7 +29,7 @@ export default function Page() {
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto">
+      <Menu className="flex-1 flex-nowrap overflow-y-auto">
         {filteredGroups.map(([groupId, group]) => {
           const filteredDevices = devices.filter((device) =>
             group.device_ids.includes(getDeviceKey(device)),
@@ -37,21 +37,21 @@ export default function Page() {
 
           return (
             <Link key={groupId} href={`/groups/${groupId}`}>
-              <Card className="card-side">
-                <Card.Body>
-                  <Card.Title className="truncate">{group.name}</Card.Title>
-                </Card.Body>
-                <div>
-                  <NoSSRPreview
-                    devices={filteredDevices}
-                    overrideColor={Color({ h: 35, s: 50, v: 100 })}
-                  />
+              <Menu.Item>
+                <div className='py-0'>
+                  <div className="flex-1 truncate">{group.name}</div>
+                  <div className="h-[96px] w-[112px]">
+                    <NoSSRPreview
+                      devices={filteredDevices}
+                      overrideColor={Color({ h: 35, s: 50, v: 100 })}
+                    />
+                  </div>
                 </div>
-              </Card>
+              </Menu.Item>
             </Link>
           );
         })}
-      </div>
+      </Menu>
     </>
   );
 }
