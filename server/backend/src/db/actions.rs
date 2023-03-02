@@ -1,6 +1,6 @@
 use super::get_db_connection;
 use anyhow::Result;
-use homectl_types::device::{Device, DeviceRow, DeviceState, DeviceKey};
+use homectl_types::device::{Device, DeviceKey, DeviceRow, DeviceState};
 use homectl_types::integration::IntegrationId;
 use homectl_types::scene::ScenesConfig;
 use homectl_types::scene::{SceneConfig, SceneId};
@@ -171,6 +171,26 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
             where scene_id = $1
         "#,
         scene_id.to_string(),
+    )
+    .fetch_one(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
+    let db = get_db_connection().await?;
+
+    sqlx::query!(
+        r#"
+            update scenes
+            set
+                scene_id = $2,
+                config = config::jsonb || format('{"name":"%s"}', $2::text)::jsonb
+            where scene_id = $1;
+        "#,
+        scene_id.to_string(),
+        name
     )
     .fetch_one(db)
     .await?;

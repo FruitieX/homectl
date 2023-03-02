@@ -8,7 +8,7 @@ use homectl_types::{
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
-use crate::db::actions::{db_delete_scene, db_store_scene};
+use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
 
 use super::state::AppState;
 
@@ -69,13 +69,22 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
 
             Ok(())
         }
+        Message::EditScene { scene_id, name } => {
+            db_edit_scene(scene_id, name).await.ok();
+            state.scenes.refresh_db_scenes().await;
+            state.send_state_ws(None).await;
+
+            Ok(())
+        }
         Message::Action(Action::ActivateScene(SceneDescriptor {
             scene_id,
             device_keys,
-            group_keys
+            group_keys,
         })) => {
             let mut devices = state.devices.clone();
-            devices.activate_scene(scene_id, device_keys, group_keys).await;
+            devices
+                .activate_scene(scene_id, device_keys, group_keys)
+                .await;
 
             Ok(())
         }
