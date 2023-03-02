@@ -3,11 +3,13 @@
 import { Card } from 'react-daisyui';
 
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import dynamicImport from 'next/dynamic';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { DeviceState } from '@/bindings/DeviceState';
+import { SceneId } from '@/bindings/SceneId';
+import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 const NoSSRPreview = dynamicImport(() => import('../Preview'), { ssr: false });
 
 type Props = {
@@ -15,8 +17,8 @@ type Props = {
 };
 
 export default function Page(props: Props) {
+  const ws = useWebsocket();
   const state = useWebsocketState();
-  console.log(props.params);
 
   const group: FlattenedGroupConfig | undefined =
     state?.groups[props.params.id];
@@ -39,6 +41,22 @@ export default function Page(props: Props) {
   filteredScenes.sort((a, b) => a[1].name.localeCompare(b[1].name));
 
   const devices: Device[] = Object.values(state?.devices ?? {});
+
+  const handleSceneClick = (sceneId: SceneId) => () => {
+    const msg: WebSocketRequest = {
+      Message: {
+        Action: {
+          action: 'ActivateScene',
+          device_keys: groupDevices as any,
+          group_keys: null,
+          scene_id: sceneId,
+        },
+      },
+    };
+
+    const data = JSON.stringify(msg);
+    ws?.send(data);
+  };
 
   return (
     <>
@@ -63,7 +81,12 @@ export default function Page(props: Props) {
           });
 
           return (
-            <Card key={sceneId} onClick={console.log} className="card-side">
+            <Card
+              key={sceneId}
+              onClick={handleSceneClick(sceneId)}
+              onContextMenu={console.log}
+              className="card-side"
+            >
               <Card.Body>
                 <Card.Title className="truncate">{scene.name}</Card.Title>
               </Card.Body>

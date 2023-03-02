@@ -5,11 +5,8 @@ import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { SceneConfig } from '@/bindings/SceneConfig';
 import { SceneDeviceState } from '@/bindings/SceneDeviceState';
-import { findDevice, getDeviceKey } from '@/lib/device';
+import { findDevice } from '@/lib/device';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { SceneDeviceConfig } from '@/bindings/SceneDeviceConfig';
-import { groupBy } from 'lodash';
-import { DeviceKey } from '@/bindings/DeviceKey';
 import { SceneDevicesSearchConfig } from '@/bindings/SceneDevicesSearchConfig';
 
 type Props = {
@@ -78,8 +75,6 @@ const Component = (props: Props) => {
           return [];
         }
       });
-
-      console.log(devicesByKey);
 
       const devicesByIntegration: SceneDevicesSearchConfig = {};
 

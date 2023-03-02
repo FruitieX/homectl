@@ -18,7 +18,6 @@ type Props = {
 };
 
 export const Preview = (props: Props) => {
-  console.log(props);
   return (
     <Stage
       width={112}
