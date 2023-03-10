@@ -1,6 +1,9 @@
-import { Button, Modal, Range } from 'react-daisyui';
+'use client';
+
+import { Button, Modal, Range, Tabs } from 'react-daisyui';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
+import Circle from '@uiw/react-color-circle';
 import Color from 'color';
 import {
   ChangeEvent,
@@ -36,15 +39,20 @@ const colorToHsva = (color: Color) => {
     a: hsva.alpha(),
   };
 };
-const Component = ({
-  close,
-  color,
+
+type TabProps = {
+  color: Color;
+  brightness: number;
+  onChange?: (color: Color, brightness: number) => void;
+  onChangeComplete?: (color: Color, brightness: number) => void;
+};
+
+const ColorWheelTab = ({
   brightness,
+  color,
   onChange,
   onChangeComplete,
-  visible,
-  title,
-}: Props) => {
+}: TabProps) => {
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
 
@@ -94,6 +102,133 @@ const Component = ({
   );
 
   return (
+    <>
+      <div className="flex-1">
+        <Wheel
+          color={hsvaWithMaxValue}
+          onChange={handleChange}
+          onTouchEnd={handleChangeComplete}
+          onMouseUp={handleChangeComplete}
+          width={300}
+          height={300}
+          className="mx-auto"
+        />
+      </div>
+      <Range
+        className="mt-6"
+        size="lg"
+        onChange={handleBrightnessChange}
+        onTouchEnd={handleChangeComplete}
+        onMouseUp={handleChangeComplete}
+        min={0}
+        max={100}
+        value={bri * 100}
+      />
+    </>
+  );
+};
+
+const SwatchesTab = ({
+  brightness,
+  color,
+  onChange,
+  onChangeComplete,
+}: TabProps) => {
+  const [hsva, setHsva] = useState(colorToHsva(color));
+  const [bri, setBri] = useState(brightness);
+
+  useEffect(() => {
+    setHsva(colorToHsva(color));
+    setBri(brightness);
+  }, [color, brightness]);
+
+  const latestColor = useRef<Color>(color);
+  useEffect(() => {
+    latestColor.current = color;
+  }, [color]);
+
+  const handleChange = useCallback(
+    (result: ColorResult) => {
+      const hsv = Color(result.rgb).hsv();
+      const color = Color({
+        h: hsv.hue(),
+        s: hsv.saturationv(),
+        v: latestColor.current.value(),
+      });
+      latestColor.current = color;
+      setHsva(colorToHsva(color));
+      onChange && onChange(color, bri);
+    },
+    [bri, onChange],
+  );
+
+  const handleChangeComplete = useCallback(() => {
+    onChangeComplete && onChangeComplete(latestColor.current, bri);
+  }, [bri, onChangeComplete]);
+
+  const handleBrightnessChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = Number(event.currentTarget.value) / 100;
+      setBri(value);
+      onChange && onChange(latestColor.current, value);
+    },
+    [onChange],
+  );
+
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto p-3">
+        <Circle
+          colors={[
+            '#f44336',
+            '#e91e63',
+            '#9c27b0',
+            '#673ab7',
+            '#3f51b5',
+            '#2196f3',
+            '#03a9f4',
+            '#00bcd4',
+            '#009688',
+            '#4caf50',
+            '#8bc34a',
+            '#cddc39',
+            '#ffeb3b',
+            '#ffc107',
+            '#ff9800',
+            '#ff5722',
+            '#795548',
+            '#607d8b',
+          ]}
+          color={hsva}
+          onChange={handleChange}
+          className="flex-1"
+        />
+      </div>
+      <Range
+        className="mt-6"
+        size="lg"
+        onChange={handleBrightnessChange}
+        onTouchEnd={handleChangeComplete}
+        onMouseUp={handleChangeComplete}
+        min={0}
+        max={100}
+        value={bri * 100}
+      />
+    </>
+  );
+};
+
+const Component = ({
+  close,
+  color,
+  brightness,
+  onChange,
+  onChangeComplete,
+  visible,
+  title,
+}: Props) => {
+  const [tab, setTab] = useState(0);
+  return (
     <Modal responsive open={visible} onClickBackdrop={close}>
       <Button
         size="sm"
@@ -107,25 +242,28 @@ const Component = ({
 
       <Modal.Body>
         {/* <CirclePicker color={hsva} /> */}
-        <Wheel
-          color={hsvaWithMaxValue}
-          onChange={handleChange}
-          onTouchEnd={handleChangeComplete}
-          onMouseUp={handleChangeComplete}
-          width={300}
-          height={300}
-          className="mx-auto"
-        />
-        <Range
-          className="mt-6"
-          size="lg"
-          onChange={handleBrightnessChange}
-          onTouchEnd={handleChangeComplete}
-          onMouseUp={handleChangeComplete}
-          min={0}
-          max={100}
-          value={bri * 100}
-        />
+        <Tabs value={tab} onChange={setTab} className="pb-6">
+          <Tabs.Tab value={0}>Wheel</Tabs.Tab>
+          <Tabs.Tab value={1}>Swatches</Tabs.Tab>
+        </Tabs>
+        <div className="flex h-96 flex-col justify-center">
+          {tab === 0 && (
+            <ColorWheelTab
+              color={color}
+              brightness={brightness}
+              onChange={onChange}
+              onChangeComplete={onChangeComplete}
+            />
+          )}
+          {tab === 1 && (
+            <SwatchesTab
+              color={color}
+              brightness={brightness}
+              onChange={onChange}
+              onChangeComplete={onChangeComplete}
+            />
+          )}
+        </div>
       </Modal.Body>
     </Modal>
   );

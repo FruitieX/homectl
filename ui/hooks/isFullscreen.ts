@@ -1,8 +1,6 @@
-
 'use client';
 
 import { atom, useAtom } from 'jotai';
-import Color from 'color';
 
 const fullscreenAtom = atom<boolean>(document.fullscreenElement !== null);
 
