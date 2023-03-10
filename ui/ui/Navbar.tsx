@@ -1,11 +1,12 @@
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { Button } from 'react-daisyui';
-import { X, Edit, ChevronLeft, Save } from 'lucide-react';
+import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { usePathname, useRouter } from 'next/navigation';
 import { useWebsocketState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
+import { useIsFullscreen } from '@/hooks/isFullscreen';
 
 export const Navbar = () => {
   const router = useRouter();
@@ -16,7 +17,7 @@ export const Navbar = () => {
   let title = 'homectl';
   let back: string | null = null;
 
-  if (pathname === '/') {
+  if (pathname === '/' || pathname === '/dashboard') {
     title = 'Dashboard';
   } else if (pathname === '/map') {
     title = 'Map';
@@ -56,6 +57,18 @@ export const Navbar = () => {
     }
   }, [back, router]);
 
+  const [isFullscreen, setIsFullscreen] = useIsFullscreen();
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement !== null) {
+      document.exitFullscreen();
+      setIsFullscreen(false);
+    } else {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
+    }
+  }, [setIsFullscreen]);
+
   return (
     <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur">
       {back !== null && (
@@ -65,7 +78,7 @@ export const Navbar = () => {
           onClick={navigateBack}
         />
       )}
-      {selectedDevices.length === 0 ? (
+      {selectedDevices.length === 0 || title !== 'Map' ? (
         <a className="btn-ghost btn text-xl normal-case">{title}</a>
       ) : (
         <>
@@ -84,6 +97,16 @@ export const Navbar = () => {
             color="ghost"
             startIcon={<Edit />}
             onClick={editSelectedDevices}
+          />
+        </>
+      )}
+      {title === 'Dashboard' && (
+        <>
+          <div className="flex-1" />
+          <Button
+            color="ghost"
+            startIcon={isFullscreen ? <Shrink /> : <Expand />}
+            onClick={toggleFullscreen}
           />
         </>
       )}

@@ -1,31 +1,9 @@
+import Dashboard from './dashboard/page';
+
 export default function Page() {
   return (
     <>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
-      <div>dashboard</div>
+      <Dashboard />
     </>
   );
 }
