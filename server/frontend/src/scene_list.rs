@@ -36,6 +36,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
 
     let scene_colors: Vec<Hsv> = scene
         .devices
+        .0
         .values()
         .filter_map(get_device_state_color)
         .map(scale_hsv_value_to_display)
@@ -52,7 +53,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
                 Action::ActivateScene(SceneDescriptor {
                     scene_id,
                     device_keys,
-                    group_keys: None
+                    group_keys: None,
                 }),
             )))
         }
@@ -61,7 +62,7 @@ fn SceneRow(cx: Scope<SceneRowProps>) -> Element {
     let edit_modal_open = use_state(&cx, || false);
     let edit_scene = {
         move |evt: MouseEvent| {
-            evt.cancel_bubble();
+            evt.stop_propagation();
             edit_modal_open.set(true);
         }
     };
@@ -108,21 +109,28 @@ pub struct SceneListProps {
 pub fn SceneList(cx: Scope<SceneListProps>) -> Element {
     let scenes = use_read(&cx, SCENES_ATOM).clone();
 
-    let scenes: FlattenedScenesConfig = scenes
-        .into_iter()
-        .filter(|(_, config)| config.hidden != Some(true))
-        .collect();
+    let scenes: FlattenedScenesConfig = FlattenedScenesConfig(
+        scenes
+            .0
+            .into_iter()
+            .filter(|(_, config)| config.hidden != Some(true))
+            .collect(),
+    );
 
     let filtered_scenes = if let Some(filters) = &cx.props.filter_by_device_ids {
-        scenes
-            .into_iter()
-            .filter(|(_, scene)| filters.iter().any(|k| scene.devices.contains_key(k)))
-            .collect()
+        FlattenedScenesConfig(
+            scenes
+                .0
+                .into_iter()
+                .filter(|(_, scene)| filters.iter().any(|k| scene.devices.0.contains_key(k)))
+                .collect(),
+        )
     } else {
         scenes
     };
 
     let sorted_scenes: Vec<(SceneId, FlattenedSceneConfig)> = filtered_scenes
+        .0
         .into_iter()
         .sorted_by(|a, b| a.1.name.cmp(&b.1.name))
         .collect();

@@ -10,7 +10,7 @@ pub fn GroupDeviceList(cx: Scope) -> Element {
     let group_id: GroupId = GroupId::new(use_route(&cx).segment("group_id")?.to_string());
     let groups = use_read(&cx, GROUPS_ATOM);
 
-    let (_, group) = groups
+    let (_, group) = groups.0
         .iter()
         .find(|(candidate_group_id, _)| *candidate_group_id == &group_id)?;
 

@@ -33,7 +33,7 @@ pub fn Header(cx: Scope<HeaderProps>) -> Element {
         ["scenes"] => "Scenes".to_string(),
         ["groups"] => "Groups".to_string(),
         ["groups", group_id] => {
-            let group = groups.get(&GroupId::new(group_id.to_string()));
+            let group = groups.0.get(&GroupId::new(group_id.to_string()));
 
             match group {
                 Some(group) => format!("{} devices", group.name),

@@ -12,14 +12,15 @@ serde_json = "1.0"
 anyhow = "1.0.53"
 homectl_types = { path = "../types" }
 homectl_console = { path = "../console" }
-js-sys = "0.3.55"
-web-sys = { version = "0.3.55", features = ["History"] }
-wasm-bindgen = "0.2.78"
-reqwasm = "0.4.0"
-dioxus = { git = "https://github.com/DioxusLabs/dioxus", features = ["web"] }
-dioxus-router = { git = "https://github.com/DioxusLabs/dioxus" }
-fermi = { git = "https://github.com/DioxusLabs/dioxus" }
-dioxus-websocket-hooks = { git = "https://github.com/FruitieX/dioxus-websocket-hooks" }
+js-sys = "0.3.60"
+web-sys = { version = "0.3.60", features = ["History"] }
+wasm-bindgen = "0.2.83"
+reqwasm = "0.5.0"
+dioxus = { version = "0.3.1" }
+dioxus-web = { version = "0.3.0" }
+dioxus-router = { version = "0.3.0" }
+fermi = { version = "0.3.0" }
+dioxus-websocket-hooks = { path = "../../src/dioxus-websocket-hooks" }
 palette = { version = "0.5.0", features = ["serializing"] }
 convert_case = "0.5.0"
 itertools = "0.10.3"

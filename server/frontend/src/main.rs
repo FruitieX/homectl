@@ -28,42 +28,43 @@ mod tile;
 mod util;
 
 fn main() {
-    dioxus::web::launch(app);
+    dioxus_web::launch(app);
 }
 
 fn app(cx: Scope) -> Element {
-    use_init_app_state(&cx);
+    cx.render(rsx!(main { "asd" }))
+    // use_init_app_state(&cx);
 
-    let disable_scroll = use_read(&cx, DISABLE_SCROLL_ATOM);
-    let disable_scroll_css = if *disable_scroll { "hidden" } else { "visible" };
+    // let disable_scroll = use_read(&cx, DISABLE_SCROLL_ATOM);
+    // let disable_scroll_css = if *disable_scroll { "hidden" } else { "visible" };
 
-    cx.render(rsx! (
-        style {
-            r"* {{
-                font-family: sans-serif;
-                user-select: none;
-            }}
-            
-            body {{
-                margin: 0;
-                height: 100vh;
-                width: 100%;
-                overflow-y: {disable_scroll_css};
-                overflow-x: hidden;
-            }}"
-        }
-        Router {
-            Header {}
-            main {
-                class: "m-2 pb-8 pt-0.5",
+    // cx.render(rsx! (
+    //     style {
+    //         r"* {{
+    //             font-family: sans-serif;
+    //             user-select: none;
+    //         }}
 
-                Route { to: "/", Dashboard {} },
-                Route { to: "/index.html", Redirect { to: "/" } },
-                Route { to: "/devices", DeviceList { filters: None } },
-                Route { to: "/groups", GroupList {} },
-                Route { to: "/groups/:group_id", GroupDeviceList {} },
-                Route { to: "/scenes", SceneList {} }
-            }
-        }
-    ))
+    //         body {{
+    //             margin: 0;
+    //             height: 100vh;
+    //             width: 100%;
+    //             overflow-y: {disable_scroll_css};
+    //             overflow-x: hidden;
+    //         }}"
+    //     }
+    //     Router {
+    //         Header {}
+    //         main {
+    //             class: "m-2 pb-8 pt-0.5",
+
+    //             Route { to: "/", Dashboard {} },
+    //             Route { to: "/index.html", Redirect { to: "/" } },
+    //             Route { to: "/devices", DeviceList { filters: None } },
+    //             Route { to: "/groups", GroupList {} },
+    //             Route { to: "/groups/:group_id", GroupDeviceList {} },
+    //             Route { to: "/scenes", SceneList {} }
+    //         }
+    //     }
+    // ))
 }

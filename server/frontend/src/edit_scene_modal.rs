@@ -18,7 +18,7 @@ pub fn EditSceneModal<'a>(cx: Scope<'a, EditSceneModalProps<'a>>) -> Element<'a>
     let set_disable_scroll = use_set(&cx, DISABLE_SCROLL_ATOM);
     let scenes = use_read(&cx, SCENES_ATOM);
     let scene_id = cx.props.scene_id;
-    let _scene = scenes.get(scene_id);
+    let _scene = scenes.0.get(scene_id);
 
     let ws = use_ws_context(&cx);
 

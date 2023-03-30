@@ -25,7 +25,7 @@ fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
     let groups = use_read(&cx, GROUPS_ATOM);
     let devices = use_read(&cx, DEVICES_ATOM);
 
-    let group_device_ids = groups
+    let group_device_ids = groups.0
         .get(group_id)
         .map(|group| group.device_ids.clone())
         .unwrap_or_default();
@@ -73,7 +73,7 @@ fn GroupRow(cx: Scope<GroupRowProps>) -> Element {
 pub fn GroupList(cx: Scope) -> Element {
     let groups = use_read(&cx, GROUPS_ATOM);
 
-    let groups: Vec<(GroupId, FlattenedGroupConfig)> = groups
+    let groups: Vec<(GroupId, FlattenedGroupConfig)> = groups.0
         .iter()
         .filter(|(_, config)| config.hidden != Some(true))
         .map(|(group_id, config)| (group_id.clone(), config.clone()))

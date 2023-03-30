@@ -46,7 +46,7 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
         let filters = cx.props.filters.clone();
 
         move |evt: MouseEvent| {
-            evt.cancel_bubble();
+            evt.stop_propagation();
 
             // Filter devices according to cx.props.filters
             let mut filtered_devices: Vec<Device> = devices
@@ -64,29 +64,31 @@ pub fn SaveSceneModal<'a>(cx: Scope<'a, SaveSceneModalProps<'a>>) -> Element<'a>
             filtered_devices.sort_by(|a, b| a.name.cmp(&b.name));
 
             // Group devices' state by integration_id and device names
-            let devices: SceneDevicesSearchConfig = filtered_devices
-                .into_iter()
-                .group_by(|device| device.integration_id.clone())
-                .into_iter()
-                .map(|(integration_id, group)| {
-                    let scene_device_configs = group
-                        .map(|device| {
-                            let scene_device_config =
-                                SceneDeviceConfig::SceneDeviceState(SceneDeviceState {
-                                    power: device.state.is_powered_on().unwrap_or_default(),
-                                    color: device.state.get_hsv().map(ColorConfig::Hsv),
-                                    brightness: device.state.get_brightness(),
-                                    cct: device.state.get_cct(),
-                                    transition_ms: None,
-                                });
+            let devices: SceneDevicesSearchConfig = SceneDevicesSearchConfig(
+                filtered_devices
+                    .into_iter()
+                    .group_by(|device| device.integration_id.clone())
+                    .into_iter()
+                    .map(|(integration_id, group)| {
+                        let scene_device_configs = group
+                            .map(|device| {
+                                let scene_device_config =
+                                    SceneDeviceConfig::SceneDeviceState(SceneDeviceState {
+                                        power: device.state.is_powered_on().unwrap_or_default(),
+                                        color: device.state.get_hsv().map(ColorConfig::Hsv),
+                                        brightness: device.state.get_brightness(),
+                                        cct: device.state.get_cct(),
+                                        transition_ms: None,
+                                    });
 
-                            (device.name, scene_device_config)
-                        })
-                        .collect();
+                                (device.name, scene_device_config)
+                            })
+                            .collect();
 
-                    (integration_id, scene_device_configs)
-                })
-                .collect();
+                        (integration_id, scene_device_configs)
+                    })
+                    .collect(),
+            );
 
             let scene_id = SceneId::new(name.to_case(Case::Snake));
             let config = SceneConfig {

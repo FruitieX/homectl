@@ -14,12 +14,12 @@ pub struct ModalProps<'a> {
 pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
     let set_disable_scroll = use_set(&cx, DISABLE_SCROLL_ATOM);
 
-    let cancel_bubble = move |evt: MouseEvent| {
-        evt.cancel_bubble();
+    let stop_propagation = move |evt: MouseEvent| {
+        evt.stop_propagation();
     };
 
     let close_modal = move |evt: MouseEvent| {
-        evt.cancel_bubble();
+        evt.stop_propagation();
         cx.props.modal_open.set(false);
         set_disable_scroll(false);
     };
@@ -38,7 +38,7 @@ pub fn Modal<'a>(cx: Scope<'a, ModalProps<'a>>) -> Element<'a> {
 
                 div {
                     class: "gap-4 bg-white w-80 max-w-[80vw] h-[35rem] max-h-[80vh] rounded-lg border border-slate-300 p-4 flex flex-col overflow-y-auto relative",
-                    onclick: cancel_bubble,
+                    onclick: stop_propagation,
 
                     div {
                         class: "gap-4 flex flex-row",
