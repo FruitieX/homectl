@@ -11,9 +11,11 @@ use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Serialize,
 };
+use ts_rs::TS;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[ts(export)]
     /// unique identifier for the Device
     pub struct DeviceId(String);
 }
@@ -33,7 +35,8 @@ impl DeviceId {
 }
 
 /// simple on/off devices such as relays, lights
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub struct OnOffDevice {
     pub power: bool,
 }
@@ -42,12 +45,16 @@ pub struct OnOffDevice {
 pub enum DeviceColor {
     // TODO: use Lch, or Yxy?
     Hsv(Hsv),
+
     Cct(CorrelatedColorTemperature),
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub struct CorrelatedColorTemperature {
     cct: f32,
+
+    #[ts(skip)]
     device_range: Range<f32>,
 }
 
@@ -84,7 +91,8 @@ impl Default for CorrelatedColorTemperature {
 }
 
 /// lights with adjustable brightness and/or color
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub struct Light {
     pub power: bool,
 
@@ -92,6 +100,9 @@ pub struct Light {
     pub brightness: Option<f32>,
 
     /// Current color, if supported
+    #[ts(
+        type = "{ Hsv: { hue: number, saturation: number, value: number } } | { Cct: { cct: number } } | null"
+    )]
     pub color: Option<DeviceColor>,
 
     /// Transition time in milliseconds
@@ -115,7 +126,8 @@ impl Light {
 }
 
 /// lights with multiple individually adjustable light sources
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub struct MultiSourceLight {
     pub power: bool,
 
@@ -123,11 +135,13 @@ pub struct MultiSourceLight {
     pub brightness: Option<f32>,
 
     /// List of colors, one for each light in this MultiSourceLight
+    #[ts(type = "String")]
     pub lights: Vec<DeviceColor>,
 }
 
 /// button sensors, motion sensors
-#[derive(Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub enum SensorKind {
     OnOffSensor {
         value: bool,
@@ -141,7 +155,8 @@ pub enum SensorKind {
     Unknown,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub enum DeviceState {
     OnOffDevice(OnOffDevice),
     Light(Light),
@@ -323,10 +338,12 @@ impl DeviceState {
 }
 
 /// active scene that's controlling the device state, if any
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub struct DeviceSceneState {
     pub scene_id: SceneId,
 
+    #[ts(type = "String")]
     pub activation_time: DateTime<Utc>,
 }
 
@@ -348,7 +365,8 @@ pub struct DeviceRow {
     pub state: sqlx::types::Json<DeviceState>,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub struct Device {
     pub id: DeviceId,
     pub name: String,
@@ -398,7 +416,8 @@ impl Device {
     }
 }
 
-#[derive(Hash, Clone, Debug, PartialEq, Eq)]
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq)]
+#[ts(export)]
 pub struct DeviceKey {
     pub integration_id: IntegrationId,
     pub device_id: DeviceId,
@@ -461,5 +480,6 @@ impl<'de> Deserialize<'de> for DeviceKey {
     }
 }
 
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[ts(export)]
 pub struct DevicesState(pub HashMap<DeviceKey, Device>);

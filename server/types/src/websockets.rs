@@ -1,23 +1,27 @@
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::{
     device::DevicesState, event::Message, group::FlattenedGroupsConfig,
     scene::FlattenedScenesConfig,
 };
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(TS, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub enum WebSocketRequest {
     Message(Message),
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(TS, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct StateUpdate {
     pub devices: DevicesState,
     pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(TS, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub enum WebSocketResponse {
     State(StateUpdate),
 }

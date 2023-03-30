@@ -3,10 +3,12 @@ use crate::device::DeviceKey;
 use super::{device::DeviceId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::Infallible};
+use ts_rs::TS;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
     #[serde(transparent)]
+    #[ts(export)]
     pub struct GroupId(String);
 }
 
@@ -51,11 +53,15 @@ pub struct GroupConfig {
 
 pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[ts(export)]
 pub struct FlattenedGroupConfig {
     pub name: String,
+    #[ts(type = "string[]")]
     pub device_ids: Vec<DeviceKey>,
     pub hidden: Option<bool>,
 }
 
-pub type FlattenedGroupsConfig = HashMap<GroupId, FlattenedGroupConfig>;
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[ts(export)]
+pub struct FlattenedGroupsConfig(pub HashMap<GroupId, FlattenedGroupConfig>);

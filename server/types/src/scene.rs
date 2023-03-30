@@ -8,9 +8,11 @@ use super::{
 use palette::{rgb::Rgb, Hsv, Lch};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use ts_rs::TS;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[ts(export)]
     pub struct SceneId(String);
 }
 
@@ -36,7 +38,8 @@ pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
     })
 }
 
-#[derive(Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[ts(export)]
 pub struct SceneDeviceLink {
     pub integration_id: IntegrationId,
     pub device_id: Option<DeviceId>,
@@ -44,7 +47,8 @@ pub struct SceneDeviceLink {
     pub brightness: Option<f32>, // allow overriding brightness
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct SceneDescriptor {
     pub scene_id: SceneId,
 
@@ -55,23 +59,27 @@ pub struct SceneDescriptor {
     pub group_keys: Option<Vec<GroupId>>,
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<SceneDescriptor>,
     pub nowrap: Option<bool>,
 }
 
-#[derive(Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[ts(export)]
 pub struct SceneDeviceState {
     pub power: bool,
+    #[ts(type = "String")]
     pub color: Option<ColorConfig>,
     pub brightness: Option<f32>,
     pub cct: Option<CorrelatedColorTemperature>,
     pub transition_ms: Option<u64>,
 }
 
-#[derive(Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[serde(untagged)]
+#[ts(export)]
 pub enum SceneDeviceConfig {
     /// Link to another device, means the scene should read current state from
     /// another device
@@ -86,12 +94,18 @@ pub enum SceneDeviceConfig {
 }
 
 pub type SceneDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, SceneDeviceConfig>>;
-pub type SceneGroupsConfig = HashMap<GroupId, SceneDeviceConfig>;
+
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[ts(export)]
+pub struct SceneGroupsConfig (pub HashMap<GroupId, SceneDeviceConfig>);
 
 /// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
-pub type SceneDevicesSearchConfig = HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>;
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[ts(export)]
+pub struct SceneDevicesSearchConfig (pub HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>);
 
-#[derive(Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[ts(export)]
 pub struct SceneConfig {
     pub name: String,
     pub devices: Option<SceneDevicesSearchConfig>,
@@ -101,12 +115,18 @@ pub struct SceneConfig {
 
 pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
 
-pub type SceneDeviceStates = HashMap<DeviceKey, DeviceState>;
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[ts(export)]
+pub struct SceneDeviceStates(pub HashMap<DeviceKey, DeviceState>);
 
-#[derive(Clone, Deserialize, Debug, Serialize, PartialEq)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
+#[ts(export)]
 pub struct FlattenedSceneConfig {
     pub name: String,
     pub devices: SceneDeviceStates,
     pub hidden: Option<bool>,
 }
-pub type FlattenedScenesConfig = HashMap<SceneId, FlattenedSceneConfig>;
+
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[ts(export)]
+pub struct FlattenedScenesConfig(pub HashMap<SceneId, FlattenedSceneConfig>);

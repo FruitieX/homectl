@@ -3,9 +3,11 @@ extern crate config;
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::Infallible, str::FromStr};
+use ts_rs::TS;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[ts(export)]
     pub struct IntegrationId(String);
 }
 
@@ -29,11 +31,13 @@ pub struct IntegrationConfig {
 pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[ts(export)]
     pub struct IntegrationActionPayload(String);
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, Deserialize, Serialize)]
+#[ts(export)]
 pub struct IntegrationActionDescriptor {
     pub integration_id: IntegrationId,
     pub payload: IntegrationActionPayload,

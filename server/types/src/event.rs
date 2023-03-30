@@ -1,12 +1,14 @@
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use serde::{Deserialize, Serialize};
+use ts_rs::TS;
 
 use crate::scene::{SceneId, SceneConfig};
 
 use super::{action::Action, device::Device, device::DevicesState};
 
 #[allow(clippy::large_enum_variant)]
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, Deserialize, Serialize)]
+#[ts(export)]
 pub enum Message {
     /// An integration has gathered information about current device state
     /// through some means (usually polling). Note that state might not actually

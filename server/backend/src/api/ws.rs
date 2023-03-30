@@ -1,5 +1,6 @@
 use super::with_state;
 use crate::AppState;
+use anyhow::Context;
 use futures::SinkExt;
 use futures_util::{StreamExt, TryFutureExt};
 use homectl_types::websockets::WebSocketRequest;
@@ -67,11 +68,17 @@ async fn user_connected(ws: WebSocket, app_state: Arc<AppState>) {
             }
         };
 
-        let json = msg.to_str().ok();
-        let msg = json.and_then(|json| serde_json::from_str::<WebSocketRequest>(json).ok());
+        let json = msg.to_str();
 
-        if let Some(WebSocketRequest::Message(msg)) = msg {
-            app_state.sender.send(msg);
+        if let Ok(json) = json {
+            let msg = serde_json::from_str::<WebSocketRequest>(json);
+
+            match msg {
+                Ok(WebSocketRequest::Message(msg)) => {
+                    app_state.sender.send(msg);
+                }
+                Err(e) => eprintln!("Error while deserializing websocket message: {}", e),
+            }
         }
     }
 
