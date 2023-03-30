@@ -57,7 +57,11 @@ impl Scenes {
     ) -> Option<SceneDevicesConfig> {
         let scene = self.find_scene(&sd.scene_id)?;
 
-        let scene_devices_search_config = scene.devices.clone().unwrap_or_default();
+        let scene_devices_search_config = scene
+            .devices
+            .clone()
+            .map(|devices| devices.0)
+            .unwrap_or_default();
 
         // replace device names by device_ids in device_configs
         let mut scene_devices_config: SceneDevicesConfig = scene_devices_search_config
@@ -113,7 +117,7 @@ impl Scenes {
             })
             .collect();
 
-        let scene_groups = scene.groups.unwrap_or_default();
+        let scene_groups = scene.groups.map(|groups| groups.0).unwrap_or_default();
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
@@ -273,63 +277,69 @@ impl Scenes {
     pub fn get_flattened_scenes(&self, devices: &DevicesState) -> FlattenedScenesConfig {
         let scenes = self.get_scenes();
 
-        scenes
-            .into_iter()
-            .filter_map(|(scene_id, config)| {
-                let devices_config = self.find_scene_devices_config(
-                    devices,
-                    &SceneDescriptor {
-                        scene_id: scene_id.clone(),
-                        device_keys: None,
-                        group_keys: None,
-                    },
-                )?;
+        FlattenedScenesConfig(
+            scenes
+                .into_iter()
+                .filter_map(|(scene_id, config)| {
+                    let devices_config = self.find_scene_devices_config(
+                        devices,
+                        &SceneDescriptor {
+                            scene_id: scene_id.clone(),
+                            device_keys: None,
+                            group_keys: None,
+                        },
+                    )?;
 
-                let devices: SceneDeviceStates = devices_config
-                    .iter()
-                    .flat_map({
-                        let scene_id = scene_id.clone();
-
-                        move |(integration_id, device_configs)| {
-                            device_configs.iter().filter_map({
+                    let devices: SceneDeviceStates = SceneDeviceStates(
+                        devices_config
+                            .iter()
+                            .flat_map({
                                 let scene_id = scene_id.clone();
 
-                                move |(device_id, _)| {
-                                    let device_key =
-                                        DeviceKey::new(integration_id.clone(), device_id.clone());
+                                move |(integration_id, device_configs)| {
+                                    device_configs.iter().filter_map({
+                                        let scene_id = scene_id.clone();
 
-                                    let device = devices.0.get(&device_key)?;
-                                    let device = Device {
-                                        scene: Some(DeviceSceneState {
-                                            scene_id: scene_id.clone(),
-                                            activation_time: device
-                                                .scene
-                                                .clone()
-                                                .map(|s| s.activation_time)
-                                                .unwrap_or_else(Utc::now),
-                                        }),
-                                        ..device.clone()
-                                    };
+                                        move |(device_id, _)| {
+                                            let device_key = DeviceKey::new(
+                                                integration_id.clone(),
+                                                device_id.clone(),
+                                            );
 
-                                    let device_state =
-                                        self.find_scene_device_state(&device, devices, false)?;
+                                            let device = devices.0.get(&device_key)?;
+                                            let device = Device {
+                                                scene: Some(DeviceSceneState {
+                                                    scene_id: scene_id.clone(),
+                                                    activation_time: device
+                                                        .scene
+                                                        .clone()
+                                                        .map(|s| s.activation_time)
+                                                        .unwrap_or_else(Utc::now),
+                                                }),
+                                                ..device.clone()
+                                            };
 
-                                    Some((device_key, device_state))
+                                            let device_state = self
+                                                .find_scene_device_state(&device, devices, false)?;
+
+                                            Some((device_key, device_state))
+                                        }
+                                    })
                                 }
                             })
-                        }
-                    })
-                    .collect();
+                            .collect(),
+                    );
 
-                Some((
-                    scene_id,
-                    FlattenedSceneConfig {
-                        name: config.name,
-                        devices,
-                        hidden: config.hidden,
-                    },
-                ))
-            })
-            .collect()
+                    Some((
+                        scene_id,
+                        FlattenedSceneConfig {
+                            name: config.name,
+                            devices,
+                            hidden: config.hidden,
+                        },
+                    ))
+                })
+                .collect(),
+        )
     }
 }

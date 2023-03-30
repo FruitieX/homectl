@@ -127,6 +127,6 @@ pub struct FlattenedSceneConfig {
     pub hidden: Option<bool>,
 }
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Default)]
 #[ts(export)]
 pub struct FlattenedScenesConfig(pub HashMap<SceneId, FlattenedSceneConfig>);

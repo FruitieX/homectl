@@ -62,6 +62,6 @@ pub struct FlattenedGroupConfig {
     pub hidden: Option<bool>,
 }
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Default)]
 #[ts(export)]
 pub struct FlattenedGroupsConfig(pub HashMap<GroupId, FlattenedGroupConfig>);

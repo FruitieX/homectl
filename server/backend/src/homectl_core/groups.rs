@@ -16,23 +16,25 @@ impl Groups {
     }
 
     pub fn get_flattened_groups(&self, devices: &DevicesState) -> FlattenedGroupsConfig {
-        self.config
-            .iter()
-            .map(|(group_id, group)| {
-                (
-                    group_id.clone(),
-                    FlattenedGroupConfig {
-                        name: group.name.clone(),
-                        device_ids: self
-                            .find_group_devices(devices, group_id)
-                            .into_iter()
-                            .map(|device| device.get_device_key())
-                            .collect(),
-                        hidden: group.hidden,
-                    },
-                )
-            })
-            .collect()
+        FlattenedGroupsConfig(
+            self.config
+                .iter()
+                .map(|(group_id, group)| {
+                    (
+                        group_id.clone(),
+                        FlattenedGroupConfig {
+                            name: group.name.clone(),
+                            device_ids: self
+                                .find_group_devices(devices, group_id)
+                                .into_iter()
+                                .map(|device| device.get_device_key())
+                                .collect(),
+                            hidden: group.hidden,
+                        },
+                    )
+                })
+                .collect(),
+        )
     }
 
     /// Returns all GroupDeviceLinks that belong to given group
