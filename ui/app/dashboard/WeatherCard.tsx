@@ -32,9 +32,10 @@ type WeatherResponse = {
 
 const fetchCachedWeather = async (): Promise<WeatherResponse> => {
   const json = await cachedPromise('weatherResponseCache', 60, async () => {
-    const res = await fetch(
-      'https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=60.2117&lon=24.7785',
-    );
+    if (process.env.NEXT_PUBLIC_WEATHER_API_URL === undefined) {
+      throw new Error('NEXT_PUBLIC_WEATHER_API_URL is undefined');
+    }
+    const res = await fetch(process.env.NEXT_PUBLIC_WEATHER_API_URL);
     const json: WeatherResponse = await res.json();
     return json;
   });
