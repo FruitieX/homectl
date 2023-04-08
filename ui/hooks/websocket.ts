@@ -18,9 +18,12 @@ export const useProvideWebsocketState = () => {
     let ws: WebSocket | null = null;
 
     const connect = () => {
-      // const ws = new WebSocket('ws://localhost:3000/ws');
       console.log('Opening ws connection...');
-      ws = new WebSocket('ws://satsuma:45289/ws');
+      if (process.env.NEXT_PUBLIC_WS_ENDPOINT === undefined) {
+        throw new Error("NEXT_PUBLIC_WS_ENDPOINT isn't defined");
+      }
+
+      ws = new WebSocket(process.env.NEXT_PUBLIC_WS_ENDPOINT);
 
       ws.onmessage = function incoming(data) {
         const msg: WebSocketResponse = JSON.parse(data.data as string);

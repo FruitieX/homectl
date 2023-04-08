@@ -1,4 +1,4 @@
-import { Bot, CarIcon, LampCeiling } from 'lucide-react';
+import { Bot, Car, LampCeiling } from 'lucide-react';
 import { Button, Card } from 'react-daisyui';
 
 export const ControlsCard = () => {
@@ -25,7 +25,7 @@ export const ControlsCard = () => {
           color="ghost"
           className={carActive ? '' : 'text-zinc-700'}
           size="lg"
-          startIcon={<CarIcon size="3rem" />}
+          startIcon={<Car size="3rem" />}
         />
       </Card.Body>
     </Card>

@@ -3,4 +3,5 @@
 ## Running Locally
 
 1. Install dependencies: `npm install`
-1. Start the dev server: `npm start`
+2. Make sure `NEXT_PUBLIC_WS_ENDPOINT` in `.env` points to your homectl server
+3. Start the dev server: `npm start`
