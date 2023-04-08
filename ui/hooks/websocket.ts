@@ -32,7 +32,6 @@ export const useProvideWebsocketState = () => {
 
       ws.onclose = () => {
         reconnectTimeout.current = setTimeout(connect, 1000);
-        connect();
       };
 
       setWebsocket(ws);
