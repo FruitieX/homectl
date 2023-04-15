@@ -5,6 +5,9 @@ authors = ["Rasmus Lövegren <fruitiex@gmail.com>"]
 edition = "2021"
 default-run = "homectl-server"
 
+[[bin]]
+name = "homectl-server"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
