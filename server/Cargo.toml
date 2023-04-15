@@ -1,7 +1,3 @@
 [workspace]
-
-members = [
-  "backend",
-  "types",
-  "console",
-]
+members = ["homectl-server", "types"]
+default-members = ["homectl-server"]

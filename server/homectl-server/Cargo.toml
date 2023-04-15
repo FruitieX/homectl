@@ -1,9 +1,9 @@
 [package]
-name = "homectl"
+name = "homectl-server"
 version = "0.1.0"
 authors = ["Rasmus Lövegren <fruitiex@gmail.com>"]
 edition = "2021"
-default-run = "homectl"
+default-run = "homectl-server"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -34,7 +34,7 @@ tokio-stream = "0.1.8"
 rust-async-tuyapi = { git = "https://github.com/FruitieX/rust-async-tuyapi", rev = "76718a40abd86c939d5f0fdb74229a405a8bf4e7" }
 env_logger = "0.9.0"
 itertools = "0.10.3"
-sqlx = { version = "0.5", features = [
+sqlx = { version = "0.6", features = [
 	"runtime-tokio-rustls",
 	"postgres",
 	"json",

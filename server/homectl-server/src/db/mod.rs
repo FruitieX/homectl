@@ -16,7 +16,7 @@ pub async fn init_db() -> Option<()> {
 
     let database_url = database_url?;
 
-    let opt = PoolOptions::new().connect_timeout(Duration::from_secs(3));
+    let opt = PoolOptions::new().acquire_timeout(Duration::from_secs(3));
 
     println!("Connecting to PostgreSQL...");
     let db = opt

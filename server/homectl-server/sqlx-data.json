@@ -1,0 +1,205 @@
+{
+  "db": "PostgreSQL",
+  "22f2763d4c670dbe6bd7802052212f9d14594ead0465da98a73e2f52d9fe69a0": {
+    "describe": {
+      "columns": [
+        {
+          "name": "integration_id",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "device_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "scene_id",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "state: Json<DeviceState>",
+          "ordinal": 4,
+          "type_info": "Jsonb"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text",
+          "Text",
+          "Text",
+          "Jsonb"
+        ]
+      }
+    },
+    "query": "\n            insert into devices (integration_id, device_id, name, scene_id, state)\n            values ($1, $2, $3, $4, $5)\n\n            on conflict (integration_id, device_id)\n            do update set\n                name = excluded.name,\n                scene_id = excluded.scene_id,\n                state = excluded.state\n\n            returning\n                integration_id,\n                device_id,\n                name,\n                scene_id,\n                state as \"state: Json<DeviceState>\"\n        "
+  },
+  "28469b7e62d38c384849c27a91eb7c9c758afb509a4feb5bac320bcf1c394b2e": {
+    "describe": {
+      "columns": [
+        {
+          "name": "integration_id",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "last_run",
+          "ordinal": 1,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "\n            insert into integration_neato (integration_id, last_run)\n            values ($1, $2)\n\n            on conflict (integration_id)\n            do update set\n                last_run = excluded.last_run\n\n            returning\n                integration_id,\n                last_run\n        "
+  },
+  "5d650cf3da83c123f659cf684dcdef7aeed3056b9877963b51ac5f11bcda861f": {
+    "describe": {
+      "columns": [
+        {
+          "name": "integration_id",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "device_id",
+          "ordinal": 1,
+          "type_info": "Text"
+        },
+        {
+          "name": "name",
+          "ordinal": 2,
+          "type_info": "Text"
+        },
+        {
+          "name": "scene_id",
+          "ordinal": 3,
+          "type_info": "Text"
+        },
+        {
+          "name": "state: Json<DeviceState>",
+          "ordinal": 4,
+          "type_info": "Jsonb"
+        }
+      ],
+      "nullable": [
+        false,
+        false,
+        false,
+        true,
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "\n            select\n                integration_id,\n                device_id,\n                name,\n                scene_id,\n                state as \"state: Json<DeviceState>\"\n            from devices\n            where integration_id = $1\n              and device_id = $2\n        "
+  },
+  "6904098a9bcbcd52c55db6af8fa62f02201ddd373ab20480311484205ba15220": {
+    "describe": {
+      "columns": [
+        {
+          "name": "last_run",
+          "ordinal": 0,
+          "type_info": "Text"
+        }
+      ],
+      "nullable": [
+        false
+      ],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n            select last_run\n            from integration_neato\n            where integration_id = $1\n        "
+  },
+  "84f33c5baf0dc08016dfbd51b80fcc471ab44768996d85f986cc8ef0f1b69543": {
+    "describe": {
+      "columns": [
+        {
+          "name": "scene_id",
+          "ordinal": 0,
+          "type_info": "Text"
+        },
+        {
+          "name": "config: Json<SceneConfig>",
+          "ordinal": 1,
+          "type_info": "Jsonb"
+        }
+      ],
+      "nullable": [
+        false,
+        false
+      ],
+      "parameters": {
+        "Left": []
+      }
+    },
+    "query": "\n            select\n                scene_id,\n                config as \"config: Json<SceneConfig>\"\n\n            from scenes\n        "
+  },
+  "878b76d50a28cbd6ce1cb6fecc837a14cc946681e431ff4e4d41ab2c77cede0e": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Jsonb"
+        ]
+      }
+    },
+    "query": "\n            insert into scenes (scene_id, config)\n            values ($1, $2)\n\n            on conflict (scene_id)\n            do update set\n                config = excluded.config\n        "
+  },
+  "d046a95e04e81bd564288cb354674fbad7017dcdcc8c882b85358cd43e85d0b9": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Text",
+          "Text"
+        ]
+      }
+    },
+    "query": "\n            update scenes\n            set\n                scene_id = $2,\n                config = config::jsonb || format('{\"name\":\"%s\"}', $2::text)::jsonb\n            where scene_id = $1;\n        "
+  },
+  "d5852ad31712142776bc6c6056c64341fd345eb9559bad55f71bb1523910da35": {
+    "describe": {
+      "columns": [],
+      "nullable": [],
+      "parameters": {
+        "Left": [
+          "Text"
+        ]
+      }
+    },
+    "query": "\n            delete from scenes\n            where scene_id = $1\n        "
+  }
+}

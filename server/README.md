@@ -15,9 +15,8 @@ trying out other alternatives for now.
 ### Quick start
 
 - Install the Rust toolchain using [`rustup`](https://rustup.rs/)
-- Run `./start-backend.sh`
-- In a separate terminal, run `./start-frontend.sh`
-- Navigate to `http://localhost:8080`
+- Clone this repository
+- Run `cargo run`
 
 You should now have a demo/dummy homectl environment running.
 
@@ -93,11 +92,6 @@ and also other similar solutions to homectl:
   disabled.
 
   For example: `DATABASE_URL=postgres://user:password@localhost/homectl`
-
-- `WS_ENDPOINT`: Read at compile time to decide what WebSocket endpoint the
-  frontend attempts connecting to.
-
-  Defaults to `ws://localhost:8080/ws`.
 
 ### Database setup (optional)
 
