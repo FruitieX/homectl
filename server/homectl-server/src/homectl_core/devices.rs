@@ -9,7 +9,6 @@ use homectl_types::{
     integration::IntegrationId,
     scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
 };
-use itertools::Itertools;
 use palette::Hsv;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -27,9 +26,9 @@ fn cmp_light_color(
     b: &Option<DeviceColor>,
     b_bri: &Option<f32>,
 ) -> bool {
-    let hue_delta = 1.0;
-    let sat_delta = 0.03;
-    let val_delta = 0.03;
+    let hue_delta = 2.0;
+    let sat_delta = 0.05;
+    let val_delta = 0.05;
     let cct_delta = 10.0;
 
     match (a, b) {
