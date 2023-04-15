@@ -108,6 +108,32 @@ and also other similar solutions to homectl:
 You can refer to the [sample config](/Settings.toml.example) for an
 example on how to put these concepts together.
 
+### MQTT
+
+```
+# Homectl-server has very rudimentary support for MQTT at the moment.
+# Only a certain message format (both incoming and outgoing messages) is
+# supported for now:
+#
+# pub struct MqttDevice {
+#     pub id: String,
+#     pub name: String,
+#     pub power: Option<bool>,
+#     pub brightness: Option<f32>,
+#     pub cct: Option<f32>,
+#     pub color: Option<Hsv>,
+#     pub transition_ms: Option<f32>,
+#     pub sensor_value: Option<String>,
+# }
+
+[integrations.example]
+plugin = "mqtt"
+host = "mqtt.example.org
+port = 1883
+topic = "home/lights/example/{id}"
+topic_set = "home/lights/example/{id}/set"
+```
+
 ### Tuya
 
 ```

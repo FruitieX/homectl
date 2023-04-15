@@ -4,14 +4,14 @@ use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
     custom_integration::CustomIntegration,
-    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    device::Device,
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
 use palette::Hsv;
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, time::Duration};
+use std::time::Duration;
 use tokio::task;
 
 use crate::integrations::mqtt::utils::mqtt_to_homectl;
@@ -22,8 +22,8 @@ use self::utils::homectl_to_mqtt;
 pub struct MqttConfig {
     host: String,
     port: u16,
-    command_topic: String,
-    state_topic: String,
+    topic_set: String,
+    topic: String,
 }
 
 pub struct Mqtt {
@@ -73,7 +73,7 @@ impl CustomIntegration for Mqtt {
         options.set_keep_alive(Duration::from_secs(5));
         let (client, mut eventloop) = AsyncClient::new(options, 10);
         client
-            .subscribe(self.config.state_topic.clone(), QoS::AtMostOnce)
+            .subscribe(self.config.topic.replace("{id}", "+"), QoS::AtMostOnce)
             .await?;
 
         self.client = Some(client);
@@ -113,8 +113,10 @@ impl CustomIntegration for Mqtt {
             .client
             .as_ref()
             .expect("Expected self.client to be set in start phase");
-        // TODO: use topic from config
-        let topic = format!("home/lights/{}/{}/set", self.id, device.id);
+        let topic = self
+            .config
+            .topic_set
+            .replace("{id}", &device.id.to_string());
         let mqtt_device = homectl_to_mqtt(device.clone())?;
         let json = serde_json::to_string(&mqtt_device)?;
         client.publish(topic, QoS::AtLeastOnce, true, json).await?;

@@ -140,7 +140,7 @@ pub struct MultiSourceLight {
 }
 
 /// button sensors, motion sensors
-#[derive(TS, Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub enum SensorKind {
     OnOffSensor {
@@ -151,6 +151,9 @@ pub enum SensorKind {
         up: bool,
         down: bool,
         off: bool,
+    },
+    StringValue {
+        value: String
     },
     Unknown,
 }

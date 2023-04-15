@@ -1,6 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use homectl_types::{
-    device::{CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light},
+    device::{
+        CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light, OnOffDevice,
+        SensorKind,
+    },
     integration::IntegrationId,
 };
 
@@ -9,21 +12,30 @@ use super::MqttDevice;
 pub fn mqtt_to_homectl(mqtt_device: MqttDevice, integration_id: IntegrationId) -> Result<Device> {
     let color = if let Some(color) = mqtt_device.color {
         Some(DeviceColor::Hsv(color))
-    } else if let Some(cct) = mqtt_device.cct {
-        Some(DeviceColor::Cct(CorrelatedColorTemperature::new(
-            cct,
-            2700.0..6500.0,
-        )))
     } else {
-        None
+        mqtt_device
+            .cct
+            .map(|cct| DeviceColor::Cct(CorrelatedColorTemperature::new(cct, 2700.0..6500.0)))
     };
 
-    let state = DeviceState::Light(Light {
-        power: mqtt_device.power.unwrap_or_default(),
-        brightness: mqtt_device.brightness,
-        color,
-        transition_ms: None,
-    });
+    let state = if let Some(value) = mqtt_device.sensor_value {
+        if let Ok(value) = value.parse::<bool>() {
+            DeviceState::Sensor(SensorKind::OnOffSensor { value })
+        } else {
+            DeviceState::Sensor(SensorKind::StringValue { value })
+        }
+    } else if mqtt_device.brightness.is_some() {
+        DeviceState::Light(Light {
+            power: mqtt_device.power.unwrap_or_default(),
+            brightness: mqtt_device.brightness,
+            color,
+            transition_ms: None,
+        })
+    } else {
+        DeviceState::OnOffDevice(OnOffDevice {
+            power: mqtt_device.power.unwrap_or_default(),
+        })
+    };
 
     Ok(Device {
         id: DeviceId::new(&mqtt_device.id),

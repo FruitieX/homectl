@@ -115,8 +115,8 @@ fn is_routine_triggered(
 }
 
 fn get_device_sensor_kind(device: &Device) -> Option<SensorKind> {
-    match device.state {
-        DeviceState::Sensor(sensor_kind) => Some(sensor_kind),
+    match &device.state {
+        DeviceState::Sensor(sensor_kind) => Some(sensor_kind.clone()),
         _ => None,
     }
 }
