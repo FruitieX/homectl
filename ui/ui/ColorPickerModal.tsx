@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Modal, Range, Tabs } from 'react-daisyui';
+import { Button, Input, Modal, Range, Tabs } from 'react-daisyui';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
@@ -19,6 +19,7 @@ import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
 import { useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
+import { Clipboard } from 'lucide-react';
 
 type Props = {
   visible: boolean;
@@ -59,9 +60,9 @@ const ColorWheelTab = ({
   const hsvaWithMaxValue = useMemo(() => {
     const result = { ...hsva };
     // Limit range to [50, 100]
-    result.v = (100 + hsva.v) / 2;
+    result.v = (100 + bri * 100) / 2;
     return result;
-  }, [hsva]);
+  }, [bri, hsva]);
 
   useEffect(() => {
     setHsva(colorToHsva(color));
@@ -79,7 +80,7 @@ const ColorWheelTab = ({
       const color = Color({
         h: hsv.hue(),
         s: hsv.saturationv(),
-        v: latestColor.current.value(),
+        v: 100,
       });
       latestColor.current = color;
       setHsva(colorToHsva(color));
@@ -218,54 +219,221 @@ const SwatchesTab = ({
   );
 };
 
-const Component = ({
-  close,
-  color,
+async function clipboardToImg(): Promise<HTMLImageElement | undefined> {
+  const items = await navigator.clipboard.read().catch((err) => {
+    console.error(err);
+  });
+
+  if (!items) return;
+
+  for (const item of items) {
+    for (const type of item.types) {
+      if (type.startsWith('image/')) {
+        item.getType(type).then((imageBlob) => {
+          const img = new Image();
+          img.src = window.URL.createObjectURL(imageBlob);
+          return img;
+        });
+      }
+    }
+  }
+}
+
+const SlidersTab = ({
   brightness,
+  color,
   onChange,
   onChangeComplete,
-  visible,
-  title,
-}: Props) => {
-  const [tab, setTab] = useState(0);
-  return (
-    <Modal responsive open={visible} onClickBackdrop={close}>
-      <Button
-        size="sm"
-        shape="circle"
-        className="absolute right-2 top-2"
-        onClick={close}
-      >
-        ✕
-      </Button>
-      <Modal.Header className="font-bold">{title}</Modal.Header>
+}: TabProps) => {
+  const [hue, setHue] = useState(color.hue());
+  const [sat, setSat] = useState(color.saturationv());
+  const [bri, setBri] = useState(brightness);
 
-      <Modal.Body>
-        {/* <CirclePicker color={hsva} /> */}
-        <Tabs value={tab} onChange={setTab} className="pb-6">
-          <Tabs.Tab value={0}>Wheel</Tabs.Tab>
-          <Tabs.Tab value={1}>Swatches</Tabs.Tab>
-        </Tabs>
-        <div className="flex h-96 flex-col justify-center">
-          {tab === 0 && (
-            <ColorWheelTab
-              color={color}
-              brightness={brightness}
-              onChange={onChange}
-              onChangeComplete={onChangeComplete}
-            />
-          )}
-          {tab === 1 && (
-            <SwatchesTab
-              color={color}
-              brightness={brightness}
-              onChange={onChange}
-              onChangeComplete={onChangeComplete}
-            />
-          )}
-        </div>
-      </Modal.Body>
-    </Modal>
+  const [inputFocused, setInputFocused] = useState(false);
+
+  useEffect(() => {
+    if (inputFocused) return;
+
+    setHue(color.hue());
+    setSat(color.saturationv());
+    setBri(brightness);
+  }, [color, brightness, inputFocused]);
+
+  const handleChangeComplete = useCallback(() => {
+    const color = Color({
+      h: hue,
+      s: sat,
+      v: 100,
+    });
+
+    onChangeComplete && onChangeComplete(color, bri);
+  }, [bri, hue, onChangeComplete, sat]);
+
+  const handleHueChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const hue = Number(event.currentTarget.value);
+      setHue(hue);
+
+      if (inputFocused) return;
+
+      const color = Color({
+        h: hue,
+        s: sat,
+        v: 100,
+      });
+
+      onChange && onChange(color, bri);
+    },
+    [bri, inputFocused, onChange, sat],
+  );
+
+  const handleSatChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const sat = Number(event.currentTarget.value);
+      setSat(sat);
+
+      if (inputFocused) return;
+
+      const color = Color({
+        h: hue,
+        s: sat,
+        v: 100,
+      });
+
+      onChange && onChange(color, bri);
+    },
+    [bri, hue, inputFocused, onChange],
+  );
+
+  const handleBriChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const bri = Number(event.currentTarget.value) / 100;
+      setBri(bri);
+
+      if (inputFocused) return;
+
+      const color = Color({
+        h: hue,
+        s: sat,
+        v: 100,
+      });
+
+      onChange && onChange(color, bri);
+    },
+    [hue, inputFocused, onChange, sat],
+  );
+
+  const focusInput = useCallback(() => {
+    setInputFocused(true);
+  }, []);
+
+  const blurInput = useCallback(() => {
+    setInputFocused(false);
+    handleChangeComplete();
+  }, [handleChangeComplete]);
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      if (event.key === 'Enter') {
+        handleChangeComplete();
+      }
+    },
+    [handleChangeComplete],
+  );
+
+  return (
+    <>
+      Hue:
+      <div className="flex items-center">
+        <Range
+          size="lg"
+          onChange={handleHueChange}
+          onTouchEnd={handleChangeComplete}
+          onMouseUp={handleChangeComplete}
+          min={0}
+          max={360}
+          value={hue}
+        />
+        <Input
+          className="ml-3 w-24"
+          value={Math.round(hue)}
+          onChange={handleHueChange}
+          onKeyDown={handleKeyDown}
+          onFocus={focusInput}
+          onBlur={blurInput}
+        />
+      </div>
+      Saturation:
+      <div className="flex items-center">
+        <Range
+          size="lg"
+          onChange={handleSatChange}
+          onTouchEnd={handleChangeComplete}
+          onMouseUp={handleChangeComplete}
+          min={0}
+          max={100}
+          value={sat}
+        />
+        <Input
+          className="ml-3 w-24"
+          value={Math.round(sat)}
+          onChange={handleSatChange}
+          onKeyDown={handleKeyDown}
+          onFocus={focusInput}
+          onBlur={blurInput}
+        />
+      </div>
+      Brightness:
+      <div className="flex items-center">
+        <Range
+          size="lg"
+          onChange={handleBriChange}
+          onTouchEnd={handleChangeComplete}
+          onMouseUp={handleChangeComplete}
+          min={0}
+          max={100}
+          value={bri * 100}
+        />
+        <Input
+          className="ml-3 w-24"
+          value={Math.round(bri * 100)}
+          onChange={handleBriChange}
+          onKeyDown={handleKeyDown}
+          onFocus={focusInput}
+          onBlur={blurInput}
+        />
+      </div>
+    </>
+  );
+};
+
+const ImageTab = ({
+  brightness,
+  color,
+  onChange,
+  onChangeComplete,
+}: TabProps) => {
+  const pastedImageContainer = useRef<HTMLDivElement | null>(null);
+
+  const handlePasteClick = useCallback(async () => {
+    const img = await clipboardToImg();
+
+    if (!img) {
+      return;
+    }
+
+    pastedImageContainer.current?.replaceChildren(img);
+    console.log(img);
+  }, []);
+
+  return (
+    <>
+      <Button startIcon={<Clipboard />} onClick={handlePasteClick}>
+        Paste from clipboard
+      </Button>
+
+      <div ref={pastedImageContainer} />
+    </>
   );
 };
 
@@ -315,15 +483,63 @@ export const ColorPickerModal = () => {
     setDeviceModalOpen(false);
   }, [setDeviceModalOpen]);
 
+  const [tab, setTab] = useState(0);
   return (
-    <Component
-      visible={deviceModalOpen}
-      close={closeDeviceModal}
-      title={deviceModalTitle}
-      color={deviceModalColor ?? black}
-      brightness={deviceModalBrightness ?? 1}
-      onChange={throttledSetDeviceColor}
-      onChangeComplete={throttledSetDeviceColor}
-    />
+    <Modal responsive open={deviceModalOpen} onClickBackdrop={closeDeviceModal}>
+      <Button
+        size="sm"
+        shape="circle"
+        className="absolute right-2 top-2"
+        onClick={closeDeviceModal}
+      >
+        ✕
+      </Button>
+      <Modal.Header className="font-bold">{deviceModalTitle}</Modal.Header>
+
+      <Modal.Body>
+        {/* <CirclePicker color={hsva} /> */}
+        <Tabs value={tab} onChange={setTab} className="pb-6">
+          <Tabs.Tab value={0}>Wheel</Tabs.Tab>
+          <Tabs.Tab value={1}>Swatches</Tabs.Tab>
+          <Tabs.Tab value={2}>Sliders</Tabs.Tab>
+          <Tabs.Tab value={3}>Image</Tabs.Tab>
+        </Tabs>
+        <div className="flex h-96 flex-col justify-center">
+          {tab === 0 && (
+            <ColorWheelTab
+              color={deviceModalColor ?? black}
+              brightness={deviceModalBrightness ?? 1}
+              onChange={throttledSetDeviceColor}
+              onChangeComplete={throttledSetDeviceColor}
+            />
+          )}
+          {tab === 1 && (
+            <SwatchesTab
+              color={deviceModalColor ?? black}
+              brightness={deviceModalBrightness ?? 1}
+              onChange={throttledSetDeviceColor}
+              onChangeComplete={throttledSetDeviceColor}
+            />
+          )}
+          {tab === 2 && (
+            <SlidersTab
+              color={deviceModalColor ?? black}
+              brightness={deviceModalBrightness ?? 1}
+              onChange={throttledSetDeviceColor}
+              onChangeComplete={throttledSetDeviceColor}
+            />
+          )}
+
+          {tab === 3 && (
+            <ImageTab
+              color={deviceModalColor ?? black}
+              brightness={deviceModalBrightness ?? 1}
+              onChange={throttledSetDeviceColor}
+              onChangeComplete={throttledSetDeviceColor}
+            />
+          )}
+        </div>
+      </Modal.Body>
+    </Modal>
   );
 };
