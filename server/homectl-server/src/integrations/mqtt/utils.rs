@@ -1,8 +1,7 @@
 use anyhow::Result;
 use homectl_types::{
     device::{
-        CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light, OnOffDevice,
-        SensorKind,
+        CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light, SensorKind,
     },
     integration::IntegrationId,
 };
@@ -24,16 +23,12 @@ pub fn mqtt_to_homectl(mqtt_device: MqttDevice, integration_id: IntegrationId) -
         } else {
             DeviceState::Sensor(SensorKind::StringValue { value })
         }
-    } else if mqtt_device.brightness.is_some() {
+    } else {
         DeviceState::Light(Light {
             power: mqtt_device.power.unwrap_or_default(),
             brightness: mqtt_device.brightness,
             color,
-            transition_ms: None,
-        })
-    } else {
-        DeviceState::OnOffDevice(OnOffDevice {
-            power: mqtt_device.power.unwrap_or_default(),
+            transition_ms: mqtt_device.transition_ms.map(|ms| ms as u64),
         })
     };
 
