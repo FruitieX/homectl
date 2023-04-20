@@ -71,7 +71,7 @@ pub fn homectl_to_mqtt(device: Device) -> Result<MqttDevice> {
                 brightness: state.brightness,
                 cct,
                 color,
-                transition_ms: None,
+                transition_ms: state.transition_ms.map(|ms| ms as f32),
                 sensor_value: None,
             }
         }
