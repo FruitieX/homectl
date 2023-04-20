@@ -22,7 +22,6 @@ jobs:
       with:
         # list of Docker images to use as base name for tags
         images: |
-          FruitieX/homectl-server
           ghcr.io/FruitieX/homectl-server
         # generate Docker tags based on the following events/attributes
         tags: |
