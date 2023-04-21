@@ -4,6 +4,10 @@ on:
   push:
     branches: [ "master" ]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -14,7 +18,7 @@ jobs:
       name: Login to GitHub Container Registry
       uses: docker/login-action@v2
       with:
-        registry: ghcr.io
+        registry: ${{ env.REGISTRY }}
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     - 
@@ -26,7 +30,7 @@ jobs:
       uses: docker/metadata-action@v4
       with:
         images: |
-          ghcr.io/FruitieX/homectl-server
+          ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         tags: |
           type=schedule
           type=ref,event=branch
