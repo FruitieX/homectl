@@ -13,4 +13,7 @@
     /* Disables pull-to-refresh and overscroll effects. */
     overscroll-behavior: none;
   }
+  html, body {
+    height: 100%;
+  }
 }

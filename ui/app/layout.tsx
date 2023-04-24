@@ -26,7 +26,7 @@ export default function RootLayout({
         <link rel="icon" type="image/png" href="/homectl-icon.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="flex h-screen flex-col overflow-hidden">
+      <body className="flex flex-col overflow-hidden">
         <ColorPickerModal />
         <SaveSceneModal />
         <SceneModal />
