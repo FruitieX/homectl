@@ -155,6 +155,14 @@ pub enum SensorKind {
     StringValue {
         value: String
     },
+    Temperature {
+        value: f64
+    },
+    LightLevel {
+        lightlevel: f64,
+        dark: bool,
+        daylight: bool,
+    },
     Unknown,
 }
 
