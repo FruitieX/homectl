@@ -7,20 +7,20 @@
 		{
 			"type": "lldb",
 			"request": "launch",
-			"name": "Debug executable 'homectl'",
+			"name": "Debug executable 'homectl-server'",
 			"cargo": {
 				"args": [
 					"build",
-					"--bin=homectl",
-					"--package=homectl"
+					"--bin=homectl-server",
+					"--package=homectl-server"
 				],
 				"filter": {
-					"name": "homectl",
+					"name": "homectl-server",
 					"kind": "bin"
 				}
 			},
 			"args": [],
-			"cwd": "${workspaceFolder}/backend"
+			"cwd": "${workspaceFolder}"
 		},
 		{
 			"type": "lldb",
