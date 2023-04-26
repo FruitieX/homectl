@@ -60,14 +60,21 @@ export const Navbar = () => {
   const [isFullscreen, setIsFullscreen] = useIsFullscreen();
 
   const toggleFullscreen = useCallback(() => {
-    if (document.fullscreenElement !== null) {
+    if (document.fullscreenElement === undefined) {
+      // iOS Safari fix
+      if (isFullscreen) {
+        setIsFullscreen(false);
+      } else {
+        setIsFullscreen(true);
+      }
+    } else if (document.fullscreenElement !== null) {
       document.exitFullscreen();
       setIsFullscreen(false);
     } else {
       document.documentElement.requestFullscreen();
       setIsFullscreen(true);
     }
-  }, [setIsFullscreen]);
+  }, [isFullscreen, setIsFullscreen]);
 
   return (
     <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur">
