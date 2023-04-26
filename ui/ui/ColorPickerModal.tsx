@@ -46,6 +46,7 @@ type TabProps = {
   brightness: number;
   onChange?: (color: Color, brightness: number) => void;
   onChangeComplete?: (color: Color, brightness: number) => void;
+  open: boolean;
 };
 
 const ColorWheelTab = ({
@@ -53,6 +54,7 @@ const ColorWheelTab = ({
   color,
   onChange,
   onChangeComplete,
+  open
 }: TabProps) => {
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
@@ -67,7 +69,7 @@ const ColorWheelTab = ({
   useEffect(() => {
     setHsva(colorToHsva(color));
     setBri(brightness);
-  }, [color, brightness]);
+  }, [open]);
 
   const latestColor = useRef<Color>(color);
   useEffect(() => {
@@ -134,6 +136,7 @@ const SwatchesTab = ({
   color,
   onChange,
   onChangeComplete,
+  open
 }: TabProps) => {
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
@@ -141,7 +144,7 @@ const SwatchesTab = ({
   useEffect(() => {
     setHsva(colorToHsva(color));
     setBri(brightness);
-  }, [color, brightness]);
+  }, [open]);
 
   const latestColor = useRef<Color>(color);
   useEffect(() => {
@@ -244,6 +247,7 @@ const SlidersTab = ({
   color,
   onChange,
   onChangeComplete,
+  open,
 }: TabProps) => {
   const [hue, setHue] = useState(color.hue());
   const [sat, setSat] = useState(color.saturationv());
@@ -257,7 +261,7 @@ const SlidersTab = ({
     setHue(color.hue());
     setSat(color.saturationv());
     setBri(brightness);
-  }, [color, brightness, inputFocused]);
+  }, [open]);
 
   const handleChangeComplete = useCallback(() => {
     const color = Color({
@@ -511,6 +515,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
+              open={deviceModalOpen} 
             />
           )}
           {tab === 1 && (
@@ -519,6 +524,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
+              open={deviceModalOpen} 
             />
           )}
           {tab === 2 && (
@@ -527,6 +533,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
+              open={deviceModalOpen} 
             />
           )}
 
@@ -536,6 +543,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
+              open={deviceModalOpen} 
             />
           )}
         </div>
