@@ -118,10 +118,11 @@ pub fn find_bridge_sensor(
 fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
     match bridge_sensor {
         BridgeSensor::Daylight { name } => name,
-        BridgeSensor::ZLLLightLevel { name } => name,
+        BridgeSensor::ZLLLightLevel { name, .. } => name,
         BridgeSensor::ZLLPresence { name, .. } => name,
         BridgeSensor::ZLLSwitch { name, .. } => name,
-        BridgeSensor::ZLLTemperature { name } => name,
+        BridgeSensor::ZLLTemperature { name, .. } => name,
+        BridgeSensor::ZLLLightLevel { name, .. } => name,
         BridgeSensor::CLIPPresence { name } => name,
         BridgeSensor::CLIPGenericStatus { name } => name,
         BridgeSensor::CLIPGenericFlag { name } => name,
@@ -175,6 +176,36 @@ pub fn bridge_sensor_to_device(
                     DimmerSwitchButtonId::Off,
                     DimmerSwitchButtonPressType::Short,
                 ),
+            });
+
+            Device {
+                id,
+                name,
+                integration_id,
+                scene,
+                state: kind,
+            }
+        }
+
+        BridgeSensor::ZLLTemperature { state, .. } => {
+            let kind = DeviceState::Sensor(SensorKind::Temperature {
+                value: state.temperature.unwrap_or_default(),
+            });
+
+            Device {
+                id,
+                name,
+                integration_id,
+                scene,
+                state: kind,
+            }
+        }
+
+        BridgeSensor::ZLLLightLevel { state, .. } => {
+            let kind = DeviceState::Sensor(SensorKind::LightLevel {
+                lightlevel: state.lightlevel.unwrap_or_default(),
+                dark: state.dark.unwrap_or_default(),
+                daylight: state.daylight.unwrap_or_default(),
             });
 
             Device {
@@ -243,6 +274,9 @@ pub fn extrapolate_sensor_updates(
         // ZLLPresence sensor updates are infrequent enough that we should not
         // need to worry about missing out on updates
         (_, BridgeSensor::ZLLPresence { .. }) => vec![next_bridge_sensor],
+        // Same with ZLLTemperature and ZLLLightLevel
+        (_, BridgeSensor::ZLLTemperature { .. }) => vec![next_bridge_sensor],
+        (_, BridgeSensor::ZLLLightLevel { .. }) => vec![next_bridge_sensor],
 
         // ZLLSwitches can be pressed quickly, and a naive polling implementation would
         // miss out on a lot of button state transition events.

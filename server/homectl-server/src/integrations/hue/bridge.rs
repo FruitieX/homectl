@@ -42,6 +42,20 @@ pub struct ZLLPresenceState {
     pub lastupdated: String,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ZLLTemperatureState {
+    pub temperature: Option<f64>,
+    pub lastupdated: String,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq)]
+pub struct ZLLLightLevelState {
+    pub lightlevel: Option<f64>,
+    pub dark: Option<bool>,
+    pub daylight: Option<bool>,
+    pub lastupdated: String,
+}
+
 pub type BridgeButtonEvent = u32;
 
 #[derive(Clone, Debug, Deserialize, PartialEq)]
@@ -59,6 +73,7 @@ pub enum BridgeSensor {
     },
     ZLLLightLevel {
         name: String,
+        state: ZLLLightLevelState,
     },
     ZLLPresence {
         name: String,
@@ -70,6 +85,7 @@ pub enum BridgeSensor {
     },
     ZLLTemperature {
         name: String,
+        state: ZLLTemperatureState,
     },
     CLIPPresence {
         name: String,
