@@ -1065,6 +1065,7 @@ dependencies = [
  "hmac 0.10.1",
  "homectl_types",
  "itertools",
+ "json_value_merge",
  "once_cell",
  "palette",
  "rand 0.7.3",
@@ -1290,6 +1291,15 @@ name = "json"
 version = "0.12.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "078e285eafdfb6c4b434e0d31e8cfcb5115b651496faca5749b88fafd4f23bfd"
+
+[[package]]
+name = "json_value_merge"
+version = "1.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc92837e7e541ab4a529c8f145bf9bd00718f6e2823705403521ead6204a0e5e"
+dependencies = [
+ "serde_json",
+]
 
 [[package]]
 name = "kv-log-macro"

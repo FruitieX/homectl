@@ -3,22 +3,20 @@ mod utils;
 use anyhow::{Context, Result};
 use async_trait::async_trait;
 use homectl_types::{
-    custom_integration::CustomIntegration, device::Device,
+    custom_integration::CustomIntegration,
+    device::Device,
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use palette::Hsv;
 use rumqttc::{AsyncClient, MqttOptions, QoS};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::task;
-use std::sync::Arc;
-
 
 use crate::integrations::mqtt::utils::mqtt_to_homectl;
 
 use self::utils::homectl_to_mqtt;
-
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct MqttConfig {
@@ -33,8 +31,8 @@ pub struct MqttConfig {
     power_field: Option<String>,
     brightness_field: Option<String>,
     sensor_value_field: Option<String>,
+    transition_ms_field: Option<String>,
 }
-
 
 pub struct Mqtt {
     id: IntegrationId,
@@ -72,14 +70,13 @@ impl CustomIntegration for Mqtt {
         let (client, mut eventloop) = AsyncClient::new(options, 10);
         client
             .subscribe(self.config.topic.replace("{id}", "+"), QoS::AtMostOnce)
-        .await?;
-        
+            .await?;
+
         self.client = Some(client);
 
         let id = self.id.clone();
         let event_tx = self.event_tx.clone();
         let config_clone = Arc::new(self.config.clone());
-
 
         task::spawn(async move {
             while let Ok(notification) = eventloop.poll().await {
