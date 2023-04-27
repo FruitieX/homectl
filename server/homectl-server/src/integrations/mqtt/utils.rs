@@ -46,19 +46,8 @@ pub fn mqtt_to_homectl(
 
     let color = value
         .pointer(color_field)
-        .and_then(serde_json::Value::as_array)
-        .and_then(|array| {
-            if array.len() == 3 {
-                Some((
-                    array[0].as_f64().unwrap(),
-                    array[1].as_f64().unwrap(),
-                    array[2].as_f64().unwrap(),
-                ))
-            } else {
-                None
-            }
-        })
-        .map(|(h, s, v)| DeviceColor::Hsv(Hsv::from((h as f32, s as f32, v as f32))))
+        .and_then(|value| serde_json::from_value::<Hsv>(value.clone()).ok())
+        .map(DeviceColor::Hsv)
         .or_else(|| {
             value
                 .pointer(cct_field)
@@ -160,8 +149,7 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
             }
 
             if let Some(DeviceColor::Hsv(hsv)) = light.color {
-                let (h, s, v) = (hsv.hue.to_degrees(), hsv.saturation, hsv.value);
-                payload.merge_in(color_field, serde_json::json!([h, s, v]))?;
+                payload.merge_in(color_field, serde_json::to_value(hsv)?)?;
             }
 
             if let Some(DeviceColor::Cct(cct)) = light.color {
