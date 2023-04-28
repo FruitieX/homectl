@@ -180,7 +180,7 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         true,
         get_circadian_brightness(circadian),
         Some(get_circadian_color(circadian)),
-        Some(POLL_RATE),
+        None,
     ));
 
     Device {
