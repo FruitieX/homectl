@@ -2052,9 +2052,9 @@ dependencies = [
 
 [[package]]
 name = "rumqttc"
-version = "0.18.0"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1514bbc994fc9f36ab7f7ae067b3e4758c717aff7a06c4818c6787cad8b086e1"
+checksum = "8b616bf8b706c2a6235604f5d93f9578c37d0c6161e13898b68a1da4af2d812c"
 dependencies = [
  "bytes 1.1.0",
  "flume 0.10.14",
@@ -2062,7 +2062,7 @@ dependencies = [
  "log",
  "pollster",
  "rustls-native-certs",
- "rustls-pemfile 0.3.0",
+ "rustls-pemfile",
  "thiserror",
  "tokio",
  "tokio-rustls",
@@ -2134,18 +2134,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0167bac7a9f490495f3c33013e7722b53cb087ecbe082fb0c6387c96f634ea50"
 dependencies = [
  "openssl-probe",
- "rustls-pemfile 1.0.1",
+ "rustls-pemfile",
  "schannel",
  "security-framework",
-]
-
-[[package]]
-name = "rustls-pemfile"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ee86d63972a7c661d1536fefe8c3c8407321c3df668891286de28abcd087360"
-dependencies = [
- "base64",
 ]
 
 [[package]]
@@ -2531,7 +2522,7 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.5",
  "rustls",
- "rustls-pemfile 1.0.1",
+ "rustls-pemfile",
  "serde 1.0.136",
  "serde_json",
  "sha1 0.10.4",

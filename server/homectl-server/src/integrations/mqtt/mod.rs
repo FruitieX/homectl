@@ -8,6 +8,7 @@ use homectl_types::{
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
+use rand::{distributions::Alphanumeric, Rng};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::Deserialize;
 use std::sync::Arc;
@@ -64,8 +65,17 @@ impl CustomIntegration for Mqtt {
     }
 
     async fn start(&mut self) -> Result<()> {
-        let mut options =
-            MqttOptions::new(self.id.clone(), self.config.host.clone(), self.config.port);
+        let random_string: String = rand::thread_rng()
+            .sample_iter(&Alphanumeric)
+            .take(8)
+            .map(char::from)
+            .collect();
+
+        let mut options = MqttOptions::new(
+            format!("{}-{}", self.id, random_string),
+            self.config.host.clone(),
+            self.config.port,
+        );
         options.set_keep_alive(Duration::from_secs(5));
         let (client, mut eventloop) = AsyncClient::new(options, 10);
         client
@@ -84,18 +94,15 @@ impl CustomIntegration for Mqtt {
                 let event_tx = event_tx.clone();
                 let config_clone = Arc::clone(&config_clone);
 
-                let res = (|| async move {
-                    if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification {
-                        let device = mqtt_to_homectl(&msg.payload, id, &config_clone)?;
-                        event_tx.send(Message::IntegrationDeviceRefresh { device })
+                if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification {
+                    let device = mqtt_to_homectl(&msg.payload, id, &config_clone);
+
+                    match device {
+                        Ok(device) => event_tx.send(Message::IntegrationDeviceRefresh { device }),
+                        Err(e) => {
+                            eprintln!("MQTT error: {:?}", e)
+                        }
                     }
-
-                    Ok::<(), Box<dyn std::error::Error>>(())
-                })()
-                .await;
-
-                if let Err(e) = res {
-                    eprintln!("MQTT error: {:?}", e);
                 }
             }
         });
@@ -110,18 +117,17 @@ impl CustomIntegration for Mqtt {
             .client
             .as_ref()
             .expect("Expected self.client to be set in start phase");
+
         let topic = self
             .config
             .topic_set
             .replace("{id}", &device.id.to_string());
+
         let mqtt_device = homectl_to_mqtt(device.clone(), &self.config)?;
         let json = serde_json::to_string(&mqtt_device)?;
-        client.publish(topic, QoS::AtLeastOnce, true, json).await?;
-        Ok(())
-    }
 
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
+        client.publish(topic, QoS::AtLeastOnce, true, json).await?;
+
         Ok(())
     }
 }
