@@ -74,6 +74,7 @@ jobs:
           args: -- -D warnings
 
   build:
+    name: Build image
     runs-on: ubuntu-latest
     steps:
     - 
