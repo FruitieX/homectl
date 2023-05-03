@@ -4,11 +4,11 @@
     "config:base",
     "group:allNonMajor"
   ],
+  "platformAutomerge": true,
+  "automergeType": "pr",
   "lockFileMaintenance": {
     "enabled": true,
-    "automerge": true,
-    "automergeType": "pr",
-    "platformAutomerge": true
+    "automerge": true
   },
   "packageRules": [
     {
@@ -17,9 +17,7 @@
         "patch"
       ],
       "matchCurrentVersion": "!/^0/",
-      "automerge": true,
-      "automergeType": "pr",
-      "platformAutomerge": true
+      "automerge": true
     }
   ]
 }
