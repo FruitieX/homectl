@@ -7,8 +7,6 @@ COPY . .
 RUN \
 	--mount=type=cache,target=/usr/local/cargo/registry \
 	--mount=type=cache,target=/usr/src/homectl-server/target \
-	--mount=type=cache,target=/usr/src/homectl-server/homectl-server/target \
-	--mount=type=cache,target=/usr/src/types/target \
 	cargo install --path homectl-server
 
 FROM debian:bullseye-slim
