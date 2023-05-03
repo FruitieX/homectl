@@ -1,6 +1,5 @@
 use super::with_state;
 use crate::AppState;
-use anyhow::Context;
 use futures::SinkExt;
 use futures_util::{StreamExt, TryFutureExt};
 use homectl_types::websockets::WebSocketRequest;

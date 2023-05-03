@@ -20,7 +20,7 @@ pub fn devices(
 
 fn get_devices(
     app_state: &Arc<AppState>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(with_state(app_state))
         .map(|app_state: Arc<AppState>| {
@@ -36,7 +36,7 @@ fn get_devices(
 
 fn put_device(
     app_state: &Arc<AppState>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!("devices" / DeviceId)
         .and(warp::put())
         .and(warp::body::json())

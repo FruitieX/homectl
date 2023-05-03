@@ -283,15 +283,10 @@ fn is_rule_triggered(state: &DevicesState, groups: &Groups, rule: &Rule) -> Resu
 
 #[cfg(test)]
 mod tests {
-    use homectl_types::{
-        group::{GroupId, GroupsConfig},
-        scene::SceneId,
-        websockets::WebSocketResponse,
-    };
+    use super::*;
 
     use crate::homectl_core::config::Config;
-
-    use super::*;
+    use homectl_types::{group::GroupId, scene::SceneId, websockets::WebSocketResponse};
 
     #[test]
     fn test_is_rule_triggered() {
@@ -334,15 +329,15 @@ devices = [
 
         let groups = Groups::new(config.groups.unwrap());
 
-        if let WebSocketResponse::State(update) = msg {
-            let state = update.devices;
-            let rule = Rule::Group(GroupRule {
-                group_id: GroupId::new("living_room".to_string()),
-                power: None,
-                scene: Some(SceneId::new("normal".to_string())),
-            });
+        let WebSocketResponse::State(update) = msg;
 
-            assert!(is_rule_triggered(&state, &groups, &rule).unwrap());
-        }
+        let state = update.devices;
+        let rule = Rule::Group(GroupRule {
+            group_id: GroupId::new("living_room".to_string()),
+            power: None,
+            scene: Some(SceneId::new("normal".to_string())),
+        });
+
+        assert!(is_rule_triggered(&state, &groups, &rule).unwrap());
     }
 }

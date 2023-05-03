@@ -185,7 +185,7 @@ impl Display for DeviceState {
                 } else if let Some(DeviceColor::Hsv(color)) = light.color {
                     format!(
                         "hsv({}, {}, {})",
-                        color.hue.to_positive_degrees(),
+                        color.hue.into_positive_degrees(),
                         color.saturation,
                         color.value
                     )

@@ -5,7 +5,7 @@ use super::{
     group::GroupId,
     integration::IntegrationId,
 };
-use palette::{rgb::Rgb, Hsv, Lch};
+use palette::{rgb::Rgb, FromColor, Hsv, Lch};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use ts_rs::TS;
@@ -32,9 +32,9 @@ pub enum ColorConfig {
 
 pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
     DeviceColor::Hsv(match color_config {
-        ColorConfig::Lch(lch) => lch.into(),
+        ColorConfig::Lch(lch) => Hsv::from_color(lch),
         ColorConfig::Hsv(hsv) => hsv,
-        ColorConfig::Rgb(rgb) => rgb.into(),
+        ColorConfig::Rgb(rgb) => Hsv::from_color(rgb),
     })
 }
 
@@ -97,12 +97,12 @@ pub type SceneDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, SceneDevi
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
-pub struct SceneGroupsConfig (pub HashMap<GroupId, SceneDeviceConfig>);
+pub struct SceneGroupsConfig(pub HashMap<GroupId, SceneDeviceConfig>);
 
 /// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
-pub struct SceneDevicesSearchConfig (pub HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>);
+pub struct SceneDevicesSearchConfig(pub HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>);
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]

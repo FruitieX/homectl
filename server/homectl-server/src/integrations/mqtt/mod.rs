@@ -6,7 +6,7 @@ use homectl_types::{
     custom_integration::CustomIntegration,
     device::Device,
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::IntegrationId,
 };
 use rand::{distributions::Alphanumeric, Rng};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
@@ -47,7 +47,7 @@ impl CustomIntegration for Mqtt {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Mqtt integration")?;
 
         Ok(Mqtt {

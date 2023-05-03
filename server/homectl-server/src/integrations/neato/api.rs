@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use chrono::Utc;
-use hmac::{Hmac, Mac, NewMac};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
 
@@ -51,7 +51,7 @@ type HmacSha256 = Hmac<Sha256>;
 
 pub enum RobotCmd {
     StartCleaning,
-    StopCleaning
+    StopCleaning,
 }
 
 pub async fn clean_house(config: &NeatoConfig, cmd: &RobotCmd) -> Result<()> {
@@ -110,7 +110,7 @@ pub async fn clean_house(config: &NeatoConfig, cmd: &RobotCmd) -> Result<()> {
         let string_to_sign = format!("{}\n{}\n{}", serial, date, body);
 
         // Create HMAC-SHA256 instance which implements `Mac` trait
-        let mut mac = HmacSha256::new_varkey(robot.secret_key.as_bytes())
+        let mut mac = HmacSha256::new_from_slice(robot.secret_key.as_bytes())
             .expect("HMAC can take key of any size");
         mac.update(string_to_sign.as_bytes());
 

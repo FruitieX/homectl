@@ -56,7 +56,7 @@ impl CustomIntegration for Neato {
     ) -> Result<Neato> {
         let config = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Neato integration")?;
         Ok(Neato {
             integration_id: integration_id.clone(),
@@ -121,10 +121,7 @@ impl CustomIntegration for Neato {
 
                 result
             }
-            "stop_cleaning" => {
-                let result = clean_house(&self.config, &RobotCmd::StopCleaning).await;
-                result
-            }
+            "stop_cleaning" => clean_house(&self.config, &RobotCmd::StopCleaning).await,
             _ => Ok(()),
         }
     }

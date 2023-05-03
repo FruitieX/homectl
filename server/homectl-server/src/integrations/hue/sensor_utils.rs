@@ -122,7 +122,6 @@ fn get_bridge_sensor_name(bridge_sensor: BridgeSensor) -> String {
         BridgeSensor::ZLLPresence { name, .. } => name,
         BridgeSensor::ZLLSwitch { name, .. } => name,
         BridgeSensor::ZLLTemperature { name, .. } => name,
-        BridgeSensor::ZLLLightLevel { name, .. } => name,
         BridgeSensor::CLIPPresence { name } => name,
         BridgeSensor::CLIPGenericStatus { name } => name,
         BridgeSensor::CLIPGenericFlag { name } => name,

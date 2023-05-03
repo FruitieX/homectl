@@ -28,7 +28,7 @@ impl CustomIntegration for Timer {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: TimerConfig = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Timer integration")?;
 
         Ok(Timer {

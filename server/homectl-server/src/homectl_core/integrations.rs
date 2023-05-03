@@ -1,33 +1,28 @@
 use crate::integrations::{
     boolean::Boolean, circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, mqtt::Mqtt,
-    neato::Neato, ping::Ping, random::Random, timer::Timer, tuya::Tuya, tuya_polling::TuyaPolling,
-    wake_on_lan::WakeOnLan,
+    neato::Neato, ping::Ping, random::Random, timer::Timer, tuya::Tuya, wake_on_lan::WakeOnLan,
 };
 use anyhow::{anyhow, Context, Result};
 use homectl_types::{
     custom_integration::CustomIntegration,
-    device::{Device, DeviceId, DeviceKey},
+    device::{Device, DeviceKey},
     event::TxEventChannel,
     integration::{IntegrationActionPayload, IntegrationId},
-    polling_integration::PollingIntegration,
 };
 use std::{collections::HashMap, convert::TryFrom, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 
 pub type CustomIntegrationsMap = HashMap<IntegrationId, Arc<Mutex<Box<dyn CustomIntegration>>>>;
-pub type PollingIntegrationsMap = HashMap<IntegrationId, Arc<Box<dyn PollingIntegration>>>;
 pub type DeviceStates = HashMap<DeviceKey, Device>;
 
 #[derive(Clone)]
 pub struct Integrations {
     expected_device_states: Arc<RwLock<DeviceStates>>,
     custom_integrations: CustomIntegrationsMap,
-    polling_integrations: PollingIntegrationsMap,
     sender: TxEventChannel,
 }
 
 pub enum IntegrationKind {
-    Polling,
     Custom,
 }
 
@@ -57,12 +52,10 @@ impl Integrations {
     pub fn new(sender: TxEventChannel) -> Self {
         let expected_device_states = Default::default();
         let integrations = Default::default();
-        let polling_integrations = Default::default();
 
         Integrations {
             expected_device_states,
             custom_integrations: integrations,
-            polling_integrations,
             sender,
         }
     }
@@ -79,7 +72,6 @@ impl Integrations {
         let integration_kind: IntegrationKind = module_name.try_into()?;
 
         match integration_kind {
-            IntegrationKind::Polling => {}
             IntegrationKind::Custom => {
                 let integration =
                     load_custom_integration(module_name, integration_id, config, event_tx)?;
@@ -170,18 +162,6 @@ fn load_custom_integration(
         "ping" => Ok(Box::new(Ping::new(id, config, event_tx)?)),
         "tuya" => Ok(Box::new(Tuya::new(id, config, event_tx)?)),
         "wake_on_lan" => Ok(Box::new(WakeOnLan::new(id, config, event_tx)?)),
-        _ => Err(anyhow!("Unknown module name {}!", module_name)),
-    }
-}
-
-fn load_polling_integration(
-    module_name: &str,
-    id: &IntegrationId,
-    config: &config::Value,
-    event_tx: TxEventChannel,
-) -> Result<Box<dyn PollingIntegration>> {
-    match module_name {
-        "tuya_polling" => Ok(Box::new(TuyaPolling::new(id, config, event_tx)?)),
         _ => Err(anyhow!("Unknown module name {}!", module_name)),
     }
 }

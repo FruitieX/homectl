@@ -25,7 +25,7 @@ impl CustomIntegration for Boolean {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: BooleanConfig = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Boolean integration")?;
 
         Ok(Boolean {

@@ -6,7 +6,7 @@ use homectl_types::{
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use palette::rgb::Rgb;
+use palette::{rgb::Rgb, FromColor, Hsv};
 use rand::prelude::*;
 use serde::Deserialize;
 use std::time::Duration;
@@ -29,7 +29,7 @@ impl CustomIntegration for Random {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: RandomConfig = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Random integration")?;
 
         Ok(Random {
@@ -81,7 +81,7 @@ fn get_random_color() -> DeviceColor {
     let b: f32 = rng.gen();
 
     let rgb: Rgb = Rgb::new(r, g, b);
-    DeviceColor::Hsv(rgb.into())
+    DeviceColor::Hsv(Hsv::from_color(rgb))
 }
 
 async fn poll_sensor(random: Random) {

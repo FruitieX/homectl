@@ -38,7 +38,7 @@ impl CustomIntegration for WakeOnLan {
     ) -> Result<WakeOnLan> {
         let config = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of WakeOnLan integration")?;
         Ok(WakeOnLan {
             id: id.clone(),
@@ -90,7 +90,7 @@ impl CustomIntegration for WakeOnLan {
             ))?;
 
         if power {
-            wakey::WolPacket::from_string(&wol_machine.mac, ':').send_magic()?;
+            wakey::WolPacket::from_string(&wol_machine.mac, ':')?.send_magic()?;
         } else if let Some(sleep_on_lan) = &wol_machine.sleep_on_lan {
             let endpoint = sleep_on_lan.clone();
 

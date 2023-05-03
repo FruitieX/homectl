@@ -19,7 +19,7 @@ pub fn actions(
 
 fn post_action(
     app_state: &Arc<AppState>,
-) -> impl Filter<Extract = impl warp::Reply, Error = warp::Rejection> + Clone {
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("trigger")
         .and(warp::post())
         .and(warp::body::json())

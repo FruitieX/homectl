@@ -35,8 +35,8 @@ impl CustomIntegration for Ping {
     fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Ping> {
         let config = config
             .clone()
-            .try_into()
-            .context("Failed to deserialize config of WakeOnLan integration")?;
+            .try_deserialize()
+            .context("Failed to deserialize config of Ping integration")?;
         Ok(Ping {
             id: id.clone(),
             config,

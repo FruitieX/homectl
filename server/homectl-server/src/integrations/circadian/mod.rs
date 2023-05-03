@@ -8,7 +8,7 @@ use homectl_types::{
     integration::{IntegrationActionPayload, IntegrationId},
     scene::{color_config_as_device_color, ColorConfig},
 };
-use palette::Gradient;
+use palette::Mix;
 use serde::Deserialize;
 use std::time::Duration;
 use tokio::time;
@@ -44,7 +44,7 @@ impl CustomIntegration for Circadian {
     fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
         let config: CircadianConfig = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Circadian integration")?;
 
         Ok(Circadian {
@@ -129,11 +129,10 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
         circadian.converted_night_color.clone(),
     ) {
         (DeviceColor::Hsv(day), DeviceColor::Hsv(night)) => {
-            let gradient = Gradient::new(vec![day, night]);
-
             let i = get_night_fade(circadian);
+            let color = day.mix(night, i);
 
-            DeviceColor::Hsv(gradient.get(i))
+            DeviceColor::Hsv(color)
         }
         (DeviceColor::Cct(_), DeviceColor::Cct(_)) => todo!(),
         _ => panic!("Mixed color types not supported"),

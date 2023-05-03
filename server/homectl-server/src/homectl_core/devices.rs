@@ -43,7 +43,7 @@ fn cmp_light_color(
             b_hsv.value *= b_bri.unwrap_or(1.0);
 
             // Light state is equal if all components differ by less than a given delta
-            (f32::abs(a_hsv.hue.to_positive_degrees() - b_hsv.hue.to_positive_degrees())
+            (f32::abs(a_hsv.hue.into_positive_degrees() - b_hsv.hue.into_positive_degrees())
                 <= hue_delta)
                 && (f32::abs(a_hsv.saturation - b_hsv.saturation) <= sat_delta)
                 && (f32::abs(a_hsv.value - b_hsv.value) <= val_delta)
@@ -294,7 +294,7 @@ impl Devices {
 
     fn find_scene_devices_config(&self, sd: &SceneDescriptor) -> Option<SceneDevicesConfig> {
         self.scenes
-            .find_scene_devices_config(&*self.state.lock().unwrap(), sd)
+            .find_scene_devices_config(&self.state.lock().unwrap(), sd)
     }
 
     pub async fn activate_scene(
@@ -391,8 +391,8 @@ impl Devices {
 
                                 let device =
                                     find_device(&state, integration_id, Some(device_id), None);
-                                let device_scene = device.clone().and_then(|d| d.scene);
-                            
+                                let device_scene = device.and_then(|d| d.scene);
+
                                 device_scene.map_or(false, |ds| ds.scene_id == sd.scene_id)
                             })
                         })

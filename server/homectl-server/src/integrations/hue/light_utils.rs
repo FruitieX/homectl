@@ -4,7 +4,7 @@ use homectl_types::{
     device::{CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::{Hsv, Yxy};
+use palette::{Hsv, Yxy, FromColor};
 
 pub fn to_light(bridge_light: BridgeLight) -> Light {
     let power = bridge_light.state.on;
@@ -26,8 +26,8 @@ pub fn to_light(bridge_light: BridgeLight) -> Light {
         })(),
         Some(ColorMode::Xy) => (move || {
             let (x, y) = xy?;
-            let hsv = Yxy::new(x, y, 1.0);
-            let mut device_color: Hsv = hsv.into();
+            let yxy = Yxy::new(x, y, 1.0);
+            let mut device_color: Hsv = Hsv::from_color(yxy);
             device_color.value = 1.0;
             Some(DeviceColor::Hsv(device_color))
         })(),

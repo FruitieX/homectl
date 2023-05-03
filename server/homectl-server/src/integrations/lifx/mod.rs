@@ -30,7 +30,7 @@ impl CustomIntegration for Lifx {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()
-            .try_into()
+            .try_deserialize()
             .context("Failed to deserialize config of Lifx integration")?;
 
         Ok(Lifx {

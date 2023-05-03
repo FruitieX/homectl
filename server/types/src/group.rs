@@ -7,7 +7,6 @@ use ts_rs::TS;
 
 macro_attr! {
     #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
-    #[serde(transparent)]
     #[ts(export)]
     pub struct GroupId(String);
 }

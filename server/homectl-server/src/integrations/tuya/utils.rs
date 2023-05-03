@@ -5,7 +5,7 @@ use homectl_types::{
     device::{Device, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::{Hsv, Yxy};
+use palette::{Hsv, Yxy, FromColor};
 use rust_async_tuyapi::{tuyadevice::TuyaDevice, Payload, PayloadStruct};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -21,13 +21,11 @@ use super::{Connection, TuyaDeviceConfig};
 const POWER_ON_FIELD: &str = "20";
 const MODE_FIELD: &str = "21";
 const BRIGHTNESS_FIELD: &str = "22";
-const COLOR_TEMP_FIELD: &str = "23";
-const COLOR_FIELD: &str = "24";
 
 fn hsv_to_tuya(power: bool, brightness: Option<f32>, hsv: Hsv) -> TuyaState {
-    let hue: f32 = hsv.hue.to_positive_degrees();
-    let saturation = (hsv.saturation as f32) * 1000.0;
-    let value = brightness.unwrap_or(1.0) * (hsv.value as f32) * 1000.0;
+    let hue: f32 = hsv.hue.into_positive_degrees();
+    let saturation = hsv.saturation * 1000.0;
+    let value = brightness.unwrap_or(1.0) * hsv.value * 1000.0;
     let tuya_color_string = format!(
         "{:0>4x}{:0>4x}{:0>4x}",
         hue as i32, saturation as i32, value as i32
@@ -107,7 +105,7 @@ fn to_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<Tu
                 Ok(state)
             } else if device_config.color_temp_field.is_some() {
                 // Received color but device only supports color temperature, do conversion
-                let xy: Yxy = color.into();
+                let xy: Yxy = Yxy::from_color(color);
                 let ct = xy_to_cct(&xy);
 
                 let brightness = color.value * light_state.brightness.unwrap_or(1.0);
@@ -127,7 +125,7 @@ fn to_tuya_state(device: &Device, device_config: &TuyaDeviceConfig) -> Result<Tu
             } else if device_config.color_field.is_some() {
                 // Received color temperature but device only supports colors, do conversion
                 let rgb = cct_to_rgb(cct.get_cct());
-                let hsv: Hsv = rgb.into();
+                let hsv: Hsv = Hsv::from_color(rgb);
                 let state = hsv_to_tuya(light_state.power, light_state.brightness, hsv);
 
                 Ok(state)
