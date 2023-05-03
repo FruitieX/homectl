@@ -22,7 +22,7 @@
     "daisyui": "2.51.6",
     "immer": "10.0.1",
     "jotai": "2.0.4",
-    "konva": "8.4.3",
+    "konva": "9.0.1",
     "lodash": "4.17.21",
     "lucide-react": "0.194.0",
     "next": "latest",
