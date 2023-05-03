@@ -341,6 +341,34 @@ const SlidersTab = ({
       if (event.key === 'Enter') {
         handleChangeComplete();
       }
+      else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        let modifier = event.key === 'ArrowUp' ? 1 : -1;
+        if (event.shiftKey) modifier *= 10;
+        let newHue = hue;
+        let newSat = sat;
+        let newBri = bri;
+
+        if (event.target.name === 'hue-input') {
+          newHue = Math.max(Math.min(hue + modifier, 360), 0);
+          setHue(newHue);
+        }
+        else if (event.target.name === 'sat-input') {
+          newSat = Math.max(Math.min(sat + modifier, 100), 0);
+          setSat(newSat);
+        }
+        else if (event.target.name === 'bri-input') {
+          newBri = Math.max(Math.min(bri + modifier / 100, 1), 0);
+          setBri(newBri);
+        }
+
+        const color = Color({
+          h: newHue,
+          s: newSat,
+          v: 100,
+        });
+  
+        onChange && onChange(color, newBri);
+      }
     },
     [handleChangeComplete],
   );
@@ -359,6 +387,7 @@ const SlidersTab = ({
           value={hue}
         />
         <Input
+          name='hue-input'
           className="ml-3 w-24"
           value={Math.round(hue)}
           onChange={handleHueChange}
@@ -379,6 +408,7 @@ const SlidersTab = ({
           value={sat}
         />
         <Input
+          name='sat-input'
           className="ml-3 w-24"
           value={Math.round(sat)}
           onChange={handleSatChange}
@@ -399,6 +429,7 @@ const SlidersTab = ({
           value={bri * 100}
         />
         <Input
+          name='bri-input'
           className="ml-3 w-24"
           value={Math.round(bri * 100)}
           onChange={handleBriChange}
