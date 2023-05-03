@@ -7,7 +7,7 @@ COPY . .
 RUN \
 	--mount=type=cache,target=/usr/local/cargo/registry \
 	--mount=type=cache,target=/usr/src/homectl-server/target \
-	cargo install --path homectl-server
+	cargo install --path .
 
 FROM debian:bullseye-slim
 RUN apt-get update && apt-get install -y ca-certificates openssl libcurl4 && rm -rf /var/lib/apt/lists/*

@@ -1,6 +1,3 @@
-/homectl-server/.cargo/
-/homectl-server/target/
-/homectl-server/Settings.toml
 /target/
 /.envrc
 /.vscode
