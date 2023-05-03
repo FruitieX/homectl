@@ -176,3 +176,142 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
 
     Ok(payload)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_homectl_to_mqtt() {
+        // Create a device and MqttConfig
+        let device = Device {
+            id: DeviceId::new("device1"),
+            name: "Device 1".to_string(),
+            integration_id: IntegrationId::from_str("mqtt").unwrap(),
+            scene: None,
+            state: DeviceState::Light(Light {
+                power: true,
+                brightness: Some(0.5),
+                color: Some(DeviceColor::Hsv(Hsv::new(45.0, 1.0, 1.0))),
+                transition_ms: Some(1000),
+            }),
+        };
+
+        let config = MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic_set: "homectl/set/{id}".to_string(),
+            topic: "homectl/devices/{id}".to_string(),
+            id_field: Some("/id".to_string()),
+            name_field: Some("/name".to_string()),
+            color_field: Some("/color".to_string()),
+            cct_field: Some("/cct".to_string()),
+            power_field: Some("/power".to_string()),
+            brightness_field: Some("/brightness".to_string()),
+            sensor_value_field: Some("/sensor_value".to_string()),
+            transition_ms_field: Some("/transition_ms".to_string()),
+        };
+
+        let mqtt_json = homectl_to_mqtt(device, &config).unwrap();
+
+        let expected = json!({
+            "id": "device1",
+            "name": "Device 1",
+            "color": { "hue": 45.0, "saturation": 1.0, "value": 1.0 },
+            "power": true,
+            "brightness": 0.5,
+            "transition_ms": serde_json::json!(1000.0),
+        });
+
+        assert_eq!(mqtt_json, expected);
+    }
+
+    #[test]
+    fn test_mqtt_to_homectl() {
+        let mqtt_json = json!({
+            "id": "device1",
+            "name": "Device 1",
+            "color": { "hue": 45.0, "saturation": 1.0, "value": 1.0 },
+            "power": true,
+            "brightness": 0.5,
+            "transition_ms": 1000
+        });
+
+        let config = MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic_set: "homectl/set/{id}".to_string(),
+            topic: "homectl/devices/{id}".to_string(),
+            id_field: Some("/id".to_string()),
+            name_field: Some("/name".to_string()),
+            color_field: Some("/color".to_string()),
+            cct_field: Some("/cct".to_string()),
+            power_field: Some("/power".to_string()),
+            brightness_field: Some("/brightness".to_string()),
+            sensor_value_field: Some("/sensor_value".to_string()),
+            transition_ms_field: Some("/transition_ms".to_string()),
+        };
+
+        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            integration_id.clone(),
+            &config,
+        )
+        .unwrap();
+
+        let expected = Device {
+            id: DeviceId::new("device1"),
+            name: "Device 1".to_string(),
+            integration_id,
+            scene: None,
+            state: DeviceState::Light(Light {
+                power: true,
+                brightness: Some(0.5),
+                color: Some(DeviceColor::Hsv(Hsv::new(45.0, 1.0, 1.0))),
+                transition_ms: Some(1000),
+            }),
+        };
+
+        assert_eq!(device, expected);
+    }
+
+    #[tokio::test]
+    async fn test_integration() {
+        let mqtt_json = json!({
+            "id": "device1",
+            "name": "Device 1",
+            "color": { "hue": 45.0, "saturation": 1.0, "value": 1.0 },
+            "power": true,
+            "brightness": 0.5,
+        });
+
+        let config = MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic_set: "homectl/set/{id}".to_string(),
+            topic: "homectl/devices/{id}".to_string(),
+            id_field: Some("/id".to_string()),
+            name_field: Some("/name".to_string()),
+            color_field: Some("/color".to_string()),
+            cct_field: Some("/cct".to_string()),
+            power_field: Some("/power".to_string()),
+            brightness_field: Some("/brightness".to_string()),
+            sensor_value_field: Some("/sensor_value".to_string()),
+            transition_ms_field: Some("/transition_ms".to_string()),
+        };
+
+        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            integration_id.clone(),
+            &config,
+        )
+        .unwrap();
+        let mqtt_message_value = homectl_to_mqtt(device.clone(), &config).unwrap();
+
+        assert_eq!(mqtt_json, mqtt_message_value);
+    }
+}
