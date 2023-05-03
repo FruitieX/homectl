@@ -4,7 +4,7 @@ use homectl_types::{
     device::{CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::{Hsv, Yxy, FromColor};
+use palette::{FromColor, Hsv, Yxy};
 
 pub fn to_light(bridge_light: BridgeLight) -> Light {
     let power = bridge_light.state.on;

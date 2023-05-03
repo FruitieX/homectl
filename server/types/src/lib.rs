@@ -5,11 +5,11 @@ extern crate macro_attr;
 extern crate newtype_derive;
 
 pub mod action;
+pub mod custom_integration;
 pub mod device;
 pub mod event;
 pub mod group;
 pub mod integration;
-pub mod custom_integration;
 pub mod rule;
 pub mod scene;
 pub mod utils;

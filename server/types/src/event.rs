@@ -1,8 +1,8 @@
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use serde::{Deserialize, Serialize};
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use ts_rs::TS;
 
-use crate::scene::{SceneId, SceneConfig};
+use crate::scene::{SceneConfig, SceneId};
 
 use super::{action::Action, device::Device, device::DevicesState};
 
@@ -41,7 +41,7 @@ pub enum Message {
     /// Store new scene in DB
     StoreScene {
         scene_id: SceneId,
-        config: SceneConfig
+        config: SceneConfig,
     },
 
     EditScene {

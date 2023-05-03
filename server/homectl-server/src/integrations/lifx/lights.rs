@@ -10,8 +10,8 @@ use homectl_types::{
 };
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
-use tokio::{time, sync::mpsc::UnboundedSender};
-use tokio::{net::UdpSocket};
+use tokio::net::UdpSocket;
+use tokio::{sync::mpsc::UnboundedSender, time};
 
 const MAX_UDP_PACKET_SIZE: usize = 1 << 16;
 

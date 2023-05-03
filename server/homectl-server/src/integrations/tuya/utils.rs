@@ -5,7 +5,7 @@ use homectl_types::{
     device::{Device, DeviceId, DeviceState, Light},
     integration::IntegrationId,
 };
-use palette::{Hsv, Yxy, FromColor};
+use palette::{FromColor, Hsv, Yxy};
 use rust_async_tuyapi::{tuyadevice::TuyaDevice, Payload, PayloadStruct};
 use serde::Deserialize;
 use serde_json::{json, Value};

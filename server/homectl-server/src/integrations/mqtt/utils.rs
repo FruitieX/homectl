@@ -304,13 +304,9 @@ mod tests {
         };
 
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
-        let device = mqtt_to_homectl(
-            mqtt_json.to_string().as_bytes(),
-            integration_id.clone(),
-            &config,
-        )
-        .unwrap();
-        let mqtt_message_value = homectl_to_mqtt(device.clone(), &config).unwrap();
+        let device =
+            mqtt_to_homectl(mqtt_json.to_string().as_bytes(), integration_id, &config).unwrap();
+        let mqtt_message_value = homectl_to_mqtt(device, &config).unwrap();
 
         assert_eq!(mqtt_json, mqtt_message_value);
     }

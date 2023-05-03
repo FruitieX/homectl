@@ -153,10 +153,10 @@ pub enum SensorKind {
         off: bool,
     },
     StringValue {
-        value: String
+        value: String,
     },
     Temperature {
-        value: f64
+        value: f64,
     },
     LightLevel {
         lightlevel: f64,

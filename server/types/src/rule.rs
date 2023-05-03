@@ -51,7 +51,7 @@ pub struct GroupRule {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct AnyRule {
-    pub any: Rules
+    pub any: Rules,
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -60,7 +60,7 @@ pub enum Rule {
     Sensor(SensorRule),
     Device(DeviceRule),
     Group(GroupRule),
-    Any(AnyRule)
+    Any(AnyRule),
 }
 
 pub type Rules = Vec<Rule>;

@@ -11,7 +11,7 @@ pub enum ColorMode {
     Xy,
 
     #[serde(rename = "ct")]
-    Ct
+    Ct,
 }
 
 #[derive(Clone, Debug, Deserialize)]

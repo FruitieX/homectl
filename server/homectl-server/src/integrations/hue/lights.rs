@@ -7,7 +7,7 @@ use homectl_types::{
 use super::bridge::BridgeLights;
 use super::{light_utils::bridge_light_to_device, HueConfig};
 use anyhow::anyhow;
-use palette::{Yxy, FromColor};
+use palette::{FromColor, Yxy};
 use serde::{Deserialize, Serialize};
 use std::{error::Error, time::Duration};
 use tokio::time;
@@ -113,8 +113,7 @@ pub async fn set_device_state(config: HueConfig, device: &Device) -> Result<(), 
                     let xy = Some(vec![x, y]);
                     // let bri = (color.luma * 254.0 * state.brightness.unwrap_or(1.0) as f32).floor()
                     //     as u32;
-                    let bri = (hsv.value * 254.0 * state.brightness.unwrap_or(1.0)).floor()
-                        as u8;
+                    let bri = (hsv.value * 254.0 * state.brightness.unwrap_or(1.0)).floor() as u8;
 
                     HueMsg::LightMsg(LightMsg {
                         on: state.power,
