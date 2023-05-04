@@ -1,15 +1,27 @@
-FROM rust:1.69 AS builder
+FROM rust:1.69 AS chef 
+RUN cargo install cargo-chef 
+WORKDIR app
 
-RUN apt-get update && apt-get install -y build-essential
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare  --recipe-path recipe.json
 
-WORKDIR /usr/src/homectl-server
+FROM chef AS builder
+
+# Build dependencies
+COPY --from=planner /app/recipe.json recipe.json
+RUN \
+	--mount=type=cache,target=/usr/local/cargo/registry \
+	--mount=type=cache,target=/app/target \
+	cargo chef cook --release --recipe-path recipe.json
+
+# Build application
 COPY . .
 RUN \
 	--mount=type=cache,target=/usr/local/cargo/registry \
-	--mount=type=cache,target=/usr/src/homectl-server/target \
+	--mount=type=cache,target=/app/target \
 	cargo install --path .
 
-FROM debian:bullseye-slim
-RUN apt-get update && apt-get install -y ca-certificates openssl libcurl4 && rm -rf /var/lib/apt/lists/*
+FROM gcr.io/distroless/cc
 COPY --from=builder /usr/local/cargo/bin/homectl-server /usr/local/bin/homectl-server
 CMD ["homectl-server"]

@@ -23,7 +23,7 @@ sha2 = "0.10.6"
 hex = "0.4.3"
 palette = { version = "0.7.1", features = ["serializing"] }
 async-trait = "0.1.68"
-surf = "2.3.2"
+surf = { version = "2.3.2", default-features=false, features = ["hyper-client"] }
 rand = "0.8.5"
 anyhow = "1.0.71"
 wakey = "0.3.0"
