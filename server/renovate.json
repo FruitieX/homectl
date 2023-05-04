@@ -2,7 +2,8 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:base",
-    "group:allNonMajor"
+    "group:allNonMajor",
+    "github>Turbo87/renovate-config//rust/updateToolchain"
   ],
   "automergeType": "pr",
   "platformAutomerge": true,
