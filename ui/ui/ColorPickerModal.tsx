@@ -348,15 +348,15 @@ const SlidersTab = ({
         let newSat = sat;
         let newBri = bri;
 
-        if (event.target.name === 'hue-input') {
+        if (event.currentTarget.name === 'hue-input') {
           newHue = Math.max(Math.min(hue + modifier, 360), 0);
           setHue(newHue);
         }
-        else if (event.target.name === 'sat-input') {
+        else if (event.currentTarget.name === 'sat-input') {
           newSat = Math.max(Math.min(sat + modifier, 100), 0);
           setSat(newSat);
         }
-        else if (event.target.name === 'bri-input') {
+        else if (event.currentTarget.name === 'bri-input') {
           newBri = Math.max(Math.min(bri + modifier / 100, 1), 0);
           setBri(newBri);
         }
@@ -370,7 +370,7 @@ const SlidersTab = ({
         onChange && onChange(color, newBri);
       }
     },
-    [handleChangeComplete],
+    [bri, handleChangeComplete, hue, onChange, sat],
   );
 
   return (

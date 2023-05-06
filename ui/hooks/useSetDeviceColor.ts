@@ -2,7 +2,7 @@ import { Device } from '@/bindings/Device';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useWebsocket } from '@/hooks/websocket';
 import Color from 'color';
-import produce from 'immer';
+import { produce } from 'immer';
 import { useCallback } from 'react';
 
 export const useSetDeviceColor = () => {
