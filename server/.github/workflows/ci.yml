@@ -3,6 +3,8 @@ name: CI
 on:
   push:
     branches: ['main']
+  pull_request:
+    types: ['opened', 'synchronize', 'reopened']
 
 env:
   REGISTRY: ghcr.io
@@ -20,7 +22,7 @@ jobs:
       - run: cargo check
 
   test:
-    name: Test Suite
+    name: Test suite
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
