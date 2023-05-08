@@ -2,4 +2,4 @@
 *
 
 # Allow built binary
-!/target/x86_64-unknown-linux-musl/release/homectl-server 
+!/target/x86_64-unknown-linux-musl/release/homectl-server
