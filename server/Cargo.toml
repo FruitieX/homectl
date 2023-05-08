@@ -23,7 +23,7 @@ sha2 = "0.10.6"
 hex = "0.4.3"
 palette = { version = "0.7.1", features = ["serializing"] }
 async-trait = "0.1.68"
-surf = { version = "2.3.2", default-features=false, features = ["hyper-client"] }
+surf = { version = "2.3.2", default-features=false, features = ["h1-client-rustls"] }
 rand = "0.8.5"
 anyhow = "1.0.71"
 wakey = "0.3.0"
@@ -32,8 +32,6 @@ serde_path_to_error = "0.1"
 tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync"] }
 futures-util = "0.3.28"
 tokio-stream = "0.1.14"
-# rust-async-tuyapi = "0.8.1"
-rust-async-tuyapi = { git = "https://github.com/FruitieX/rust-async-tuyapi", rev = "76718a40abd86c939d5f0fdb74229a405a8bf4e7" }
 env_logger = "0.10.0"
 itertools = "0.10.5"
 sqlx = { version = "0.6", features = [

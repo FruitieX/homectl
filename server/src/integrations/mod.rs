@@ -8,5 +8,4 @@ pub mod neato;
 pub mod ping;
 pub mod random;
 pub mod timer;
-pub mod tuya;
 pub mod wake_on_lan;

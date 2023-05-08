@@ -209,15 +209,6 @@ impl DeviceState {
             DeviceState::Sensor(_) => None,
         }
     }
-
-    pub fn get_color(&self) -> Option<DeviceColor> {
-        match self {
-            DeviceState::OnOffDevice(_) => None,
-            DeviceState::Light(state) => state.color.clone(),
-            DeviceState::MultiSourceLight(_) => None,
-            DeviceState::Sensor(_) => None,
-        }
-    }
 }
 
 /// active scene that's controlling the device state, if any

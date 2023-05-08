@@ -11,7 +11,7 @@ let
     ];
     targets = [
       "x86_64-unknown-linux-gnu"
-      "wasm32-unknown-unknown"
+      "x86_64-unknown-linux-musl"
     ];
   };
 in
@@ -22,7 +22,6 @@ in
       rustStableChannel
 
       docker-compose
-      openssl
       pkg-config
       postgresql
 
