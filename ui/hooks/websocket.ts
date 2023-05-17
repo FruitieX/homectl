@@ -4,6 +4,7 @@ import { StateUpdate } from '@/bindings/StateUpdate';
 import { WebSocketResponse } from '@/bindings/WebSocketResponse';
 import { useEffect, useRef } from 'react';
 import { atom, useAtom } from 'jotai';
+import getConfig from 'next/config';
 
 const websocketStateAtom = atom<StateUpdate | null>(null);
 const websocketAtom = atom<WebSocket | null>(null);
@@ -19,11 +20,13 @@ export const useProvideWebsocketState = () => {
 
     const connect = () => {
       console.log('Opening ws connection...');
-      if (process.env.NEXT_PUBLIC_WS_ENDPOINT === undefined) {
-        throw new Error("NEXT_PUBLIC_WS_ENDPOINT isn't defined");
+      const WS_ENDPOINT = getConfig().publicRuntimeConfig.wsEndpoint;
+
+      if (WS_ENDPOINT === undefined) {
+        throw new Error("WS_ENDPOINT isn't defined");
       }
 
-      ws = new WebSocket(process.env.NEXT_PUBLIC_WS_ENDPOINT);
+      ws = new WebSocket(WS_ENDPOINT);
 
       ws.onmessage = function incoming(data) {
         const msg: WebSocketResponse = JSON.parse(data.data as string);

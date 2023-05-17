@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card } from 'react-daisyui';
 import { useInterval } from 'usehooks-ts';
 import { cachedPromise } from './cachedPromise';
+import getConfig from 'next/config';
 
 type WeatherTimeSeries = {
   data: {
@@ -32,10 +33,12 @@ type WeatherResponse = {
 
 const fetchCachedWeather = async (): Promise<WeatherResponse> => {
   const json = await cachedPromise('weatherResponseCache', 60, async () => {
-    if (process.env.NEXT_PUBLIC_WEATHER_API_URL === undefined) {
-      throw new Error('NEXT_PUBLIC_WEATHER_API_URL is undefined');
+    const WEATHER_API_URL = getConfig().publicRuntimeConfig.weatherApiUrl;
+
+    if (WEATHER_API_URL === undefined) {
+      throw new Error('WEATHER_API_URL is undefined');
     }
-    const res = await fetch(process.env.NEXT_PUBLIC_WEATHER_API_URL);
+    const res = await fetch(WEATHER_API_URL);
     const json: WeatherResponse = await res.json();
     return json;
   });
