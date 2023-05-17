@@ -2,7 +2,9 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:base",
-    "group:allNonMajor"
+    "group:allNonMajor",
+    ":automergeDigest",
+    ":semanticCommits"
   ],
   "platformAutomerge": true,
   "automergeType": "pr",
@@ -16,8 +18,10 @@
         "minor",
         "patch"
       ],
-      "matchCurrentVersion": "!/^0/",
       "automerge": true
     }
-  ]
+  ],
+  "docker": {
+    "pinDigests": true
+  }
 }
