@@ -7,10 +7,6 @@ const nextConfig = {
     appDir: true,
     esmExternals: true,
   },
-  publicRuntimeConfig: {
-    wsEndpoint: process.env.WS_ENDPOINT,
-    weatherApiUrl: process.env.WEATHER_API_URL,
-  },
 };
 
 module.exports = nextConfig;

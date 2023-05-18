@@ -3,15 +3,16 @@
 import { StateUpdate } from '@/bindings/StateUpdate';
 import { WebSocketResponse } from '@/bindings/WebSocketResponse';
 import { useEffect, useRef } from 'react';
-import { atom, useAtom } from 'jotai';
-import getConfig from 'next/config';
+import { atom, useAtomValue, useSetAtom } from 'jotai';
+import { useAppConfig } from './appConfig';
 
 const websocketStateAtom = atom<StateUpdate | null>(null);
 const websocketAtom = atom<WebSocket | null>(null);
 
 export const useProvideWebsocketState = () => {
-  const [, setState] = useAtom(websocketStateAtom);
-  const [, setWebsocket] = useAtom(websocketAtom);
+  const wsEndpoint = useAppConfig().wsEndpoint;
+  const setState = useSetAtom(websocketStateAtom);
+  const setWebsocket = useSetAtom(websocketAtom);
 
   const reconnectTimeout = useRef<NodeJS.Timer | null>(null);
 
@@ -20,13 +21,12 @@ export const useProvideWebsocketState = () => {
 
     const connect = () => {
       console.log('Opening ws connection...');
-      const WS_ENDPOINT = getConfig().publicRuntimeConfig.wsEndpoint;
 
-      if (WS_ENDPOINT === undefined) {
+      if (wsEndpoint === undefined) {
         throw new Error("WS_ENDPOINT isn't defined");
       }
 
-      ws = new WebSocket(WS_ENDPOINT);
+      ws = new WebSocket(wsEndpoint);
 
       ws.onmessage = function incoming(data) {
         const msg: WebSocketResponse = JSON.parse(data.data as string);
@@ -53,15 +53,15 @@ export const useProvideWebsocketState = () => {
         ws.close();
       }
     };
-  }, [setState, setWebsocket]);
+  }, [setState, setWebsocket, wsEndpoint]);
 };
 
 export const useWebsocketState = (): StateUpdate | null => {
-  const [state] = useAtom(websocketStateAtom);
+  const state = useAtomValue(websocketStateAtom);
   return state;
 };
 
 export const useWebsocket = (): WebSocket | null => {
-  const [state] = useAtom(websocketAtom);
+  const state = useAtomValue(websocketAtom);
   return state;
 };

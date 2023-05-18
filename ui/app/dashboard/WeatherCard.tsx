@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Card } from 'react-daisyui';
 import { useInterval } from 'usehooks-ts';
 import { cachedPromise } from './cachedPromise';
-import getConfig from 'next/config';
+import { useAppConfig } from '@/hooks/appConfig';
 
 type WeatherTimeSeries = {
   data: {
@@ -31,14 +31,12 @@ type WeatherResponse = {
   };
 };
 
-const fetchCachedWeather = async (): Promise<WeatherResponse> => {
+const fetchCachedWeather = async (url: string): Promise<WeatherResponse> => {
   const json = await cachedPromise('weatherResponseCache', 60, async () => {
-    const WEATHER_API_URL = getConfig().publicRuntimeConfig.weatherApiUrl;
-
-    if (WEATHER_API_URL === undefined) {
+    if (url === undefined) {
       throw new Error('WEATHER_API_URL is undefined');
     }
-    const res = await fetch(WEATHER_API_URL);
+    const res = await fetch(url);
     const json: WeatherResponse = await res.json();
     return json;
   });
@@ -49,11 +47,13 @@ const fetchCachedWeather = async (): Promise<WeatherResponse> => {
 export const WeatherCard = () => {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
 
+  const weatherApiUrl = useAppConfig().weatherApiUrl;
+
   useEffect(() => {
     let isSubscribed = true;
 
     const fetch = async () => {
-      const weather = await fetchCachedWeather();
+      const weather = await fetchCachedWeather(weatherApiUrl);
       if (isSubscribed === true) {
         setWeather(weather);
       }
@@ -63,10 +63,10 @@ export const WeatherCard = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [weatherApiUrl]);
 
   useInterval(async () => {
-    const weather = await fetchCachedWeather();
+    const weather = await fetchCachedWeather(weatherApiUrl);
     setWeather(weather);
   }, 1000);
 

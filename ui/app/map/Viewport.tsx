@@ -37,7 +37,7 @@ export const Viewport = () => {
   }, []);
 
   return (
-    <div ref={containerRef} className="absolute top-0 left-0 h-screen w-screen">
+    <div ref={containerRef} className="absolute left-0 top-0 h-screen w-screen">
       <Stage
         width={width}
         height={height}

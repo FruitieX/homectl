@@ -8,13 +8,29 @@ import { ColorPickerModal } from '@/ui/ColorPickerModal';
 import { Navbar } from '@/ui/Navbar';
 import { SaveSceneModal } from '@/ui/SaveSceneModal';
 import { SceneModal } from '@/ui/SceneModal';
+import { useProvideAppConfig } from '@/hooks/appConfig';
+
+const Layout = ({ children }: { children: React.ReactNode }) => {
+  useProvideWebsocketState();
+
+  return (
+    <>
+      <ColorPickerModal />
+      <SaveSceneModal />
+      <SceneModal />
+      <Navbar />
+      <main className="flex min-h-0 flex-1 flex-col">{children}</main>
+      <BottomNavigation />
+    </>
+  );
+};
 
 export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  useProvideWebsocketState();
+  const appConfigLoaded = useProvideAppConfig();
 
   return (
     <html>
@@ -27,12 +43,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body className="flex flex-col overflow-hidden">
-        <ColorPickerModal />
-        <SaveSceneModal />
-        <SceneModal />
-        <Navbar />
-        <main className="flex min-h-0 flex-1 flex-col">{children}</main>
-        <BottomNavigation />
+        {appConfigLoaded && <Layout>{children}</Layout>}
       </body>
     </html>
   );
