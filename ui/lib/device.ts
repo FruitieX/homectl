@@ -9,7 +9,6 @@ export const findDevice = (
   state: StateUpdate,
   deviceKey: string,
 ): Device | undefined => {
-
   const device = ((state?.devices as Record<string, Device>) ?? {})[deviceKey];
 
   return device;

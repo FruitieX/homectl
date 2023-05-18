@@ -54,7 +54,7 @@ const ColorWheelTab = ({
   color,
   onChange,
   onChangeComplete,
-  open
+  open,
 }: TabProps) => {
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
@@ -136,7 +136,7 @@ const SwatchesTab = ({
   color,
   onChange,
   onChangeComplete,
-  open
+  open,
 }: TabProps) => {
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
@@ -340,8 +340,7 @@ const SlidersTab = ({
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (event.key === 'Enter') {
         handleChangeComplete();
-      }
-      else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+      } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
         let modifier = event.key === 'ArrowUp' ? 1 : -1;
         if (event.shiftKey) modifier *= 10;
         let newHue = hue;
@@ -351,12 +350,10 @@ const SlidersTab = ({
         if (event.currentTarget.name === 'hue-input') {
           newHue = Math.max(Math.min(hue + modifier, 360), 0);
           setHue(newHue);
-        }
-        else if (event.currentTarget.name === 'sat-input') {
+        } else if (event.currentTarget.name === 'sat-input') {
           newSat = Math.max(Math.min(sat + modifier, 100), 0);
           setSat(newSat);
-        }
-        else if (event.currentTarget.name === 'bri-input') {
+        } else if (event.currentTarget.name === 'bri-input') {
           newBri = Math.max(Math.min(bri + modifier / 100, 1), 0);
           setBri(newBri);
         }
@@ -366,7 +363,7 @@ const SlidersTab = ({
           s: newSat,
           v: 100,
         });
-  
+
         onChange && onChange(color, newBri);
       }
     },
@@ -387,7 +384,7 @@ const SlidersTab = ({
           value={hue}
         />
         <Input
-          name='hue-input'
+          name="hue-input"
           className="ml-3 w-24"
           value={Math.round(hue)}
           onChange={handleHueChange}
@@ -408,7 +405,7 @@ const SlidersTab = ({
           value={sat}
         />
         <Input
-          name='sat-input'
+          name="sat-input"
           className="ml-3 w-24"
           value={Math.round(sat)}
           onChange={handleSatChange}
@@ -429,7 +426,7 @@ const SlidersTab = ({
           value={bri * 100}
         />
         <Input
-          name='bri-input'
+          name="bri-input"
           className="ml-3 w-24"
           value={Math.round(bri * 100)}
           onChange={handleBriChange}
@@ -546,7 +543,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen} 
+              open={deviceModalOpen}
             />
           )}
           {tab === 1 && (
@@ -555,7 +552,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen} 
+              open={deviceModalOpen}
             />
           )}
           {tab === 2 && (
@@ -564,7 +561,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen} 
+              open={deviceModalOpen}
             />
           )}
 
@@ -574,7 +571,7 @@ export const ColorPickerModal = () => {
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen} 
+              open={deviceModalOpen}
             />
           )}
         </div>
