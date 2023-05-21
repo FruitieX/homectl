@@ -21,7 +21,7 @@ serde_json = "1.0"
 hmac = "0.12.1"
 sha2 = "0.10.6"
 hex = "0.4.3"
-palette = { version = "0.7.1", features = ["serializing"] }
+palette = { version = "0.7.2", features = ["serializing"] }
 async-trait = "0.1.68"
 surf = { version = "2.3.2", default-features=false, features = ["h1-client-rustls"] }
 rand = "0.8.5"
