@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{net::SocketAddr, time::Duration};
 
 use crate::types::{
     custom_integration::CustomIntegration,
@@ -15,6 +15,7 @@ use tokio::time;
 struct WakeOnLanMachine {
     id: String,
     mac: String,
+    broadcast_ip: Option<SocketAddr>,
     sleep_on_lan: Option<String>,
 }
 
@@ -90,7 +91,17 @@ impl CustomIntegration for WakeOnLan {
             ))?;
 
         if power {
-            wakey::WolPacket::from_string(&wol_machine.mac, ':')?.send_magic()?;
+            match wol_machine.broadcast_ip {
+                Some(broadcast_ip) => {
+                    let src = SocketAddr::from(([0, 0, 0, 0], 0));
+                    wakey::WolPacket::from_string(&wol_machine.mac, ':')?
+                        .send_magic_to(&src, &broadcast_ip)?;
+                }
+                None => {
+                    let src = SocketAddr::from(([0, 0, 0, 0], 0));
+                    wakey::WolPacket::from_string(&wol_machine.mac, ':')?.send_magic()?;
+                }
+            }
         } else if let Some(sleep_on_lan) = &wol_machine.sleep_on_lan {
             let endpoint = sleep_on_lan.clone();
 
