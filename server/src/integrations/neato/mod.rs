@@ -89,6 +89,13 @@ impl CustomIntegration for Neato {
                 let force = payload.to_string() == "clean_house_force";
                 let local = chrono::Local::now().naive_local();
 
+                if !(self.config.cleaning_time_start..self.config.cleaning_time_end)
+                    .contains(&local.time())
+                {
+                    println!("Skipping cleaning due to wrong time of day");
+                    return Ok(());
+                }
+
                 if !force && !self.config.dummy {
                     let weekday = local.weekday();
 
