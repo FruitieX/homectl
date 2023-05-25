@@ -98,7 +98,6 @@ impl CustomIntegration for WakeOnLan {
                         .send_magic_to(&src, &broadcast_ip)?;
                 }
                 None => {
-                    let src = SocketAddr::from(([0, 0, 0, 0], 0));
                     wakey::WolPacket::from_string(&wol_machine.mac, ':')?.send_magic()?;
                 }
             }
