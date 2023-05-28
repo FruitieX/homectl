@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Input, Modal, Range, Tabs } from 'react-daisyui';
+import { Button, Input, Modal, Range, Tabs, Toggle } from 'react-daisyui';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
@@ -14,12 +14,13 @@ import {
   useState,
 } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { black, getBrightness, getColor } from '@/lib/colors';
+import { black, getBrightness, getColor, getPower } from '@/lib/colors';
 import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
 import { useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
 import { Clipboard } from 'lucide-react';
+import { useSetDevicePower } from '@/hooks/useSetDevicePower';
 
 type Props = {
   visible: boolean;
@@ -488,8 +489,12 @@ export const ColorPickerModal = () => {
     device?.state === undefined ? null : getColor(device.state);
   const deviceModalBrightness =
     device?.state === undefined ? null : getBrightness(device.state);
+  const deviceModalPower = 
+    device?.state === undefined ? null : getPower(device.state);
 
   const setDeviceColor = useSetDeviceColor();
+  const setDevicePower = useSetDevicePower();
+  
   const partialSetDeviceColor = useCallback(
     (color: Color, brightness: number) => {
       if (deviceModalState !== null) {
@@ -505,6 +510,22 @@ export const ColorPickerModal = () => {
     [deviceModalState, setDeviceColor, state],
   );
 
+  const partialSetDevicePower = useCallback(
+    (power: boolean) => {
+      if (deviceModalState !== null) {
+        deviceModalState.forEach((deviceKey) => {
+          const match = state !== null ? findDevice(state, deviceKey) : null;
+
+          if (match) {
+            console.log(`Setting device ${match.name} ${power ? 'on' : 'off'}.`)
+            setDevicePower(match, power);
+          }
+        });
+      }
+    },
+    [deviceModalState, setDevicePower, state],
+  );
+
   const throttledSetDeviceColor = useThrottleCallback(
     partialSetDeviceColor,
     3,
@@ -518,15 +539,14 @@ export const ColorPickerModal = () => {
   const [tab, setTab] = useState(0);
   return (
     <Modal responsive open={deviceModalOpen} onClickBackdrop={closeDeviceModal}>
-      <Button
-        size="sm"
-        shape="circle"
-        className="absolute right-2 top-2"
-        onClick={closeDeviceModal}
-      >
-        ✕
-      </Button>
-      <Modal.Header className="font-bold">{deviceModalTitle}</Modal.Header>
+      <Modal.Header className="font-bold">
+        {deviceModalTitle}
+        <Toggle 
+          checked={deviceModalPower ?? false}
+          onChange={() => partialSetDevicePower(!deviceModalPower)} 
+          className={"float-right"}
+          />
+      </Modal.Header>
 
       <Modal.Body>
         {/* <CirclePicker color={hsva} /> */}
@@ -576,6 +596,9 @@ export const ColorPickerModal = () => {
           )}
         </div>
       </Modal.Body>
+      <Modal.Actions>
+        <Button onClick={closeDeviceModal}>Ok</Button>
+      </Modal.Actions>
     </Modal>
   );
 };
