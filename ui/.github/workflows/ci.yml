@@ -12,6 +12,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  conventional-commit:
+    name: Conventional commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: webiny/action-conventional-commits@v1.1.0
+
   build:
     name: Build image
     runs-on: ubuntu-latest
