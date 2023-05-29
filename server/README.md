@@ -407,3 +407,40 @@ For instance if I have manually enabled another scene, I don't want that scene
 overwritten every time someone uses the stairs. Or if I'm setting the colors of
 my lights through the homectl UI, I don't want the changes to be lost whenever I
 walk past a motion detector.
+
+### Development notes
+
+You can test features without access to physical hardware with configs such as:
+
+```
+[integrations.mqtt]
+plugin = "mqtt"
+host = "localhost"
+port = 1883
+topic = "home/devices/adb/{id}"
+topic_set = "home/devices/adb/{id}/set"
+
+[integrations.dummy]
+plugin = "dummy"
+
+[integrations.dummy.devices.sensor]
+name = "Test sensor"
+init_state = { Sensor = { OnOffSensor = { value = false } } }
+
+[routines.test]
+name = "Test routine"
+rules = [
+  { integration_id = "dummy", name = "Test sensor", state = { value = true } }
+]
+actions = [{ action = "Custom", integration_id = "mqtt", payload = '{ "topic": "home/devices/adb/android-tv/set", "json": "{ \"power\": false }" }' }]
+```
+
+Now you can test the `Test routine` by toggling the dummy sensor on/off over HTTP:
+
+```
+xh PUT localhost:45289/api/v1/devices/sensor id=sensor name="Test sensor" integration_id=dummy state:='{ "Sensor": { "OnOffSensor": { "value": true }}}'
+```
+
+```
+xh PUT localhost:45289/api/v1/devices/sensor id=sensor name="Test sensor" integration_id=dummy state:='{ "Sensor": { "OnOffSensor": { "value": false }}}'
+```

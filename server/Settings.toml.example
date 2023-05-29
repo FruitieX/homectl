@@ -19,13 +19,13 @@
 plugin = "dummy"
 
   [integrations.dummy_ha1.devices]
-  1 = { name = "Kitchen ceiling light", init_state = { hue = 0, saturation = 0, value = 1 } }
-  2 = { name = "Living room", init_state = { hue = 25, saturation = 0.35, value = 1 } }
-  3 = { name = "Entryway", init_state = { hue = 25, saturation = 0.35, value = 1 } }
-  4 = { name = "Office", init_state = { hue = 0, saturation = 0, value = 0 } }
-  5 = { name = "Bedroom", init_state = { hue = 0, saturation = 0, value = 0 } }
-  6 = { name = "Outdoor spot", init_state = { hue = 100, saturation = 0.75, value = 1 } }
-  7 = { name = "Staircase", init_state = { hue = 0, saturation = 0, value = 0 } }
+  1 = { name = "Kitchen ceiling light", init_state = { Light = { power = true, hue = 0, saturation = 0, value = 1 } } }
+  2 = { name = "Living room", init_state = { Light = { power = true, hue = 25, saturation = 0.35, value = 1 } } }
+  3 = { name = "Entryway", init_state = { Light = { power = true, hue = 25, saturation = 0.35, value = 1 } } }
+  4 = { name = "Office", init_state = { Light = { power = false } } }
+  5 = { name = "Bedroom", init_state = { Light = { power = false } } }
+  6 = { name = "Outdoor spot", init_state = { Light = { power = true, hue = 100, saturation = 0.75, value = 1 } } }
+  7 = { name = "Staircase", init_state = { Light = { power = true, hue = 0, saturation = 0, value = 0 } } }
 
 # Set up another dummy home automation system, which our imaginary LED strips
 # are controlled by.
@@ -33,8 +33,8 @@ plugin = "dummy"
 plugin = "dummy"
 
   [integrations.dummy_ha2.devices]
-  1 = { name = "Kitchen cabinet LED", init_state = { hue = 0, saturation = 0, value = 1 } }
-  2 = { name = "Bathroom LED", init_state = { hue = 25, saturation = 0.35, value = 1 } }
+  1 = { name = "Kitchen cabinet LED", init_state = { Light = { power = true, hue = 0, saturation = 0, value = 1 } } }
+  2 = { name = "Bathroom LED", init_state = { Light = { power = true, hue = 25, saturation = 0.35, value = 1 } } }
 
 # This integration creates a fake device that transitions its color between
 # presets for day and night.
@@ -185,3 +185,4 @@ name = "Night light"
 
   [scenes.night_light.devices.dummy_ha2]
   "Bathroom LED" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
+

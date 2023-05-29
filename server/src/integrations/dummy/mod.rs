@@ -1,19 +1,18 @@
 use crate::types::{
     custom_integration::CustomIntegration,
-    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    device::{Device, DeviceId, DeviceState, OnOffDevice},
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use palette::Hsv;
 use serde::Deserialize;
 use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 pub struct DummyDeviceConfig {
     name: String,
-    init_state: Hsv,
+    init_state: Option<DeviceState>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -46,12 +45,11 @@ impl CustomIntegration for Dummy {
 
     async fn register(&mut self) -> Result<()> {
         for (id, device) in &self.config.devices {
-            let state = DeviceState::Light(Light::new(
-                true,
-                Some(1.0),
-                Some(DeviceColor::Hsv(device.init_state)),
-                None,
-            ));
+            let state = device
+                .init_state
+                .clone()
+                .unwrap_or(DeviceState::OnOffDevice(OnOffDevice { power: false }));
+
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);
             self.event_tx
                 .send(Message::IntegrationDeviceRefresh { device });
