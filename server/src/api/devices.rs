@@ -37,7 +37,7 @@ fn get_devices(
 fn put_device(
     app_state: &Arc<AppState>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!("devices" / DeviceId)
+    warp::path!(DeviceId)
         .and(warp::put())
         .and(warp::body::json())
         .and(with_state(app_state))
