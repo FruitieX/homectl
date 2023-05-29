@@ -2,7 +2,7 @@ use crate::types::{
     custom_integration::CustomIntegration,
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::IntegrationId,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -45,8 +45,6 @@ impl CustomIntegration for Random {
         self.event_tx
             .send(Message::IntegrationDeviceRefresh { device });
 
-        println!("registered random integration {}", self.id);
-
         Ok(())
     }
 
@@ -59,16 +57,6 @@ impl CustomIntegration for Random {
         // that polling is not needed here?
         tokio::spawn(async { poll_sensor(random).await });
 
-        Ok(())
-    }
-
-    async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
-        // do nothing
-        Ok(())
-    }
-
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
         Ok(())
     }
 }

@@ -4,7 +4,7 @@ use crate::types::{
     custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, Light, OnOffDevice},
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::IntegrationId,
 };
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -115,19 +115,10 @@ impl CustomIntegration for WakeOnLan {
 
         Ok(())
     }
-
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
-        Ok(())
-    }
 }
 
 async fn do_sleep_on_lan(endpoint: String) -> Result<()> {
-    let mut res = surf::get(&endpoint).await.map_err(|err| anyhow!(err))?;
-    println!(
-        "res: {}",
-        res.body_string().await.map_err(|err| anyhow!(err))?
-    );
+    surf::get(&endpoint).await.map_err(|err| anyhow!(err))?;
 
     Ok(())
 }

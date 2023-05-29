@@ -45,18 +45,6 @@ impl CustomIntegration for Timer {
         self.event_tx
             .send(Message::IntegrationDeviceRefresh { device });
 
-        println!("registered timer integration {}", self.id);
-
-        Ok(())
-    }
-
-    async fn start(&mut self) -> Result<()> {
-        println!("started timer integration {}", self.id);
-
-        Ok(())
-    }
-
-    async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
         Ok(())
     }
 

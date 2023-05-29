@@ -58,12 +58,6 @@ impl CustomIntegration for Mqtt {
         })
     }
 
-    async fn register(&mut self) -> Result<()> {
-        println!("registered mqtt integration {}", self.id);
-
-        Ok(())
-    }
-
     async fn start(&mut self) -> Result<()> {
         let random_string: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
@@ -106,8 +100,6 @@ impl CustomIntegration for Mqtt {
                 }
             }
         });
-
-        println!("started mqtt integration {}", self.id);
 
         Ok(())
     }

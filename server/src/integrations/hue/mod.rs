@@ -8,7 +8,7 @@ use crate::types::{
     custom_integration::CustomIntegration,
     device::Device,
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::IntegrationId,
 };
 use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
@@ -81,14 +81,10 @@ impl CustomIntegration for Hue {
                 .send(Message::IntegrationDeviceRefresh { device });
         }
 
-        println!("registered hue integration");
-
         Ok(())
     }
 
     async fn start(&mut self) -> Result<()> {
-        println!("started hue integration");
-
         {
             let init_bridge_sensors = self
                 .bridge_state
@@ -123,11 +119,6 @@ impl CustomIntegration for Hue {
             }
         }
 
-        Ok(())
-    }
-
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
         Ok(())
     }
 }

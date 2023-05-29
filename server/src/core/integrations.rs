@@ -12,7 +12,13 @@ use anyhow::{anyhow, Context, Result};
 use std::{collections::HashMap, convert::TryFrom, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 
-pub type CustomIntegrationsMap = HashMap<IntegrationId, Arc<Mutex<Box<dyn CustomIntegration>>>>;
+#[derive(Clone)]
+pub struct LoadedIntegration {
+    integration: Arc<Mutex<Box<dyn CustomIntegration>>>,
+    module_name: String,
+}
+
+pub type CustomIntegrationsMap = HashMap<IntegrationId, LoadedIntegration>;
 pub type DeviceStates = HashMap<DeviceKey, Device>;
 
 #[derive(Clone)]
@@ -74,8 +80,14 @@ impl Integrations {
             IntegrationKind::Custom => {
                 let integration =
                     load_custom_integration(module_name, integration_id, config, event_tx)?;
+
+                let loaded_integration = LoadedIntegration {
+                    integration: Arc::new(Mutex::new(integration)),
+                    module_name: module_name.to_string(),
+                };
+
                 self.custom_integrations
-                    .insert(integration_id.clone(), Arc::new(Mutex::new(integration)));
+                    .insert(integration_id.clone(), loaded_integration);
             }
         }
 
@@ -83,20 +95,25 @@ impl Integrations {
     }
 
     pub async fn run_register_pass(&mut self) -> Result<()> {
-        for (_integration_id, integration) in self.custom_integrations.iter_mut() {
-            let mut integration = integration.lock().await;
+        for (integration_id, li) in self.custom_integrations.iter_mut() {
+            let mut integration = li.integration.lock().await;
 
             integration.register().await.unwrap();
+            println!(
+                "registered {} integration {}",
+                li.module_name, integration_id
+            );
         }
 
         Ok(())
     }
 
     pub async fn run_start_pass(&mut self) -> Result<()> {
-        for (_integration_id, integration) in self.custom_integrations.iter_mut() {
-            let mut integration = integration.lock().await;
+        for (integration_id, li) in self.custom_integrations.iter_mut() {
+            let mut integration = li.integration.lock().await;
 
             integration.start().await.unwrap();
+            println!("started {} integration {}", li.module_name, integration_id);
         }
 
         Ok(())
@@ -108,14 +125,14 @@ impl Integrations {
             expected_device_states.insert(device.get_device_key(), device.clone());
         }
 
-        let integration = self
+        let li = self
             .custom_integrations
             .get(&device.integration_id)
             .context(format!(
                 "Expected to find integration by id {}",
                 device.integration_id
             ))?;
-        let mut integration = integration.lock().await;
+        let mut integration = li.integration.lock().await;
 
         integration
             .set_integration_device_state(&device.clone())
@@ -127,14 +144,14 @@ impl Integrations {
         integration_id: &IntegrationId,
         payload: &IntegrationActionPayload,
     ) -> Result<()> {
-        let integration = self
+        let li = self
             .custom_integrations
             .get(integration_id)
             .context(format!(
                 "Expected to find integration by id {}",
                 integration_id
             ))?;
-        let mut integration = integration.lock().await;
+        let mut integration = li.integration.lock().await;
 
         integration.run_integration_action(payload).await
     }

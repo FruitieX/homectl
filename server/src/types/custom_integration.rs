@@ -10,9 +10,15 @@ pub trait CustomIntegration: Send {
     where
         Self: Sized;
 
-    async fn register(&mut self) -> Result<()>;
-    async fn start(&mut self) -> Result<()>;
-    async fn set_integration_device_state(&mut self, device: &Device) -> Result<()>;
+    async fn register(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn start(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
+        Ok(())
+    }
     async fn run_integration_action(&mut self, _payload: &IntegrationActionPayload) -> Result<()> {
         Ok(())
     }

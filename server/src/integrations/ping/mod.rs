@@ -8,7 +8,7 @@ use crate::types::{
     custom_integration::CustomIntegration,
     device::{Device, DeviceId, DeviceState, OnOffDevice},
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::IntegrationId,
 };
 use serde::Deserialize;
 use tokio::time;
@@ -81,20 +81,13 @@ impl CustomIntegration for Ping {
         });
         Ok(())
     }
-    async fn start(&mut self) -> Result<()> {
-        Ok(())
-    }
 
     async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
         // self.devices.insert(device.id.clone(), device.clone());
         Ok(())
     }
-
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
-        Ok(())
-    }
 }
+
 fn update_state(machine: &PingMachine, id: &IntegrationId, state_b: bool, sender: &TxEventChannel) {
     let state = DeviceState::OnOffDevice(OnOffDevice { power: state_b });
     let device = Device {

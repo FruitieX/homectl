@@ -2,10 +2,8 @@ pub mod lights;
 pub mod utils;
 
 use crate::types::{
-    custom_integration::CustomIntegration,
-    device::Device,
-    event::TxEventChannel,
-    integration::{IntegrationActionPayload, IntegrationId},
+    custom_integration::CustomIntegration, device::Device, event::TxEventChannel,
+    integration::IntegrationId,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -42,8 +40,6 @@ impl CustomIntegration for Lifx {
     }
 
     async fn register(&mut self) -> Result<()> {
-        println!("registered lifx integration {}", self.id);
-
         let config = self.config.clone();
         let integration_id = self.id.clone();
         let sender = self.event_tx.clone();
@@ -88,12 +84,6 @@ impl CustomIntegration for Lifx {
         Ok(())
     }
 
-    async fn start(&mut self) -> Result<()> {
-        println!("started lifx integration {}", self.id);
-
-        Ok(())
-    }
-
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let lifx_state = to_lifx_state(device);
 
@@ -117,11 +107,6 @@ impl CustomIntegration for Lifx {
             Err(e) => println!("Error in lifx set_integration_device_state {:?}", e),
         }
 
-        Ok(())
-    }
-
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
         Ok(())
     }
 }

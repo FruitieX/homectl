@@ -56,14 +56,12 @@ impl CustomIntegration for Dummy {
             self.event_tx
                 .send(Message::IntegrationDeviceRefresh { device });
         }
-        println!("registered dummy integration {}", self.id);
 
         Ok(())
     }
 
     async fn start(&mut self) -> Result<()> {
-        println!("started dummy integration {}", self.id);
-
+        // do nothing
         Ok(())
     }
 

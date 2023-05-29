@@ -2,7 +2,7 @@ use crate::types::{
     custom_integration::CustomIntegration,
     device::{Device, DeviceColor, DeviceId, DeviceState, Light},
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::IntegrationId,
     scene::{color_config_as_device_color, ColorConfig},
 };
 use crate::utils::from_hh_mm;
@@ -62,30 +62,16 @@ impl CustomIntegration for Circadian {
         self.sender
             .send(Message::IntegrationDeviceRefresh { device });
 
-        println!("registered circadian integration {}", self.id);
-
         Ok(())
     }
 
     async fn start(&mut self) -> Result<()> {
-        println!("started circadian integration {}", self.id);
-
         let circadian = self.clone();
 
         // FIXME: can we restructure the integrations / devices systems such
         // that polling is not needed here?
         tokio::spawn(async { poll_sensor(circadian).await });
 
-        Ok(())
-    }
-
-    async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {
-        // do nothing
-        Ok(())
-    }
-
-    async fn run_integration_action(&mut self, _: &IntegrationActionPayload) -> Result<()> {
-        // do nothing
         Ok(())
     }
 }
