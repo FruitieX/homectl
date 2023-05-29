@@ -4,7 +4,7 @@ use crate::types::{
     custom_integration::CustomIntegration,
     device::Device,
     event::{Message, TxEventChannel},
-    integration::IntegrationId,
+    integration::{IntegrationActionPayload, IntegrationId},
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
@@ -40,6 +40,12 @@ pub struct Mqtt {
     event_tx: TxEventChannel,
     config: MqttConfig,
     client: Option<AsyncClient>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct CustomMqttAction {
+    topic: String,
+    json: String,
 }
 
 #[async_trait]
@@ -119,6 +125,22 @@ impl CustomIntegration for Mqtt {
         let json = serde_json::to_string(&mqtt_device)?;
 
         client.publish(topic, QoS::AtLeastOnce, true, json).await?;
+
+        Ok(())
+    }
+
+    /// Can be used for pushing arbitrary values to the MQTT broker
+    async fn run_integration_action(&mut self, payload: &IntegrationActionPayload) -> Result<()> {
+        let action: CustomMqttAction = serde_json::from_str(&payload.to_string())?;
+
+        let client = self
+            .client
+            .as_ref()
+            .expect("Expected self.client to be set in start phase");
+
+        client
+            .publish(action.topic, QoS::AtLeastOnce, true, action.json)
+            .await?;
 
         Ok(())
     }
