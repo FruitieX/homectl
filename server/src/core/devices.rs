@@ -153,7 +153,7 @@ impl Devices {
                                 ..db_device
                             };
 
-                            self.set_device_state(&device, true, true, false).await;
+                            self.set_device_state(&device, true, true, true).await;
                         }
                         None => {
                             println!("Discovered device: {:?}", device);
