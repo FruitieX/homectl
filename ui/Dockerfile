@@ -1,4 +1,4 @@
-FROM node:20-alpine@sha256:4559bc033338938e54d0a3c2f0d7c3ad7d1d13c28c4c405b85c6b3a26f4ce5f7 AS base
+FROM node:20-alpine@sha256:f3fe00fbf0cd0660487f3133a2a4bf16d0778198fdc94a08eb6558ebf9c39f57 AS base
 
 # Install dependencies
 FROM base AS deps
