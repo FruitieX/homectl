@@ -1,10 +1,8 @@
 use crate::types::{
     action::{Action, Actions},
-    device::{Device, DeviceState, DevicesState, SensorKind},
+    device::{Device, DeviceData, DevicesState, SensorDevice},
     event::{Message, TxEventChannel},
-    rule::{
-        AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule, SensorRuleState,
-    },
+    rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
 };
 use std::collections::HashSet;
 
@@ -114,9 +112,9 @@ fn is_routine_triggered(
     Ok(result)
 }
 
-fn get_device_sensor_kind(device: &Device) -> Option<SensorKind> {
-    match &device.state {
-        DeviceState::Sensor(sensor_kind) => Some(sensor_kind.clone()),
+fn get_device_sensor_kind(device: &Device) -> Option<SensorDevice> {
+    match &device.data {
+        DeviceData::Sensor(sensor_kind) => Some(sensor_kind.clone()),
         _ => None,
     }
 }
@@ -132,67 +130,17 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
             // FIXME: there must be a better way
             match (rule.state.clone(), sensor_kind) {
                 (
-                    SensorRuleState::OnOffSensor { value: rule_value },
-                    Some(SensorKind::OnOffSensor {
+                    SensorDevice::BooleanSensor { value: rule_value },
+                    Some(SensorDevice::BooleanSensor {
                         value: sensor_value,
                     }),
                 ) => Ok(rule_value == sensor_value),
                 (
-                    SensorRuleState::DimmerSwitch {
-                        on: Some(rule_on),
-                        up: _,
-                        down: _,
-                        off: _,
-                    },
-                    Some(SensorKind::DimmerSwitch {
-                        on: sensor_on,
-                        up: _,
-                        down: _,
-                        off: _,
+                    SensorDevice::TextSensor { value: rule_value },
+                    Some(SensorDevice::TextSensor {
+                        value: sensor_value,
                     }),
-                ) => Ok(rule_on == sensor_on),
-                (
-                    SensorRuleState::DimmerSwitch {
-                        on: _,
-                        up: Some(rule_up),
-                        down: _,
-                        off: _,
-                    },
-                    Some(SensorKind::DimmerSwitch {
-                        on: _,
-                        up: sensor_up,
-                        down: _,
-                        off: _,
-                    }),
-                ) => Ok(rule_up == sensor_up),
-                (
-                    SensorRuleState::DimmerSwitch {
-                        on: _,
-                        up: _,
-                        down: Some(rule_down),
-                        off: _,
-                    },
-                    Some(SensorKind::DimmerSwitch {
-                        on: _,
-                        up: _,
-                        down: sensor_down,
-                        off: _,
-                    }),
-                ) => Ok(rule_down == sensor_down),
-                (
-                    SensorRuleState::DimmerSwitch {
-                        on: _,
-                        up: _,
-                        down: _,
-                        off: Some(rule_off),
-                    },
-                    Some(SensorKind::DimmerSwitch {
-                        on: _,
-                        up: _,
-                        down: _,
-                        off: sensor_off,
-                    }),
-                ) => Ok(rule_off == sensor_off),
+                ) => Ok(rule_value == sensor_value),
                 (rule, sensor) => Err(format!(
                     "Unknown sensor states encountered when processing rule {:?}. (sensor: {:?})",
                     rule, sensor,
@@ -202,9 +150,9 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
         Rule::Group(GroupRule { scene, power, .. })
         | Rule::Device(DeviceRule { scene, power, .. }) => {
             #[allow(clippy::if_same_then_else)]
-            if scene.is_some() && scene.as_ref() != device.scene.as_ref().map(|s| &s.scene_id) {
+            if scene.is_some() && scene.as_ref() != device.get_scene().as_ref() {
                 Ok(false)
-            } else if power.is_some() && power != &device.state.is_powered_on() {
+            } else if power.is_some() && power != &device.is_powered_on() {
                 Ok(false)
             } else {
                 Ok(true)

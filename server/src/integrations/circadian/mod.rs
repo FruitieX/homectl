@@ -1,9 +1,9 @@
 use crate::types::{
+    color::{DeviceColor, SupportedColorModes},
     custom_integration::CustomIntegration,
-    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
-    scene::{color_config_as_device_color, ColorConfig},
 };
 use crate::utils::from_hh_mm;
 use anyhow::{Context, Result};
@@ -20,13 +20,13 @@ pub struct CircadianConfig {
     #[serde(deserialize_with = "from_hh_mm")]
     day_fade_start: chrono::NaiveTime,
     day_fade_duration_hours: i64,
-    day_color: ColorConfig,
+    day_color: DeviceColor,
     day_brightness: Option<f32>,
 
     #[serde(deserialize_with = "from_hh_mm")]
     night_fade_start: chrono::NaiveTime,
     night_fade_duration_hours: i64,
-    night_color: ColorConfig,
+    night_color: DeviceColor,
     night_brightness: Option<f32>,
 }
 
@@ -51,8 +51,8 @@ impl CustomIntegration for Circadian {
             id: id.clone(),
             config: config.clone(),
             sender,
-            converted_day_color: color_config_as_device_color(config.day_color),
-            converted_night_color: color_config_as_device_color(config.night_color),
+            converted_day_color: config.day_color,
+            converted_night_color: config.night_color,
         })
     }
 
@@ -114,13 +114,15 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
         circadian.converted_day_color.clone(),
         circadian.converted_night_color.clone(),
     ) {
-        (DeviceColor::Hsv(day), DeviceColor::Hsv(night)) => {
+        (DeviceColor::Hs(day), DeviceColor::Hs(night)) => {
             let i = get_night_fade(circadian);
+            let day = palette::Hsv::new(day.h as f32, day.s, 1.0);
+            let night = palette::Hsv::new(night.h as f32, night.s, 1.0);
             let color = day.mix(night, i);
 
-            DeviceColor::Hsv(color)
+            color.into()
         }
-        (DeviceColor::Cct(_), DeviceColor::Cct(_)) => todo!(),
+        (DeviceColor::Ct(_), DeviceColor::Ct(_)) => todo!(),
         _ => panic!("Mixed color types not supported"),
     }
 }
@@ -161,18 +163,19 @@ async fn poll_sensor(circadian: Circadian) {
 }
 
 fn mk_circadian_device(circadian: &Circadian) -> Device {
-    let state = DeviceState::Light(Light::new(
+    let state = DeviceData::Managed(ManagedDevice::new(
+        None,
         true,
         get_circadian_brightness(circadian),
         Some(get_circadian_color(circadian)),
         None,
+        SupportedColorModes::default(),
     ));
 
     Device {
         id: DeviceId::new("color"),
         name: circadian.config.device_name.clone(),
         integration_id: circadian.id.clone(),
-        scene: None,
-        state,
+        data: state,
     }
 }

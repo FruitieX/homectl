@@ -1,12 +1,12 @@
 use crate::types::{
+    color::{ColorMode, DeviceColor, SupportedColorModes},
     custom_integration::CustomIntegration,
-    device::{Device, DeviceColor, DeviceId, DeviceState, Light},
+    device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
 use anyhow::{Context, Result};
 use async_trait::async_trait;
-use palette::{rgb::Rgb, FromColor, Hsv};
 use rand::prelude::*;
 use serde::Deserialize;
 use std::time::Duration;
@@ -64,12 +64,11 @@ impl CustomIntegration for Random {
 fn get_random_color() -> DeviceColor {
     let mut rng = rand::thread_rng();
 
-    let r: f32 = rng.gen();
-    let g: f32 = rng.gen();
-    let b: f32 = rng.gen();
+    let r: u8 = rng.gen();
+    let g: u8 = rng.gen();
+    let b: u8 = rng.gen();
 
-    let rgb: Rgb = Rgb::new(r, g, b);
-    DeviceColor::Hsv(Hsv::from_color(rgb))
+    DeviceColor::new_from_rgb(r, g, b)
 }
 
 async fn poll_sensor(random: Random) {
@@ -90,18 +89,19 @@ async fn poll_sensor(random: Random) {
 }
 
 fn mk_random_device(random: &Random) -> Device {
-    let state = DeviceState::Light(Light::new(
+    let state = DeviceData::Managed(ManagedDevice::new(
+        None,
         true,
         Some(1.0),
         Some(get_random_color()),
         Some(500),
+        SupportedColorModes::singleton(ColorMode::Rgb),
     ));
 
     Device {
         id: DeviceId::new("color"),
         name: random.config.device_name.clone(),
         integration_id: random.id.clone(),
-        scene: None,
-        state,
+        data: state,
     }
 }

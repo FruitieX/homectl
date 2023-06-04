@@ -1,13 +1,11 @@
 use crate::types::{
-    device::{Device, DeviceId, DeviceKey, DeviceSceneState, DeviceState, DevicesState, Light},
+    device::{Device, DeviceData, DeviceId, DeviceKey, DevicesState, ManagedDeviceState},
     group::GroupDeviceLink,
     scene::{
-        color_config_as_device_color, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
-        SceneDescriptor, SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId,
-        ScenesConfig,
+        FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig, SceneDescriptor,
+        SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId, ScenesConfig,
     },
 };
-use chrono::Utc;
 use itertools::Itertools;
 
 use crate::db::actions::db_get_scenes;
@@ -185,13 +183,13 @@ impl Scenes {
         device: &Device,
         devices: &DevicesState,
         ignore_transition: bool,
-    ) -> Option<DeviceState> {
-        let scene_id = &device.scene.as_ref()?.scene_id;
+    ) -> Option<ManagedDeviceState> {
+        let scene_id = device.get_scene()?;
 
         let scene_devices = self.find_scene_devices_config(
             devices,
             &SceneDescriptor {
-                scene_id: scene_id.clone(),
+                scene_id,
                 device_keys: None,
                 group_keys: None,
             },
@@ -211,66 +209,40 @@ impl Scenes {
                     link.name.as_ref(),
                 )?;
 
-                let state = source_device.state;
+                let mut state = if let DeviceData::Managed(managed) = source_device.data {
+                    Some(managed.state)
+                } else {
+                    None
+                }?;
 
                 // Brightness override
-                let state = match state {
-                    DeviceState::Light(mut state) => {
-                        state.brightness = if link.brightness.is_some()
-                            || state.brightness.is_some()
-                        {
-                            Some(link.brightness.unwrap_or(1.0) * state.brightness.unwrap_or(1.0))
-                        } else {
-                            None
-                        };
-                        DeviceState::Light(state)
-                    }
-                    DeviceState::MultiSourceLight(mut state) => {
-                        state.brightness = if link.brightness.is_some()
-                            || state.brightness.is_some()
-                        {
-                            Some(link.brightness.unwrap_or(1.0) * state.brightness.unwrap_or(1.0))
-                        } else {
-                            None
-                        };
-                        DeviceState::MultiSourceLight(state)
-                    }
-                    DeviceState::OnOffDevice(state) => DeviceState::OnOffDevice(state),
-                    DeviceState::Sensor(state) => DeviceState::Sensor(state),
-                };
+                state.brightness = link.brightness;
 
-                // Ignore device's transition_ms value
-                let state = match (ignore_transition, state.clone()) {
-                    (true, DeviceState::Light(mut state)) => {
-                        state.transition_ms = None;
-                        DeviceState::Light(state)
-                    }
-                    _ => state,
-                };
+                if ignore_transition {
+                    // Ignore device's transition_ms value
+                    state.transition_ms = None;
+                }
 
                 Some(state)
             }
 
             SceneDeviceConfig::SceneLink(link) => {
                 // Use state from another scene
-                let device = Device {
-                    scene: Some(DeviceSceneState {
-                        scene_id: link.scene_id.clone(),
-                        ..device.scene.clone()?
-                    }),
-                    ..device.clone()
-                };
-
+                let device = device.set_scene(Some(link.scene_id.clone()));
                 self.find_scene_device_state(&device, devices, ignore_transition)
             }
 
-            SceneDeviceConfig::DeviceState(scene_device) => Some(DeviceState::Light(Light {
-                // Use state from scene_device
-                brightness: scene_device.brightness,
-                color: scene_device.color.clone().map(color_config_as_device_color),
-                power: scene_device.power,
-                transition_ms: scene_device.transition_ms,
-            })),
+            SceneDeviceConfig::DeviceState(scene_device) => {
+                Some(
+                    // Use state from scene_device
+                    ManagedDeviceState {
+                        brightness: scene_device.brightness,
+                        color: scene_device.color.clone(),
+                        power: scene_device.power,
+                        transition_ms: scene_device.transition_ms,
+                    },
+                )
+            }
         }
     }
 
@@ -307,17 +279,7 @@ impl Scenes {
                                             );
 
                                             let device = devices.0.get(&device_key)?;
-                                            let device = Device {
-                                                scene: Some(DeviceSceneState {
-                                                    scene_id: scene_id.clone(),
-                                                    activation_time: device
-                                                        .scene
-                                                        .clone()
-                                                        .map(|s| s.activation_time)
-                                                        .unwrap_or_else(Utc::now),
-                                                }),
-                                                ..device.clone()
-                                            };
+                                            let device = device.set_scene(Some(scene_id.clone()));
 
                                             let device_state = self
                                                 .find_scene_device_state(&device, devices, false)?;

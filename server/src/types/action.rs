@@ -16,7 +16,7 @@ pub enum Action {
     /// Request to cycle between given scenes.
     CycleScenes(CycleScenesDescriptor),
 
-    /// Runs an integration action
+    /// Runs a custom integration action
     Custom(CustomActionDescriptor),
 }
 

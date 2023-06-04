@@ -1,8 +1,9 @@
 use std::{net::SocketAddr, time::Duration};
 
 use crate::types::{
+    color::SupportedColorModes,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceId, DeviceState, Light, OnOffDevice},
+    device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -50,14 +51,20 @@ impl CustomIntegration for WakeOnLan {
 
     async fn register(&mut self) -> anyhow::Result<()> {
         for machine in &self.config.machines {
-            let state = DeviceState::OnOffDevice(OnOffDevice { power: true });
+            let data = DeviceData::Managed(ManagedDevice::new(
+                None,
+                true,
+                None,
+                None,
+                None,
+                SupportedColorModes::default(),
+            ));
 
             let device = Device {
                 id: DeviceId::new(&machine.id),
                 name: machine.id.clone(),
                 integration_id: self.id.clone(),
-                scene: None,
-                state,
+                data,
             };
 
             self.sender
@@ -72,9 +79,8 @@ impl CustomIntegration for WakeOnLan {
     }
 
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
-        let power = match device.state {
-            DeviceState::OnOffDevice(OnOffDevice { power }) => Ok(power),
-            DeviceState::Light(Light { power, .. }) => Ok(power),
+        let power = match &device.data {
+            DeviceData::Managed(ManagedDevice { state, .. }) => Ok(state.power),
             _ => Err(anyhow!(
                 "Unsupported device kind received in wol integration"
             )),

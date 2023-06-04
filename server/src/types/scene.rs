@@ -1,11 +1,7 @@
-use super::device::{CorrelatedColorTemperature, DeviceKey, DeviceState};
+use super::color::DeviceColor;
+use super::device::{DeviceKey, ManagedDeviceState};
 
-use super::{
-    device::{DeviceColor, DeviceId},
-    group::GroupId,
-    integration::IntegrationId,
-};
-use palette::{rgb::Rgb, FromColor, Hsv, Lch};
+use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -29,22 +25,6 @@ impl std::str::FromStr for SceneId {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Ok(SceneId(s.to_string()))
     }
-}
-
-#[derive(Clone, Deserialize, Debug, Serialize)]
-#[serde(untagged)]
-pub enum ColorConfig {
-    Lch(Lch),
-    Hsv(Hsv),
-    Rgb(Rgb),
-}
-
-pub fn color_config_as_device_color(color_config: ColorConfig) -> DeviceColor {
-    DeviceColor::Hsv(match color_config {
-        ColorConfig::Lch(lch) => Hsv::from_color(lch),
-        ColorConfig::Hsv(hsv) => hsv,
-        ColorConfig::Rgb(rgb) => Hsv::from_color(rgb),
-    })
 }
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
@@ -79,10 +59,8 @@ pub struct CycleScenesDescriptor {
 #[ts(export)]
 pub struct SceneDeviceState {
     pub power: bool,
-    #[ts(type = "String")]
-    pub color: Option<ColorConfig>,
+    pub color: Option<DeviceColor>,
     pub brightness: Option<f32>,
-    pub cct: Option<CorrelatedColorTemperature>,
     pub transition_ms: Option<u64>,
 }
 
@@ -126,7 +104,7 @@ pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
 #[ts(export)]
-pub struct SceneDeviceStates(pub HashMap<DeviceKey, DeviceState>);
+pub struct SceneDeviceStates(pub HashMap<DeviceKey, ManagedDeviceState>);
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]

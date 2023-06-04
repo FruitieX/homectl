@@ -1,6 +1,6 @@
 use crate::integrations::{
-    boolean::Boolean, circadian::Circadian, dummy::Dummy, hue::Hue, lifx::Lifx, mqtt::Mqtt,
-    neato::Neato, ping::Ping, random::Random, timer::Timer, wake_on_lan::WakeOnLan,
+    boolean::Boolean, circadian::Circadian, dummy::Dummy, mqtt::Mqtt,
+    neato::Neato, random::Random, timer::Timer, wake_on_lan::WakeOnLan,
 };
 use crate::types::{
     custom_integration::CustomIntegration,
@@ -171,11 +171,8 @@ fn load_custom_integration(
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
         "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
-        "lifx" => Ok(Box::new(Lifx::new(id, config, event_tx)?)),
-        "hue" => Ok(Box::new(Hue::new(id, config, event_tx)?)),
         "mqtt" => Ok(Box::new(Mqtt::new(id, config, event_tx)?)),
         "neato" => Ok(Box::new(Neato::new(id, config, event_tx)?)),
-        "ping" => Ok(Box::new(Ping::new(id, config, event_tx)?)),
         "wake_on_lan" => Ok(Box::new(WakeOnLan::new(id, config, event_tx)?)),
         _ => Err(anyhow!("Unknown module name {}!", module_name)),
     }

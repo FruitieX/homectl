@@ -1,5 +1,5 @@
 use super::get_db_connection;
-use crate::types::device::{Device, DeviceKey, DeviceRow, DeviceState};
+use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
 use crate::types::integration::IntegrationId;
 use crate::types::scene::ScenesConfig;
 use crate::types::scene::{SceneConfig, SceneId};
@@ -12,27 +12,24 @@ pub async fn db_update_device(device: &Device) -> Result<Device> {
     let row = sqlx::query_as!(
         DeviceRow,
         r#"
-            insert into devices (integration_id, device_id, name, scene_id, state)
-            values ($1, $2, $3, $4, $5)
+            insert into devices (integration_id, device_id, name, state)
+            values ($1, $2, $3, $4)
 
             on conflict (integration_id, device_id)
             do update set
                 name = excluded.name,
-                scene_id = excluded.scene_id,
                 state = excluded.state
 
             returning
                 integration_id,
                 device_id,
                 name,
-                scene_id,
-                state as "state: Json<DeviceState>"
+                state as "state: Json<DeviceData>"
         "#,
         &device.integration_id.to_string(),
         &device.id.to_string(),
         &device.name,
-        device.get_scene_id().map(|id| id.to_string()),
-        Json(device.state.clone()) as _
+        Json(device.data.clone()) as _
     )
     .fetch_one(db)
     .await?;
@@ -52,8 +49,7 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Device> {
                 integration_id,
                 device_id,
                 name,
-                scene_id,
-                state as "state: Json<DeviceState>"
+                state as "state: Json<DeviceData>"
             from devices
             where integration_id = $1
               and device_id = $2

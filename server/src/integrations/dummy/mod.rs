@@ -1,6 +1,7 @@
 use crate::types::{
+    color::SupportedColorModes,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceId, DeviceState, OnOffDevice},
+    device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
@@ -12,7 +13,7 @@ use std::collections::HashMap;
 #[derive(Debug, Deserialize)]
 pub struct DummyDeviceConfig {
     name: String,
-    init_state: Option<DeviceState>,
+    init_state: Option<DeviceData>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -45,10 +46,18 @@ impl CustomIntegration for Dummy {
 
     async fn register(&mut self) -> Result<()> {
         for (id, device) in &self.config.devices {
-            let state = device
-                .init_state
-                .clone()
-                .unwrap_or(DeviceState::OnOffDevice(OnOffDevice { power: false }));
+            let state =
+                device
+                    .init_state
+                    .clone()
+                    .unwrap_or(DeviceData::Managed(ManagedDevice::new(
+                        None,
+                        false,
+                        None,
+                        None,
+                        None,
+                        SupportedColorModes::default(),
+                    )));
 
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);
             self.event_tx

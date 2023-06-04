@@ -33,6 +33,7 @@ pub struct MqttConfig {
     brightness_field: Option<String>,
     sensor_value_field: Option<String>,
     transition_ms_field: Option<String>,
+    supported_modes_field: Option<String>,
 }
 
 pub struct Mqtt {

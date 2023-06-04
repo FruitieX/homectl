@@ -1,6 +1,6 @@
 use crate::types::{
     custom_integration::CustomIntegration,
-    device::{Device, DeviceId, DeviceState, SensorKind},
+    device::{Device, DeviceData, DeviceId, SensorDevice},
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
@@ -79,13 +79,12 @@ impl CustomIntegration for Timer {
 }
 
 fn mk_timer_device(id: &IntegrationId, config: &TimerConfig, value: bool) -> Device {
-    let state = DeviceState::Sensor(SensorKind::OnOffSensor { value });
+    let state = DeviceData::Sensor(SensorDevice::BooleanSensor { value });
 
     Device {
         id: DeviceId::new("timer"),
         name: config.device_name.clone(),
         integration_id: id.clone(),
-        scene: None,
-        state,
+        data: state,
     }
 }

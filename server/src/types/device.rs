@@ -1,12 +1,13 @@
 use std::{
     collections::HashMap,
     fmt::{self, Display},
-    ops::Range,
 };
 
-use super::{integration::IntegrationId, scene::SceneId};
-use chrono::{DateTime, Utc};
-use palette::Hsv;
+use super::{
+    color::{DeviceColor, SupportedColorModes},
+    integration::IntegrationId,
+    scene::SceneId,
+};
 use serde::{
     de::{self, Unexpected, Visitor},
     Deserialize, Serialize,
@@ -34,208 +35,113 @@ impl DeviceId {
     }
 }
 
-/// simple on/off devices such as relays, lights
-#[derive(TS, Copy, Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[ts(export)]
-pub struct OnOffDevice {
-    pub power: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
-pub enum DeviceColor {
-    // TODO: use Lch, or Yxy?
-    Hsv(Hsv),
-
-    Cct(CorrelatedColorTemperature),
-}
-
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
-pub struct CorrelatedColorTemperature {
-    cct: f32,
-
-    #[ts(skip)]
-    device_range: Range<f32>,
-}
-
-impl CorrelatedColorTemperature {
-    pub fn new(cct: f32, device_range: Range<f32>) -> CorrelatedColorTemperature {
-        CorrelatedColorTemperature { cct, device_range }
-    }
-
-    pub fn get_cct(&self) -> f32 {
-        self.cct
-    }
-
-    pub fn get_device_range(&self) -> &Range<f32> {
-        &self.device_range
-    }
-}
-
-impl Default for CorrelatedColorTemperature {
-    fn default() -> Self {
-        Self {
-            cct: 4000.0,
-            device_range: Range {
-                start: 2000.0,
-                end: 6500.0,
-            },
-        }
-    }
-}
-
-/// lights with adjustable brightness and/or color
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[ts(export)]
-pub struct Light {
+pub struct ManagedDeviceState {
     pub power: bool,
 
     /// Current brightness, if supported
     pub brightness: Option<f32>,
 
     /// Current color, if supported
-    #[ts(
-        type = "{ Hsv: { hue: number, saturation: number, value: number } } | { Cct: { cct: number } } | null"
-    )]
     pub color: Option<DeviceColor>,
 
     /// Transition time in milliseconds
     pub transition_ms: Option<u64>,
 }
 
-impl Light {
-    pub fn new(
-        power: bool,
-        brightness: Option<f32>,
-        color: Option<DeviceColor>,
-        transition_ms: Option<u64>,
-    ) -> Light {
-        Light {
-            power,
-            brightness,
-            color,
-            transition_ms,
-        }
-    }
-}
-
-/// lights with multiple individually adjustable light sources
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[ts(export)]
-pub struct MultiSourceLight {
-    pub power: bool,
-
-    /// Global brightness control for all lights in this MultiSourceLight
-    pub brightness: Option<f32>,
-
-    /// List of colors, one for each light in this MultiSourceLight
-    #[ts(type = "String")]
-    pub lights: Vec<DeviceColor>,
-}
-
-/// button sensors, motion sensors
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[ts(export)]
-pub enum SensorKind {
-    OnOffSensor {
-        value: bool,
-    },
-    DimmerSwitch {
-        on: bool,
-        up: bool,
-        down: bool,
-        off: bool,
-    },
-    StringValue {
-        value: String,
-    },
-    Temperature {
-        value: f64,
-    },
-    LightLevel {
-        lightlevel: f64,
-        dark: bool,
-        daylight: bool,
-    },
-    Unknown,
-}
-
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
-#[ts(export)]
-pub enum DeviceState {
-    OnOffDevice(OnOffDevice),
-    Light(Light),
-    MultiSourceLight(MultiSourceLight),
-    Sensor(SensorKind),
-}
-
-impl Display for DeviceState {
+impl Display for ManagedDeviceState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let s = match self {
-            DeviceState::OnOffDevice(_) => "OnOffDevice".to_string(),
-            DeviceState::Light(light) => {
-                if !light.power {
-                    "off".to_string()
-                } else if let Some(DeviceColor::Hsv(color)) = light.color {
-                    format!(
-                        "hsv({}, {}, {})",
-                        color.hue.into_positive_degrees(),
-                        color.saturation,
-                        color.value
-                    )
-                } else if let Some(DeviceColor::Cct(cct)) = &light.color {
-                    format!("cct({})", cct.get_cct())
-                } else if let Some(bri) = light.brightness {
-                    format!("bri({})", bri)
-                } else {
-                    "on".to_string()
-                }
+        let s = {
+            let color_str = if !self.power {
+                "off".to_string()
+            } else if let Some(DeviceColor::Xy(color)) = &self.color {
+                format!("xy({}, {})", color.x, color.y,)
+            } else if let Some(DeviceColor::Hs(color)) = &self.color {
+                format!("hs({}, {})", color.h, color.s,)
+            } else if let Some(DeviceColor::Rgb(color)) = &self.color {
+                format!("rgb({}, {}, {})", color.r, color.g, color.b)
+            } else if let Some(DeviceColor::Ct(ct)) = &self.color {
+                format!("ct({})", ct.ct)
+            } else {
+                "on".to_string()
+            };
+
+            if let Some(bri) = self.brightness {
+                format!("{}, bri({})", color_str, bri)
+            } else {
+                color_str
             }
-            DeviceState::MultiSourceLight(_) => "MultiSourceLight".to_string(),
-            DeviceState::Sensor(_) => "Sensor".to_string(),
         };
 
         f.write_str(&s)
     }
 }
 
-impl DeviceState {
-    pub fn is_powered_on(&self) -> Option<bool> {
-        match self {
-            DeviceState::OnOffDevice(device) => Some(device.power),
-            DeviceState::Light(device) => Some(device.power),
-            DeviceState::MultiSourceLight(device) => Some(device.power),
-            // Doesn't make sense for sensors
-            DeviceState::Sensor(_) => None,
-        }
-    }
-}
-
-/// active scene that's controlling the device state, if any
+/// lights with adjustable brightness and/or color
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
-pub struct DeviceSceneState {
-    pub scene_id: SceneId,
-
-    #[ts(type = "String")]
-    pub activation_time: DateTime<Utc>,
+pub struct ManagedDevice {
+    pub scene: Option<SceneId>,
+    pub supported_modes: SupportedColorModes,
+    pub state: ManagedDeviceState,
 }
 
-impl DeviceSceneState {
-    pub fn new(scene_id: SceneId) -> DeviceSceneState {
-        DeviceSceneState {
-            scene_id,
-            activation_time: Utc::now(),
+impl ManagedDevice {
+    pub fn new(
+        scene: Option<SceneId>,
+        power: bool,
+        brightness: Option<f32>,
+        color: Option<DeviceColor>,
+        transition_ms: Option<u64>,
+        supported_modes: SupportedColorModes,
+    ) -> ManagedDevice {
+        ManagedDevice {
+            scene,
+            state: ManagedDeviceState {
+                power,
+                brightness,
+                color,
+                transition_ms,
+            },
+            supported_modes,
         }
     }
 }
+
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
+#[serde(untagged)]
+pub enum SensorDevice {
+    BooleanSensor { value: bool },
+    TextSensor { value: String },
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
+pub enum DeviceData {
+    Managed(ManagedDevice),
+    Sensor(SensorDevice),
+}
+
+impl Display for DeviceData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            DeviceData::Managed(light) => light.state.to_string(),
+            DeviceData::Sensor(_) => "Sensor".to_string(),
+        };
+
+        f.write_str(&s)
+    }
+}
+
+impl DeviceData {}
 
 pub struct DeviceRow {
     pub device_id: String,
     pub name: String,
     pub integration_id: String,
-    pub scene_id: Option<String>,
-    pub state: sqlx::types::Json<DeviceState>,
+    pub state: sqlx::types::Json<DeviceData>,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -244,8 +150,7 @@ pub struct Device {
     pub id: DeviceId,
     pub name: String,
     pub integration_id: IntegrationId,
-    pub scene: Option<DeviceSceneState>,
-    pub state: DeviceState,
+    pub data: DeviceData,
 }
 
 impl From<DeviceRow> for Device {
@@ -254,8 +159,7 @@ impl From<DeviceRow> for Device {
             id: row.device_id.into(),
             name: row.name,
             integration_id: row.integration_id.into(),
-            scene: row.scene_id.map(SceneId::new).map(DeviceSceneState::new),
-            state: row.state.0,
+            data: row.state.0,
         }
     }
 }
@@ -265,14 +169,13 @@ impl Device {
         integration_id: IntegrationId,
         id: DeviceId,
         name: String,
-        state: DeviceState,
+        state: DeviceData,
     ) -> Device {
         Device {
             id,
             name,
             integration_id,
-            scene: None,
-            state,
+            data: state,
         }
     }
 
@@ -283,8 +186,46 @@ impl Device {
         }
     }
 
-    pub fn get_scene_id(&self) -> Option<&SceneId> {
-        self.scene.as_ref().map(|scene| &scene.scene_id)
+    pub fn get_scene(&self) -> Option<SceneId> {
+        match &self.data {
+            DeviceData::Managed(ManagedDevice { scene, .. }) => scene.clone(),
+            DeviceData::Sensor(_) => None,
+        }
+    }
+
+    pub fn set_scene(&self, scene: Option<SceneId>) -> Self {
+        let mut device = self.clone();
+
+        if let DeviceData::Managed(ref mut data) = device.data {
+            data.scene = scene;
+        }
+
+        device
+    }
+
+    pub fn is_powered_on(&self) -> Option<bool> {
+        match &self.data {
+            DeviceData::Managed(data) => Some(data.state.power),
+            // Doesn't make sense for sensors
+            DeviceData::Sensor(_) => None,
+        }
+    }
+
+    pub fn get_managed_state(&self) -> Option<&ManagedDeviceState> {
+        match self.data {
+            DeviceData::Managed(ref data) => Some(&data.state),
+            DeviceData::Sensor(_) => None,
+        }
+    }
+
+    pub fn set_managed_state(&self, state: ManagedDeviceState) -> Device {
+        let mut device = self.clone();
+
+        if let DeviceData::Managed(ref mut data) = device.data {
+            data.state = state;
+        }
+
+        device
     }
 }
 

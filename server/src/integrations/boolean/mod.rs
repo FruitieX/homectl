@@ -1,6 +1,6 @@
 use crate::types::{
     custom_integration::CustomIntegration,
-    device::{Device, DeviceId, DeviceState, SensorKind},
+    device::{Device, DeviceData, DeviceId, SensorDevice},
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
@@ -66,7 +66,7 @@ impl CustomIntegration for Boolean {
 }
 
 fn mk_boolean_device(id: &IntegrationId, config: &BooleanConfig, value: Option<bool>) -> Device {
-    let state = DeviceState::Sensor(SensorKind::OnOffSensor {
+    let state = DeviceData::Sensor(SensorDevice::BooleanSensor {
         value: value.unwrap_or(config.init_value),
     });
 
@@ -74,7 +74,6 @@ fn mk_boolean_device(id: &IntegrationId, config: &BooleanConfig, value: Option<b
         id: DeviceId::new("boolean"),
         name: config.device_name.clone(),
         integration_id: id.clone(),
-        scene: None,
-        state,
+        data: state,
     }
 }

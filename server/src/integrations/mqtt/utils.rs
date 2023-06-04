@@ -1,14 +1,11 @@
 use crate::integrations::mqtt::MqttConfig;
+use crate::types::color::{Ct, DeviceColor, Hs, SupportedColorModes};
 use crate::types::{
-    device::{
-        CorrelatedColorTemperature, Device, DeviceColor, DeviceId, DeviceState, Light, OnOffDevice,
-        SensorKind,
-    },
+    device::{Device, DeviceData, DeviceId, ManagedDevice, SensorDevice},
     integration::IntegrationId,
 };
 use anyhow::Result;
 use json_value_merge::Merge;
-use palette::Hsv;
 
 pub fn mqtt_to_homectl(
     payload: &[u8],
@@ -31,6 +28,10 @@ pub fn mqtt_to_homectl(
         .transition_ms_field
         .as_deref()
         .unwrap_or("/transition_ms");
+    let supported_modes_field = config
+        .supported_modes_field
+        .as_deref()
+        .unwrap_or("/supported_modes");
 
     let id = value
         .pointer(id_field)
@@ -46,18 +47,13 @@ pub fn mqtt_to_homectl(
 
     let color = value
         .pointer(color_field)
-        .and_then(|value| serde_json::from_value::<Hsv>(value.clone()).ok())
-        .map(DeviceColor::Hsv)
+        .and_then(|value| serde_json::from_value::<Hs>(value.clone()).ok())
+        .map(DeviceColor::Hs)
         .or_else(|| {
             value
                 .pointer(cct_field)
                 .and_then(serde_json::Value::as_f64)
-                .map(|value| {
-                    DeviceColor::Cct(CorrelatedColorTemperature::new(
-                        value as f32,
-                        2700.0..6500.0,
-                    ))
-                })
+                .map(|value| DeviceColor::Ct(Ct { ct: value as u16 }))
         });
 
     let power = value
@@ -85,9 +81,9 @@ pub fn mqtt_to_homectl(
             .unwrap_or("")
             .parse::<bool>()
         {
-            DeviceState::Sensor(SensorKind::OnOffSensor { value })
+            DeviceData::Sensor(SensorDevice::BooleanSensor { value })
         } else {
-            DeviceState::Sensor(SensorKind::StringValue {
+            DeviceData::Sensor(SensorDevice::TextSensor {
                 value: value
                     .pointer(sensor_value_field)
                     .and_then(serde_json::Value::as_str)
@@ -95,23 +91,27 @@ pub fn mqtt_to_homectl(
                     .to_string(),
             })
         }
-    } else if brightness.is_some() {
-        DeviceState::Light(Light {
+    } else {
+        let supported_modes: SupportedColorModes = value
+            .pointer(supported_modes_field)
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .unwrap_or_default();
+
+        DeviceData::Managed(ManagedDevice::new(
+            None,
             power,
             brightness,
             color,
             transition_ms,
-        })
-    } else {
-        DeviceState::OnOffDevice(OnOffDevice { power })
+            supported_modes,
+        ))
     };
 
     Ok(Device {
         id: DeviceId::new(&id),
         name,
         integration_id,
-        scene: None,
-        state: device_state,
+        data: device_state,
     })
 }
 
@@ -132,14 +132,11 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
     payload.merge_in(id_field, serde_json::Value::String(device.id.to_string()))?;
     payload.merge_in(name_field, serde_json::Value::String(device.name))?;
 
-    match device.state {
-        DeviceState::OnOffDevice(on_off_device) => {
-            payload.merge_in(power_field, serde_json::Value::Bool(on_off_device.power))?;
-        }
-        DeviceState::Light(light) => {
-            payload.merge_in(power_field, serde_json::Value::Bool(light.power))?;
+    match device.data {
+        DeviceData::Managed(device) => {
+            payload.merge_in(power_field, serde_json::Value::Bool(device.state.power))?;
 
-            if let Some(brightness) = light.brightness {
+            if let Some(brightness) = device.state.brightness {
                 payload.merge_in(
                     brightness_field,
                     serde_json::Number::from_f64(brightness.into())
@@ -148,20 +145,20 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
                 )?;
             }
 
-            if let Some(DeviceColor::Hsv(hsv)) = light.color {
+            if let Some(DeviceColor::Hs(hsv)) = &device.state.color {
                 payload.merge_in(color_field, serde_json::to_value(hsv)?)?;
             }
 
-            if let Some(DeviceColor::Cct(cct)) = light.color {
+            if let Some(DeviceColor::Ct(ct)) = &device.state.color {
                 payload.merge_in(
                     cct_field,
-                    serde_json::Number::from_f64(cct.get_cct().into())
+                    serde_json::Number::from_f64(ct.ct as f64)
                         .map(serde_json::Value::Number)
                         .unwrap(),
                 )?;
             }
 
-            if let Some(transition_ms) = light.transition_ms {
+            if let Some(transition_ms) = device.state.transition_ms {
                 payload.merge_in(
                     transition_ms_field,
                     serde_json::Number::from_f64(transition_ms as f64)
@@ -170,8 +167,7 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
                 )?;
             }
         }
-        DeviceState::MultiSourceLight(_) => unimplemented!(),
-        DeviceState::Sensor(_) => unimplemented!(),
+        DeviceData::Sensor(_) => {}
     };
 
     Ok(payload)
@@ -179,6 +175,8 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
 
 #[cfg(test)]
 mod tests {
+    use crate::types::color::{Hs, SupportedColorModes};
+
     use super::*;
     use serde_json::json;
     use std::str::FromStr;
@@ -190,13 +188,14 @@ mod tests {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
             integration_id: IntegrationId::from_str("mqtt").unwrap(),
-            scene: None,
-            state: DeviceState::Light(Light {
-                power: true,
-                brightness: Some(0.5),
-                color: Some(DeviceColor::Hsv(Hsv::new(45.0, 1.0, 1.0))),
-                transition_ms: Some(1000),
-            }),
+            data: DeviceData::Managed(ManagedDevice::new(
+                None,
+                true,
+                Some(0.5),
+                Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
+                Some(1000),
+                SupportedColorModes::default(),
+            )),
         };
 
         let config = MqttConfig {
@@ -212,6 +211,7 @@ mod tests {
             brightness_field: Some("/brightness".to_string()),
             sensor_value_field: Some("/sensor_value".to_string()),
             transition_ms_field: Some("/transition_ms".to_string()),
+            supported_modes_field: Some("/supported_modes".to_string()),
         };
 
         let mqtt_json = homectl_to_mqtt(device, &config).unwrap();
@@ -252,6 +252,7 @@ mod tests {
             brightness_field: Some("/brightness".to_string()),
             sensor_value_field: Some("/sensor_value".to_string()),
             transition_ms_field: Some("/transition_ms".to_string()),
+            supported_modes_field: Some("/supported_modes".to_string()),
         };
 
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
@@ -266,13 +267,14 @@ mod tests {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
             integration_id,
-            scene: None,
-            state: DeviceState::Light(Light {
-                power: true,
-                brightness: Some(0.5),
-                color: Some(DeviceColor::Hsv(Hsv::new(45.0, 1.0, 1.0))),
-                transition_ms: Some(1000),
-            }),
+            data: DeviceData::Managed(ManagedDevice::new(
+                None,
+                true,
+                Some(0.5),
+                Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
+                Some(1000),
+                SupportedColorModes::default(),
+            )),
         };
 
         assert_eq!(device, expected);
@@ -301,6 +303,7 @@ mod tests {
             brightness_field: Some("/brightness".to_string()),
             sensor_value_field: Some("/sensor_value".to_string()),
             transition_ms_field: Some("/transition_ms".to_string()),
+            supported_modes_field: Some("/supported_modes".to_string()),
         };
 
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
