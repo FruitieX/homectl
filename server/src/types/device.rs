@@ -135,8 +135,6 @@ impl Display for DeviceData {
     }
 }
 
-impl DeviceData {}
-
 pub struct DeviceRow {
     pub device_id: String,
     pub name: String,
@@ -215,6 +213,20 @@ impl Device {
         match self.data {
             DeviceData::Managed(ref data) => Some(&data.state),
             DeviceData::Sensor(_) => None,
+        }
+    }
+
+    pub fn get_supported_color_modes(&self) -> Option<&SupportedColorModes> {
+        match self.data {
+            DeviceData::Managed(ref data) => Some(&data.supported_modes),
+            DeviceData::Sensor(_) => None,
+        }
+    }
+
+    pub fn get_sensor_state(&self) -> Option<&SensorDevice> {
+        match self.data {
+            DeviceData::Managed(_) => None,
+            DeviceData::Sensor(ref data) => Some(data),
         }
     }
 
