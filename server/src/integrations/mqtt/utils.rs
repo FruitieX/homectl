@@ -128,6 +128,10 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
         .transition_ms_field
         .as_deref()
         .unwrap_or("/transition_ms");
+    let supported_modes_field = config
+        .supported_modes_field
+        .as_deref()
+        .unwrap_or("/supported_modes");
 
     payload.merge_in(id_field, serde_json::Value::String(device.id.to_string()))?;
     payload.merge_in(name_field, serde_json::Value::String(device.name))?;
@@ -166,6 +170,11 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
                         .unwrap(),
                 )?;
             }
+
+            payload.merge_in(
+                supported_modes_field,
+                serde_json::to_value(device.supported_modes)?,
+            )?;
         }
         DeviceData::Sensor(_) => {}
     };
@@ -175,7 +184,7 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
 
 #[cfg(test)]
 mod tests {
-    use crate::types::color::{Hs, SupportedColorModes};
+    use crate::types::color::{ColorMode, Hs, SupportedColorModes};
 
     use super::*;
     use serde_json::json;
@@ -194,7 +203,7 @@ mod tests {
                 Some(0.5),
                 Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
                 Some(1000),
-                SupportedColorModes::default(),
+                SupportedColorModes::singleton(ColorMode::Hs),
             )),
         };
 
@@ -219,10 +228,11 @@ mod tests {
         let expected = json!({
             "id": "device1",
             "name": "Device 1",
-            "color": { "hue": 45.0, "saturation": 1.0, "value": 1.0 },
+            "color": { "h": 45, "s": 1.0 },
             "power": true,
             "brightness": 0.5,
             "transition_ms": serde_json::json!(1000.0),
+            "supported_modes": { "ct": serde_json::Value::Null, "hs": true, "rgb": false, "xy": false }
         });
 
         assert_eq!(mqtt_json, expected);
@@ -233,10 +243,11 @@ mod tests {
         let mqtt_json = json!({
             "id": "device1",
             "name": "Device 1",
-            "color": { "hue": 45.0, "saturation": 1.0, "value": 1.0 },
+            "color": { "h": 45, "s": 1.0 },
             "power": true,
             "brightness": 0.5,
-            "transition_ms": 1000
+            "transition_ms": 1000,
+            "supported_modes": { "ct": serde_json::Value::Null, "hs": true, "rgb": false, "xy": false }
         });
 
         let config = MqttConfig {
@@ -273,7 +284,7 @@ mod tests {
                 Some(0.5),
                 Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
                 Some(1000),
-                SupportedColorModes::default(),
+                SupportedColorModes::singleton(ColorMode::Hs),
             )),
         };
 
@@ -285,9 +296,10 @@ mod tests {
         let mqtt_json = json!({
             "id": "device1",
             "name": "Device 1",
-            "color": { "hue": 45.0, "saturation": 1.0, "value": 1.0 },
+            "color": { "h": 45, "s": 1.0 },
             "power": true,
             "brightness": 0.5,
+            "supported_modes": { "ct": serde_json::Value::Null, "hs": true, "rgb": false, "xy": false }
         });
 
         let config = MqttConfig {
