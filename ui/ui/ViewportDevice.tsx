@@ -165,7 +165,11 @@ export const ViewportDevice = (props: Props) => {
         x={position.x}
         y={position.y}
         radius={20}
-        fill={color.desaturate(0.4).darken(power ? 0 : 0.8).hsl().string()}
+        fill={color
+          .desaturate(0.4)
+          .darken(0.5 - brightness / 2)
+          .hsl()
+          .string()}
         stroke={props.selected ? 'white' : '#111'}
         strokeWidth={4}
         {...(interactive
