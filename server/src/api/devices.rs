@@ -1,6 +1,10 @@
 use std::{convert::Infallible, sync::Arc};
 
-use crate::types::device::{Device, DeviceId};
+use crate::types::{
+    color::{Capabilities, ColorMode},
+    device::{Device, DeviceData, DeviceId},
+};
+use serde::{Deserialize, Serialize};
 use warp::Filter;
 
 use crate::core::state::AppState;
@@ -18,16 +22,42 @@ pub fn devices(
     warp::path("devices").and(get_devices(app_state).or(put_device(app_state)))
 }
 
+#[derive(Serialize, Deserialize)]
+struct GetQuery {
+    color_mode: Option<ColorMode>,
+}
+
 fn get_devices(
     app_state: &Arc<AppState>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
+        .and(warp::query::<GetQuery>())
         .and(with_state(app_state))
-        .map(|app_state: Arc<AppState>| {
+        .map(|q: GetQuery, app_state: Arc<AppState>| {
             let devices = app_state.devices.get_devices();
 
+            let devices_converted = devices
+                .0
+                .values()
+                .map(|device| {
+                    let mut device = device.clone();
+
+                    if let DeviceData::Managed(managed) = &mut device.data {
+                        let converted_state =
+                            managed
+                                .state
+                                .color_to_device_preferred_mode(&Capabilities::singleton(
+                                    q.color_mode.clone().unwrap_or(ColorMode::Hs),
+                                ));
+                        managed.state = converted_state;
+                    }
+
+                    device
+                })
+                .collect::<Vec<Device>>();
+
             let response = DevicesResponse {
-                devices: devices.0.values().cloned().collect(),
+                devices: devices_converted,
             };
 
             Ok(warp::reply::json(&response))

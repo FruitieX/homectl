@@ -21,6 +21,8 @@ pub struct Capabilities {
     pub ct: Option<std::ops::Range<u16>>,
 }
 
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[ts(export)]
 pub enum ColorMode {
     Xy,
     Hs,
