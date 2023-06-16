@@ -263,12 +263,12 @@ name = "Normal (downstairs only)"
 
   # Add as many groups as you want
   [scenes.normal_downstairs.groups]
-  downstairs = { power = true, color = { hue = 42, saturation = 1.0, value = 1.0 }}
-  outdoor = { power = true, color = { red = 255, green = 255, blue = 255 }, brightness = 0.75 }
+  downstairs = { power = true, color = { h = 42, s = 1.0 }}
+  outdoor = { power = true, color = { r = 255, g = 255, b = 255 }, brightness = 0.75 }
 
   # You can add devices directly per integration and device name, too
   [scenes.normal_downstairs.devices.hue]
-  "Hue lightstrip" = { power = true, color = { hue = 263.0, saturation = 1.0, value = 1.0 } }
+  "Hue lightstrip" = { power = true, color = { h = 263, s = 1.0 } }
 ```
 
 ### Combine scenes into larger scenes:
@@ -294,10 +294,10 @@ house without needing to duplicate the config of contained scenes.
 [integrations.circadian]
 plugin = "circadian"
 device_name = "Circadian rhythm"
-day_color = { hue = 25, saturation = 0.35, value = 1 }
+day_color = { h = 25, s = 0.35 }
 day_fade_start = "04:00"
 day_fade_duration_hours = 4
-night_color = { hue = 20, saturation = 0.95, value = 0.75 }
+night_color = { h = 20, s = 0.95 }
 night_fade_start = "18:00"
 night_fade_duration_hours = 3
 
