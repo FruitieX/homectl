@@ -19,13 +19,13 @@
 plugin = "dummy"
 
   [integrations.dummy_ha1.devices]
-  1 = { name = "Kitchen ceiling light", init_state = { Light = { power = true, hue = 0, saturation = 0, value = 1 } } }
-  2 = { name = "Living room", init_state = { Light = { power = true, hue = 25, saturation = 0.35, value = 1 } } }
-  3 = { name = "Entryway", init_state = { Light = { power = true, hue = 25, saturation = 0.35, value = 1 } } }
+  1 = { name = "Kitchen ceiling light", init_state = { Light = { power = true, h = 0, s = 0.0 } } }
+  2 = { name = "Living room", init_state = { Light = { power = true, h = 25, s = 0.35 } } }
+  3 = { name = "Entryway", init_state = { Light = { power = true, h = 25, s = 0.35 } } }
   4 = { name = "Office", init_state = { Light = { power = false } } }
   5 = { name = "Bedroom", init_state = { Light = { power = false } } }
-  6 = { name = "Outdoor spot", init_state = { Light = { power = true, hue = 100, saturation = 0.75, value = 1 } } }
-  7 = { name = "Staircase", init_state = { Light = { power = true, hue = 0, saturation = 0, value = 0 } } }
+  6 = { name = "Outdoor spot", init_state = { Light = { power = true, h = 100, s = 0.75 } } }
+  7 = { name = "Staircase", init_state = { Light = { power = true, h = 0, s = 0.0 } } }
 
 # Set up another dummy home automation system, which our imaginary LED strips
 # are controlled by.
@@ -33,18 +33,18 @@ plugin = "dummy"
 plugin = "dummy"
 
   [integrations.dummy_ha2.devices]
-  1 = { name = "Kitchen cabinet LED", init_state = { Light = { power = true, hue = 0, saturation = 0, value = 1 } } }
-  2 = { name = "Bathroom LED", init_state = { Light = { power = true, hue = 25, saturation = 0.35, value = 1 } } }
+  1 = { name = "Kitchen cabinet LED", init_state = { Light = { power = true, h = 0, s = 0.0 } } }
+  2 = { name = "Bathroom LED", init_state = { Light = { power = true, h = 25, s = 0.35 } } }
 
 # This integration creates a fake device that transitions its color between
 # presets for day and night.
 [integrations.circadian]
 plugin = "circadian"
 device_name = "Circadian rhythm"
-day_color = { hue = 25, saturation = 0.35, value = 1 }
+day_color = { h = 25, s = 0.35 }
 day_fade_start = "06:00"
 day_fade_duration_hours = 4
-night_color = { hue = 17, saturation = 1.0, value = 0.5 }
+night_color = { h = 17, s = 1.0 }
 night_fade_start = "18:00"
 night_fade_duration_hours = 1
 
@@ -127,12 +127,12 @@ name = "Party"
 
   # Individual light states are configured per integration with each light's name
   [scenes.party.devices.dummy_ha1]
-  "Living room" = { power = true, color = { hue = 130, saturation = 1.0, value = 1.0 }}
-  "Entryway" = { power = true, color = { hue = 30, saturation = 1.0, value = 1.0 }}
-  "Kitchen ceiling light" = { power = true, color = { hue = 240, saturation = 1.0, value = 1.0 }}
+  "Living room" = { power = true, color = { h = 130, s = 1.0 }}
+  "Entryway" = { power = true, color = { h = 30, s = 1.0 }}
+  "Kitchen ceiling light" = { power = true, color = { h = 240, s = 1.0 }}
 
   [scenes.party.devices.dummy_ha2]
-  "Kitchen cabinet LED" = { power = true, color = { hue = 300, saturation = 1.0, value = 1.0 }}
+  "Kitchen cabinet LED" = { power = true, color = { h = 300, s = 1.0 }}
 
 # Turn all lights off, useful when leaving house
 [scenes.off]
@@ -169,7 +169,7 @@ name = "Default (downstairs)"
 
   # And set the outdoor spot to a certain color
   [scenes.default_downstairs.devices.dummy_ha1]
-  "Outdoor spot" = { power = true, color = { hue = 100, saturation = 0.75, value = 1 } }
+  "Outdoor spot" = { power = true, color = { h = 100, s = 0.75 } }
 
 # Night light scene
 [scenes.night_light]
@@ -181,8 +181,8 @@ name = "Night light"
 
   # Leave these lights on with very low brightness
   [scenes.night_light.devices.dummy_ha1]
-  "Staircase" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
+  "Staircase" = { power = true, color = { h = 14, s = 1.0 } }
 
   [scenes.night_light.devices.dummy_ha2]
-  "Bathroom LED" = { power = true, color = { hue = 14, saturation = 1, value = 0.15 } }
+  "Bathroom LED" = { power = true, color = { h = 14, s = 1.0 } }
 
