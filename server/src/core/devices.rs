@@ -1,5 +1,5 @@
 use crate::db::actions::{db_find_device, db_update_device};
-use crate::types::color::{DeviceColor, SupportedColorModes};
+use crate::types::color::{Capabilities, DeviceColor};
 
 use super::scenes::Scenes;
 use crate::types::device::{DeviceId, ManagedDevice, ManagedDeviceState, SensorDevice};
@@ -21,7 +21,7 @@ pub struct Devices {
 }
 
 fn cmp_light_color(
-    supported_modes: &SupportedColorModes,
+    capabilities: &Capabilities,
     incoming: &Option<DeviceColor>,
     incoming_bri: &Option<f32>,
     expected: &Option<DeviceColor>,
@@ -29,14 +29,14 @@ fn cmp_light_color(
 ) -> bool {
     // If brightness mismatches, the light state is not equal
     let bri_delta = 0.01;
-    if f32::abs(incoming_bri.unwrap_or(1.0) - expected_bri.unwrap_or(1.0)) <= bri_delta {
+    if f32::abs(incoming_bri.unwrap_or(1.0) - expected_bri.unwrap_or(1.0)) > bri_delta {
         return false;
     }
 
     // Convert expected color to supported color mode before performing comparison
     let expected_converted = expected
         .as_ref()
-        .and_then(|c| c.to_supported(supported_modes));
+        .and_then(|c| c.to_device_preferred_mode(capabilities));
 
     // If colors are equal by PartialEq, the light state is equal
     if incoming.as_ref() == expected_converted.as_ref() {
@@ -50,7 +50,7 @@ fn cmp_light_color(
     let xy_delta = 0.01;
     let cct_delta = 10;
 
-    match (incoming, expected) {
+    match (incoming, expected_converted) {
         (Some(DeviceColor::Xy(a)), Some(DeviceColor::Xy(b))) => {
             // Light state is equal if all components differ by less than a given delta
             (f32::abs(a.x - b.x) <= xy_delta) && (f32::abs(a.y - b.y) <= xy_delta)
@@ -79,7 +79,7 @@ fn cmp_device_states(device: &ManagedDevice, expected: &ManagedDeviceState) -> b
     // Compare colors if supported
     if device.state.color.is_some() {
         return cmp_light_color(
-            &device.supported_modes,
+            &device.capabilities,
             &device.state.color,
             &device.state.brightness,
             &expected.color,
@@ -140,11 +140,11 @@ impl Devices {
                             device
                         );
 
-                        self.set_device_state(&device, true, true, false).await;
+                        self.set_device_state(&device, true, true).await;
                     }
                     None => {
                         println!("Discovered device: {:?}", incoming);
-                        self.set_device_state(incoming, true, false, false).await;
+                        self.set_device_state(incoming, true, false).await;
                         db_update_device(incoming).await.ok();
                     }
                 }
@@ -161,7 +161,7 @@ impl Devices {
 
                 // Sensor state has changed, defer handling of this update to
                 // other subsystems
-                self.set_device_state(incoming, false, false, true).await;
+                self.set_device_state(incoming, false, false).await;
             }
 
             (DeviceData::Managed(ref incoming_managed), _, Some(expected_state)) => {
@@ -169,13 +169,19 @@ impl Devices {
                     return;
                 }
 
+                let expected_converted =
+                    expected_state.color_to_device_preferred_mode(&incoming_managed.capabilities);
+
                 // Device state does not match expected state, maybe the device
                 // missed a state update or forgot its state? We will try fixing
                 // this by emitting a SetIntegrationDeviceState message back to
                 // integration
                 println!(
-                    "Device state mismatch detected ({}/{}): (was: {:?}, expected: {:?})",
-                    incoming.integration_id, incoming.name, incoming.data, expected_state
+                    "Device state mismatch detected ({}/{}):\nwas:      {}\nexpected: {}\n",
+                    incoming.integration_id,
+                    incoming.name,
+                    incoming_managed.state,
+                    expected_converted
                 );
 
                 // Replace device state with expected state, converted into a
@@ -185,7 +191,10 @@ impl Devices {
                 managed.state.color = managed
                     .state
                     .color
-                    .and_then(|c| c.to_supported(&incoming_managed.supported_modes));
+                    .and_then(|c| c.to_device_preferred_mode(&incoming_managed.capabilities));
+
+                // Disable transitions
+                managed.state.transition_ms = None;
 
                 let mut device = incoming.clone();
                 device.data = DeviceData::Managed(managed);
@@ -198,7 +207,7 @@ impl Devices {
 
             // Expected device state was not found
             (_, _, None) => {
-                self.set_device_state(incoming, false, false, true).await;
+                self.set_device_state(incoming, false, false).await;
             }
         }
     }
@@ -224,7 +233,7 @@ impl Devices {
                         .find_scene_device_state(device, &state, ignore_transition)
                 };
 
-                match scene_device_state {
+                let mut expected_state = match scene_device_state {
                     // Return state from active scene
                     Some(state) => Some(state),
                     None => {
@@ -244,7 +253,14 @@ impl Devices {
                             device.get_managed_state().cloned()
                         }
                     }
+                };
+
+                // Make sure brightness is set, defaults to 100%
+                if let Some(expected_state) = &mut expected_state {
+                    expected_state.brightness = Some(expected_state.brightness.unwrap_or(1.0));
                 }
+
+                expected_state
             }
         }
     }
@@ -255,7 +271,6 @@ impl Devices {
         device: &Device,
         set_scene: bool,
         skip_db: bool,
-        skip_integration: bool,
     ) -> Device {
         let old: Option<Device> = self.get_device(&device.get_device_key());
         let old_states = { self.state.lock().unwrap().clone() };
@@ -270,15 +285,14 @@ impl Devices {
 
         // Allow active scene to override device state
         let expected_state = self.get_expected_state(&device, true);
-        let supported_modes = device.get_supported_color_modes();
+        let capabilities = device.get_supported_color_modes();
 
         // Replace device state with expected state, converted into a supported
         // color format
-        if let (Some(mut expected_state), Some(supported_modes)) = (expected_state, supported_modes)
-        {
+        if let (Some(mut expected_state), Some(capabilities)) = (expected_state, capabilities) {
             expected_state.color = expected_state
                 .color
-                .and_then(|c| c.to_supported(supported_modes));
+                .and_then(|c| c.to_device_preferred_mode(capabilities));
             device = device.set_managed_state(expected_state);
         }
 
@@ -305,7 +319,7 @@ impl Devices {
             });
         }
 
-        if !skip_integration {
+        if !device.is_sensor() {
             self.sender.send(Message::SetIntegrationDeviceState {
                 device: device.clone(),
                 state_changed,
@@ -346,7 +360,7 @@ impl Devices {
 
                 if let Some(device) = device {
                     let device = device.set_scene(Some(scene_id.clone()));
-                    self.set_device_state(&device, true, false, false).await;
+                    self.set_device_state(&device, true, false).await;
                 }
             }
         }

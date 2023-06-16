@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::{
-    color::{DeviceColor, SupportedColorModes},
+    color::{Capabilities, DeviceColor},
     integration::IntegrationId,
     scene::SceneId,
 };
@@ -78,12 +78,24 @@ impl Display for ManagedDeviceState {
     }
 }
 
+impl ManagedDeviceState {
+    pub fn color_to_device_preferred_mode(&self, capabilities: &Capabilities) -> Self {
+        let mut state = self.clone();
+
+        if let Some(color) = state.color {
+            state.color = color.to_device_preferred_mode(capabilities);
+        }
+
+        state
+    }
+}
+
 /// lights with adjustable brightness and/or color
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub struct ManagedDevice {
     pub scene: Option<SceneId>,
-    pub supported_modes: SupportedColorModes,
+    pub capabilities: Capabilities,
     pub state: ManagedDeviceState,
 }
 
@@ -94,7 +106,7 @@ impl ManagedDevice {
         brightness: Option<f32>,
         color: Option<DeviceColor>,
         transition_ms: Option<u64>,
-        supported_modes: SupportedColorModes,
+        capabilities: Capabilities,
     ) -> ManagedDevice {
         ManagedDevice {
             scene,
@@ -104,7 +116,7 @@ impl ManagedDevice {
                 color,
                 transition_ms,
             },
-            supported_modes,
+            capabilities,
         }
     }
 }
@@ -216,11 +228,15 @@ impl Device {
         }
     }
 
-    pub fn get_supported_color_modes(&self) -> Option<&SupportedColorModes> {
+    pub fn get_supported_color_modes(&self) -> Option<&Capabilities> {
         match self.data {
-            DeviceData::Managed(ref data) => Some(&data.supported_modes),
+            DeviceData::Managed(ref data) => Some(&data.capabilities),
             DeviceData::Sensor(_) => None,
         }
+    }
+
+    pub fn is_sensor(&self) -> bool {
+        matches!(self.data, DeviceData::Sensor(_))
     }
 
     pub fn get_sensor_state(&self) -> Option<&SensorDevice> {

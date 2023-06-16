@@ -1,5 +1,5 @@
 use crate::types::{
-    color::{DeviceColor, SupportedColorModes},
+    color::{Capabilities, ColorMode, DeviceColor},
     custom_integration::CustomIntegration,
     device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
@@ -169,7 +169,7 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         get_circadian_brightness(circadian),
         Some(get_circadian_color(circadian)),
         None,
-        SupportedColorModes::default(),
+        Capabilities::singleton(ColorMode::Hs),
     ));
 
     Device {

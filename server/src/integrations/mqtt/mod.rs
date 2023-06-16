@@ -28,12 +28,11 @@ pub struct MqttConfig {
     id_field: Option<String>,
     name_field: Option<String>,
     color_field: Option<String>,
-    cct_field: Option<String>,
     power_field: Option<String>,
     brightness_field: Option<String>,
     sensor_value_field: Option<String>,
     transition_ms_field: Option<String>,
-    supported_modes_field: Option<String>,
+    capabilities_field: Option<String>,
 }
 
 pub struct Mqtt {

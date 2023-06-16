@@ -36,7 +36,7 @@ pub fn read_config() -> Result<(Config, OpaqueIntegrationsConfigs)> {
 
     let settings = builder.build()?;
 
-    let config: Config = settings.clone().try_deserialize().context(
+    let config: Config = serde_path_to_error::deserialize(settings.clone()).context(
         "Failed to deserialize config, compare your config file to Settings.toml.example!",
     )?;
 

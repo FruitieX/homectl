@@ -216,7 +216,8 @@ impl Scenes {
                 }?;
 
                 // Brightness override
-                state.brightness = link.brightness;
+                state.brightness =
+                    Some(state.brightness.unwrap_or(1.0) * link.brightness.unwrap_or(1.0));
 
                 if ignore_transition {
                     // Ignore device's transition_ms value
@@ -238,7 +239,7 @@ impl Scenes {
                     ManagedDeviceState {
                         brightness: scene_device.brightness,
                         color: scene_device.color.clone(),
-                        power: scene_device.power,
+                        power: scene_device.power.unwrap_or(true),
                         transition_ms: scene_device.transition_ms,
                     },
                 )

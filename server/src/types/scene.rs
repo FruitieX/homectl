@@ -58,7 +58,7 @@ pub struct CycleScenesDescriptor {
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
 pub struct SceneDeviceState {
-    pub power: bool,
+    pub power: Option<bool>,
     pub color: Option<DeviceColor>,
     pub brightness: Option<f32>,
     pub transition_ms: Option<u64>,

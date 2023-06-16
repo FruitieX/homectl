@@ -1,5 +1,5 @@
 use crate::types::{
-    color::SupportedColorModes,
+    color::Capabilities,
     custom_integration::CustomIntegration,
     device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
@@ -56,7 +56,7 @@ impl CustomIntegration for Dummy {
                         None,
                         None,
                         None,
-                        SupportedColorModes::default(),
+                        Capabilities::default(),
                     )));
 
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);

@@ -1,7 +1,7 @@
 use std::{net::SocketAddr, time::Duration};
 
 use crate::types::{
-    color::SupportedColorModes,
+    color::Capabilities,
     custom_integration::CustomIntegration,
     device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
@@ -57,7 +57,7 @@ impl CustomIntegration for WakeOnLan {
                 None,
                 None,
                 None,
-                SupportedColorModes::default(),
+                Capabilities::default(),
             ));
 
             let device = Device {

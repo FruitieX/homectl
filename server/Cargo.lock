@@ -1101,6 +1101,7 @@ dependencies = [
  "hmac 0.12.1",
  "itertools",
  "json_value_merge",
+ "log",
  "macro-attr",
  "newtype_derive",
  "once_cell",

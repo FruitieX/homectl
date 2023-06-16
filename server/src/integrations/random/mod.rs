@@ -1,5 +1,5 @@
 use crate::types::{
-    color::{ColorMode, DeviceColor, SupportedColorModes},
+    color::{Capabilities, ColorMode, DeviceColor},
     custom_integration::CustomIntegration,
     device::{Device, DeviceData, DeviceId, ManagedDevice},
     event::{Message, TxEventChannel},
@@ -95,7 +95,7 @@ fn mk_random_device(random: &Random) -> Device {
         Some(1.0),
         Some(get_random_color()),
         Some(500),
-        SupportedColorModes::singleton(ColorMode::Rgb),
+        Capabilities::singleton(ColorMode::Rgb),
     ));
 
     Device {

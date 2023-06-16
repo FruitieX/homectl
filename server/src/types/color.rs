@@ -4,7 +4,7 @@ use ts_rs::TS;
 
 #[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
-pub struct SupportedColorModes {
+pub struct Capabilities {
     /// XY color space (0.0 - 1.0)
     #[serde(default)]
     pub xy: bool,
@@ -28,8 +28,8 @@ pub enum ColorMode {
     Ct(std::ops::Range<u16>),
 }
 
-impl SupportedColorModes {
-    pub fn singleton(mode: ColorMode) -> SupportedColorModes {
+impl Capabilities {
+    pub fn singleton(mode: ColorMode) -> Capabilities {
         let mut xy = false;
         let mut hs = false;
         let mut rgb = false;
@@ -50,7 +50,7 @@ impl SupportedColorModes {
             }
         };
 
-        SupportedColorModes { xy, hs, rgb, ct }
+        Capabilities { xy, hs, rgb, ct }
     }
 
     pub fn is_supported(&self, color: &DeviceColor) -> bool {
@@ -133,23 +133,23 @@ impl DeviceColor {
         matches!(self, DeviceColor::Ct(_))
     }
 
-    pub fn to_supported(&self, supported_modes: &SupportedColorModes) -> Option<DeviceColor> {
+    pub fn to_device_preferred_mode(&self, capabilities: &Capabilities) -> Option<DeviceColor> {
         // Don't perform any conversion if device supports current color mode
-        if supported_modes.is_supported(self) {
+        if capabilities.is_supported(self) {
             return Some(self.clone());
         }
 
         // Convert color into supported color mode
         let yxy: palette::Yxy = self.into();
-        if supported_modes.xy {
+        if capabilities.xy {
             Some(yxy.into())
-        } else if supported_modes.hs {
+        } else if capabilities.hs {
             let hsv: palette::Hsv = yxy.into_color();
             Some(hsv.into())
-        } else if supported_modes.rgb {
+        } else if capabilities.rgb {
             let rgb: palette::rgb::Rgb = yxy.into_color();
             Some(rgb.into())
-        } else if let Some(supported_range) = &supported_modes.ct {
+        } else if let Some(supported_range) = &capabilities.ct {
             // McCamy's approximation
             let x = yxy.x;
             let y = yxy.y;
