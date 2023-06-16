@@ -1,6 +1,6 @@
 use crate::integrations::{
-    boolean::Boolean, circadian::Circadian, dummy::Dummy, mqtt::Mqtt,
-    neato::Neato, random::Random, timer::Timer, wake_on_lan::WakeOnLan,
+    boolean::Boolean, circadian::Circadian, dummy::Dummy, mqtt::Mqtt, neato::Neato, random::Random,
+    timer::Timer, wake_on_lan::WakeOnLan,
 };
 use crate::types::{
     custom_integration::CustomIntegration,
