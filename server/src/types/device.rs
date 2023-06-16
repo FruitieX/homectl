@@ -4,7 +4,7 @@ use std::{
 };
 
 use super::{
-    color::{Capabilities, DeviceColor},
+    color::{Capabilities, ColorMode, DeviceColor},
     integration::IntegrationId,
     scene::SceneId,
 };
@@ -226,6 +226,19 @@ impl Device {
             DeviceData::Managed(ref data) => Some(&data.state),
             DeviceData::Sensor(_) => None,
         }
+    }
+
+    pub fn color_to_mode(&self, mode: ColorMode) -> Device {
+        let mut device = self.clone();
+
+        if let DeviceData::Managed(managed) = &mut device.data {
+            let converted_state = managed
+                .state
+                .color_to_device_preferred_mode(&Capabilities::singleton(mode));
+            managed.state = converted_state;
+        }
+
+        device
     }
 
     pub fn get_supported_color_modes(&self) -> Option<&Capabilities> {

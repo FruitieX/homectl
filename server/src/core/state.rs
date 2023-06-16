@@ -1,4 +1,6 @@
 use crate::types::{
+    color::ColorMode,
+    device::DevicesState,
     event::TxEventChannel,
     websockets::{StateUpdate, WebSocketResponse},
 };
@@ -35,8 +37,14 @@ impl AppState {
         let scenes = self.scenes.get_flattened_scenes(&devices);
         let groups = self.groups.get_flattened_groups(&devices);
 
+        let devices_converted = devices
+            .0
+            .values()
+            .map(|device| (device.get_device_key(), device.color_to_mode(ColorMode::Hs)))
+            .collect();
+
         let message = WebSocketResponse::State(StateUpdate {
-            devices,
+            devices: DevicesState(devices_converted),
             scenes,
             groups,
         });

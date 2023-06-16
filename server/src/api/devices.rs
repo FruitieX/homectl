@@ -1,8 +1,8 @@
 use std::{convert::Infallible, sync::Arc};
 
 use crate::types::{
-    color::{Capabilities, ColorMode},
-    device::{Device, DeviceData, DeviceId},
+    color::ColorMode,
+    device::{Device, DeviceId},
 };
 use serde::{Deserialize, Serialize};
 use warp::Filter;
@@ -39,21 +39,7 @@ fn get_devices(
             let devices_converted = devices
                 .0
                 .values()
-                .map(|device| {
-                    let mut device = device.clone();
-
-                    if let DeviceData::Managed(managed) = &mut device.data {
-                        let converted_state =
-                            managed
-                                .state
-                                .color_to_device_preferred_mode(&Capabilities::singleton(
-                                    q.color_mode.clone().unwrap_or(ColorMode::Hs),
-                                ));
-                        managed.state = converted_state;
-                    }
-
-                    device
-                })
+                .map(|device| device.color_to_mode(q.color_mode.clone().unwrap_or(ColorMode::Hs)))
                 .collect::<Vec<Device>>();
 
             let response = DevicesResponse {
