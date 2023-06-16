@@ -7,7 +7,6 @@ import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import dynamicImport from 'next/dynamic';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
-import { DeviceState } from '@/bindings/DeviceState';
 import { SceneId } from '@/bindings/SceneId';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useSceneModalState } from '@/hooks/sceneModalState';
@@ -21,8 +20,10 @@ export default function Page(props: Props) {
   const ws = useWebsocket();
   const state = useWebsocketState();
 
-  const { setOpen: setSceneModalOpen, setState: setSceneModalState } =
-    useSceneModalState();
+  const {
+    setOpen: setSceneModalOpen,
+    setState: setSceneModalState,
+  } = useSceneModalState();
 
   const group: FlattenedGroupConfig | undefined =
     state?.groups[props.params.id];
@@ -34,7 +35,7 @@ export default function Page(props: Props) {
   if (!scenes || !groupDevices) return null;
 
   const filteredScenes = Object.entries(scenes).filter(([, scene]) => {
-    const devices = scene.devices as Record<string, DeviceState>;
+    const devices = scene.devices;
     if (groupDevices.find((gd) => Object.keys(devices).includes(gd))) {
       return true;
     } else {
@@ -51,7 +52,7 @@ export default function Page(props: Props) {
       Message: {
         Action: {
           action: 'ActivateScene',
-          device_keys: groupDevices as any,
+          device_keys: groupDevices,
           group_keys: null,
           scene_id: sceneId,
         },
@@ -62,34 +63,35 @@ export default function Page(props: Props) {
     ws?.send(data);
   };
 
-  const openSceneModal =
-    (sceneId: SceneId) => (e: React.MouseEvent<HTMLLIElement>) => {
-      e.preventDefault();
-      setSceneModalState(sceneId);
-      setSceneModalOpen(true);
-    };
+  const openSceneModal = (sceneId: SceneId) => (
+    e: React.MouseEvent<HTMLLIElement>,
+  ) => {
+    e.preventDefault();
+    setSceneModalState(sceneId);
+    setSceneModalOpen(true);
+  };
 
   return (
     <>
       <Menu className="flex-1 flex-nowrap overflow-y-auto">
         {filteredScenes.map(([sceneId, scene]) => {
-          const previewDevices = Object.entries(
-            scene.devices as Record<string, DeviceState>,
-          ).flatMap(([id, state]) => {
-            const origDevice = devices.find(
-              (device) => getDeviceKey(device) === id,
-            );
+          const previewDevices = Object.entries(scene.devices).flatMap(
+            ([id, state]) => {
+              const origDevice = devices.find(
+                (device) => getDeviceKey(device) === id,
+              );
 
-            if (!origDevice) return [];
-            if (!groupDevices?.includes(getDeviceKey(origDevice))) return [];
+              if (!origDevice) return [];
+              if (!groupDevices?.includes(getDeviceKey(origDevice))) return [];
 
-            const device: Device = {
-              ...origDevice,
-              state: state,
-            };
+              const device = JSON.parse(JSON.stringify(origDevice));
+              if ('Managed' in device.data) {
+                device.data.Managed.state = state;
+              }
 
-            return [device];
-          });
+              return [device];
+            },
+          );
 
           return (
             <Menu.Item

@@ -46,19 +46,22 @@ const Component = (props: Props) => {
         { integrationId: string; name: string },
         SceneDeviceState,
       ])[] = selectedDevices.flatMap((device) => {
-        if ('Light' in device.state) {
-          const light = device.state.Light;
-          let color = { hue: 0, saturation: 0, value: 0 };
+        if ('Managed' in device.data) {
+          const light = device.data.Managed;
+          let color = { h: 0, s: 0 };
 
-          if (light.color !== null && 'Hsv' in light.color) {
-            color = light.color.Hsv;
+          if (
+            light.state.color !== null &&
+            'h' in light.state.color &&
+            's' in light.state.color
+          ) {
+            color = light.state.color;
           }
 
           const state: SceneDeviceState = {
-            power: light.power,
-            color: color as any,
-            brightness: light.brightness,
-            cct: null,
+            power: light.state.power,
+            color,
+            brightness: light.state.brightness,
             transition_ms: null,
           };
 
@@ -141,8 +144,10 @@ const Component = (props: Props) => {
 };
 
 export const SaveSceneModal = () => {
-  const { open: saveSceneModalOpen, setOpen: setSaveSceneModalOpen } =
-    useSaveSceneModalState();
+  const {
+    open: saveSceneModalOpen,
+    setOpen: setSaveSceneModalOpen,
+  } = useSaveSceneModalState();
 
   const closeSceneModal = useCallback(() => {
     setSaveSceneModalOpen(false);

@@ -1,21 +1,24 @@
-import { DeviceState } from '@/bindings/DeviceState';
+import { DeviceData } from '@/bindings/DeviceData';
 import Color from 'color';
 
 export const black = Color('black');
 export const white = Color('white');
-export const getColor = (deviceState: DeviceState): Color => {
+export const getColor = (data: DeviceData): Color => {
   let color = black;
 
-  if ('Light' in deviceState) {
-    if (deviceState.Light.color !== null && 'Hsv' in deviceState.Light.color) {
-      const hsv = deviceState.Light.color.Hsv;
+  if ('Managed' in data) {
+    if (
+      data.Managed.state.color !== null &&
+      'h' in data.Managed.state.color &&
+      's' in data.Managed.state.color
+    ) {
       color = Color({
-        h: hsv.hue,
-        s: hsv.saturation * 100,
-        v: hsv.value * 100,
+        h: data.Managed.state.color.h,
+        s: data.Managed.state.color.s * 100,
+        v: 100,
       });
     } else {
-      if (deviceState.Light.power) {
+      if (data.Managed.state.power) {
         return white;
       } else {
         return black;
@@ -26,12 +29,12 @@ export const getColor = (deviceState: DeviceState): Color => {
   return color;
 };
 
-export const getBrightness = (deviceState: DeviceState): number => {
-  if ('Light' in deviceState) {
-    if (deviceState.Light.brightness !== null) {
-      return deviceState.Light.brightness;
+export const getBrightness = (data: DeviceData): number => {
+  if ('Managed' in data) {
+    if (data.Managed.state.brightness !== null) {
+      return data.Managed.state.brightness;
     } else {
-      if (deviceState.Light.power) {
+      if (data.Managed.state.power) {
         return 1;
       } else {
         return 0;
@@ -42,9 +45,9 @@ export const getBrightness = (deviceState: DeviceState): number => {
   return 0;
 };
 
-export const getPower = (deviceState: DeviceState): boolean => {
-  if ('Light' in deviceState) {
-    return deviceState.Light.power;
+export const getPower = (data: DeviceData): boolean => {
+  if ('Managed' in data) {
+    return data.Managed.state.power;
   }
 
   return false;

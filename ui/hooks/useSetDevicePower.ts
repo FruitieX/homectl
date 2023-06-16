@@ -9,9 +9,9 @@ export const useSetDevicePower = () => {
   const setDevicePower = useCallback(
     (clickedDevice: Device, power: boolean) => {
       const device = produce(clickedDevice, (draft) => {
-        if ('Light' in draft.state) {
-          draft.state.Light.power = power;
-          draft.scene = null;
+        if ('Managed' in draft.data) {
+          draft.data.Managed.state.power = power;
+          draft.data.Managed.scene = null;
         }
       });
 

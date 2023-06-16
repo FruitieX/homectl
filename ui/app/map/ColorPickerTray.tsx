@@ -14,7 +14,7 @@ export const ColorPickerTray = () => {
 
   const colors = uniqBy(
     devices.map((device) => {
-      const color = getColor(device.state);
+      const color = getColor(device.data);
       return color;
     }),
     (color) => color.hsl().string(),

@@ -19,18 +19,8 @@ import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
 import { useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
-import { Clipboard } from 'lucide-react';
+import { Clipboard, X } from 'lucide-react';
 import { useSetDevicePower } from '@/hooks/useSetDevicePower';
-
-type Props = {
-  visible: boolean;
-  close: () => void;
-  color: Color;
-  brightness: number;
-  onChange?: (color: Color, brightness: number) => void;
-  onChangeComplete?: (color: Color, brightness: number) => void;
-  title: string;
-};
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
@@ -483,18 +473,18 @@ export const ColorPickerModal = () => {
 
   const deviceModalTitle =
     deviceModalState.length === 1
-      ? `Set ${device?.name} color`
-      : `Set color of ${deviceModalState.length} devices`;
+      ? device?.name
+      : `${deviceModalState.length} devices`;
   const deviceModalColor =
-    device?.state === undefined ? null : getColor(device.state);
+    device?.data === undefined ? null : getColor(device.data);
   const deviceModalBrightness =
-    device?.state === undefined ? null : getBrightness(device.state);
-  const deviceModalPower = 
-    device?.state === undefined ? null : getPower(device.state);
+    device?.data === undefined ? null : getBrightness(device.data);
+  const deviceModalPower =
+    device?.data === undefined ? null : getPower(device.data);
 
   const setDeviceColor = useSetDeviceColor();
   const setDevicePower = useSetDevicePower();
-  
+
   const partialSetDeviceColor = useCallback(
     (color: Color, brightness: number) => {
       if (deviceModalState !== null) {
@@ -517,7 +507,9 @@ export const ColorPickerModal = () => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            console.log(`Setting device ${match.name} ${power ? 'on' : 'off'}.`)
+            console.log(
+              `Setting device ${match.name} ${power ? 'on' : 'off'}.`,
+            );
             setDevicePower(match, power);
           }
         });

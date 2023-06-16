@@ -10,17 +10,14 @@ export const useSetDeviceColor = () => {
   const setDeviceColor = useCallback(
     (clickedDevice: Device, color: Color, brightness: number) => {
       const device = produce(clickedDevice, (draft) => {
-        if ('Light' in draft.state) {
+        if ('Managed' in draft.data) {
           const hsv = color.hsv();
-          draft.state.Light.color = {
-            Hsv: {
-              hue: hsv.hue(),
-              saturation: hsv.saturationv() / 100,
-              value: hsv.value() / 100,
-            },
+          draft.data.Managed.state.color = {
+            h: Math.round(hsv.hue()),
+            s: hsv.saturationv() / 100,
           };
-          draft.state.Light.brightness = brightness;
-          draft.scene = null;
+          draft.data.Managed.state.brightness = brightness;
+          draft.data.Managed.scene = null;
         }
       });
 
