@@ -125,8 +125,9 @@ impl ManagedDevice {
 #[ts(export)]
 #[serde(untagged)]
 pub enum SensorDevice {
-    BooleanSensor { value: bool },
-    TextSensor { value: String },
+    Boolean { value: bool },
+    Text { value: String },
+    Color(ManagedDeviceState),
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -307,7 +308,7 @@ impl<'de> Visitor<'de> for DeviceKeyVisitor {
     type Value = DeviceKey;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a colon-separated pair of integers between 0 and 255")
+        formatter.write_str("a colon-separated pair of strings")
     }
 
     fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>

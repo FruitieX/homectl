@@ -42,8 +42,7 @@ impl CustomIntegration for Timer {
     async fn register(&mut self) -> Result<()> {
         let device = mk_timer_device(&self.id, &self.config, false);
 
-        self.event_tx
-            .send(Message::IntegrationDeviceRefresh { device });
+        self.event_tx.send(Message::RecvDeviceState { device });
 
         Ok(())
     }
@@ -51,8 +50,7 @@ impl CustomIntegration for Timer {
     async fn run_integration_action(&mut self, action: &IntegrationActionPayload) -> Result<()> {
         let device = mk_timer_device(&self.id, &self.config, true);
 
-        self.event_tx
-            .send(Message::IntegrationDeviceRefresh { device });
+        self.event_tx.send(Message::RecvDeviceState { device });
 
         let payload = action.to_string();
         let timeout_ms: u64 = payload.parse()?;
@@ -65,7 +63,7 @@ impl CustomIntegration for Timer {
             time::sleep(sleep_duration).await;
 
             let device = mk_timer_device(&id, &config, false);
-            sender.send(Message::IntegrationDeviceRefresh { device });
+            sender.send(Message::RecvDeviceState { device });
         });
 
         if let Some(timer_task) = self.timer_task.take() {
@@ -79,7 +77,7 @@ impl CustomIntegration for Timer {
 }
 
 fn mk_timer_device(id: &IntegrationId, config: &TimerConfig, value: bool) -> Device {
-    let state = DeviceData::Sensor(SensorDevice::BooleanSensor { value });
+    let state = DeviceData::Sensor(SensorDevice::Boolean { value });
 
     Device {
         id: DeviceId::new("timer"),

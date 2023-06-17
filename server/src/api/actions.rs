@@ -25,7 +25,7 @@ fn post_action(
         .and(warp::body::json())
         .and(with_state(app_state))
         .map(|action: Action, app_state: Arc<AppState>| {
-            let sender = app_state.sender.clone();
+            let sender = app_state.event_tx.clone();
             sender.send(Message::Action(action));
 
             Ok(warp::reply::json(&()))

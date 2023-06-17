@@ -74,7 +74,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<AppState>) {
 
             match msg {
                 Ok(WebSocketRequest::Message(msg)) => {
-                    app_state.sender.send(msg);
+                    app_state.event_tx.send(msg);
                 }
                 Err(e) => eprintln!("Error while deserializing websocket message: {}", e),
             }

@@ -15,7 +15,7 @@ use std::sync::Mutex;
 
 #[derive(Clone)]
 pub struct Devices {
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
     state: Arc<Mutex<DevicesState>>,
     scenes: Scenes,
 }
@@ -95,9 +95,9 @@ fn cmp_sensor_states(sensor: &SensorDevice, previous: &SensorDevice) -> bool {
 }
 
 impl Devices {
-    pub fn new(sender: TxEventChannel, scenes: Scenes) -> Self {
+    pub fn new(event_tx: TxEventChannel, scenes: Scenes) -> Self {
         Devices {
-            sender,
+            event_tx,
             state: Default::default(),
             scenes,
         }
@@ -108,7 +108,7 @@ impl Devices {
     }
 
     /// Checks whether device values were changed or not due to refresh
-    pub async fn handle_integration_device_refresh(&mut self, incoming: &Device) {
+    pub async fn handle_recv_device_state(&mut self, incoming: &Device) {
         // println!("handle_integration_device_refresh {:?}", device);
         let current = self.get_device(&incoming.get_device_key());
 
@@ -199,7 +199,7 @@ impl Devices {
                 let mut device = incoming.clone();
                 device.data = DeviceData::Managed(managed);
 
-                self.sender.send(Message::SetIntegrationDeviceState {
+                self.event_tx.send(Message::SendDeviceState {
                     device,
                     state_changed: true,
                 });
@@ -267,7 +267,8 @@ impl Devices {
         }
     }
 
-    /// Sets stored state for given device and dispatches DeviceUpdate
+    /// Sets internal state for given device and dispatches device state to
+    /// integration
     pub async fn set_device_state(
         &mut self,
         device: &Device,
@@ -289,12 +290,13 @@ impl Devices {
         let expected_state = self.get_expected_state(&device, true);
         let capabilities = device.get_supported_color_modes();
 
-        // Replace device state with expected state, converted into a supported
-        // color format
+        // Replace device state with expected state
         if let (Some(mut expected_state), Some(capabilities)) = (expected_state, capabilities) {
+            // Converted expected state into a supported color format
             expected_state.color = expected_state
                 .color
                 .and_then(|c| c.to_device_preferred_mode(capabilities));
+
             device = device.set_managed_state(expected_state);
         }
 
@@ -306,7 +308,7 @@ impl Devices {
 
         let state_changed = old.as_ref() != Some(&device);
 
-        self.sender.send(Message::DeviceUpdate {
+        self.event_tx.send(Message::InternalStateUpdate {
             old_state: old_states,
             new_state,
             old,
@@ -322,7 +324,7 @@ impl Devices {
         }
 
         if !device.is_sensor() {
-            self.sender.send(Message::SetIntegrationDeviceState {
+            self.event_tx.send(Message::SendDeviceState {
                 device: device.clone(),
                 state_changed,
             });

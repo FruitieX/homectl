@@ -73,9 +73,9 @@ pub fn mqtt_to_homectl(
             .unwrap_or("")
             .parse::<bool>()
         {
-            DeviceData::Sensor(SensorDevice::BooleanSensor { value })
+            DeviceData::Sensor(SensorDevice::Boolean { value })
         } else {
-            DeviceData::Sensor(SensorDevice::TextSensor {
+            DeviceData::Sensor(SensorDevice::Text {
                 value: value
                     .pointer(sensor_value_field)
                     .and_then(serde_json::Value::as_str)

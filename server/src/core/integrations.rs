@@ -1,6 +1,6 @@
 use crate::integrations::{
-    boolean::Boolean, circadian::Circadian, dummy::Dummy, mqtt::Mqtt, neato::Neato, random::Random,
-    timer::Timer, wake_on_lan::WakeOnLan,
+    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, neato::Neato, random::Random, timer::Timer,
+    wake_on_lan::WakeOnLan,
 };
 use crate::types::{
     custom_integration::CustomIntegration,
@@ -9,7 +9,7 @@ use crate::types::{
     integration::{IntegrationActionPayload, IntegrationId},
 };
 use anyhow::{anyhow, Context, Result};
-use std::{collections::HashMap, convert::TryFrom, sync::Arc};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 
 #[derive(Clone)]
@@ -25,43 +25,18 @@ pub type DeviceStates = HashMap<DeviceKey, Device>;
 pub struct Integrations {
     expected_device_states: Arc<RwLock<DeviceStates>>,
     custom_integrations: CustomIntegrationsMap,
-    sender: TxEventChannel,
-}
-
-pub enum IntegrationKind {
-    Custom,
-}
-
-impl TryFrom<&str> for IntegrationKind {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        match value {
-            "boolean" => Ok(IntegrationKind::Custom),
-            "circadian" => Ok(IntegrationKind::Custom),
-            "random" => Ok(IntegrationKind::Custom),
-            "timer" => Ok(IntegrationKind::Custom),
-            "dummy" => Ok(IntegrationKind::Custom),
-            "lifx" => Ok(IntegrationKind::Custom),
-            "hue" => Ok(IntegrationKind::Custom),
-            "mqtt" => Ok(IntegrationKind::Custom),
-            "neato" => Ok(IntegrationKind::Custom),
-            "ping" => Ok(IntegrationKind::Custom),
-            "wake_on_lan" => Ok(IntegrationKind::Custom),
-            _ => Err(anyhow!("Unknown module name {}!", value)),
-        }
-    }
+    event_tx: TxEventChannel,
 }
 
 impl Integrations {
-    pub fn new(sender: TxEventChannel) -> Self {
+    pub fn new(event_tx: TxEventChannel) -> Self {
         let expected_device_states = Default::default();
         let integrations = Default::default();
 
         Integrations {
             expected_device_states,
             custom_integrations: integrations,
-            sender,
+            event_tx,
         }
     }
 
@@ -73,23 +48,16 @@ impl Integrations {
     ) -> Result<()> {
         println!("loading integration with module_name {}", module_name);
 
-        let event_tx = self.sender.clone();
-        let integration_kind: IntegrationKind = module_name.try_into()?;
+        let event_tx = self.event_tx.clone();
+        let integration = load_custom_integration(module_name, integration_id, config, event_tx)?;
 
-        match integration_kind {
-            IntegrationKind::Custom => {
-                let integration =
-                    load_custom_integration(module_name, integration_id, config, event_tx)?;
+        let loaded_integration = LoadedIntegration {
+            integration: Arc::new(Mutex::new(integration)),
+            module_name: module_name.to_string(),
+        };
 
-                let loaded_integration = LoadedIntegration {
-                    integration: Arc::new(Mutex::new(integration)),
-                    module_name: module_name.to_string(),
-                };
-
-                self.custom_integrations
-                    .insert(integration_id.clone(), loaded_integration);
-            }
-        }
+        self.custom_integrations
+            .insert(integration_id.clone(), loaded_integration);
 
         Ok(())
     }
@@ -166,7 +134,6 @@ fn load_custom_integration(
     event_tx: TxEventChannel,
 ) -> Result<Box<dyn CustomIntegration>> {
     match module_name {
-        "boolean" => Ok(Box::new(Boolean::new(id, config, event_tx)?)),
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
         "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),

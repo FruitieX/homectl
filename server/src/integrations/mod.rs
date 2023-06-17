@@ -1,4 +1,3 @@
-pub mod boolean;
 pub mod circadian;
 pub mod dummy;
 pub mod mqtt;

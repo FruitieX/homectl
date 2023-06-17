@@ -1,6 +1,6 @@
 use crate::types::{
-    action::{Action, Actions},
-    device::{Device, DeviceData, DevicesState, SensorDevice},
+    action::Actions,
+    device::{Device, DevicesState, SensorDevice},
     event::{Message, TxEventChannel},
     rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
 };
@@ -13,20 +13,22 @@ use super::groups::Groups;
 #[derive(Clone)]
 pub struct Rules {
     config: RoutinesConfig,
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
     groups: Groups,
 }
 
 impl Rules {
-    pub fn new(config: RoutinesConfig, groups: Groups, sender: TxEventChannel) -> Self {
+    pub fn new(config: RoutinesConfig, groups: Groups, event_tx: TxEventChannel) -> Self {
         Rules {
             config,
-            sender,
+            event_tx,
             groups,
         }
     }
 
-    pub async fn handle_device_update(
+    /// An internal state update has occurred, we need to check if any rules are
+    /// triggered by this change and run actions of triggered rules.
+    pub async fn handle_internal_state_update(
         &self,
         old_state: &DevicesState,
         new_state: &DevicesState,
@@ -35,22 +37,18 @@ impl Rules {
     ) {
         match old {
             Some(_) => {
-                // println!("device_updated {:?} (was: {:?})", new, old);
-
                 let matching_actions = self.find_matching_actions(old_state, new_state);
 
                 for action in matching_actions {
-                    self.run_action(&action).await;
+                    self.event_tx.send(Message::Action(action.clone()));
                 }
             }
             None => {}
         }
     }
 
-    async fn run_action(&self, action: &Action) {
-        self.sender.send(Message::Action(action.clone()));
-    }
-
+    /// Find any rules that were triggered by transitioning from `old_state` to
+    /// `new_state`, and return all actions of those rules.
     fn find_matching_actions(&self, old_state: &DevicesState, new_state: &DevicesState) -> Actions {
         // if states are equal we can bail out early
         if old_state == new_state {
@@ -62,6 +60,8 @@ impl Rules {
         let new_triggered_routine_ids =
             get_triggered_routine_ids(&self.config, &self.groups, new_state);
 
+        // The difference between the two sets will contain only routines that
+        // were triggered just now.
         let triggered_routine_ids =
             new_triggered_routine_ids.difference(&prev_triggered_routine_ids);
 
@@ -76,6 +76,8 @@ impl Rules {
     }
 }
 
+/// Returns a set of routine ids that are currently triggered with the given
+/// state.
 fn get_triggered_routine_ids(
     routines: &RoutinesConfig,
     groups: &Groups,
@@ -98,6 +100,7 @@ fn get_triggered_routine_ids(
     triggered_routine_ids
 }
 
+/// Returns true if all rules of the given routine are triggered.
 fn is_routine_triggered(
     state: &DevicesState,
     groups: &Groups,
@@ -112,55 +115,53 @@ fn is_routine_triggered(
     Ok(result)
 }
 
-fn get_device_sensor_kind(device: &Device) -> Option<SensorDevice> {
-    match &device.data {
-        DeviceData::Sensor(sensor_kind) => Some(sensor_kind.clone()),
-        _ => None,
-    }
-}
-
+/// Returns true if rule state matches device state
 fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, String> {
-    let sensor_kind = get_device_sensor_kind(device);
+    let sensor_state: Option<&SensorDevice> = device.get_sensor_state();
 
     match rule {
         Rule::Any(_) => {
             panic!("compare_rule_device_state() cannot be called directly on Any rule");
         }
-        Rule::Sensor(rule) => {
-            // FIXME: there must be a better way
-            match (rule.state.clone(), sensor_kind) {
-                (
-                    SensorDevice::BooleanSensor { value: rule_value },
-                    Some(SensorDevice::BooleanSensor {
-                        value: sensor_value,
-                    }),
-                ) => Ok(rule_value == sensor_value),
-                (
-                    SensorDevice::TextSensor { value: rule_value },
-                    Some(SensorDevice::TextSensor {
-                        value: sensor_value,
-                    }),
-                ) => Ok(rule_value == sensor_value),
-                (rule, sensor) => Err(format!(
-                    "Unknown sensor states encountered when processing rule {:?}. (sensor: {:?})",
-                    rule, sensor,
-                )),
-            }
-        }
+        // Check for sensor value matches
+        Rule::Sensor(rule) => match (&rule.state, sensor_state) {
+            (
+                SensorDevice::Boolean { value: rule_value },
+                Some(SensorDevice::Boolean {
+                    value: sensor_value,
+                }),
+            ) => Ok(rule_value == sensor_value),
+            (
+                SensorDevice::Text { value: rule_value },
+                Some(SensorDevice::Text {
+                    value: sensor_value,
+                }),
+            ) => Ok(rule_value == sensor_value),
+            (rule, sensor) => Err(format!(
+                "Unknown sensor states encountered when processing rule {:?}. (sensor: {:?})",
+                rule, sensor,
+            )),
+        },
         Rule::Group(GroupRule { scene, power, .. })
         | Rule::Device(DeviceRule { scene, power, .. }) => {
             #[allow(clippy::if_same_then_else)]
+            // Check for scene field mismatch (if provided)
             if scene.is_some() && scene.as_ref() != device.get_scene().as_ref() {
                 Ok(false)
-            } else if power.is_some() && power != &device.is_powered_on() {
+            }
+            // Check for power field mismatch (if provided)
+            else if power.is_some() && power != &device.is_powered_on() {
                 Ok(false)
-            } else {
+            }
+            // Otherwise rule matches
+            else {
                 Ok(true)
             }
         }
     }
 }
 
+/// Returns true if rule is triggered
 fn is_rule_triggered(state: &DevicesState, groups: &Groups, rule: &Rule) -> Result<bool, String> {
     // Try finding matching device
     let devices = match rule {

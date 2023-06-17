@@ -15,7 +15,7 @@ use crate::core::{
     devices::Devices, groups::Groups, integrations::Integrations, message::handle_message,
     rules::Rules, scenes::Scenes, state::AppState,
 };
-use crate::types::event::mk_channel;
+use crate::types::event::mk_event_channel;
 use anyhow::{Context, Result};
 use api::init_api;
 use db::init_db;
@@ -33,17 +33,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // println!("Using config:");
     // println!("{:#?}", config);
 
-    let (sender, mut receiver) = mk_channel();
+    let (event_tx, mut event_rx) = mk_event_channel();
 
-    let mut integrations = Integrations::new(sender.clone());
+    let mut integrations = Integrations::new(event_tx.clone());
     let groups = Groups::new(config.groups.unwrap_or_default());
     let scenes = Scenes::new(config.scenes.unwrap_or_default(), groups.clone());
     scenes.refresh_db_scenes().await;
-    let devices = Devices::new(sender.clone(), scenes.clone());
+    let devices = Devices::new(event_tx.clone(), scenes.clone());
     let rules = Rules::new(
         config.routines.unwrap_or_default(),
         groups.clone(),
-        sender.clone(),
+        event_tx.clone(),
     );
 
     for (id, integration_config) in &config.integrations.unwrap_or_default() {
@@ -69,7 +69,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         scenes,
         devices,
         rules,
-        sender: sender.clone(),
+        event_tx,
         ws: Default::default(),
     };
 
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     init_api(&state).expect("Expected init_api to return Ok(())");
 
     loop {
-        let msg = receiver
+        let msg = event_rx
             .recv()
             .await
             .expect("Expected sender end of channel to never be dropped");

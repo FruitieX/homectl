@@ -1,7 +1,7 @@
 use crate::types::{
-    color::{Capabilities, ColorMode, DeviceColor},
+    color::DeviceColor,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceData, DeviceId, ManagedDevice},
+    device::{Device, DeviceData, DeviceId, ManagedDeviceState, SensorDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -34,14 +34,14 @@ pub struct CircadianConfig {
 pub struct Circadian {
     id: IntegrationId,
     config: CircadianConfig,
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
     converted_day_color: DeviceColor,
     converted_night_color: DeviceColor,
 }
 
 #[async_trait]
 impl CustomIntegration for Circadian {
-    fn new(id: &IntegrationId, config: &config::Value, sender: TxEventChannel) -> Result<Self> {
+    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: CircadianConfig = config
             .clone()
             .try_deserialize()
@@ -50,7 +50,7 @@ impl CustomIntegration for Circadian {
         Ok(Circadian {
             id: id.clone(),
             config: config.clone(),
-            sender,
+            event_tx,
             converted_day_color: config.day_color,
             converted_night_color: config.night_color,
         })
@@ -59,8 +59,7 @@ impl CustomIntegration for Circadian {
     async fn register(&mut self) -> Result<()> {
         let device = mk_circadian_device(self);
 
-        self.sender
-            .send(Message::IntegrationDeviceRefresh { device });
+        self.event_tx.send(Message::RecvDeviceState { device });
 
         Ok(())
     }
@@ -152,10 +151,11 @@ async fn poll_sensor(circadian: Circadian) {
     loop {
         interval.tick().await;
 
-        let sender = circadian.sender.clone();
+        let event_tx = circadian.event_tx.clone();
 
         let device = mk_circadian_device(&circadian);
-        sender.send(Message::SetDeviceState {
+
+        event_tx.send(Message::SetExpectedState {
             device,
             set_scene: false,
         });
@@ -163,14 +163,12 @@ async fn poll_sensor(circadian: Circadian) {
 }
 
 fn mk_circadian_device(circadian: &Circadian) -> Device {
-    let state = DeviceData::Managed(ManagedDevice::new(
-        None,
-        true,
-        get_circadian_brightness(circadian),
-        Some(get_circadian_color(circadian)),
-        None,
-        Capabilities::singleton(ColorMode::Hs),
-    ));
+    let state = DeviceData::Sensor(SensorDevice::Color(ManagedDeviceState {
+        power: true,
+        color: Some(get_circadian_color(circadian)),
+        brightness: get_circadian_brightness(circadian),
+        transition_ms: Some(POLL_RATE),
+    }));
 
     Device {
         id: DeviceId::new("color"),

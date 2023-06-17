@@ -42,9 +42,18 @@ pub struct AnyRule {
 #[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Rule {
+    /// Match fields on individual sensors.
     Sensor(SensorRule),
+
+    /// Match fields on individual devices.
     Device(DeviceRule),
+
+    /// Match fields on entire device groups.
     Group(GroupRule),
+
+    /// Normally, all rules must match for a routine to be triggered. This
+    /// special rule allows you to group multiple rules together, such that only
+    /// one of the contained rules need to match.
     Any(AnyRule),
 }
 

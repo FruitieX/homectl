@@ -63,10 +63,6 @@ impl Capabilities {
             DeviceColor::Ct(_) => self.ct.is_some(),
         }
     }
-
-    pub fn is_ct_supported(&self) -> bool {
-        self.ct.is_some()
-    }
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -122,17 +118,6 @@ impl DeviceColor {
 
     pub fn new_from_ct(ct: u16) -> DeviceColor {
         DeviceColor::Ct(Ct { ct })
-    }
-
-    pub fn is_color_mode(&self) -> bool {
-        matches!(
-            self,
-            DeviceColor::Xy(_) | DeviceColor::Hs(_) | DeviceColor::Rgb(_)
-        )
-    }
-
-    pub fn is_ct_mode(&self) -> bool {
-        matches!(self, DeviceColor::Ct(_))
     }
 
     pub fn to_device_preferred_mode(&self, capabilities: &Capabilities) -> Option<DeviceColor> {

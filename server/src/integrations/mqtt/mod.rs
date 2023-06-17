@@ -98,7 +98,7 @@ impl CustomIntegration for Mqtt {
                     let device = mqtt_to_homectl(&msg.payload, id, &config_clone);
 
                     match device {
-                        Ok(device) => event_tx.send(Message::IntegrationDeviceRefresh { device }),
+                        Ok(device) => event_tx.send(Message::RecvDeviceState { device }),
                         Err(e) => {
                             eprintln!("MQTT error: {:?}", e)
                         }

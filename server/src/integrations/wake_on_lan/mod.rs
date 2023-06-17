@@ -28,7 +28,7 @@ struct WakeOnLanConfig {
 pub struct WakeOnLan {
     id: IntegrationId,
     config: WakeOnLanConfig,
-    sender: TxEventChannel,
+    event_tx: TxEventChannel,
 }
 
 #[async_trait]
@@ -36,7 +36,7 @@ impl CustomIntegration for WakeOnLan {
     fn new(
         id: &IntegrationId,
         config: &config::Value,
-        sender: TxEventChannel,
+        event_tx: TxEventChannel,
     ) -> Result<WakeOnLan> {
         let config = config
             .clone()
@@ -45,7 +45,7 @@ impl CustomIntegration for WakeOnLan {
         Ok(WakeOnLan {
             id: id.clone(),
             config,
-            sender,
+            event_tx,
         })
     }
 
@@ -67,8 +67,7 @@ impl CustomIntegration for WakeOnLan {
                 data,
             };
 
-            self.sender
-                .send(Message::IntegrationDeviceRefresh { device });
+            self.event_tx.send(Message::RecvDeviceState { device });
         }
 
         Ok(())

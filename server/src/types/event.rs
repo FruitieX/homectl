@@ -10,72 +10,65 @@ use super::{action::Action, device::Device, device::DevicesState};
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
 #[ts(export)]
 pub enum Message {
-    /// An integration has gathered information about current device state
-    /// through some means (usually polling). Note that state might not actually
-    /// have changed.
-    IntegrationDeviceRefresh {
-        device: Device,
-    },
+    /// An integration has informed us of current device state. We'll want to
+    /// check if this matches with our internal "expected" state. If there's a
+    /// mismatch, we'll try to correct it.
+    RecvDeviceState { device: Device },
 
-    /// Internal device state update was detected, need to take any appropriate
-    /// actions.
-    DeviceUpdate {
+    /// Tell integration to trigger state change for the device.
+    SendDeviceState { device: Device, state_changed: bool },
+
+    /// Internal device state update has taken place, need to take appropriate
+    /// actions such as checking (and possibly triggering) routines.
+    InternalStateUpdate {
         old_state: DevicesState,
         new_state: DevicesState,
         old: Option<Device>,
         new: Device,
     },
 
-    /// Tell devices to update internal device state.
-    SetDeviceState {
+    /// Sets internal expected state for the device.
+    SetExpectedState {
         device: Device,
+
+        /// Whether to honor the scene field in the device data or not.
         set_scene: bool,
     },
 
-    /// Tell integration to trigger state change for the device.
-    SetIntegrationDeviceState {
-        device: Device,
-        state_changed: bool,
-    },
-
-    /// Store new scene in DB
-    StoreScene {
+    /// Store new scene in DB.
+    DbStoreScene {
         scene_id: SceneId,
         config: SceneConfig,
     },
 
-    EditScene {
-        scene_id: SceneId,
-        name: String,
-    },
+    /// Edit scene in DB.
+    DbEditScene { scene_id: SceneId, name: String },
 
-    DeleteScene {
-        scene_id: SceneId,
-    },
+    /// Delete scene from DB.
+    DbDeleteScene { scene_id: SceneId },
 
+    /// Various actions that can be triggered by rules.
     Action(Action),
 }
 
 #[derive(Clone)]
 pub struct Sender<T> {
-    sender: UnboundedSender<T>,
+    tx: UnboundedSender<T>,
 }
 
 impl<T: std::fmt::Debug> Sender<T> {
     pub fn send(&self, msg: T) {
-        self.sender
-            .send(msg)
-            .expect("Receiver end of channel closed");
+        self.tx.send(msg).expect("Receiver end of channel closed");
     }
 }
 
 pub type TxEventChannel = Sender<Message>;
 pub type RxEventChannel = UnboundedReceiver<Message>;
 
-pub fn mk_channel() -> (TxEventChannel, RxEventChannel) {
+pub fn mk_event_channel() -> (TxEventChannel, RxEventChannel) {
     let (tx, rx) = unbounded_channel::<Message>();
 
-    let sender = Sender { sender: tx };
+    let sender = Sender { tx };
 
     (sender, rx)
 }

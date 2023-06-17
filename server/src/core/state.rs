@@ -17,7 +17,7 @@ pub struct AppState {
     pub scenes: Scenes,
     pub devices: Devices,
     pub rules: Rules,
-    pub sender: TxEventChannel,
+    pub event_tx: TxEventChannel,
     pub ws: WebSockets,
 }
 

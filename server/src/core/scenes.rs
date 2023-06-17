@@ -1,5 +1,7 @@
 use crate::types::{
-    device::{Device, DeviceData, DeviceId, DeviceKey, DevicesState, ManagedDeviceState},
+    device::{
+        Device, DeviceData, DeviceId, DeviceKey, DevicesState, ManagedDeviceState, SensorDevice,
+    },
     group::GroupDeviceLink,
     scene::{
         FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig, SceneDescriptor,
@@ -209,10 +211,10 @@ impl Scenes {
                     link.name.as_ref(),
                 )?;
 
-                let mut state = if let DeviceData::Managed(managed) = source_device.data {
-                    Some(managed.state)
-                } else {
-                    None
+                let mut state = match source_device.data {
+                    DeviceData::Managed(managed) => Some(managed.state),
+                    DeviceData::Sensor(SensorDevice::Color(state)) => Some(state),
+                    _ => None,
                 }?;
 
                 // Brightness override

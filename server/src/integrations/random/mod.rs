@@ -1,7 +1,7 @@
 use crate::types::{
-    color::{Capabilities, ColorMode, DeviceColor},
+    color::DeviceColor,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceData, DeviceId, ManagedDevice},
+    device::{Device, DeviceData, DeviceId, ManagedDeviceState, SensorDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -42,8 +42,7 @@ impl CustomIntegration for Random {
     async fn register(&mut self) -> Result<()> {
         let device = mk_random_device(self);
 
-        self.event_tx
-            .send(Message::IntegrationDeviceRefresh { device });
+        self.event_tx.send(Message::RecvDeviceState { device });
 
         Ok(())
     }
@@ -78,25 +77,21 @@ async fn poll_sensor(random: Random) {
     loop {
         interval.tick().await;
 
-        let sender = random.event_tx.clone();
+        let event_tx = random.event_tx.clone();
 
         let device = mk_random_device(&random);
-        sender.send(Message::SetDeviceState {
-            device,
-            set_scene: false,
-        });
+
+        event_tx.send(Message::RecvDeviceState { device });
     }
 }
 
 fn mk_random_device(random: &Random) -> Device {
-    let state = DeviceData::Managed(ManagedDevice::new(
-        None,
-        true,
-        Some(1.0),
-        Some(get_random_color()),
-        Some(500),
-        Capabilities::singleton(ColorMode::Rgb),
-    ));
+    let state = DeviceData::Sensor(SensorDevice::Color(ManagedDeviceState {
+        power: true,
+        color: Some(get_random_color()),
+        brightness: Some(1.0),
+        transition_ms: Some(1000),
+    }));
 
     Device {
         id: DeviceId::new("color"),

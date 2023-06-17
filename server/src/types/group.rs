@@ -49,7 +49,6 @@ pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
 #[ts(export)]
 pub struct FlattenedGroupConfig {
     pub name: String,
-    #[ts(type = "string[]")]
     pub device_ids: Vec<DeviceKey>,
     pub hidden: Option<bool>,
 }

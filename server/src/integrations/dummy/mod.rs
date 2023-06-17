@@ -60,8 +60,7 @@ impl CustomIntegration for Dummy {
                     )));
 
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);
-            self.event_tx
-                .send(Message::IntegrationDeviceRefresh { device });
+            self.event_tx.send(Message::RecvDeviceState { device });
         }
 
         Ok(())
