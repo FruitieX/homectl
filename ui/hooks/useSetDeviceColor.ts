@@ -22,7 +22,7 @@ export const useSetDeviceColor = () => {
       });
 
       const msg: WebSocketRequest = {
-        Message: { SetDeviceState: { device, set_scene: true } },
+        Message: { SetExpectedState: { device, set_scene: true } },
       };
       ws?.send(JSON.stringify(msg));
     },

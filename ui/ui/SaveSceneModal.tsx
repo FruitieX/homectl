@@ -98,7 +98,7 @@ const Component = (props: Props) => {
 
       const msg: WebSocketRequest = {
         Message: {
-          StoreScene: {
+          DbStoreScene: {
             scene_id: value,
             config,
           },

@@ -44,7 +44,7 @@ const Component = (props: Props) => {
 
       const msg: WebSocketRequest = {
         Message: {
-          EditScene: {
+          DbEditScene: {
             scene_id: sceneModalState,
             name: value,
           },
@@ -73,7 +73,7 @@ const Component = (props: Props) => {
 
       const msg: WebSocketRequest = {
         Message: {
-          DeleteScene: {
+          DbDeleteScene: {
             scene_id: sceneModalState,
           },
         },
@@ -135,8 +135,10 @@ const Component = (props: Props) => {
 };
 
 export const SceneModal = () => {
-  const { open: sceneModalOpen, setOpen: setSceneModalOpen } =
-    useSceneModalState();
+  const {
+    open: sceneModalOpen,
+    setOpen: setSceneModalOpen,
+  } = useSceneModalState();
 
   const closeSceneModal = useCallback(() => {
     setSceneModalOpen(false);
