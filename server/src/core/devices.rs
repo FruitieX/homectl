@@ -255,9 +255,11 @@ impl Devices {
                     }
                 };
 
-                // Make sure brightness is set, defaults to 100%
+                // Make sure brightness is set when device is powered on, defaults to 100%
                 if let Some(expected_state) = &mut expected_state {
-                    expected_state.brightness = Some(expected_state.brightness.unwrap_or(1.0));
+                    if expected_state.power {
+                        expected_state.brightness = Some(expected_state.brightness.unwrap_or(1.0));
+                    }
                 }
 
                 expected_state

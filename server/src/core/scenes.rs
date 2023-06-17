@@ -216,8 +216,10 @@ impl Scenes {
                 }?;
 
                 // Brightness override
-                state.brightness =
-                    Some(state.brightness.unwrap_or(1.0) * link.brightness.unwrap_or(1.0));
+                if state.power {
+                    state.brightness =
+                        Some(state.brightness.unwrap_or(1.0) * link.brightness.unwrap_or(1.0));
+                }
 
                 if ignore_transition {
                     // Ignore device's transition_ms value
