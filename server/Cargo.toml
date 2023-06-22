@@ -33,7 +33,7 @@ tokio = { version = "1", features = ["rt", "net", "time", "macros", "sync"] }
 futures-util = "0.3.28"
 tokio-stream = "0.1.14"
 env_logger = "0.10.0"
-itertools = "0.10.5"
+itertools = "0.11.0"
 sqlx = { version = "0.6", features = [
 	"runtime-tokio-rustls",
 	"postgres",
