@@ -89,20 +89,26 @@ impl CustomIntegration for Mqtt {
         let config_clone = Arc::new(self.config.clone());
 
         task::spawn(async move {
-            while let Ok(notification) = eventloop.poll().await {
+            loop {
+                let notification = eventloop.poll().await;
+
                 let id = id.clone();
                 let event_tx = event_tx.clone();
                 let config_clone = Arc::clone(&config_clone);
 
-                if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification {
-                    let device = mqtt_to_homectl(&msg.payload, id, &config_clone);
-
-                    match device {
-                        Ok(device) => event_tx.send(Message::RecvDeviceState { device }),
-                        Err(e) => {
-                            eprintln!("MQTT error: {:?}", e)
-                        }
+                let res = (|| async {
+                    if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification? {
+                        let device = mqtt_to_homectl(&msg.payload, id, &config_clone)?;
+                        event_tx.send(Message::RecvDeviceState { device })
                     }
+
+                    Ok::<(), Box<dyn std::error::Error + Sync + Send>>(())
+                })()
+                .await;
+
+                if let Err(e) = res {
+                    eprintln!("MQTT error: {:?}", e);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             }
         });
