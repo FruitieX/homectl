@@ -109,7 +109,7 @@ impl Devices {
 
     /// Checks whether device values were changed or not due to refresh
     pub async fn handle_recv_device_state(&mut self, incoming: &Device) {
-        // println!("handle_integration_device_refresh {:?}", device);
+        trace!("handle_recv_device_state {:?}", incoming);
         let current = self.get_device(&incoming.get_device_key());
 
         // recompute expected_state here as it may have changed since we last
@@ -135,7 +135,7 @@ impl Devices {
 
                         let device = incoming.set_scene(scene);
 
-                        println!(
+                        info!(
                             "Discovered previously seen device, restored scene from DB: {:?}",
                             device
                         );
@@ -143,7 +143,7 @@ impl Devices {
                         self.set_device_state(&device, true, true).await;
                     }
                     None => {
-                        println!("Discovered device: {:?}", incoming);
+                        info!("Discovered device: {:?}", incoming);
                         self.set_device_state(incoming, true, false).await;
                         db_update_device(incoming).await.ok();
                     }
@@ -176,7 +176,7 @@ impl Devices {
                 // missed a state update or forgot its state? We will try fixing
                 // this by emitting a SetIntegrationDeviceState message back to
                 // integration
-                println!(
+                info!(
                     "Device state mismatch detected ({}/{}):\nwas:      {}\nexpected: {}\n",
                     incoming.integration_id,
                     incoming.name,
@@ -348,7 +348,7 @@ impl Devices {
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
     ) -> Option<bool> {
-        println!("Activating scene {:?}", scene_id);
+        info!("Activating scene {:?}", scene_id);
 
         let scene_devices_config = self.find_scene_devices_config(&SceneDescriptor {
             scene_id: scene_id.clone(),

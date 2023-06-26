@@ -11,14 +11,14 @@ pub async fn init_db() -> Option<()> {
     let database_url = env::var("DATABASE_URL").ok();
 
     if database_url.is_none() {
-        eprintln!("DATABASE_URL environment variable not set, skipping PostgreSQL initialization.")
+        info!("DATABASE_URL environment variable not set, skipping PostgreSQL initialization.")
     }
 
     let database_url = database_url?;
 
     let opt = PoolOptions::new().acquire_timeout(Duration::from_secs(3));
 
-    println!("Connecting to PostgreSQL...");
+    info!("Connecting to PostgreSQL...");
     let db = opt
         .connect(&database_url)
         .await

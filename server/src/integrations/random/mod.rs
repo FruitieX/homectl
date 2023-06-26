@@ -48,8 +48,6 @@ impl CustomIntegration for Random {
     }
 
     async fn start(&mut self) -> Result<()> {
-        println!("started random integration {}", self.id);
-
         let random = self.clone();
 
         // FIXME: can we restructure the integrations / devices systems such

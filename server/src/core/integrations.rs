@@ -46,7 +46,7 @@ impl Integrations {
         integration_id: &IntegrationId,
         config: &config::Value,
     ) -> Result<()> {
-        println!("loading integration with module_name {}", module_name);
+        info!("loading integration with module_name {}", module_name);
 
         let event_tx = self.event_tx.clone();
         let integration = load_custom_integration(module_name, integration_id, config, event_tx)?;
@@ -67,7 +67,7 @@ impl Integrations {
             let mut integration = li.integration.lock().await;
 
             integration.register().await.unwrap();
-            println!(
+            info!(
                 "registered {} integration {}",
                 li.module_name, integration_id
             );
@@ -81,7 +81,7 @@ impl Integrations {
             let mut integration = li.integration.lock().await;
 
             integration.start().await.unwrap();
-            println!("started {} integration {}", li.module_name, integration_id);
+            info!("started {} integration {}", li.module_name, integration_id);
         }
 
         Ok(())

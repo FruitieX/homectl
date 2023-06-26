@@ -16,7 +16,7 @@ trying out other alternatives for now.
 
 - Install the Rust toolchain using [`rustup`](https://rustup.rs/)
 - Clone this repository
-- Run `cargo run`
+- Run `RUST_LOG=homectl_server=info cargo run`
 
 You should now have a demo/dummy homectl environment running.
 

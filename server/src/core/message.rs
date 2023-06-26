@@ -104,8 +104,9 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
     };
 
     if let Err(err) = result {
-        println!("Error while handling message:");
-        println!("Msg: {:#?}", msg);
-        println!("Error: {:#?}", err);
+        error!(
+            "Error while handling message:\n    Msg:\n    {:#?}\n\n    Err:\n    {:#?}",
+            msg, err
+        );
     }
 }

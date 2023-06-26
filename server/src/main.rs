@@ -1,7 +1,11 @@
 #[macro_use]
 extern crate macro_attr;
+
 #[macro_use]
 extern crate newtype_derive;
+
+#[macro_use]
+extern crate log;
 
 mod api;
 mod core;
@@ -23,15 +27,14 @@ use std::{error::Error, sync::Arc};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    env_logger::init();
+    pretty_env_logger::init();
 
     // Attempt connecting to Postgres
     init_db().await;
 
     let (config, opaque_integrations_configs) = core::config::read_config()?;
 
-    // println!("Using config:");
-    // println!("{:#?}", config);
+    trace!("Using config:\n    {:#?}", config);
 
     let (event_tx, mut event_rx) = mk_event_channel();
 

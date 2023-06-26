@@ -130,7 +130,7 @@ pub async fn clean_house(config: &NeatoConfig, cmd: &RobotCmd) -> Result<()> {
         .await
         .map_err(|err| anyhow!(err))?;
 
-        println!("response: {}", result);
+        debug!("response: {}", result);
     }
 
     Ok(())

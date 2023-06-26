@@ -92,7 +92,7 @@ impl CustomIntegration for Neato {
                 if !(self.config.cleaning_time_start..self.config.cleaning_time_end)
                     .contains(&local.time())
                 {
-                    println!("Skipping cleaning due to wrong time of day");
+                    info!("Skipping cleaning due to wrong time of day");
                     return Ok(());
                 }
 
@@ -100,20 +100,20 @@ impl CustomIntegration for Neato {
                     let weekday = local.weekday();
 
                     if !self.config.cleaning_days.contains(&weekday) {
-                        println!("Skipping cleaning due to wrong weekday");
+                        info!("Skipping cleaning due to wrong weekday");
                         return Ok(());
                     }
 
                     if !(self.config.cleaning_time_start..self.config.cleaning_time_end)
                         .contains(&local.time())
                     {
-                        println!("Skipping cleaning due to wrong time of day");
+                        info!("Skipping cleaning due to wrong time of day");
                         return Ok(());
                     }
 
                     if let Some(prev_run) = self.prev_run {
                         if prev_run.num_days_from_ce() == local.num_days_from_ce() {
-                            println!("Skipping cleaning due to previous run being today");
+                            info!("Skipping cleaning due to previous run being today");
                             return Ok(());
                         }
                     }

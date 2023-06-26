@@ -98,7 +98,7 @@ impl CustomIntegration for Mqtt {
 
                 let res = (|| async {
                     if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification? {
-                        let device = mqtt_to_homectl(&msg.payload, id, &config_clone)?;
+                        let device = mqtt_to_homectl(&msg.payload, id.clone(), &config_clone)?;
                         event_tx.send(Message::RecvDeviceState { device })
                     }
 
@@ -107,7 +107,10 @@ impl CustomIntegration for Mqtt {
                 .await;
 
                 if let Err(e) = res {
-                    eprintln!("MQTT error: {:?}", e);
+                    error!(
+                        target: &format!("homectl_server::integrations::mqtt::{}", id),
+                        "MQTT error: {:?}", e
+                    );
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }
             }

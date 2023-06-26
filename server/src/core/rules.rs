@@ -89,7 +89,7 @@ fn get_triggered_routine_ids(
             |(_, routine)| match is_routine_triggered(state, groups, routine) {
                 Ok(triggered) => triggered,
                 Err(e) => {
-                    println!("Error while checking routine {:?} rules: {}", routine, e);
+                    error!("Error while checking routine {:?} rules: {}", routine, e);
                     false
                 }
             },
