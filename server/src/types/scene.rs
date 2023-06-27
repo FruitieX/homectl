@@ -1,5 +1,5 @@
 use super::color::DeviceColor;
-use super::device::{DeviceKey, ManagedDeviceState};
+use super::device::{DeviceKey, DeviceRef, ManagedDeviceState};
 
 use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
@@ -30,10 +30,10 @@ impl std::str::FromStr for SceneId {
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
 pub struct SceneDeviceLink {
-    pub integration_id: IntegrationId,
-    pub device_id: Option<DeviceId>,
-    pub name: Option<String>,
     pub brightness: Option<f32>, // allow overriding brightness
+
+    #[serde(flatten)]
+    pub device_ref: DeviceRef,
 }
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug)]

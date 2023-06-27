@@ -2,7 +2,7 @@ use crate::db::actions::{db_find_device, db_update_device};
 use crate::types::color::{Capabilities, DeviceColor};
 
 use super::scenes::Scenes;
-use crate::types::device::{DeviceId, ManagedDevice, ManagedDeviceState, SensorDevice};
+use crate::types::device::{DeviceId, DeviceRef, ManagedDevice, ManagedDeviceState, SensorDevice};
 use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
@@ -431,8 +431,13 @@ impl Devices {
                                     return false;
                                 }
 
-                                let device =
-                                    find_device(&state, integration_id, Some(device_id), None);
+                                let device = find_device(
+                                    &state,
+                                    &DeviceRef::new_with_id(
+                                        integration_id.clone(),
+                                        device_id.clone(),
+                                    ),
+                                );
                                 let device_scene = device.and_then(|d| d.get_scene());
 
                                 device_scene.map_or(false, |ds| ds == sd.scene_id)
@@ -466,12 +471,7 @@ impl Devices {
     }
 }
 
-pub fn find_device(
-    devices: &DevicesState,
-    integration_id: &IntegrationId,
-    device_id: Option<&DeviceId>,
-    name: Option<&String>,
-) -> Option<Device> {
+pub fn find_device(devices: &DevicesState, device_ref: &DeviceRef) -> Option<Device> {
     let device = devices
         .0
         .iter()
@@ -483,14 +483,17 @@ pub fn find_device(
                 },
                 candidate_device,
             )| {
-                if integration_id != candidate_integration_id {
+                if device_ref.integration_id() != candidate_integration_id {
                     return false;
                 }
+
+                let device_id = device_ref.device_id();
                 if device_id.is_some() && device_id != Some(candidate_device_id) {
                     return false;
                 }
 
                 // TODO: regex matches
+                let name = device_ref.name();
                 if name.is_some() && name != Some(&candidate_device.name) {
                     return false;
                 }

@@ -271,6 +271,67 @@ impl Device {
     }
 }
 
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[ts(export)]
+pub struct DeviceIdRef {
+    pub integration_id: IntegrationId,
+    pub device_id: DeviceId,
+}
+
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[ts(export)]
+pub struct DeviceNameRef {
+    pub integration_id: IntegrationId,
+    pub name: String,
+}
+
+/// A reference to a device, either by name or by id
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(untagged)]
+#[ts(export)]
+pub enum DeviceRef {
+    Id(DeviceIdRef),
+    Name(DeviceNameRef),
+}
+
+impl DeviceRef {
+    pub fn new_with_id(integration_id: IntegrationId, device_id: DeviceId) -> DeviceRef {
+        DeviceRef::Id(DeviceIdRef {
+            integration_id,
+            device_id,
+        })
+    }
+
+    pub fn new_with_name(integration_id: IntegrationId, name: String) -> DeviceRef {
+        DeviceRef::Name(DeviceNameRef {
+            integration_id,
+            name,
+        })
+    }
+
+    pub fn integration_id(&self) -> &IntegrationId {
+        match self {
+            DeviceRef::Id(id) => &id.integration_id,
+            DeviceRef::Name(name) => &name.integration_id,
+        }
+    }
+
+    pub fn device_id(&self) -> Option<&DeviceId> {
+        match self {
+            DeviceRef::Id(id) => Some(&id.device_id),
+            DeviceRef::Name(_) => None,
+        }
+    }
+
+    pub fn name(&self) -> Option<&String> {
+        match self {
+            DeviceRef::Id(_) => None,
+            DeviceRef::Name(name) => Some(&name.name),
+        }
+    }
+}
+
+/// A reference to a device, always by id, serializes to `integration_id/device_id`
 #[derive(TS, Hash, Clone, Debug, PartialEq, Eq)]
 #[ts(export)]
 pub struct DeviceKey {

@@ -1,8 +1,7 @@
 use crate::types::{
     device::{
-        Device, DeviceData, DeviceId, DeviceKey, DevicesState, ManagedDeviceState, SensorDevice,
+        Device, DeviceData, DeviceKey, DeviceRef, DevicesState, ManagedDeviceState, SensorDevice,
     },
-    group::GroupDeviceLink,
     scene::{
         FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig, SceneDescriptor,
         SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId, ScenesConfig,
@@ -17,6 +16,99 @@ use std::{
     collections::HashMap,
     sync::{Arc, RwLock},
 };
+
+/// Finds scene config of given device in its current scene
+pub fn find_scene_device_config(
+    device: &Device,
+    groups: &Groups,
+    scenes: &ScenesConfig,
+) -> Option<SceneDeviceConfig> {
+    let scene_id = device.get_scene()?;
+    let scene = scenes.get(&scene_id)?;
+
+    let scene_devices_search_config = scene.devices.as_ref().map(|devices| &devices.0);
+
+    let scene_device_config = scene_devices_search_config.and_then(|sc| {
+        sc.get(&device.integration_id)
+            .and_then(|device_configs| device_configs.get(&device.name))
+    });
+
+    // If a match was found by device name, it takes precedence over eventual
+    // group matches
+    if scene_device_config.is_some() {
+        return scene_device_config.cloned();
+    }
+
+    let scene_group_configs = scene.groups.as_ref().map(|groups| &groups.0)?;
+    let matching_group_config = scene_group_configs
+        .iter()
+        .find(|(group_id, _)| {
+            groups.is_device_in_group(
+                group_id,
+                &DeviceRef::new_with_name(device.integration_id.clone(), device.name.clone()),
+            )
+        })
+        .map(|(_, config)| config);
+
+    matching_group_config.cloned()
+}
+
+/// Evaluates current state of given device in its current scene
+pub fn eval_scene_device_state(
+    device: &Device,
+    devices: &DevicesState,
+    groups: &Groups,
+    scenes: &ScenesConfig,
+    ignore_transition: bool,
+) -> Option<ManagedDeviceState> {
+    let scene_device_config = find_scene_device_config(device, groups, scenes)?;
+
+    match scene_device_config {
+        SceneDeviceConfig::DeviceLink(link) => {
+            // Use state from another device
+
+            // Try finding source device by integration_id, device_id, name
+            let source_device = find_device(devices, &link.device_ref)?;
+
+            let mut state = match source_device.data {
+                DeviceData::Managed(managed) => Some(managed.state),
+                DeviceData::Sensor(SensorDevice::Color(state)) => Some(state),
+                _ => None,
+            }?;
+
+            // Brightness override
+            if state.power {
+                state.brightness =
+                    Some(state.brightness.unwrap_or(1.0) * link.brightness.unwrap_or(1.0));
+            }
+
+            if ignore_transition {
+                // Ignore device's transition_ms value
+                state.transition_ms = None;
+            }
+
+            Some(state)
+        }
+
+        SceneDeviceConfig::SceneLink(link) => {
+            // Use state from another scene
+            let device = device.set_scene(Some(link.scene_id));
+            eval_scene_device_state(&device, devices, groups, scenes, ignore_transition)
+        }
+
+        SceneDeviceConfig::DeviceState(scene_device) => {
+            Some(
+                // Use state from scene_device
+                ManagedDeviceState {
+                    brightness: scene_device.brightness,
+                    color: scene_device.color.clone(),
+                    power: scene_device.power.unwrap_or(true),
+                    transition_ms: scene_device.transition_ms,
+                },
+            )
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct Scenes {
@@ -72,16 +164,25 @@ impl Scenes {
                     device_configs
                         .iter()
                         .filter_map(|(device_name, device_config)| {
-                            let device =
-                                find_device(devices, integration_id, None, Some(device_name));
+                            let device = find_device(
+                                devices,
+                                &DeviceRef::new_with_name(
+                                    integration_id.clone(),
+                                    device_name.clone(),
+                                ),
+                            );
 
-                            let device_id = device.map(|d| d.id).unwrap_or_else(|| {
-                                warn!(
-                                    "Could not find device_id for {} device with name {}",
-                                    integration_id, device_name
-                                );
-                                DeviceId::new("N/A")
-                            });
+                            let device_id = match device {
+                                Some(device) => Some(device.id),
+                                None => {
+                                    error!(
+                                        "Could not find device_id for {} device with name {}",
+                                        integration_id, device_name
+                                    );
+
+                                    None
+                                }
+                            }?;
                             let device_key =
                                 &DeviceKey::new(integration_id.clone(), device_id.clone());
 
@@ -121,21 +222,16 @@ impl Scenes {
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
-            let group_devices = { self.groups.find_group_device_links(&group_id) };
+            let group_device_refs = { self.groups.find_group_device_refs(&group_id) };
 
-            for GroupDeviceLink {
-                integration_id,
-                device_id,
-                name,
-            } in group_devices
-            {
-                let device =
-                    find_device(devices, &integration_id, device_id.as_ref(), name.as_ref());
+            for device_ref in group_device_refs {
+                let device = find_device(devices, &device_ref);
 
                 if let Some(device) = device {
+                    let integration_id = device_ref.integration_id();
                     let empty_devices_integrations = HashMap::new();
                     let mut scene_devices_integrations = scene_devices_config
-                        .get(&integration_id)
+                        .get(integration_id)
                         .unwrap_or(&empty_devices_integrations)
                         .to_owned();
 
@@ -171,7 +267,8 @@ impl Scenes {
                     scene_devices_integrations
                         .entry(device_id.clone())
                         .or_insert_with(|| scene_device_config.clone());
-                    scene_devices_config.insert(integration_id, scene_devices_integrations.clone());
+                    scene_devices_config
+                        .insert(integration_id.clone(), scene_devices_integrations.clone());
                 }
             }
         }
@@ -186,69 +283,13 @@ impl Scenes {
         devices: &DevicesState,
         ignore_transition: bool,
     ) -> Option<ManagedDeviceState> {
-        let scene_id = device.get_scene()?;
-
-        let scene_devices = self.find_scene_devices_config(
+        eval_scene_device_state(
+            device,
             devices,
-            &SceneDescriptor {
-                scene_id,
-                device_keys: None,
-                group_keys: None,
-            },
-        )?;
-        let integration_devices = scene_devices.get(&device.integration_id)?;
-        let scene_device = integration_devices.get(&device.id)?;
-
-        match scene_device {
-            SceneDeviceConfig::DeviceLink(link) => {
-                // Use state from another device
-
-                // Try finding source device by integration_id, device_id, name
-                let source_device = find_device(
-                    devices,
-                    &link.integration_id,
-                    link.device_id.as_ref(),
-                    link.name.as_ref(),
-                )?;
-
-                let mut state = match source_device.data {
-                    DeviceData::Managed(managed) => Some(managed.state),
-                    DeviceData::Sensor(SensorDevice::Color(state)) => Some(state),
-                    _ => None,
-                }?;
-
-                // Brightness override
-                if state.power {
-                    state.brightness =
-                        Some(state.brightness.unwrap_or(1.0) * link.brightness.unwrap_or(1.0));
-                }
-
-                if ignore_transition {
-                    // Ignore device's transition_ms value
-                    state.transition_ms = None;
-                }
-
-                Some(state)
-            }
-
-            SceneDeviceConfig::SceneLink(link) => {
-                // Use state from another scene
-                let device = device.set_scene(Some(link.scene_id.clone()));
-                self.find_scene_device_state(&device, devices, ignore_transition)
-            }
-
-            SceneDeviceConfig::DeviceState(scene_device) => {
-                Some(
-                    // Use state from scene_device
-                    ManagedDeviceState {
-                        brightness: scene_device.brightness,
-                        color: scene_device.color.clone(),
-                        power: scene_device.power.unwrap_or(true),
-                        transition_ms: scene_device.transition_ms,
-                    },
-                )
-            }
-        }
+            &self.groups,
+            &self.get_scenes(),
+            ignore_transition,
+        )
     }
 
     pub fn get_flattened_scenes(&self, devices: &DevicesState) -> FlattenedScenesConfig {

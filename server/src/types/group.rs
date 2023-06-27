@@ -1,6 +1,5 @@
-use super::device::DeviceKey;
+use super::device::{DeviceKey, DeviceRef};
 
-use super::{device::DeviceId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::Infallible};
 use ts_rs::TS;
@@ -19,14 +18,7 @@ impl std::str::FromStr for GroupId {
     }
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, PartialEq)]
-pub struct GroupDeviceLink {
-    pub integration_id: IntegrationId,
-    pub device_id: Option<DeviceId>,
-    pub name: Option<String>,
-}
-
-pub type GroupDevicesConfig = Vec<GroupDeviceLink>;
+pub type GroupDevicesConfig = Vec<DeviceRef>;
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 pub struct GroupLink {

@@ -1,3 +1,5 @@
+use itertools::Itertools;
+
 use crate::types::{
     action::Actions,
     device::{Device, DevicesState, SensorDevice},
@@ -85,15 +87,7 @@ fn get_triggered_routine_ids(
 ) -> HashSet<RoutineId> {
     let triggered_routine_ids: HashSet<RoutineId> = routines
         .iter()
-        .filter(
-            |(_, routine)| match is_routine_triggered(state, groups, routine) {
-                Ok(triggered) => triggered,
-                Err(e) => {
-                    error!("Error while checking routine {:?} rules: {}", routine, e);
-                    false
-                }
-            },
-        )
+        .filter(|(_, routine)| is_routine_triggered(state, groups, routine))
         .map(|(routine_id, _)| routine_id.clone())
         .collect();
 
@@ -101,18 +95,17 @@ fn get_triggered_routine_ids(
 }
 
 /// Returns true if all rules of the given routine are triggered.
-fn is_routine_triggered(
-    state: &DevicesState,
-    groups: &Groups,
-    routine: &Routine,
-) -> Result<bool, String> {
-    let result = routine
+fn is_routine_triggered(state: &DevicesState, groups: &Groups, routine: &Routine) -> bool {
+    let (errors, results): (Vec<_>, Vec<_>) = routine
         .rules
         .iter()
-        .map(|rule| is_rule_triggered(state, groups, rule))
-        .all(|result| result == Ok(true));
+        .partition_map(|rule| is_rule_triggered(state, groups, rule, &routine.name).into());
 
-    Ok(result)
+    for error in errors {
+        error!("Error while checking routine {}: {}", routine.name, error);
+    }
+
+    !results.is_empty() && results.into_iter().all(|result| result)
 }
 
 /// Returns true if rule state matches device state
@@ -162,62 +155,61 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
 }
 
 /// Returns true if rule is triggered
-fn is_rule_triggered(state: &DevicesState, groups: &Groups, rule: &Rule) -> Result<bool, String> {
+fn is_rule_triggered(
+    state: &DevicesState,
+    groups: &Groups,
+    rule: &Rule,
+    routine_name: &String,
+) -> Result<bool, String> {
     // Try finding matching device
     let devices = match rule {
         Rule::Any(AnyRule { any: rules }) => {
             let any_triggered = rules
                 .iter()
-                .map(|rule| is_rule_triggered(state, groups, rule))
+                .map(|rule| is_rule_triggered(state, groups, rule, routine_name))
                 .any(|result| result == Ok(true));
 
             return Ok(any_triggered);
         }
         Rule::Sensor(rule) => {
-            vec![find_device(
-                state,
-                &rule.integration_id,
-                rule.device_id.as_ref(),
-                rule.name.as_ref(),
-            )
-            .ok_or(format!(
+            vec![find_device(state, &rule.device_ref).ok_or(format!(
                 "Could not find matching sensor for rule: {:?}",
                 rule
             ))?]
         }
         Rule::Device(rule) => {
-            vec![find_device(
-                state,
-                &rule.integration_id,
-                rule.device_id.as_ref(),
-                rule.name.as_ref(),
-            )
-            .ok_or(format!(
+            vec![find_device(state, &rule.device_ref).ok_or(format!(
                 "Could not find matching device for rule: {:?}",
                 rule
             ))?]
         }
         Rule::Group(rule) => {
-            let group_device_links = groups.find_group_device_links(&rule.group_id);
-            let group_devices: Result<Vec<Device>, _> = group_device_links
-                .iter()
-                .map(|gdl| {
-                    find_device(
-                        state,
-                        &gdl.integration_id,
-                        gdl.device_id.as_ref(),
-                        gdl.name.as_ref(),
-                    )
-                    .ok_or(format!(
-                        "Could not find matching device for rule: {:?}",
-                        rule
-                    ))
-                })
-                .collect();
+            let group_device_refs = groups.find_group_device_refs(&rule.group_id);
+            let (errors, group_devices): (Vec<_>, Vec<Device>) =
+                group_device_refs.iter().partition_map(|device_ref| {
+                    find_device(state, device_ref)
+                        .ok_or(format!(
+                            "Could not find matching device for rule: {:?}",
+                            rule
+                        ))
+                        .into()
+                });
 
-            group_devices?
+            for error in errors {
+                error!(
+                    "Error while checking group {} rule under routine {}: {}",
+                    rule.group_id, routine_name, error
+                );
+            }
+
+            group_devices
         }
     };
+
+    // Make sure we found at least one device to check against
+    if devices.is_empty() {
+        return Ok(false);
+    }
 
     // Make sure rule is triggered for every device it contains
     for device in devices {

@@ -1,7 +1,7 @@
-use super::device::SensorDevice;
+use super::device::{DeviceRef, SensorDevice};
 use super::{group::GroupId, scene::SceneId};
 
-use super::{action::Actions, device::DeviceId, integration::IntegrationId};
+use super::action::Actions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -12,19 +12,19 @@ macro_attr! {
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct SensorRule {
-    pub integration_id: IntegrationId,
-    pub device_id: Option<DeviceId>,
-    pub name: Option<String>,
     pub state: SensorDevice,
+
+    #[serde(flatten)]
+    pub device_ref: DeviceRef,
 }
 
 #[derive(Clone, Deserialize, Debug)]
 pub struct DeviceRule {
-    pub integration_id: IntegrationId,
-    pub device_id: Option<DeviceId>,
-    pub name: Option<String>,
     pub power: Option<bool>,
     pub scene: Option<SceneId>,
+
+    #[serde(flatten)]
+    pub device_ref: DeviceRef,
 }
 
 #[derive(Clone, Deserialize, Debug)]
