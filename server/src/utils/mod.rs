@@ -1,4 +1,4 @@
-use anyhow::Result;
+use color_eyre::Result;
 use serde::{de, Deserialize};
 
 pub fn from_hh_mm<'de, D>(d: D) -> Result<chrono::NaiveTime, D::Error>

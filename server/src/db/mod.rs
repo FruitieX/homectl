@@ -1,4 +1,5 @@
-use anyhow::{Context, Result};
+use color_eyre::Result;
+use eyre::eyre;
 use once_cell::sync::OnceCell;
 use sqlx::{pool::PoolOptions, PgPool};
 use std::{env, time::Duration};
@@ -30,5 +31,7 @@ pub async fn init_db() -> Option<()> {
 }
 
 pub async fn get_db_connection<'a>() -> Result<&'a PgPool> {
-    DB_CONNECTION.get().context("Not connected to database")
+    DB_CONNECTION
+        .get()
+        .ok_or_else(|| eyre!("Not connected to database"))
 }

@@ -5,8 +5,9 @@ use crate::types::{
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use anyhow::{Context, Result};
 use async_trait::async_trait;
+use color_eyre::Result;
+use eyre::Context;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -34,7 +35,7 @@ impl CustomIntegration for Dummy {
         let config = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of Dummy integration")?;
+            .wrap_err("Failed to deserialize config of Dummy integration")?;
 
         Ok(Dummy {
             id: id.clone(),

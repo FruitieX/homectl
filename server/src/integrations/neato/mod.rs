@@ -8,9 +8,10 @@ use crate::{
     db::actions::{db_get_neato_last_run, db_set_neato_last_run},
     utils::from_hh_mm,
 };
-use anyhow::{Context, Result};
 use async_trait::async_trait;
 use chrono::{Datelike, Weekday};
+use color_eyre::Result;
+use eyre::Context;
 use serde::Deserialize;
 
 mod api;
@@ -57,7 +58,7 @@ impl CustomIntegration for Neato {
         let config = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of Neato integration")?;
+            .wrap_err("Failed to deserialize config of Neato integration")?;
         Ok(Neato {
             integration_id: integration_id.clone(),
             config,
@@ -65,7 +66,7 @@ impl CustomIntegration for Neato {
         })
     }
 
-    async fn register(&mut self) -> anyhow::Result<()> {
+    async fn register(&mut self) -> color_eyre::Result<()> {
         let prev_run = db_get_neato_last_run(&self.integration_id).await;
 
         if let Ok(prev_run) = prev_run {
@@ -75,7 +76,7 @@ impl CustomIntegration for Neato {
         Ok(())
     }
 
-    async fn start(&mut self) -> anyhow::Result<()> {
+    async fn start(&mut self) -> color_eyre::Result<()> {
         Ok(())
     }
 

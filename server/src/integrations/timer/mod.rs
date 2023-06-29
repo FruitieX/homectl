@@ -4,8 +4,9 @@ use crate::types::{
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use anyhow::{Context, Result};
 use async_trait::async_trait;
+use color_eyre::Result;
+use eyre::Context;
 use serde::Deserialize;
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -29,7 +30,7 @@ impl CustomIntegration for Timer {
         let config: TimerConfig = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of Timer integration")?;
+            .wrap_err("Failed to deserialize config of Timer integration")?;
 
         Ok(Timer {
             id: id.clone(),

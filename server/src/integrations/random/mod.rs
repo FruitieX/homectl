@@ -5,8 +5,9 @@ use crate::types::{
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
-use anyhow::{Context, Result};
 use async_trait::async_trait;
+use color_eyre::Result;
+use eyre::Context;
 use rand::prelude::*;
 use serde::Deserialize;
 use std::time::Duration;
@@ -30,7 +31,7 @@ impl CustomIntegration for Random {
         let config: RandomConfig = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of Random integration")?;
+            .wrap_err("Failed to deserialize config of Random integration")?;
 
         Ok(Random {
             id: id.clone(),

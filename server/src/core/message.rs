@@ -1,4 +1,4 @@
-use anyhow::Result;
+use color_eyre::Result;
 use std::sync::Arc;
 
 use crate::types::{

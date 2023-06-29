@@ -25,7 +25,6 @@ palette = { version = "0.7.2", features = ["serializing"] }
 async-trait = "0.1.68"
 surf = { version = "2.3.2", default-features=false, features = ["h1-client-rustls"] }
 rand = "0.8.5"
-anyhow = "1.0.71"
 wakey = "0.3.0"
 warp = "0.3"
 serde_path_to_error = "0.1"
@@ -48,3 +47,5 @@ macro-attr = "0.2.0"
 newtype_derive = "0.1.6"
 log = "0.4.19"
 pretty_env_logger = "0.5.0"
+eyre = "0.6.8"
+color-eyre = "0.6.2"

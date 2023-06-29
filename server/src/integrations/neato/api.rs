@@ -1,5 +1,6 @@
-use anyhow::{anyhow, Result};
 use chrono::Utc;
+use color_eyre::Result;
+use eyre::eyre;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
@@ -61,22 +62,22 @@ pub async fn clean_house(config: &NeatoConfig, cmd: &RobotCmd) -> Result<()> {
     };
 
     let token = surf::post(&format!("{}/sessions", BASE_URL))
-        .body(surf::Body::from_json(&body).map_err(|err| anyhow!(err))?)
+        .body(surf::Body::from_json(&body).map_err(|err| eyre!(err))?)
         .await
-        .map_err(|err| anyhow!(err))?
+        .map_err(|err| eyre!(err))?
         .body_json::<SessionsResponse>()
         .await
-        .map_err(|err| anyhow!(err))?
+        .map_err(|err| eyre!(err))?
         .access_token;
 
     let robots = surf::get(&format!("{}/users/me/robots", BASE_URL))
         .header("Authorization", format!("Bearer {}", token))
         .send()
         .await
-        .map_err(|err| anyhow!(err))?
+        .map_err(|err| eyre!(err))?
         .body_json::<Vec<Robot>>()
         .await
-        .map_err(|err| anyhow!(err))?;
+        .map_err(|err| eyre!(err))?;
 
     for robot in robots {
         // https://developers.neatorobotics.com/api/nucleo
@@ -123,12 +124,12 @@ pub async fn clean_house(config: &NeatoConfig, cmd: &RobotCmd) -> Result<()> {
         .header("Accept", "application/vnd.neato.nucleo.v1")
         .header("Date", date)
         .header("Authorization", format!("NEATOAPP {}", signature))
-        .body(surf::Body::from_json(&robot_message).map_err(|err| anyhow!(err))?)
+        .body(surf::Body::from_json(&robot_message).map_err(|err| eyre!(err))?)
         .await
-        .map_err(|err| anyhow!(err))?
+        .map_err(|err| eyre!(err))?
         .body_string()
         .await
-        .map_err(|err| anyhow!(err))?;
+        .map_err(|err| eyre!(err))?;
 
         debug!("response: {}", result);
     }

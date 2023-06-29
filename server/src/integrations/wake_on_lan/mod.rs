@@ -7,8 +7,9 @@ use crate::types::{
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
-use anyhow::{anyhow, Context, Result};
 use async_trait::async_trait;
+use color_eyre::Result;
+use eyre::{eyre, Context};
 use serde::Deserialize;
 use tokio::time;
 
@@ -41,7 +42,7 @@ impl CustomIntegration for WakeOnLan {
         let config = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of WakeOnLan integration")?;
+            .wrap_err("Failed to deserialize config of WakeOnLan integration")?;
         Ok(WakeOnLan {
             id: id.clone(),
             config,
@@ -49,7 +50,7 @@ impl CustomIntegration for WakeOnLan {
         })
     }
 
-    async fn register(&mut self) -> anyhow::Result<()> {
+    async fn register(&mut self) -> color_eyre::Result<()> {
         for machine in &self.config.machines {
             let data = DeviceData::Managed(ManagedDevice::new(
                 None,
@@ -73,16 +74,14 @@ impl CustomIntegration for WakeOnLan {
         Ok(())
     }
 
-    async fn start(&mut self) -> anyhow::Result<()> {
+    async fn start(&mut self) -> color_eyre::Result<()> {
         Ok(())
     }
 
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let power = match &device.data {
             DeviceData::Managed(ManagedDevice { state, .. }) => Ok(state.power),
-            _ => Err(anyhow!(
-                "Unsupported device kind received in wol integration"
-            )),
+            _ => Err(eyre!("Unsupported device kind received in wol integration")),
         }?;
 
         let wol_machine = self
@@ -90,10 +89,7 @@ impl CustomIntegration for WakeOnLan {
             .machines
             .iter()
             .find(|machine| machine.id == device.id.to_string())
-            .context(format!(
-                "Expected to find WOL device with matching id {}",
-                device.id
-            ))?;
+            .ok_or_else(|| eyre!("Expected to find WOL device with matching id {}", device.id))?;
 
         if power {
             match wol_machine.broadcast_ip {
@@ -123,7 +119,7 @@ impl CustomIntegration for WakeOnLan {
 }
 
 async fn do_sleep_on_lan(endpoint: String) -> Result<()> {
-    surf::get(&endpoint).await.map_err(|err| anyhow!(err))?;
+    surf::get(&endpoint).await.map_err(|err| eyre!(err))?;
 
     Ok(())
 }

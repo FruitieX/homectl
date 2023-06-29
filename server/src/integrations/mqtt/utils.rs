@@ -4,7 +4,8 @@ use crate::types::{
     device::{Device, DeviceData, DeviceId, ManagedDevice, SensorDevice},
     integration::IntegrationId,
 };
-use anyhow::Result;
+use color_eyre::Result;
+use eyre::eyre;
 use json_value_merge::Merge;
 
 pub fn mqtt_to_homectl(
@@ -35,13 +36,13 @@ pub fn mqtt_to_homectl(
     let id = value
         .pointer(id_field)
         .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| anyhow::anyhow!("Missing '{}' field in MQTT message", id_field))?
+        .ok_or_else(|| eyre!("Missing '{}' field in MQTT message", id_field))?
         .to_string();
 
     let name = value
         .pointer(name_field)
         .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| anyhow::anyhow!("Missing '{}' field in MQTT message", name_field))?
+        .ok_or_else(|| eyre!("Missing '{}' field in MQTT message", name_field))?
         .to_string();
 
     let color = value

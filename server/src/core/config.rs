@@ -4,7 +4,8 @@ use crate::types::{
     rule::RoutinesConfig,
     scene::ScenesConfig,
 };
-use anyhow::{Context, Result};
+use color_eyre::Result;
+use eyre::Context;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -36,13 +37,13 @@ pub fn read_config() -> Result<(Config, OpaqueIntegrationsConfigs)> {
 
     let settings = builder.build()?;
 
-    let config: Config = serde_path_to_error::deserialize(settings.clone()).context(
+    let config: Config = serde_path_to_error::deserialize(settings.clone()).wrap_err(
         "Failed to deserialize config, compare your config file to Settings.toml.example!",
     )?;
 
     let integrations_config = settings
         .get::<OpaqueIntegrationsConfigs>("integrations")
-        .context("Expected to find integrations key in config")?;
+        .wrap_err("Expected to find integrations key in config")?;
 
     Ok((config, integrations_config))
 }

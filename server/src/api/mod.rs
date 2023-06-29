@@ -9,7 +9,7 @@ mod ws;
 use actions::*;
 use devices::*;
 
-use anyhow::Result;
+use color_eyre::Result;
 use warp::Filter;
 
 use self::ws::ws;

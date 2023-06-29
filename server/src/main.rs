@@ -20,13 +20,15 @@ use crate::core::{
     rules::Rules, scenes::Scenes, state::AppState,
 };
 use crate::types::event::mk_event_channel;
-use anyhow::{Context, Result};
 use api::init_api;
+use color_eyre::Result;
 use db::init_db;
+use eyre::eyre;
 use std::{error::Error, sync::Arc};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    color_eyre::install()?;
     pretty_env_logger::init();
 
     // Attempt connecting to Postgres
@@ -52,7 +54,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for (id, integration_config) in &config.integrations.unwrap_or_default() {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
             .get(id)
-            .with_context(|| format!("Expected to find config for integration with id {}", id))?;
+            .ok_or_else(|| eyre!("Expected to find config for integration with id {}", id))?;
 
         integrations
             .load_integration(&integration_config.plugin, id, opaque_integration_config)

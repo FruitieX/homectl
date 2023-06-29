@@ -6,8 +6,9 @@ use crate::types::{
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use anyhow::{Context, Result};
 use async_trait::async_trait;
+use color_eyre::Result;
+use eyre::Context;
 use rand::{distributions::Alphanumeric, Rng};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::Deserialize;
@@ -54,7 +55,7 @@ impl CustomIntegration for Mqtt {
         let config = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of Mqtt integration")?;
+            .wrap_err("Failed to deserialize config of Mqtt integration")?;
 
         Ok(Mqtt {
             id: id.clone(),

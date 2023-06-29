@@ -6,8 +6,9 @@ use crate::types::{
     integration::IntegrationId,
 };
 use crate::utils::from_hh_mm;
-use anyhow::{Context, Result};
 use async_trait::async_trait;
+use color_eyre::Result;
+use eyre::Context;
 use palette::Mix;
 use serde::Deserialize;
 use std::time::Duration;
@@ -45,7 +46,7 @@ impl CustomIntegration for Circadian {
         let config: CircadianConfig = config
             .clone()
             .try_deserialize()
-            .context("Failed to deserialize config of Circadian integration")?;
+            .wrap_err("Failed to deserialize config of Circadian integration")?;
 
         Ok(Circadian {
             id: id.clone(),

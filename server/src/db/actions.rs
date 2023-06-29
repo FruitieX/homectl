@@ -3,7 +3,7 @@ use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
 use crate::types::integration::IntegrationId;
 use crate::types::scene::ScenesConfig;
 use crate::types::scene::{SceneConfig, SceneId};
-use anyhow::Result;
+use color_eyre::Result;
 use sqlx::types::Json;
 
 pub async fn db_update_device(device: &Device) -> Result<Device> {

@@ -1,4 +1,4 @@
-use anyhow::Result;
+use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, convert::Infallible, str::FromStr};
 use ts_rs::TS;

@@ -1,7 +1,7 @@
 use super::integration::{IntegrationActionPayload, IntegrationId};
 use super::{device::Device, event::TxEventChannel};
-use anyhow::Result;
 use async_trait::async_trait;
+use color_eyre::Result;
 
 #[async_trait]
 pub trait CustomIntegration: Send {

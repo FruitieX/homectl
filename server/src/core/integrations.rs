@@ -8,7 +8,8 @@ use crate::types::{
     event::TxEventChannel,
     integration::{IntegrationActionPayload, IntegrationId},
 };
-use anyhow::{anyhow, Context, Result};
+use color_eyre::Result;
+use eyre::eyre;
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, RwLock};
 
@@ -96,10 +97,12 @@ impl Integrations {
         let li = self
             .custom_integrations
             .get(&device.integration_id)
-            .context(format!(
-                "Expected to find integration by id {}",
-                device.integration_id
-            ))?;
+            .ok_or_else(|| {
+                eyre!(
+                    "Expected to find integration by id {}",
+                    device.integration_id
+                )
+            })?;
         let mut integration = li.integration.lock().await;
 
         integration
@@ -115,10 +118,7 @@ impl Integrations {
         let li = self
             .custom_integrations
             .get(integration_id)
-            .context(format!(
-                "Expected to find integration by id {}",
-                integration_id
-            ))?;
+            .ok_or_else(|| eyre!("Expected to find integration by id {}", integration_id))?;
         let mut integration = li.integration.lock().await;
 
         integration.run_integration_action(payload).await
@@ -141,6 +141,6 @@ fn load_custom_integration(
         "mqtt" => Ok(Box::new(Mqtt::new(id, config, event_tx)?)),
         "neato" => Ok(Box::new(Neato::new(id, config, event_tx)?)),
         "wake_on_lan" => Ok(Box::new(WakeOnLan::new(id, config, event_tx)?)),
-        _ => Err(anyhow!("Unknown module name {}!", module_name)),
+        _ => Err(eyre!("Unknown module name {}!", module_name)),
     }
 }
