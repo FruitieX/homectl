@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.4.5](https://github.com/FruitieX/homectl-next/compare/v0.4.0...v0.4.5) (2023-06-29)
+
+
+### Features
+
+* add departure times to train schedule card ([fccdcf8](https://github.com/FruitieX/homectl-next/commit/fccdcf84f67483b60d0c1c99a6bc42476960c811))
+* reduced suggestedMinUntilDeparture to 12 ([3d01fae](https://github.com/FruitieX/homectl-next/commit/3d01fae0dd886c7f4c503983bf16a0d2143723e8))
+
+
+### Bug Fixes
+
+* BottomNavigation items transparent when active ([1101f5c](https://github.com/FruitieX/homectl-next/commit/1101f5cd4e5a7d080f1c2858499147b353aa5465))
+* center align device modal title ([6807dcf](https://github.com/FruitieX/homectl-next/commit/6807dcf1b068a8ea152981a4afd252a68e26eca6))
+* **deps:** update all non-major dependencies ([4b153d8](https://github.com/FruitieX/homectl-next/commit/4b153d84cac4ce6cb6c9088a0ad9c421b46f1ff7))
+* **deps:** update all non-major dependencies ([88d1c53](https://github.com/FruitieX/homectl-next/commit/88d1c532f1efa62eaee3028e24dac24613bc7d79))
+* **deps:** update all non-major dependencies ([aa205d5](https://github.com/FruitieX/homectl-next/commit/aa205d5ab6f27523181023af5a22468d43935b7f))
+* **deps:** update dependency daisyui to v3 ([b21fa6d](https://github.com/FruitieX/homectl-next/commit/b21fa6d7a04f0aec3504c76e7a4bfdfc2e3a4795))
+* **deps:** update dependency lucide-react to v0.252.0 ([317dd30](https://github.com/FruitieX/homectl-next/commit/317dd302939fe91c738637e6708f7cc3b033b98d))
+* **deps:** update dependency react-daisyui to v4 ([755f516](https://github.com/FruitieX/homectl-next/commit/755f51600ca3ddfa07996e37238518c6f6d3b9a2))
+* **deps:** update dependency use-image to v1.1.1 ([baaa7af](https://github.com/FruitieX/homectl-next/commit/baaa7afc52f35256fa6d26be200206fc61b6c57d))
+* remove `any` type usage ([8b672ef](https://github.com/FruitieX/homectl-next/commit/8b672ef373cc9721e6fd335498473e9fe5064403))
+* update ts bindings ([1d418ac](https://github.com/FruitieX/homectl-next/commit/1d418ac19a8cab58c85d5855f15021a83b4ec8bd))
+* updated generated ts bindings ([c30e0a5](https://github.com/FruitieX/homectl-next/commit/c30e0a5db41a41d2d92402b834bf1312093a414b))
+
+
+### Miscellaneous Chores
+
+* release 0.4.5 ([a026297](https://github.com/FruitieX/homectl-next/commit/a0262977d2e358bb818862ecd897152cbaf3adbf))
+
 ## [0.4.0](https://github.com/FruitieX/homectl-next/compare/v0.2.0...v0.4.0) (2023-06-16)
 
 
