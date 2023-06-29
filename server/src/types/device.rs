@@ -88,6 +88,13 @@ impl ManagedDeviceState {
 
         state
     }
+
+    pub fn is_ct(&self) -> bool {
+        self.color
+            .as_ref()
+            .map(|c| matches!(c, DeviceColor::Ct(_)))
+            .unwrap_or_default()
+    }
 }
 
 /// lights with adjustable brightness and/or color
@@ -229,10 +236,14 @@ impl Device {
         }
     }
 
-    pub fn color_to_mode(&self, mode: ColorMode) -> Device {
+    pub fn color_to_mode(&self, mode: ColorMode, skip_ct_conversion: bool) -> Device {
         let mut device = self.clone();
 
         if let DeviceData::Managed(managed) = &mut device.data {
+            if skip_ct_conversion && managed.state.is_ct() {
+                return device;
+            }
+
             let converted_state = managed
                 .state
                 .color_to_device_preferred_mode(&Capabilities::singleton(mode));

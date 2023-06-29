@@ -40,7 +40,7 @@ impl AppState {
         let devices_converted = devices
             .0
             .values()
-            .map(|device| (device.get_device_key(), device.color_to_mode(ColorMode::Hs)))
+            .map(|device| (device.get_device_key(), device.color_to_mode(ColorMode::Hs, true)))
             .collect();
 
         let message = WebSocketResponse::State(StateUpdate {

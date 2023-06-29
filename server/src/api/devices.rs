@@ -39,7 +39,9 @@ fn get_devices(
             let devices_converted = devices
                 .0
                 .values()
-                .map(|device| device.color_to_mode(q.color_mode.clone().unwrap_or(ColorMode::Hs)))
+                .map(|device| {
+                    device.color_to_mode(q.color_mode.clone().unwrap_or(ColorMode::Hs), true)
+                })
                 .collect::<Vec<Device>>();
 
             let response = DevicesResponse {
