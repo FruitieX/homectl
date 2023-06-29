@@ -119,7 +119,7 @@ type Train = {
 
 function getSecSinceMidnight(d: Date) {
   const e = new Date(d);
-  return ((d as any as number) - e.setHours(0, 0, 0, 0)) / 1000;
+  return (d.valueOf() - e.setHours(0, 0, 0, 0)) / 1000;
 }
 
 export const TrainScheduleCard = () => {
