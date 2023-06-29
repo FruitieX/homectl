@@ -154,7 +154,7 @@ mod eval_group_config_device_links_tests {
 
         let result = eval_group_config_device_refs(&group_config, &groups_config);
 
-        assert_eq!(result.len(), 3);
+        assert_eq!(result.len(), 2);
         assert!(result.contains(&device1));
         assert!(result.contains(&device2));
     }

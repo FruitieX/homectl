@@ -28,7 +28,6 @@ impl std::str::FromStr for SceneId {
 }
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
-#[ts(export)]
 pub struct SceneDeviceLink {
     pub brightness: Option<f32>, // allow overriding brightness
 
