@@ -91,8 +91,11 @@ const fetchCachedTrainSchedule = async (): Promise<Train[]> => {
 
     const secUntilDeparture = departureSecSinceMidnight - secSinceMidnight;
     const minUntilDeparture = secUntilDeparture / 60;
+    const suggestedMinUntilDeparture = 12;
 
-    const minUntilHomeDeparture = Math.floor(minUntilDeparture - 15);
+    const minUntilHomeDeparture = Math.floor(
+      minUntilDeparture - suggestedMinUntilDeparture,
+    );
     if (minUntilHomeDeparture < -5) {
       return [];
     }
