@@ -42,12 +42,7 @@ pub fn find_scene_device_config(
     let scene_group_configs = scene.groups.as_ref().map(|groups| &groups.0)?;
     let matching_group_config = scene_group_configs
         .iter()
-        .find(|(group_id, _)| {
-            groups.is_device_in_group(
-                group_id,
-                &DeviceRef::new_with_name(device.integration_id.clone(), device.name.clone()),
-            )
-        })
+        .find(|(group_id, _)| groups.is_device_in_group(group_id, device))
         .map(|(_, config)| config);
 
     matching_group_config.cloned()

@@ -11,6 +11,7 @@ use super::devices::find_device;
 #[derive(Clone)]
 pub struct Groups {
     config: GroupsConfig,
+    device_refs_by_groups: HashMap<GroupId, HashSet<DeviceRef>>,
     groups_by_device_id: HashMap<IntegrationId, HashMap<DeviceId, HashSet<GroupId>>>,
     groups_by_device_name: HashMap<IntegrationId, HashMap<String, HashSet<GroupId>>>,
 }
@@ -46,7 +47,193 @@ pub fn eval_group_config_device_refs(
         .collect()
 }
 
-// Unit tests for eval_group_config_device_links
+type DeviceRefsByGroups = HashMap<GroupId, HashSet<DeviceRef>>;
+fn mk_device_refs_by_groups(config: &GroupsConfig) -> DeviceRefsByGroups {
+    config
+        .iter()
+        .map(|(group_id, group)| {
+            (
+                group_id.clone(),
+                eval_group_config_device_refs(group, config),
+            )
+        })
+        .collect()
+}
+
+type GroupsByIntegration = HashMap<IntegrationId, HashMap<GroupId, HashSet<DeviceRef>>>;
+fn mk_groups_by_integration(device_refs_by_groups: &DeviceRefsByGroups) -> GroupsByIntegration {
+    device_refs_by_groups
+        .iter()
+        .fold(Default::default(), |mut acc, (group_id, device_refs)| {
+            for device_ref in device_refs {
+                let integration_id = device_ref.integration_id().clone();
+
+                let groups = acc.entry(integration_id).or_default();
+                let integration_group_device_refs = groups.entry(group_id.clone()).or_default();
+                integration_group_device_refs.insert(device_ref.clone());
+            }
+
+            acc
+        })
+}
+
+type GroupsByDeviceId = HashMap<IntegrationId, HashMap<DeviceId, HashSet<GroupId>>>;
+fn mk_groups_by_device_id(groups_by_integration: &GroupsByIntegration) -> GroupsByDeviceId {
+    groups_by_integration.iter().fold(
+        Default::default(),
+        |mut acc, (integration_id, integration_groups)| {
+            for (group_id, device_refs) in integration_groups {
+                for device_ref in device_refs {
+                    if let Some(device_id) = device_ref.device_id() {
+                        let integration_id = integration_id.clone();
+                        let integration_devices = acc.entry(integration_id).or_default();
+
+                        let device_id = device_id.clone();
+                        let integration_device_group_ids =
+                            integration_devices.entry(device_id).or_default();
+                        integration_device_group_ids.insert(group_id.clone());
+                    }
+                }
+            }
+
+            acc
+        },
+    )
+}
+
+type GroupsByDeviceName = HashMap<IntegrationId, HashMap<String, HashSet<GroupId>>>;
+fn mk_groups_by_device_name(groups_by_integration: &GroupsByIntegration) -> GroupsByDeviceName {
+    groups_by_integration.iter().fold(
+        Default::default(),
+        |mut acc, (integration_id, integration_groups)| {
+            for (group_id, device_refs) in integration_groups {
+                for device_ref in device_refs {
+                    if let Some(name) = device_ref.name() {
+                        let integration_id = integration_id.clone();
+                        let integration_devices = acc.entry(integration_id).or_default();
+
+                        let name = name.clone();
+                        let integration_device_group_ids =
+                            integration_devices.entry(name).or_default();
+                        integration_device_group_ids.insert(group_id.clone());
+                    }
+                }
+            }
+
+            acc
+        },
+    )
+}
+
+fn is_device_in_group(
+    group_id: &GroupId,
+    device: &Device,
+    groups_by_device_id: &GroupsByDeviceId,
+    groups_by_device_name: &GroupsByDeviceName,
+) -> bool {
+    let found_name_match = groups_by_device_name
+        .get(&device.integration_id)
+        .and_then(|devices| devices.get(&device.name))
+        .map(|groups| groups.contains(group_id))
+        .unwrap_or_default();
+
+    if found_name_match {
+        return true;
+    }
+
+    let found_id_match = groups_by_device_id
+        .get(&device.integration_id)
+        .and_then(|devices| devices.get(&device.id))
+        .map(|groups| groups.contains(group_id))
+        .unwrap_or_default();
+
+    if found_id_match {
+        return true;
+    }
+
+    false
+}
+
+fn mk_flattened_groups(
+    config: &GroupsConfig,
+    device_refs_by_groups: &HashMap<GroupId, HashSet<DeviceRef>>,
+    devices: &DevicesState,
+) -> FlattenedGroupsConfig {
+    let flattened_config = device_refs_by_groups
+        .iter()
+        .map(|(group_id, device_refs)| {
+            let group = config
+                .get(group_id)
+                .expect("Expected to find group with id from device_refs_by_groups");
+
+            (
+                group_id.clone(),
+                FlattenedGroupConfig {
+                    name: group.name.clone(),
+                    device_ids: device_refs
+                        .iter()
+                        .filter_map(|device_ref| find_device(devices, device_ref))
+                        .map(|device| device.get_device_key())
+                        .collect(),
+                    hidden: group.hidden,
+                },
+            )
+        })
+        .collect();
+
+    FlattenedGroupsConfig(flattened_config)
+}
+
+impl Groups {
+    pub fn new(config: GroupsConfig) -> Self {
+        let device_refs_by_groups = mk_device_refs_by_groups(&config);
+
+        let groups_by_integration = mk_groups_by_integration(&device_refs_by_groups);
+        let groups_by_device_id = mk_groups_by_device_id(&groups_by_integration);
+        let groups_by_device_name = mk_groups_by_device_name(&groups_by_integration);
+
+        Groups {
+            config,
+            device_refs_by_groups,
+            groups_by_device_id,
+            groups_by_device_name,
+        }
+    }
+
+    /// Returns whether a device is in the given group.
+    pub fn is_device_in_group(&self, group_id: &GroupId, device: &Device) -> bool {
+        is_device_in_group(
+            group_id,
+            device,
+            &self.groups_by_device_id,
+            &self.groups_by_device_name,
+        )
+    }
+
+    /// Returns a flattened version of the groups config, with any contained
+    /// groups expanded.
+    pub fn get_flattened_groups(&self, devices: &DevicesState) -> FlattenedGroupsConfig {
+        mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices)
+    }
+
+    /// Returns all DeviceRefs that belong to given group
+    pub fn find_group_device_refs(&self, group_id: &GroupId) -> HashSet<DeviceRef> {
+        self.device_refs_by_groups
+            .get(group_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Returns all Devices that belong to given group
+    pub fn find_group_devices(&self, devices: &DevicesState, group_id: &GroupId) -> Vec<Device> {
+        let group_device_refs = self.find_group_device_refs(group_id);
+        group_device_refs
+            .iter()
+            .filter_map(|device_ref| find_device(devices, device_ref))
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod eval_group_config_device_links_tests {
     use std::str::FromStr;
@@ -157,174 +344,5 @@ mod eval_group_config_device_links_tests {
         assert_eq!(result.len(), 2);
         assert!(result.contains(&device1));
         assert!(result.contains(&device2));
-    }
-}
-
-fn mk_flattened_groups(config: &GroupsConfig) -> HashMap<GroupId, HashSet<DeviceRef>> {
-    config
-        .iter()
-        .map(|(group_id, group)| {
-            (
-                group_id.clone(),
-                eval_group_config_device_refs(group, config),
-            )
-        })
-        .collect()
-}
-
-fn mk_groups_by_integration(
-    flattened_groups: &HashMap<GroupId, HashSet<DeviceRef>>,
-) -> HashMap<IntegrationId, HashMap<GroupId, HashSet<DeviceRef>>> {
-    flattened_groups
-        .iter()
-        .fold(Default::default(), |mut acc, (group_id, device_refs)| {
-            for device_ref in device_refs {
-                let integration_id = device_ref.integration_id().clone();
-
-                let groups = acc.entry(integration_id).or_default();
-                let integration_group_device_refs = groups.entry(group_id.clone()).or_default();
-                integration_group_device_refs.insert(device_ref.clone());
-            }
-
-            acc
-        })
-}
-
-fn mk_groups_by_device_id(
-    groups_by_integration: &HashMap<IntegrationId, HashMap<GroupId, HashSet<DeviceRef>>>,
-) -> HashMap<IntegrationId, HashMap<DeviceId, HashSet<GroupId>>> {
-    groups_by_integration.iter().fold(
-        Default::default(),
-        |mut acc, (integration_id, integration_groups)| {
-            for (group_id, device_refs) in integration_groups {
-                for device_ref in device_refs {
-                    if let Some(device_id) = device_ref.device_id() {
-                        let integration_id = integration_id.clone();
-                        let integration_devices = acc.entry(integration_id).or_default();
-
-                        let device_id = device_id.clone();
-                        let integration_device_group_ids =
-                            integration_devices.entry(device_id).or_default();
-                        integration_device_group_ids.insert(group_id.clone());
-                    }
-                }
-            }
-
-            acc
-        },
-    )
-}
-
-fn mk_groups_by_device_name(
-    groups_by_integration: &HashMap<IntegrationId, HashMap<GroupId, HashSet<DeviceRef>>>,
-) -> HashMap<IntegrationId, HashMap<String, HashSet<GroupId>>> {
-    groups_by_integration.iter().fold(
-        Default::default(),
-        |mut acc, (integration_id, integration_groups)| {
-            for (group_id, device_refs) in integration_groups {
-                for device_ref in device_refs {
-                    if let Some(name) = device_ref.name() {
-                        let integration_id = integration_id.clone();
-                        let integration_devices = acc.entry(integration_id).or_default();
-
-                        let name = name.clone();
-                        let integration_device_group_ids =
-                            integration_devices.entry(name).or_default();
-                        integration_device_group_ids.insert(group_id.clone());
-                    }
-                }
-            }
-
-            acc
-        },
-    )
-}
-
-impl Groups {
-    pub fn new(config: GroupsConfig) -> Self {
-        let flattened = mk_flattened_groups(&config);
-
-        let groups_by_integration = mk_groups_by_integration(&flattened);
-        let groups_by_device_id = mk_groups_by_device_id(&groups_by_integration);
-        let groups_by_device_name = mk_groups_by_device_name(&groups_by_integration);
-
-        Groups {
-            config,
-            groups_by_device_id,
-            groups_by_device_name,
-        }
-    }
-
-    /// Returns whether the given device is in the given group.
-    /// NOTE: Currently this will only work correctly if the passed DeviceRef is
-    /// of the same variant as used in the group's configuration.
-    pub fn is_device_in_group(&self, group_id: &GroupId, device_ref: &DeviceRef) -> bool {
-        match device_ref {
-            DeviceRef::Id(d) => self
-                .groups_by_device_id
-                .get(&d.integration_id)
-                .and_then(|devices| devices.get(&d.device_id))
-                .map(|groups| groups.contains(group_id))
-                .unwrap_or_default(),
-
-            DeviceRef::Name(d) => self
-                .groups_by_device_name
-                .get(&d.integration_id)
-                .and_then(|devices| devices.get(&d.name))
-                .map(|groups| groups.contains(group_id))
-                .unwrap_or_default(),
-        }
-    }
-
-    pub fn get_flattened_groups(&self, devices: &DevicesState) -> FlattenedGroupsConfig {
-        FlattenedGroupsConfig(
-            self.config
-                .iter()
-                .map(|(group_id, group)| {
-                    (
-                        group_id.clone(),
-                        FlattenedGroupConfig {
-                            name: group.name.clone(),
-                            device_ids: self
-                                .find_group_devices(devices, group_id)
-                                .into_iter()
-                                .map(|device| device.get_device_key())
-                                .collect(),
-                            hidden: group.hidden,
-                        },
-                    )
-                })
-                .collect(),
-        )
-    }
-
-    /// Returns all GroupDeviceLinks that belong to given group
-    pub fn find_group_device_refs(&self, group_id: &GroupId) -> Vec<DeviceRef> {
-        let group = self.config.get(group_id);
-
-        let results = group.map(|group| {
-            let mut results = vec![];
-
-            for device_link in group.devices.clone().unwrap_or_default() {
-                results.push(device_link);
-            }
-
-            for group_link in group.groups.clone().unwrap_or_default() {
-                let mut device_links = self.find_group_device_refs(&group_link.group_id);
-                results.append(device_links.as_mut());
-            }
-
-            results
-        });
-
-        results.unwrap_or_default()
-    }
-
-    pub fn find_group_devices(&self, devices: &DevicesState, group_id: &GroupId) -> Vec<Device> {
-        let group_device_refs = self.find_group_device_refs(group_id);
-        group_device_refs
-            .iter()
-            .filter_map(|device_ref| find_device(devices, device_ref))
-            .collect()
     }
 }
