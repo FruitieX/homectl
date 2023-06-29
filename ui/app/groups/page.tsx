@@ -38,7 +38,7 @@ export default function Page() {
           return (
             <Link key={groupId} href={`/groups/${groupId}`}>
               <Menu.Item>
-                <div className="py-0 flex">
+                <div className="flex py-0">
                   <div className="flex-1 truncate">{group.name}</div>
                   <div className="h-[96px] w-[112px]">
                     <NoSSRPreview

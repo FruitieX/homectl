@@ -99,7 +99,7 @@ export default function Page(props: Props) {
               onClick={handleSceneClick(sceneId)}
               onContextMenu={openSceneModal(sceneId)}
             >
-              <div className="py-0 flex">
+              <div className="flex py-0">
                 <div className="flex-1 truncate">{scene.name}</div>
                 <div className="h-[96px] w-[112px]">
                   <NoSSRPreview devices={previewDevices} />

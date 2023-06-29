@@ -31,9 +31,9 @@ export const useProvideWebsocketState = () => {
       ws.onmessage = function incoming(data) {
         const msg: WebSocketResponse = JSON.parse(data.data as string);
 
-        if ("Command" in msg && msg.Command === "reload") {
+        if ('Command' in msg && msg.Command === 'reload') {
           window.location.reload();
-        } else if ("State" in msg) {
+        } else if ('State' in msg) {
           setState(msg.State);
         }
       };
