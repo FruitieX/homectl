@@ -530,14 +530,18 @@ export const ColorPickerModal = () => {
 
   const [tab, setTab] = useState(0);
   return (
-    <Modal responsive open={deviceModalOpen} onClickBackdrop={closeDeviceModal}>
+    <Modal.Legacy
+      responsive
+      open={deviceModalOpen}
+      onClickBackdrop={closeDeviceModal}
+    >
       <Modal.Header className="flex items-center justify-between font-bold">
         <Toggle
           checked={deviceModalPower ?? false}
           onChange={() => partialSetDevicePower(!deviceModalPower)}
           size="lg"
         />
-        {deviceModalTitle}
+        <div className="mx-4 text-center">{deviceModalTitle}</div>
         <Button onClick={closeDeviceModal} variant="outline">
           <X />
         </Button>
@@ -591,6 +595,6 @@ export const ColorPickerModal = () => {
           )}
         </div>
       </Modal.Body>
-    </Modal>
+    </Modal.Legacy>
   );
 };

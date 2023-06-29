@@ -100,10 +100,15 @@ const fetchCachedTrainSchedule = async (): Promise<Train[]> => {
       return [];
     }
 
+    const departureFormatted = new Date(st.realtimeDeparture * 1000)
+      .toISOString()
+      .slice(11, 16);
+
     return [
       {
         minUntilHomeDeparture,
         name: st.trip.routeShortName,
+        departureFormatted,
         realtime: st.realtime,
         realtimeState: st.realtimeState,
       },
@@ -116,6 +121,7 @@ const fetchCachedTrainSchedule = async (): Promise<Train[]> => {
 type Train = {
   minUntilHomeDeparture: number;
   name: string;
+  departureFormatted: string;
   realtime: boolean;
   realtimeState: RealtimeState;
 };
@@ -155,18 +161,19 @@ export const TrainScheduleCard = () => {
         <Table>
           <Table.Head>
             <span>Train</span>
-            <span>Leave home in (min)</span>
+            <span>Departure</span>
+            <span>Leave home</span>
           </Table.Head>
           <Table.Body>
             {trains.map((train, index) => {
               return (
-                <Table.Row key={index}>
+                <Table.Row key={index} className={clsx(['text-xl'])}>
                   <span>{train.name}</span>
+                  <span>{train.departureFormatted}</span>
                   <span
-                    className={clsx([
-                      'text-2xl',
-                      train.realtime ? 'font-extrabold' : '',
-                    ])}
+                    className={
+                      train.realtime ? 'font-extrabold' : 'text-stone-500'
+                    }
                   >
                     {train.minUntilHomeDeparture}
                   </span>

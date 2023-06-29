@@ -114,7 +114,7 @@ const Component = (props: Props) => {
   );
 
   return (
-    <Modal responsive open={visible} onClickBackdrop={close}>
+    <Modal.Legacy responsive open={visible} onClickBackdrop={close}>
       <Button
         size="sm"
         shape="circle"
@@ -139,7 +139,7 @@ const Component = (props: Props) => {
           </Button>
         </Modal.Actions>
       </form>
-    </Modal>
+    </Modal.Legacy>
   );
 };
 
