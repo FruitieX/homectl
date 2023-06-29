@@ -1,7 +1,9 @@
 use crate::types::{
     device::{
-        Device, DeviceData, DeviceKey, DeviceRef, DevicesState, ManagedDeviceState, SensorDevice,
+        Device, DeviceData, DeviceId, DeviceKey, DeviceRef, DevicesState, ManagedDeviceState,
+        SensorDevice,
     },
+    integration::IntegrationId,
     scene::{
         FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig, SceneDescriptor,
         SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId, ScenesConfig,
@@ -13,7 +15,7 @@ use crate::db::actions::db_get_scenes;
 
 use super::{devices::find_device, groups::Groups};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 
@@ -105,6 +107,132 @@ pub fn eval_scene_device_state(
     }
 }
 
+type SceneDeviceList = HashSet<(IntegrationId, DeviceId)>;
+pub fn find_scene_device_lists(
+    scene_devices_configs: &[(&SceneDescriptor, Option<SceneDevicesConfig>)],
+) -> Vec<SceneDeviceList> {
+    let scenes_devices = scene_devices_configs
+        .iter()
+        .map(|(_, scene_devices_config)| {
+            let mut scene_devices: HashSet<(IntegrationId, DeviceId)> = HashSet::new();
+            if let Some(integrations) = scene_devices_config {
+                for (integration_id, integration) in integrations {
+                    for device_id in integration.keys() {
+                        scene_devices.insert((integration_id.clone(), device_id.clone()));
+                    }
+                }
+            }
+
+            scene_devices
+        })
+        .collect();
+
+    scenes_devices
+}
+
+/// Finds devices that are common in all given scenes
+pub fn find_scenes_common_devices(
+    scene_device_lists: Vec<SceneDeviceList>,
+) -> HashSet<(IntegrationId, DeviceId)> {
+    let mut scenes_common_devices: HashSet<(IntegrationId, DeviceId)> = HashSet::new();
+
+    if let Some(first_scene_devices) = scene_device_lists.first() {
+        for scene_device in first_scene_devices {
+            if scene_device_lists
+                .iter()
+                .all(|scene_devices| scene_devices.contains(scene_device))
+            {
+                scenes_common_devices.insert(scene_device.clone());
+            }
+        }
+    }
+
+    scenes_common_devices
+}
+
+/// Finds index of active scene (if any) in given list of scenes.
+///
+/// Arguments:
+/// * `scene_devices_configs` - list of scenes with their device configs
+/// * `scenes_common_devices` - list of devices that are common in all given scenes
+/// * `devices` - current state of devices
+pub fn find_active_scene_index(
+    scene_devices_configs: &[(&SceneDescriptor, Option<SceneDevicesConfig>)],
+    scenes_common_devices: &HashSet<(IntegrationId, DeviceId)>,
+    devices: &DevicesState,
+) -> Option<usize> {
+    scene_devices_configs
+        .iter()
+        .position(|(sd, scene_devices_config)| {
+            // try finding any device in scene_devices_config that has this scene active
+            if let Some(integrations) = scene_devices_config {
+                integrations.iter().any(|(integration_id, scene_devices)| {
+                    scene_devices.iter().any(|(device_id, _)| {
+                        // only consider devices which are common across all cycled scenes
+                        if !scenes_common_devices
+                            .contains(&(integration_id.clone(), device_id.clone()))
+                        {
+                            return false;
+                        }
+
+                        let device = find_device(
+                            devices,
+                            &DeviceRef::new_with_id(integration_id.clone(), device_id.clone()),
+                        );
+                        let device_scene = device.and_then(|d| d.get_scene());
+
+                        device_scene.map_or(false, |ds| ds == sd.scene_id)
+                    })
+                })
+            } else {
+                false
+            }
+        })
+}
+
+/// Gets next scene from a list of scene descriptors to cycle through.
+///
+/// Arguments:
+/// * `scene_descriptors` - list of scene descriptors to cycle through
+/// * `nowrap` - whether to cycle back to first scene when last scene is reached
+/// * `devices` - current state of devices
+/// * `scenes` - current state of scenes
+pub fn get_next_cycled_scene(
+    scene_descriptors: &[SceneDescriptor],
+    nowrap: bool,
+    devices: &DevicesState,
+    scenes: &Scenes,
+) -> Option<SceneDescriptor> {
+    let scene_devices_configs: Vec<(&SceneDescriptor, Option<SceneDevicesConfig>)> =
+        scene_descriptors
+            .iter()
+            .map(|sd| (sd, scenes.find_scene_devices_config(devices, sd)))
+            .collect();
+
+    // gather a Vec<HashSet<(IntegrationId, DeviceId)>> of all devices in cycled scenes
+    let scene_device_lists = find_scene_device_lists(&scene_devices_configs);
+
+    // gather devices which exist in all cycled scenes
+    let scenes_common_devices = find_scenes_common_devices(scene_device_lists);
+
+    let active_scene_index =
+        find_active_scene_index(&scene_devices_configs, &scenes_common_devices, devices);
+
+    let next_scene = match active_scene_index {
+        Some(index) => {
+            let next_scene_index = if nowrap {
+                (index + 1).min(scene_descriptors.len() - 1)
+            } else {
+                (index + 1) % scene_descriptors.len()
+            };
+            scene_descriptors.get(next_scene_index)
+        }
+        None => scene_descriptors.first(),
+    }?;
+
+    Some(next_scene.clone())
+}
+
 #[derive(Clone)]
 pub struct Scenes {
     config: ScenesConfig,
@@ -150,6 +278,37 @@ impl Scenes {
             .map(|devices| devices.0)
             .unwrap_or_default();
 
+        let filter_device_by_keys = |device: &Device| -> bool {
+            let device_key = &DeviceKey::new(device.integration_id.clone(), device.id.clone());
+
+            // Skip this device if it's not in device_keys
+            if let Some(device_keys) = &sd.device_keys {
+                if !device_keys.contains(device_key) {
+                    return false;
+                }
+            }
+
+            // Skip this device if it's not in group_keys
+            if let Some(group_keys) = &sd.group_keys {
+                let device_keys = group_keys
+                    .iter()
+                    .flat_map(|group_id| {
+                        self.groups
+                            .find_group_devices(devices, group_id)
+                            .iter()
+                            .map(|d| d.get_device_key())
+                            .collect_vec()
+                    })
+                    .collect_vec();
+
+                if !device_keys.contains(device_key) {
+                    return false;
+                }
+            }
+
+            true
+        };
+
         // replace device names by device_ids in device_configs
         let mut scene_devices_config: SceneDevicesConfig = scene_devices_search_config
             .iter()
@@ -167,8 +326,8 @@ impl Scenes {
                                 ),
                             );
 
-                            let device_id = match device {
-                                Some(device) => Some(device.id),
+                            let device_id = match &device {
+                                Some(device) => Some(device.id.clone()),
                                 None => {
                                     error!(
                                         "Could not find device_id for {} device with name {}",
@@ -178,35 +337,13 @@ impl Scenes {
                                     None
                                 }
                             }?;
-                            let device_key =
-                                &DeviceKey::new(integration_id.clone(), device_id.clone());
 
-                            // Skip this device if it's not in device_keys
-                            if let Some(device_keys) = &sd.device_keys {
-                                if !device_keys.contains(device_key) {
-                                    None?
-                                }
+                            // Skip this device if it's not in device_keys or group_keys
+                            if filter_device_by_keys(&device?) {
+                                Some((device_id, device_config.clone()))
+                            } else {
+                                None
                             }
-
-                            // Skip this device if it's not in group_keys
-                            if let Some(group_keys) = &sd.group_keys {
-                                let device_keys = group_keys
-                                    .iter()
-                                    .flat_map(|group_id| {
-                                        self.groups
-                                            .find_group_devices(devices, group_id)
-                                            .iter()
-                                            .map(|d| d.get_device_key())
-                                            .collect_vec()
-                                    })
-                                    .collect_vec();
-
-                                if !device_keys.contains(device_key) {
-                                    None?
-                                }
-                            }
-
-                            Some((device_id, device_config.clone()))
                         })
                         .collect(),
                 )
@@ -231,31 +368,10 @@ impl Scenes {
                         .to_owned();
 
                     let device_id = &device.id;
-                    let device_key = &DeviceKey::new(integration_id.clone(), device_id.clone());
 
-                    // Skip this device if it's not in device_keys
-                    if let Some(device_keys) = &sd.device_keys {
-                        if !device_keys.contains(device_key) {
-                            continue;
-                        }
-                    }
-
-                    // Skip this device if it's not in group_keys
-                    if let Some(group_keys) = &sd.group_keys {
-                        let device_keys = group_keys
-                            .iter()
-                            .flat_map(|group_id| {
-                                self.groups
-                                    .find_group_devices(devices, group_id)
-                                    .iter()
-                                    .map(|d| d.get_device_key())
-                                    .collect_vec()
-                            })
-                            .collect_vec();
-
-                        if !device_keys.contains(device_key) {
-                            continue;
-                        }
+                    // Skip this device if it's not in device_keys or group_keys
+                    if !filter_device_by_keys(&device) {
+                        continue;
                     }
 
                     // only insert device config if it did not exist yet

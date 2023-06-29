@@ -16,9 +16,7 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
     let result: Result<()> = match &msg {
         Message::RecvDeviceState { device } => {
             let mut devices = state.devices.clone();
-            devices.handle_recv_device_state(device).await;
-
-            Ok(())
+            devices.handle_recv_device_state(device).await
         }
         Message::InternalStateUpdate {
             old_state,

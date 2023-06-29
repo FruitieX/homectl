@@ -1,15 +1,16 @@
 use crate::db::actions::{db_find_device, db_update_device};
 use crate::types::color::{Capabilities, DeviceColor};
 
-use super::scenes::Scenes;
-use crate::types::device::{DeviceId, DeviceRef, ManagedDevice, ManagedDeviceState, SensorDevice};
+use super::scenes::{get_next_cycled_scene, Scenes};
+use crate::types::device::{DeviceRef, ManagedDevice, ManagedDeviceState, SensorDevice};
 use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
     event::{Message, TxEventChannel},
-    integration::IntegrationId,
-    scene::{SceneDescriptor, SceneDevicesConfig, SceneId},
+    scene::{SceneDescriptor, SceneId},
 };
+use color_eyre::Result;
+use eyre::eyre;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -20,6 +21,10 @@ pub struct Devices {
     scenes: Scenes,
 }
 
+/// Compares light colors in the color mode as preferred by the device, allowing
+/// slight deltas to account for rounding errors.
+///
+/// If the colors match, the function evaluates to true.
 fn cmp_light_color(
     capabilities: &Capabilities,
     incoming: &Option<DeviceColor>,
@@ -66,6 +71,9 @@ fn cmp_light_color(
     }
 }
 
+/// Compares the state of a ManagedDevice to some given ManagedDeviceState.
+///
+/// If the states match, the function evaluates to true.
 fn cmp_device_states(device: &ManagedDevice, expected: &ManagedDeviceState) -> bool {
     if device.state.power != expected.power {
         return false;
@@ -90,6 +98,9 @@ fn cmp_device_states(device: &ManagedDevice, expected: &ManagedDeviceState) -> b
     true
 }
 
+/// Compares the state of two sensor devices.
+///
+/// If the states match, the function evaluates to true.
 fn cmp_sensor_states(sensor: &SensorDevice, previous: &SensorDevice) -> bool {
     sensor == previous
 }
@@ -108,7 +119,7 @@ impl Devices {
     }
 
     /// Checks whether device values were changed or not due to refresh
-    pub async fn handle_recv_device_state(&mut self, incoming: &Device) {
+    pub async fn handle_recv_device_state(&mut self, incoming: &Device) -> Result<()> {
         trace!("handle_recv_device_state {:?}", incoming);
         let current = self.get_device(&incoming.get_device_key());
 
@@ -151,12 +162,12 @@ impl Devices {
             }
 
             (DeviceData::Sensor(incoming_sensor), Some(current), _) => {
-                let previous = current.get_sensor_state().unwrap_or_else(|| panic!("Previous state is not of type SensorDevice for {}. Maybe there is an ID collision with another ManagedDevice",
-                    current.get_device_key()));
+                let previous = current.get_sensor_state().ok_or_else(|| eyre!("Previous state is not of type SensorDevice for {}. Maybe there is an ID collision with another ManagedDevice",
+                    current.get_device_key()))?;
 
                 // If there's no change in sensor state, ignore this update
                 if cmp_sensor_states(incoming_sensor, previous) {
-                    return;
+                    return Ok(());
                 }
 
                 // Sensor state has changed, defer handling of this update to
@@ -166,7 +177,7 @@ impl Devices {
 
             (DeviceData::Managed(ref incoming_managed), _, Some(expected_state)) => {
                 if cmp_device_states(incoming_managed, &expected_state) {
-                    return;
+                    return Ok(());
                 }
 
                 let expected_converted =
@@ -210,6 +221,8 @@ impl Devices {
                 self.set_device_state(incoming, false, false).await;
             }
         }
+
+        Ok(())
     }
 
     /// Returns expected state for given device based on possible active scene.
@@ -315,14 +328,6 @@ impl Devices {
             new: device.clone(),
         });
 
-        if state_changed && !skip_db {
-            // FIXME: compiler error without task::spawn()
-            let device = device.clone();
-            tokio::spawn(async move {
-                db_update_device(&device).await.ok();
-            });
-        }
-
         if !device.is_sensor() {
             self.event_tx.send(Message::SendDeviceState {
                 device: device.clone(),
@@ -330,16 +335,16 @@ impl Devices {
             });
         }
 
+        if state_changed && !skip_db {
+            let device = device.clone();
+            db_update_device(&device).await.ok();
+        }
+
         device
     }
 
     pub fn get_device(&self, device_key: &DeviceKey) -> Option<Device> {
         self.state.lock().unwrap().0.get(device_key).cloned()
-    }
-
-    fn find_scene_devices_config(&self, sd: &SceneDescriptor) -> Option<SceneDevicesConfig> {
-        self.scenes
-            .find_scene_devices_config(&self.state.lock().unwrap(), sd)
     }
 
     pub async fn activate_scene(
@@ -350,11 +355,14 @@ impl Devices {
     ) -> Option<bool> {
         info!("Activating scene {:?}", scene_id);
 
-        let scene_devices_config = self.find_scene_devices_config(&SceneDescriptor {
-            scene_id: scene_id.clone(),
-            device_keys: device_keys.clone(),
-            group_keys: group_keys.clone(),
-        })?;
+        let scene_devices_config = self.scenes.find_scene_devices_config(
+            &self.state.lock().unwrap(),
+            &SceneDescriptor {
+                scene_id: scene_id.clone(),
+                device_keys: device_keys.clone(),
+                group_keys: group_keys.clone(),
+            },
+        )?;
 
         for (integration_id, devices) in scene_devices_config {
             for (device_id, _) in devices {
@@ -376,88 +384,12 @@ impl Devices {
         &mut self,
         scene_descriptors: &[SceneDescriptor],
         nowrap: bool,
-    ) -> Option<bool> {
-        let mut scenes_common_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
+    ) -> Option<()> {
+        let next_scene = {
+            let devices = self.state.lock().unwrap();
+            let scenes = &self.scenes;
 
-        let scene_devices_configs: Vec<(&SceneDescriptor, Option<SceneDevicesConfig>)> =
-            scene_descriptors
-                .iter()
-                .map(|sd| (sd, self.find_scene_devices_config(sd)))
-                .collect();
-
-        // gather a Vec<Vec(IntegrationId, DeviceId)>> of all devices in cycled scenes
-        let scenes_devices: Vec<Vec<(IntegrationId, DeviceId)>> = scene_devices_configs
-            .iter()
-            .map(|(_, scene_devices_config)| {
-                let mut scene_devices: Vec<(IntegrationId, DeviceId)> = Vec::new();
-                if let Some(integrations) = scene_devices_config {
-                    for (integration_id, integration) in integrations {
-                        for device_id in integration.keys() {
-                            scene_devices.push((integration_id.clone(), device_id.clone()));
-                        }
-                    }
-                }
-
-                scene_devices
-            })
-            .collect();
-
-        // gather devices which exist in all cycled scenes into scenes_common_devices
-        if let Some(first_scene_devices) = scenes_devices.first() {
-            for scene_device in first_scene_devices {
-                if scenes_devices
-                    .iter()
-                    .all(|scene_devices| scene_devices.contains(scene_device))
-                {
-                    scenes_common_devices.push(scene_device.clone());
-                }
-            }
-        }
-
-        let state = self.state.lock().unwrap().clone();
-
-        let active_scene_index =
-            scene_devices_configs
-                .iter()
-                .position(|(sd, scene_devices_config)| {
-                    // try finding any device in scene_devices_config that has this scene active
-                    if let Some(integrations) = scene_devices_config {
-                        integrations.iter().any(|(integration_id, devices)| {
-                            devices.iter().any(|(device_id, _)| {
-                                // only consider devices which are common across all cycled scenes
-                                if !scenes_common_devices
-                                    .contains(&(integration_id.clone(), device_id.clone()))
-                                {
-                                    return false;
-                                }
-
-                                let device = find_device(
-                                    &state,
-                                    &DeviceRef::new_with_id(
-                                        integration_id.clone(),
-                                        device_id.clone(),
-                                    ),
-                                );
-                                let device_scene = device.and_then(|d| d.get_scene());
-
-                                device_scene.map_or(false, |ds| ds == sd.scene_id)
-                            })
-                        })
-                    } else {
-                        false
-                    }
-                });
-
-        let next_scene = match active_scene_index {
-            Some(index) => {
-                let next_scene_index = if nowrap {
-                    (index + 1).min(scene_descriptors.len() - 1)
-                } else {
-                    (index + 1) % scene_descriptors.len()
-                };
-                scene_descriptors.get(next_scene_index)
-            }
-            None => scene_descriptors.first(),
+            get_next_cycled_scene(scene_descriptors, nowrap, &devices, scenes)
         }?;
 
         self.activate_scene(
@@ -467,7 +399,7 @@ impl Devices {
         )
         .await;
 
-        Some(true)
+        Some(())
     }
 }
 
