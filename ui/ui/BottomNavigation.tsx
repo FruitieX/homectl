@@ -31,15 +31,24 @@ export const BottomNavigation = () => {
 
   return (
     <div className="btm-nav relative z-30 min-h-0 flex-shrink-0 bg-opacity-75 backdrop-blur">
-      <Link className={route === 'Dashboard' ? 'active' : ''} href="/">
+      <Link
+        className={route === 'Dashboard' ? 'active bg-opacity-0' : ''}
+        href="/"
+      >
         <LayoutDashboard />
         <span className="btm-nav-label">Dashboard</span>
       </Link>
-      <Link className={route === 'Map' ? 'active' : ''} href="/map">
+      <Link
+        className={route === 'Map' ? 'active bg-opacity-0' : ''}
+        href="/map"
+      >
         <Map />
         <span className="btm-nav-label">Map</span>
       </Link>
-      <Link className={route === 'Groups' ? 'active' : ''} href="/groups">
+      <Link
+        className={route === 'Groups' ? 'active bg-opacity-0' : ''}
+        href="/groups"
+      >
         <List />
         <span className="btm-nav-label">Groups</span>
       </Link>
