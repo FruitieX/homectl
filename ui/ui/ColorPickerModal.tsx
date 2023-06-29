@@ -541,7 +541,7 @@ export const ColorPickerModal = () => {
           onChange={() => partialSetDevicePower(!deviceModalPower)}
           size="lg"
         />
-        {deviceModalTitle}
+        <div className="mx-4 text-center">{deviceModalTitle}</div>
         <Button onClick={closeDeviceModal} variant="outline">
           <X />
         </Button>
