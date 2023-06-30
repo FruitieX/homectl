@@ -119,7 +119,7 @@ export const ViewportGroup = (props: Props) => {
       height={rect.height}
       x={rect.x}
       y={rect.y}
-      fill={isSelected ? '#aaa' : 'transparent'}
+      fill={isSelected ? '#aaa' : undefined}
       opacity={isSelected ? 0.5 : 0.5}
       stroke={isSelected ? '#fff' : '#000'}
       strokeWidth={4}
