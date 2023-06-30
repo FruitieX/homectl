@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/FruitieX/homectl-next/compare/v0.4.6...v0.5.0) (2023-06-30)
+
+
+### Features
+
+* apply image colors to selected devices ([277c24c](https://github.com/FruitieX/homectl-next/commit/277c24c31bf7ddc4a7df0ea76b51465784583a47))
+* groups support in viewport ([53ae10c](https://github.com/FruitieX/homectl-next/commit/53ae10c2327e28b8e048e4703ef5f87a29976262))
+
+
+### Bug Fixes
+
+* center align weather card contents ([0e4a0c6](https://github.com/FruitieX/homectl-next/commit/0e4a0c6c7ddc7f4bf53b942001b927f17892f48d))
+
 ## [0.4.6](https://github.com/FruitieX/homectl-next/compare/v0.4.5...v0.4.6) (2023-06-30)
 
 
