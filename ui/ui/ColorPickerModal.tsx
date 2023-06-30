@@ -561,6 +561,9 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
   return <SceneList deviceKeys={props.deviceKeys} />;
 };
 
+const eqSet = <T,>(xs: Set<T>, ys: Set<T>) =>
+  xs.size === ys.size && [...xs].every((x) => ys.has(x));
+
 export const ColorPickerModal = () => {
   const {
     state: deviceModalState,
@@ -570,18 +573,36 @@ export const ColorPickerModal = () => {
 
   const state = useWebsocketState();
 
-  const device = state !== null ? findDevice(state, deviceModalState[0]) : null;
+  const firstDevice =
+    state !== null ? findDevice(state, deviceModalState[0]) : null;
+  const groups = state?.groups ?? {};
 
-  const deviceModalTitle =
-    deviceModalState.length === 1
-      ? device?.name
-      : `${deviceModalState.length} devices`;
+  const selectedDevicesSet = new Set(deviceModalState);
+
+  // A group is active if the list of active devices == the devices contained in
+  // the group
+  const activeGroup = Object.values(groups).find((group) => {
+    const groupDevicesSet = new Set(group.device_ids);
+
+    return eqSet(selectedDevicesSet, groupDevicesSet);
+  });
+
+  let deviceModalTitle;
+
+  if (activeGroup !== undefined) {
+    deviceModalTitle = activeGroup.name;
+  } else {
+    deviceModalTitle =
+      deviceModalState.length === 1
+        ? firstDevice?.name
+        : `${deviceModalState.length} devices`;
+  }
   const deviceModalColor =
-    device?.data === undefined ? null : getColor(device.data);
+    firstDevice?.data === undefined ? null : getColor(firstDevice.data);
   const deviceModalBrightness =
-    device?.data === undefined ? null : getBrightness(device.data);
+    firstDevice?.data === undefined ? null : getBrightness(firstDevice.data);
   const deviceModalPower =
-    device?.data === undefined ? null : getPower(device.data);
+    firstDevice?.data === undefined ? null : getPower(firstDevice.data);
 
   const setDeviceColor = useSetDeviceColor();
   const setDevicePower = useSetDevicePower();
@@ -649,7 +670,7 @@ export const ColorPickerModal = () => {
         <Tabs
           value={tab}
           onChange={setTab}
-          className="overflow-x-auto pb-3 mb-3 flex-nowrap"
+          className="mb-3 flex-nowrap overflow-x-auto pb-3"
         >
           <Tabs.Tab value={0}>Wheel</Tabs.Tab>
           <Tabs.Tab value={1}>Swatches</Tabs.Tab>

@@ -8,6 +8,8 @@ import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from '@/ui/ViewportDevice';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
+import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
+import { ViewportGroup } from '@/ui/ViewportGroup';
 
 const scale = { x: 0.265, y: 0.265 };
 
@@ -20,6 +22,7 @@ export const Viewport = () => {
   const state = useWebsocketState();
 
   const devices: Device[] = Object.values(state?.devices ?? {});
+  const groups: FlattenedGroupsConfig = state?.groups ?? {};
 
   const [containerRef, { width, height }] = useElementSize();
 
@@ -39,8 +42,9 @@ export const Viewport = () => {
   return (
     <div ref={containerRef} className="absolute left-0 top-0 h-screen w-screen">
       <Stage
-        width={width}
-        height={height}
+        // fix for 0 dimension errors
+        width={width || 1}
+        height={height || 1}
         scale={scale}
         offsetY={-800}
         draggable
@@ -54,6 +58,16 @@ export const Viewport = () => {
         <Layer name="bottom-layer" />
         <Layer>
           <Floorplan />
+
+          {Object.entries(groups).map(([groupId, group]) => (
+            <ViewportGroup
+              key={groupId}
+              groupId={groupId}
+              group={group}
+              touchRegistersAsTap={touchRegistersAsTap}
+              deviceTouchTimer={deviceTouchTimer}
+            />
+          ))}
 
           {devices.map((device) => (
             <ViewportDevice

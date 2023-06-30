@@ -3,21 +3,24 @@
 import { atom, useAtom } from 'jotai';
 
 const baseAtom = atom<string[]>([]);
-const toggleSelectedDeviceAtom = atom(null, (_get, set, deviceKey: string) => {
-  set(baseAtom, (prev) => {
-    const result = [...prev];
-    const existingIndex = result.findIndex((d) => {
-      return d === deviceKey;
-    });
+const toggleSelectedDeviceAtom = atom(
+  null,
+  (_get, set, deviceKey: string, selected?: boolean) => {
+    set(baseAtom, (prev) => {
+      const result = [...prev];
+      const existingIndex = result.findIndex((d) => {
+        return d === deviceKey;
+      });
 
-    if (existingIndex !== -1) {
-      result.splice(existingIndex, 1);
-    } else {
-      result.push(deviceKey);
-    }
-    return result;
-  });
-});
+      if (existingIndex !== -1 && selected !== false) {
+        result.splice(existingIndex, 1);
+      } else if (selected !== true) {
+        result.push(deviceKey);
+      }
+      return result;
+    });
+  },
+);
 
 export const useSelectedDevices = () => {
   const [state, setState] = useAtom(baseAtom);
