@@ -72,7 +72,7 @@ export const WeatherCard = () => {
 
   const jsx =
     weather !== null ? (
-      <div className="flex flex-1 flex-col items-center">
+      <div className="flex flex-1 flex-col items-center justify-center">
         <img
           className="w-16"
           src={`/weathericons/${weather.properties.timeseries[0]?.data.next_1_hours.summary.symbol_code}.svg`}
