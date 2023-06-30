@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.4.6](https://github.com/FruitieX/homectl-next/compare/v0.4.5...v0.4.6) (2023-06-30)
+
+
+### Features
+
+* Image and Scenes tabs in device modal ([8c7deaa](https://github.com/FruitieX/homectl-next/commit/8c7deaa1f54fcedebd8539cbc37a9cf7f22c3c6b))
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide-react to v0.257.0 ([e7d3438](https://github.com/FruitieX/homectl-next/commit/e7d3438c9a935e59692b38df3aba52143bea028b))
+
+
+### Miscellaneous Chores
+
+* release 0.4.6 ([b057e05](https://github.com/FruitieX/homectl-next/commit/b057e059e6c4969f4b4d831c3cfc50aa97049d3e))
+
 ## [0.4.5](https://github.com/FruitieX/homectl-next/compare/v0.4.0...v0.4.5) (2023-06-29)
 
 
