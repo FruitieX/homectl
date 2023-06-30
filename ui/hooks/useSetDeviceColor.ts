@@ -11,7 +11,7 @@ export const useSetDeviceColor = () => {
     (
       clickedDevice: Device,
       color: Color,
-      brightness: number,
+      brightness?: number,
       transitionMs?: number,
     ) => {
       const device = produce(clickedDevice, (draft) => {
@@ -21,8 +21,13 @@ export const useSetDeviceColor = () => {
             h: Math.round(hsv.hue()),
             s: hsv.saturationv() / 100,
           };
-          draft.data.Managed.state.brightness = brightness;
+
           draft.data.Managed.scene = null;
+
+          if (brightness !== undefined) {
+            draft.data.Managed.state.brightness = brightness;
+          }
+
           if (transitionMs !== undefined) {
             draft.data.Managed.state.transition_ms = (transitionMs as unknown) as bigint;
           }

@@ -20,7 +20,7 @@ import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
 import { useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
-import { Clipboard, X } from 'lucide-react';
+import { Clipboard, X, Dices } from 'lucide-react';
 import { useSetDevicePower } from '@/hooks/useSetDevicePower';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
@@ -449,8 +449,9 @@ const ImageTab = ({
   color,
   onChange,
   onChangeComplete,
-}: TabProps) => {
-  const [pastedImageColors, setPastedImageColors] = useState<string[]>();
+  deviceKeys,
+}: TabProps & { deviceKeys: string[] }) => {
+  const [pastedImageColors, setPastedImageColors] = useState<string[]>([]);
   const [pastedImage, setPastedImage] = usePastedImage();
   const pastedImageContainer = useRef<HTMLDivElement | null>(null);
 
@@ -531,17 +532,43 @@ const ImageTab = ({
     [onChange],
   );
 
+  const state = useWebsocketState();
+  const setDeviceColor = useSetDeviceColor();
+  const handleApplyToDevices = useCallback(() => {
+    const randomizedDeviceKeyOrder = deviceKeys
+      ?.concat()
+      .sort(() => Math.random() - 0.5);
+
+    const randomizedColorOrder = pastedImageColors
+      ?.concat()
+      .sort(() => Math.random() - 0.5);
+
+    randomizedDeviceKeyOrder?.forEach((deviceKey, index) => {
+      const match = state !== null ? findDevice(state, deviceKey) : null;
+      const color = randomizedColorOrder[index % pastedImageColors.length];
+
+      if (match) {
+        setDeviceColor(match, Color(color, 'rgb'));
+      }
+    });
+  }, [deviceKeys, state, pastedImageColors, setDeviceColor]);
+
   return (
     <>
-      <Button startIcon={<Clipboard />} onClick={handlePasteClick}>
-        Paste from clipboard
-      </Button>
-      <div ref={pastedImageContainer} className="min-h-0 w-full flex-1 py-4" />
+      <div ref={pastedImageContainer} className="min-h-0 w-full flex-1 pb-4" />
+      <div className="flex w-full justify-center gap-4">
+        <Button startIcon={<Clipboard />} onClick={handlePasteClick}>
+          Paste image
+        </Button>
+        <Button startIcon={<Dices />} onClick={handleApplyToDevices}>
+          Apply colors
+        </Button>
+      </div>
       <Circle
         colors={pastedImageColors}
         color={hsva}
         onChange={handleChange}
-        className="min-h-[40px]"
+        className="min-h-[40px] !flex-nowrap overflow-x-auto pl-4 pt-4 [&>*]:flex-shrink-0"
       />
       <Range
         className="mt-2"
@@ -704,6 +731,7 @@ export const ColorPickerModal = () => {
               onChange={throttledSetDeviceColor}
               onChangeComplete={throttledSetDeviceColor}
               open={deviceModalOpen}
+              deviceKeys={deviceModalState}
             />
           )}
           {tab === 3 && (

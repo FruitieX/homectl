@@ -14,7 +14,7 @@ const groupRects: Record<
 > = {
   Kitchen: { x: 260, y: 596, width: 293, height: 250 },
   'Living room': { x: 63, y: 327, width: 490, height: 260 },
-  Entryway: { x: 63, y: 852, width: 224, height: 335 },
+  Entryway: { x: 63, y: 1062, width: 224, height: 125 },
   'Downstairs bathroom': { x: 63, y: 852, width: 104, height: 187 },
   Office: { x: 317, y: 937, width: 235, height: 250 },
   'Outdoor lights': { x: 317, y: -70, width: 400, height: 375 },
