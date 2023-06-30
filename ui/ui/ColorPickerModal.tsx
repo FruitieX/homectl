@@ -5,6 +5,7 @@ import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
 import Color from 'color';
+import ColorThief from 'colorthief';
 import {
   ChangeEvent,
   useCallback,
@@ -21,17 +22,20 @@ import { useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
 import { Clipboard, X } from 'lucide-react';
 import { useSetDevicePower } from '@/hooks/useSetDevicePower';
+import { usePastedImage } from '@/hooks/pastedImage';
+import { SceneList } from 'app/groups/[id]/SceneList';
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
   return {
     h: hsva.hue(),
     s: hsva.saturationv(),
-    v: hsva.value(),
+    v: 100,
     a: hsva.alpha(),
   };
 };
 
+const setMaxColorValue = (color: Color): Color => color.value(100);
 type TabProps = {
   color: Color;
   brightness: number;
@@ -60,6 +64,7 @@ const ColorWheelTab = ({
   useEffect(() => {
     setHsva(colorToHsva(color));
     setBri(brightness);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const latestColor = useRef<Color>(color);
@@ -122,6 +127,30 @@ const ColorWheelTab = ({
   );
 };
 
+const presetColors = [
+  '#f44336',
+  '#e91e63',
+  '#9c27b0',
+  '#673ab7',
+  '#3f51b5',
+  '#2196f3',
+  '#03a9f4',
+  '#00bcd4',
+  '#009688',
+  '#4caf50',
+  '#8bc34a',
+  '#cddc39',
+  '#ffeb3b',
+  '#ffc107',
+  '#ff9800',
+  '#ff5722',
+  '#795548',
+  '#607d8b',
+]
+  .map((hex) => Color(hex, 'rgb'))
+  .map(setMaxColorValue)
+  .map((color) => color.hex());
+
 const SwatchesTab = ({
   brightness,
   color,
@@ -129,12 +158,13 @@ const SwatchesTab = ({
   onChangeComplete,
   open,
 }: TabProps) => {
-  const [hsva, setHsva] = useState(colorToHsva(color));
+  const [hex, setHex] = useState(color.value(100).hex());
   const [bri, setBri] = useState(brightness);
 
   useEffect(() => {
-    setHsva(colorToHsva(color));
+    setHex(color.value(100).hex());
     setBri(brightness);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const latestColor = useRef<Color>(color);
@@ -151,7 +181,7 @@ const SwatchesTab = ({
         v: latestColor.current.value(),
       });
       latestColor.current = color;
-      setHsva(colorToHsva(color));
+      setHex(color.value(100).hex());
       onChange && onChange(color, bri);
     },
     [bri, onChange],
@@ -174,27 +204,8 @@ const SwatchesTab = ({
     <>
       <div className="flex-1 overflow-y-auto p-3">
         <Circle
-          colors={[
-            '#f44336',
-            '#e91e63',
-            '#9c27b0',
-            '#673ab7',
-            '#3f51b5',
-            '#2196f3',
-            '#03a9f4',
-            '#00bcd4',
-            '#009688',
-            '#4caf50',
-            '#8bc34a',
-            '#cddc39',
-            '#ffeb3b',
-            '#ffc107',
-            '#ff9800',
-            '#ff5722',
-            '#795548',
-            '#607d8b',
-          ]}
-          color={hsva}
+          colors={presetColors}
+          color={hex}
           onChange={handleChange}
           className="flex-1"
         />
@@ -223,10 +234,12 @@ async function clipboardToImg(): Promise<HTMLImageElement | undefined> {
   for (const item of items) {
     for (const type of item.types) {
       if (type.startsWith('image/')) {
-        item.getType(type).then((imageBlob) => {
+        const blob = await item.getType(type);
+        return new Promise((resolve, reject) => {
           const img = new Image();
-          img.src = window.URL.createObjectURL(imageBlob);
-          return img;
+          img.onload = () => resolve(img);
+          img.onerror = reject;
+          img.src = window.URL.createObjectURL(blob);
         });
       }
     }
@@ -252,6 +265,7 @@ const SlidersTab = ({
     setHue(color.hue());
     setSat(color.saturationv());
     setBri(brightness);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const handleChangeComplete = useCallback(() => {
@@ -436,7 +450,33 @@ const ImageTab = ({
   onChange,
   onChangeComplete,
 }: TabProps) => {
+  const [pastedImageColors, setPastedImageColors] = useState<string[]>();
+  const [pastedImage, setPastedImage] = usePastedImage();
   const pastedImageContainer = useRef<HTMLDivElement | null>(null);
+
+  const handlePastedImage = useCallback(() => {
+    if (pastedImage === null) return;
+
+    pastedImage.style.objectFit = 'cover';
+    pastedImage.style.height = '100%';
+    pastedImage.style.marginLeft = 'auto';
+    pastedImage.style.marginRight = 'auto';
+
+    pastedImageContainer.current?.replaceChildren(pastedImage);
+    const instance = new ColorThief();
+    const dominant: number[] = instance.getColor(pastedImage);
+    const palette: number[][] = instance.getPalette(pastedImage);
+    const colors = [dominant, ...palette]
+      .map((components) => Color(components, 'rgb'))
+      .map(setMaxColorValue)
+      .map((color) => color.hex());
+
+    setPastedImageColors(colors);
+  }, [pastedImage]);
+
+  useEffect(() => {
+    handlePastedImage();
+  }, [handlePastedImage]);
 
   const handlePasteClick = useCallback(async () => {
     const img = await clipboardToImg();
@@ -445,19 +485,80 @@ const ImageTab = ({
       return;
     }
 
-    pastedImageContainer.current?.replaceChildren(img);
-    console.log(img);
-  }, []);
+    setPastedImage(img);
+    handlePastedImage();
+  }, [handlePastedImage, setPastedImage]);
+
+  const [hsva, setHsva] = useState(colorToHsva(color));
+  const [bri, setBri] = useState(brightness);
+
+  useEffect(() => {
+    setHsva(colorToHsva(color));
+    setBri(brightness);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const latestColor = useRef<Color>(color);
+  useEffect(() => {
+    latestColor.current = color;
+  }, [color]);
+
+  const handleChange = useCallback(
+    (result: ColorResult) => {
+      const hsv = Color(result.rgb).hsv();
+      const color = Color({
+        h: hsv.hue(),
+        s: hsv.saturationv(),
+        v: latestColor.current.value(),
+      });
+      latestColor.current = color;
+      setHsva(colorToHsva(color));
+      onChange && onChange(color, bri);
+    },
+    [bri, onChange],
+  );
+
+  const handleChangeComplete = useCallback(() => {
+    onChangeComplete && onChangeComplete(latestColor.current, bri);
+  }, [bri, onChangeComplete]);
+
+  const handleBrightnessChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = Number(event.currentTarget.value) / 100;
+      setBri(value);
+      onChange && onChange(latestColor.current, value);
+    },
+    [onChange],
+  );
 
   return (
     <>
       <Button startIcon={<Clipboard />} onClick={handlePasteClick}>
         Paste from clipboard
       </Button>
-
-      <div ref={pastedImageContainer} />
+      <div ref={pastedImageContainer} className="min-h-0 w-full flex-1 py-4" />
+      <Circle
+        colors={pastedImageColors}
+        color={hsva}
+        onChange={handleChange}
+        className="min-h-[40px]"
+      />
+      <Range
+        className="mt-2"
+        size="lg"
+        onChange={handleBrightnessChange}
+        onTouchEnd={handleChangeComplete}
+        onMouseUp={handleChangeComplete}
+        min={0}
+        max={100}
+        value={bri * 100}
+      />
     </>
   );
+};
+
+const ScenesTab = (props: { deviceKeys: string[] }) => {
+  return <SceneList deviceKeys={props.deviceKeys} />;
 };
 
 export const ColorPickerModal = () => {
@@ -492,7 +593,7 @@ export const ColorPickerModal = () => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            setDeviceColor(match, color, brightness);
+            setDeviceColor(match, color, brightness, 250);
           }
         });
       }
@@ -507,9 +608,6 @@ export const ColorPickerModal = () => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            console.log(
-              `Setting device ${match.name} ${power ? 'on' : 'off'}.`,
-            );
             setDevicePower(match, power);
           }
         });
@@ -520,7 +618,7 @@ export const ColorPickerModal = () => {
 
   const throttledSetDeviceColor = useThrottleCallback(
     partialSetDeviceColor,
-    3,
+    4,
     true,
   );
 
@@ -548,12 +646,16 @@ export const ColorPickerModal = () => {
       </Modal.Header>
 
       <Modal.Body>
-        {/* <CirclePicker color={hsva} /> */}
-        <Tabs value={tab} onChange={setTab} className="pb-6">
+        <Tabs
+          value={tab}
+          onChange={setTab}
+          className="overflow-x-auto pb-3 mb-3 flex-nowrap"
+        >
           <Tabs.Tab value={0}>Wheel</Tabs.Tab>
           <Tabs.Tab value={1}>Swatches</Tabs.Tab>
-          <Tabs.Tab value={2}>Sliders</Tabs.Tab>
-          <Tabs.Tab value={3}>Image</Tabs.Tab>
+          <Tabs.Tab value={2}>Image</Tabs.Tab>
+          <Tabs.Tab value={3}>Sliders</Tabs.Tab>
+          <Tabs.Tab value={4}>Scenes</Tabs.Tab>
         </Tabs>
         <div className="flex h-96 flex-col justify-center">
           {tab === 0 && (
@@ -575,16 +677,6 @@ export const ColorPickerModal = () => {
             />
           )}
           {tab === 2 && (
-            <SlidersTab
-              color={deviceModalColor ?? black}
-              brightness={deviceModalBrightness ?? 1}
-              onChange={throttledSetDeviceColor}
-              onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen}
-            />
-          )}
-
-          {tab === 3 && (
             <ImageTab
               color={deviceModalColor ?? black}
               brightness={deviceModalBrightness ?? 1}
@@ -593,6 +685,16 @@ export const ColorPickerModal = () => {
               open={deviceModalOpen}
             />
           )}
+          {tab === 3 && (
+            <SlidersTab
+              color={deviceModalColor ?? black}
+              brightness={deviceModalBrightness ?? 1}
+              onChange={throttledSetDeviceColor}
+              onChangeComplete={throttledSetDeviceColor}
+              open={deviceModalOpen}
+            />
+          )}
+          {tab === 4 && <ScenesTab deviceKeys={deviceModalState} />}
         </div>
       </Modal.Body>
     </Modal.Legacy>

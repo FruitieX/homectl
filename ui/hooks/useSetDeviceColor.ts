@@ -8,7 +8,12 @@ import { useCallback } from 'react';
 export const useSetDeviceColor = () => {
   const ws = useWebsocket();
   const setDeviceColor = useCallback(
-    (clickedDevice: Device, color: Color, brightness: number) => {
+    (
+      clickedDevice: Device,
+      color: Color,
+      brightness: number,
+      transitionMs?: number,
+    ) => {
       const device = produce(clickedDevice, (draft) => {
         if ('Managed' in draft.data) {
           const hsv = color.hsv();
@@ -18,6 +23,9 @@ export const useSetDeviceColor = () => {
           };
           draft.data.Managed.state.brightness = brightness;
           draft.data.Managed.scene = null;
+          if (transitionMs !== undefined) {
+            draft.data.Managed.state.transition_ms = (transitionMs as unknown) as bigint;
+          }
         }
       });
 
