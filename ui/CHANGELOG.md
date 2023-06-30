@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.8](https://github.com/FruitieX/homectl-next/compare/v0.4.7...v0.4.8) (2023-06-30)
+
+
+### Bug Fixes
+
+* viewport groups mobile performance patch ([57d689e](https://github.com/FruitieX/homectl-next/commit/57d689ec0ad45e11b3d0ee90ffff1d74f5aa876e))
+
 ## [0.5.0](https://github.com/FruitieX/homectl-next/compare/v0.4.6...v0.5.0) (2023-06-30)
 
 
