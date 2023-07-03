@@ -22,7 +22,7 @@ hmac = "0.12.1"
 sha2 = "0.10.7"
 hex = "0.4.3"
 palette = { version = "0.7.2", features = ["serializing"] }
-async-trait = "0.1.68"
+async-trait = "0.1.69"
 surf = { version = "2.3.2", default-features=false, features = ["h1-client-rustls"] }
 rand = "0.8.5"
 wakey = "0.3.0"
