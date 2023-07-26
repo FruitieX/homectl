@@ -20,7 +20,7 @@
     "clsx": "1.2.1",
     "color": "4.2.3",
     "colorthief": "2.4.0",
-    "daisyui": "3.4.0",
+    "daisyui": "3.5.0",
     "immer": "10.0.2",
     "jotai": "2.2.2",
     "konva": "9.2.0",
@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@types/color": "3.0.3",
-    "@types/lodash": "4.14.195",
+    "@types/lodash": "4.14.196",
     "@types/node": "18.17.1",
     "@types/react": "18.2.16",
     "@types/react-color": "3.0.6",
