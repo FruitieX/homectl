@@ -4,6 +4,7 @@ use ts_rs::TS;
 use super::{
     integration::CustomActionDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
+    dim::DimDescriptor,
 };
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
@@ -18,6 +19,9 @@ pub enum Action {
 
     /// Runs a custom integration action
     Custom(CustomActionDescriptor),
+
+    /// Dims the given groups and devices
+    DimAction(DimDescriptor),
 }
 
 pub type Actions = Vec<Action>;

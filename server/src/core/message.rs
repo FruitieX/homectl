@@ -6,6 +6,7 @@ use crate::types::{
     event::*,
     integration::CustomActionDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
+    dim::DimDescriptor,
 };
 
 use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
@@ -87,6 +88,18 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
         Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
             let mut devices = state.devices.clone();
             devices.cycle_scenes(scenes, nowrap.unwrap_or(false)).await;
+
+            Ok(())
+        }
+        Message::Action(Action::DimAction(DimDescriptor {
+            device_keys,
+            group_keys,
+            step,
+        })) => {
+            let mut devices = state.devices.clone();
+            devices
+                .dim(device_keys, group_keys, step)
+                .await;
 
             Ok(())
         }

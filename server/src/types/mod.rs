@@ -7,4 +7,5 @@ pub mod group;
 pub mod integration;
 pub mod rule;
 pub mod scene;
+pub mod dim;
 pub mod websockets;

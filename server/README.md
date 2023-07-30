@@ -318,6 +318,30 @@ actions = [
 ]
 ```
 
+### Make a light switch dim/brighten lights:
+
+```
+# Brighten
+[routines.brighten]
+name = "Brighten"
+rules = [
+  { integration_id = "hue1", name = "Living room switch button 2", state = { value = true } }
+]
+actions = [
+  { action = "DimAction", step = -0.1 },
+]
+
+# Dim
+[routines.dim]
+name = "Dim"
+rules = [
+  { integration_id = "hue1", name = "Living room switch button 3", state = { value = true } }
+]
+actions = [
+  { action = "DimAction", step = 0.1 },
+]
+```
+
 ### Temporarily disable a motion detector when leaving the house:
 
 ```
