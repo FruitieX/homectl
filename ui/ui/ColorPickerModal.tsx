@@ -451,9 +451,39 @@ const ImageTab = ({
   onChangeComplete,
   deviceKeys,
 }: TabProps & { deviceKeys: string[] }) => {
-  const [pastedImageColors, setPastedImageColors] = useState<string[]>([]);
+  const pastedImageColors = useRef<string[]>([]);
+  const [computedColors, setComputedColors] = useState<Color[]>([]);
   const [pastedImage, setPastedImage] = usePastedImage();
   const pastedImageContainer = useRef<HTMLDivElement | null>(null);
+
+  const [hsva, setHsva] = useState(colorToHsva(color));
+  const [bri, setBri] = useState(brightness);
+  const [sat, setSat] = useState(0.5);
+
+  const recomputeColors = useCallback(
+    (currentBri: number | null, currentSat: number | null) => {
+      const computedColors = pastedImageColors.current.map((color) => {
+        const hsv = Color(color).hsv();
+        let saturated;
+
+        const saturationValue = currentSat ?? sat;
+        if (saturationValue > 0.5) {
+          saturated = hsv.saturate(saturationValue * 2 - 1);
+        } else {
+          saturated = hsv.desaturate(1 - saturationValue * 2);
+        }
+
+        return Color({
+          h: saturated.hue(),
+          s: saturated.saturationv(),
+          v: (currentBri ?? bri) * 100,
+        });
+      });
+
+      setComputedColors(computedColors);
+    },
+    [bri, pastedImageColors, sat],
+  );
 
   const handlePastedImage = useCallback(() => {
     if (pastedImage === null) return;
@@ -472,8 +502,9 @@ const ImageTab = ({
       .map(setMaxColorValue)
       .map((color) => color.hex());
 
-    setPastedImageColors(colors);
-  }, [pastedImage]);
+    pastedImageColors.current = colors;
+    recomputeColors(null, null);
+  }, [pastedImage, recomputeColors]);
 
   useEffect(() => {
     handlePastedImage();
@@ -489,9 +520,6 @@ const ImageTab = ({
     setPastedImage(img);
     handlePastedImage();
   }, [handlePastedImage, setPastedImage]);
-
-  const [hsva, setHsva] = useState(colorToHsva(color));
-  const [bri, setBri] = useState(brightness);
 
   useEffect(() => {
     setHsva(colorToHsva(color));
@@ -510,7 +538,7 @@ const ImageTab = ({
       const color = Color({
         h: hsv.hue(),
         s: hsv.saturationv(),
-        v: latestColor.current.value(),
+        v: bri * 100,
       });
       latestColor.current = color;
       setHsva(colorToHsva(color));
@@ -519,17 +547,22 @@ const ImageTab = ({
     [bri, onChange],
   );
 
-  const handleChangeComplete = useCallback(() => {
-    onChangeComplete && onChangeComplete(latestColor.current, bri);
-  }, [bri, onChangeComplete]);
-
   const handleBrightnessChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = Number(event.currentTarget.value) / 100;
       setBri(value);
-      onChange && onChange(latestColor.current, value);
+      recomputeColors(value, null);
     },
-    [onChange],
+    [recomputeColors],
+  );
+
+  const handleSaturationChange = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const value = Number(event.currentTarget.value) / 100;
+      setSat(value);
+      recomputeColors(null, value);
+    },
+    [recomputeColors],
   );
 
   const state = useWebsocketState();
@@ -539,19 +572,19 @@ const ImageTab = ({
       ?.concat()
       .sort(() => Math.random() - 0.5);
 
-    const randomizedColorOrder = pastedImageColors
+    const randomizedColorOrder = computedColors
       ?.concat()
       .sort(() => Math.random() - 0.5);
 
     randomizedDeviceKeyOrder?.forEach((deviceKey, index) => {
       const match = state !== null ? findDevice(state, deviceKey) : null;
-      const color = randomizedColorOrder[index % pastedImageColors.length];
+      const color = randomizedColorOrder[index % computedColors.length];
 
       if (match) {
-        setDeviceColor(match, Color(color, 'rgb'));
+        setDeviceColor(match, Color(color, 'rgb'), color.value() / 100);
       }
     });
-  }, [deviceKeys, state, pastedImageColors, setDeviceColor]);
+  }, [deviceKeys, computedColors, state, setDeviceColor]);
 
   return (
     <>
@@ -565,21 +598,35 @@ const ImageTab = ({
         </Button>
       </div>
       <Circle
-        colors={pastedImageColors}
+        colors={computedColors.map((color) => color.hex())}
         color={hsva}
         onChange={handleChange}
         className="min-h-[40px] !flex-nowrap overflow-x-auto pl-4 pt-4 [&>*]:flex-shrink-0"
       />
-      <Range
-        className="mt-2"
-        size="lg"
-        onChange={handleBrightnessChange}
-        onTouchEnd={handleChangeComplete}
-        onMouseUp={handleChangeComplete}
-        min={0}
-        max={100}
-        value={bri * 100}
-      />
+      <div className="flex flex-nowrap gap-4">
+        <div>
+          Saturation:
+          <Range
+            className="mt-2"
+            size="lg"
+            onChange={handleSaturationChange}
+            min={0}
+            max={100}
+            value={sat * 100}
+          />
+        </div>
+        <div>
+          Brightness:
+          <Range
+            className="mt-2"
+            size="lg"
+            onChange={handleBrightnessChange}
+            min={0}
+            max={100}
+            value={bri * 100}
+          />
+        </div>
+      </div>
     </>
   );
 };
