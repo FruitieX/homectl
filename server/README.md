@@ -183,7 +183,7 @@ dummy = false
 [routines.leave_home]
 name = "Leave home"
 rules = [
-  { integration_id = "hue1", name = "Entryway switch", state = { off = true } }
+  { integration_id = "hue1", name = "Entryway switch button 4", state = { value = true } }
 ]
 actions = [
   { action = "IntegrationAction", integration_id = "neato", payload = "clean_house" },
@@ -298,7 +298,7 @@ name = "Normal"
 [routines.arrive_home]
 name = "Arrive home"
 rules = [
-  { integration_id = "hue", name = "Entryway switch", state = { on = true } }
+  { integration_id = "hue", name = "Entryway switch button 1", state = { value = true } }
 ]
 actions = [
   { action = "ActivateScene", scene_id = "normal_downstairs" },
@@ -311,10 +311,10 @@ actions = [
 [routines.favorite_scenes]
 name = "Cycle through favorite scenes"
 rules = [
-  { integration_id = "hue1", name = "Living room switch", state = { on = true } }
+  { integration_id = "hue1", name = "Living room switch button 1", state = { value = true } }
 ]
 actions = [
-  { action = "CycleScenes", scenes = [ { scene_id = "normal" }, { scene_id = "wedding" } ] },
+  { action = "CycleScenes", scenes = [ { scene_id = "normal" }, { scene_id = "bright" } ] },
 ]
 ```
 
@@ -344,7 +344,7 @@ actions = [
 [routines.leave_home]
 name = "Leave home"
 rules = [
-  { integration_id = "hue1", name = "Entryway switch", state = { off = true } }
+  { integration_id = "hue1", name = "Entryway switch button 4", state = { value = true } }
 ]
 actions = [
   { action = "ActivateScene", scene_id = "leave" },
