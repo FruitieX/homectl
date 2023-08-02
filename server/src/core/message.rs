@@ -3,10 +3,10 @@ use std::sync::Arc;
 
 use crate::types::{
     action::Action,
+    dim::DimDescriptor,
     event::*,
     integration::CustomActionDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
-    dim::DimDescriptor,
 };
 
 use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
@@ -97,9 +97,7 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             step,
         })) => {
             let mut devices = state.devices.clone();
-            devices
-                .dim(device_keys, group_keys, step)
-                .await;
+            devices.dim(device_keys, group_keys, step).await;
 
             Ok(())
         }

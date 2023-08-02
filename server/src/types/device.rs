@@ -128,9 +128,9 @@ impl ManagedDevice {
     }
 
     pub fn dim(&mut self, amount: f32) {
-        if self.state.power == true {
+        if self.state.power {
             self.state.brightness =
-                        Some((self.state.brightness.unwrap_or(0.0) - amount).clamp(0.1, 1.0));
+                Some((self.state.brightness.unwrap_or(0.0) - amount).clamp(0.1, 1.0));
         }
     }
 }
@@ -246,16 +246,8 @@ impl Device {
     pub fn dim_device(&mut self, amount: f32) -> Self {
         let mut device = self.clone();
 
-        // if !device.is_sensor() && device.is_powered_on().unwrap_or(false) {
-        //     device.state.brightness =
-        //         Some((device.state.brightness.unwrap_or(0.0) - amount).clamp(0.1, 1.0));
-        // }
-        
-        match device.data {
-            DeviceData::Managed(ref mut data) => {
-                data.dim(amount);
-            }
-            _ => {}
+        if let DeviceData::Managed(ref mut data) = device.data {
+            data.dim(amount);
         }
         device
     }

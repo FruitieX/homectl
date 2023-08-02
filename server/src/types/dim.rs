@@ -1,8 +1,8 @@
 use super::color::DeviceColor;
 use super::device::{
-    DeviceKey, 
-    // DeviceRef, 
-    ManagedDeviceState
+    DeviceKey,
+    // DeviceRef,
+    ManagedDeviceState,
 };
 
 use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
@@ -49,26 +49,26 @@ pub struct DimDeviceState {
 pub enum DimDeviceConfig {
     /// Link to another device, means the dim should read current state from
     /// another device
-    DimDeviceLink(DimDeviceLink),
+    DeviceLink(DimDeviceLink),
 
     /// Link to another dim, means the dim should merge all state from another
     /// dim
     DimLink(DimDescriptor),
 
     /// State to be applied to a device
-    DimDeviceState(DimDeviceState),
+    DeviceState(DimDeviceState),
 }
 
 // pub type DimDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, DimDeviceConfig>>;
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
-pub struct DimGroupsConfig (pub HashMap<GroupId, DimDeviceConfig>);
+pub struct DimGroupsConfig(pub HashMap<GroupId, DimDeviceConfig>);
 
 /// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
-pub struct DimDevicesSearchConfig (pub HashMap<IntegrationId, HashMap<String, DimDeviceConfig>>);
+pub struct DimDevicesSearchConfig(pub HashMap<IntegrationId, HashMap<String, DimDeviceConfig>>);
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]

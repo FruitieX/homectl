@@ -2,9 +2,9 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
+    dim::DimDescriptor,
     integration::CustomActionDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
-    dim::DimDescriptor,
 };
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
