@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use crate::types::{
     action::Action,
+    dim::DimDescriptor,
     event::*,
     integration::CustomActionDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
@@ -87,6 +88,16 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
         Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
             let mut devices = state.devices.clone();
             devices.cycle_scenes(scenes, nowrap.unwrap_or(false)).await;
+
+            Ok(())
+        }
+        Message::Action(Action::DimAction(DimDescriptor {
+            device_keys,
+            group_keys,
+            step,
+        })) => {
+            let mut devices = state.devices.clone();
+            devices.dim(device_keys, group_keys, step).await;
 
             Ok(())
         }

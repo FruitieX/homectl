@@ -126,6 +126,13 @@ impl ManagedDevice {
             capabilities,
         }
     }
+
+    pub fn dim(&mut self, amount: f32) {
+        if self.state.power {
+            self.state.brightness =
+                Some((self.state.brightness.unwrap_or(0.0) - amount).clamp(0.1, 1.0));
+        }
+    }
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -234,6 +241,15 @@ impl Device {
             DeviceData::Managed(ref data) => Some(&data.state),
             DeviceData::Sensor(_) => None,
         }
+    }
+
+    pub fn dim_device(&mut self, amount: f32) -> Self {
+        let mut device = self.clone();
+
+        if let DeviceData::Managed(ref mut data) = device.data {
+            data.dim(amount);
+        }
+        device
     }
 
     pub fn color_to_mode(&self, mode: ColorMode, skip_ct_conversion: bool) -> Device {

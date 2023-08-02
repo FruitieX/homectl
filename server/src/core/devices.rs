@@ -380,6 +380,26 @@ impl Devices {
         Some(true)
     }
 
+    pub async fn dim(
+        &mut self,
+        _device_keys: &Option<Vec<DeviceKey>>,
+        _group_keys: &Option<Vec<GroupId>>,
+        step: &Option<f32>,
+    ) -> Option<bool> {
+        println!("Dimming devices. Step: {}", step.unwrap_or(0.1));
+
+        let mut devices = self.state.lock().unwrap().clone();
+
+        for device in devices.0.iter_mut() {
+            let mut d = device.1.clone();
+            d = d.dim_device(step.unwrap_or(0.1));
+            d = d.set_scene(Some(SceneId::new("dimmed".to_string())));
+            self.set_device_state(&d, true, false).await;
+        }
+
+        Some(true)
+    }
+
     pub async fn cycle_scenes(
         &mut self,
         scene_descriptors: &[SceneDescriptor],
