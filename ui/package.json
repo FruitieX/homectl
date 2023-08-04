@@ -29,7 +29,7 @@
     "next": "latest",
     "react": "18.2.0",
     "react-color": "2.19.3",
-    "react-daisyui": "4.0.3",
+    "react-daisyui": "4.0.4",
     "react-dom": "18.2.0",
     "react-konva": "18.2.10",
     "react-konva-utils": "1.0.5",
