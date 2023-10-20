@@ -117,7 +117,7 @@ pub async fn db_set_neato_last_run(
 pub async fn db_get_scenes() -> Result<ScenesConfig> {
     let db = get_db_connection().await?;
 
-    let rows = sqlx::query!(
+    let result = sqlx::query!(
         r#"
             select
                 scene_id,
@@ -127,9 +127,13 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
         "#
     )
     .fetch_all(db)
-    .await?;
+    .await;
 
-    let scenes = rows
+    if let Err(err) = &result {
+        eprintln!("Error fetching scenes from DB: {:?}", err);
+    }
+
+    let scenes = result?
         .into_iter()
         .map(|row| (SceneId::new(row.scene_id), row.config.0))
         .collect();
