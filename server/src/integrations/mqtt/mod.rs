@@ -79,11 +79,8 @@ impl CustomIntegration for Mqtt {
         );
         options.set_keep_alive(Duration::from_secs(5));
         let (client, mut eventloop) = AsyncClient::new(options, 10);
-        client
-            .subscribe(self.config.topic.replace("{id}", "+"), QoS::AtMostOnce)
-            .await?;
 
-        self.client = Some(client);
+        self.client = Some(client.clone());
 
         let id = self.id.clone();
         let event_tx = self.event_tx.clone();
@@ -98,9 +95,18 @@ impl CustomIntegration for Mqtt {
                 let config_clone = Arc::clone(&config_clone);
 
                 let res = (|| async {
-                    if let rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) = notification? {
-                        let device = mqtt_to_homectl(&msg.payload, id.clone(), &config_clone)?;
-                        event_tx.send(Message::RecvDeviceState { device })
+                    match notification? {
+                        rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
+                            client
+                                .subscribe(config_clone.topic.replace("{id}", "+"), QoS::AtMostOnce)
+                                .await?;
+                        }
+
+                        rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) => {
+                            let device = mqtt_to_homectl(&msg.payload, id.clone(), &config_clone)?;
+                            event_tx.send(Message::RecvDeviceState { device })
+                        }
+                        _ => {}
                     }
 
                     Ok::<(), Box<dyn std::error::Error + Sync + Send>>(())
