@@ -1,3 +1,5 @@
+#![allow(clippy::redundant_closure_call)]
+
 mod utils;
 
 use crate::types::{

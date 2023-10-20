@@ -257,7 +257,7 @@ impl Scenes {
 
     pub fn get_scenes(&self) -> ScenesConfig {
         let mut db_scenes = self.db_scenes.read().unwrap().clone();
-        db_scenes.extend(self.config.clone().into_iter());
+        db_scenes.extend(self.config.clone());
         db_scenes
     }
 
