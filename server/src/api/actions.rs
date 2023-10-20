@@ -9,8 +9,7 @@ use super::with_state;
 pub fn actions(
     app_state: &Arc<AppState>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("actions")
-        .and(post_action(app_state).or(warp::get().map(|| warp::reply::json(&()))))
+    warp::path("actions").and(post_action(app_state).or(warp::get().map(|| warp::reply::json(&()))))
 }
 
 fn post_action(
