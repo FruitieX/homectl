@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.5.0](https://github.com/FruitieX/homectl-server/compare/v0.4.5...v0.5.0) (2023-10-20)
+
+
+### Features
+
+* adds dim/brighten action for lights ([89382fa](https://github.com/FruitieX/homectl-server/commit/89382fa83371c3c4c8de9135109a12d9f28e9217))
+
+
+### Bug Fixes
+
+* **deps:** update all non-major dependencies ([6318096](https://github.com/FruitieX/homectl-server/commit/63180960410700a786631c4333d8e54c4d0911db))
+* **deps:** update rust crate async-trait to 0.1.69 ([74b3985](https://github.com/FruitieX/homectl-server/commit/74b3985803e13fc600d0abdf5ab50ccd8dd53b02))
+* **deps:** update rust crate json_value_merge to v2 ([7940e43](https://github.com/FruitieX/homectl-server/commit/7940e437fa8b7374b1292ae093ff496964a8f431))
+* **deps:** update rust crate serde to 1.0.166 ([b38995b](https://github.com/FruitieX/homectl-server/commit/b38995bed70fc7d332707f8d0d61445f691ee8cb))
+* **deps:** update rust crate ts-rs to v7 ([eedf5b8](https://github.com/FruitieX/homectl-server/commit/eedf5b84593622214ff57dacb642a1476970041d))
+* MQTT client re-subscribes on reconnect ([7f1ef3d](https://github.com/FruitieX/homectl-server/commit/7f1ef3da3dfc72240fef37ebfb4a6309d7d1a6c6))
+
 ## [0.4.5](https://github.com/FruitieX/homectl-server/compare/v0.4.4...v0.4.5) (2023-06-29)
 
 
