@@ -24,6 +24,7 @@ in
       docker-compose
       pkg-config
       postgresql
+      openssl
 
       nodejs
     ];

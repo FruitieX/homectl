@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into scenes (scene_id, config)\n            values ($1, $2)\n\n            on conflict (scene_id)\n            do update set\n                config = excluded.config\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "878b76d50a28cbd6ce1cb6fecc837a14cc946681e431ff4e4d41ab2c77cede0e"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            update scenes\n            set\n                scene_id = $2,\n                config = config::jsonb || format('{\"name\":\"%s\"}', $2::text)::jsonb\n            where scene_id = $1;\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d046a95e04e81bd564288cb354674fbad7017dcdcc8c882b85358cd43e85d0b9"
+}

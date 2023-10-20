@@ -1,0 +1,43 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into devices (integration_id, device_id, name, state)\n            values ($1, $2, $3, $4)\n\n            on conflict (integration_id, device_id)\n            do update set\n                name = excluded.name,\n                state = excluded.state\n\n            returning\n                integration_id,\n                device_id,\n                name,\n                state as \"state: Json<DeviceData>\"\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "integration_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "state: Json<DeviceData>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "59210ea5a994a8ba2d6019a82c700e321b35f5c5f06779fc08148c21a86e15c4"
+}

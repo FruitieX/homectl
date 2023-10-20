@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select\n                scene_id,\n                config as \"config: Json<SceneConfig>\"\n\n            from scenes\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "scene_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "config: Json<SceneConfig>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "84f33c5baf0dc08016dfbd51b80fcc471ab44768996d85f986cc8ef0f1b69543"
+}
