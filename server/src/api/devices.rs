@@ -48,7 +48,7 @@ fn get_devices(
                 devices: devices_converted,
             };
 
-            Ok(warp::reply::json(&response))
+            warp::reply::json(&response)
         })
 }
 

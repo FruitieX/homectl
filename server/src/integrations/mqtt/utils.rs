@@ -121,29 +121,29 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
         .as_deref()
         .unwrap_or("/transition_ms");
 
-    payload.merge_in(id_field, serde_json::Value::String(device.id.to_string()))?;
-    payload.merge_in(name_field, serde_json::Value::String(device.name))?;
+    payload.merge_in(id_field, &serde_json::Value::String(device.id.to_string()))?;
+    payload.merge_in(name_field, &serde_json::Value::String(device.name))?;
 
     if let DeviceData::Managed(device) = device.data {
-        payload.merge_in(power_field, serde_json::Value::Bool(device.state.power))?;
+        payload.merge_in(power_field, &serde_json::Value::Bool(device.state.power))?;
 
         if let Some(brightness) = device.state.brightness {
             payload.merge_in(
                 brightness_field,
-                serde_json::Number::from_f64(brightness.into())
+                &serde_json::Number::from_f64(brightness.into())
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
         }
 
         if let Some(color) = &device.state.color {
-            payload.merge_in(color_field, serde_json::to_value(color)?)?;
+            payload.merge_in(color_field, &serde_json::to_value(color)?)?;
         }
 
         if let Some(transition_ms) = device.state.transition_ms {
             payload.merge_in(
                 transition_ms_field,
-                serde_json::Number::from_f64(transition_ms as f64)
+                &serde_json::Number::from_f64(transition_ms as f64)
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
