@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.5.0](https://github.com/FruitieX/homectl-next/compare/v0.4.8...v0.5.0) (2023-10-26)
+
+
+### Features
+
+* allow controlling image color saturation ([f82f969](https://github.com/FruitieX/homectl-next/commit/f82f969c46964a5f46d9d160b37577ce8c1e3759))
+
+
+### Bug Fixes
+
+* **deps:** update all non-major dependencies ([f25e2e2](https://github.com/FruitieX/homectl-next/commit/f25e2e2bbc1cf5fcd0691d3bd8abb8b17c39a91f))
+* **deps:** update all non-major dependencies ([3f52b77](https://github.com/FruitieX/homectl-next/commit/3f52b779510d9c7681a3f3267495f97491b78f48))
+* **deps:** update all non-major dependencies ([4a5d455](https://github.com/FruitieX/homectl-next/commit/4a5d45571dc86b02da4180194370cc73fdf2a03e))
+* **deps:** update all non-major dependencies ([a0854ae](https://github.com/FruitieX/homectl-next/commit/a0854ae9ef73107bf08aeb6f4f722d47c538b7e9))
+* **deps:** update all non-major dependencies to v1.3.2 ([39e4e66](https://github.com/FruitieX/homectl-next/commit/39e4e661f64ebc98bf5dd8a4e474b1e855e52f85))
+* **deps:** update all non-major dependencies to v1.3.3 ([2cdc36c](https://github.com/FruitieX/homectl-next/commit/2cdc36cb0be606bc75c7b8123abc41d6b8104dbb))
+* **deps:** update dependency clsx to v2 ([1530703](https://github.com/FruitieX/homectl-next/commit/1530703a7b46e667b2436e44355e7d026702b138))
+* **deps:** update dependency daisyui to v3.1.10 ([ad3bff1](https://github.com/FruitieX/homectl-next/commit/ad3bff1a3b517ed88a299c2c69bf7b24a8480f2e))
+* **deps:** update dependency daisyui to v3.2.1 ([2f818ac](https://github.com/FruitieX/homectl-next/commit/2f818ac191ecff436b6b48a08f720041e03a731e))
+* **deps:** update dependency daisyui to v3.4.0 ([e6f84df](https://github.com/FruitieX/homectl-next/commit/e6f84df5e2aa8be18dc14ef58e718b8aa3eb4779))
+* **deps:** update dependency jotai to v2.2.3 ([af3d254](https://github.com/FruitieX/homectl-next/commit/af3d2548f0ab7f3aaa9c192e4ef724350de7aeac))
+* **deps:** update dependency jotai to v2.3.0 ([e1e3519](https://github.com/FruitieX/homectl-next/commit/e1e3519212de43df5a13d5f86cdef0b74e6def50))
+* **deps:** update dependency jotai to v2.3.1 ([5411c29](https://github.com/FruitieX/homectl-next/commit/5411c29c3cbd95b62a4c05e000ab4ba2e15e9026))
+* **deps:** update dependency lucide-react to v0.258.0 ([1e098a4](https://github.com/FruitieX/homectl-next/commit/1e098a40c6f6522b0add6d67dac3e9eb4dae3505))
+* **deps:** update dependency lucide-react to v0.261.0 ([cf2af17](https://github.com/FruitieX/homectl-next/commit/cf2af171de9c23a2ad025f6bbbf9a367a1e59841))
+* **deps:** update dependency lucide-react to v0.262.0 ([339d906](https://github.com/FruitieX/homectl-next/commit/339d906b8178347e1a46673665db095994f9e44e))
+* **deps:** update dependency lucide-react to v0.263.0 ([1036536](https://github.com/FruitieX/homectl-next/commit/1036536917fd6d8bfceb099e89b1647364cc8bc7))
+* **deps:** update dependency lucide-react to v0.264.0 ([5ad2f06](https://github.com/FruitieX/homectl-next/commit/5ad2f06db134f33c69eea91413b0cabaeb4be92c))
+* **deps:** update dependency lucide-react to v0.265.0 ([3a45913](https://github.com/FruitieX/homectl-next/commit/3a459130e533db497b8698f604373b801f732c49))
+* **deps:** update dependency react-daisyui to v4.0.4 ([9100700](https://github.com/FruitieX/homectl-next/commit/91007008cdb5eb3a4bf861645a54cab5798b23e8))
+* **deps:** update dependency react-konva-utils to v1.0.5 ([6ee049b](https://github.com/FruitieX/homectl-next/commit/6ee049b94080991bf6d21638aea07c116d2be84e))
+
 ## [0.4.8](https://github.com/FruitieX/homectl-next/compare/v0.4.7...v0.4.8) (2023-06-30)
 
 
