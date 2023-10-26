@@ -1,27 +1,4 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:base",
-    "group:allNonMajor",
-    ":automergeDigest",
-    ":semanticCommits"
-  ],
-  "platformAutomerge": true,
-  "automergeType": "pr",
-  "lockFileMaintenance": {
-    "enabled": true,
-    "automerge": true
-  },
-  "packageRules": [
-    {
-      "matchUpdateTypes": [
-        "minor",
-        "patch"
-      ],
-      "automerge": true
-    }
-  ],
-  "docker": {
-    "pinDigests": true
-  }
+  "extends": ["github>FruitieX/renovate-config"]
 }
