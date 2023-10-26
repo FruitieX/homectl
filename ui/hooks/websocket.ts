@@ -14,7 +14,7 @@ export const useProvideWebsocketState = () => {
   const setState = useSetAtom(websocketStateAtom);
   const setWebsocket = useSetAtom(websocketAtom);
 
-  const reconnectTimeout = useRef<NodeJS.Timer | null>(null);
+  const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
