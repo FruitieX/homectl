@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@types/color": "3.0.6",
-    "@types/lodash": "4.14.200",
+    "@types/lodash": "4.14.201",
     "@types/node": "20.8.10",
     "@types/react": "18.2.36",
     "@types/react-color": "3.0.9",
