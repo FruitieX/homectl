@@ -27,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16@sha256:06265a45bb71f15f2e857646a1644df33209f39b55b97660b22b7d0d4df34276
+        image: postgres:16@sha256:a3a4524686403f8c29447a52dea7452923c1bb5d26b33793b93b5e703cd508a4
         env:
           POSTGRES_PASSWORD: postgres
         ports:
