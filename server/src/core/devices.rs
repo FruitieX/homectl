@@ -156,7 +156,11 @@ impl Devices {
                     None => {
                         info!("Discovered device: {:?}", incoming);
                         self.set_device_state(incoming, true, false).await;
-                        db_update_device(incoming).await.ok();
+
+                        let incoming = incoming.clone();
+                        tokio::spawn(async move {
+                            db_update_device(&incoming).await.ok();
+                        });
                     }
                 }
             }
@@ -337,7 +341,9 @@ impl Devices {
 
         if state_changed && !skip_db {
             let device = device.clone();
-            db_update_device(&device).await.ok();
+            tokio::spawn(async move {
+                db_update_device(&device).await.ok();
+            });
         }
 
         device
