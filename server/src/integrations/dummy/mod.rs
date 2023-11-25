@@ -47,18 +47,18 @@ impl CustomIntegration for Dummy {
 
     async fn register(&mut self) -> Result<()> {
         for (id, device) in &self.config.devices {
-            let state =
-                device
-                    .init_state
-                    .clone()
-                    .unwrap_or(DeviceData::Managed(ControllableDevice::new(
-                        None,
-                        false,
-                        None,
-                        None,
-                        None,
-                        Capabilities::default(),
-                    )));
+            let state = device
+                .init_state
+                .clone()
+                .unwrap_or(DeviceData::Controllable(ControllableDevice::new(
+                    None,
+                    false,
+                    None,
+                    None,
+                    None,
+                    Capabilities::default(),
+                    true,
+                )));
 
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);
             self.event_tx.send(Message::RecvDeviceState { device });

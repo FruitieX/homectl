@@ -68,7 +68,7 @@ pub fn eval_scene_device_state(
             let source_device = find_device(devices, &link.device_ref)?;
 
             let mut state = match source_device.data {
-                DeviceData::Managed(managed) => Some(managed.state),
+                DeviceData::Controllable(managed) => Some(managed.state),
                 DeviceData::Sensor(SensorDevice::Color(state)) => Some(state),
                 _ => None,
             }?;

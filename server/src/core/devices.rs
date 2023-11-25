@@ -174,13 +174,18 @@ impl Devices {
                 self.set_device_state(incoming, false, false, false).await;
             }
 
-            (DeviceData::Managed(ref incoming_managed), _, Some(expected_state)) => {
-                if cmp_device_states(incoming_managed, &expected_state) {
+            (DeviceData::Controllable(ref incoming_state), _, Some(expected_state)) => {
+                if !incoming_state.managed {
+                    self.set_device_state(incoming, false, false, true).await;
+                    return Ok(());
+                }
+
+                if cmp_device_states(incoming_state, &expected_state) {
                     return Ok(());
                 }
 
                 let expected_converted =
-                    expected_state.color_to_device_preferred_mode(&incoming_managed.capabilities);
+                    expected_state.color_to_device_preferred_mode(&incoming_state.capabilities);
 
                 // Device state does not match expected state, maybe the device
                 // missed a state update or forgot its state? We will try fixing
@@ -190,34 +195,29 @@ impl Devices {
                     "Device state mismatch detected ({}/{}):\nwas:      {}\nexpected: {}\n",
                     incoming.integration_id,
                     incoming.name,
-                    incoming_managed.state,
+                    incoming_state.state,
                     expected_converted
                 );
 
                 // Replace device state with expected state, converted into a
                 // supported color format
-                let mut managed = incoming_managed.clone();
+                let mut managed = incoming_state.clone();
                 managed.state = expected_state;
                 managed.state.color = managed
                     .state
                     .color
-                    .and_then(|c| c.to_device_preferred_mode(&incoming_managed.capabilities));
+                    .and_then(|c| c.to_device_preferred_mode(&incoming_state.capabilities));
 
                 // Disable transitions
                 managed.state.transition_ms = None;
 
                 let mut device = incoming.clone();
-                device.data = DeviceData::Managed(managed);
+                device.data = DeviceData::Controllable(managed);
 
                 self.event_tx.send(Message::SendDeviceState {
                     device,
                     state_changed: true,
                 });
-            }
-
-            // Take current state as expected for unmanaged devices
-            (DeviceData::Unmanaged(_), _, Some(_)) => {
-                self.set_device_state(incoming, false, false, true).await;
             }
 
             // Expected device state was not found
@@ -240,7 +240,7 @@ impl Devices {
         match device.data {
             DeviceData::Sensor(_) => None,
 
-            DeviceData::Managed(_) | DeviceData::Unmanaged(_) => {
+            DeviceData::Controllable(_) => {
                 let scene_device_state = {
                     let state = self.state.lock().unwrap();
 

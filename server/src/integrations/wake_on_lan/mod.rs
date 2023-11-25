@@ -52,13 +52,14 @@ impl CustomIntegration for WakeOnLan {
 
     async fn register(&mut self) -> color_eyre::Result<()> {
         for machine in &self.config.machines {
-            let data = DeviceData::Managed(ControllableDevice::new(
+            let data = DeviceData::Controllable(ControllableDevice::new(
                 None,
                 true,
                 None,
                 None,
                 None,
                 Capabilities::default(),
+                false,
             ));
 
             let device = Device {
@@ -80,7 +81,7 @@ impl CustomIntegration for WakeOnLan {
 
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let power = match &device.data {
-            DeviceData::Managed(ControllableDevice { state, .. }) => Ok(state.power),
+            DeviceData::Controllable(ControllableDevice { state, .. }) => Ok(state.power),
             _ => Err(eyre!("Unsupported device kind received in wol integration")),
         }?;
 

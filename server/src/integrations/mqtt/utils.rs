@@ -90,14 +90,17 @@ pub fn mqtt_to_homectl(
             .and_then(|value| serde_json::from_value(value.clone()).ok())
             .unwrap_or_default();
 
-        let controllable_device =
-            ControllableDevice::new(None, power, brightness, color, transition_ms, capabilities);
+        let controllable_device = ControllableDevice::new(
+            None,
+            power,
+            brightness,
+            color,
+            transition_ms,
+            capabilities,
+            config.managed.unwrap_or(true),
+        );
 
-        if config.managed == Some(false) {
-            DeviceData::Unmanaged(controllable_device)
-        } else {
-            DeviceData::Managed(controllable_device)
-        }
+        DeviceData::Controllable(controllable_device)
     };
 
     Ok(Device {
@@ -124,7 +127,7 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
     payload.merge_in(id_field, &serde_json::Value::String(device.id.to_string()))?;
     payload.merge_in(name_field, &serde_json::Value::String(device.name))?;
 
-    if let DeviceData::Managed(device) = device.data {
+    if let DeviceData::Controllable(device) = device.data {
         payload.merge_in(power_field, &serde_json::Value::Bool(device.state.power))?;
 
         if let Some(brightness) = device.state.brightness {
@@ -168,13 +171,14 @@ mod tests {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
             integration_id: IntegrationId::from_str("mqtt").unwrap(),
-            data: DeviceData::Managed(ControllableDevice::new(
+            data: DeviceData::Controllable(ControllableDevice::new(
                 None,
                 true,
                 Some(0.5),
                 Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
                 Some(1000),
                 Capabilities::default(),
+                true,
             )),
         };
 
@@ -248,13 +252,14 @@ mod tests {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
             integration_id,
-            data: DeviceData::Managed(ControllableDevice::new(
+            data: DeviceData::Controllable(ControllableDevice::new(
                 None,
                 true,
                 Some(0.5),
                 Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
                 Some(1000),
                 Capabilities::singleton(ColorMode::Hs),
+                true,
             )),
         };
 
