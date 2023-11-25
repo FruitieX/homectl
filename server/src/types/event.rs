@@ -33,6 +33,9 @@ pub enum Message {
 
         /// Whether to honor the scene field in the device data or not.
         set_scene: bool,
+
+        /// Whether to skip sending [Message::SendDeviceState] as a result of this state update.
+        skip_send: bool,
     },
 
     /// Store new scene in DB.

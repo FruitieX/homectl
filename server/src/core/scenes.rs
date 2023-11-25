@@ -1,6 +1,6 @@
 use crate::types::{
     device::{
-        Device, DeviceData, DeviceId, DeviceKey, DeviceRef, DevicesState, ManagedDeviceState,
+        ControllableState, Device, DeviceData, DeviceId, DeviceKey, DeviceRef, DevicesState,
         SensorDevice,
     },
     integration::IntegrationId,
@@ -57,7 +57,7 @@ pub fn eval_scene_device_state(
     groups: &Groups,
     scenes: &ScenesConfig,
     ignore_transition: bool,
-) -> Option<ManagedDeviceState> {
+) -> Option<ControllableState> {
     let scene_device_config = find_scene_device_config(device, groups, scenes)?;
 
     match scene_device_config {
@@ -96,7 +96,7 @@ pub fn eval_scene_device_state(
         SceneDeviceConfig::DeviceState(scene_device) => {
             Some(
                 // Use state from scene_device
-                ManagedDeviceState {
+                ControllableState {
                     brightness: scene_device.brightness,
                     color: scene_device.color.clone(),
                     power: scene_device.power.unwrap_or(true),
@@ -393,7 +393,7 @@ impl Scenes {
         device: &Device,
         devices: &DevicesState,
         ignore_transition: bool,
-    ) -> Option<ManagedDeviceState> {
+    ) -> Option<ControllableState> {
         eval_scene_device_state(
             device,
             devices,

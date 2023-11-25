@@ -1,5 +1,5 @@
 use super::color::DeviceColor;
-use super::device::{DeviceKey, DeviceRef, ManagedDeviceState};
+use super::device::{ControllableState, DeviceKey, DeviceRef};
 
 use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
@@ -103,7 +103,7 @@ pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
 #[ts(export)]
-pub struct SceneDeviceStates(pub HashMap<DeviceKey, ManagedDeviceState>);
+pub struct SceneDeviceStates(pub HashMap<DeviceKey, ControllableState>);
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]

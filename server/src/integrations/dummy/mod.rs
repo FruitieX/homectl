@@ -1,7 +1,7 @@
 use crate::types::{
     color::Capabilities,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceData, DeviceId, ManagedDevice},
+    device::{ControllableDevice, Device, DeviceData, DeviceId},
     event::{Message, TxEventChannel},
     integration::{IntegrationActionPayload, IntegrationId},
 };
@@ -51,7 +51,7 @@ impl CustomIntegration for Dummy {
                 device
                     .init_state
                     .clone()
-                    .unwrap_or(DeviceData::Managed(ManagedDevice::new(
+                    .unwrap_or(DeviceData::Managed(ControllableDevice::new(
                         None,
                         false,
                         None,

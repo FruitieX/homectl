@@ -32,9 +32,15 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
 
             Ok(())
         }
-        Message::SetExpectedState { device, set_scene } => {
+        Message::SetExpectedState {
+            device,
+            set_scene,
+            skip_send,
+        } => {
             let mut devices = state.devices.clone();
-            devices.set_device_state(device, *set_scene, false).await;
+            devices
+                .set_device_state(device, *set_scene, false, *skip_send)
+                .await;
 
             Ok(())
         }

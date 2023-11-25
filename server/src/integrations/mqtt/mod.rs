@@ -29,8 +29,9 @@ pub struct MqttConfig {
     topic: String,
     topic_set: String,
 
-    /// Can be used to control whether a device is "managed" or not, i.e.
-    /// whether homectl should keep track of the device's expected state or not.
+    /// Can be used to control whether the devices published by this integration
+    /// are "managed" or not, i.e.  whether homectl should keep track of the
+    /// devices' expected states or not.
     managed: Option<bool>,
 
     id_field: Option<String>,
@@ -115,6 +116,7 @@ impl CustomIntegration for Mqtt {
                                 Message::SetExpectedState {
                                     device,
                                     set_scene: true,
+                                    skip_send: true,
                                 }
                             } else {
                                 Message::RecvDeviceState { device }

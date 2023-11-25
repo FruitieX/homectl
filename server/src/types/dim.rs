@@ -1,8 +1,8 @@
 use super::color::DeviceColor;
 use super::device::{
-    DeviceKey,
     // DeviceRef,
-    ManagedDeviceState,
+    ControllableState,
+    DeviceKey,
 };
 
 use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
@@ -83,7 +83,7 @@ pub struct DimConfig {
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
 #[ts(export)]
-pub struct DimDeviceStates(pub HashMap<DeviceKey, ManagedDeviceState>);
+pub struct DimDeviceStates(pub HashMap<DeviceKey, ControllableState>);
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]

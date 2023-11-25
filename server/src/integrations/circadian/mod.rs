@@ -1,7 +1,7 @@
 use crate::types::{
     color::DeviceColor,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceData, DeviceId, ManagedDeviceState, SensorDevice},
+    device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -159,12 +159,13 @@ async fn poll_sensor(circadian: Circadian) {
         event_tx.send(Message::SetExpectedState {
             device,
             set_scene: false,
+            skip_send: false,
         });
     }
 }
 
 fn mk_circadian_device(circadian: &Circadian) -> Device {
-    let state = DeviceData::Sensor(SensorDevice::Color(ManagedDeviceState {
+    let state = DeviceData::Sensor(SensorDevice::Color(ControllableState {
         power: true,
         color: Some(get_circadian_color(circadian)),
         brightness: get_circadian_brightness(circadian),

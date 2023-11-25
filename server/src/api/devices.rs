@@ -73,7 +73,7 @@ async fn put_device_impl(
     }
 
     let mut devices = app_state.devices.clone();
-    devices.set_device_state(&device, true, false).await;
+    devices.set_device_state(&device, true, false, false).await;
 
     let devices = app_state.devices.get_devices();
     let response = DevicesResponse {

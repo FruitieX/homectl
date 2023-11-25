@@ -2,7 +2,7 @@ use crate::db::actions::{db_find_device, db_update_device};
 use crate::types::color::{Capabilities, DeviceColor};
 
 use super::scenes::{get_next_cycled_scene, Scenes};
-use crate::types::device::{DeviceRef, ManagedDevice, ManagedDeviceState, SensorDevice};
+use crate::types::device::{ControllableDevice, ControllableState, DeviceRef, SensorDevice};
 use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
@@ -74,7 +74,7 @@ fn cmp_light_color(
 /// Compares the state of a ManagedDevice to some given ManagedDeviceState.
 ///
 /// If the states match, the function evaluates to true.
-fn cmp_device_states(device: &ManagedDevice, expected: &ManagedDeviceState) -> bool {
+fn cmp_device_states(device: &ControllableDevice, expected: &ControllableState) -> bool {
     if device.state.power != expected.power {
         return false;
     }
@@ -151,11 +151,11 @@ impl Devices {
                             device
                         );
 
-                        self.set_device_state(&device, true, true).await;
+                        self.set_device_state(&device, true, true, false).await;
                     }
                     None => {
                         info!("Discovered device: {:?}", incoming);
-                        self.set_device_state(incoming, true, false).await;
+                        self.set_device_state(incoming, true, false, false).await;
                     }
                 }
             }
@@ -171,7 +171,7 @@ impl Devices {
 
                 // Sensor state has changed, defer handling of this update to
                 // other subsystems
-                self.set_device_state(incoming, false, false).await;
+                self.set_device_state(incoming, false, false, false).await;
             }
 
             (DeviceData::Managed(ref incoming_managed), _, Some(expected_state)) => {
@@ -215,9 +215,14 @@ impl Devices {
                 });
             }
 
+            // Take current state as expected for unmanaged devices
+            (DeviceData::Unmanaged(_), _, Some(_)) => {
+                self.set_device_state(incoming, false, false, true).await;
+            }
+
             // Expected device state was not found
             (_, _, None) => {
-                self.set_device_state(incoming, false, false).await;
+                self.set_device_state(incoming, false, false, false).await;
             }
         }
 
@@ -231,11 +236,11 @@ impl Devices {
         &self,
         device: &Device,
         use_passed_state: bool,
-    ) -> Option<ManagedDeviceState> {
+    ) -> Option<ControllableState> {
         match device.data {
             DeviceData::Sensor(_) => None,
 
-            DeviceData::Managed(_) => {
+            DeviceData::Managed(_) | DeviceData::Unmanaged(_) => {
                 let scene_device_state = {
                     let state = self.state.lock().unwrap();
 
@@ -286,6 +291,7 @@ impl Devices {
         device: &Device,
         set_scene: bool,
         skip_db: bool,
+        skip_send: bool,
     ) -> Device {
         let old: Option<Device> = self.get_device(&device.get_device_key());
         let old_states = { self.state.lock().unwrap().clone() };
@@ -327,14 +333,14 @@ impl Devices {
             new: device.clone(),
         });
 
-        if !device.is_sensor() {
+        if !skip_send && !device.is_sensor() {
             self.event_tx.send(Message::SendDeviceState {
                 device: device.clone(),
                 state_changed,
             });
         }
 
-        if state_changed && !skip_db {
+        if !skip_db && state_changed {
             let device = device.clone();
             tokio::spawn(async move {
                 db_update_device(&device).await.ok();
@@ -373,7 +379,7 @@ impl Devices {
 
                 if let Some(device) = device {
                     let device = device.set_scene(Some(scene_id.clone()));
-                    self.set_device_state(&device, true, false).await;
+                    self.set_device_state(&device, true, false, false).await;
                 }
             }
         }
@@ -395,7 +401,7 @@ impl Devices {
             let mut d = device.1.clone();
             d = d.dim_device(step.unwrap_or(0.1));
             d = d.set_scene(Some(SceneId::new("dimmed".to_string())));
-            self.set_device_state(&d, true, false).await;
+            self.set_device_state(&d, true, false, false).await;
         }
 
         Some(true)

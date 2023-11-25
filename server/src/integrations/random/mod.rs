@@ -1,7 +1,7 @@
 use crate::types::{
     color::DeviceColor,
     custom_integration::CustomIntegration,
-    device::{Device, DeviceData, DeviceId, ManagedDeviceState, SensorDevice},
+    device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
     event::{Message, TxEventChannel},
     integration::IntegrationId,
 };
@@ -85,7 +85,7 @@ async fn poll_sensor(random: Random) {
 }
 
 fn mk_random_device(random: &Random) -> Device {
-    let state = DeviceData::Sensor(SensorDevice::Color(ManagedDeviceState {
+    let state = DeviceData::Sensor(SensorDevice::Color(ControllableState {
         power: true,
         color: Some(get_random_color()),
         brightness: Some(1.0),

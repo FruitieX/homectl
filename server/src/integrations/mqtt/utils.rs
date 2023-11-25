@@ -1,7 +1,7 @@
 use crate::integrations::mqtt::MqttConfig;
 use crate::types::color::{Capabilities, DeviceColor};
 use crate::types::{
-    device::{Device, DeviceData, DeviceId, ManagedDevice, SensorDevice},
+    device::{ControllableDevice, Device, DeviceData, DeviceId, SensorDevice},
     integration::IntegrationId,
 };
 use color_eyre::Result;
@@ -90,14 +90,14 @@ pub fn mqtt_to_homectl(
             .and_then(|value| serde_json::from_value(value.clone()).ok())
             .unwrap_or_default();
 
-        DeviceData::Managed(ManagedDevice::new(
-            None,
-            power,
-            brightness,
-            color,
-            transition_ms,
-            capabilities,
-        ))
+        let controllable_device =
+            ControllableDevice::new(None, power, brightness, color, transition_ms, capabilities);
+
+        if config.managed == Some(false) {
+            DeviceData::Unmanaged(controllable_device)
+        } else {
+            DeviceData::Managed(controllable_device)
+        }
     };
 
     Ok(Device {
@@ -168,7 +168,7 @@ mod tests {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
             integration_id: IntegrationId::from_str("mqtt").unwrap(),
-            data: DeviceData::Managed(ManagedDevice::new(
+            data: DeviceData::Managed(ControllableDevice::new(
                 None,
                 true,
                 Some(0.5),
@@ -248,7 +248,7 @@ mod tests {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
             integration_id,
-            data: DeviceData::Managed(ManagedDevice::new(
+            data: DeviceData::Managed(ControllableDevice::new(
                 None,
                 true,
                 Some(0.5),

@@ -37,7 +37,7 @@ impl DeviceId {
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
-pub struct ManagedDeviceState {
+pub struct ControllableState {
     pub power: bool,
 
     /// Current brightness, if supported
@@ -50,7 +50,7 @@ pub struct ManagedDeviceState {
     pub transition_ms: Option<u64>,
 }
 
-impl Display for ManagedDeviceState {
+impl Display for ControllableState {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = {
             let color_str = if !self.power {
@@ -78,7 +78,7 @@ impl Display for ManagedDeviceState {
     }
 }
 
-impl ManagedDeviceState {
+impl ControllableState {
     pub fn color_to_device_preferred_mode(&self, capabilities: &Capabilities) -> Self {
         let mut state = self.clone();
 
@@ -100,13 +100,13 @@ impl ManagedDeviceState {
 /// lights with adjustable brightness and/or color
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
-pub struct ManagedDevice {
+pub struct ControllableDevice {
     pub scene: Option<SceneId>,
     pub capabilities: Capabilities,
-    pub state: ManagedDeviceState,
+    pub state: ControllableState,
 }
 
-impl ManagedDevice {
+impl ControllableDevice {
     pub fn new(
         scene: Option<SceneId>,
         power: bool,
@@ -114,10 +114,10 @@ impl ManagedDevice {
         color: Option<DeviceColor>,
         transition_ms: Option<u64>,
         capabilities: Capabilities,
-    ) -> ManagedDevice {
-        ManagedDevice {
+    ) -> ControllableDevice {
+        ControllableDevice {
             scene,
-            state: ManagedDeviceState {
+            state: ControllableState {
                 power,
                 brightness,
                 color,
@@ -141,20 +141,26 @@ impl ManagedDevice {
 pub enum SensorDevice {
     Boolean { value: bool },
     Text { value: String },
-    Color(ManagedDeviceState),
+    Color(ControllableState),
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub enum DeviceData {
-    Managed(ManagedDevice),
+    /// Managed device, i.e. homectl will keep track of its expected state and try to correct for drift
+    Managed(ControllableDevice),
+
+    /// Unmanaged device, i.e. homectl will keep track of its state but will NOT try to correct for drift
+    Unmanaged(ControllableDevice),
+
+    /// This device type is read only
     Sensor(SensorDevice),
 }
 
 impl Display for DeviceData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
-            DeviceData::Managed(light) => light.state.to_string(),
+            DeviceData::Managed(light) | DeviceData::Unmanaged(light) => light.state.to_string(),
             DeviceData::Sensor(_) => "Sensor".to_string(),
         };
 
@@ -213,7 +219,8 @@ impl Device {
 
     pub fn get_scene(&self) -> Option<SceneId> {
         match &self.data {
-            DeviceData::Managed(ManagedDevice { scene, .. }) => scene.clone(),
+            DeviceData::Managed(ControllableDevice { scene, .. })
+            | DeviceData::Unmanaged(ControllableDevice { scene, .. }) => scene.clone(),
             DeviceData::Sensor(_) => None,
         }
     }
@@ -230,15 +237,15 @@ impl Device {
 
     pub fn is_powered_on(&self) -> Option<bool> {
         match &self.data {
-            DeviceData::Managed(data) => Some(data.state.power),
+            DeviceData::Managed(data) | DeviceData::Unmanaged(data) => Some(data.state.power),
             // Doesn't make sense for sensors
             DeviceData::Sensor(_) => None,
         }
     }
 
-    pub fn get_managed_state(&self) -> Option<&ManagedDeviceState> {
+    pub fn get_managed_state(&self) -> Option<&ControllableState> {
         match self.data {
-            DeviceData::Managed(ref data) => Some(&data.state),
+            DeviceData::Managed(ref data) | DeviceData::Unmanaged(ref data) => Some(&data.state),
             DeviceData::Sensor(_) => None,
         }
     }
@@ -271,7 +278,9 @@ impl Device {
 
     pub fn get_supported_color_modes(&self) -> Option<&Capabilities> {
         match self.data {
-            DeviceData::Managed(ref data) => Some(&data.capabilities),
+            DeviceData::Managed(ref data) | DeviceData::Unmanaged(ref data) => {
+                Some(&data.capabilities)
+            }
             DeviceData::Sensor(_) => None,
         }
     }
@@ -282,12 +291,12 @@ impl Device {
 
     pub fn get_sensor_state(&self) -> Option<&SensorDevice> {
         match self.data {
-            DeviceData::Managed(_) => None,
+            DeviceData::Managed(_) | DeviceData::Unmanaged(_) => None,
             DeviceData::Sensor(ref data) => Some(data),
         }
     }
 
-    pub fn set_managed_state(&self, state: ManagedDeviceState) -> Device {
+    pub fn set_managed_state(&self, state: ControllableState) -> Device {
         let mut device = self.clone();
 
         if let DeviceData::Managed(ref mut data) = device.data {
