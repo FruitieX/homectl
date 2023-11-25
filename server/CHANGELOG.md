@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.2](https://github.com/FruitieX/homectl-server/compare/v0.6.1...v0.6.2) (2023-11-25)
+
+
+### Bug Fixes
+
+* core takes care of correct unmanaged msg type ([27e36d3](https://github.com/FruitieX/homectl-server/commit/27e36d365086d8a79d9cf97611d425543fc8a6c3))
+* move the managed flag inside DeviceData::Controllable ([6bd7740](https://github.com/FruitieX/homectl-server/commit/6bd77409f793e9632313775a1f4b6d949c78fb47))
+
 ## [0.6.1](https://github.com/FruitieX/homectl-server/compare/v0.6.0...v0.6.1) (2023-11-25)
 
 
