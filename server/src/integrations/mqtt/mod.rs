@@ -112,15 +112,7 @@ impl CustomIntegration for Mqtt {
 
                         rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) => {
                             let device = mqtt_to_homectl(&msg.payload, id.clone(), &config)?;
-                            let msg = if config.managed == Some(false) {
-                                Message::SetExpectedState {
-                                    device,
-                                    set_scene: true,
-                                    skip_send: true,
-                                }
-                            } else {
-                                Message::RecvDeviceState { device }
-                            };
+                            let msg = Message::RecvDeviceState { device };
                             event_tx.send(msg);
                         }
                         _ => {}
