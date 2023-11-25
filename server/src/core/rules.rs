@@ -1,3 +1,4 @@
+use eyre::{ContextCompat, Result};
 use itertools::Itertools;
 
 use crate::types::{
@@ -47,6 +48,21 @@ impl Rules {
             }
             None => {}
         }
+    }
+
+    pub fn force_trigger_routine(&self, routine_id: &RoutineId) -> Result<()> {
+        let routine = self
+            .config
+            .get(routine_id)
+            .with_context(|| eyre!("Routine not found"))?;
+
+        let routine_actions = routine.actions.clone();
+
+        for action in routine_actions {
+            self.event_tx.send(Message::Action(action.clone()));
+        }
+
+        Ok(())
     }
 
     /// Find any rules that were triggered by transitioning from `old_state` to

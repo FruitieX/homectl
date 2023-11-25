@@ -6,6 +6,7 @@ use crate::types::{
     dim::DimDescriptor,
     event::*,
     integration::CustomActionDescriptor,
+    rule::ForceTriggerRoutineDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
@@ -110,6 +111,12 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             integrations
                 .run_integration_action(integration_id, payload)
                 .await
+        }
+        Message::Action(Action::ForceTriggerRoutine(ForceTriggerRoutineDescriptor {
+            routine_id,
+        })) => {
+            let rules = state.rules.clone();
+            rules.force_trigger_routine(routine_id)
         }
     };
 

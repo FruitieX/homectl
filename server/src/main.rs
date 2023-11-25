@@ -7,6 +7,9 @@ extern crate newtype_derive;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate eyre;
+
 mod api;
 mod core;
 mod db;

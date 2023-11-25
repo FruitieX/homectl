@@ -4,6 +4,7 @@ use ts_rs::TS;
 use super::{
     dim::DimDescriptor,
     integration::CustomActionDescriptor,
+    rule::ForceTriggerRoutineDescriptor,
     scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
@@ -22,6 +23,9 @@ pub enum Action {
 
     /// Dims the given groups and devices
     DimAction(DimDescriptor),
+
+    /// Forcibly triggers a routine, ignoring any possible rules
+    ForceTriggerRoutine(ForceTriggerRoutineDescriptor),
 }
 
 pub type Actions = Vec<Action>;

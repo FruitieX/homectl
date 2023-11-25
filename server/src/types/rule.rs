@@ -4,10 +4,11 @@ use super::{group::GroupId, scene::SceneId};
 use super::action::Actions;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use ts_rs::TS;
 
 macro_attr! {
-    #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
-    pub struct RoutineId(String);
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    pub struct RoutineId(pub String);
 }
 
 #[derive(Clone, Deserialize, Debug)]
@@ -67,3 +68,9 @@ pub struct Routine {
 }
 
 pub type RoutinesConfig = HashMap<RoutineId, Routine>;
+
+#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[ts(export)]
+pub struct ForceTriggerRoutineDescriptor {
+    pub routine_id: RoutineId,
+}
