@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.6.0](https://github.com/FruitieX/homectl-server/compare/v0.5.1...v0.6.0) (2023-11-25)
+
+
+### Features
+
+* **mqtt:** unmanaged mqtt devices ([d2352e0](https://github.com/FruitieX/homectl-server/commit/d2352e043190face0357cb6d93e58f93057c65ff))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate config to v0.13.4 ([3b9588c](https://github.com/FruitieX/homectl-server/commit/3b9588cfb74034605f66f82147c3e6ad543a69fc))
+* **deps:** update rust crate eyre to v0.6.9 ([315456f](https://github.com/FruitieX/homectl-server/commit/315456f9bbd6920e9fda19bad7bf46bfb7476e64))
+* **deps:** update rust crate itertools to v0.12.0 ([0865780](https://github.com/FruitieX/homectl-server/commit/086578010f7261edf6271c246b0b0f5e143d2bd1))
+* **deps:** update rust crate serde to 1.0.190 ([8f81352](https://github.com/FruitieX/homectl-server/commit/8f81352b9298fe598857b244389959a1b0e82ddc))
+* **deps:** update rust crate serde to v1.0.192 ([548d501](https://github.com/FruitieX/homectl-server/commit/548d5019dc658089ded210f4ecbd5ed4c659e3f5))
+* **deps:** update rust crate serde to v1.0.193 ([504790e](https://github.com/FruitieX/homectl-server/commit/504790e8ce2093aad89e3670d77a64d9a11f237c))
+* **deps:** update rust crate serde_json to v1.0.108 ([fb18f91](https://github.com/FruitieX/homectl-server/commit/fb18f914aad62c46544b2874846a7f5bb3176b7d))
+* **deps:** update rust crate sqlx to v0.7.3 ([5db2ed9](https://github.com/FruitieX/homectl-server/commit/5db2ed9d87a3393c84a96fe08b52896ca807cb46))
+* **deps:** update rust crate tokio to v1.34.0 ([45ad1de](https://github.com/FruitieX/homectl-server/commit/45ad1de6d7aa94cccb71c7b58af1c8506031298a))
+* **deps:** update rust crate toml to 0.8.4 ([1115970](https://github.com/FruitieX/homectl-server/commit/1115970db6aa7eed2d1dec4c9a7ead797f81b5f3))
+* **deps:** update rust crate toml to v0.8.5 ([8ce7c73](https://github.com/FruitieX/homectl-server/commit/8ce7c731106ace1ba1e579de87a647bf4c1c4c1c))
+* **deps:** update rust crate toml to v0.8.6 ([71b03f1](https://github.com/FruitieX/homectl-server/commit/71b03f13b04367c342651ae231c949b25385ad86))
+* **deps:** update rust crate toml to v0.8.8 ([9dbc604](https://github.com/FruitieX/homectl-server/commit/9dbc604e57294be4ff6bff4bd8a7e920ed755e7c))
+* **deps:** update rust-futures monorepo to v0.3.29 ([2e87670](https://github.com/FruitieX/homectl-server/commit/2e876700db508decc08cbf221e8e4b20f8026355))
+* perform db updates in separate task ([ff04147](https://github.com/FruitieX/homectl-server/commit/ff041479621d3263dc0acb628be1042c1904daa7))
+* remove redundant device db update call ([23e985e](https://github.com/FruitieX/homectl-server/commit/23e985eeb9a1a461ad44a59e99ede7973e4b8442))
+* warn if scenes table is busted ([6a8ed45](https://github.com/FruitieX/homectl-server/commit/6a8ed458a8789a1f8fd3e60c50579634c098f28b))
+
 ## [0.5.1](https://github.com/FruitieX/homectl-server/compare/v0.5.0...v0.5.1) (2023-10-20)
 
 
