@@ -81,8 +81,8 @@ export const SceneList = (props: Props) => {
                 return [];
 
               const device = JSON.parse(JSON.stringify(origDevice));
-              if ('Managed' in device.data) {
-                device.data.Managed.state = state;
+              if ('Controllable' in device.data) {
+                device.data.Controllable.state = state;
               }
 
               return [device];

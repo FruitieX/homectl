@@ -15,27 +15,29 @@ export const useSetDeviceColor = () => {
       transitionMs?: number,
     ) => {
       const device = produce(clickedDevice, (draft) => {
-        if ('Managed' in draft.data) {
+        if ('Controllable' in draft.data) {
           const hsv = color.hsv();
-          draft.data.Managed.state.color = {
+          draft.data.Controllable.state.color = {
             h: Math.round(hsv.hue()),
             s: hsv.saturationv() / 100,
           };
 
-          draft.data.Managed.scene = null;
+          draft.data.Controllable.scene = null;
 
           if (brightness !== undefined) {
-            draft.data.Managed.state.brightness = brightness;
+            draft.data.Controllable.state.brightness = brightness;
           }
 
           if (transitionMs !== undefined) {
-            draft.data.Managed.state.transition_ms = (transitionMs as unknown) as bigint;
+            draft.data.Controllable.state.transition_ms = (transitionMs as unknown) as bigint;
           }
         }
       });
 
       const msg: WebSocketRequest = {
-        Message: { SetExpectedState: { device, set_scene: true } },
+        Message: {
+          SetExpectedState: { device, set_scene: true, skip_send: false },
+        },
       };
       ws?.send(JSON.stringify(msg));
     },

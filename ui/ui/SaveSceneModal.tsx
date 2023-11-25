@@ -46,8 +46,8 @@ const Component = (props: Props) => {
         { integrationId: string; name: string },
         SceneDeviceState,
       ])[] = selectedDevices.flatMap((device) => {
-        if ('Managed' in device.data) {
-          const light = device.data.Managed;
+        if ('Controllable' in device.data) {
+          const light = device.data.Controllable;
           let color = { h: 0, s: 0 };
 
           if (

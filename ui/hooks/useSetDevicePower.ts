@@ -9,14 +9,16 @@ export const useSetDevicePower = () => {
   const setDevicePower = useCallback(
     (clickedDevice: Device, power: boolean) => {
       const device = produce(clickedDevice, (draft) => {
-        if ('Managed' in draft.data) {
-          draft.data.Managed.state.power = power;
-          draft.data.Managed.scene = null;
+        if ('Controllable' in draft.data) {
+          draft.data.Controllable.state.power = power;
+          draft.data.Controllable.scene = null;
         }
       });
 
       const msg: WebSocketRequest = {
-        Message: { SetExpectedState: { device, set_scene: true } },
+        Message: {
+          SetExpectedState: { device, set_scene: true, skip_send: false },
+        },
       };
       ws?.send(JSON.stringify(msg));
     },

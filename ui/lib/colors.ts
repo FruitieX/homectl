@@ -6,19 +6,19 @@ export const white = Color('white');
 export const getColor = (data: DeviceData): Color => {
   let color = black;
 
-  if ('Managed' in data) {
+  if ('Controllable' in data) {
     if (
-      data.Managed.state.color !== null &&
-      'h' in data.Managed.state.color &&
-      's' in data.Managed.state.color
+      data.Controllable.state.color !== null &&
+      'h' in data.Controllable.state.color &&
+      's' in data.Controllable.state.color
     ) {
       color = Color({
-        h: data.Managed.state.color.h,
-        s: data.Managed.state.color.s * 100,
+        h: data.Controllable.state.color.h,
+        s: data.Controllable.state.color.s * 100,
         v: 100,
       });
     } else {
-      if (data.Managed.state.power) {
+      if (data.Controllable.state.power) {
         return white;
       } else {
         return black;
@@ -30,11 +30,11 @@ export const getColor = (data: DeviceData): Color => {
 };
 
 export const getBrightness = (data: DeviceData): number => {
-  if ('Managed' in data) {
-    if (data.Managed.state.brightness !== null) {
-      return data.Managed.state.brightness;
+  if ('Controllable' in data) {
+    if (data.Controllable.state.brightness !== null) {
+      return data.Controllable.state.brightness;
     } else {
-      if (data.Managed.state.power) {
+      if (data.Controllable.state.power) {
         return 1;
       } else {
         return 0;
@@ -46,8 +46,8 @@ export const getBrightness = (data: DeviceData): number => {
 };
 
 export const getPower = (data: DeviceData): boolean => {
-  if ('Managed' in data) {
-    return data.Managed.state.power;
+  if ('Controllable' in data) {
+    return data.Controllable.state.power;
   }
 
   return false;
