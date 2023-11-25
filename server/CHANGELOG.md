@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/FruitieX/homectl-server/compare/v0.6.0...v0.6.1) (2023-11-25)
+
+
+### Bug Fixes
+
+* unmanaged device updates don't emit SendDeviceState ([2d2223e](https://github.com/FruitieX/homectl-server/commit/2d2223e4c384ff365b8159bf618fc07c09790bac))
+
 ## [0.6.0](https://github.com/FruitieX/homectl-server/compare/v0.5.1...v0.6.0) (2023-11-25)
 
 
