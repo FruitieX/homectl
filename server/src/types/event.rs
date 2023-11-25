@@ -16,7 +16,7 @@ pub enum Message {
     RecvDeviceState { device: Device },
 
     /// Tell integration to trigger state change for the device.
-    SendDeviceState { device: Device, state_changed: bool },
+    SendDeviceState { device: Device },
 
     /// Internal device state update has taken place, need to take appropriate
     /// actions such as checking (and possibly triggering) routines.
@@ -49,6 +49,9 @@ pub enum Message {
 
     /// Delete scene from DB.
     DbDeleteScene { scene_id: SceneId },
+
+    /// Broadcast current state to all WS peers
+    WsBroadcastState,
 
     /// Various actions that can be triggered by rules.
     Action(Action),

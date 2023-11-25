@@ -44,19 +44,14 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
 
             Ok(())
         }
-        Message::SendDeviceState {
-            device,
-            state_changed,
-        } => {
+        Message::SendDeviceState { device } => {
             let mut integrations = state.integrations.clone();
-            let res = integrations.set_integration_device_state(device).await;
+            integrations.set_integration_device_state(device).await
+        }
+        Message::WsBroadcastState => {
+            state.send_state_ws(None).await;
 
-            // Only send state update to WS peers if state actually changed
-            if *state_changed {
-                state.send_state_ws(None).await;
-            }
-
-            res
+            Ok(())
         }
         Message::DbStoreScene { scene_id, config } => {
             db_store_scene(scene_id, config).await.ok();

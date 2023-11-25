@@ -214,10 +214,7 @@ impl Devices {
                 let mut device = incoming.clone();
                 device.data = DeviceData::Controllable(managed);
 
-                self.event_tx.send(Message::SendDeviceState {
-                    device,
-                    state_changed: true,
-                });
+                self.event_tx.send(Message::SendDeviceState { device });
             }
 
             // Expected device state was not found
@@ -326,6 +323,10 @@ impl Devices {
 
         let state_changed = old.as_ref() != Some(&device);
 
+        if state_changed {
+            self.event_tx.send(Message::WsBroadcastState);
+        }
+
         self.event_tx.send(Message::InternalStateUpdate {
             old_state: old_states,
             new_state,
@@ -336,7 +337,6 @@ impl Devices {
         if !skip_send && !device.is_sensor() {
             self.event_tx.send(Message::SendDeviceState {
                 device: device.clone(),
-                state_changed,
             });
         }
 
