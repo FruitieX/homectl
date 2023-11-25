@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.3](https://github.com/FruitieX/homectl-server/compare/v0.6.2...v0.6.3) (2023-11-25)
+
+
+### Bug Fixes
+
+* always broadcast state updates to ws ([7bd6d70](https://github.com/FruitieX/homectl-server/commit/7bd6d70d622eae0139bde14d35878e771aae16e4))
+
 ## [0.6.2](https://github.com/FruitieX/homectl-server/compare/v0.6.1...v0.6.2) (2023-11-25)
 
 
