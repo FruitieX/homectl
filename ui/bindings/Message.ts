@@ -7,7 +7,7 @@ import type { SceneId } from './SceneId';
 
 export type Message =
   | { RecvDeviceState: { device: Device } }
-  | { SendDeviceState: { device: Device; state_changed: boolean } }
+  | { SendDeviceState: { device: Device } }
   | {
       InternalStateUpdate: {
         old_state: DevicesState;
@@ -16,8 +16,15 @@ export type Message =
         new: Device;
       };
     }
-  | { SetExpectedState: { device: Device; set_scene: boolean } }
+  | {
+      SetExpectedState: {
+        device: Device;
+        set_scene: boolean;
+        skip_send: boolean;
+      };
+    }
   | { DbStoreScene: { scene_id: SceneId; config: SceneConfig } }
   | { DbEditScene: { scene_id: SceneId; name: string } }
   | { DbDeleteScene: { scene_id: SceneId } }
+  | 'WsBroadcastState'
   | { Action: Action };
