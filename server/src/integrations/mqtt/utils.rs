@@ -181,8 +181,9 @@ mod tests {
         let config = MqttConfig {
             host: "localhost".to_string(),
             port: 1883,
-            topic_set: "homectl/set/{id}".to_string(),
             topic: "homectl/devices/{id}".to_string(),
+            topic_set: "homectl/set/{id}".to_string(),
+            managed: Some(true),
             id_field: Some("/id".to_string()),
             name_field: Some("/name".to_string()),
             color_field: Some("/color".to_string()),
@@ -222,8 +223,9 @@ mod tests {
         let config = MqttConfig {
             host: "localhost".to_string(),
             port: 1883,
-            topic_set: "homectl/set/{id}".to_string(),
             topic: "homectl/devices/{id}".to_string(),
+            topic_set: "homectl/set/{id}".to_string(),
+            managed: Some(true),
             id_field: Some("/id".to_string()),
             name_field: Some("/name".to_string()),
             color_field: Some("/color".to_string()),
@@ -272,8 +274,9 @@ mod tests {
         let config = MqttConfig {
             host: "localhost".to_string(),
             port: 1883,
-            topic_set: "homectl/set/{id}".to_string(),
             topic: "homectl/devices/{id}".to_string(),
+            topic_set: "homectl/set/{id}".to_string(),
+            managed: Some(true),
             id_field: Some("/id".to_string()),
             name_field: Some("/name".to_string()),
             color_field: Some("/color".to_string()),

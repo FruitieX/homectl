@@ -26,8 +26,13 @@ use self::utils::homectl_to_mqtt;
 pub struct MqttConfig {
     host: String,
     port: u16,
-    topic_set: String,
     topic: String,
+    topic_set: String,
+
+    /// Can be used to control whether a device is "managed" or not, i.e.
+    /// whether homectl should keep track of the device's expected state or not.
+    managed: Option<bool>,
+
     id_field: Option<String>,
     name_field: Option<String>,
     color_field: Option<String>,
@@ -86,7 +91,7 @@ impl CustomIntegration for Mqtt {
 
         let id = self.id.clone();
         let event_tx = self.event_tx.clone();
-        let config_clone = Arc::new(self.config.clone());
+        let config = Arc::new(self.config.clone());
 
         task::spawn(async move {
             loop {
@@ -94,19 +99,27 @@ impl CustomIntegration for Mqtt {
 
                 let id = id.clone();
                 let event_tx = event_tx.clone();
-                let config_clone = Arc::clone(&config_clone);
+                let config = Arc::clone(&config);
 
                 let res = (|| async {
                     match notification? {
                         rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
                             client
-                                .subscribe(config_clone.topic.replace("{id}", "+"), QoS::AtMostOnce)
+                                .subscribe(config.topic.replace("{id}", "+"), QoS::AtMostOnce)
                                 .await?;
                         }
 
                         rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) => {
-                            let device = mqtt_to_homectl(&msg.payload, id.clone(), &config_clone)?;
-                            event_tx.send(Message::RecvDeviceState { device })
+                            let device = mqtt_to_homectl(&msg.payload, id.clone(), &config)?;
+                            let msg = if config.managed == Some(false) {
+                                Message::SetExpectedState {
+                                    device,
+                                    set_scene: true,
+                                }
+                            } else {
+                                Message::RecvDeviceState { device }
+                            };
+                            event_tx.send(msg);
                         }
                         _ => {}
                     }
