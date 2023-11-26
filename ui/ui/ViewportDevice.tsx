@@ -11,6 +11,7 @@ import {
   useToggleSelectedDevice,
 } from '@/hooks/selectedDevices';
 import Color from 'color';
+import { KonvaEventObject } from 'konva/lib/Node';
 
 const devicePositions: Record<string, Vector2d> = {
   'Kitchen lightstrip upper': { x: 537, y: 700 },
@@ -92,45 +93,57 @@ export const ViewportDevice = (props: Props) => {
   const touchRegistersAsTap = props.touchRegistersAsTap;
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const onDeviceTouchStart = useCallback(() => {
-    if (touchRegistersAsTap === undefined) {
-      return;
-    }
-    touchRegistersAsTap.current = true;
-    deviceTouchTimer.current = setTimeout(() => {
+  const onDeviceTouchStart = useCallback(
+    (e: KonvaEventObject<TouchEvent | MouseEvent>) => {
+      if (touchRegistersAsTap === undefined) {
+        return;
+      }
+
+      if (e.evt.cancelable) e.evt.preventDefault();
+
+      touchRegistersAsTap.current = true;
+      deviceTouchTimer.current = setTimeout(() => {
+        if (touchRegistersAsTap.current === true) {
+          toggleSelectedDevice(getDeviceKey(device));
+        }
+        deviceTouchTimer.current = null;
+        touchRegistersAsTap.current = false;
+      }, 500);
+    },
+    [device, toggleSelectedDevice, touchRegistersAsTap],
+  );
+
+  const onDeviceTouchEnd = useCallback(
+    (e: KonvaEventObject<TouchEvent | MouseEvent>) => {
+      if (touchRegistersAsTap === undefined) {
+        return;
+      }
+
+      if (e.evt.cancelable) e.evt.preventDefault();
+
+      if (deviceTouchTimer.current !== null) {
+        clearTimeout(deviceTouchTimer.current);
+        deviceTouchTimer.current = null;
+      }
+
       if (touchRegistersAsTap.current === true) {
-        toggleSelectedDevice(getDeviceKey(device));
+        if (selectedDevices.length === 0) {
+          setDeviceModalState([getDeviceKey(device)]);
+          setDeviceModalOpen(true);
+        } else {
+          toggleSelectedDevice(getDeviceKey(device));
+        }
       }
-      deviceTouchTimer.current = null;
-      touchRegistersAsTap.current = false;
-    }, 500);
-  }, [device, toggleSelectedDevice, touchRegistersAsTap]);
-
-  const onDeviceTouchEnd = useCallback(() => {
-    if (touchRegistersAsTap === undefined) {
-      return;
-    }
-    if (deviceTouchTimer.current !== null) {
-      clearTimeout(deviceTouchTimer.current);
-      deviceTouchTimer.current = null;
-    }
-
-    if (touchRegistersAsTap.current === true) {
-      if (selectedDevices.length === 0) {
-        setDeviceModalState([getDeviceKey(device)]);
-        setDeviceModalOpen(true);
-      } else {
-        toggleSelectedDevice(getDeviceKey(device));
-      }
-    }
-  }, [
-    device,
-    selectedDevices.length,
-    setDeviceModalOpen,
-    setDeviceModalState,
-    toggleSelectedDevice,
-    touchRegistersAsTap,
-  ]);
+    },
+    [
+      device,
+      selectedDevices.length,
+      setDeviceModalOpen,
+      setDeviceModalState,
+      toggleSelectedDevice,
+      touchRegistersAsTap,
+    ],
+  );
 
   useEffect(() => {
     return () => {

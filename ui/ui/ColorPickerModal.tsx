@@ -448,7 +448,6 @@ const ImageTab = ({
   brightness,
   color,
   onChange,
-  onChangeComplete,
   deviceKeys,
 }: TabProps & { deviceKeys: string[] }) => {
   const pastedImageColors = useRef<string[]>([]);
@@ -776,7 +775,6 @@ export const ColorPickerModal = () => {
               color={deviceModalColor ?? black}
               brightness={deviceModalBrightness ?? 1}
               onChange={throttledSetDeviceColor}
-              onChangeComplete={throttledSetDeviceColor}
               open={deviceModalOpen}
               deviceKeys={deviceModalState}
             />
