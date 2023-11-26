@@ -1,5 +1,32 @@
 # Changelog
 
+## [0.6.0](https://github.com/FruitieX/homectl-next/compare/v0.5.0...v0.6.0) (2023-11-26)
+
+
+### Features
+
+* ControlsCard button click handlers ([7b18c38](https://github.com/FruitieX/homectl-next/commit/7b18c3848d6095c03a6657d5f275cf5c256d8a93))
+
+
+### Bug Fixes
+
+* **deps:** update dependency @uiw/react-color-circle to v2 ([2dbc3c6](https://github.com/FruitieX/homectl-next/commit/2dbc3c6d928127753021568a1e7987873696f066))
+* **deps:** update dependency @uiw/react-color-circle to v2.0.1 ([e811edb](https://github.com/FruitieX/homectl-next/commit/e811edbd4962d06be87d8de71598cdabde190ff8))
+* **deps:** update dependency @uiw/react-color-circle to v2.0.2 ([91ad280](https://github.com/FruitieX/homectl-next/commit/91ad280b6d2e377c3a473ce89006051b8511a274))
+* **deps:** update dependency @uiw/react-color-wheel to v2 ([c740696](https://github.com/FruitieX/homectl-next/commit/c7406960fae9f15580828e2b8e1c8493e5e3b582))
+* **deps:** update dependency @uiw/react-color-wheel to v2.0.1 ([98f469b](https://github.com/FruitieX/homectl-next/commit/98f469b54e734125d12e7f4de366c43f0513b076))
+* **deps:** update dependency @uiw/react-color-wheel to v2.0.2 ([5ab7c33](https://github.com/FruitieX/homectl-next/commit/5ab7c334f17c5f9309fa9cf308dc7ca204607517))
+* **deps:** update dependency daisyui to v3.9.4 ([ef8dcf8](https://github.com/FruitieX/homectl-next/commit/ef8dcf8e080ce89312e5535c46ca1bbf26f26e9f))
+* **deps:** update dependency jotai to v2.5.1 ([ecad0da](https://github.com/FruitieX/homectl-next/commit/ecad0daddc38884d286c2dc7f21ec24e64ecd459))
+* **deps:** update dependency jotai to v2.6.0 ([4c6412a](https://github.com/FruitieX/homectl-next/commit/4c6412a6dfd471a4149a885c6dbdfdaff570f0e3))
+* **deps:** update dependency konva to v9.2.3 ([e745496](https://github.com/FruitieX/homectl-next/commit/e74549698e0037f3e1d244944144b92d34c0221a))
+* **deps:** update dependency lucide-react to v0.290.0 ([f2b6bef](https://github.com/FruitieX/homectl-next/commit/f2b6bef47dffede0df302cc4f904f076dbae57e4))
+* **deps:** update dependency lucide-react to v0.291.0 ([70b2e4d](https://github.com/FruitieX/homectl-next/commit/70b2e4d3271220d93b67b3a5d481288deca0c380))
+* **deps:** update dependency lucide-react to v0.292.0 ([a501bdb](https://github.com/FruitieX/homectl-next/commit/a501bdb8688c0286468ca892894855febb2e39da))
+* **deps:** update dependency lucide-react to v0.293.0 ([2cbbdf0](https://github.com/FruitieX/homectl-next/commit/2cbbdf0d44151080d6db9c63f262c8467ee7a65f))
+* disable scrolling on iOS Safari ([c7a79da](https://github.com/FruitieX/homectl-next/commit/c7a79da519cf12724d6ca28e9903713001591637))
+* fix modal getting touch events from canvas ([9a688e2](https://github.com/FruitieX/homectl-next/commit/9a688e22435df02a6780a5178d001da2331426c3))
+
 ## [0.5.0](https://github.com/FruitieX/homectl-next/compare/v0.4.8...v0.5.0) (2023-10-26)
 
 ### Features
