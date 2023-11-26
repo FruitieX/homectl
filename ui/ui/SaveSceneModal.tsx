@@ -144,10 +144,8 @@ const Component = (props: Props) => {
 };
 
 export const SaveSceneModal = () => {
-  const {
-    open: saveSceneModalOpen,
-    setOpen: setSaveSceneModalOpen,
-  } = useSaveSceneModalState();
+  const { open: saveSceneModalOpen, setOpen: setSaveSceneModalOpen } =
+    useSaveSceneModalState();
 
   const closeSceneModal = useCallback(() => {
     setSaveSceneModalOpen(false);

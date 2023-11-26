@@ -48,10 +48,8 @@ export const ViewportGroup = (props: Props) => {
   );
   const isSelected = selectedGroupDevices.length > 0;
 
-  const {
-    setState: setDeviceModalState,
-    setOpen: setDeviceModalOpen,
-  } = useDeviceModalState();
+  const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
+    useDeviceModalState();
 
   const touchRegistersAsTap = props.touchRegistersAsTap;
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);

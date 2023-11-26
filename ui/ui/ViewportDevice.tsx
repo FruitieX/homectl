@@ -79,16 +79,14 @@ export const ViewportDevice = (props: Props) => {
   const color = props.overrideColor
     ? props.overrideColor
     : power
-    ? getColor(device.data)
-    : Color('black');
+      ? getColor(device.data)
+      : Color('black');
 
   const [selectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
 
-  const {
-    setState: setDeviceModalState,
-    setOpen: setDeviceModalOpen,
-  } = useDeviceModalState();
+  const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
+    useDeviceModalState();
 
   const touchRegistersAsTap = props.touchRegistersAsTap;
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);

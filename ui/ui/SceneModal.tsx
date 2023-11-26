@@ -135,10 +135,8 @@ const Component = (props: Props) => {
 };
 
 export const SceneModal = () => {
-  const {
-    open: sceneModalOpen,
-    setOpen: setSceneModalOpen,
-  } = useSceneModalState();
+  const { open: sceneModalOpen, setOpen: setSceneModalOpen } =
+    useSceneModalState();
 
   const closeSceneModal = useCallback(() => {
     setSceneModalOpen(false);

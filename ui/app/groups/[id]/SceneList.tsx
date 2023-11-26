@@ -16,10 +16,8 @@ export const SceneList = (props: Props) => {
   const ws = useWebsocket();
   const state = useWebsocketState();
 
-  const {
-    setOpen: setSceneModalOpen,
-    setState: setSceneModalState,
-  } = useSceneModalState();
+  const { setOpen: setSceneModalOpen, setState: setSceneModalState } =
+    useSceneModalState();
 
   const scenes = state?.scenes;
 
@@ -58,13 +56,12 @@ export const SceneList = (props: Props) => {
     ws?.send(data);
   };
 
-  const openSceneModal = (sceneId: SceneId) => (
-    e: React.MouseEvent<HTMLLIElement>,
-  ) => {
-    e.preventDefault();
-    setSceneModalState(sceneId);
-    setSceneModalOpen(true);
-  };
+  const openSceneModal =
+    (sceneId: SceneId) => (e: React.MouseEvent<HTMLLIElement>) => {
+      e.preventDefault();
+      setSceneModalState(sceneId);
+      setSceneModalOpen(true);
+    };
 
   return (
     <>
