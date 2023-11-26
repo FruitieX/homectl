@@ -42,7 +42,11 @@ export default function RootLayout({
         <link rel="icon" type="image/png" href="/homectl-icon.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body className="flex flex-col overflow-hidden">
+      <body
+        className="flex flex-col overflow-hidden"
+        // Disables scrolling on iOS Safari
+        style={{ touchAction: 'none' }}
+      >
         {appConfigLoaded && <Layout>{children}</Layout>}
       </body>
     </html>
