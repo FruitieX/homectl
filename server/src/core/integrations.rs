@@ -2,10 +2,9 @@ use crate::integrations::{
     circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, timer::Timer,
 };
 use crate::types::{
-    custom_integration::CustomIntegration,
     device::{Device, DeviceKey},
     event::TxEventChannel,
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use color_eyre::Result;
 use eyre::eyre;
@@ -14,7 +13,7 @@ use tokio::sync::{Mutex, RwLock};
 
 #[derive(Clone)]
 pub struct LoadedIntegration {
-    integration: Arc<Mutex<Box<dyn CustomIntegration>>>,
+    integration: Arc<Mutex<Box<dyn Integration>>>,
     module_name: String,
 }
 
@@ -131,7 +130,7 @@ fn load_custom_integration(
     id: &IntegrationId,
     config: &config::Value,
     event_tx: TxEventChannel,
-) -> Result<Box<dyn CustomIntegration>> {
+) -> Result<Box<dyn Integration>> {
     match module_name {
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),

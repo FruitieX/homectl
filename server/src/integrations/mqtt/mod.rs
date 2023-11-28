@@ -3,10 +3,9 @@
 mod utils;
 
 use crate::types::{
-    custom_integration::CustomIntegration,
     device::Device,
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -58,7 +57,7 @@ pub struct CustomMqttAction {
 }
 
 #[async_trait]
-impl CustomIntegration for Mqtt {
+impl Integration for Mqtt {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()

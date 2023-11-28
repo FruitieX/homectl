@@ -1,9 +1,8 @@
 use crate::types::{
     color::Capabilities,
-    custom_integration::CustomIntegration,
     device::{ControllableDevice, Device, DeviceData, DeviceId},
     event::{Message, TxEventChannel},
-    integration::{IntegrationActionPayload, IntegrationId},
+    integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -30,7 +29,7 @@ pub struct Dummy {
 }
 
 #[async_trait]
-impl CustomIntegration for Dummy {
+impl Integration for Dummy {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config = config
             .clone()

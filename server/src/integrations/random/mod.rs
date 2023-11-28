@@ -1,9 +1,8 @@
 use crate::types::{
     color::DeviceColor,
-    custom_integration::CustomIntegration,
     device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
     event::{Message, TxEventChannel},
-    integration::IntegrationId,
+    integration::{Integration, IntegrationId},
 };
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -26,7 +25,7 @@ pub struct Random {
 }
 
 #[async_trait]
-impl CustomIntegration for Random {
+impl Integration for Random {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: RandomConfig = config
             .clone()

@@ -1,9 +1,8 @@
 use crate::types::{
     color::DeviceColor,
-    custom_integration::CustomIntegration,
     device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
     event::{Message, TxEventChannel},
-    integration::IntegrationId,
+    integration::{Integration, IntegrationId},
 };
 use crate::utils::from_hh_mm;
 use async_trait::async_trait;
@@ -41,7 +40,7 @@ pub struct Circadian {
 }
 
 #[async_trait]
-impl CustomIntegration for Circadian {
+impl Integration for Circadian {
     fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
         let config: CircadianConfig = config
             .clone()
