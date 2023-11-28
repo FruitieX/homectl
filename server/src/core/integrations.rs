@@ -1,6 +1,5 @@
 use crate::integrations::{
-    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, neato::Neato, random::Random, timer::Timer,
-    wake_on_lan::WakeOnLan,
+    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, timer::Timer,
 };
 use crate::types::{
     custom_integration::CustomIntegration,
@@ -139,8 +138,6 @@ fn load_custom_integration(
         "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
         "mqtt" => Ok(Box::new(Mqtt::new(id, config, event_tx)?)),
-        "neato" => Ok(Box::new(Neato::new(id, config, event_tx)?)),
-        "wake_on_lan" => Ok(Box::new(WakeOnLan::new(id, config, event_tx)?)),
         _ => Err(eyre!("Unknown module name {}!", module_name)),
     }
 }

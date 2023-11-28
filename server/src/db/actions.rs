@@ -1,6 +1,5 @@
 use super::get_db_connection;
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
-use crate::types::integration::IntegrationId;
 use crate::types::scene::ScenesConfig;
 use crate::types::scene::{SceneConfig, SceneId};
 use color_eyre::Result;
@@ -63,55 +62,6 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Device> {
     let device = row.into();
 
     Ok(device)
-}
-
-pub async fn db_get_neato_last_run(
-    integration_id: &IntegrationId,
-) -> Result<chrono::NaiveDateTime> {
-    let db = get_db_connection().await?;
-
-    let row = sqlx::query!(
-        r#"
-            select last_run
-            from integration_neato
-            where integration_id = $1
-        "#,
-        &integration_id.to_string()
-    )
-    .fetch_one(db)
-    .await?;
-
-    let last_run = serde_json::from_str(&row.last_run).unwrap();
-
-    Ok(last_run)
-}
-
-pub async fn db_set_neato_last_run(
-    integration_id: &IntegrationId,
-    last_run: chrono::NaiveDateTime,
-) -> Result<()> {
-    let db = get_db_connection().await?;
-
-    sqlx::query!(
-        r#"
-            insert into integration_neato (integration_id, last_run)
-            values ($1, $2)
-
-            on conflict (integration_id)
-            do update set
-                last_run = excluded.last_run
-
-            returning
-                integration_id,
-                last_run
-        "#,
-        &integration_id.to_string(),
-        &serde_json::to_string(&last_run).unwrap()
-    )
-    .fetch_one(db)
-    .await?;
-
-    Ok(())
 }
 
 pub async fn db_get_scenes() -> Result<ScenesConfig> {
