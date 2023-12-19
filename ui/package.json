@@ -16,7 +16,7 @@
   "dependencies": {
     "@react-hook/throttle": "2.2.0",
     "@uiw/react-color-circle": "2.0.5",
-    "@uiw/react-color-wheel": "2.0.3",
+    "@uiw/react-color-wheel": "2.0.5",
     "clsx": "2.0.0",
     "color": "4.2.3",
     "colorthief": "2.4.0",
