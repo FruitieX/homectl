@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.6.1](https://github.com/FruitieX/homectl-next/compare/v0.6.0...v0.6.1) (2024-01-01)
+
+
+### Bug Fixes
+
+* **deps:** update dependency @uiw/react-color-circle to v2.0.3 ([d78d036](https://github.com/FruitieX/homectl-next/commit/d78d036629b7cdbfdbf05ad66ff3772b0c2dbe6b))
+* **deps:** update dependency @uiw/react-color-circle to v2.0.5 ([e4a470a](https://github.com/FruitieX/homectl-next/commit/e4a470a3b4e07e5b3246e9701366053744390189))
+* **deps:** update dependency @uiw/react-color-wheel to v2.0.3 ([a6304e0](https://github.com/FruitieX/homectl-next/commit/a6304e074c453a5290c63333828c565322d96eec))
+* **deps:** update dependency @uiw/react-color-wheel to v2.0.5 ([fbe9aeb](https://github.com/FruitieX/homectl-next/commit/fbe9aeb731f955753eeaa3ff66f4cd3a7ebcfccd))
+* **deps:** update dependency clsx to v2.1.0 ([1750450](https://github.com/FruitieX/homectl-next/commit/175045068aae8d5f128e1a0d570b7ec3362001f2))
+* **deps:** update dependency daisyui to v4.4.24 ([e482ed0](https://github.com/FruitieX/homectl-next/commit/e482ed01361118352b0e32e4a4d4bd577f8110b2))
+* **deps:** update dependency jotai to v2.6.1 ([9e90bda](https://github.com/FruitieX/homectl-next/commit/9e90bdafa7dd8ce3b55cb8d95ed73aeca0343697))
+* **deps:** update dependency konva to v9.3.0 ([d3ad4e4](https://github.com/FruitieX/homectl-next/commit/d3ad4e469ca7c30125b8e8e877f1af95f722276d))
+* **deps:** update dependency lucide-react to v0.294.0 ([7bda227](https://github.com/FruitieX/homectl-next/commit/7bda2274a18671811c7fb7eea7b261afdf7a2838))
+* **deps:** update dependency lucide-react to v0.295.0 ([8aa66fe](https://github.com/FruitieX/homectl-next/commit/8aa66fe01be6a712f20cee408011ed95c4279604))
+* **deps:** update dependency lucide-react to v0.297.0 ([06b7b54](https://github.com/FruitieX/homectl-next/commit/06b7b54c990ae0b7924d870a2f43cce707a0f394))
+* **deps:** update dependency lucide-react to v0.298.0 ([d01bdfd](https://github.com/FruitieX/homectl-next/commit/d01bdfda0c8f7f731841a93e05bcdff738c23474))
+* **deps:** update dependency lucide-react to v0.299.0 ([1a02bf0](https://github.com/FruitieX/homectl-next/commit/1a02bf0c58d79ee215556acd740e8948bf381ac2))
+* **deps:** update dependency lucide-react to v0.300.0 ([11730f6](https://github.com/FruitieX/homectl-next/commit/11730f6fc50462bcc6f61e8b6e28999d69097753))
+* **deps:** update dependency lucide-react to v0.301.0 ([f3200f3](https://github.com/FruitieX/homectl-next/commit/f3200f3da9cc848520c24568e0a04167913dce85))
+* **deps:** update dependency lucide-react to v0.302.0 ([3497f06](https://github.com/FruitieX/homectl-next/commit/3497f06c8d7a46d12cf58487bf323637168dcd02))
+* **deps:** update dependency lucide-react to v0.303.0 ([5df5518](https://github.com/FruitieX/homectl-next/commit/5df551860ce443b38953204abff774ce4fabafa3))
+* reload app every 24h to attempt to fix websocket issues ([9a07edb](https://github.com/FruitieX/homectl-next/commit/9a07edb7b3d772080d3d6fb3cda195d8e52ee2fa))
+
 ## [0.6.0](https://github.com/FruitieX/homectl-next/compare/v0.5.0...v0.6.0) (2023-11-26)
 
 
