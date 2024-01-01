@@ -9,6 +9,7 @@ import { Navbar } from '@/ui/Navbar';
 import { SaveSceneModal } from '@/ui/SaveSceneModal';
 import { SceneModal } from '@/ui/SceneModal';
 import { useProvideAppConfig } from '@/hooks/appConfig';
+import { useEffect } from 'react';
 
 const Layout = ({ children }: { children: React.ReactNode }) => {
   useProvideWebsocketState();
@@ -31,6 +32,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   const appConfigLoaded = useProvideAppConfig();
+
+  // Reload app at 4am
+  useEffect(() => {
+    const now = new Date();
+    const reloadAt = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate(),
+      4,
+      0,
+      0,
+    );
+    const reloadTimeout = setTimeout(() => {
+      window.location.reload();
+    }, reloadAt.getTime() - now.getTime());
+
+    return () => {
+      clearTimeout(reloadTimeout);
+    };
+  });
 
   return (
     <html>
