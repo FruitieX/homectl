@@ -741,15 +741,25 @@ export const ColorPickerModal = () => {
 
       <Modal.Body>
         <Tabs
-          value={tab}
-          onChange={setTab}
+          onChange={console.log}
           className="mb-3 flex-nowrap overflow-x-auto pb-3"
+          variant="bordered"
         >
-          <Tabs.Tab value={0}>Wheel</Tabs.Tab>
-          <Tabs.Tab value={1}>Swatches</Tabs.Tab>
-          <Tabs.Tab value={2}>Image</Tabs.Tab>
-          <Tabs.Tab value={3}>Sliders</Tabs.Tab>
-          <Tabs.Tab value={4}>Scenes</Tabs.Tab>
+          <Tabs.Tab active={tab === 0} onClick={() => setTab(0)}>
+            Wheel
+          </Tabs.Tab>
+          <Tabs.Tab active={tab === 1} onClick={() => setTab(1)}>
+            Swatches
+          </Tabs.Tab>
+          <Tabs.Tab active={tab === 2} onClick={() => setTab(2)}>
+            Image
+          </Tabs.Tab>
+          <Tabs.Tab active={tab === 3} onClick={() => setTab(3)}>
+            Sliders
+          </Tabs.Tab>
+          <Tabs.Tab active={tab === 4} onClick={() => setTab(4)}>
+            Scenes
+          </Tabs.Tab>
         </Tabs>
         <div className="flex h-96 flex-col justify-center">
           {tab === 0 && (
