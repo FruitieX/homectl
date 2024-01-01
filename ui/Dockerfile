@@ -3,8 +3,8 @@ FROM node:21.5.0-alpine@sha256:82c93cef3d2acbb2557c5fda48214fbc2bf5385edfb4d96d9
 # Install dependencies
 FROM base AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci
+COPY package.json pnpm-lock.yaml ./
+RUN yarn global add pnpm && pnpm i --frozen-lockfile
 
 # Build app
 FROM base AS builder
