@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/FruitieX/homectl-next/compare/v0.6.1...v0.6.2) (2024-01-01)
+
+
+### Bug Fixes
+
+* app reload bug that made app unusable is fixed ([96a87bd](https://github.com/FruitieX/homectl-next/commit/96a87bd7d2459a6da0b3caf0d0024d65bcae3698))
+
 ## [0.6.1](https://github.com/FruitieX/homectl-next/compare/v0.6.0...v0.6.1) (2024-01-01)
 
 
