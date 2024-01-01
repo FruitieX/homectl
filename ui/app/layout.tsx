@@ -44,6 +44,8 @@ export default function RootLayout({
       0,
       0,
     );
+    reloadAt.setDate(reloadAt.getDate() + 1);
+
     const reloadTimeout = setTimeout(() => {
       window.location.reload();
     }, reloadAt.getTime() - now.getTime());
