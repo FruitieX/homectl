@@ -97,7 +97,7 @@ pub fn mqtt_to_homectl(
             color,
             transition_ms,
             capabilities,
-            config.managed.unwrap_or(true),
+            config.managed.clone().unwrap_or_default(),
         );
 
         DeviceData::Controllable(controllable_device)
@@ -158,7 +158,10 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
 
 #[cfg(test)]
 mod tests {
-    use crate::types::color::{Capabilities, ColorMode, Hs};
+    use crate::types::{
+        color::{Capabilities, ColorMode, Hs},
+        device::ManageKind,
+    };
 
     use super::*;
     use serde_json::json;
@@ -178,7 +181,7 @@ mod tests {
                 Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
                 Some(1000),
                 Capabilities::default(),
-                true,
+                ManageKind::Full,
             )),
         };
 
@@ -187,7 +190,7 @@ mod tests {
             port: 1883,
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
-            managed: Some(true),
+            managed: None,
             id_field: Some("/id".to_string()),
             name_field: Some("/name".to_string()),
             color_field: Some("/color".to_string()),
@@ -229,7 +232,7 @@ mod tests {
             port: 1883,
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
-            managed: Some(true),
+            managed: Some(ManageKind::Unmanaged),
             id_field: Some("/id".to_string()),
             name_field: Some("/name".to_string()),
             color_field: Some("/color".to_string()),
@@ -259,7 +262,7 @@ mod tests {
                 Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
                 Some(1000),
                 Capabilities::singleton(ColorMode::Hs),
-                true,
+                ManageKind::Unmanaged,
             )),
         };
 
@@ -281,7 +284,7 @@ mod tests {
             port: 1883,
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
-            managed: Some(true),
+            managed: Some(ManageKind::Unmanaged),
             id_field: Some("/id".to_string()),
             name_field: Some("/name".to_string()),
             color_field: Some("/color".to_string()),

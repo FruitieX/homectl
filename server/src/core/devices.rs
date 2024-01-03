@@ -2,7 +2,9 @@ use crate::db::actions::{db_find_device, db_update_device};
 use crate::types::color::{Capabilities, DeviceColor};
 
 use super::scenes::{get_next_cycled_scene, Scenes};
-use crate::types::device::{ControllableDevice, ControllableState, DeviceRef, SensorDevice};
+use crate::types::device::{
+    ControllableDevice, ControllableState, DeviceRef, ManageKind, SensorDevice,
+};
 use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
@@ -175,12 +177,36 @@ impl Devices {
             }
 
             (DeviceData::Controllable(ref incoming_state), _, Some(expected_state)) => {
-                if !incoming_state.managed {
+                let treat_as_unmanaged = match incoming_state.managed {
+                    ManageKind::Partial {
+                        prev_change_committed,
+                    } if prev_change_committed => true,
+                    ManageKind::Unmanaged => true,
+                    _ => false,
+                };
+
+                if treat_as_unmanaged {
                     self.set_device_state(incoming, false, false, true).await;
                     return Ok(());
                 }
 
                 if cmp_device_states(incoming_state, &expected_state) {
+                    if let ManageKind::Partial {
+                        prev_change_committed: true,
+                    } = incoming_state.managed
+                    {
+                        // Set prev_change_committed flag
+                        let mut incoming_state = incoming_state.clone();
+                        incoming_state.managed = ManageKind::Partial {
+                            prev_change_committed: true,
+                        };
+
+                        let mut incoming = incoming.clone();
+                        incoming.data = DeviceData::Controllable(incoming_state);
+
+                        self.set_device_state(&incoming, false, false, true).await;
+                    };
+
                     return Ok(());
                 }
 

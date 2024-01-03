@@ -1,6 +1,6 @@
 use crate::types::{
     color::Capabilities,
-    device::{ControllableDevice, Device, DeviceData, DeviceId},
+    device::{ControllableDevice, Device, DeviceData, DeviceId, ManageKind},
     event::{Message, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
@@ -56,7 +56,7 @@ impl Integration for Dummy {
                     None,
                     None,
                     Capabilities::default(),
-                    true,
+                    ManageKind::Full,
                 )));
 
             let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);

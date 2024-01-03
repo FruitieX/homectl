@@ -3,7 +3,7 @@
 mod utils;
 
 use crate::types::{
-    device::Device,
+    device::{Device, ManageKind},
     event::{Message, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
@@ -31,7 +31,7 @@ pub struct MqttConfig {
     /// Can be used to control whether the devices published by this integration
     /// are "managed" or not, i.e.  whether homectl should keep track of the
     /// devices' expected states or not.
-    managed: Option<bool>,
+    managed: Option<ManageKind>,
 
     id_field: Option<String>,
     name_field: Option<String>,

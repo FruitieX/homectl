@@ -97,6 +97,47 @@ impl ControllableState {
     }
 }
 
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+#[ts(export)]
+pub enum ManageKind {
+    /// Device is fully managed by homectl.
+    /// Homectl will always correct any drift from expected state.
+    ///
+    /// This is the best choice for devices that you wish to control exclusively
+    /// via homectl.
+    ///
+    /// Corrects for:
+    ///
+    /// - Incorrect state due to power loss
+    /// - Missed commands due to poor connection
+    /// - State changes introduced via other smart home apps
+    /// - Changes to expected state introduced via links to other devices
+    #[default]
+    Full,
+
+    /// Device is partially managed by homectl.
+    /// Homectl will make sure that state transitions are completed
+    /// successfully, but will not fix any further drift from expected state.
+    ///
+    /// Useful for devices that you wish to control via homectl, but also via
+    /// some other means that you cannot make homectl aware of such as a
+    /// physical switch on the device.
+    ///
+    /// Corrects for:
+    ///
+    /// - Missed commands due to poor connection
+    Partial {
+        /// Whether we have seen the device change state since the previously
+        /// issued command.
+        prev_change_committed: bool,
+    },
+
+    /// Device is not managed by homectl.
+    /// Homectl will not make any effort to correct state drift, and any
+    /// state commands sent to the device will be fire-and-forget.
+    Unmanaged,
+}
+
 /// lights with adjustable brightness and/or color
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
@@ -104,7 +145,7 @@ pub struct ControllableDevice {
     pub scene: Option<SceneId>,
     pub capabilities: Capabilities,
     pub state: ControllableState,
-    pub managed: bool,
+    pub managed: ManageKind,
 }
 
 impl ControllableDevice {
@@ -115,7 +156,7 @@ impl ControllableDevice {
         color: Option<DeviceColor>,
         transition_ms: Option<u64>,
         capabilities: Capabilities,
-        managed: bool,
+        managed: ManageKind,
     ) -> ControllableDevice {
         ControllableDevice {
             scene,
