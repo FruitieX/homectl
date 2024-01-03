@@ -93,7 +93,7 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
 
             Ok(())
         }
-        Message::Action(Action::DimAction(DimDescriptor {
+        Message::Action(Action::Dim(DimDescriptor {
             device_keys,
             group_keys,
             step,

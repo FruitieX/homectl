@@ -22,7 +22,7 @@ pub enum Action {
     Custom(CustomActionDescriptor),
 
     /// Dims the given groups and devices
-    DimAction(DimDescriptor),
+    Dim(DimDescriptor),
 
     /// Forcibly triggers a routine, ignoring any possible rules
     ForceTriggerRoutine(ForceTriggerRoutineDescriptor),
