@@ -1,6 +1,7 @@
 'use client';
 
-import { atom, useAtom } from 'jotai';
+import { useAtom } from 'jotai';
+import { atomWithStorage } from 'jotai/utils';
 
 const getIsFullscreen = () => {
   if (typeof window !== 'undefined') {
@@ -15,7 +16,10 @@ const getIsFullscreen = () => {
   return false;
 };
 
-const fullscreenAtom = atom<boolean>(getIsFullscreen());
+const fullscreenAtom = atomWithStorage<boolean>(
+  'fullscreen',
+  getIsFullscreen(),
+);
 
 export const useIsFullscreen = () => {
   const [state, setState] = useAtom(fullscreenAtom);
