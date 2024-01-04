@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.0](https://github.com/FruitieX/homectl-next/compare/v0.6.2...v0.7.0) (2024-01-04)
+
+
+### Features
+
+* persist fullscreen state ([de30a50](https://github.com/FruitieX/homectl-next/commit/de30a507b3810157c91031f7ef07ba71b69c6bde))
+
+
+### Bug Fixes
+
+* **deps:** update dependency daisyui to v4.5.0 ([c4436fa](https://github.com/FruitieX/homectl-next/commit/c4436faf2db7ee995dcff1553a2b03334c084f06))
+
 ## [0.6.2](https://github.com/FruitieX/homectl-next/compare/v0.6.1...v0.6.2) (2024-01-01)
 
 
