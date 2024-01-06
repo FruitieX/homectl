@@ -52,7 +52,7 @@ dependencies:
     version: 2.19.3(react@18.2.0)
   react-daisyui:
     specifier: 5.0.0
-    version: 5.0.0(daisyui@4.5.0)(react-dom@18.2.0)(react@18.2.0)(tailwindcss@3.4.0)
+    version: 5.0.0(daisyui@4.5.0)(react-dom@18.2.0)(react@18.2.0)(tailwindcss@3.4.1)
   react-dom:
     specifier: 18.2.0
     version: 18.2.0(react@18.2.0)
@@ -119,8 +119,8 @@ devDependencies:
     specifier: 0.5.11
     version: 0.5.11(prettier@3.1.1)
   tailwindcss:
-    specifier: 3.4.0
-    version: 3.4.0
+    specifier: 3.4.1
+    version: 3.4.1
   typescript:
     specifier: 5.3.3
     version: 5.3.3
@@ -2805,7 +2805,7 @@ packages:
       tinycolor2: 1.6.0
     dev: false
 
-  /react-daisyui@5.0.0(daisyui@4.5.0)(react-dom@18.2.0)(react@18.2.0)(tailwindcss@3.4.0):
+  /react-daisyui@5.0.0(daisyui@4.5.0)(react-dom@18.2.0)(react@18.2.0)(tailwindcss@3.4.1):
     resolution: {integrity: sha512-j1cugAxALmIbihycGBh7P9H3UXrfsvqu84qM6O55l7nOKST43IjUkZjmNav/7s0ZaUpa9Y+52mFchUb2zvon1A==}
     peerDependencies:
       daisyui: ^4.4.6
@@ -2816,7 +2816,7 @@ packages:
       daisyui: 4.5.0(postcss@8.4.33)
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
-      tailwindcss: 3.4.0
+      tailwindcss: 3.4.1
     dev: false
 
   /react-dom@18.2.0(react@18.2.0):
@@ -3233,8 +3233,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  /tailwindcss@3.4.0:
-    resolution: {integrity: sha512-VigzymniH77knD1dryXbyxR+ePHihHociZbXnLZHUyzf2MMs2ZVqlUrZ3FvpXP8pno9JzmILt1sZPD19M3IxtA==}
+  /tailwindcss@3.4.1:
+    resolution: {integrity: sha512-qAYmXRfk3ENzuPBakNK0SRrUDipP8NQnEY6772uDhflcQz5EhRdD7JNZxyrFHVQNCwULPBn6FNPp9brpO7ctcA==}
     engines: {node: '>=14.0.0'}
     hasBin: true
     dependencies:
