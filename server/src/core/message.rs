@@ -118,6 +118,12 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             let rules = state.rules.clone();
             rules.force_trigger_routine(routine_id)
         }
+        Message::Action(Action::SetDeviceState(device)) => {
+            let mut devices = state.devices.clone();
+            devices.set_device_state(device, false, false, false).await;
+
+            Ok(())
+        }
     };
 
     if let Err(err) = result {

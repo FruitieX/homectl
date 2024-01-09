@@ -5,7 +5,7 @@ use super::{
     dim::DimDescriptor,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
+    scene::{CycleScenesDescriptor, SceneDescriptor}, device::Device,
 };
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
@@ -18,14 +18,17 @@ pub enum Action {
     /// Request to cycle between given scenes.
     CycleScenes(CycleScenesDescriptor),
 
-    /// Runs a custom integration action
+    /// Runs a custom integration action.
     Custom(CustomActionDescriptor),
 
-    /// Dims the given groups and devices
+    /// Dims the given groups and devices.
     Dim(DimDescriptor),
 
-    /// Forcibly triggers a routine, ignoring any possible rules
+    /// Forcibly triggers a routine, ignoring any possible rules.
     ForceTriggerRoutine(ForceTriggerRoutineDescriptor),
+
+    /// Sets device state to given state.
+    SetDeviceState(Device)
 }
 
 pub type Actions = Vec<Action>;
