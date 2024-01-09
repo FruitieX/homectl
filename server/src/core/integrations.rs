@@ -1,3 +1,4 @@
+use crate::integrations::cron::Cron;
 use crate::integrations::{
     circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, timer::Timer,
 };
@@ -133,6 +134,7 @@ fn load_custom_integration(
 ) -> Result<Box<dyn Integration>> {
     match module_name {
         "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
+        "cron" => Ok(Box::new(Cron::new(id, config, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
         "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),

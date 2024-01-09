@@ -2,10 +2,11 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
+    device::Device,
     dim::DimDescriptor,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
-    scene::{CycleScenesDescriptor, SceneDescriptor}, device::Device,
+    scene::{CycleScenesDescriptor, SceneDescriptor},
 };
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
@@ -28,7 +29,7 @@ pub enum Action {
     ForceTriggerRoutine(ForceTriggerRoutineDescriptor),
 
     /// Sets device state to given state.
-    SetDeviceState(Device)
+    SetDeviceState(Device),
 }
 
 pub type Actions = Vec<Action>;
