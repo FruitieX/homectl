@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.7.1](https://github.com/FruitieX/homectl-next/compare/v0.7.0...v0.7.1) (2024-01-10)
+
+
+### Bug Fixes
+
+* **deps:** update dependency lucide-react to v0.304.0 ([5369136](https://github.com/FruitieX/homectl-next/commit/53691365670d01ba1ee03802df3a290314853b3c))
+* **deps:** update dependency lucide-react to v0.306.0 ([4ff2b75](https://github.com/FruitieX/homectl-next/commit/4ff2b758368823491b8e5d2df6906150a789f5ca))
+* **deps:** update dependency lucide-react to v0.307.0 ([7912389](https://github.com/FruitieX/homectl-next/commit/7912389cabafac4f3f18b028b0f29de17b891cf4))
+* **deps:** update dependency lucide-react to v0.308.0 ([1d3236f](https://github.com/FruitieX/homectl-next/commit/1d3236f07d95815c7a01f9c7c012a8b161094924))
+* **deps:** update dependency usehooks-ts to v2.9.2 ([4cdb14b](https://github.com/FruitieX/homectl-next/commit/4cdb14beae4556c374a6298ea60294ea2cf9ea25))
+* reset scene when toggling car heater ([7c1f8d8](https://github.com/FruitieX/homectl-next/commit/7c1f8d8fd6e4e9f838a24f37d819ebedcc0f5bc8))
+
 ## [0.7.0](https://github.com/FruitieX/homectl-next/compare/v0.6.2...v0.7.0) (2024-01-04)
 
 
