@@ -32,6 +32,7 @@ export const ControlsCard = () => {
       const device = produce(carHeaterDevice, (draft) => {
         if ('Controllable' in draft.data) {
           draft.data.Controllable.state.power = !carHeater;
+          draft.data.Controllable.scene = null;
         }
       });
 
