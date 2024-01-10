@@ -64,12 +64,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await?;
     }
 
-    let _: Result<()> = {
-        integrations.run_register_pass().await?;
-        integrations.run_start_pass().await?;
-
-        Ok(())
-    };
+    integrations.run_register_pass().await?;
+    integrations.run_start_pass().await?;
 
     let state = AppState {
         integrations,
@@ -83,7 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let state = Arc::new(state);
 
-    init_api(&state).expect("Expected init_api to return Ok(())");
+    init_api(&state)?;
 
     loop {
         let msg = event_rx

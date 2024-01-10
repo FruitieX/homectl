@@ -12,7 +12,7 @@ use crate::types::{
 
 use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
 
-use super::state::AppState;
+use super::{expr::state_to_eval_context, state::AppState};
 
 pub async fn handle_message(state: Arc<AppState>, msg: Message) {
     let result: Result<()> = match &msg {
@@ -123,6 +123,20 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             devices.set_device_state(device, false, false, false).await;
 
             Ok(())
+        }
+        Message::Action(Action::EvalExpr(expr)) => {
+            // TODO: move this elsewhere
+            let devices = state.devices.get_devices();
+            let mut context = state_to_eval_context(devices);
+
+            // TODO: implement actions as custom evalexpr functions
+            match &mut context {
+                Ok(context) => expr
+                    .eval_with_context_mut(context)
+                    .map(|_| ())
+                    .map_err(|err| eyre!(err)),
+                Err(err) => Err(eyre!("Error while creating eval context: {:#?}", err)),
+            }
         }
     };
 

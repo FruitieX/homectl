@@ -133,7 +133,7 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
         if let Some(brightness) = device.state.brightness {
             payload.merge_in(
                 brightness_field,
-                &serde_json::Number::from_f64(brightness.into())
+                &serde_json::Number::from_f64((*brightness).into())
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
@@ -164,6 +164,7 @@ mod tests {
     };
 
     use super::*;
+    use ordered_float::OrderedFloat;
     use serde_json::json;
     use std::str::FromStr;
 
@@ -178,7 +179,10 @@ mod tests {
                 None,
                 true,
                 Some(0.5),
-                Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
+                Some(DeviceColor::Hs(Hs {
+                    h: 45,
+                    s: OrderedFloat(1.0),
+                })),
                 Some(1000),
                 Capabilities::default(),
                 ManageKind::Full,
@@ -259,7 +263,10 @@ mod tests {
                 None,
                 true,
                 Some(0.5),
-                Some(DeviceColor::Hs(Hs { h: 45, s: 1.0 })),
+                Some(DeviceColor::Hs(Hs {
+                    h: 45,
+                    s: OrderedFloat(1.0),
+                })),
                 Some(1000),
                 Capabilities::singleton(ColorMode::Hs),
                 ManageKind::Unmanaged,

@@ -1,8 +1,9 @@
+use ordered_float::OrderedFloat;
 use palette::{convert::FromColorUnclamped, FromColor, IntoColor};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-#[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Capabilities {
     /// XY color space (0.0 - 1.0)
@@ -65,21 +66,24 @@ impl Capabilities {
     }
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Xy {
-    pub x: f32,
-    pub y: f32,
+    #[ts(type = "f32")]
+    pub x: OrderedFloat<f32>,
+    #[ts(type = "f32")]
+    pub y: OrderedFloat<f32>,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Hs {
     pub h: u16,
-    pub s: f32,
+    #[ts(type = "f32")]
+    pub s: OrderedFloat<f32>,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Rgb {
     pub r: u8,
@@ -87,13 +91,13 @@ pub struct Rgb {
     pub b: u8,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Ct {
     pub ct: u16,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[serde(untagged)]
 #[ts(export)]
 pub enum DeviceColor {
@@ -105,11 +109,17 @@ pub enum DeviceColor {
 
 impl DeviceColor {
     pub fn new_from_xy(x: f32, y: f32) -> DeviceColor {
-        DeviceColor::Xy(Xy { x, y })
+        DeviceColor::Xy(Xy {
+            x: OrderedFloat(x),
+            y: OrderedFloat(y),
+        })
     }
 
     pub fn new_from_hs(h: u16, s: f32) -> DeviceColor {
-        DeviceColor::Hs(Hs { h, s })
+        DeviceColor::Hs(Hs {
+            h,
+            s: OrderedFloat(s),
+        })
     }
 
     pub fn new_from_rgb(r: u8, g: u8, b: u8) -> DeviceColor {
@@ -154,9 +164,9 @@ impl DeviceColor {
 impl From<&DeviceColor> for palette::Yxy {
     fn from(color: &DeviceColor) -> Self {
         match color {
-            DeviceColor::Xy(xy) => palette::Yxy::from_components((xy.x, xy.y, 1.0)),
+            DeviceColor::Xy(xy) => palette::Yxy::from_components((*xy.x, *xy.y, 1.0)),
             DeviceColor::Hs(hs) => {
-                let hsv: palette::hsv::Hsv = palette::Hsv::new(hs.h as f32, hs.s, 1.0);
+                let hsv: palette::hsv::Hsv = palette::Hsv::new(hs.h as f32, *hs.s, 1.0);
                 palette::Yxy::from_color_unclamped(hsv)
             }
             DeviceColor::Rgb(rgb) => {
@@ -187,7 +197,10 @@ impl From<&DeviceColor> for palette::Yxy {
 
 impl From<palette::Yxy> for DeviceColor {
     fn from(yxy: palette::Yxy) -> Self {
-        DeviceColor::Xy(Xy { x: yxy.x, y: yxy.y })
+        DeviceColor::Xy(Xy {
+            x: OrderedFloat(yxy.x),
+            y: OrderedFloat(yxy.y),
+        })
     }
 }
 
@@ -195,7 +208,7 @@ impl From<palette::Hsv> for DeviceColor {
     fn from(hsv: palette::Hsv) -> Self {
         DeviceColor::Hs(Hs {
             h: hsv.hue.into_positive_degrees() as u16,
-            s: hsv.saturation,
+            s: OrderedFloat(hsv.saturation),
         })
     }
 }

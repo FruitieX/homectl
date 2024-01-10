@@ -6,7 +6,7 @@ use std::{collections::HashMap, convert::Infallible, str::FromStr};
 use ts_rs::TS;
 
 macro_attr! {
-    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Hash, NewtypeDisplay!, NewtypeFrom!)]
     #[ts(export)]
     pub struct IntegrationId(String);
 }

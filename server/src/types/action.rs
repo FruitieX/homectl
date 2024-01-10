@@ -30,6 +30,11 @@ pub enum Action {
 
     /// Sets device state to given state.
     SetDeviceState(Device),
+
+    /// Evaluates given expression.
+    #[serde(untagged, skip_serializing)]
+    #[ts(skip)]
+    EvalExpr(evalexpr::Node),
 }
 
 pub type Actions = Vec<Action>;

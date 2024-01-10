@@ -2,6 +2,7 @@ use super::color::DeviceColor;
 use super::device::{ControllableState, DeviceKey, DeviceRef};
 
 use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
+use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::Infallible;
@@ -61,7 +62,8 @@ pub struct CycleScenesDescriptor {
 pub struct SceneDeviceState {
     pub power: Option<bool>,
     pub color: Option<DeviceColor>,
-    pub brightness: Option<f32>,
+    #[ts(type = "f32 | null")]
+    pub brightness: Option<OrderedFloat<f32>>,
     pub transition_ms: Option<u64>,
 }
 

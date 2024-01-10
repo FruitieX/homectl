@@ -57,6 +57,10 @@ pub enum Rule {
     /// special rule allows you to group multiple rules together, such that only
     /// one of the contained rules need to match.
     Any(AnyRule),
+
+    /// Evaluates given expression.
+    #[serde(untagged)]
+    EvalExpr(evalexpr::Node),
 }
 
 pub type Rules = Vec<Rule>;

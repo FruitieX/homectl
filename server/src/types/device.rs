@@ -1,5 +1,6 @@
+use ordered_float::OrderedFloat;
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     fmt::{self, Display},
 };
 
@@ -15,7 +16,7 @@ use serde::{
 use ts_rs::TS;
 
 macro_attr! {
-    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Ord, PartialOrd, Hash, NewtypeDisplay!, NewtypeFrom!)]
     #[ts(export)]
     /// unique identifier for the Device
     pub struct DeviceId(String);
@@ -35,13 +36,14 @@ impl DeviceId {
     }
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableState {
     pub power: bool,
 
     /// Current brightness, if supported
-    pub brightness: Option<f32>,
+    #[ts(type = "f32 | null")]
+    pub brightness: Option<OrderedFloat<f32>>,
 
     /// Current color, if supported
     pub color: Option<DeviceColor>,
@@ -97,7 +99,7 @@ impl ControllableState {
     }
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Default)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Default, Hash, Eq)]
 #[ts(export)]
 pub enum ManageKind {
     /// Device is fully managed by homectl.
@@ -139,7 +141,7 @@ pub enum ManageKind {
 }
 
 /// lights with adjustable brightness and/or color
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableDevice {
     pub scene: Option<SceneId>,
@@ -162,7 +164,7 @@ impl ControllableDevice {
             scene,
             state: ControllableState {
                 power,
-                brightness,
+                brightness: brightness.map(OrderedFloat),
                 color,
                 transition_ms,
             },
@@ -173,13 +175,15 @@ impl ControllableDevice {
 
     pub fn dim(&mut self, amount: f32) {
         if self.state.power {
-            self.state.brightness =
-                Some((self.state.brightness.unwrap_or(0.0) - amount).clamp(0.1, 1.0));
+            let brightness =
+                (self.state.brightness.as_deref().unwrap_or(&0.0) - amount).clamp(0.1, 1.0);
+
+            self.state.brightness = Some(OrderedFloat(brightness));
         }
     }
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 #[serde(untagged)]
 pub enum SensorDevice {
@@ -188,7 +192,7 @@ pub enum SensorDevice {
     Color(ControllableState),
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub enum DeviceData {
     /// This device type can both be read and written to
@@ -216,7 +220,7 @@ pub struct DeviceRow {
     pub state: sqlx::types::Json<DeviceData>,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Device {
     pub id: DeviceId,
@@ -343,6 +347,13 @@ impl Device {
 
         device
     }
+
+    pub fn get_value(&self) -> serde_json::Value {
+        match self.data {
+            DeviceData::Controllable(ref data) => serde_json::to_value(data).unwrap(),
+            DeviceData::Sensor(ref data) => serde_json::to_value(data).unwrap(),
+        }
+    }
 }
 
 #[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
@@ -406,7 +417,7 @@ impl DeviceRef {
 }
 
 /// A reference to a device, always by id, serializes to `integration_id/device_id`
-#[derive(TS, Hash, Clone, Debug, PartialEq, Eq)]
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
 #[ts(export)]
 pub struct DeviceKey {
     pub integration_id: IntegrationId,
@@ -470,6 +481,6 @@ impl<'de> Deserialize<'de> for DeviceKey {
     }
 }
 
-#[derive(TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
+#[derive(TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq, Hash, Eq)]
 #[ts(export)]
-pub struct DevicesState(pub HashMap<DeviceKey, Device>);
+pub struct DevicesState(pub BTreeMap<DeviceKey, Device>);

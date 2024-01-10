@@ -7,6 +7,7 @@ use crate::types::{
 use async_trait::async_trait;
 use color_eyre::Result;
 use eyre::Context;
+use ordered_float::OrderedFloat;
 use rand::prelude::*;
 use serde::Deserialize;
 use std::time::Duration;
@@ -87,7 +88,7 @@ fn mk_random_device(random: &Random) -> Device {
     let state = DeviceData::Sensor(SensorDevice::Color(ControllableState {
         power: true,
         color: Some(get_random_color()),
-        brightness: Some(1.0),
+        brightness: Some(OrderedFloat(1.0)),
         transition_ms: Some(1000),
     }));
 

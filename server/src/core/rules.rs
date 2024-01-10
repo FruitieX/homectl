@@ -1,11 +1,14 @@
 use eyre::{ContextCompat, Result};
 use itertools::Itertools;
 
-use crate::types::{
-    action::Actions,
-    device::{Device, DevicesState, SensorDevice},
-    event::{Message, TxEventChannel},
-    rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
+use crate::{
+    core::expr::state_to_eval_context,
+    types::{
+        action::Actions,
+        device::{Device, DevicesState, SensorDevice},
+        event::{Message, TxEventChannel},
+        rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
+    },
 };
 use std::collections::HashSet;
 
@@ -125,12 +128,12 @@ fn is_routine_triggered(state: &DevicesState, groups: &Groups, routine: &Routine
 }
 
 /// Returns true if rule state matches device state
-fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, String> {
+fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool> {
     let sensor_state: Option<&SensorDevice> = device.get_sensor_state();
 
     match rule {
-        Rule::Any(_) => {
-            panic!("compare_rule_device_state() cannot be called directly on Any rule");
+        Rule::Any(_) | Rule::EvalExpr(_) => {
+            unreachable!("compare_rule_device_state() cannot be called for Any or EvalExpr rules");
         }
         // Check for sensor value matches
         Rule::Sensor(rule) => match (&rule.state, sensor_state) {
@@ -146,9 +149,10 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool, Strin
                     value: sensor_value,
                 }),
             ) => Ok(rule_value == sensor_value),
-            (rule, sensor) => Err(format!(
+            (rule, sensor) => Err(eyre!(
                 "Unknown sensor states encountered when processing rule {:?}. (sensor: {:?})",
-                rule, sensor,
+                rule,
+                sensor,
             )),
         },
         Rule::Group(GroupRule { scene, power, .. })
@@ -176,28 +180,24 @@ fn is_rule_triggered(
     groups: &Groups,
     rule: &Rule,
     routine_name: &String,
-) -> Result<bool, String> {
+) -> Result<bool> {
     // Try finding matching device
     let devices = match rule {
         Rule::Any(AnyRule { any: rules }) => {
             let any_triggered = rules
                 .iter()
                 .map(|rule| is_rule_triggered(state, groups, rule, routine_name))
-                .any(|result| result == Ok(true));
+                .any(|result| matches!(result, Ok(true)));
 
             return Ok(any_triggered);
         }
         Rule::Sensor(rule) => {
-            vec![find_device(state, &rule.device_ref).ok_or(format!(
-                "Could not find matching sensor for rule: {:?}",
-                rule
-            ))?]
+            vec![find_device(state, &rule.device_ref)
+                .ok_or(eyre!("Could not find matching sensor for rule: {:?}", rule))?]
         }
         Rule::Device(rule) => {
-            vec![find_device(state, &rule.device_ref).ok_or(format!(
-                "Could not find matching device for rule: {:?}",
-                rule
-            ))?]
+            vec![find_device(state, &rule.device_ref)
+                .ok_or(eyre!("Could not find matching device for rule: {:?}", rule))?]
         }
         Rule::Group(rule) => {
             let group_device_refs = groups.find_group_device_refs(&rule.group_id);
@@ -219,6 +219,11 @@ fn is_rule_triggered(
             }
 
             group_devices
+        }
+        Rule::EvalExpr(expr) => {
+            let mut context = state_to_eval_context(state.clone())?;
+            let result = expr.eval_boolean_with_context_mut(&mut context)?;
+            return Ok(result);
         }
     };
 

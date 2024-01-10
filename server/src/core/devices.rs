@@ -13,6 +13,7 @@ use crate::types::{
 };
 use color_eyre::Result;
 use eyre::eyre;
+use ordered_float::OrderedFloat;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -60,11 +61,11 @@ fn cmp_light_color(
     match (incoming, expected_converted) {
         (Some(DeviceColor::Xy(a)), Some(DeviceColor::Xy(b))) => {
             // Light state is equal if all components differ by less than a given delta
-            (f32::abs(a.x - b.x) <= xy_delta) && (f32::abs(a.y - b.y) <= xy_delta)
+            (f32::abs(*a.x - *b.x) <= xy_delta) && (f32::abs(*a.y - *b.y) <= xy_delta)
         }
         (Some(DeviceColor::Hs(a)), Some(DeviceColor::Hs(b))) => {
             // Light state is equal if all components differ by less than a given delta
-            (u16::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(a.s - b.s) <= sat_delta)
+            (u16::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(*a.s - *b.s) <= sat_delta)
         }
         (Some(DeviceColor::Ct(a)), Some(DeviceColor::Ct(b))) => {
             u16::abs_diff(a.ct, b.ct) <= cct_delta
@@ -91,9 +92,9 @@ fn cmp_device_states(device: &ControllableDevice, expected: &ControllableState) 
         return cmp_light_color(
             &device.capabilities,
             &device.state.color,
-            &device.state.brightness,
+            &device.state.brightness.map(|b| b.into_inner()),
             &expected.color,
-            &expected.brightness,
+            &expected.brightness.map(|b| b.into_inner()),
         );
     }
 
@@ -298,7 +299,8 @@ impl Devices {
                 // Make sure brightness is set when device is powered on, defaults to 100%
                 if let Some(expected_state) = &mut expected_state {
                     if expected_state.power {
-                        expected_state.brightness = Some(expected_state.brightness.unwrap_or(1.0));
+                        expected_state.brightness =
+                            Some(expected_state.brightness.unwrap_or(OrderedFloat(1.0)));
                     }
                 }
 

@@ -8,6 +8,7 @@ use crate::utils::from_hh_mm;
 use async_trait::async_trait;
 use color_eyre::Result;
 use eyre::Context;
+use ordered_float::OrderedFloat;
 use palette::Mix;
 use serde::Deserialize;
 use std::time::Duration;
@@ -115,8 +116,8 @@ fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
     ) {
         (DeviceColor::Hs(day), DeviceColor::Hs(night)) => {
             let i = get_night_fade(circadian);
-            let day = palette::Hsv::new(day.h as f32, day.s, 1.0);
-            let night = palette::Hsv::new(night.h as f32, night.s, 1.0);
+            let day = palette::Hsv::new(day.h as f32, *day.s, 1.0);
+            let night = palette::Hsv::new(night.h as f32, *night.s, 1.0);
             let color = day.mix(night, i);
 
             color.into()
@@ -167,7 +168,7 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
     let state = DeviceData::Sensor(SensorDevice::Color(ControllableState {
         power: true,
         color: Some(get_circadian_color(circadian)),
-        brightness: get_circadian_brightness(circadian),
+        brightness: get_circadian_brightness(circadian).map(OrderedFloat),
         transition_ms: Some(POLL_RATE),
     }));
 
