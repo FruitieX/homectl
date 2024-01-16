@@ -30,8 +30,8 @@ dependencies:
     specifier: 10.0.3
     version: 10.0.3
   jotai:
-    specifier: 2.6.1
-    version: 2.6.1(@types/react@18.2.48)(react@18.2.0)
+    specifier: 2.6.2
+    version: 2.6.2(@types/react@18.2.48)(react@18.2.0)
   konva:
     specifier: 9.3.0
     version: 9.3.0
@@ -2149,8 +2149,8 @@ packages:
     resolution: {integrity: sha512-gFqAIbuKyyso/3G2qhiO2OM6shY6EPP/R0+mkDbyspxKazh8BXDC5FiFsUjlczgdNz/vfra0da2y+aHrusLG/Q==}
     hasBin: true
 
-  /jotai@2.6.1(@types/react@18.2.48)(react@18.2.0):
-    resolution: {integrity: sha512-GLQtAnA9iEKRMXnyCjf1azIxfQi5JausX2EI5qSlb59j4i73ZEyV/EXPDEAQj4uQNZYEefi3degv/Pw3+L/Dtg==}
+  /jotai@2.6.2(@types/react@18.2.48)(react@18.2.0):
+    resolution: {integrity: sha512-kl4KguU1Fr+tFiLi3A3h9qPEzhvLTTDA10DO3QZAz6k7BEaQJ+qvSBwolzonnfNI4QzEovyQfUqVgnRxfnnQVQ==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
       '@types/react': '>=17.0.0'
