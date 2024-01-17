@@ -523,8 +523,7 @@ dependencies = [
 [[package]]
 name = "evalexpr"
 version = "11.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63b41cb9dd076076058a4523f009c900c582279536d0b2e45a29aa930e083cc5"
+source = "git+https://github.com/FruitieX/evalexpr?branch=rasmus/type-unsafe-context#582dd373d6ca8bff6de1ecd6c2a70f40eb569b2f"
 dependencies = [
  "rand",
  "serde",
@@ -564,6 +563,15 @@ name = "finl_unicode"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fcfdc7a0362c9f4444381a9e697c79d435fe65b52a37466fc2c1184cee9edc6"
+
+[[package]]
+name = "fluent-uri"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "17c704e9dbe1ddd863da1e6ff3567795087b1eb201ce80d8fa81162e1516500d"
+dependencies = [
+ "bitflags 1.3.2",
+]
 
 [[package]]
 name = "flume"
@@ -854,7 +862,7 @@ dependencies = [
  "futures",
  "futures-util",
  "itertools",
- "json_value_merge",
+ "jsonptr",
  "log",
  "macro-attr",
  "newtype_derive",
@@ -866,6 +874,7 @@ dependencies = [
  "rumqttc",
  "serde",
  "serde_json",
+ "serde_json_path",
  "serde_path_to_error",
  "sqlx",
  "tokio",
@@ -1004,6 +1013,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "inventory"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c8573b2b1fb643a372c73b23f4da5f888677feef3305146d68a539250a9bccc7"
+
+[[package]]
 name = "is-terminal"
 version = "0.4.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1050,11 +1065,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "json_value_merge"
-version = "2.0.0"
+name = "jsonptr"
+version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b0a3aadd8aaadfe2be6fd22bbdb5dbc63494ce22b7c124211f684fd757b3215"
+checksum = "5aed217c35273066710eec9860baa5ebdb627379e87e4c1ec8db8ff45047d16b"
 dependencies = [
+ "fluent-uri",
+ "serde",
  "serde_json",
 ]
 
@@ -1908,6 +1925,55 @@ dependencies = [
  "itoa",
  "ryu",
  "serde",
+]
+
+[[package]]
+name = "serde_json_path"
+version = "0.6.4"
+source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+dependencies = [
+ "inventory",
+ "nom",
+ "once_cell",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_json_path_core",
+ "serde_json_path_macros",
+ "thiserror",
+]
+
+[[package]]
+name = "serde_json_path_core"
+version = "0.1.3"
+source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+dependencies = [
+ "inventory",
+ "once_cell",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
+name = "serde_json_path_macros"
+version = "0.1.1"
+source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+dependencies = [
+ "inventory",
+ "once_cell",
+ "serde_json_path_core",
+ "serde_json_path_macros_internal",
+]
+
+[[package]]
+name = "serde_json_path_macros_internal"
+version = "0.1.0"
+source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.48",
 ]
 
 [[package]]

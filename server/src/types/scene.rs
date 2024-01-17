@@ -4,12 +4,12 @@ use super::device::{ControllableState, DeviceKey, DeviceRef};
 use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
 use ts_rs::TS;
 
 macro_attr! {
-    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Ord, PartialOrd, NewtypeDisplay!, NewtypeFrom!)]
     #[ts(export)]
     pub struct SceneId(String);
 }
@@ -28,17 +28,18 @@ impl std::str::FromStr for SceneId {
     }
 }
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct SceneDeviceLink {
-    pub brightness: Option<f32>, // allow overriding brightness
+    #[ts(type = "number | null")]
+    pub brightness: Option<OrderedFloat<f32>>, // allow overriding brightness
 
     #[serde(flatten)]
     #[ts(skip)]
     pub device_ref: DeviceRef,
 }
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct SceneDescriptor {
     pub scene_id: SceneId,
@@ -50,24 +51,24 @@ pub struct SceneDescriptor {
     pub group_keys: Option<Vec<GroupId>>,
 }
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<SceneDescriptor>,
     pub nowrap: Option<bool>,
 }
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct SceneDeviceState {
     pub power: Option<bool>,
     pub color: Option<DeviceColor>,
-    #[ts(type = "f32 | null")]
+    #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>,
     pub transition_ms: Option<u64>,
 }
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[serde(untagged)]
 #[ts(export)]
 pub enum SceneDeviceConfig {
@@ -85,16 +86,18 @@ pub enum SceneDeviceConfig {
 
 pub type SceneDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, SceneDeviceConfig>>;
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[ts(export)]
-pub struct SceneGroupsConfig(pub HashMap<GroupId, SceneDeviceConfig>);
+pub struct SceneGroupsConfig(pub BTreeMap<GroupId, SceneDeviceConfig>);
 
 /// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
-#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[ts(export)]
-pub struct SceneDevicesSearchConfig(pub HashMap<IntegrationId, HashMap<String, SceneDeviceConfig>>);
+pub struct SceneDevicesSearchConfig(
+    pub BTreeMap<IntegrationId, BTreeMap<String, SceneDeviceConfig>>,
+);
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct SceneConfig {
     pub name: String,
@@ -103,13 +106,13 @@ pub struct SceneConfig {
     pub hidden: Option<bool>,
 }
 
-pub type ScenesConfig = HashMap<SceneId, SceneConfig>;
+pub type ScenesConfig = BTreeMap<SceneId, SceneConfig>;
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 #[ts(export)]
-pub struct SceneDeviceStates(pub HashMap<DeviceKey, ControllableState>);
+pub struct SceneDeviceStates(pub BTreeMap<DeviceKey, ControllableState>);
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq, Eq, Hash)]
 #[ts(export)]
 pub struct FlattenedSceneConfig {
     pub name: String,
@@ -117,6 +120,6 @@ pub struct FlattenedSceneConfig {
     pub hidden: Option<bool>,
 }
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Default)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Default, Hash)]
 #[ts(export)]
-pub struct FlattenedScenesConfig(pub HashMap<SceneId, FlattenedSceneConfig>);
+pub struct FlattenedScenesConfig(pub BTreeMap<SceneId, FlattenedSceneConfig>);

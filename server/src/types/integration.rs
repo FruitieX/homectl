@@ -31,7 +31,7 @@ pub struct IntegrationConfig {
 pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
 
 macro_attr! {
-    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
     #[ts(export)]
     pub struct IntegrationActionPayload(String);
 }

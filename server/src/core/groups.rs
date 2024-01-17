@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::types::{
     device::{Device, DeviceId, DeviceRef, DevicesState},
@@ -8,12 +8,12 @@ use crate::types::{
 
 use super::devices::find_device;
 
-#[derive(Clone)]
+#[derive(Clone, Hash, PartialEq, Eq)]
 pub struct Groups {
     config: GroupsConfig,
-    device_refs_by_groups: HashMap<GroupId, HashSet<DeviceRef>>,
-    groups_by_device_id: HashMap<IntegrationId, HashMap<DeviceId, HashSet<GroupId>>>,
-    groups_by_device_name: HashMap<IntegrationId, HashMap<String, HashSet<GroupId>>>,
+    device_refs_by_groups: BTreeMap<GroupId, BTreeSet<DeviceRef>>,
+    groups_by_device_id: BTreeMap<IntegrationId, BTreeMap<DeviceId, BTreeSet<GroupId>>>,
+    groups_by_device_name: BTreeMap<IntegrationId, BTreeMap<String, BTreeSet<GroupId>>>,
 }
 
 /// Evaluates the group config and returns a flattened version of it
@@ -25,7 +25,7 @@ pub struct Groups {
 pub fn eval_group_config_device_refs(
     group: &GroupConfig,
     groups: &GroupsConfig,
-) -> HashSet<DeviceRef> {
+) -> BTreeSet<DeviceRef> {
     group
         .devices
         .clone()
@@ -47,7 +47,7 @@ pub fn eval_group_config_device_refs(
         .collect()
 }
 
-type DeviceRefsByGroups = HashMap<GroupId, HashSet<DeviceRef>>;
+type DeviceRefsByGroups = BTreeMap<GroupId, BTreeSet<DeviceRef>>;
 fn mk_device_refs_by_groups(config: &GroupsConfig) -> DeviceRefsByGroups {
     config
         .iter()
@@ -60,7 +60,7 @@ fn mk_device_refs_by_groups(config: &GroupsConfig) -> DeviceRefsByGroups {
         .collect()
 }
 
-type GroupsByIntegration = HashMap<IntegrationId, HashMap<GroupId, HashSet<DeviceRef>>>;
+type GroupsByIntegration = BTreeMap<IntegrationId, BTreeMap<GroupId, BTreeSet<DeviceRef>>>;
 fn mk_groups_by_integration(device_refs_by_groups: &DeviceRefsByGroups) -> GroupsByIntegration {
     device_refs_by_groups
         .iter()
@@ -77,7 +77,7 @@ fn mk_groups_by_integration(device_refs_by_groups: &DeviceRefsByGroups) -> Group
         })
 }
 
-type GroupsByDeviceId = HashMap<IntegrationId, HashMap<DeviceId, HashSet<GroupId>>>;
+type GroupsByDeviceId = BTreeMap<IntegrationId, BTreeMap<DeviceId, BTreeSet<GroupId>>>;
 fn mk_groups_by_device_id(groups_by_integration: &GroupsByIntegration) -> GroupsByDeviceId {
     groups_by_integration.iter().fold(
         Default::default(),
@@ -101,7 +101,7 @@ fn mk_groups_by_device_id(groups_by_integration: &GroupsByIntegration) -> Groups
     )
 }
 
-type GroupsByDeviceName = HashMap<IntegrationId, HashMap<String, HashSet<GroupId>>>;
+type GroupsByDeviceName = BTreeMap<IntegrationId, BTreeMap<String, BTreeSet<GroupId>>>;
 fn mk_groups_by_device_name(groups_by_integration: &GroupsByIntegration) -> GroupsByDeviceName {
     groups_by_integration.iter().fold(
         Default::default(),
@@ -156,7 +156,7 @@ fn is_device_in_group(
 
 fn mk_flattened_groups(
     config: &GroupsConfig,
-    device_refs_by_groups: &HashMap<GroupId, HashSet<DeviceRef>>,
+    device_refs_by_groups: &BTreeMap<GroupId, BTreeSet<DeviceRef>>,
     devices: &DevicesState,
 ) -> FlattenedGroupsConfig {
     let flattened_config = device_refs_by_groups
@@ -182,6 +182,61 @@ fn mk_flattened_groups(
         .collect();
 
     FlattenedGroupsConfig(flattened_config)
+}
+
+pub fn flattened_groups_to_eval_context_values(
+    flattened_config: FlattenedGroupsConfig,
+    devices: DevicesState,
+) -> Vec<(String, serde_json::Value)> {
+    flattened_config
+        .0
+        .iter()
+        .flat_map(|(group_id, group)| {
+            let group_devices: Vec<&Device> = group
+                .device_ids
+                .iter()
+                .filter_map(|device_key| devices.0.get(device_key))
+                .collect();
+
+            let all_devices_powered_on = group_devices
+                .iter()
+                .all(|device| device.is_powered_on() == Some(true));
+
+            let first_group_device = group_devices.first();
+
+            // group_scene_id is set only if all devices have the same scene activated
+            let group_scene_id = {
+                let first_device_scene_id = first_group_device.and_then(|d| d.get_scene());
+                if group_devices
+                    .iter()
+                    .all(|device| device.get_scene() == first_device_scene_id)
+                {
+                    first_device_scene_id
+                } else {
+                    None
+                }
+            };
+
+            let prefix = format!("groups.{}", group_id);
+
+            vec![
+                (
+                    format!("{}.name", prefix),
+                    serde_json::Value::String(group.name.clone()),
+                ),
+                (
+                    format!("{}.power", prefix),
+                    serde_json::Value::Bool(all_devices_powered_on),
+                ),
+                (
+                    format!("{}.scene_id", prefix),
+                    group_scene_id
+                        .map(|id| serde_json::Value::String(id.to_string()))
+                        .unwrap_or_else(|| serde_json::Value::Null),
+                ),
+            ]
+        })
+        .collect()
 }
 
 impl Groups {
@@ -217,7 +272,7 @@ impl Groups {
     }
 
     /// Returns all DeviceRefs that belong to given group
-    pub fn find_group_device_refs(&self, group_id: &GroupId) -> HashSet<DeviceRef> {
+    pub fn find_group_device_refs(&self, group_id: &GroupId) -> BTreeSet<DeviceRef> {
         self.device_refs_by_groups
             .get(group_id)
             .cloned()

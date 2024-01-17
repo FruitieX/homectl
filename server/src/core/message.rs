@@ -12,14 +12,11 @@ use crate::types::{
 
 use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
 
-use super::{expr::state_to_eval_context, state::AppState};
+use super::{expr::eval_action_expr, state::AppState};
 
-pub async fn handle_message(state: Arc<AppState>, msg: Message) {
-    let result: Result<()> = match &msg {
-        Message::RecvDeviceState { device } => {
-            let mut devices = state.devices.clone();
-            devices.handle_recv_device_state(device).await
-        }
+pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
+    match msg {
+        Message::RecvDeviceState { device } => state.devices.handle_recv_device_state(device).await,
         Message::InternalStateUpdate {
             old_state,
             new_state,
@@ -38,16 +35,18 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             set_scene,
             skip_send,
         } => {
-            let mut devices = state.devices.clone();
-            devices
+            state
+                .devices
                 .set_device_state(device, *set_scene, false, *skip_send)
                 .await;
 
             Ok(())
         }
         Message::SendDeviceState { device } => {
-            let mut integrations = state.integrations.clone();
-            integrations.set_integration_device_state(device).await
+            state
+                .integrations
+                .set_integration_device_state(device)
+                .await
         }
         Message::WsBroadcastState => {
             state.send_state_ws(None).await;
@@ -80,16 +79,18 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             device_keys,
             group_keys,
         })) => {
-            let mut devices = state.devices.clone();
-            devices
+            state
+                .devices
                 .activate_scene(scene_id, device_keys, group_keys)
                 .await;
 
             Ok(())
         }
         Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
-            let mut devices = state.devices.clone();
-            devices.cycle_scenes(scenes, nowrap.unwrap_or(false)).await;
+            state
+                .devices
+                .cycle_scenes(scenes, nowrap.unwrap_or(false))
+                .await;
 
             Ok(())
         }
@@ -98,8 +99,7 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             group_keys,
             step,
         })) => {
-            let mut devices = state.devices.clone();
-            devices.dim(device_keys, group_keys, step).await;
+            state.devices.dim(device_keys, group_keys, step).await;
 
             Ok(())
         }
@@ -107,43 +107,29 @@ pub async fn handle_message(state: Arc<AppState>, msg: Message) {
             integration_id,
             payload,
         })) => {
-            let mut integrations = state.integrations.clone();
-            integrations
+            state
+                .integrations
                 .run_integration_action(integration_id, payload)
                 .await
         }
         Message::Action(Action::ForceTriggerRoutine(ForceTriggerRoutineDescriptor {
             routine_id,
-        })) => {
-            let rules = state.rules.clone();
-            rules.force_trigger_routine(routine_id)
-        }
+        })) => state.rules.force_trigger_routine(routine_id),
         Message::Action(Action::SetDeviceState(device)) => {
-            let mut devices = state.devices.clone();
-            devices.set_device_state(device, false, false, false).await;
+            state
+                .devices
+                .set_device_state(device, false, false, false)
+                .await;
 
             Ok(())
         }
         Message::Action(Action::EvalExpr(expr)) => {
-            // TODO: move this elsewhere
             let devices = state.devices.get_devices();
-            let mut context = state_to_eval_context(devices);
+            let scenes = state.scenes.clone();
+            let groups = state.groups.clone();
+            eval_action_expr(expr, devices, scenes, groups, &state.event_tx)?;
 
-            // TODO: implement actions as custom evalexpr functions
-            match &mut context {
-                Ok(context) => expr
-                    .eval_with_context_mut(context)
-                    .map(|_| ())
-                    .map_err(|err| eyre!(err)),
-                Err(err) => Err(eyre!("Error while creating eval context: {:#?}", err)),
-            }
+            Ok(())
         }
-    };
-
-    if let Err(err) = result {
-        error!(
-            "Error while handling message:\n    Msg:\n    {:#?}\n\n    Err:\n    {:#?}",
-            msg, err
-        );
     }
 }

@@ -122,7 +122,7 @@ impl Devices {
     }
 
     /// Checks whether device values were changed or not due to refresh
-    pub async fn handle_recv_device_state(&mut self, incoming: &Device) -> Result<()> {
+    pub async fn handle_recv_device_state(&self, incoming: &Device) -> Result<()> {
         trace!("handle_recv_device_state {:?}", incoming);
         let current = self.get_device(&incoming.get_device_key());
 
@@ -312,7 +312,7 @@ impl Devices {
     /// Sets internal state for given device and dispatches device state to
     /// integration
     pub async fn set_device_state(
-        &mut self,
+        &self,
         device: &Device,
         set_scene: bool,
         skip_db: bool,
@@ -383,7 +383,7 @@ impl Devices {
     }
 
     pub async fn activate_scene(
-        &mut self,
+        &self,
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
@@ -416,7 +416,7 @@ impl Devices {
     }
 
     pub async fn dim(
-        &mut self,
+        &self,
         _device_keys: &Option<Vec<DeviceKey>>,
         _group_keys: &Option<Vec<GroupId>>,
         step: &Option<f32>,
@@ -436,7 +436,7 @@ impl Devices {
     }
 
     pub async fn cycle_scenes(
-        &mut self,
+        &self,
         scene_descriptors: &[SceneDescriptor],
         nowrap: bool,
     ) -> Option<()> {

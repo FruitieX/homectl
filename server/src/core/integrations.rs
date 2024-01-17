@@ -62,8 +62,8 @@ impl Integrations {
         Ok(())
     }
 
-    pub async fn run_register_pass(&mut self) -> Result<()> {
-        for (integration_id, li) in self.custom_integrations.iter_mut() {
+    pub async fn run_register_pass(&self) -> Result<()> {
+        for (integration_id, li) in self.custom_integrations.iter() {
             let mut integration = li.integration.lock().await;
 
             integration.register().await.unwrap();
@@ -76,8 +76,8 @@ impl Integrations {
         Ok(())
     }
 
-    pub async fn run_start_pass(&mut self) -> Result<()> {
-        for (integration_id, li) in self.custom_integrations.iter_mut() {
+    pub async fn run_start_pass(&self) -> Result<()> {
+        for (integration_id, li) in self.custom_integrations.iter() {
             let mut integration = li.integration.lock().await;
 
             integration.start().await.unwrap();
@@ -87,7 +87,7 @@ impl Integrations {
         Ok(())
     }
 
-    pub async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
+    pub async fn set_integration_device_state(&self, device: &Device) -> Result<()> {
         {
             let mut expected_device_states = self.expected_device_states.write().await;
             expected_device_states.insert(device.get_device_key(), device.clone());
@@ -110,7 +110,7 @@ impl Integrations {
     }
 
     pub async fn run_integration_action(
-        &mut self,
+        &self,
         integration_id: &IntegrationId,
         payload: &IntegrationActionPayload,
     ) -> Result<()> {

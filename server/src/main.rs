@@ -51,6 +51,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let rules = Rules::new(
         config.routines.unwrap_or_default(),
         groups.clone(),
+        scenes.clone(),
         event_tx.clone(),
     );
 
@@ -87,10 +88,19 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await
             .expect("Expected sender end of channel to never be dropped");
 
+        // trace!("Received message: {:.100}", format!("{:?}", msg));
+
         let state = Arc::clone(&state);
 
         tokio::spawn(async move {
-            handle_message(state, msg).await;
+            let result = handle_message(state, &msg).await;
+
+            if let Err(err) = result {
+                error!(
+                    "Error while handling message:\n    Msg:\n    {:#?}\n\n    Err:\n    {:#?}",
+                    msg, err
+                );
+            }
         });
     }
 }

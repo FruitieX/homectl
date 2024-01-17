@@ -72,8 +72,10 @@ async fn put_device_impl(
         return Ok(warp::reply::json(&DevicesResponse { devices: vec![] }));
     }
 
-    let mut devices = app_state.devices.clone();
-    devices.set_device_state(&device, true, false, false).await;
+    app_state
+        .devices
+        .set_device_state(&device, true, false, false)
+        .await;
 
     let devices = app_state.devices.get_devices();
     let response = DevicesResponse {

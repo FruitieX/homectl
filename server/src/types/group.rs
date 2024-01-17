@@ -1,13 +1,13 @@
 use super::device::{DeviceKey, DeviceRef};
 
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, convert::Infallible};
+use std::{collections::BTreeMap, convert::Infallible};
 use ts_rs::TS;
 
 macro_attr! {
-    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Ord, PartialOrd, NewtypeDisplay!)]
     #[ts(export)]
-    pub struct GroupId(String);
+    pub struct GroupId(pub String);
 }
 
 impl std::str::FromStr for GroupId {
@@ -20,14 +20,14 @@ impl std::str::FromStr for GroupId {
 
 pub type GroupDevicesConfig = Vec<DeviceRef>;
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 pub struct GroupLink {
     pub group_id: GroupId,
 }
 
 pub type GroupLinksConfig = Vec<GroupLink>;
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
+#[derive(Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 pub struct GroupConfig {
     pub name: String,
     pub devices: Option<GroupDevicesConfig>,
@@ -35,9 +35,9 @@ pub struct GroupConfig {
     pub hidden: Option<bool>,
 }
 
-pub type GroupsConfig = HashMap<GroupId, GroupConfig>;
+pub type GroupsConfig = BTreeMap<GroupId, GroupConfig>;
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct FlattenedGroupConfig {
     pub name: String,
@@ -45,6 +45,6 @@ pub struct FlattenedGroupConfig {
     pub hidden: Option<bool>,
 }
 
-#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Default)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Default, Hash)]
 #[ts(export)]
-pub struct FlattenedGroupsConfig(pub HashMap<GroupId, FlattenedGroupConfig>);
+pub struct FlattenedGroupsConfig(pub BTreeMap<GroupId, FlattenedGroupConfig>);

@@ -77,7 +77,8 @@ pub fn eval_scene_device_state(
             // Brightness override
             if state.power {
                 state.brightness = Some(
-                    state.brightness.unwrap_or(OrderedFloat(1.0)) * link.brightness.unwrap_or(1.0),
+                    state.brightness.unwrap_or(OrderedFloat(1.0))
+                        * link.brightness.unwrap_or(OrderedFloat(1.0)),
                 );
             }
 

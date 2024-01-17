@@ -21,7 +21,7 @@ use crate::integrations::mqtt::utils::mqtt_to_homectl;
 
 use self::utils::homectl_to_mqtt;
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Default, Debug, Deserialize, Clone)]
 pub struct MqttConfig {
     host: String,
     port: u16,
@@ -33,14 +33,14 @@ pub struct MqttConfig {
     /// devices' expected states or not.
     managed: Option<ManageKind>,
 
-    id_field: Option<String>,
-    name_field: Option<String>,
-    color_field: Option<String>,
-    power_field: Option<String>,
-    brightness_field: Option<String>,
-    sensor_value_field: Option<String>,
-    transition_ms_field: Option<String>,
-    capabilities_field: Option<String>,
+    id_field: Option<jsonptr::Pointer>,
+    name_field: Option<jsonptr::Pointer>,
+    color_field: Option<jsonptr::Pointer>,
+    power_field: Option<jsonptr::Pointer>,
+    brightness_field: Option<jsonptr::Pointer>,
+    sensor_value_field: Option<jsonptr::Pointer>,
+    transition_ms_field: Option<jsonptr::Pointer>,
+    capabilities_field: Option<jsonptr::Pointer>,
 }
 
 pub struct Mqtt {

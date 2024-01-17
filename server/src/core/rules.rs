@@ -1,3 +1,4 @@
+use evalexpr::HashMapContext;
 use eyre::{ContextCompat, Result};
 use itertools::Itertools;
 
@@ -14,21 +15,28 @@ use std::collections::HashSet;
 
 use crate::core::devices::find_device;
 
-use super::groups::Groups;
+use super::{groups::Groups, scenes::Scenes};
 
 #[derive(Clone)]
 pub struct Rules {
     config: RoutinesConfig,
     event_tx: TxEventChannel,
     groups: Groups,
+    scenes: Scenes,
 }
 
 impl Rules {
-    pub fn new(config: RoutinesConfig, groups: Groups, event_tx: TxEventChannel) -> Self {
+    pub fn new(
+        config: RoutinesConfig,
+        groups: Groups,
+        scenes: Scenes,
+        event_tx: TxEventChannel,
+    ) -> Self {
         Rules {
             config,
             event_tx,
             groups,
+            scenes,
         }
     }
 
@@ -76,10 +84,8 @@ impl Rules {
             return vec![];
         }
 
-        let prev_triggered_routine_ids =
-            get_triggered_routine_ids(&self.config, &self.groups, old_state);
-        let new_triggered_routine_ids =
-            get_triggered_routine_ids(&self.config, &self.groups, new_state);
+        let prev_triggered_routine_ids = self.get_triggered_routine_ids(old_state);
+        let new_triggered_routine_ids = self.get_triggered_routine_ids(new_state);
 
         // The difference between the two sets will contain only routines that
         // were triggered just now.
@@ -95,30 +101,40 @@ impl Rules {
             })
             .collect()
     }
-}
 
-/// Returns a set of routine ids that are currently triggered with the given
-/// state.
-fn get_triggered_routine_ids(
-    routines: &RoutinesConfig,
-    groups: &Groups,
-    state: &DevicesState,
-) -> HashSet<RoutineId> {
-    let triggered_routine_ids: HashSet<RoutineId> = routines
-        .iter()
-        .filter(|(_, routine)| is_routine_triggered(state, groups, routine))
-        .map(|(routine_id, _)| routine_id.clone())
-        .collect();
+    /// Returns a set of routine ids that are currently triggered with the given
+    /// state.
+    fn get_triggered_routine_ids(&self, devices: &DevicesState) -> HashSet<RoutineId> {
+        let eval_context = state_to_eval_context(
+            devices.clone(),
+            self.scenes.get_flattened_scenes(devices),
+            self.groups.get_flattened_groups(devices),
+        )
+        .expect("Failed to create eval context");
 
-    triggered_routine_ids
+        let triggered_routine_ids: HashSet<RoutineId> = self
+            .config
+            .iter()
+            .filter(|(_, routine)| {
+                is_routine_triggered(devices, &self.groups, routine, &eval_context)
+            })
+            .map(|(routine_id, _)| routine_id.clone())
+            .collect();
+
+        triggered_routine_ids
+    }
 }
 
 /// Returns true if all rules of the given routine are triggered.
-fn is_routine_triggered(state: &DevicesState, groups: &Groups, routine: &Routine) -> bool {
-    let (errors, results): (Vec<_>, Vec<_>) = routine
-        .rules
-        .iter()
-        .partition_map(|rule| is_rule_triggered(state, groups, rule, &routine.name).into());
+fn is_routine_triggered(
+    state: &DevicesState,
+    groups: &Groups,
+    routine: &Routine,
+    eval_context: &HashMapContext,
+) -> bool {
+    let (errors, results): (Vec<_>, Vec<_>) = routine.rules.iter().partition_map(|rule| {
+        is_rule_triggered(state, groups, rule, &routine.name, eval_context).into()
+    });
 
     for error in errors {
         error!("Error while checking routine {}: {}", routine.name, error);
@@ -176,34 +192,35 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool> {
 
 /// Returns true if rule is triggered
 fn is_rule_triggered(
-    state: &DevicesState,
+    devices: &DevicesState,
     groups: &Groups,
     rule: &Rule,
     routine_name: &String,
+    eval_context: &HashMapContext,
 ) -> Result<bool> {
     // Try finding matching device
     let devices = match rule {
         Rule::Any(AnyRule { any: rules }) => {
             let any_triggered = rules
                 .iter()
-                .map(|rule| is_rule_triggered(state, groups, rule, routine_name))
+                .map(|rule| is_rule_triggered(devices, groups, rule, routine_name, eval_context))
                 .any(|result| matches!(result, Ok(true)));
 
             return Ok(any_triggered);
         }
         Rule::Sensor(rule) => {
-            vec![find_device(state, &rule.device_ref)
+            vec![find_device(devices, &rule.device_ref)
                 .ok_or(eyre!("Could not find matching sensor for rule: {:?}", rule))?]
         }
         Rule::Device(rule) => {
-            vec![find_device(state, &rule.device_ref)
+            vec![find_device(devices, &rule.device_ref)
                 .ok_or(eyre!("Could not find matching device for rule: {:?}", rule))?]
         }
         Rule::Group(rule) => {
             let group_device_refs = groups.find_group_device_refs(&rule.group_id);
             let (errors, group_devices): (Vec<_>, Vec<Device>) =
                 group_device_refs.iter().partition_map(|device_ref| {
-                    find_device(state, device_ref)
+                    find_device(devices, device_ref)
                         .ok_or(format!(
                             "Could not find matching device for rule: {:?}",
                             rule
@@ -221,8 +238,7 @@ fn is_rule_triggered(
             group_devices
         }
         Rule::EvalExpr(expr) => {
-            let mut context = state_to_eval_context(state.clone())?;
-            let result = expr.eval_boolean_with_context_mut(&mut context)?;
+            let result = expr.eval_boolean_with_context(eval_context)?;
             return Ok(result);
         }
     };

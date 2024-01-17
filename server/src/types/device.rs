@@ -1,3 +1,4 @@
+use eyre::Result;
 use ordered_float::OrderedFloat;
 use std::{
     collections::BTreeMap,
@@ -42,7 +43,7 @@ pub struct ControllableState {
     pub power: bool,
 
     /// Current brightness, if supported
-    #[ts(type = "f32 | null")]
+    #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>,
 
     /// Current color, if supported
@@ -354,16 +355,41 @@ impl Device {
             DeviceData::Sensor(ref data) => serde_json::to_value(data).unwrap(),
         }
     }
+
+    pub fn set_value(&self, value: &serde_json::Value) -> Result<Device> {
+        let mut device = self.clone();
+
+        if let DeviceData::Controllable(ref mut data) = device.data {
+            if let Some(brightness) = value.get("brightness").and_then(|b| b.as_f64()) {
+                data.state.brightness = Some(OrderedFloat(brightness as f32));
+                data.scene = None;
+            }
+            if let Some(power) = value.get("power").and_then(|b| b.as_bool()) {
+                data.state.power = power;
+                data.scene = None;
+            }
+            if let Some(transition_ms) = value.get("transition_ms").and_then(|b| b.as_u64()) {
+                data.state.transition_ms = Some(transition_ms);
+                data.scene = None;
+            }
+            if let Some(color) = value.get("color") {
+                data.state.color = Some(serde_json::from_value(color.clone())?);
+                data.scene = None;
+            }
+        }
+
+        Ok(device)
+    }
 }
 
-#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, PartialOrd, Ord)]
 #[ts(export)]
 pub struct DeviceIdRef {
     pub integration_id: IntegrationId,
     pub device_id: DeviceId,
 }
 
-#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, PartialOrd, Ord)]
 #[ts(export)]
 pub struct DeviceNameRef {
     pub integration_id: IntegrationId,
@@ -371,7 +397,7 @@ pub struct DeviceNameRef {
 }
 
 /// A reference to a device, either by name or by id
-#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, PartialOrd, Ord)]
 #[serde(untagged)]
 #[ts(export)]
 pub enum DeviceRef {

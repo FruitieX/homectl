@@ -6,7 +6,7 @@ use crate::types::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use json_value_merge::Merge;
+use jsonptr::Assign;
 
 pub fn mqtt_to_homectl(
     payload: &[u8],
@@ -114,39 +114,54 @@ pub fn mqtt_to_homectl(
 pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json::Value> {
     let mut payload = serde_json::Value::default();
 
-    let id_field = config.id_field.as_deref().unwrap_or("/id");
-    let name_field = config.name_field.as_deref().unwrap_or("/name");
-    let color_field = config.color_field.as_deref().unwrap_or("/color");
-    let power_field = config.power_field.as_deref().unwrap_or("/power");
-    let brightness_field = config.brightness_field.as_deref().unwrap_or("/brightness");
+    let id_field = config
+        .id_field
+        .clone()
+        .unwrap_or_else(|| jsonptr::Pointer::new(["id"]));
+    let name_field = config
+        .name_field
+        .clone()
+        .unwrap_or_else(|| jsonptr::Pointer::new(["name"]));
+    let color_field = config
+        .color_field
+        .clone()
+        .unwrap_or_else(|| jsonptr::Pointer::new(["color"]));
+    let power_field = config
+        .power_field
+        .clone()
+        .unwrap_or_else(|| jsonptr::Pointer::new(["power"]));
+    let brightness_field = config
+        .brightness_field
+        .clone()
+        .unwrap_or_else(|| jsonptr::Pointer::new(["brightness"]));
     let transition_ms_field = config
         .transition_ms_field
-        .as_deref()
-        .unwrap_or("/transition_ms");
+        .clone()
+        .unwrap_or_else(|| jsonptr::Pointer::new(["transition_ms"]));
 
-    payload.merge_in(id_field, &serde_json::Value::String(device.id.to_string()))?;
-    payload.merge_in(name_field, &serde_json::Value::String(device.name))?;
+    payload.assign(&id_field, serde_json::Value::String(device.id.to_string()))?;
+    payload.assign(&name_field, serde_json::Value::String(device.name))?;
 
     if let DeviceData::Controllable(device) = device.data {
-        payload.merge_in(power_field, &serde_json::Value::Bool(device.state.power))?;
+        payload.assign(&power_field, serde_json::Value::Bool(device.state.power))?;
 
         if let Some(brightness) = device.state.brightness {
-            payload.merge_in(
-                brightness_field,
-                &serde_json::Number::from_f64((*brightness).into())
+            payload.assign(
+                &brightness_field,
+                serde_json::Number::from_f64((*brightness).into())
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
         }
 
         if let Some(color) = &device.state.color {
-            payload.merge_in(color_field, &serde_json::to_value(color)?)?;
+            payload.assign(&color_field, serde_json::to_value(color)?)?;
         }
 
         if let Some(transition_ms) = device.state.transition_ms {
-            payload.merge_in(
-                transition_ms_field,
-                &serde_json::Number::from_f64(transition_ms as f64)
+            payload.assign(
+                &transition_ms_field,
+                serde_json::Number::from_f64(transition_ms as f64)
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
@@ -194,15 +209,7 @@ mod tests {
             port: 1883,
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
-            managed: None,
-            id_field: Some("/id".to_string()),
-            name_field: Some("/name".to_string()),
-            color_field: Some("/color".to_string()),
-            power_field: Some("/power".to_string()),
-            brightness_field: Some("/brightness".to_string()),
-            sensor_value_field: Some("/sensor_value".to_string()),
-            transition_ms_field: Some("/transition_ms".to_string()),
-            capabilities_field: Some("/capabilities".to_string()),
+            ..Default::default()
         };
 
         let mqtt_json = homectl_to_mqtt(device, &config).unwrap();
@@ -237,14 +244,7 @@ mod tests {
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
             managed: Some(ManageKind::Unmanaged),
-            id_field: Some("/id".to_string()),
-            name_field: Some("/name".to_string()),
-            color_field: Some("/color".to_string()),
-            power_field: Some("/power".to_string()),
-            brightness_field: Some("/brightness".to_string()),
-            sensor_value_field: Some("/sensor_value".to_string()),
-            transition_ms_field: Some("/transition_ms".to_string()),
-            capabilities_field: Some("/capabilities".to_string()),
+            ..Default::default()
         };
 
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
@@ -292,14 +292,7 @@ mod tests {
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
             managed: Some(ManageKind::Unmanaged),
-            id_field: Some("/id".to_string()),
-            name_field: Some("/name".to_string()),
-            color_field: Some("/color".to_string()),
-            power_field: Some("/power".to_string()),
-            brightness_field: Some("/brightness".to_string()),
-            sensor_value_field: Some("/sensor_value".to_string()),
-            transition_ms_field: Some("/transition_ms".to_string()),
-            capabilities_field: Some("/capabilities".to_string()),
+            ..Default::default()
         };
 
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
