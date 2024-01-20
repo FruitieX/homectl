@@ -100,7 +100,7 @@ fn compute_scene_device_state(
             // Use state from another device
 
             // Try finding source device by integration_id, device_id, name
-            let source_device = find_device(devices, &link.device_ref)?;
+            let source_device = find_device(devices, &link.device_ref)?.clone();
 
             let mut state = match source_device.data {
                 DeviceData::Controllable(controllable) => Some(controllable.state),
@@ -121,7 +121,7 @@ fn compute_scene_device_state(
                 state.transition_ms = None;
             }
 
-            Some(state)
+            Some(state.clone())
         }
 
         SceneDeviceConfig::SceneLink(link) => {
@@ -393,7 +393,7 @@ impl Scenes {
                             }?;
 
                             // Skip this device if it's not in device_keys or group_keys
-                            if filter_device_by_keys(&device?) {
+                            if filter_device_by_keys(device?) {
                                 Some((device_id, device_config.clone()))
                             } else {
                                 None
@@ -416,33 +416,29 @@ impl Scenes {
 
         // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
-            let group_device_refs = { self.groups.find_group_device_refs(&group_id) };
+            let group_devices = self.groups.find_group_devices(devices, &group_id);
 
-            for device_ref in group_device_refs {
-                let device = find_device(devices, &device_ref);
+            for device in group_devices {
+                let integration_id = &device.integration_id;
+                let empty_devices_integrations = HashMap::new();
+                let mut scene_devices_integrations = scene_devices_config
+                    .get(integration_id)
+                    .unwrap_or(&empty_devices_integrations)
+                    .to_owned();
 
-                if let Some(device) = device {
-                    let integration_id = device_ref.integration_id();
-                    let empty_devices_integrations = HashMap::new();
-                    let mut scene_devices_integrations = scene_devices_config
-                        .get(integration_id)
-                        .unwrap_or(&empty_devices_integrations)
-                        .to_owned();
+                let device_id = &device.id;
 
-                    let device_id = &device.id;
-
-                    // Skip this device if it's not in device_keys or group_keys
-                    if !filter_device_by_keys(&device) {
-                        continue;
-                    }
-
-                    // only insert device config if it did not exist yet
-                    scene_devices_integrations
-                        .entry(device_id.clone())
-                        .or_insert_with(|| scene_device_config.clone());
-                    scene_devices_config
-                        .insert(integration_id.clone(), scene_devices_integrations.clone());
+                // Skip this device if it's not in device_keys or group_keys
+                if !filter_device_by_keys(device) {
+                    continue;
                 }
+
+                // only insert device config if it did not exist yet
+                scene_devices_integrations
+                    .entry(device_id.clone())
+                    .or_insert_with(|| scene_device_config.clone());
+                scene_devices_config
+                    .insert(integration_id.clone(), scene_devices_integrations.clone());
             }
         }
 

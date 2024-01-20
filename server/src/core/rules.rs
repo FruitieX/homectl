@@ -139,9 +139,10 @@ fn is_routine_triggered(
     routine: &Routine,
     eval_context: &HashMapContext,
 ) -> bool {
-    let (errors, results): (Vec<_>, Vec<_>) = routine.rules.iter().partition_map(|rule| {
-        is_rule_triggered(state, groups, rule, &routine.name, eval_context).into()
-    });
+    let (errors, results): (Vec<_>, Vec<_>) = routine
+        .rules
+        .iter()
+        .partition_map(|rule| is_rule_triggered(state, groups, rule, eval_context).into());
 
     for error in errors {
         error!("Error while checking routine {}: {}", routine.name, error);
@@ -202,7 +203,6 @@ fn is_rule_triggered(
     devices: &DevicesState,
     groups: &Groups,
     rule: &Rule,
-    routine_name: &String,
     eval_context: &HashMapContext,
 ) -> Result<bool> {
     // Try finding matching device
@@ -210,7 +210,7 @@ fn is_rule_triggered(
         Rule::Any(AnyRule { any: rules }) => {
             let any_triggered = rules
                 .iter()
-                .map(|rule| is_rule_triggered(devices, groups, rule, routine_name, eval_context))
+                .map(|rule| is_rule_triggered(devices, groups, rule, eval_context))
                 .any(|result| matches!(result, Ok(true)));
 
             return Ok(any_triggered);
@@ -223,27 +223,7 @@ fn is_rule_triggered(
             vec![find_device(devices, &rule.device_ref)
                 .ok_or(eyre!("Could not find matching device for rule: {:?}", rule))?]
         }
-        Rule::Group(rule) => {
-            let group_device_refs = groups.find_group_device_refs(&rule.group_id);
-            let (errors, group_devices): (Vec<_>, Vec<Device>) =
-                group_device_refs.iter().partition_map(|device_ref| {
-                    find_device(devices, device_ref)
-                        .ok_or(format!(
-                            "Could not find matching device for rule: {:?}",
-                            rule
-                        ))
-                        .into()
-                });
-
-            for error in errors {
-                error!(
-                    "Error while checking group {} rule under routine {}: {}",
-                    rule.group_id, routine_name, error
-                );
-            }
-
-            group_devices
-        }
+        Rule::Group(rule) => groups.find_group_devices(devices, &rule.group_id),
         Rule::EvalExpr(expr) => {
             let result = expr.eval_boolean_with_context(eval_context)?;
             return Ok(result);
@@ -257,7 +237,7 @@ fn is_rule_triggered(
 
     // Make sure rule is triggered for every device it contains
     for device in devices {
-        let triggered = compare_rule_device_state(rule, &device)?;
+        let triggered = compare_rule_device_state(rule, device)?;
         if !triggered {
             return Ok(false);
         }

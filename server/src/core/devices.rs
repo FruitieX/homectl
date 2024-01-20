@@ -155,7 +155,8 @@ impl Devices {
                             device
                         );
 
-                        self.set_device_state(&device, true, true, false).await;
+                        self.set_device_state(&device, true, true, !device.is_managed())
+                            .await;
                     }
                     None => {
                         info!("Discovered device: {:?}", incoming);
@@ -179,15 +180,7 @@ impl Devices {
             }
 
             (DeviceData::Controllable(ref incoming_state), _, Some(expected_state)) => {
-                let treat_as_unmanaged = match incoming_state.managed {
-                    ManageKind::Partial {
-                        prev_change_committed,
-                    } if prev_change_committed => true,
-                    ManageKind::Unmanaged => true,
-                    _ => false,
-                };
-
-                if treat_as_unmanaged {
+                if !incoming.is_managed() {
                     self.set_device_state(incoming, false, false, true).await;
                     return Ok(());
                 }
@@ -467,7 +460,7 @@ impl Devices {
     }
 }
 
-pub fn find_device(devices: &DevicesState, device_ref: &DeviceRef) -> Option<Device> {
+pub fn find_device<'a>(devices: &'a DevicesState, device_ref: &DeviceRef) -> Option<&'a Device> {
     let device = devices
         .0
         .iter()
@@ -499,5 +492,5 @@ pub fn find_device(devices: &DevicesState, device_ref: &DeviceRef) -> Option<Dev
         )
         .map(|(_, device)| device)?;
 
-    Some(device.clone())
+    Some(device)
 }

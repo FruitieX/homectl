@@ -26,7 +26,7 @@ pub struct Groups {
 ///
 /// * `group` - The group config to be evaluated
 /// * `groups` - Used for recursing into linked groups
-pub fn eval_group_config_device_refs(
+fn eval_group_config_device_refs(
     group: &GroupConfig,
     groups: &GroupsConfig,
 ) -> BTreeSet<DeviceRef> {
@@ -276,20 +276,20 @@ impl Groups {
         self.flattened_groups.read().unwrap().clone()
     }
 
-    /// Returns all DeviceRefs that belong to given group
-    pub fn find_group_device_refs(&self, group_id: &GroupId) -> BTreeSet<DeviceRef> {
-        self.device_refs_by_groups
-            .get(group_id)
-            .cloned()
-            .unwrap_or_default()
-    }
-
     /// Returns all Devices that belong to given group
-    pub fn find_group_devices(&self, devices: &DevicesState, group_id: &GroupId) -> Vec<Device> {
-        let group_device_refs = self.find_group_device_refs(group_id);
-        group_device_refs
+    pub fn find_group_devices<'a>(
+        &self,
+        devices: &'a DevicesState,
+        group_id: &GroupId,
+    ) -> Vec<&'a Device> {
+        let flattened_groups = self.get_flattened_groups();
+        let group = flattened_groups.0.get(group_id);
+        let Some(group) = group else { return vec![] };
+
+        let group_device_keys = &group.device_ids;
+        group_device_keys
             .iter()
-            .filter_map(|device_ref| find_device(devices, device_ref))
+            .filter_map(|device_id| devices.0.get(device_id))
             .collect()
     }
 
