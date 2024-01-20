@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::{Arc, RwLock},
+};
 
 use crate::types::{
     device::{Device, DeviceId, DeviceRef, DevicesState},
@@ -8,12 +11,13 @@ use crate::types::{
 
 use super::devices::find_device;
 
-#[derive(Clone, Hash, PartialEq, Eq)]
+#[derive(Clone)]
 pub struct Groups {
     config: GroupsConfig,
     device_refs_by_groups: BTreeMap<GroupId, BTreeSet<DeviceRef>>,
     groups_by_device_id: BTreeMap<IntegrationId, BTreeMap<DeviceId, BTreeSet<GroupId>>>,
     groups_by_device_name: BTreeMap<IntegrationId, BTreeMap<String, BTreeSet<GroupId>>>,
+    flattened_groups: Arc<RwLock<FlattenedGroupsConfig>>,
 }
 
 /// Evaluates the group config and returns a flattened version of it
@@ -252,6 +256,7 @@ impl Groups {
             device_refs_by_groups,
             groups_by_device_id,
             groups_by_device_name,
+            flattened_groups: Default::default(),
         }
     }
 
@@ -267,8 +272,8 @@ impl Groups {
 
     /// Returns a flattened version of the groups config, with any contained
     /// groups expanded.
-    pub fn get_flattened_groups(&self, devices: &DevicesState) -> FlattenedGroupsConfig {
-        mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices)
+    pub fn get_flattened_groups(&self) -> FlattenedGroupsConfig {
+        self.flattened_groups.read().unwrap().clone()
     }
 
     /// Returns all DeviceRefs that belong to given group
@@ -286,6 +291,13 @@ impl Groups {
             .iter()
             .filter_map(|device_ref| find_device(devices, device_ref))
             .collect()
+    }
+
+    pub fn invalidate(&self, devices: &DevicesState) {
+        let flattened_groups =
+            mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices);
+        let mut rw_lock = self.flattened_groups.write().unwrap();
+        *rw_lock = flattened_groups
     }
 }
 

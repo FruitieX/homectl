@@ -11,18 +11,20 @@ use serde_json_path::JsonPath;
 
 use crate::types::{
     action::Action,
-    device::DevicesState,
+    device::{Device, DeviceKey, DevicesState},
     event::{Message, TxEventChannel},
     group::{FlattenedGroupsConfig, GroupId},
     integration::{CustomActionDescriptor, IntegrationActionPayload, IntegrationId},
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
-    scene::{FlattenedScenesConfig, SceneDescriptor, SceneId},
+    scene::{FlattenedScenesConfig, SceneDescriptor, SceneDeviceConfig, SceneId},
 };
 
 use super::{
     groups::{flattened_groups_to_eval_context_values, Groups},
     scenes::Scenes,
 };
+
+pub type EvalContext = HashMapContext;
 
 fn value_kv_pairs_deep(
     value: &serde_json::Value,
@@ -85,13 +87,14 @@ fn name_to_evalexpr(device_name: &str) -> String {
     device_name.to_lowercase().replace(' ', "_")
 }
 
-#[cached(size = 1, result = true)]
+#[cached(size = 2, result = true)]
 pub fn state_to_eval_context(
     devices: DevicesState,
     flattened_scenes: FlattenedScenesConfig,
     flattened_groups: FlattenedGroupsConfig,
 ) -> Result<HashMapContext> {
     let mut context = HashMapContext::new();
+    context.set_type_safety_checks_disabled(true)?;
 
     for device in devices.0.values() {
         let root_value = device.get_value();
@@ -166,16 +169,86 @@ fn tuple_value_to_vec_string(value: &Value) -> EvalexprResult<Vec<String>> {
     Ok(vec)
 }
 
+fn context_diff_obj(a: &HashMapContext, b: &HashMapContext) -> Result<serde_json::Value> {
+    let vars_diff_map: HashMap<String, Value> = b
+        .iter_variables()
+        .filter_map(|(name, value)| {
+            let original_value = a.get_value(&name);
+            if Some(&value) != original_value {
+                Some((name.clone(), value.clone()))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    debug!("The expression changed the value of the following variables:");
+    debug!("{vars_diff_map:?}");
+
+    let mut vars_diff_obj = serde_json::Value::default();
+
+    for (path, value) in vars_diff_map {
+        let json_pointer = jsonptr::Pointer::try_from(format!("/{}", path.replace('.', "/")))?;
+        let new_value = evalexpr_value_to_serde(&value)?;
+        vars_diff_obj.assign(&json_pointer, new_value)?;
+    }
+
+    Ok(vars_diff_obj)
+}
+
+fn find_device_by_expr_path<'a>(devices: &'a DevicesState, path: &[String]) -> Option<&'a Device> {
+    let integration_id = path.get(1).unwrap();
+    let name = path.get(2).unwrap();
+
+    devices.0.values().find(|device| {
+        &device.integration_id.to_string() == integration_id
+            && &name_to_evalexpr(&device.name) == name
+    })
+}
+
+pub fn eval_scene_expr(
+    expr: &Node,
+    context: &EvalContext,
+    devices: &DevicesState,
+) -> Result<HashMap<DeviceKey, SceneDeviceConfig>> {
+    let mut context = context.clone();
+    let original_context = context.clone();
+
+    expr.eval_with_context_mut(&mut context)?;
+
+    let vars_diff_obj = context_diff_obj(&original_context, &context)?;
+
+    let state_path = JsonPath::parse("$.devices.*.*.state").unwrap();
+    let state_diff = state_path.query_path_and_value(&vars_diff_obj);
+
+    let mut result = HashMap::new();
+    for (path, state) in state_diff {
+        let Some(device) = find_device_by_expr_path(devices, &path) else {
+            eprintln!("Could not find device by expression path: {path:?}");
+            continue;
+        };
+        let Ok(device) = device.set_value(state) else {
+            eprintln!("Could not set value on device: {device:?}, {state}");
+            continue;
+        };
+        let Some(controllable_state) = device.get_controllable_state() else {
+            continue;
+        };
+
+        let scene_device_config = SceneDeviceConfig::DeviceState(controllable_state.clone().into());
+        result.insert(device.get_device_key(), scene_device_config);
+    }
+
+    Ok(result)
+}
+
 pub fn eval_action_expr(
     expr: &Node,
+    context: &EvalContext,
     devices: DevicesState,
-    scenes: Scenes,
-    groups: Groups,
     event_tx: &TxEventChannel,
 ) -> Result<()> {
-    let flattened_scenes = scenes.get_flattened_scenes(&devices);
-    let flattened_groups = groups.get_flattened_groups(&devices);
-    let mut context = state_to_eval_context(devices.clone(), flattened_scenes, flattened_groups)?;
+    let mut context = context.clone();
     context.set_type_safety_checks_disabled(true)?;
     let original_context = context.clone();
     let actions = Arc::new(RwLock::new(Vec::<EvalExprAction>::new()));
@@ -272,47 +345,16 @@ pub fn eval_action_expr(
         event_tx.send(Message::Action(action));
     }
 
-    let vars_diff: HashMap<String, Value> = context
-        .iter_variables()
-        .filter_map(|(name, value)| {
-            let original_value = original_context.get_value(&name);
-            if Some(&value) != original_value {
-                Some((name.clone(), value.clone()))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    debug!("The expression changed the value of the following variables:");
-    debug!("{vars_diff:?}");
-
-    let mut vars_diff_map = serde_json::Value::default();
-
-    for (path, value) in vars_diff {
-        let json_pointer = jsonptr::Pointer::try_from(format!("/{}", path.replace('.', "/")))?;
-        let new_value = evalexpr_value_to_serde(&value)?;
-        vars_diff_map.assign(&json_pointer, new_value)?;
-    }
-
     let scenes_path = JsonPath::parse("$.devices.*.*.scene").unwrap();
     let state_path = JsonPath::parse("$.devices.*.*.state").unwrap();
 
-    let find_device_by_path = |path: &Vec<String>| {
-        let integration_id = path.get(1).unwrap();
-        let name = path.get(2).unwrap();
+    let vars_diff_obj = context_diff_obj(&original_context, &context)?;
 
-        devices.0.values().find(|device| {
-            &device.integration_id.to_string() == integration_id
-                && &name_to_evalexpr(&device.name) == name
-        })
-    };
-
-    let scenes_diff = scenes_path.query_path_and_value(&vars_diff_map);
-    let state_diff = state_path.query_path_and_value(&vars_diff_map);
+    let scenes_diff = scenes_path.query_path_and_value(&vars_diff_obj);
+    let state_diff = state_path.query_path_and_value(&vars_diff_obj);
 
     for (path, scene_id) in scenes_diff {
-        let Some(device) = find_device_by_path(&path) else {
+        let Some(device) = find_device_by_expr_path(&devices, &path) else {
             continue;
         };
 
@@ -328,7 +370,7 @@ pub fn eval_action_expr(
     }
 
     for (path, state) in state_diff {
-        let Some(device) = find_device_by_path(&path) else {
+        let Some(device) = find_device_by_expr_path(&devices, &path) else {
             continue;
         };
 
@@ -349,4 +391,43 @@ pub fn debug_print_context(context: &HashMapContext) {
     vars_sorted.sort();
 
     dbg!(&vars_sorted);
+}
+
+#[derive(Clone)]
+pub struct Expr {
+    pub scenes: Scenes,
+    pub groups: Groups,
+    pub context: Arc<RwLock<HashMapContext>>,
+}
+
+impl Expr {
+    pub fn new(scenes: Scenes, groups: Groups) -> Self {
+        Expr {
+            scenes,
+            groups,
+            context: Arc::new(RwLock::new(HashMapContext::new())),
+        }
+    }
+
+    pub fn get_context(&self) -> HashMapContext {
+        self.context.read().unwrap().clone()
+    }
+
+    pub fn recompute(&self, devices_state: &DevicesState) -> HashMapContext {
+        // TODO: decide whether we want to support scene expressions that reference
+        // other scenes with expressions
+
+        // let flattened_scenes = self.scenes.compute_flattened_scenes(devices, Some(scene_id));
+        let flattened_scenes = self.scenes.get_flattened_scenes();
+        let flattened_groups = self.groups.get_flattened_groups();
+
+        state_to_eval_context(devices_state.clone(), flattened_scenes, flattened_groups)
+            .expect("Failed to create eval context")
+    }
+
+    pub fn invalidate(&self, devices_state: &DevicesState) {
+        let context = self.recompute(devices_state);
+        let mut rw_lock = self.context.write().unwrap();
+        *rw_lock = context;
+    }
 }

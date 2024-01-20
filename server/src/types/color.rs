@@ -1,6 +1,7 @@
 use ordered_float::OrderedFloat;
 use palette::{convert::FromColorUnclamped, FromColor, IntoColor};
 use serde::{Deserialize, Serialize};
+use serde_this_or_that::as_u64;
 use ts_rs::TS;
 
 #[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize, Hash, Eq)]
@@ -78,7 +79,8 @@ pub struct Xy {
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Hs {
-    pub h: u16,
+    #[serde(deserialize_with = "as_u64")]
+    pub h: u64,
     #[ts(type = "f32")]
     pub s: OrderedFloat<f32>,
 }
@@ -86,15 +88,19 @@ pub struct Hs {
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Rgb {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
+    #[serde(deserialize_with = "as_u64")]
+    pub r: u64,
+    #[serde(deserialize_with = "as_u64")]
+    pub g: u64,
+    #[serde(deserialize_with = "as_u64")]
+    pub b: u64,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Ct {
-    pub ct: u16,
+    #[serde(deserialize_with = "as_u64")]
+    pub ct: u64,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
@@ -117,17 +123,21 @@ impl DeviceColor {
 
     pub fn new_from_hs(h: u16, s: f32) -> DeviceColor {
         DeviceColor::Hs(Hs {
-            h,
+            h: h as u64,
             s: OrderedFloat(s),
         })
     }
 
     pub fn new_from_rgb(r: u8, g: u8, b: u8) -> DeviceColor {
-        DeviceColor::Rgb(Rgb { r, g, b })
+        DeviceColor::Rgb(Rgb {
+            r: r as u64,
+            g: g as u64,
+            b: b as u64,
+        })
     }
 
     pub fn new_from_ct(ct: u16) -> DeviceColor {
-        DeviceColor::Ct(Ct { ct })
+        DeviceColor::Ct(Ct { ct: ct as u64 })
     }
 
     pub fn to_device_preferred_mode(&self, capabilities: &Capabilities) -> Option<DeviceColor> {
@@ -207,7 +217,7 @@ impl From<palette::Yxy> for DeviceColor {
 impl From<palette::Hsv> for DeviceColor {
     fn from(hsv: palette::Hsv) -> Self {
         DeviceColor::Hs(Hs {
-            h: hsv.hue.into_positive_degrees() as u16,
+            h: hsv.hue.into_positive_degrees() as u64,
             s: OrderedFloat(hsv.saturation),
         })
     }
@@ -216,15 +226,15 @@ impl From<palette::Hsv> for DeviceColor {
 impl From<palette::rgb::Rgb> for DeviceColor {
     fn from(rgb: palette::rgb::Rgb) -> Self {
         DeviceColor::Rgb(Rgb {
-            r: (rgb.red * 255.0) as u8,
-            g: (rgb.green * 255.0) as u8,
-            b: (rgb.blue * 255.0) as u8,
+            r: (rgb.red * 255.0) as u64,
+            g: (rgb.green * 255.0) as u64,
+            b: (rgb.blue * 255.0) as u64,
         })
     }
 }
 
 impl From<u16> for DeviceColor {
     fn from(ct: u16) -> Self {
-        DeviceColor::Ct(Ct { ct })
+        DeviceColor::Ct(Ct { ct: ct as u64 })
     }
 }

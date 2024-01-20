@@ -59,7 +59,6 @@ pub enum Rule {
     Any(AnyRule),
 
     /// Evaluates given expression.
-    #[serde(untagged)]
     EvalExpr(evalexpr::Node),
 }
 

@@ -1,6 +1,7 @@
 use crate::db::actions::{db_find_device, db_update_device};
 use crate::types::color::{Capabilities, DeviceColor};
 
+use super::expr::EvalContext;
 use super::scenes::{get_next_cycled_scene, Scenes};
 use crate::types::device::{
     ControllableDevice, ControllableState, DeviceRef, ManageKind, SensorDevice,
@@ -65,16 +66,16 @@ fn cmp_light_color(
         }
         (Some(DeviceColor::Hs(a)), Some(DeviceColor::Hs(b))) => {
             // Light state is equal if all components differ by less than a given delta
-            (u16::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(*a.s - *b.s) <= sat_delta)
+            (u64::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(*a.s - *b.s) <= sat_delta)
         }
         (Some(DeviceColor::Ct(a)), Some(DeviceColor::Ct(b))) => {
-            u16::abs_diff(a.ct, b.ct) <= cct_delta
+            u64::abs_diff(a.ct, b.ct) <= cct_delta
         }
         (_, _) => false,
     }
 }
 
-/// Compares the state of a ManagedDevice to some given ManagedDeviceState.
+/// Compares the state of a ControllableDevice to some given ControllableState.
 ///
 /// If the states match, the function evaluates to true.
 fn cmp_device_states(device: &ControllableDevice, expected: &ControllableState) -> bool {
@@ -193,7 +194,7 @@ impl Devices {
 
                 if cmp_device_states(incoming_state, &expected_state) {
                     if let ManageKind::Partial {
-                        prev_change_committed: true,
+                        prev_change_committed: false,
                     } = incoming_state.managed
                     {
                         // Set prev_change_committed flag
@@ -228,18 +229,18 @@ impl Devices {
 
                 // Replace device state with expected state, converted into a
                 // supported color format
-                let mut managed = incoming_state.clone();
-                managed.state = expected_state;
-                managed.state.color = managed
+                let mut controllable = incoming_state.clone();
+                controllable.state = expected_state;
+                controllable.state.color = controllable
                     .state
                     .color
                     .and_then(|c| c.to_device_preferred_mode(&incoming_state.capabilities));
 
                 // Disable transitions
-                managed.state.transition_ms = None;
+                controllable.state.transition_ms = None;
 
                 let mut device = incoming.clone();
-                device.data = DeviceData::Controllable(managed);
+                device.data = DeviceData::Controllable(controllable);
 
                 self.event_tx.send(Message::SendDeviceState { device });
             }
@@ -266,12 +267,16 @@ impl Devices {
 
             DeviceData::Controllable(_) => {
                 let scene_device_state = {
-                    let state = self.state.lock().unwrap();
-
-                    // Ignore transition specified by scene if we're setting state
                     let ignore_transition = use_passed_state;
-                    self.scenes
-                        .find_scene_device_state(device, &state, ignore_transition)
+                    let device_state = self.scenes.find_scene_device_state(device);
+                    device_state.map(|mut state| {
+                        // Ignore transition specified by scene if we're setting state
+                        if ignore_transition {
+                            state.transition_ms = None;
+                        }
+
+                        state
+                    })
                 };
 
                 let mut expected_state = match scene_device_state {
@@ -280,7 +285,7 @@ impl Devices {
                     None => {
                         if use_passed_state {
                             // Return passed device state
-                            device.get_managed_state().cloned()
+                            device.get_controllable_state().cloned()
                         } else {
                             let state = self.state.lock().unwrap();
 
@@ -291,7 +296,7 @@ impl Devices {
                                 .unwrap_or(device)
                                 .clone();
 
-                            device.get_managed_state().cloned()
+                            device.get_controllable_state().cloned()
                         }
                     }
                 };
@@ -329,18 +334,20 @@ impl Devices {
             device = device.set_scene(old_device_scene);
         }
 
-        // Allow active scene to override device state
-        let expected_state = self.get_expected_state(&device, true);
-        let capabilities = device.get_supported_color_modes();
+        if set_scene || device.is_managed() {
+            // Allow active scene to override device state
+            let expected_state = self.get_expected_state(&device, true);
+            let capabilities = device.get_supported_color_modes();
 
-        // Replace device state with expected state
-        if let (Some(mut expected_state), Some(capabilities)) = (expected_state, capabilities) {
-            // Converted expected state into a supported color format
-            expected_state.color = expected_state
-                .color
-                .and_then(|c| c.to_device_preferred_mode(capabilities));
+            // Replace device state with expected state
+            if let (Some(mut expected_state), Some(capabilities)) = (expected_state, capabilities) {
+                // Converted expected state into a supported color format
+                expected_state.color = expected_state
+                    .color
+                    .and_then(|c| c.to_device_preferred_mode(capabilities));
 
-            device = device.set_managed_state(expected_state);
+                device = device.set_controllable_state(expected_state);
+            }
         }
 
         let new_state = {
@@ -352,15 +359,13 @@ impl Devices {
         let state_changed = old.as_ref() != Some(&device);
 
         if state_changed {
-            self.event_tx.send(Message::WsBroadcastState);
+            self.event_tx.send(Message::InternalStateUpdate {
+                old_state: old_states,
+                new_state,
+                old,
+                new: device.clone(),
+            });
         }
-
-        self.event_tx.send(Message::InternalStateUpdate {
-            old_state: old_states,
-            new_state,
-            old,
-            new: device.clone(),
-        });
 
         if !skip_send && !device.is_sensor() {
             self.event_tx.send(Message::SendDeviceState {
@@ -387,6 +392,7 @@ impl Devices {
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        eval_context: &EvalContext,
     ) -> Option<bool> {
         info!("Activating scene {:?}", scene_id);
 
@@ -397,6 +403,7 @@ impl Devices {
                 device_keys: device_keys.clone(),
                 group_keys: group_keys.clone(),
             },
+            eval_context,
         )?;
 
         for (integration_id, devices) in scene_devices_config {
@@ -429,7 +436,7 @@ impl Devices {
             let mut d = device.1.clone();
             d = d.dim_device(step.unwrap_or(0.1));
             d = d.set_scene(Some(SceneId::new("dimmed".to_string())));
-            self.set_device_state(&d, true, false, false).await;
+            self.set_device_state(&d, false, false, false).await;
         }
 
         Some(true)
@@ -439,18 +446,20 @@ impl Devices {
         &self,
         scene_descriptors: &[SceneDescriptor],
         nowrap: bool,
+        eval_context: &EvalContext,
     ) -> Option<()> {
         let next_scene = {
             let devices = self.state.lock().unwrap();
             let scenes = &self.scenes;
 
-            get_next_cycled_scene(scene_descriptors, nowrap, &devices, scenes)
+            get_next_cycled_scene(scene_descriptors, nowrap, &devices, scenes, eval_context)
         }?;
 
         self.activate_scene(
             &next_scene.scene_id,
             &next_scene.device_keys,
             &next_scene.group_keys,
+            eval_context,
         )
         .await;
 

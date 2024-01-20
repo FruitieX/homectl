@@ -17,6 +17,7 @@ mod integrations;
 mod types;
 mod utils;
 
+use crate::core::expr::Expr;
 // use db::{actions::find_floorplans, establish_connection};
 use crate::core::{
     devices::Devices, groups::Groups, integrations::Integrations, message::handle_message,
@@ -48,10 +49,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let scenes = Scenes::new(config.scenes.unwrap_or_default(), groups.clone());
     scenes.refresh_db_scenes().await;
     let devices = Devices::new(event_tx.clone(), scenes.clone());
+    let expr = Expr::new(scenes.clone(), groups.clone());
     let rules = Rules::new(
         config.routines.unwrap_or_default(),
         groups.clone(),
-        scenes.clone(),
+        expr.clone(),
         event_tx.clone(),
     );
 
@@ -75,6 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         devices,
         rules,
         event_tx,
+        expr,
         ws: Default::default(),
     };
 

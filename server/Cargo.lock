@@ -873,6 +873,7 @@ dependencies = [
  "rand",
  "rumqttc",
  "serde",
+ "serde-this-or-that",
  "serde_json",
  "serde_json_path",
  "serde_path_to_error",
@@ -1903,6 +1904,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63261df402c67811e9ac6def069e4786148c4563f4b50fd4bf30aa370d626b02"
 dependencies = [
  "serde_derive",
+]
+
+[[package]]
+name = "serde-this-or-that"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "634c5a3cb041e56cc2964386151c67d520f845445789da3bd46bfb1c94f5e3bb"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

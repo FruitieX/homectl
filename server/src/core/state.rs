@@ -6,8 +6,8 @@ use crate::types::{
 };
 
 use super::{
-    devices::Devices, groups::Groups, integrations::Integrations, rules::Rules, scenes::Scenes,
-    websockets::WebSockets,
+    devices::Devices, expr::Expr, groups::Groups, integrations::Integrations, rules::Rules,
+    scenes::Scenes, websockets::WebSockets,
 };
 
 #[derive(Clone)]
@@ -18,6 +18,7 @@ pub struct AppState {
     pub devices: Devices,
     pub rules: Rules,
     pub event_tx: TxEventChannel,
+    pub expr: Expr,
     pub ws: WebSockets,
 }
 
@@ -34,8 +35,8 @@ impl AppState {
         }
 
         let devices = self.devices.get_devices();
-        let scenes = self.scenes.get_flattened_scenes(&devices);
-        let groups = self.groups.get_flattened_groups(&devices);
+        let scenes = self.scenes.get_flattened_scenes();
+        let groups = self.groups.get_flattened_groups();
 
         let devices_converted = devices
             .0

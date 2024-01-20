@@ -288,7 +288,7 @@ impl Device {
         }
     }
 
-    pub fn get_managed_state(&self) -> Option<&ControllableState> {
+    pub fn get_controllable_state(&self) -> Option<&ControllableState> {
         match self.data {
             DeviceData::Controllable(ref data) => Some(&data.state),
             DeviceData::Sensor(_) => None,
@@ -307,15 +307,15 @@ impl Device {
     pub fn color_to_mode(&self, mode: ColorMode, skip_ct_conversion: bool) -> Device {
         let mut device = self.clone();
 
-        if let DeviceData::Controllable(managed) = &mut device.data {
-            if skip_ct_conversion && managed.state.is_ct() {
+        if let DeviceData::Controllable(controllable) = &mut device.data {
+            if skip_ct_conversion && controllable.state.is_ct() {
                 return device;
             }
 
-            let converted_state = managed
+            let converted_state = controllable
                 .state
                 .color_to_device_preferred_mode(&Capabilities::singleton(mode));
-            managed.state = converted_state;
+            controllable.state = converted_state;
         }
 
         device
@@ -339,7 +339,7 @@ impl Device {
         }
     }
 
-    pub fn set_managed_state(&self, state: ControllableState) -> Device {
+    pub fn set_controllable_state(&self, state: ControllableState) -> Device {
         let mut device = self.clone();
 
         if let DeviceData::Controllable(ref mut data) = device.data {
@@ -353,6 +353,21 @@ impl Device {
         match self.data {
             DeviceData::Controllable(ref data) => serde_json::to_value(data).unwrap(),
             DeviceData::Sensor(ref data) => serde_json::to_value(data).unwrap(),
+        }
+    }
+
+    pub fn is_managed(&self) -> bool {
+        match self.data {
+            DeviceData::Controllable(ref data) => {
+                matches!(
+                    data.managed,
+                    ManageKind::Full
+                        | ManageKind::Partial {
+                            prev_change_committed: false
+                        }
+                )
+            }
+            DeviceData::Sensor(_) => false,
         }
     }
 

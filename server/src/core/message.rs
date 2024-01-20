@@ -23,10 +23,20 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             old,
             new,
         } => {
+            // TODO: invalidate only changed devices
+            debug!("invalidating {name}", name = new.name);
+            state.groups.invalidate(new_state);
+            state
+                .scenes
+                .invalidate(new_state, &state.expr.get_context());
+            state.expr.invalidate(new_state);
+
             state
                 .rules
                 .handle_internal_state_update(old_state, new_state, old, new)
                 .await;
+
+            state.event_tx.send(Message::WsBroadcastState);
 
             Ok(())
         }
@@ -79,17 +89,19 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             device_keys,
             group_keys,
         })) => {
+            let eval_context = state.expr.get_context();
             state
                 .devices
-                .activate_scene(scene_id, device_keys, group_keys)
+                .activate_scene(scene_id, device_keys, group_keys, &eval_context)
                 .await;
 
             Ok(())
         }
         Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
+            let eval_context = state.expr.get_context();
             state
                 .devices
-                .cycle_scenes(scenes, nowrap.unwrap_or(false))
+                .cycle_scenes(scenes, nowrap.unwrap_or(false), &eval_context)
                 .await;
 
             Ok(())
@@ -125,9 +137,8 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
         }
         Message::Action(Action::EvalExpr(expr)) => {
             let devices = state.devices.get_devices();
-            let scenes = state.scenes.clone();
-            let groups = state.groups.clone();
-            eval_action_expr(expr, devices, scenes, groups, &state.event_tx)?;
+            let eval_context = state.expr.get_context();
+            eval_action_expr(expr, &eval_context, devices, &state.event_tx)?;
 
             Ok(())
         }

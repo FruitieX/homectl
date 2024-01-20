@@ -68,7 +68,18 @@ pub struct SceneDeviceState {
     pub transition_ms: Option<u64>,
 }
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
+impl From<ControllableState> for SceneDeviceState {
+    fn from(state: ControllableState) -> Self {
+        SceneDeviceState {
+            power: Some(state.power),
+            color: state.color,
+            brightness: state.brightness,
+            transition_ms: state.transition_ms,
+        }
+    }
+}
+
+#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[serde(untagged)]
 #[ts(export)]
 pub enum SceneDeviceConfig {
@@ -86,24 +97,29 @@ pub enum SceneDeviceConfig {
 
 pub type SceneDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, SceneDeviceConfig>>;
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]
 pub struct SceneGroupsConfig(pub BTreeMap<GroupId, SceneDeviceConfig>);
 
 /// Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
-#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]
 pub struct SceneDevicesSearchConfig(
     pub BTreeMap<IntegrationId, BTreeMap<String, SceneDeviceConfig>>,
 );
 
-#[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
+#[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]
 pub struct SceneConfig {
     pub name: String,
     pub devices: Option<SceneDevicesSearchConfig>,
     pub groups: Option<SceneGroupsConfig>,
     pub hidden: Option<bool>,
+
+    /// Evaluates given expression to compute scene config.
+    #[ts(skip)]
+    #[serde(skip_serializing)]
+    pub expr: Option<evalexpr::Node>,
 }
 
 pub type ScenesConfig = BTreeMap<SceneId, SceneConfig>;

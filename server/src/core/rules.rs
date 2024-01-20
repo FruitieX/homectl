@@ -2,41 +2,43 @@ use evalexpr::HashMapContext;
 use eyre::{ContextCompat, Result};
 use itertools::Itertools;
 
-use crate::{
-    core::expr::state_to_eval_context,
-    types::{
-        action::Actions,
-        device::{Device, DevicesState, SensorDevice},
-        event::{Message, TxEventChannel},
-        rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
-    },
+use crate::types::{
+    action::Actions,
+    device::{Device, DevicesState, SensorDevice},
+    event::{Message, TxEventChannel},
+    rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
 };
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    sync::{Arc, RwLock},
+};
 
 use crate::core::devices::find_device;
 
-use super::{groups::Groups, scenes::Scenes};
+use super::{expr::Expr, groups::Groups};
 
 #[derive(Clone)]
 pub struct Rules {
     config: RoutinesConfig,
     event_tx: TxEventChannel,
     groups: Groups,
-    scenes: Scenes,
+    expr: Expr,
+    prev_triggered_routine_ids: Arc<RwLock<Option<HashSet<RoutineId>>>>,
 }
 
 impl Rules {
     pub fn new(
         config: RoutinesConfig,
         groups: Groups,
-        scenes: Scenes,
+        expr: Expr,
         event_tx: TxEventChannel,
     ) -> Self {
         Rules {
             config,
             event_tx,
             groups,
-            scenes,
+            expr,
+            prev_triggered_routine_ids: Default::default(),
         }
     }
 
@@ -84,8 +86,18 @@ impl Rules {
             return vec![];
         }
 
-        let prev_triggered_routine_ids = self.get_triggered_routine_ids(old_state);
+        let prev_triggered_routine_ids = self
+            .prev_triggered_routine_ids
+            .read()
+            .unwrap()
+            .clone()
+            .unwrap_or_default();
         let new_triggered_routine_ids = self.get_triggered_routine_ids(new_state);
+
+        {
+            let mut rw_lock = self.prev_triggered_routine_ids.write().unwrap();
+            *rw_lock = Some(new_triggered_routine_ids.clone());
+        }
 
         // The difference between the two sets will contain only routines that
         // were triggered just now.
@@ -105,12 +117,7 @@ impl Rules {
     /// Returns a set of routine ids that are currently triggered with the given
     /// state.
     fn get_triggered_routine_ids(&self, devices: &DevicesState) -> HashSet<RoutineId> {
-        let eval_context = state_to_eval_context(
-            devices.clone(),
-            self.scenes.get_flattened_scenes(devices),
-            self.groups.get_flattened_groups(devices),
-        )
-        .expect("Failed to create eval context");
+        let eval_context = self.expr.get_context();
 
         let triggered_routine_ids: HashSet<RoutineId> = self
             .config
