@@ -66,8 +66,8 @@ dependencies:
     specifier: 1.1.1
     version: 1.1.1(react-dom@18.2.0)(react@18.2.0)
   usehooks-ts:
-    specifier: 2.9.5
-    version: 2.9.5(react-dom@18.2.0)(react@18.2.0)
+    specifier: 2.10.0
+    version: 2.10.0(react-dom@18.2.0)(react@18.2.0)
 
 devDependencies:
   '@types/color':
@@ -3430,8 +3430,8 @@ packages:
       react-dom: 18.2.0(react@18.2.0)
     dev: false
 
-  /usehooks-ts@2.9.5(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-M5LrjX9Wo4XRsof0zCCsq81x5+so/b89aUO53XPTjUehKAbOFhRq/DDRyv7qsRK4AEaJe1rhReFZqesPGnREhQ==}
+  /usehooks-ts@2.10.0(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-hN22L5pqcsM1LwL6Q3p1QfxI9K+wuP4lrBXyCQ4Vi5Zo94YhphqRh2l7G7uhqPzLunAObLUAoSKzo64lisNyWQ==}
     engines: {node: '>=16.15.0'}
     peerDependencies:
       react: ^16.8.0  || ^17.0.0 || ^18.0.0
