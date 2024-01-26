@@ -33,8 +33,8 @@ dependencies:
     specifier: 2.6.3
     version: 2.6.3(@types/react@18.2.48)(react@18.2.0)
   konva:
-    specifier: 9.3.1
-    version: 9.3.1
+    specifier: 9.3.2
+    version: 9.3.2
   lodash:
     specifier: 4.17.21
     version: 4.17.21
@@ -58,10 +58,10 @@ dependencies:
     version: 18.2.0(react@18.2.0)
   react-konva:
     specifier: 18.2.10
-    version: 18.2.10(konva@9.3.1)(react-dom@18.2.0)(react@18.2.0)
+    version: 18.2.10(konva@9.3.2)(react-dom@18.2.0)(react@18.2.0)
   react-konva-utils:
     specifier: 1.0.6
-    version: 1.0.6(konva@9.3.1)(react-dom@18.2.0)(react@18.2.0)
+    version: 1.0.6(konva@9.3.2)(react-dom@18.2.0)(react@18.2.0)
   use-image:
     specifier: 1.1.1
     version: 1.1.1(react-dom@18.2.0)(react@18.2.0)
@@ -2224,8 +2224,8 @@ packages:
       json-buffer: 3.0.1
     dev: true
 
-  /konva@9.3.1:
-    resolution: {integrity: sha512-KXHJVUrYVWFIJUbnlw8QUZDBGC1jx6wwRsGaByPm/2yk78xw7hKquCMNEd9EtVqGz/jUkKFJAWom77TLB+zVOA==}
+  /konva@9.3.2:
+    resolution: {integrity: sha512-I4CFGVbWKpzgYi1I0pmoHz8iYfmGc/A61yfltzcuBHMFuBwDsR2VnQo4+eFQ1dGyEAmHcdvTumJ871KqkhuGng==}
     dev: false
 
   /language-subtag-registry@0.3.22:
@@ -2821,21 +2821,21 @@ packages:
   /react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
-  /react-konva-utils@1.0.6(konva@9.3.1)(react-dom@18.2.0)(react@18.2.0):
+  /react-konva-utils@1.0.6(konva@9.3.2)(react-dom@18.2.0)(react@18.2.0):
     resolution: {integrity: sha512-011+jyXwadFDkbIUdlTarKwbqME0ljX1vPeW5oyLQx4rtHdcsDr43tdOdSsMT3XpZyl8clgM9I/eK0lBuBuFHg==}
     peerDependencies:
       konva: ^8.3.5 || ^9.0.0
       react: ^18.2.0
       react-dom: ^18.2.0
     dependencies:
-      konva: 9.3.1
+      konva: 9.3.2
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
-      react-konva: 18.2.10(konva@9.3.1)(react-dom@18.2.0)(react@18.2.0)
+      react-konva: 18.2.10(konva@9.3.2)(react-dom@18.2.0)(react@18.2.0)
       use-image: 1.1.1(react-dom@18.2.0)(react@18.2.0)
     dev: false
 
-  /react-konva@18.2.10(konva@9.3.1)(react-dom@18.2.0)(react@18.2.0):
+  /react-konva@18.2.10(konva@9.3.2)(react-dom@18.2.0)(react@18.2.0):
     resolution: {integrity: sha512-ohcX1BJINL43m4ynjZ24MxFI1syjBdrXhqVxYVDw2rKgr3yuS0x/6m1Y2Z4sl4T/gKhfreBx8KHisd0XC6OT1g==}
     peerDependencies:
       konva: ^8.0.1 || ^7.2.5 || ^9.0.0
@@ -2844,7 +2844,7 @@ packages:
     dependencies:
       '@types/react-reconciler': 0.28.8
       its-fine: 1.1.1(react@18.2.0)
-      konva: 9.3.1
+      konva: 9.3.2
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
       react-reconciler: 0.29.0(react@18.2.0)
