@@ -16,7 +16,7 @@ jobs:
     name: Conventional commits
     runs-on: ubuntu-latest
     steps:
-      - uses: webiny/action-conventional-commits@0cc64c05ba23b8179973090d3509f31dba971afb # v1.2.0
+      - uses: webiny/action-conventional-commits@8bc41ff4e7d423d56fa4905f6ff79209a78776c7 # v1.3.0
 
   build:
     name: Build image
