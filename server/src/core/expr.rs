@@ -1,9 +1,8 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, RwLock},
 };
 
-use cached::proc_macro::cached;
 use evalexpr::*;
 use eyre::Result;
 use jsonptr::Assign;
@@ -87,11 +86,10 @@ fn name_to_evalexpr(device_name: &str) -> String {
     device_name.to_lowercase().replace(' ', "_")
 }
 
-#[cached(size = 2, result = true)]
 pub fn state_to_eval_context(
-    devices: DevicesState,
-    flattened_scenes: FlattenedScenesConfig,
-    flattened_groups: FlattenedGroupsConfig,
+    devices: &DevicesState,
+    flattened_scenes: &FlattenedScenesConfig,
+    flattened_groups: &FlattenedGroupsConfig,
 ) -> Result<HashMapContext> {
     let mut context = HashMapContext::new();
     context.set_type_safety_checks_disabled(true)?;
@@ -111,11 +109,11 @@ pub fn state_to_eval_context(
         }
     }
 
-    for (scene_id, scene) in flattened_scenes.0 {
+    for (scene_id, scene) in &flattened_scenes.0 {
         let prefix = format!("scenes.{}", name_to_evalexpr(&scene_id.to_string()));
 
-        for (device_key, state) in scene.devices.0 {
-            let device = devices.0.get(&device_key);
+        for (device_key, state) in &scene.devices.0 {
+            let device = devices.0.get(device_key);
 
             let Some(device) = device else {
                 continue;
@@ -224,11 +222,11 @@ pub fn eval_scene_expr(
     let mut result = HashMap::new();
     for (path, state) in state_diff {
         let Some(device) = find_device_by_expr_path(devices, &path) else {
-            eprintln!("Could not find device by expression path: {path:?}");
+            warn!("Could not find device by expression path: {path:?}");
             continue;
         };
         let Ok(device) = device.set_value(state) else {
-            eprintln!("Could not set value on device: {device:?}, {state}");
+            error!("Could not set value on device: {device:?}, {state}");
             continue;
         };
         let Some(controllable_state) = device.get_controllable_state() else {
@@ -421,7 +419,7 @@ impl Expr {
         let flattened_scenes = self.scenes.get_flattened_scenes();
         let flattened_groups = self.groups.get_flattened_groups();
 
-        state_to_eval_context(devices_state.clone(), flattened_scenes, flattened_groups)
+        state_to_eval_context(devices_state, &flattened_scenes, &flattened_groups)
             .expect("Failed to create eval context")
     }
 
@@ -430,4 +428,60 @@ impl Expr {
         let mut rw_lock = self.context.write().unwrap();
         *rw_lock = context;
     }
+}
+
+pub fn get_expr_device_deps(expr: &Node, devices: &DevicesState) -> HashSet<DeviceKey> {
+    expr.iter_read_variable_identifiers()
+        .filter_map(|name| {
+            let path = name.split('.').collect::<Vec<_>>();
+
+            if path.first() != Some(&"devices") {
+                return None;
+            }
+
+            let integration_id = path.get(1)?;
+            let name = path.get(2)?;
+
+            devices.0.values().find(|device| {
+                &device.integration_id.to_string() == integration_id
+                    && &name_to_evalexpr(&device.name) == name
+            })
+        })
+        .map(|device| device.get_device_key())
+        .collect()
+}
+
+pub fn get_expr_group_device_deps(
+    expr: &Node,
+    groups: &FlattenedGroupsConfig,
+) -> HashSet<DeviceKey> {
+    expr.iter_read_variable_identifiers()
+        .filter_map(|name| {
+            let path = name.split('.').collect::<Vec<_>>();
+
+            if path.first() != Some(&"groups") {
+                return None;
+            }
+
+            let group_id = path.get(1)?;
+
+            groups.0.get(&GroupId(group_id.to_string()))
+        })
+        .flat_map(|group| group.device_ids.clone())
+        .collect()
+}
+
+pub fn get_expr_scene_deps(expr: &Node) -> HashSet<SceneId> {
+    expr.iter_read_variable_identifiers()
+        .filter_map(|name| {
+            let path = name.split('.').collect::<Vec<_>>();
+
+            if path.first() != Some(&"scenes") {
+                return None;
+            }
+
+            let scene_id = path.get(1)?;
+            Some(SceneId::new(scene_id.to_string()))
+        })
+        .collect()
 }

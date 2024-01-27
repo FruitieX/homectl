@@ -23,12 +23,19 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             old,
             new,
         } => {
-            // TODO: invalidate only changed devices
-            debug!("invalidating {name}", name = new.name);
-            state.groups.invalidate(new_state);
-            state
-                .scenes
-                .invalidate(new_state, &state.expr.get_context());
+            let invalidated_device = new;
+            debug!("invalidating {name}", name = invalidated_device.name);
+
+            let groups_invalidated = state.groups.invalidate(old_state, new_state);
+
+            let invalidated_scenes = state.scenes.invalidate(
+                old_state,
+                new_state,
+                invalidated_device,
+                &state.expr.get_context(),
+            );
+
+            // TODO: only invalidate changed devices/groups/scenes in expr context
             state.expr.invalidate(new_state);
 
             state

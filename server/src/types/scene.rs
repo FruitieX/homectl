@@ -1,7 +1,7 @@
 use super::color::DeviceColor;
 use super::device::{ControllableState, DeviceKey, DeviceRef};
 
-use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
+use super::{group::GroupId, integration::IntegrationId};
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap};
@@ -95,7 +95,8 @@ pub enum SceneDeviceConfig {
     DeviceState(SceneDeviceState),
 }
 
-pub type SceneDevicesConfig = HashMap<IntegrationId, HashMap<DeviceId, SceneDeviceConfig>>;
+pub type SceneDevicesConfig = HashMap<DeviceKey, SceneDeviceConfig>;
+pub type SceneDevicesConfigs = HashMap<SceneId, (SceneConfig, SceneDevicesConfig)>;
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize, PartialEq)]
 #[ts(export)]

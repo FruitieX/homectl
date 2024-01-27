@@ -1,6 +1,5 @@
 use evalexpr::HashMapContext;
 use eyre::{ContextCompat, Result};
-use itertools::Itertools;
 
 use crate::types::{
     action::Actions,
@@ -139,16 +138,20 @@ fn is_routine_triggered(
     routine: &Routine,
     eval_context: &HashMapContext,
 ) -> bool {
-    let (errors, results): (Vec<_>, Vec<_>) = routine
-        .rules
-        .iter()
-        .partition_map(|rule| is_rule_triggered(state, groups, rule, eval_context).into());
-
-    for error in errors {
-        error!("Error while checking routine {}: {}", routine.name, error);
+    if routine.rules.is_empty() {
+        return false;
     }
 
-    !results.is_empty() && results.into_iter().all(|result| result)
+    routine.rules.iter().all(|rule| {
+        let result = is_rule_triggered(state, groups, rule, eval_context);
+        match result {
+            Ok(result) => result,
+            Err(error) => {
+                error!("Error while checking routine {}: {}", routine.name, error);
+                false
+            }
+        }
+    })
 }
 
 /// Returns true if rule state matches device state

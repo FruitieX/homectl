@@ -3,20 +3,20 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-use crate::types::{
-    device::{Device, DeviceId, DeviceRef, DevicesState},
-    group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupConfig, GroupId, GroupsConfig},
-    integration::IntegrationId,
+use crate::{
+    types::{
+        device::{Device, DeviceRef, DevicesState},
+        group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupConfig, GroupId, GroupsConfig},
+    },
+    utils::keys_match,
 };
 
 use super::devices::find_device;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Groups {
     config: GroupsConfig,
     device_refs_by_groups: BTreeMap<GroupId, BTreeSet<DeviceRef>>,
-    groups_by_device_id: BTreeMap<IntegrationId, BTreeMap<DeviceId, BTreeSet<GroupId>>>,
-    groups_by_device_name: BTreeMap<IntegrationId, BTreeMap<String, BTreeSet<GroupId>>>,
     flattened_groups: Arc<RwLock<FlattenedGroupsConfig>>,
 }
 
@@ -64,100 +64,6 @@ fn mk_device_refs_by_groups(config: &GroupsConfig) -> DeviceRefsByGroups {
         .collect()
 }
 
-type GroupsByIntegration = BTreeMap<IntegrationId, BTreeMap<GroupId, BTreeSet<DeviceRef>>>;
-fn mk_groups_by_integration(device_refs_by_groups: &DeviceRefsByGroups) -> GroupsByIntegration {
-    device_refs_by_groups
-        .iter()
-        .fold(Default::default(), |mut acc, (group_id, device_refs)| {
-            for device_ref in device_refs {
-                let integration_id = device_ref.integration_id().clone();
-
-                let groups = acc.entry(integration_id).or_default();
-                let integration_group_device_refs = groups.entry(group_id.clone()).or_default();
-                integration_group_device_refs.insert(device_ref.clone());
-            }
-
-            acc
-        })
-}
-
-type GroupsByDeviceId = BTreeMap<IntegrationId, BTreeMap<DeviceId, BTreeSet<GroupId>>>;
-fn mk_groups_by_device_id(groups_by_integration: &GroupsByIntegration) -> GroupsByDeviceId {
-    groups_by_integration.iter().fold(
-        Default::default(),
-        |mut acc, (integration_id, integration_groups)| {
-            for (group_id, device_refs) in integration_groups {
-                for device_ref in device_refs {
-                    if let Some(device_id) = device_ref.device_id() {
-                        let integration_id = integration_id.clone();
-                        let integration_devices = acc.entry(integration_id).or_default();
-
-                        let device_id = device_id.clone();
-                        let integration_device_group_ids =
-                            integration_devices.entry(device_id).or_default();
-                        integration_device_group_ids.insert(group_id.clone());
-                    }
-                }
-            }
-
-            acc
-        },
-    )
-}
-
-type GroupsByDeviceName = BTreeMap<IntegrationId, BTreeMap<String, BTreeSet<GroupId>>>;
-fn mk_groups_by_device_name(groups_by_integration: &GroupsByIntegration) -> GroupsByDeviceName {
-    groups_by_integration.iter().fold(
-        Default::default(),
-        |mut acc, (integration_id, integration_groups)| {
-            for (group_id, device_refs) in integration_groups {
-                for device_ref in device_refs {
-                    if let Some(name) = device_ref.name() {
-                        let integration_id = integration_id.clone();
-                        let integration_devices = acc.entry(integration_id).or_default();
-
-                        let name = name.clone();
-                        let integration_device_group_ids =
-                            integration_devices.entry(name).or_default();
-                        integration_device_group_ids.insert(group_id.clone());
-                    }
-                }
-            }
-
-            acc
-        },
-    )
-}
-
-fn is_device_in_group(
-    group_id: &GroupId,
-    device: &Device,
-    groups_by_device_id: &GroupsByDeviceId,
-    groups_by_device_name: &GroupsByDeviceName,
-) -> bool {
-    let found_name_match = groups_by_device_name
-        .get(&device.integration_id)
-        .and_then(|devices| devices.get(&device.name))
-        .map(|groups| groups.contains(group_id))
-        .unwrap_or_default();
-
-    if found_name_match {
-        return true;
-    }
-
-    let found_id_match = groups_by_device_id
-        .get(&device.integration_id)
-        .and_then(|devices| devices.get(&device.id))
-        .map(|groups| groups.contains(group_id))
-        .unwrap_or_default();
-
-    if found_id_match {
-        return true;
-    }
-
-    false
-}
-
 fn mk_flattened_groups(
     config: &GroupsConfig,
     device_refs_by_groups: &BTreeMap<GroupId, BTreeSet<DeviceRef>>,
@@ -189,8 +95,8 @@ fn mk_flattened_groups(
 }
 
 pub fn flattened_groups_to_eval_context_values(
-    flattened_config: FlattenedGroupsConfig,
-    devices: DevicesState,
+    flattened_config: &FlattenedGroupsConfig,
+    devices: &DevicesState,
 ) -> Vec<(String, serde_json::Value)> {
     flattened_config
         .0
@@ -247,27 +153,11 @@ impl Groups {
     pub fn new(config: GroupsConfig) -> Self {
         let device_refs_by_groups = mk_device_refs_by_groups(&config);
 
-        let groups_by_integration = mk_groups_by_integration(&device_refs_by_groups);
-        let groups_by_device_id = mk_groups_by_device_id(&groups_by_integration);
-        let groups_by_device_name = mk_groups_by_device_name(&groups_by_integration);
-
         Groups {
             config,
             device_refs_by_groups,
-            groups_by_device_id,
-            groups_by_device_name,
             flattened_groups: Default::default(),
         }
-    }
-
-    /// Returns whether a device is in the given group.
-    pub fn is_device_in_group(&self, group_id: &GroupId, device: &Device) -> bool {
-        is_device_in_group(
-            group_id,
-            device,
-            &self.groups_by_device_id,
-            &self.groups_by_device_name,
-        )
     }
 
     /// Returns a flattened version of the groups config, with any contained
@@ -293,11 +183,17 @@ impl Groups {
             .collect()
     }
 
-    pub fn invalidate(&self, devices: &DevicesState) {
-        let flattened_groups =
-            mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices);
-        let mut rw_lock = self.flattened_groups.write().unwrap();
-        *rw_lock = flattened_groups
+    pub fn invalidate(&self, old_state: &DevicesState, new_state: &DevicesState) -> bool {
+        // Only invalidate groups if device ids have changed
+        if !keys_match(&old_state.0, &new_state.0) {
+            let flattened_groups =
+                mk_flattened_groups(&self.config, &self.device_refs_by_groups, new_state);
+            let mut rw_lock = self.flattened_groups.write().unwrap();
+            *rw_lock = flattened_groups;
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -305,7 +201,7 @@ impl Groups {
 mod eval_group_config_device_links_tests {
     use std::str::FromStr;
 
-    use crate::types::group::GroupLink;
+    use crate::types::{device::DeviceId, group::GroupLink, integration::IntegrationId};
 
     use super::*;
 

@@ -1,12 +1,11 @@
 use crate::types::{
     device::{
-        ControllableState, Device, DeviceData, DeviceId, DeviceKey, DeviceRef, DevicesState,
-        SensorDevice,
+        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
     },
-    integration::IntegrationId,
     scene::{
         FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig, SceneDescriptor,
-        SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId, ScenesConfig,
+        SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneDevicesConfigs, SceneId,
+        ScenesConfig,
     },
 };
 use itertools::Itertools;
@@ -16,7 +15,10 @@ use crate::db::actions::db_get_scenes;
 
 use super::{
     devices::find_device,
-    expr::{eval_scene_expr, EvalContext},
+    expr::{
+        eval_scene_expr, get_expr_device_deps, get_expr_group_device_deps, get_expr_scene_deps,
+        EvalContext,
+    },
     groups::Groups,
 };
 use std::{
@@ -24,76 +26,26 @@ use std::{
     sync::{Arc, RwLock},
 };
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct Scenes {
     config: ScenesConfig,
     groups: Groups,
     db_scenes: Arc<RwLock<ScenesConfig>>,
     flattened_scenes: Arc<RwLock<FlattenedScenesConfig>>,
+    scene_devices_configs: Arc<RwLock<SceneDevicesConfigs>>,
+    device_invalidation_map: Arc<RwLock<HashMap<DeviceKey, HashSet<SceneId>>>>,
 }
 
-/// Finds scene config of given device in its current scene
-fn find_scene_device_config(
-    device: &Device,
-    devices: &DevicesState,
-    eval_context: &EvalContext,
-    groups: &Groups,
-    scenes: &Scenes,
-) -> Option<SceneDeviceConfig> {
-    let scene_id = device.get_scene()?;
-    let scene = scenes.find_scene(&scene_id)?;
-
-    let expr_device_config = scene.clone().expr.and_then(|expr| {
-        let result = eval_scene_expr(&expr, eval_context, devices);
-
-        let devices = match result {
-            Ok(devices) => Some(devices),
-            Err(e) => {
-                eprintln!("Error while evaluating scene {scene_id} expression: {e}");
-                None
-            }
-        }?;
-
-        devices.get(&device.get_device_key()).cloned()
-    });
-
-    if let Some(expr_device_config) = expr_device_config {
-        return Some(expr_device_config);
-    }
-
-    let scene_devices_search_config = scene.devices.as_ref().map(|devices| &devices.0);
-
-    let scene_device_config = scene_devices_search_config.and_then(|sc| {
-        sc.get(&device.integration_id)
-            .and_then(|device_configs| device_configs.get(&device.name))
-    });
-
-    // If a match was found by device name, it takes precedence over eventual
-    // group matches
-    if scene_device_config.is_some() {
-        return scene_device_config.cloned();
-    }
-
-    let scene_group_configs = scene.groups.as_ref().map(|groups| &groups.0)?;
-    let matching_group_config = scene_group_configs
-        .iter()
-        .find(|(group_id, _)| groups.is_device_in_group(group_id, device))
-        .map(|(_, config)| config);
-
-    matching_group_config.cloned()
-}
-
-/// Evaluates current state of given device in its current scene
+/// Evaluates current state of given device in some given scene
 fn compute_scene_device_state(
+    scene_id: &SceneId,
     device: &Device,
     devices: &DevicesState,
-    groups: &Groups,
-    scenes: &Scenes,
+    scene_devices_configs: &SceneDevicesConfigs,
     ignore_transition: bool,
-    eval_context: &EvalContext,
 ) -> Option<ControllableState> {
-    let scene_device_config =
-        find_scene_device_config(device, devices, eval_context, groups, scenes)?;
+    let (_scene_config, scene_devices_config) = scene_devices_configs.get(scene_id)?;
+    let scene_device_config = scene_devices_config.get(&device.get_device_key())?;
 
     match scene_device_config {
         SceneDeviceConfig::DeviceLink(link) => {
@@ -126,14 +78,12 @@ fn compute_scene_device_state(
 
         SceneDeviceConfig::SceneLink(link) => {
             // Use state from another scene
-            let device = device.set_scene(Some(link.scene_id));
             compute_scene_device_state(
-                &device,
+                &link.scene_id,
+                device,
                 devices,
-                groups,
-                scenes,
+                scene_devices_configs,
                 ignore_transition,
-                eval_context,
             )
         }
 
@@ -151,23 +101,18 @@ fn compute_scene_device_state(
     }
 }
 
-type SceneDeviceList = HashSet<(IntegrationId, DeviceId)>;
+type SceneDeviceList = HashSet<DeviceKey>;
+/// Gathers a Vec<HashSet<DeviceKey>> of all devices in provided scenes
 fn find_scene_device_lists(
     scene_devices_configs: &[(&SceneDescriptor, Option<SceneDevicesConfig>)],
 ) -> Vec<SceneDeviceList> {
     let scenes_devices = scene_devices_configs
         .iter()
         .map(|(_, scene_devices_config)| {
-            let mut scene_devices: HashSet<(IntegrationId, DeviceId)> = HashSet::new();
-            if let Some(integrations) = scene_devices_config {
-                for (integration_id, integration) in integrations {
-                    for device_id in integration.keys() {
-                        scene_devices.insert((integration_id.clone(), device_id.clone()));
-                    }
-                }
-            }
-
-            scene_devices
+            scene_devices_config
+                .as_ref()
+                .map(|c| c.keys().cloned().collect())
+                .unwrap_or_default()
         })
         .collect();
 
@@ -175,10 +120,8 @@ fn find_scene_device_lists(
 }
 
 /// Finds devices that are common in all given scenes
-fn find_scenes_common_devices(
-    scene_device_lists: Vec<SceneDeviceList>,
-) -> HashSet<(IntegrationId, DeviceId)> {
-    let mut scenes_common_devices: HashSet<(IntegrationId, DeviceId)> = HashSet::new();
+fn find_scenes_common_devices(scene_device_lists: Vec<SceneDeviceList>) -> HashSet<DeviceKey> {
+    let mut scenes_common_devices: HashSet<DeviceKey> = HashSet::new();
 
     if let Some(first_scene_devices) = scene_device_lists.first() {
         for scene_device in first_scene_devices {
@@ -202,35 +145,28 @@ fn find_scenes_common_devices(
 /// * `devices` - current state of devices
 fn find_active_scene_index(
     scene_devices_configs: &[(&SceneDescriptor, Option<SceneDevicesConfig>)],
-    scenes_common_devices: &HashSet<(IntegrationId, DeviceId)>,
+    scenes_common_devices: &HashSet<DeviceKey>,
     devices: &DevicesState,
 ) -> Option<usize> {
     scene_devices_configs
         .iter()
         .position(|(sd, scene_devices_config)| {
             // try finding any device in scene_devices_config that has this scene active
-            if let Some(integrations) = scene_devices_config {
-                integrations.iter().any(|(integration_id, scene_devices)| {
-                    scene_devices.iter().any(|(device_id, _)| {
-                        // only consider devices which are common across all cycled scenes
-                        if !scenes_common_devices
-                            .contains(&(integration_id.clone(), device_id.clone()))
-                        {
-                            return false;
-                        }
+            let Some(scene_devices_config) = scene_devices_config else {
+                return false;
+            };
 
-                        let device = find_device(
-                            devices,
-                            &DeviceRef::new_with_id(integration_id.clone(), device_id.clone()),
-                        );
-                        let device_scene = device.and_then(|d| d.get_scene());
+            scene_devices_config.iter().any(|(device_key, _)| {
+                // only consider devices which are common across all cycled scenes
+                if !scenes_common_devices.contains(device_key) {
+                    return false;
+                }
 
-                        device_scene.map_or(false, |ds| ds == sd.scene_id)
-                    })
-                })
-            } else {
-                false
-            }
+                let device = find_device(devices, &device_key.into());
+                let device_scene = device.and_then(|d| d.get_scene());
+
+                device_scene.map_or(false, |ds| ds == sd.scene_id)
+            })
         })
 }
 
@@ -259,7 +195,7 @@ pub fn get_next_cycled_scene(
             })
             .collect();
 
-    // gather a Vec<HashSet<(IntegrationId, DeviceId)>> of all devices in cycled scenes
+    // gather a Vec<HashSet<DeviceKey>> of all devices in cycled scenes
     let scene_device_lists = find_scene_device_lists(&scene_devices_configs);
 
     // gather devices which exist in all cycled scenes
@@ -288,8 +224,7 @@ impl Scenes {
         Scenes {
             config,
             groups,
-            db_scenes: Default::default(),
-            flattened_scenes: Default::default(),
+            ..Default::default()
         }
     }
 
@@ -303,6 +238,10 @@ impl Scenes {
         let mut db_scenes = self.db_scenes.read().unwrap().clone();
         db_scenes.extend(self.config.clone());
         db_scenes
+    }
+
+    pub fn get_scene_ids(&self) -> Vec<SceneId> {
+        self.get_scenes().keys().cloned().collect()
     }
 
     pub fn find_scene(&self, scene_id: &SceneId) -> Option<SceneConfig> {
@@ -363,83 +302,52 @@ impl Scenes {
             true
         };
 
-        // replace device names by device_ids in device_configs
-        let mut scene_devices_config: SceneDevicesConfig = scene_devices_search_config
-            .iter()
-            .map(|(integration_id, device_configs)| {
-                (
-                    integration_id.clone(),
-                    device_configs
-                        .iter()
-                        .filter_map(|(device_name, device_config)| {
-                            let device = find_device(
-                                devices,
-                                &DeviceRef::new_with_name(
-                                    integration_id.clone(),
-                                    device_name.clone(),
-                                ),
-                            );
+        let mut scene_devices_config: SceneDevicesConfig = Default::default();
 
-                            let device_id = match &device {
-                                Some(device) => Some(device.id.clone()),
-                                None => {
-                                    error!(
-                                        "Could not find device_id for {} device with name {}",
-                                        integration_id, device_name
-                                    );
-
-                                    None
-                                }
-                            }?;
-
-                            // Skip this device if it's not in device_keys or group_keys
-                            if filter_device_by_keys(device?) {
-                                Some((device_id, device_config.clone()))
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
-                )
-            })
-            .collect();
-
-        // Override scene_devices_config with entries from expr_device_configs
-        for (device_key, device_config) in expr_device_configs {
-            scene_devices_config
-                .entry(device_key.integration_id)
-                .or_default()
-                .insert(device_key.device_id, device_config);
-        }
-
+        // Inserts devices from groups
         let scene_groups = scene.groups.map(|groups| groups.0).unwrap_or_default();
-
-        // merges in devices from scene_groups
         for (group_id, scene_device_config) in scene_groups {
             let group_devices = self.groups.find_group_devices(devices, &group_id);
 
             for device in group_devices {
-                let integration_id = &device.integration_id;
-                let empty_devices_integrations = HashMap::new();
-                let mut scene_devices_integrations = scene_devices_config
-                    .get(integration_id)
-                    .unwrap_or(&empty_devices_integrations)
-                    .to_owned();
+                // Skip this device if it's not in device_keys or group_keys
+                if !filter_device_by_keys(device) {
+                    continue;
+                }
 
-                let device_id = &device.id;
+                scene_devices_config.insert(device.get_device_key(), scene_device_config.clone());
+            }
+        }
+
+        // Insert scene devices
+        for (integration_id, scene_device_configs) in scene_devices_search_config {
+            for (device_name, scene_device_config) in scene_device_configs {
+                let device = find_device(
+                    devices,
+                    &DeviceRef::new_with_name(integration_id.clone(), device_name.clone()),
+                );
+
+                let Some(device) = device else {
+                    warn!(
+                        "Could not find device with name {} in integration {}",
+                        device_name, integration_id
+                    );
+
+                    continue;
+                };
 
                 // Skip this device if it's not in device_keys or group_keys
                 if !filter_device_by_keys(device) {
                     continue;
                 }
 
-                // only insert device config if it did not exist yet
-                scene_devices_integrations
-                    .entry(device_id.clone())
-                    .or_insert_with(|| scene_device_config.clone());
-                scene_devices_config
-                    .insert(integration_id.clone(), scene_devices_integrations.clone());
+                scene_devices_config.insert(device.get_device_key(), scene_device_config.clone());
             }
+        }
+
+        // Insert devices from evaluated expression
+        for (device_key, device_config) in expr_device_configs {
+            scene_devices_config.insert(device_key, device_config);
         }
 
         Some(scene_devices_config)
@@ -453,25 +361,52 @@ impl Scenes {
         scene.devices.0.get(&device.get_device_key()).cloned()
     }
 
-    pub fn mk_flattened_scenes(
+    pub fn mk_flattened_scene(
+        &self,
+        scene_id: &SceneId,
+        devices: &DevicesState,
+    ) -> Option<FlattenedSceneConfig> {
+        let scene_devices_configs = self.scene_devices_configs.read().unwrap();
+        let (scene_config, scene_devices_config) = scene_devices_configs.get(scene_id)?;
+
+        let devices = scene_devices_config
+            .keys()
+            .filter_map({
+                |device_key| {
+                    let device = devices.0.get(device_key)?;
+
+                    let device_state = compute_scene_device_state(
+                        scene_id,
+                        device,
+                        devices,
+                        &scene_devices_configs,
+                        false,
+                    )?;
+
+                    Some((device_key.clone(), device_state))
+                }
+            })
+            .collect();
+
+        Some(FlattenedSceneConfig {
+            name: scene_config.name.clone(),
+            devices: SceneDeviceStates(devices),
+            hidden: scene_config.hidden,
+        })
+    }
+
+    pub fn mk_scene_devices_configs(
         &self,
         devices: &DevicesState,
-        skip_scene_id: Option<&SceneId>,
+        invalidated_scenes: &HashSet<SceneId>,
         eval_context: &EvalContext,
-    ) -> FlattenedScenesConfig {
-        let scenes = self.get_scenes();
-
-        FlattenedScenesConfig(
-            scenes
-                .into_iter()
-                .filter_map(|(scene_id, config)| {
-                    if let Some(skip_scene_id) = skip_scene_id {
-                        if &scene_id == skip_scene_id {
-                            return None;
-                        }
-                    }
-
-                    let devices_config = self.find_scene_devices_config(
+    ) -> SceneDevicesConfigs {
+        self.get_scene_ids()
+            .iter()
+            .filter_map(|scene_id| {
+                let scene_devices_config = if invalidated_scenes.contains(scene_id) {
+                    let scene_config = self.find_scene(scene_id)?;
+                    let scene_devices_config = self.find_scene_devices_config(
                         devices,
                         &SceneDescriptor {
                             scene_id: scene_id.clone(),
@@ -481,50 +416,41 @@ impl Scenes {
                         eval_context,
                     )?;
 
-                    let devices: SceneDeviceStates = SceneDeviceStates(
-                        devices_config
-                            .iter()
-                            .flat_map({
-                                let scene_id = scene_id.clone();
+                    Some((scene_config, scene_devices_config))
+                } else {
+                    self.scene_devices_configs
+                        .read()
+                        .unwrap()
+                        .get(scene_id)
+                        .cloned()
+                }?;
 
-                                move |(integration_id, device_configs)| {
-                                    device_configs.iter().filter_map({
-                                        let scene_id = scene_id.clone();
+                Some((scene_id.clone(), scene_devices_config))
+            })
+            .collect()
+    }
 
-                                        move |(device_id, _)| {
-                                            let device_key = DeviceKey::new(
-                                                integration_id.clone(),
-                                                device_id.clone(),
-                                            );
+    pub fn mk_flattened_scenes(
+        &self,
+        devices: &DevicesState,
+        invalidated_scenes: &HashSet<SceneId>,
+    ) -> FlattenedScenesConfig {
+        FlattenedScenesConfig(
+            self.get_scene_ids()
+                .iter()
+                .filter_map(|scene_id| {
+                    let flattened_scene = if invalidated_scenes.contains(scene_id) {
+                        self.mk_flattened_scene(scene_id, devices)?
+                    } else {
+                        self.flattened_scenes
+                            .read()
+                            .unwrap()
+                            .0
+                            .get(scene_id)?
+                            .clone()
+                    };
 
-                                            let device = devices.0.get(&device_key)?;
-                                            let device = device.set_scene(Some(scene_id.clone()));
-
-                                            let device_state = compute_scene_device_state(
-                                                &device,
-                                                devices,
-                                                &self.groups,
-                                                self,
-                                                false,
-                                                eval_context,
-                                            )?;
-
-                                            Some((device_key, device_state))
-                                        }
-                                    })
-                                }
-                            })
-                            .collect(),
-                    );
-
-                    Some((
-                        scene_id,
-                        FlattenedSceneConfig {
-                            name: config.name,
-                            devices,
-                            hidden: config.hidden,
-                        },
-                    ))
+                    Some((scene_id.clone(), flattened_scene))
                 })
                 .collect(),
         )
@@ -534,9 +460,130 @@ impl Scenes {
         self.flattened_scenes.read().unwrap().clone()
     }
 
-    pub fn invalidate(&self, devices: &DevicesState, eval_context: &EvalContext) {
-        let flattened_scenes = self.mk_flattened_scenes(devices, None, eval_context);
-        let mut rw_lock = self.flattened_scenes.write().unwrap();
-        *rw_lock = flattened_scenes
+    fn get_invalidated_devices_for_scene(
+        &self,
+        devices: &DevicesState,
+        scene_id: &SceneId,
+    ) -> HashSet<DeviceKey> {
+        let scene_device_configs = self
+            .scene_devices_configs
+            .read()
+            .unwrap()
+            .get(scene_id)
+            .cloned();
+
+        let mut invalidated_devices = HashSet::new();
+
+        let Some((scene_config, scene_device_configs)) = &scene_device_configs else {
+            return invalidated_devices;
+        };
+
+        // Invalidate any devices that the scene expression refers to directly,
+        // via groups or via other scenes
+        if let Some(expr) = &scene_config.expr {
+            invalidated_devices.extend(get_expr_device_deps(expr, devices));
+            invalidated_devices.extend(get_expr_group_device_deps(
+                expr,
+                &self.groups.get_flattened_groups(),
+            ));
+
+            let scene_deps = get_expr_scene_deps(expr);
+            for scene_id in scene_deps {
+                invalidated_devices
+                    .extend(self.get_invalidated_devices_for_scene(devices, &scene_id))
+            }
+        }
+
+        for scene_device_config in scene_device_configs.values() {
+            match scene_device_config {
+                SceneDeviceConfig::DeviceLink(d) => {
+                    let device = find_device(devices, &d.device_ref);
+                    if let Some(device) = device {
+                        invalidated_devices.insert(device.get_device_key());
+                    }
+                }
+                SceneDeviceConfig::SceneLink(s) => invalidated_devices
+                    .extend(self.get_invalidated_devices_for_scene(devices, &s.scene_id)),
+                SceneDeviceConfig::DeviceState(_) => {}
+            };
+        }
+
+        invalidated_devices
+    }
+
+    pub fn mk_device_invalidation_map(
+        &self,
+        devices: &DevicesState,
+    ) -> HashMap<DeviceKey, HashSet<SceneId>> {
+        let devices_by_scene: HashMap<SceneId, HashSet<DeviceKey>> = self
+            .get_scene_ids()
+            .into_iter()
+            .map(|scene_id| {
+                let invalidated_devices =
+                    self.get_invalidated_devices_for_scene(devices, &scene_id);
+                (scene_id, invalidated_devices)
+            })
+            .collect();
+
+        let mut scenes_by_device: HashMap<DeviceKey, HashSet<SceneId>> = Default::default();
+        for (scene_id, device_keys) in devices_by_scene {
+            for device_key in device_keys {
+                let scene_ids = scenes_by_device.entry(device_key).or_default();
+                scene_ids.insert(scene_id.clone());
+            }
+        }
+
+        scenes_by_device
+    }
+
+    pub fn invalidate(
+        &self,
+        old_state: &DevicesState,
+        new_state: &DevicesState,
+        invalidated_device: &Device,
+        eval_context: &EvalContext,
+    ) -> HashSet<SceneId> {
+        let is_new_device = !old_state
+            .0
+            .contains_key(&invalidated_device.get_device_key());
+
+        let invalidated_scenes = self
+            .device_invalidation_map
+            .read()
+            .unwrap()
+            .get(&invalidated_device.get_device_key())
+            .cloned()
+            .unwrap_or_else(|| {
+                if is_new_device {
+                    // Invalidate all scenes if device was recently discovered
+                    self.get_scene_ids()
+                        .into_iter()
+                        .collect::<HashSet<SceneId>>()
+                } else {
+                    Default::default()
+                }
+            });
+
+        {
+            let scene_devices_configs =
+                self.mk_scene_devices_configs(new_state, &invalidated_scenes, eval_context);
+            let mut rw_lock = self.scene_devices_configs.write().unwrap();
+            *rw_lock = scene_devices_configs;
+        }
+
+        {
+            let flattened_scenes = self.mk_flattened_scenes(new_state, &invalidated_scenes);
+            let mut rw_lock = self.flattened_scenes.write().unwrap();
+            *rw_lock = flattened_scenes
+        }
+
+        // Recompute device_invalidation_map if device was recently discovered
+        if is_new_device {
+            let device_invalidation_map = self.mk_device_invalidation_map(new_state);
+            let mut rw_lock = self.device_invalidation_map.write().unwrap();
+            *rw_lock = device_invalidation_map;
+        }
+
+        invalidated_scenes
     }
 }

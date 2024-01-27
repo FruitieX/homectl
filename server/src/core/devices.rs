@@ -399,16 +399,12 @@ impl Devices {
             eval_context,
         )?;
 
-        for (integration_id, devices) in scene_devices_config {
-            for (device_id, _) in devices {
-                let device_key = &DeviceKey::new(integration_id.clone(), device_id);
+        for device_key in scene_devices_config.keys() {
+            let device = self.get_device(device_key);
 
-                let device = self.get_device(device_key);
-
-                if let Some(device) = device {
-                    let device = device.set_scene(Some(scene_id.clone()));
-                    self.set_device_state(&device, true, false, false).await;
-                }
+            if let Some(device) = device {
+                let device = device.set_scene(Some(scene_id.clone()));
+                self.set_device_state(&device, true, false, false).await;
             }
         }
 
@@ -421,7 +417,7 @@ impl Devices {
         _group_keys: &Option<Vec<GroupId>>,
         step: &Option<f32>,
     ) -> Option<bool> {
-        println!("Dimming devices. Step: {}", step.unwrap_or(0.1));
+        debug!("Dimming devices. Step: {}", step.unwrap_or(0.1));
 
         let mut devices = self.state.lock().unwrap().clone();
 

@@ -421,6 +421,7 @@ pub enum DeviceRef {
 }
 
 impl DeviceRef {
+    #[allow(dead_code)]
     pub fn new_with_id(integration_id: IntegrationId, device_id: DeviceId) -> DeviceRef {
         DeviceRef::Id(DeviceIdRef {
             integration_id,
@@ -454,6 +455,15 @@ impl DeviceRef {
             DeviceRef::Id(_) => None,
             DeviceRef::Name(name) => Some(&name.name),
         }
+    }
+}
+
+impl From<&DeviceKey> for DeviceRef {
+    fn from(value: &DeviceKey) -> Self {
+        DeviceRef::Id(DeviceIdRef {
+            integration_id: value.integration_id.clone(),
+            device_id: value.device_id.clone(),
+        })
     }
 }
 
@@ -495,7 +505,7 @@ impl<'de> Visitor<'de> for DeviceKeyVisitor {
     type Value = DeviceKey;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-        formatter.write_str("a colon-separated pair of strings")
+        formatter.write_str("a pair of strings separated by a forward slash")
     }
 
     fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
