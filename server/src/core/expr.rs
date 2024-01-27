@@ -243,7 +243,7 @@ pub fn eval_scene_expr(
 pub fn eval_action_expr(
     expr: &Node,
     context: &EvalContext,
-    devices: DevicesState,
+    devices: &DevicesState,
     event_tx: &TxEventChannel,
 ) -> Result<()> {
     let mut context = context.clone();
@@ -352,7 +352,7 @@ pub fn eval_action_expr(
     let state_diff = state_path.query_path_and_value(&vars_diff_obj);
 
     for (path, scene_id) in scenes_diff {
-        let Some(device) = find_device_by_expr_path(&devices, &path) else {
+        let Some(device) = find_device_by_expr_path(devices, &path) else {
             continue;
         };
 
@@ -368,7 +368,7 @@ pub fn eval_action_expr(
     }
 
     for (path, state) in state_diff {
-        let Some(device) = find_device_by_expr_path(&devices, &path) else {
+        let Some(device) = find_device_by_expr_path(devices, &path) else {
             continue;
         };
 
@@ -393,40 +393,40 @@ pub fn debug_print_context(context: &HashMapContext) {
 
 #[derive(Clone)]
 pub struct Expr {
-    pub scenes: Scenes,
-    pub groups: Groups,
-    pub context: Arc<RwLock<HashMapContext>>,
+    context: HashMapContext,
 }
 
 impl Expr {
-    pub fn new(scenes: Scenes, groups: Groups) -> Self {
+    pub fn new() -> Self {
         Expr {
-            scenes,
-            groups,
-            context: Arc::new(RwLock::new(HashMapContext::new())),
+            context: HashMapContext::new(),
         }
     }
 
-    pub fn get_context(&self) -> HashMapContext {
-        self.context.read().unwrap().clone()
+    pub fn get_context(&self) -> &HashMapContext {
+        &self.context
     }
 
-    pub fn recompute(&self, devices_state: &DevicesState) -> HashMapContext {
+    pub fn recompute(
+        &self,
+        devices_state: &DevicesState,
+        groups: &Groups,
+        scenes: &Scenes,
+    ) -> HashMapContext {
         // TODO: decide whether we want to support scene expressions that reference
         // other scenes with expressions
 
         // let flattened_scenes = self.scenes.compute_flattened_scenes(devices, Some(scene_id));
-        let flattened_scenes = self.scenes.get_flattened_scenes();
-        let flattened_groups = self.groups.get_flattened_groups();
+        let flattened_scenes = scenes.get_flattened_scenes();
+        let flattened_groups = groups.get_flattened_groups();
 
-        state_to_eval_context(devices_state, &flattened_scenes, &flattened_groups)
+        state_to_eval_context(devices_state, flattened_scenes, flattened_groups)
             .expect("Failed to create eval context")
     }
 
-    pub fn invalidate(&self, devices_state: &DevicesState) {
-        let context = self.recompute(devices_state);
-        let mut rw_lock = self.context.write().unwrap();
-        *rw_lock = context;
+    pub fn invalidate(&mut self, devices_state: &DevicesState, groups: &Groups, scenes: &Scenes) {
+        let context = self.recompute(devices_state, groups, scenes);
+        self.context = context;
     }
 }
 

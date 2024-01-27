@@ -7,36 +7,22 @@ use crate::types::{
     event::{Message, TxEventChannel},
     rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
 };
-use std::{
-    collections::HashSet,
-    sync::{Arc, RwLock},
-};
+use std::collections::HashSet;
 
-use crate::core::devices::find_device;
-
-use super::{expr::Expr, groups::Groups};
+use super::{devices::Devices, expr::Expr, groups::Groups};
 
 #[derive(Clone)]
 pub struct Rules {
     config: RoutinesConfig,
     event_tx: TxEventChannel,
-    groups: Groups,
-    expr: Expr,
-    prev_triggered_routine_ids: Arc<RwLock<Option<HashSet<RoutineId>>>>,
+    prev_triggered_routine_ids: Option<HashSet<RoutineId>>,
 }
 
 impl Rules {
-    pub fn new(
-        config: RoutinesConfig,
-        groups: Groups,
-        expr: Expr,
-        event_tx: TxEventChannel,
-    ) -> Self {
+    pub fn new(config: RoutinesConfig, event_tx: TxEventChannel) -> Self {
         Rules {
             config,
             event_tx,
-            groups,
-            expr,
             prev_triggered_routine_ids: Default::default(),
         }
     }
@@ -44,15 +30,18 @@ impl Rules {
     /// An internal state update has occurred, we need to check if any rules are
     /// triggered by this change and run actions of triggered rules.
     pub async fn handle_internal_state_update(
-        &self,
+        &mut self,
         old_state: &DevicesState,
         new_state: &DevicesState,
         old: &Option<Device>,
-        _new: &Device,
+        devices: &Devices,
+        groups: &Groups,
+        expr: &Expr,
     ) {
         match old {
             Some(_) => {
-                let matching_actions = self.find_matching_actions(old_state, new_state);
+                let matching_actions =
+                    self.find_matching_actions(old_state, new_state, devices, groups, expr);
 
                 for action in matching_actions {
                     self.event_tx.send(Message::Action(action.clone()));
@@ -79,23 +68,25 @@ impl Rules {
 
     /// Find any rules that were triggered by transitioning from `old_state` to
     /// `new_state`, and return all actions of those rules.
-    fn find_matching_actions(&self, old_state: &DevicesState, new_state: &DevicesState) -> Actions {
+    fn find_matching_actions(
+        &mut self,
+        old_state: &DevicesState,
+        new_state: &DevicesState,
+        devices: &Devices,
+        groups: &Groups,
+        expr: &Expr,
+    ) -> Actions {
         // if states are equal we can bail out early
         if old_state == new_state {
             return vec![];
         }
 
-        let prev_triggered_routine_ids = self
-            .prev_triggered_routine_ids
-            .read()
-            .unwrap()
-            .clone()
-            .unwrap_or_default();
-        let new_triggered_routine_ids = self.get_triggered_routine_ids(new_state);
+        let prev_triggered_routine_ids =
+            self.prev_triggered_routine_ids.clone().unwrap_or_default();
+        let new_triggered_routine_ids = self.get_triggered_routine_ids(devices, groups, expr);
 
         {
-            let mut rw_lock = self.prev_triggered_routine_ids.write().unwrap();
-            *rw_lock = Some(new_triggered_routine_ids.clone());
+            self.prev_triggered_routine_ids = Some(new_triggered_routine_ids.clone());
         }
 
         // The difference between the two sets will contain only routines that
@@ -115,15 +106,18 @@ impl Rules {
 
     /// Returns a set of routine ids that are currently triggered with the given
     /// state.
-    fn get_triggered_routine_ids(&self, devices: &DevicesState) -> HashSet<RoutineId> {
-        let eval_context = self.expr.get_context();
+    fn get_triggered_routine_ids(
+        &self,
+        devices: &Devices,
+        groups: &Groups,
+        expr: &Expr,
+    ) -> HashSet<RoutineId> {
+        let eval_context = expr.get_context();
 
         let triggered_routine_ids: HashSet<RoutineId> = self
             .config
             .iter()
-            .filter(|(_, routine)| {
-                is_routine_triggered(devices, &self.groups, routine, &eval_context)
-            })
+            .filter(|(_, routine)| is_routine_triggered(devices, groups, routine, eval_context))
             .map(|(routine_id, _)| routine_id.clone())
             .collect();
 
@@ -133,7 +127,7 @@ impl Rules {
 
 /// Returns true if all rules of the given routine are triggered.
 fn is_routine_triggered(
-    state: &DevicesState,
+    devices: &Devices,
     groups: &Groups,
     routine: &Routine,
     eval_context: &HashMapContext,
@@ -143,7 +137,7 @@ fn is_routine_triggered(
     }
 
     routine.rules.iter().all(|rule| {
-        let result = is_rule_triggered(state, groups, rule, eval_context);
+        let result = is_rule_triggered(devices, groups, rule, eval_context);
         match result {
             Ok(result) => result,
             Err(error) => {
@@ -203,7 +197,7 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool> {
 
 /// Returns true if rule is triggered
 fn is_rule_triggered(
-    devices: &DevicesState,
+    devices: &Devices,
     groups: &Groups,
     rule: &Rule,
     eval_context: &HashMapContext,
@@ -219,14 +213,16 @@ fn is_rule_triggered(
             return Ok(any_triggered);
         }
         Rule::Sensor(rule) => {
-            vec![find_device(devices, &rule.device_ref)
+            vec![devices
+                .get_device_by_ref(&rule.device_ref)
                 .ok_or(eyre!("Could not find matching sensor for rule: {:?}", rule))?]
         }
         Rule::Device(rule) => {
-            vec![find_device(devices, &rule.device_ref)
+            vec![devices
+                .get_device_by_ref(&rule.device_ref)
                 .ok_or(eyre!("Could not find matching device for rule: {:?}", rule))?]
         }
-        Rule::Group(rule) => groups.find_group_devices(devices, &rule.group_id),
+        Rule::Group(rule) => groups.find_group_devices(devices.get_state(), &rule.group_id),
         Rule::EvalExpr(expr) => {
             let result = expr.eval_boolean_with_context(eval_context)?;
             return Ok(result);

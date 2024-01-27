@@ -34,9 +34,9 @@ impl AppState {
             }
         }
 
-        let devices = self.devices.get_devices();
-        let scenes = self.scenes.get_flattened_scenes();
-        let groups = self.groups.get_flattened_groups();
+        let devices = self.devices.get_state();
+        let scenes = self.scenes.get_flattened_scenes().clone();
+        let groups = self.groups.get_flattened_groups().clone();
 
         let devices_converted = devices
             .0

@@ -10,19 +10,20 @@ use actions::*;
 use devices::*;
 
 use color_eyre::Result;
+use tokio::sync::RwLock;
 use warp::Filter;
 
 use self::ws::ws;
 
 pub fn with_state(
-    app_state: &Arc<AppState>,
-) -> impl Filter<Extract = (Arc<AppState>,), Error = std::convert::Infallible> + Clone {
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (Arc<RwLock<AppState>>,), Error = std::convert::Infallible> + Clone {
     let app_state = app_state.clone();
     warp::any().map(move || app_state.clone())
 }
 
 // Example of warp usage: https://github.com/seanmonstar/warp/blob/master/examples/todos.rs
-pub fn init_api(app_state: &Arc<AppState>) -> Result<()> {
+pub fn init_api(app_state: &Arc<RwLock<AppState>>) -> Result<()> {
     let api = warp::path("api")
         .and(warp::path("v1"))
         .and(devices(app_state).or(actions(app_state)));

@@ -1,7 +1,4 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::{Arc, RwLock},
-};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     types::{
@@ -11,13 +8,13 @@ use crate::{
     utils::keys_match,
 };
 
-use super::devices::find_device;
+use super::devices::Devices;
 
 #[derive(Clone, Default)]
 pub struct Groups {
     config: GroupsConfig,
     device_refs_by_groups: BTreeMap<GroupId, BTreeSet<DeviceRef>>,
-    flattened_groups: Arc<RwLock<FlattenedGroupsConfig>>,
+    flattened_groups: FlattenedGroupsConfig,
 }
 
 /// Evaluates the group config and returns a flattened version of it
@@ -67,7 +64,7 @@ fn mk_device_refs_by_groups(config: &GroupsConfig) -> DeviceRefsByGroups {
 fn mk_flattened_groups(
     config: &GroupsConfig,
     device_refs_by_groups: &BTreeMap<GroupId, BTreeSet<DeviceRef>>,
-    devices: &DevicesState,
+    devices: &Devices,
 ) -> FlattenedGroupsConfig {
     let flattened_config = device_refs_by_groups
         .iter()
@@ -82,7 +79,7 @@ fn mk_flattened_groups(
                     name: group.name.clone(),
                     device_ids: device_refs
                         .iter()
-                        .filter_map(|device_ref| find_device(devices, device_ref))
+                        .filter_map(|device_ref| devices.get_device_by_ref(device_ref))
                         .map(|device| device.get_device_key())
                         .collect(),
                     hidden: group.hidden,
@@ -162,8 +159,8 @@ impl Groups {
 
     /// Returns a flattened version of the groups config, with any contained
     /// groups expanded.
-    pub fn get_flattened_groups(&self) -> FlattenedGroupsConfig {
-        self.flattened_groups.read().unwrap().clone()
+    pub fn get_flattened_groups(&self) -> &FlattenedGroupsConfig {
+        &self.flattened_groups
     }
 
     /// Returns all Devices that belong to given group
@@ -183,13 +180,16 @@ impl Groups {
             .collect()
     }
 
-    pub fn invalidate(&self, old_state: &DevicesState, new_state: &DevicesState) -> bool {
+    pub fn invalidate(
+        &mut self,
+        old_state: &DevicesState,
+        new_state: &DevicesState,
+        devices: &Devices,
+    ) -> bool {
         // Only invalidate groups if device ids have changed
         if !keys_match(&old_state.0, &new_state.0) {
-            let flattened_groups =
-                mk_flattened_groups(&self.config, &self.device_refs_by_groups, new_state);
-            let mut rw_lock = self.flattened_groups.write().unwrap();
-            *rw_lock = flattened_groups;
+            self.flattened_groups =
+                mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices);
             true
         } else {
             false

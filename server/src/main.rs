@@ -29,6 +29,7 @@ use color_eyre::Result;
 use db::init_db;
 use eyre::eyre;
 use std::{error::Error, sync::Arc};
+use tokio::sync::RwLock;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -46,16 +47,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut integrations = Integrations::new(event_tx.clone());
     let groups = Groups::new(config.groups.unwrap_or_default());
-    let scenes = Scenes::new(config.scenes.unwrap_or_default(), groups.clone());
+    let mut scenes = Scenes::new(config.scenes.unwrap_or_default());
     scenes.refresh_db_scenes().await;
-    let devices = Devices::new(event_tx.clone(), scenes.clone());
-    let expr = Expr::new(scenes.clone(), groups.clone());
-    let rules = Rules::new(
-        config.routines.unwrap_or_default(),
-        groups.clone(),
-        expr.clone(),
-        event_tx.clone(),
-    );
+    let devices = Devices::new(event_tx.clone());
+    let expr = Expr::new();
+    let rules = Rules::new(config.routines.unwrap_or_default(), event_tx.clone());
 
     for (id, integration_config) in &config.integrations.unwrap_or_default() {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
@@ -81,7 +77,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         ws: Default::default(),
     };
 
-    let state = Arc::new(state);
+    let state = Arc::new(RwLock::new(state));
 
     init_api(&state)?;
 
@@ -96,7 +92,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let state = Arc::clone(&state);
 
         tokio::spawn(async move {
-            let result = handle_message(state, &msg).await;
+            let mut state = state.write().await;
+            let result = handle_message(&mut state, &msg).await;
 
             if let Err(err) = result {
                 error!(

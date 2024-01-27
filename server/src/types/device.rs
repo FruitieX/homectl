@@ -404,6 +404,15 @@ pub struct DeviceIdRef {
     pub device_id: DeviceId,
 }
 
+impl DeviceIdRef {
+    pub fn into_device_key(self) -> DeviceKey {
+        DeviceKey {
+            integration_id: self.integration_id,
+            device_id: self.device_id,
+        }
+    }
+}
+
 #[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, PartialOrd, Ord)]
 #[ts(export)]
 pub struct DeviceNameRef {
@@ -434,27 +443,6 @@ impl DeviceRef {
             integration_id,
             name,
         })
-    }
-
-    pub fn integration_id(&self) -> &IntegrationId {
-        match self {
-            DeviceRef::Id(id) => &id.integration_id,
-            DeviceRef::Name(name) => &name.integration_id,
-        }
-    }
-
-    pub fn device_id(&self) -> Option<&DeviceId> {
-        match self {
-            DeviceRef::Id(id) => Some(&id.device_id),
-            DeviceRef::Name(_) => None,
-        }
-    }
-
-    pub fn name(&self) -> Option<&String> {
-        match self {
-            DeviceRef::Id(_) => None,
-            DeviceRef::Name(name) => Some(&name.name),
-        }
     }
 }
 

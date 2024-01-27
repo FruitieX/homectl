@@ -7,7 +7,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::{ws::WebSocket, Filter};
 
@@ -15,20 +15,20 @@ use warp::{ws::WebSocket, Filter};
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 
 pub fn ws(
-    app_state: &Arc<AppState>,
+    app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("ws")
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
         .and(with_state(app_state))
-        .map(|ws: warp::ws::Ws, app_state: Arc<AppState>| {
+        .map(|ws: warp::ws::Ws, app_state: Arc<RwLock<AppState>>| {
             // This will call our function if the handshake succeeds.
             ws.on_upgrade(move |socket| user_connected(socket, app_state))
         })
 }
 
 // https://github.com/seanmonstar/warp/blob/master/examples/websockets_chat.rs
-async fn user_connected(ws: WebSocket, app_state: Arc<AppState>) {
+async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
     // Use a counter to assign a new unique ID for this user.
     let my_id = NEXT_USER_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -50,6 +50,8 @@ async fn user_connected(ws: WebSocket, app_state: Arc<AppState>) {
                 .await;
         }
     });
+
+    let app_state = app_state.read().await;
 
     // Save the sender in our list of connected users.
     app_state.ws.user_connected(my_id, tx).await;

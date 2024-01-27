@@ -1,5 +1,4 @@
 use color_eyre::Result;
-use std::sync::Arc;
 
 use crate::types::{
     action::Action,
@@ -14,9 +13,14 @@ use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
 
 use super::{expr::eval_action_expr, state::AppState};
 
-pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
+pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
     match msg {
-        Message::RecvDeviceState { device } => state.devices.handle_recv_device_state(device).await,
+        Message::RecvDeviceState { device } => {
+            state
+                .devices
+                .handle_recv_device_state(device, &state.scenes)
+                .await
+        }
         Message::InternalStateUpdate {
             old_state,
             new_state,
@@ -26,21 +30,34 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             let invalidated_device = new;
             debug!("invalidating {name}", name = invalidated_device.name);
 
-            let groups_invalidated = state.groups.invalidate(old_state, new_state);
+            let _groups_invalidated = state
+                .groups
+                .invalidate(old_state, new_state, &state.devices);
 
-            let invalidated_scenes = state.scenes.invalidate(
+            let _invalidated_scenes = state.scenes.invalidate(
                 old_state,
                 new_state,
                 invalidated_device,
-                &state.expr.get_context(),
+                &state.devices,
+                &state.groups,
+                state.expr.get_context(),
             );
 
             // TODO: only invalidate changed devices/groups/scenes in expr context
-            state.expr.invalidate(new_state);
+            state
+                .expr
+                .invalidate(new_state, &state.groups, &state.scenes);
 
             state
                 .rules
-                .handle_internal_state_update(old_state, new_state, old, new)
+                .handle_internal_state_update(
+                    old_state,
+                    new_state,
+                    old,
+                    &state.devices,
+                    &state.groups,
+                    &state.expr,
+                )
                 .await;
 
             state.event_tx.send(Message::WsBroadcastState);
@@ -54,7 +71,7 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
         } => {
             state
                 .devices
-                .set_device_state(device, *set_scene, false, *skip_send)
+                .set_device_state(device, &state.scenes, *set_scene, false, *skip_send)
                 .await;
 
             Ok(())
@@ -99,7 +116,14 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             let eval_context = state.expr.get_context();
             state
                 .devices
-                .activate_scene(scene_id, device_keys, group_keys, &eval_context)
+                .activate_scene(
+                    scene_id,
+                    device_keys,
+                    group_keys,
+                    &state.groups,
+                    &state.scenes,
+                    eval_context,
+                )
                 .await;
 
             Ok(())
@@ -108,7 +132,13 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             let eval_context = state.expr.get_context();
             state
                 .devices
-                .cycle_scenes(scenes, nowrap.unwrap_or(false), &eval_context)
+                .cycle_scenes(
+                    scenes,
+                    nowrap.unwrap_or(false),
+                    &state.groups,
+                    &state.scenes,
+                    eval_context,
+                )
                 .await;
 
             Ok(())
@@ -118,7 +148,10 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
             group_keys,
             step,
         })) => {
-            state.devices.dim(device_keys, group_keys, step).await;
+            state
+                .devices
+                .dim(device_keys, group_keys, step, &state.scenes)
+                .await;
 
             Ok(())
         }
@@ -137,15 +170,19 @@ pub async fn handle_message(state: Arc<AppState>, msg: &Message) -> Result<()> {
         Message::Action(Action::SetDeviceState(device)) => {
             state
                 .devices
-                .set_device_state(device, false, false, false)
+                .set_device_state(device, &state.scenes, false, false, false)
                 .await;
 
             Ok(())
         }
         Message::Action(Action::EvalExpr(expr)) => {
-            let devices = state.devices.get_devices();
             let eval_context = state.expr.get_context();
-            eval_action_expr(expr, &eval_context, devices, &state.event_tx)?;
+            eval_action_expr(
+                expr,
+                eval_context,
+                state.devices.get_state(),
+                &state.event_tx,
+            )?;
 
             Ok(())
         }

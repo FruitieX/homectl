@@ -5,6 +5,7 @@ use crate::types::{
     device::{Device, DeviceId},
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 use warp::Filter;
 
 use crate::core::state::AppState;
@@ -17,7 +18,7 @@ pub struct DevicesResponse {
 }
 
 pub fn devices(
-    app_state: &Arc<AppState>,
+    app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("devices").and(get_devices(app_state).or(put_device(app_state)))
 }
@@ -28,13 +29,14 @@ struct GetQuery {
 }
 
 fn get_devices(
-    app_state: &Arc<AppState>,
+    app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::query::<GetQuery>())
         .and(with_state(app_state))
-        .map(|q: GetQuery, app_state: Arc<AppState>| {
-            let devices = app_state.devices.get_devices();
+        .map(|q: GetQuery, app_state: Arc<RwLock<AppState>>| {
+            let app_state = app_state.blocking_read();
+            let devices = app_state.devices.get_state();
 
             let devices_converted = devices
                 .0
@@ -53,7 +55,7 @@ fn get_devices(
 }
 
 fn put_device(
-    app_state: &Arc<AppState>,
+    app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path!(DeviceId)
         .and(warp::put())
@@ -65,19 +67,22 @@ fn put_device(
 async fn put_device_impl(
     device_id: DeviceId,
     device: Device,
-    app_state: Arc<AppState>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl warp::Reply, Infallible> {
     // Make sure device_id matches with provided device
     if device_id != device.id {
         return Ok(warp::reply::json(&DevicesResponse { devices: vec![] }));
     }
 
+    let mut app_state = app_state.write().await;
+    let scenes = app_state.scenes.clone();
+
     app_state
         .devices
-        .set_device_state(&device, true, false, false)
+        .set_device_state(&device, &scenes, true, false, false)
         .await;
 
-    let devices = app_state.devices.get_devices();
+    let devices = app_state.devices.get_state();
     let response = DevicesResponse {
         devices: devices.0.values().cloned().collect(),
     };

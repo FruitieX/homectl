@@ -1,7 +1,9 @@
 use crate::db::actions::{db_find_device, db_update_device};
 use crate::types::color::{Capabilities, DeviceColor};
+use crate::types::integration::IntegrationId;
 
 use super::expr::EvalContext;
+use super::groups::Groups;
 use super::scenes::{get_next_cycled_scene, Scenes};
 use crate::types::device::{
     ControllableDevice, ControllableState, DeviceRef, ManageKind, SensorDevice,
@@ -15,14 +17,13 @@ use crate::types::{
 use color_eyre::Result;
 use eyre::eyre;
 use ordered_float::OrderedFloat;
-use std::sync::Arc;
-use std::sync::Mutex;
+use std::collections::BTreeMap;
 
 #[derive(Clone)]
 pub struct Devices {
     event_tx: TxEventChannel,
-    state: Arc<Mutex<DevicesState>>,
-    scenes: Scenes,
+    state: DevicesState,
+    keys_by_name: BTreeMap<(IntegrationId, String), DeviceKey>,
 }
 
 /// Compares light colors in the color mode as preferred by the device, allowing
@@ -110,20 +111,24 @@ fn cmp_sensor_states(sensor: &SensorDevice, previous: &SensorDevice) -> bool {
 }
 
 impl Devices {
-    pub fn new(event_tx: TxEventChannel, scenes: Scenes) -> Self {
+    pub fn new(event_tx: TxEventChannel) -> Self {
         Devices {
             event_tx,
             state: Default::default(),
-            scenes,
+            keys_by_name: Default::default(),
         }
     }
 
-    pub fn get_devices(&self) -> DevicesState {
-        self.state.lock().unwrap().clone()
+    pub fn get_state(&self) -> &DevicesState {
+        &self.state
     }
 
     /// Checks whether device values were changed or not due to refresh
-    pub async fn handle_recv_device_state(&self, incoming: &Device) -> Result<()> {
+    pub async fn handle_recv_device_state(
+        &mut self,
+        incoming: &Device,
+        scenes: &Scenes,
+    ) -> Result<()> {
         trace!("handle_recv_device_state {:?}", incoming);
         let current = self.get_device(&incoming.get_device_key());
 
@@ -131,7 +136,7 @@ impl Devices {
         // computed it
         let expected_state = current
             .as_ref()
-            .and_then(|d| self.get_expected_state(d, false));
+            .and_then(|d| self.get_expected_state(d, scenes, false));
 
         // Take action if the device state differs from expected state
         match (&incoming.data, current, expected_state) {
@@ -155,12 +160,13 @@ impl Devices {
                             device
                         );
 
-                        self.set_device_state(&device, true, true, !device.is_managed())
+                        self.set_device_state(&device, scenes, true, true, !device.is_managed())
                             .await;
                     }
                     None => {
                         info!("Discovered device: {:?}", incoming);
-                        self.set_device_state(incoming, true, false, false).await;
+                        self.set_device_state(incoming, scenes, true, false, false)
+                            .await;
                     }
                 }
             }
@@ -176,12 +182,14 @@ impl Devices {
 
                 // Sensor state has changed, defer handling of this update to
                 // other subsystems
-                self.set_device_state(incoming, false, false, false).await;
+                self.set_device_state(incoming, scenes, false, false, false)
+                    .await;
             }
 
             (DeviceData::Controllable(ref incoming_state), _, Some(expected_state)) => {
                 if !incoming.is_managed() {
-                    self.set_device_state(incoming, false, false, true).await;
+                    self.set_device_state(incoming, scenes, false, false, true)
+                        .await;
                     return Ok(());
                 }
 
@@ -199,7 +207,8 @@ impl Devices {
                         let mut incoming = incoming.clone();
                         incoming.data = DeviceData::Controllable(incoming_state);
 
-                        self.set_device_state(&incoming, false, false, true).await;
+                        self.set_device_state(&incoming, scenes, false, false, true)
+                            .await;
                     };
 
                     return Ok(());
@@ -223,7 +232,7 @@ impl Devices {
                 // Replace device state with expected state, converted into a
                 // supported color format
                 let mut controllable = incoming_state.clone();
-                controllable.state = expected_state;
+                controllable.state = expected_state.clone();
                 controllable.state.color = controllable
                     .state
                     .color
@@ -240,7 +249,8 @@ impl Devices {
 
             // Expected device state was not found
             (_, _, None) => {
-                self.set_device_state(incoming, false, false, false).await;
+                self.set_device_state(incoming, scenes, false, false, false)
+                    .await;
             }
         }
 
@@ -253,6 +263,7 @@ impl Devices {
     fn get_expected_state(
         &self,
         device: &Device,
+        scenes: &Scenes,
         use_passed_state: bool,
     ) -> Option<ControllableState> {
         match device.data {
@@ -261,8 +272,10 @@ impl Devices {
             DeviceData::Controllable(_) => {
                 let scene_device_state = {
                     let ignore_transition = use_passed_state;
-                    let device_state = self.scenes.find_scene_device_state(device);
-                    device_state.map(|mut state| {
+                    let device_state = scenes.find_scene_device_state(device);
+                    device_state.map(|state| {
+                        let mut state = state.clone();
+
                         // Ignore transition specified by scene if we're setting state
                         if ignore_transition {
                             state.transition_ms = None;
@@ -280,10 +293,9 @@ impl Devices {
                             // Return passed device state
                             device.get_controllable_state().cloned()
                         } else {
-                            let state = self.state.lock().unwrap();
-
                             // Return previous device state
-                            let device = state
+                            let device = self
+                                .state
                                 .0
                                 .get(&device.get_device_key())
                                 .unwrap_or(device)
@@ -310,14 +322,23 @@ impl Devices {
     /// Sets internal state for given device and dispatches device state to
     /// integration
     pub async fn set_device_state(
-        &self,
+        &mut self,
         device: &Device,
+        scenes: &Scenes,
         set_scene: bool,
         skip_db: bool,
         skip_send: bool,
     ) -> Device {
-        let old: Option<Device> = self.get_device(&device.get_device_key());
-        let old_states = { self.state.lock().unwrap().clone() };
+        let old_states = { self.state.clone() };
+        let old = old_states.0.get(&device.get_device_key()).cloned();
+
+        // Insert new device into keys_by_name map
+        if old.is_none() {
+            self.keys_by_name.insert(
+                (device.integration_id.clone(), device.name.clone()),
+                device.get_device_key(),
+            );
+        }
 
         let mut device = device.clone();
 
@@ -329,32 +350,30 @@ impl Devices {
 
         if set_scene || device.is_managed() {
             // Allow active scene to override device state
-            let expected_state = self.get_expected_state(&device, true);
+            let expected_state = self.get_expected_state(&device, scenes, true);
             let capabilities = device.get_supported_color_modes();
 
             // Replace device state with expected state
-            if let (Some(mut expected_state), Some(capabilities)) = (expected_state, capabilities) {
+            if let (Some(expected_state), Some(capabilities)) = (expected_state, capabilities) {
+                let mut expected_state = expected_state.clone();
+
                 // Converted expected state into a supported color format
                 expected_state.color = expected_state
                     .color
                     .and_then(|c| c.to_device_preferred_mode(capabilities));
 
-                device = device.set_controllable_state(expected_state);
+                device = device.set_controllable_state(expected_state.clone());
             }
         }
 
-        let new_state = {
-            let mut states = self.state.lock().unwrap();
-            states.0.insert(device.get_device_key(), device.clone());
-            states.clone()
-        };
+        self.state.0.insert(device.get_device_key(), device.clone());
 
         let state_changed = old.as_ref() != Some(&device);
 
         if state_changed {
             self.event_tx.send(Message::InternalStateUpdate {
                 old_state: old_states,
-                new_state,
+                new_state: self.state.clone(),
                 old,
                 new: device.clone(),
             });
@@ -376,21 +395,24 @@ impl Devices {
         device
     }
 
-    pub fn get_device(&self, device_key: &DeviceKey) -> Option<Device> {
-        self.state.lock().unwrap().0.get(device_key).cloned()
+    pub fn get_device(&self, device_key: &DeviceKey) -> Option<&Device> {
+        self.state.0.get(device_key)
     }
 
     pub async fn activate_scene(
-        &self,
+        &mut self,
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        groups: &Groups,
+        scenes: &Scenes,
         eval_context: &EvalContext,
     ) -> Option<bool> {
         info!("Activating scene {:?}", scene_id);
 
-        let scene_devices_config = self.scenes.find_scene_devices_config(
-            &self.state.lock().unwrap(),
+        let scene_devices_config = scenes.find_scene_devices_config(
+            self,
+            groups,
             &SceneDescriptor {
                 scene_id: scene_id.clone(),
                 device_keys: device_keys.clone(),
@@ -404,7 +426,8 @@ impl Devices {
 
             if let Some(device) = device {
                 let device = device.set_scene(Some(scene_id.clone()));
-                self.set_device_state(&device, true, false, false).await;
+                self.set_device_state(&device, scenes, true, false, false)
+                    .await;
             }
         }
 
@@ -412,81 +435,66 @@ impl Devices {
     }
 
     pub async fn dim(
-        &self,
+        &mut self,
         _device_keys: &Option<Vec<DeviceKey>>,
         _group_keys: &Option<Vec<GroupId>>,
         step: &Option<f32>,
+        scenes: &Scenes,
     ) -> Option<bool> {
         debug!("Dimming devices. Step: {}", step.unwrap_or(0.1));
 
-        let mut devices = self.state.lock().unwrap().clone();
-
-        for device in devices.0.iter_mut() {
+        let devices = self.get_state().clone();
+        for device in devices.0 {
             let mut d = device.1.clone();
             d = d.dim_device(step.unwrap_or(0.1));
             d = d.set_scene(Some(SceneId::new("dimmed".to_string())));
-            self.set_device_state(&d, false, false, false).await;
+            self.set_device_state(&d, scenes, false, false, false).await;
         }
 
         Some(true)
     }
 
     pub async fn cycle_scenes(
-        &self,
+        &mut self,
         scene_descriptors: &[SceneDescriptor],
         nowrap: bool,
+        groups: &Groups,
+        scenes: &Scenes,
         eval_context: &EvalContext,
     ) -> Option<()> {
         let next_scene = {
-            let devices = self.state.lock().unwrap();
-            let scenes = &self.scenes;
-
-            get_next_cycled_scene(scene_descriptors, nowrap, &devices, scenes, eval_context)
+            get_next_cycled_scene(
+                scene_descriptors,
+                nowrap,
+                self,
+                groups,
+                scenes,
+                eval_context,
+            )
         }?;
 
         self.activate_scene(
             &next_scene.scene_id,
             &next_scene.device_keys,
             &next_scene.group_keys,
+            groups,
+            scenes,
             eval_context,
         )
         .await;
 
         Some(())
     }
-}
 
-pub fn find_device<'a>(devices: &'a DevicesState, device_ref: &DeviceRef) -> Option<&'a Device> {
-    let device = devices
-        .0
-        .iter()
-        .find(
-            |(
-                DeviceKey {
-                    integration_id: candidate_integration_id,
-                    device_id: candidate_device_id,
-                },
-                candidate_device,
-            )| {
-                if device_ref.integration_id() != candidate_integration_id {
-                    return false;
-                }
+    pub fn get_device_by_ref<'a>(&'a self, device_ref: &DeviceRef) -> Option<&'a Device> {
+        let device_key = match device_ref {
+            DeviceRef::Id(id_ref) => Some(id_ref.clone().into_device_key()),
+            DeviceRef::Name(name_ref) => self
+                .keys_by_name
+                .get(&(name_ref.integration_id.clone(), name_ref.name.clone()))
+                .cloned(),
+        }?;
 
-                let device_id = device_ref.device_id();
-                if device_id.is_some() && device_id != Some(candidate_device_id) {
-                    return false;
-                }
-
-                // TODO: regex matches
-                let name = device_ref.name();
-                if name.is_some() && name != Some(&candidate_device.name) {
-                    return false;
-                }
-
-                true
-            },
-        )
-        .map(|(_, device)| device)?;
-
-    Some(device)
+        self.state.0.get(&device_key)
+    }
 }
