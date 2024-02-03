@@ -51,7 +51,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
         }
     });
 
-    let app_state = app_state.read().await;
+    let app_state = app_state.read().await.clone();
 
     // Save the sender in our list of connected users.
     app_state.ws.user_connected(my_id, tx).await;
