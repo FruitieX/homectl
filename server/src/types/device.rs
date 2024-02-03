@@ -328,6 +328,19 @@ impl Device {
         }
     }
 
+    pub fn color_to_preferred_mode(&self) -> Device {
+        let state = self.get_controllable_state();
+        let capabilities = self.get_supported_color_modes();
+
+        if let (Some(state), Some(capabilities)) = (state, capabilities) {
+            let converted_state = state.color_to_device_preferred_mode(capabilities);
+
+            self.set_controllable_state(converted_state)
+        } else {
+            self.clone()
+        }
+    }
+
     pub fn is_sensor(&self) -> bool {
         matches!(self.data, DeviceData::Sensor(_))
     }

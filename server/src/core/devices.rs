@@ -351,17 +351,9 @@ impl Devices {
         if set_scene || device.is_managed() {
             // Allow active scene to override device state
             let expected_state = self.get_expected_state(&device, scenes, true);
-            let capabilities = device.get_supported_color_modes();
 
             // Replace device state with expected state
-            if let (Some(expected_state), Some(capabilities)) = (expected_state, capabilities) {
-                let mut expected_state = expected_state.clone();
-
-                // Converted expected state into a supported color format
-                expected_state.color = expected_state
-                    .color
-                    .and_then(|c| c.to_device_preferred_mode(capabilities));
-
+            if let Some(expected_state) = expected_state {
                 device = device.set_controllable_state(expected_state.clone());
             }
         }
@@ -380,9 +372,9 @@ impl Devices {
         }
 
         if !skip_send && !device.is_sensor() {
-            self.event_tx.send(Message::SendDeviceState {
-                device: device.clone(),
-            });
+            let device = device.color_to_preferred_mode();
+
+            self.event_tx.send(Message::SendDeviceState { device });
         }
 
         if !skip_db && state_changed {
