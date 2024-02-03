@@ -89,18 +89,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
         // trace!("Received message: {:.100}", format!("{:?}", msg));
 
-        let state = Arc::clone(&state);
+        let mut state = state.write().await;
+        let result = handle_message(&mut state, &msg).await;
 
-        tokio::spawn(async move {
-            let mut state = state.write().await;
-            let result = handle_message(&mut state, &msg).await;
-
-            if let Err(err) = result {
-                error!(
-                    "Error while handling message:\n    Msg:\n    {:#?}\n\n    Err:\n    {:#?}",
-                    msg, err
-                );
-            }
-        });
+        if let Err(err) = result {
+            error!(
+                "Error while handling message:\n    Msg:\n    {:#?}\n\n    Err:\n    {:#?}",
+                msg, err
+            );
+        }
     }
 }
