@@ -4,7 +4,7 @@ use std::{
 };
 
 use evalexpr::*;
-use eyre::Result;
+use eyre::{OptionExt, Result};
 use jsonptr::Assign;
 use serde_json_path::{JsonPath, NormalizedPath};
 
@@ -167,34 +167,10 @@ fn tuple_value_to_vec_string(value: &Value) -> EvalexprResult<Vec<String>> {
     Ok(vec)
 }
 
-fn context_diff_obj(a: &HashMapContext, b: &HashMapContext) -> Result<serde_json::Value> {
-    let vars_diff_map: HashMap<String, Value> = b
-        .iter_variables()
-        .filter_map(|(name, value)| {
-            let original_value = a.get_value(&name);
-            if Some(&value) != original_value {
-                Some((name.clone(), value.clone()))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    debug!("The expression changed the value of the following variables:");
-    debug!("{vars_diff_map:?}");
-
-    let mut vars_diff_obj = serde_json::Value::default();
-
-    for (path, value) in vars_diff_map {
-        let json_pointer = jsonptr::Pointer::try_from(format!("/{}", path.replace('.', "/")))?;
-        let new_value = evalexpr_value_to_serde(&value)?;
-        vars_diff_obj.assign(&json_pointer, new_value)?;
-    }
-
-    Ok(vars_diff_obj)
-}
-
-fn find_device_by_expr_path<'a>(devices: &'a DevicesState, path: &NormalizedPath<'a>) -> Option<&'a Device> {
+fn find_device_by_expr_path<'a>(
+    devices: &'a DevicesState,
+    path: &NormalizedPath<'a>,
+) -> Option<&'a Device> {
     let integration_id = path.get(1)?.to_string();
     let name = path.get(2)?.to_string();
 
@@ -204,20 +180,33 @@ fn find_device_by_expr_path<'a>(devices: &'a DevicesState, path: &NormalizedPath
     })
 }
 
+fn context_write_vars_obj(expr: &Node, context: &HashMapContext) -> Result<serde_json::Value> {
+    let mut obj = serde_json::Value::default();
+
+    for var in expr.iter_write_variable_identifiers() {
+        let value = context.get_value(var).ok_or_eyre(
+            "Could not find value of expr variable that we're currently looping over",
+        )?;
+        let json_pointer = jsonptr::Pointer::try_from(format!("/{}", var.replace('.', "/")))?;
+        let new_value = evalexpr_value_to_serde(value)?;
+        obj.assign(&json_pointer, new_value)?;
+    }
+
+    Ok(obj)
+}
 pub fn eval_scene_expr(
     expr: &Node,
     context: &EvalContext,
     devices: &DevicesState,
 ) -> Result<HashMap<DeviceKey, SceneDeviceConfig>> {
     let mut context = context.clone();
-    let original_context = context.clone();
 
     expr.eval_with_context_mut(&mut context)?;
 
-    let vars_diff_obj = context_diff_obj(&original_context, &context)?;
+    let write_vars_obj = context_write_vars_obj(expr, &context)?;
 
     let state_path = JsonPath::parse("$.devices.*.*.state").unwrap();
-    let state_diff = state_path.query_located(&vars_diff_obj);
+    let state_diff = state_path.query_located(&write_vars_obj);
 
     let mut result = HashMap::new();
     for q in state_diff {
@@ -228,9 +217,12 @@ pub fn eval_scene_expr(
             warn!("Could not find device by expression path: {path:?}");
             continue;
         };
-        let Ok(device) = device.set_value(state) else {
-            error!("Could not set value on device: {device:?}, {state}");
-            continue;
+        let device = match device.set_value(state) {
+            Ok(device) => device,
+            Err(e) => {
+                error!("Could not set value on device: {device:?}, {state}:\n{e}");
+                continue;
+            }
         };
         let Some(controllable_state) = device.get_controllable_state() else {
             continue;
@@ -251,7 +243,6 @@ pub fn eval_action_expr(
 ) -> Result<()> {
     let mut context = context.clone();
     context.set_type_safety_checks_disabled(true)?;
-    let original_context = context.clone();
     let actions = Arc::new(RwLock::new(Vec::<EvalExprAction>::new()));
 
     #[derive(Clone)]
@@ -349,10 +340,10 @@ pub fn eval_action_expr(
     let scenes_path = JsonPath::parse("$.devices.*.*.scene").unwrap();
     let state_path = JsonPath::parse("$.devices.*.*.state").unwrap();
 
-    let vars_diff_obj = context_diff_obj(&original_context, &context)?;
+    let write_vars_obj = context_write_vars_obj(expr, &context)?;
 
-    let scenes_diff = scenes_path.query_located(&vars_diff_obj);
-    let state_diff = state_path.query_located(&vars_diff_obj);
+    let scenes_diff = scenes_path.query_located(&write_vars_obj);
+    let state_diff = state_path.query_located(&write_vars_obj);
 
     for q in scenes_diff {
         let path = q.location();
@@ -381,9 +372,16 @@ pub fn eval_action_expr(
             continue;
         };
 
-        let device = device.set_value(state);
-        if let Ok(device) = device {
-            event_tx.send(Message::Action(Action::SetDeviceState(device)));
+        match device.set_value(state) {
+            Ok(device) => {
+                event_tx.send(Message::Action(Action::SetDeviceState(device)));
+            }
+            Err(e) => {
+                error!(
+                    "Could not set value on device: {name:?},\ndata: {state}:\n{e}",
+                    name = device.name
+                );
+            }
         }
     }
 
