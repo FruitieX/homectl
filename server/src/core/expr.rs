@@ -6,7 +6,7 @@ use std::{
 use evalexpr::*;
 use eyre::Result;
 use jsonptr::Assign;
-use serde_json_path::JsonPath;
+use serde_json_path::{JsonPath, NormalizedPath};
 
 use crate::types::{
     action::Action,
@@ -194,13 +194,13 @@ fn context_diff_obj(a: &HashMapContext, b: &HashMapContext) -> Result<serde_json
     Ok(vars_diff_obj)
 }
 
-fn find_device_by_expr_path<'a>(devices: &'a DevicesState, path: &[String]) -> Option<&'a Device> {
-    let integration_id = path.get(1).unwrap();
-    let name = path.get(2).unwrap();
+fn find_device_by_expr_path<'a>(devices: &'a DevicesState, path: &NormalizedPath<'a>) -> Option<&'a Device> {
+    let integration_id = path.get(1)?.to_string();
+    let name = path.get(2)?.to_string();
 
     devices.0.values().find(|device| {
-        &device.integration_id.to_string() == integration_id
-            && &name_to_evalexpr(&device.name) == name
+        device.integration_id.to_string() == integration_id
+            && name_to_evalexpr(&device.name) == name
     })
 }
 
@@ -217,11 +217,14 @@ pub fn eval_scene_expr(
     let vars_diff_obj = context_diff_obj(&original_context, &context)?;
 
     let state_path = JsonPath::parse("$.devices.*.*.state").unwrap();
-    let state_diff = state_path.query_path_and_value(&vars_diff_obj);
+    let state_diff = state_path.query_located(&vars_diff_obj);
 
     let mut result = HashMap::new();
-    for (path, state) in state_diff {
-        let Some(device) = find_device_by_expr_path(devices, &path) else {
+    for q in state_diff {
+        let path = q.location();
+        let state = q.node();
+
+        let Some(device) = find_device_by_expr_path(devices, path) else {
             warn!("Could not find device by expression path: {path:?}");
             continue;
         };
@@ -348,11 +351,14 @@ pub fn eval_action_expr(
 
     let vars_diff_obj = context_diff_obj(&original_context, &context)?;
 
-    let scenes_diff = scenes_path.query_path_and_value(&vars_diff_obj);
-    let state_diff = state_path.query_path_and_value(&vars_diff_obj);
+    let scenes_diff = scenes_path.query_located(&vars_diff_obj);
+    let state_diff = state_path.query_located(&vars_diff_obj);
 
-    for (path, scene_id) in scenes_diff {
-        let Some(device) = find_device_by_expr_path(devices, &path) else {
+    for q in scenes_diff {
+        let path = q.location();
+        let scene_id = q.node();
+
+        let Some(device) = find_device_by_expr_path(devices, path) else {
             continue;
         };
 
@@ -367,8 +373,11 @@ pub fn eval_action_expr(
         }
     }
 
-    for (path, state) in state_diff {
-        let Some(device) = find_device_by_expr_path(devices, &path) else {
+    for q in state_diff {
+        let path = q.location();
+        let state = q.node();
+
+        let Some(device) = find_device_by_expr_path(devices, path) else {
             continue;
         };
 

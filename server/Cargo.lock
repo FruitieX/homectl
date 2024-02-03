@@ -1876,7 +1876,7 @@ dependencies = [
 [[package]]
 name = "serde_json_path"
 version = "0.6.4"
-source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+source = "git+https://github.com/hiltontj/serde_json_path?rev=3b231b360934961109b6b5e49f4ced3ceca98b02#3b231b360934961109b6b5e49f4ced3ceca98b02"
 dependencies = [
  "inventory",
  "nom",
@@ -1892,7 +1892,7 @@ dependencies = [
 [[package]]
 name = "serde_json_path_core"
 version = "0.1.3"
-source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+source = "git+https://github.com/hiltontj/serde_json_path?rev=3b231b360934961109b6b5e49f4ced3ceca98b02#3b231b360934961109b6b5e49f4ced3ceca98b02"
 dependencies = [
  "inventory",
  "once_cell",
@@ -1904,7 +1904,7 @@ dependencies = [
 [[package]]
 name = "serde_json_path_macros"
 version = "0.1.1"
-source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+source = "git+https://github.com/hiltontj/serde_json_path?rev=3b231b360934961109b6b5e49f4ced3ceca98b02#3b231b360934961109b6b5e49f4ced3ceca98b02"
 dependencies = [
  "inventory",
  "once_cell",
@@ -1915,7 +1915,7 @@ dependencies = [
 [[package]]
 name = "serde_json_path_macros_internal"
 version = "0.1.0"
-source = "git+https://github.com/FruitieX/serde_json_path#beb6ef5b5d61d19c508aa10bc9c26019f3377f12"
+source = "git+https://github.com/hiltontj/serde_json_path?rev=3b231b360934961109b6b5e49f4ced3ceca98b02#3b231b360934961109b6b5e49f4ced3ceca98b02"
 dependencies = [
  "proc-macro2",
  "quote",
