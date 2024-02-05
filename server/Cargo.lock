@@ -779,7 +779,7 @@ dependencies = [
 
 [[package]]
 name = "homectl-server"
-version = "0.6.3"
+version = "0.7.0"
 dependencies = [
  "async-trait",
  "byteorder",

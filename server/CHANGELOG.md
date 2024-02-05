@@ -1,5 +1,75 @@
 # Changelog
 
+## [0.7.0](https://github.com/FruitieX/homectl-server/compare/v0.6.3...v0.7.0) (2024-02-05)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename Action::DimAction to Action::Dim to make clippy happy
+
+### Features
+
+* avoid computing groups/scene structs on every state update ([997de4e](https://github.com/FruitieX/homectl-server/commit/997de4e6ba116800d1a41f7e6ac97d97be431463))
+* cron integration ([3be926f](https://github.com/FruitieX/homectl-server/commit/3be926f4ac30abb39690c72590584a3c07879215))
+* evalexpr support in rules and actions ([7453168](https://github.com/FruitieX/homectl-server/commit/74531680169a975fc59977e90d3ae19fcc8cab77))
+* partially managed devices ([638e516](https://github.com/FruitieX/homectl-server/commit/638e516fd3b2074d8de1b7af998c1fa09e4adeac))
+* ReadOnly managed mode ([48a3934](https://github.com/FruitieX/homectl-server/commit/48a39343a7c902072a1a5976539b6967a5b66192))
+* **routines:** expressions in rules and actions ([9632c9f](https://github.com/FruitieX/homectl-server/commit/9632c9f57a42ba86a23746c2e444dc5f07904595))
+* scene expressions ([e946d89](https://github.com/FruitieX/homectl-server/commit/e946d89a8a0f95934e284aa8586bc29be3d468e7))
+* SetDeviceState action ([fd43901](https://github.com/FruitieX/homectl-server/commit/fd43901ef586a17cb4a0978f82c622a2db553980))
+* support forcibly triggering routines ([65c2d77](https://github.com/FruitieX/homectl-server/commit/65c2d775c225b8abf28e8ec8433159d8d3e72e2f))
+
+
+### Bug Fixes
+
+* always convert color to preferred mode when sending ([c52155c](https://github.com/FruitieX/homectl-server/commit/c52155c6a9788a73c3619cb353a6727ed2acfbff))
+* bypass config and use toml crate directly ([a219adb](https://github.com/FruitieX/homectl-server/commit/a219adb34e63b27fbbe918167c016d22aa4dd898))
+* **deps:** pin dependencies ([6dd5fcc](https://github.com/FruitieX/homectl-server/commit/6dd5fccf59dfc8affce2fd43774d8175af9c9870))
+* **deps:** pin rust crate croner to =2.0.4 ([c4413a1](https://github.com/FruitieX/homectl-server/commit/c4413a12348a2d2711618f8499e4302b67a1f6b4))
+* **deps:** pin rust crate jsonptr to =0.4.4 ([bd20093](https://github.com/FruitieX/homectl-server/commit/bd20093018866ad8022beb4290fea578aa3b72f6))
+* **deps:** pin rust crate serde-this-or-that to =0.4.2 ([21220ae](https://github.com/FruitieX/homectl-server/commit/21220aed92375bfb5fe08549f57e47fe24ab7ab7))
+* **deps:** update rust crate async-trait to v0.1.75 ([18fb828](https://github.com/FruitieX/homectl-server/commit/18fb8282779021daffc46c84bc699dd98d7fd4c4))
+* **deps:** update rust crate async-trait to v0.1.76 ([cbb0f3f](https://github.com/FruitieX/homectl-server/commit/cbb0f3fdbb92b0a74aea044dd4399409603a33c3))
+* **deps:** update rust crate async-trait to v0.1.77 ([483da8c](https://github.com/FruitieX/homectl-server/commit/483da8c7c56edeb71ffd935a511970f367011484))
+* **deps:** update rust crate cached to v0.48.0 ([3b73ce0](https://github.com/FruitieX/homectl-server/commit/3b73ce0eebd88d11271d0e791fd1a898b8888462))
+* **deps:** update rust crate cached to v0.48.1 ([504c7c1](https://github.com/FruitieX/homectl-server/commit/504c7c1702ba017f8e566fbe55c0ab6c9cb50ba0))
+* **deps:** update rust crate chrono to v0.4.32 ([56ea5b0](https://github.com/FruitieX/homectl-server/commit/56ea5b0fd83680ada64c2898bb0e05dfcd3c9687))
+* **deps:** update rust crate chrono to v0.4.33 ([a6fcc3c](https://github.com/FruitieX/homectl-server/commit/a6fcc3c9ed287bb8a72fc3c746e6171c6daa47ec))
+* **deps:** update rust crate config to v0.14.0 ([544d9ab](https://github.com/FruitieX/homectl-server/commit/544d9ab72bd7219fe1ce5f0f1ec985a10d8a67e1))
+* **deps:** update rust crate eyre to v0.6.10 ([8abf002](https://github.com/FruitieX/homectl-server/commit/8abf002e1140fb5c604c62d0301e6e48bb5fe843))
+* **deps:** update rust crate eyre to v0.6.11 ([c1f41c2](https://github.com/FruitieX/homectl-server/commit/c1f41c2041a38d5b69e7b0dab85838991c4f7324))
+* **deps:** update rust crate eyre to v0.6.12 ([a54cf04](https://github.com/FruitieX/homectl-server/commit/a54cf04b70ea4caff142833deaf23bdcae4c962b))
+* **deps:** update rust crate itertools to v0.12.1 ([a6be06e](https://github.com/FruitieX/homectl-server/commit/a6be06ecbd27c34ce5a23494feddf1ba32a6a038))
+* **deps:** update rust crate once_cell to v1.19.0 ([c48f7b5](https://github.com/FruitieX/homectl-server/commit/c48f7b5e192a02e6f1cca176095bfcebc0e2bba9))
+* **deps:** update rust crate palette to v0.7.4 ([4d4cf09](https://github.com/FruitieX/homectl-server/commit/4d4cf094c59cb107e9b087054093237a88eb3dc2))
+* **deps:** update rust crate serde to v1.0.194 ([4da8780](https://github.com/FruitieX/homectl-server/commit/4da87804d8b7a9f6aa35b8a86b62307a2934a52c))
+* **deps:** update rust crate serde to v1.0.195 ([d6baed3](https://github.com/FruitieX/homectl-server/commit/d6baed317a6ee35a0c96bf24e46e9c7ef395a3f7))
+* **deps:** update rust crate serde to v1.0.196 ([c25c6bf](https://github.com/FruitieX/homectl-server/commit/c25c6bf8e48704ebfa16e00135db6b619307f94a))
+* **deps:** update rust crate serde_json to v1.0.109 ([05a0e92](https://github.com/FruitieX/homectl-server/commit/05a0e92e6168563f54e66305f30cbca2d43872fe))
+* **deps:** update rust crate serde_json to v1.0.110 ([b7f92ab](https://github.com/FruitieX/homectl-server/commit/b7f92aba4320b9f4f0b352d36a7d26ec8afdc68d))
+* **deps:** update rust crate serde_json to v1.0.111 ([07fd30d](https://github.com/FruitieX/homectl-server/commit/07fd30d3668b83a8744a0247233914578cb816ab))
+* **deps:** update rust crate serde_json to v1.0.112 ([aa72849](https://github.com/FruitieX/homectl-server/commit/aa7284937c7f34936c7de4e00dbd4126e00c1918))
+* **deps:** update rust crate serde_json to v1.0.113 ([4dae8b3](https://github.com/FruitieX/homectl-server/commit/4dae8b3e1c29efe6e987c428f4f66d1c631ab589))
+* **deps:** update rust crate serde_path_to_error to v0.1.15 ([8ecd7f4](https://github.com/FruitieX/homectl-server/commit/8ecd7f493c62a72806c34b22ecc59ecca0f5a5ec))
+* **deps:** update rust crate tokio to v1.35.0 ([3c3962e](https://github.com/FruitieX/homectl-server/commit/3c3962e19e43335cdca355fe0b74fb0530b10a2e))
+* **deps:** update rust crate tokio to v1.35.1 ([1633046](https://github.com/FruitieX/homectl-server/commit/16330462335ac83ee601fc957fd5d65c0f729212))
+* **deps:** update rust crate tokio to v1.36.0 ([93c4479](https://github.com/FruitieX/homectl-server/commit/93c44790de31c6ffcd27c105104f4a6871cd4bdd))
+* **deps:** update rust crate toml to v0.8.9 ([060f1e5](https://github.com/FruitieX/homectl-server/commit/060f1e5d288670ea9b0d257769293c41b08ec0a1))
+* **deps:** update rust crate ts-rs to v7.1.0 ([40d1edf](https://github.com/FruitieX/homectl-server/commit/40d1edf6fefd3af01c6da92fa95b1cbe7dd93a7b))
+* **deps:** update rust crate ts-rs to v7.1.1 ([72d0bb9](https://github.com/FruitieX/homectl-server/commit/72d0bb9feaa2474734955b93f31ddea83b531f9f))
+* **deps:** update rust-futures monorepo to v0.3.30 ([2b396c9](https://github.com/FruitieX/homectl-server/commit/2b396c9cc1f959f0d802e3ab5a6bc59bca02f225))
+* don't spawn new task for each message ([e6a6e89](https://github.com/FruitieX/homectl-server/commit/e6a6e897746a01ffc050b36373cd9523d55c0600))
+* drop neato and wake_on_lan integrations ([161480d](https://github.com/FruitieX/homectl-server/commit/161480d5ad2bae09f7a07e0ae8c608c191c57b41))
+* improve method of detecting written expr vars ([45125e8](https://github.com/FruitieX/homectl-server/commit/45125e8764d0cfe6cc05ed8649b138586274a289))
+* make more use of cached flattened groups config ([b18d32c](https://github.com/FruitieX/homectl-server/commit/b18d32ceca258333acff13ee84222e771a6c8e76))
+* websockets don't hold onto state lock forever ([360d804](https://github.com/FruitieX/homectl-server/commit/360d804bd144a585935f74f308c54ce9eef07a1a))
+
+
+### Miscellaneous Chores
+
+* release 0.7.0 ([ba4fca7](https://github.com/FruitieX/homectl-server/commit/ba4fca7478b02eb7014f2a93cc6303ae96b27430))
+* rename Action::DimAction to Action::Dim to make clippy happy ([3851b92](https://github.com/FruitieX/homectl-server/commit/3851b927382c067c050b02cd3d627c8d5dc4dbf1))
+
 ## [0.6.3](https://github.com/FruitieX/homectl-server/compare/v0.6.2...v0.6.3) (2023-11-25)
 
 
