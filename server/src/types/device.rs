@@ -139,6 +139,11 @@ pub enum ManageKind {
     /// Homectl will not make any effort to correct state drift, and any
     /// state commands sent to the device will be fire-and-forget.
     Unmanaged,
+
+    /// Device is read-only and cannot be controlled by homectl.
+    ///
+    /// Intended for debugging purposes.
+    ReadOnly,
 }
 
 /// lights with adjustable brightness and/or color
@@ -343,6 +348,16 @@ impl Device {
 
     pub fn is_sensor(&self) -> bool {
         matches!(self.data, DeviceData::Sensor(_))
+    }
+
+    pub fn is_readonly(&self) -> bool {
+        matches!(
+            self.data,
+            DeviceData::Controllable(ControllableDevice {
+                managed: ManageKind::ReadOnly,
+                ..
+            })
+        )
     }
 
     pub fn get_sensor_state(&self) -> Option<&SensorDevice> {

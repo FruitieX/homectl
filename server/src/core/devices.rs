@@ -165,7 +165,7 @@ impl Devices {
                     }
                     None => {
                         info!("Discovered device: {:?}", incoming);
-                        self.set_device_state(incoming, scenes, true, false, false)
+                        self.set_device_state(incoming, scenes, true, false, !incoming.is_managed())
                             .await;
                     }
                 }
@@ -371,7 +371,7 @@ impl Devices {
             });
         }
 
-        if !skip_send && !device.is_sensor() {
+        if !skip_send && !device.is_sensor() && !device.is_readonly() {
             let device = device.color_to_preferred_mode();
 
             self.event_tx.send(Message::SendDeviceState { device });

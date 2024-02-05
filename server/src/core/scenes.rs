@@ -23,7 +23,7 @@ use super::{
 };
 use std::collections::{HashMap, HashSet};
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Debug)]
 pub struct Scenes {
     config: ScenesConfig,
     db_scenes: ScenesConfig,
@@ -263,7 +263,6 @@ impl Scenes {
 
         let scene_devices_search_config = scene
             .devices
-            .clone()
             .map(|devices| devices.0)
             .unwrap_or_default();
 
