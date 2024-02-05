@@ -8,6 +8,9 @@
 			"type": "lldb",
 			"request": "launch",
 			"name": "Debug executable 'homectl-server'",
+			"env": {
+				"RUST_LOG": "homectl_server=debug"
+			},
 			"cargo": {
 				"args": [
 					"build",
