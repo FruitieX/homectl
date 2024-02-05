@@ -261,10 +261,8 @@ impl Scenes {
             })
             .unwrap_or_default();
 
-        let scene_devices_search_config = scene
-            .devices
-            .map(|devices| devices.0)
-            .unwrap_or_default();
+        let scene_devices_search_config =
+            scene.devices.map(|devices| devices.0).unwrap_or_default();
 
         let filter_device_by_keys = |device: &Device| -> bool {
             let device_key = &DeviceKey::new(device.integration_id.clone(), device.id.clone());

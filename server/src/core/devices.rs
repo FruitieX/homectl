@@ -165,8 +165,14 @@ impl Devices {
                     }
                     None => {
                         info!("Discovered device: {:?}", incoming);
-                        self.set_device_state(incoming, scenes, true, false, !incoming.is_managed())
-                            .await;
+                        self.set_device_state(
+                            incoming,
+                            scenes,
+                            true,
+                            false,
+                            !incoming.is_managed(),
+                        )
+                        .await;
                     }
                 }
             }
