@@ -12,6 +12,7 @@ use super::{
 
 #[derive(Clone)]
 pub struct AppState {
+    pub warming_up: bool,
     pub integrations: Integrations,
     pub groups: Groups,
     pub scenes: Scenes,

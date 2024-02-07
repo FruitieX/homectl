@@ -89,10 +89,10 @@ impl Integration for Cron {
                     let next = cron.find_next_occurrence(&Local::now(), false).unwrap();
 
                     let duration = next - Local::now();
-                    trace!("Sleeping for {:?}", duration);
+                    trace!("Sleeping for {duration:?}");
                     sleep_until(Instant::now() + duration.to_std().unwrap()).await;
 
-                    debug!("Running cron job for device {}", id);
+                    debug!("Running cron job for device {id}");
 
                     let devices = devices.read().await;
                     let device = devices.get(&id).unwrap();

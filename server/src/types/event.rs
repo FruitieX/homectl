@@ -18,6 +18,9 @@ pub enum Message {
     /// Tell integration to trigger state change for the device.
     SendDeviceState { device: Device },
 
+    /// Wait for a bit for devices to come online before starting up.
+    StartupCompleted,
+
     /// Internal device state update has taken place, need to take appropriate
     /// actions such as checking (and possibly triggering) routines.
     InternalStateUpdate {

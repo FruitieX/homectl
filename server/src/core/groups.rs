@@ -124,19 +124,19 @@ pub fn flattened_groups_to_eval_context_values(
                 }
             };
 
-            let prefix = format!("groups.{}", group_id);
+            let prefix = format!("groups.{group_id}");
 
             vec![
                 (
-                    format!("{}.name", prefix),
+                    format!("{prefix}.name"),
                     serde_json::Value::String(group.name.clone()),
                 ),
                 (
-                    format!("{}.power", prefix),
+                    format!("{prefix}.power"),
                     serde_json::Value::Bool(all_devices_powered_on),
                 ),
                 (
-                    format!("{}.scene_id", prefix),
+                    format!("{prefix}.scene_id"),
                     group_scene_id
                         .map(|id| serde_json::Value::String(id.to_string()))
                         .unwrap_or_else(|| serde_json::Value::Null),
@@ -194,6 +194,11 @@ impl Groups {
         } else {
             false
         }
+    }
+
+    pub fn force_invalidate(&mut self, devices: &Devices) {
+        self.flattened_groups =
+            mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices);
     }
 }
 

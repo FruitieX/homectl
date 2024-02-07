@@ -129,7 +129,7 @@ impl Devices {
         incoming: &Device,
         scenes: &Scenes,
     ) -> Result<()> {
-        trace!("handle_recv_device_state {:?}", incoming);
+        trace!("handle_recv_device_state {incoming:?}");
         let current = self.get_device(&incoming.get_device_key());
 
         // recompute expected_state here as it may have changed since we last
@@ -156,15 +156,14 @@ impl Devices {
                         let device = incoming.set_scene(scene);
 
                         info!(
-                            "Discovered previously seen device, restored scene from DB: {:?}",
-                            device
+                            "Discovered previously seen device, restored scene from DB: {device}",
                         );
 
                         self.set_device_state(&device, scenes, true, true, !device.is_managed())
                             .await;
                     }
                     None => {
-                        info!("Discovered device: {:?}", incoming);
+                        info!("Discovered device: {incoming}");
                         self.set_device_state(
                             incoming,
                             scenes,
@@ -406,7 +405,7 @@ impl Devices {
         scenes: &Scenes,
         eval_context: &EvalContext,
     ) -> Option<bool> {
-        info!("Activating scene {:?}", scene_id);
+        info!("Activating scene {scene_id}");
 
         let scene_devices_config = scenes.find_scene_devices_config(
             self,

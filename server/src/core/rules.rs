@@ -141,7 +141,10 @@ fn is_routine_triggered(
         match result {
             Ok(result) => result,
             Err(error) => {
-                error!("Error while checking routine {}: {}", routine.name, error);
+                error!(
+                    "Error while checking routine {name}: {error}",
+                    name = routine.name
+                );
                 false
             }
         }
@@ -171,9 +174,7 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool> {
                 }),
             ) => Ok(rule_value == sensor_value),
             (rule, sensor) => Err(eyre!(
-                "Unknown sensor states encountered when processing rule {:?}. (sensor: {:?})",
-                rule,
-                sensor,
+                "Unknown sensor states encountered when processing rule {rule:?}. (sensor: {sensor:?})"
             )),
         },
         Rule::Group(GroupRule { scene, power, .. })
@@ -215,12 +216,12 @@ fn is_rule_triggered(
         Rule::Sensor(rule) => {
             vec![devices
                 .get_device_by_ref(&rule.device_ref)
-                .ok_or(eyre!("Could not find matching sensor for rule: {:?}", rule))?]
+                .ok_or(eyre!("Could not find matching sensor for rule: {rule:?}"))?]
         }
         Rule::Device(rule) => {
             vec![devices
                 .get_device_by_ref(&rule.device_ref)
-                .ok_or(eyre!("Could not find matching device for rule: {:?}", rule))?]
+                .ok_or(eyre!("Could not find matching device for rule: {rule:?}"))?]
         }
         Rule::Group(rule) => groups.find_group_devices(devices.get_state(), &rule.group_id),
         Rule::EvalExpr(expr) => {

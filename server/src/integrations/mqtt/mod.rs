@@ -123,8 +123,8 @@ impl Integration for Mqtt {
 
                 if let Err(e) = res {
                     error!(
-                        target: &format!("homectl_server::integrations::mqtt::{}", id),
-                        "MQTT error: {:?}", e
+                        target: &format!("homectl_server::integrations::mqtt::{id}"),
+                        "MQTT error: {e:?}"
                     );
                     tokio::time::sleep(Duration::from_secs(1)).await;
                 }

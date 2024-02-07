@@ -80,7 +80,7 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
     .await;
 
     if let Err(err) = &result {
-        error!("Error fetching scenes from DB: {:?}", err);
+        error!("Error fetching scenes from DB: {err:?}");
     }
 
     let scenes = result?

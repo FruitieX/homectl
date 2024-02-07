@@ -21,18 +21,47 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 .handle_recv_device_state(device, &state.scenes)
                 .await
         }
+        Message::StartupCompleted => {
+            state.groups.force_invalidate(&state.devices);
+
+            state
+                .expr
+                .invalidate(state.devices.get_state(), &state.groups, &state.scenes);
+
+            state
+                .scenes
+                .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
+
+            state
+                .expr
+                .invalidate(state.devices.get_state(), &state.groups, &state.scenes);
+
+            let device_count = state.devices.get_state().0.len();
+            info!("Startup completed, discovered {device_count} devices");
+
+            Ok(())
+        }
         Message::InternalStateUpdate {
             old_state,
             new_state,
             old,
             new,
         } => {
+            if state.warming_up {
+                return Ok(());
+            }
+
             let invalidated_device = new;
             debug!("invalidating {name}", name = invalidated_device.name);
 
             let _groups_invalidated = state
                 .groups
                 .invalidate(old_state, new_state, &state.devices);
+
+            // TODO: only invalidate changed devices/groups/scenes in expr context
+            state
+                .expr
+                .invalidate(new_state, &state.groups, &state.scenes);
 
             let _invalidated_scenes = state.scenes.invalidate(
                 old_state,

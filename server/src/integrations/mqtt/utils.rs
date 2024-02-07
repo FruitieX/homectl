@@ -36,13 +36,13 @@ pub fn mqtt_to_homectl(
     let id = value
         .pointer(id_field)
         .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| eyre!("Missing '{}' field in MQTT message", id_field))?
+        .ok_or_else(|| eyre!("Missing '{id_field}' field in MQTT message"))?
         .to_string();
 
     let name = value
         .pointer(name_field)
         .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| eyre!("Missing '{}' field in MQTT message", name_field))?
+        .ok_or_else(|| eyre!("Missing '{name_field}' field in MQTT message"))?
         .to_string();
 
     let color = value
@@ -85,8 +85,7 @@ pub fn mqtt_to_homectl(
                 },
                 _ => {
                     return Err(eyre!(
-                        "Unsupported value for sensor field '{}'",
-                        sensor_value_field
+                        "Unsupported value for sensor field '{sensor_value_field}'",
                     ))
                 }
             })

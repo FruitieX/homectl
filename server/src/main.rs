@@ -23,11 +23,12 @@ use crate::core::{
     devices::Devices, groups::Groups, integrations::Integrations, message::handle_message,
     rules::Rules, scenes::Scenes, state::AppState,
 };
-use crate::types::event::mk_event_channel;
+use crate::types::event::{mk_event_channel, Message};
 use api::init_api;
 use color_eyre::Result;
 use db::init_db;
 use eyre::eyre;
+use std::time::Duration;
 use std::{error::Error, sync::Arc};
 use tokio::sync::RwLock;
 
@@ -56,7 +57,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     for (id, integration_config) in &config.integrations.unwrap_or_default() {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
             .get(id)
-            .ok_or_else(|| eyre!("Expected to find config for integration with id {}", id))?;
+            .ok_or_else(|| eyre!("Expected to find config for integration with id {id}"))?;
 
         integrations
             .load_integration(&integration_config.plugin, id, opaque_integration_config)
@@ -67,6 +68,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     integrations.run_start_pass().await?;
 
     let state = AppState {
+        warming_up: true,
         integrations,
         groups,
         scenes,
@@ -81,13 +83,26 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     init_api(&state)?;
 
+    {
+        let state = state.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(
+                config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1),
+            ))
+            .await;
+            let mut state = state.write().await;
+            state.warming_up = false;
+            state.event_tx.send(Message::StartupCompleted);
+        });
+    }
+
     loop {
         let msg = event_rx
             .recv()
             .await
             .expect("Expected sender end of channel to never be dropped");
 
-        // trace!("Received message: {:.100}", format!("{:?}", msg));
+        // trace!("Received message: {:.100}", format!("{msg:?}"));
 
         let mut state = state.write().await;
         let result = handle_message(&mut state, &msg).await;

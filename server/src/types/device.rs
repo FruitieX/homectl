@@ -199,6 +199,19 @@ pub enum SensorDevice {
     Color(ControllableState),
 }
 
+impl Display for SensorDevice {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let s = match self {
+            SensorDevice::Boolean { value } => value.to_string(),
+            SensorDevice::Text { value } => value.to_string(),
+            SensorDevice::Number { value } => value.to_string(),
+            SensorDevice::Color(state) => state.to_string(),
+        };
+
+        f.write_str(&s)
+    }
+}
+
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub enum DeviceData {
@@ -213,7 +226,7 @@ impl Display for DeviceData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let s = match self {
             DeviceData::Controllable(light) => light.state.to_string(),
-            DeviceData::Sensor(_) => "Sensor".to_string(),
+            DeviceData::Sensor(sensor) => sensor.to_string(),
         };
 
         f.write_str(&s)
@@ -234,6 +247,12 @@ pub struct Device {
     pub name: String,
     pub integration_id: IntegrationId,
     pub data: DeviceData,
+}
+
+impl Display for Device {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}/{} [{}]", self.integration_id, self.name, self.data)
+    }
 }
 
 impl From<DeviceRow> for Device {

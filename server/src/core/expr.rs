@@ -33,7 +33,7 @@ fn value_kv_pairs_deep(
         serde_json::Value::Object(object) => object
             .iter()
             .flat_map(|(key, value)| {
-                let key = format!("{}.{}", prefix, key);
+                let key = format!("{prefix}.{key}");
                 value_kv_pairs_deep(value, key)
             })
             .collect(),
@@ -41,7 +41,7 @@ fn value_kv_pairs_deep(
             .iter()
             .enumerate()
             .flat_map(|(i, value)| {
-                let key = format!("{}.{}", prefix, i);
+                let key = format!("{prefix}.{i}");
                 value_kv_pairs_deep(value, key)
             })
             .collect(),
@@ -214,13 +214,13 @@ pub fn eval_scene_expr(
         let state = q.node();
 
         let Some(device) = find_device_by_expr_path(devices, path) else {
-            warn!("Could not find device by expression path: {path:?}");
+            warn!("Could not find device by expression path: {path}");
             continue;
         };
         let device = match device.set_value(state) {
             Ok(device) => device,
             Err(e) => {
-                error!("Could not set value on device: {device:?}, {state}:\n{e}");
+                error!("Could not set value on device: {device}, {state}:\n{e}");
                 continue;
             }
         };

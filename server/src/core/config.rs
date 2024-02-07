@@ -10,7 +10,13 @@ use serde::Deserialize;
 use std::{collections::HashMap, fs::File, io::Read};
 
 #[derive(Deserialize, Debug)]
+pub struct CoreConfig {
+    pub warmup_time_seconds: Option<u64>,
+}
+
+#[derive(Deserialize, Debug)]
 pub struct Config {
+    pub core: Option<CoreConfig>,
     pub integrations: Option<IntegrationsConfig>,
     pub scenes: Option<ScenesConfig>,
     pub groups: Option<GroupsConfig>,

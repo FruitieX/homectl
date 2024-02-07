@@ -257,6 +257,11 @@ impl Scenes {
             .expr
             .and_then(|expr| {
                 let result = eval_scene_expr(&expr, eval_context, devices.get_state());
+
+                if let Err(e) = &result {
+                    warn!("Error evaluating scene expression: {e:?}");
+                }
+
                 result.ok()
             })
             .unwrap_or_default();
@@ -322,8 +327,7 @@ impl Scenes {
 
                 let Some(device) = device else {
                     warn!(
-                        "Could not find device with name {} in integration {}",
-                        device_name, integration_id
+                        "Could not find device with name {device_name} in integration {integration_id}",
                     );
 
                     continue;
@@ -555,5 +559,21 @@ impl Scenes {
         }
 
         invalidated_scenes
+    }
+
+    pub fn force_invalidate(
+        &mut self,
+        devices: &Devices,
+        groups: &Groups,
+        eval_context: &EvalContext,
+    ) {
+        let invalidated_scenes = self
+            .get_scene_ids()
+            .into_iter()
+            .collect::<HashSet<SceneId>>();
+        self.scene_devices_configs =
+            self.mk_scene_devices_configs(devices, groups, &invalidated_scenes, eval_context);
+        self.flattened_scenes = self.mk_flattened_scenes(devices, &invalidated_scenes);
+        self.device_invalidation_map = self.mk_device_invalidation_map(devices, groups);
     }
 }

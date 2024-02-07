@@ -45,7 +45,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
             user_ws_tx
                 .send(message)
                 .unwrap_or_else(|e| {
-                    warn!("websocket send error: {}", e);
+                    warn!("websocket send error: {e}");
                 })
                 .await;
         }
@@ -64,7 +64,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
         let msg = match result {
             Ok(msg) => msg,
             Err(e) => {
-                warn!("websocket error(uid={}): {}", my_id, e);
+                warn!("websocket error(uid={my_id}): {e}");
                 break;
             }
         };
@@ -78,7 +78,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
                 Ok(WebSocketRequest::Message(msg)) => {
                     app_state.event_tx.send(msg);
                 }
-                Err(e) => warn!("Error while deserializing websocket message: {}", e),
+                Err(e) => warn!("Error while deserializing websocket message: {e}"),
             }
         }
     }

@@ -46,7 +46,7 @@ impl Integrations {
         integration_id: &IntegrationId,
         config: &config::Value,
     ) -> Result<()> {
-        info!("loading integration with module_name {}", module_name);
+        info!("loading integration with module_name {module_name}");
 
         let event_tx = self.event_tx.clone();
         let integration = load_custom_integration(module_name, integration_id, config, event_tx)?;
@@ -117,7 +117,7 @@ impl Integrations {
         let li = self
             .custom_integrations
             .get(integration_id)
-            .ok_or_else(|| eyre!("Expected to find integration by id {}", integration_id))?;
+            .ok_or_else(|| eyre!("Expected to find integration by id {integration_id}"))?;
         let mut integration = li.integration.lock().await;
 
         integration.run_integration_action(payload).await
@@ -139,6 +139,6 @@ fn load_custom_integration(
         "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
         "mqtt" => Ok(Box::new(Mqtt::new(id, config, event_tx)?)),
-        _ => Err(eyre!("Unknown module name {}!", module_name)),
+        _ => Err(eyre!("Unknown module name {module_name}!")),
     }
 }
