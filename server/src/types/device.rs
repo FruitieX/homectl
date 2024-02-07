@@ -189,16 +189,17 @@ impl ControllableDevice {
     }
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 #[serde(untagged)]
 pub enum SensorDevice {
     Boolean { value: bool },
     Text { value: String },
+    Number { value: f64 },
     Color(ControllableState),
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub enum DeviceData {
     /// This device type can both be read and written to
@@ -226,7 +227,7 @@ pub struct DeviceRow {
     pub state: sqlx::types::Json<DeviceData>,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub struct Device {
     pub id: DeviceId,
@@ -548,6 +549,6 @@ impl<'de> Deserialize<'de> for DeviceKey {
     }
 }
 
-#[derive(TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq, Hash, Eq)]
+#[derive(TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[ts(export)]
 pub struct DevicesState(pub BTreeMap<DeviceKey, Device>);

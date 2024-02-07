@@ -63,45 +63,51 @@ pub fn mqtt_to_homectl(
         .pointer(transition_ms_field)
         .and_then(serde_json::Value::as_u64);
 
-    let device_state = if value
-        .pointer(sensor_value_field)
-        .filter(|v| !v.is_null())
-        .is_some()
-    {
-        if let Ok(value) = value
-            .pointer(sensor_value_field)
-            .and_then(serde_json::Value::as_str)
-            .unwrap_or("")
-            .parse::<bool>()
-        {
-            DeviceData::Sensor(SensorDevice::Boolean { value })
-        } else {
-            DeviceData::Sensor(SensorDevice::Text {
-                value: value
-                    .pointer(sensor_value_field)
-                    .and_then(serde_json::Value::as_str)
-                    .unwrap_or("")
-                    .to_string(),
+    let device_state =
+        if let Some(value) = value.pointer(sensor_value_field).filter(|v| !v.is_null()) {
+            DeviceData::Sensor(match value {
+                serde_json::Value::Number(value) => SensorDevice::Number {
+                    value: value.as_f64().unwrap(),
+                },
+
+                serde_json::Value::Bool(value) => SensorDevice::Boolean { value: *value },
+
+                // TODO: get rid of this hack and use proper booleans
+                serde_json::Value::String(value) if value == "true" => {
+                    SensorDevice::Boolean { value: true }
+                }
+                serde_json::Value::String(value) if value == "false" => {
+                    SensorDevice::Boolean { value: false }
+                }
+
+                serde_json::Value::String(value) => SensorDevice::Text {
+                    value: value.clone(),
+                },
+                _ => {
+                    return Err(eyre!(
+                        "Unsupported value for sensor field '{}'",
+                        sensor_value_field
+                    ))
+                }
             })
-        }
-    } else {
-        let capabilities: Capabilities = value
-            .pointer(capabilities_field)
-            .and_then(|value| serde_json::from_value(value.clone()).ok())
-            .unwrap_or_default();
+        } else {
+            let capabilities: Capabilities = value
+                .pointer(capabilities_field)
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+                .unwrap_or_default();
 
-        let controllable_device = ControllableDevice::new(
-            None,
-            power,
-            brightness,
-            color,
-            transition_ms,
-            capabilities,
-            config.managed.clone().unwrap_or_default(),
-        );
+            let controllable_device = ControllableDevice::new(
+                None,
+                power,
+                brightness,
+                color,
+                transition_ms,
+                capabilities,
+                config.managed.clone().unwrap_or_default(),
+            );
 
-        DeviceData::Controllable(controllable_device)
-    };
+            DeviceData::Controllable(controllable_device)
+        };
 
     Ok(Device {
         id: DeviceId::new(&id),
