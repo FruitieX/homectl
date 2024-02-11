@@ -37,9 +37,9 @@ pub struct DimDescriptor {
 #[ts(export)]
 pub struct DimDeviceState {
     pub power: bool,
-    #[ts(type = "String")]
     pub color: Option<DeviceColor>,
     pub brightness: Option<f32>,
+    #[ts(type = "number | null")]
     pub transition_ms: Option<u64>,
 }
 

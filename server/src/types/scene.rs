@@ -65,6 +65,7 @@ pub struct SceneDeviceState {
     pub color: Option<DeviceColor>,
     #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>,
+    #[ts(type = "number | null")]
     pub transition_ms: Option<u64>,
 }
 

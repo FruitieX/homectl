@@ -70,9 +70,10 @@ impl Capabilities {
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Xy {
-    #[ts(type = "f32")]
+    #[ts(type = "number")]
     pub x: OrderedFloat<f32>,
-    #[ts(type = "f32")]
+
+    #[ts(type = "number")]
     pub y: OrderedFloat<f32>,
 }
 
@@ -80,8 +81,10 @@ pub struct Xy {
 #[ts(export)]
 pub struct Hs {
     #[serde(deserialize_with = "as_u64")]
+    #[ts(type = "number")]
     pub h: u64,
-    #[ts(type = "f32")]
+
+    #[ts(type = "number")]
     pub s: OrderedFloat<f32>,
 }
 
@@ -89,10 +92,15 @@ pub struct Hs {
 #[ts(export)]
 pub struct Rgb {
     #[serde(deserialize_with = "as_u64")]
+    #[ts(type = "number")]
     pub r: u64,
+
     #[serde(deserialize_with = "as_u64")]
+    #[ts(type = "number")]
     pub g: u64,
+
     #[serde(deserialize_with = "as_u64")]
+    #[ts(type = "number")]
     pub b: u64,
 }
 
@@ -100,6 +108,7 @@ pub struct Rgb {
 #[ts(export)]
 pub struct Ct {
     #[serde(deserialize_with = "as_u64")]
+    #[ts(type = "number")]
     pub ct: u64,
 }
 

@@ -50,6 +50,7 @@ pub struct ControllableState {
     pub color: Option<DeviceColor>,
 
     /// Transition time in milliseconds
+    #[ts(type = "number")]
     pub transition_ms: Option<u64>,
 }
 
@@ -620,7 +621,6 @@ impl From<&DeviceKey> for DeviceRef {
 
 /// A reference to a device, always by id, serializes to `integration_id/device_id`
 #[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
-#[ts(export)]
 pub struct DeviceKey {
     pub integration_id: IntegrationId,
     pub device_id: DeviceId,
