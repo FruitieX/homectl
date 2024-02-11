@@ -5,5 +5,5 @@ export interface SceneDeviceState {
   power: boolean | null;
   color: DeviceColor | null;
   brightness: number | null;
-  transition_ms: bigint | null;
+  transition_ms: number | null;
 }

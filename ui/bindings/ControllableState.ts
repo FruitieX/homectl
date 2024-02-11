@@ -5,5 +5,5 @@ export interface ControllableState {
   power: boolean;
   brightness: number | null;
   color: DeviceColor | null;
-  transition_ms: bigint | null;
+  transition_ms: number;
 }

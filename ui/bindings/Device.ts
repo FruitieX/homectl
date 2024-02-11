@@ -8,4 +8,5 @@ export interface Device {
   name: string;
   integration_id: IntegrationId;
   data: DeviceData;
+  raw: Record<string, any> | null;
 }

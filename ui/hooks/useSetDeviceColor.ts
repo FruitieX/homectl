@@ -29,8 +29,7 @@ export const useSetDeviceColor = () => {
           }
 
           if (transitionMs !== undefined) {
-            draft.data.Controllable.state.transition_ms =
-              transitionMs as unknown as bigint;
+            draft.data.Controllable.state.transition_ms = transitionMs;
           }
         }
       });

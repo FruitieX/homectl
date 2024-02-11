@@ -8,6 +8,7 @@ import type { SceneId } from './SceneId';
 export type Message =
   | { RecvDeviceState: { device: Device } }
   | { SendDeviceState: { device: Device } }
+  | 'StartupCompleted'
   | {
       InternalStateUpdate: {
         old_state: DevicesState;

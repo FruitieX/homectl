@@ -4,4 +4,5 @@ import type { ControllableState } from './ControllableState';
 export type SensorDevice =
   | { value: boolean }
   | { value: string }
+  | { value: number }
   | ControllableState;
