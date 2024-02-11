@@ -187,6 +187,15 @@ impl ControllableDevice {
             self.state.brightness = Some(OrderedFloat(brightness));
         }
     }
+
+    pub fn has_partial_uncommitted_changes(&self) -> bool {
+        matches!(
+            self.managed,
+            ManageKind::Partial {
+                prev_change_committed: false
+            }
+        )
+    }
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
@@ -233,6 +242,102 @@ impl Display for DeviceData {
     }
 }
 
+impl DeviceData {
+    pub fn is_state_eq(&self, other: &DeviceData) -> bool {
+        match (&self, &other) {
+            (DeviceData::Controllable(a), DeviceData::Controllable(b)) => {
+                cmp_device_states(a, &b.state)
+            }
+            (DeviceData::Sensor(a), DeviceData::Sensor(b)) => cmp_sensor_states(a, b),
+            _ => false,
+        }
+    }
+}
+
+/// Compares light colors in the color mode as preferred by the device, allowing
+/// slight deltas to account for rounding errors.
+///
+/// If the colors match, the function evaluates to true.
+fn cmp_light_color(
+    capabilities: &Capabilities,
+    incoming: &Option<DeviceColor>,
+    incoming_bri: &Option<f32>,
+    expected: &Option<DeviceColor>,
+    expected_bri: &Option<f32>,
+) -> bool {
+    // If brightness mismatches, the light state is not equal
+    let bri_delta = 0.01;
+    if f32::abs(incoming_bri.unwrap_or(1.0) - expected_bri.unwrap_or(1.0)) > bri_delta {
+        return false;
+    }
+
+    // Convert expected color to supported color mode before performing comparison
+    let expected_converted = expected
+        .as_ref()
+        .and_then(|c| c.to_device_preferred_mode(capabilities));
+
+    // If colors are equal by PartialEq, the light state is equal
+    if incoming.as_ref() == expected_converted.as_ref() {
+        return true;
+    }
+
+    // Otherwise compare colors by components, allow slight deltas to account
+    // for rounding errors
+    let hue_delta = 1;
+    let sat_delta = 0.01;
+    let xy_delta = 0.01;
+    let cct_delta = 10;
+
+    match (incoming, expected_converted) {
+        (Some(DeviceColor::Xy(a)), Some(DeviceColor::Xy(b))) => {
+            // Light state is equal if all components differ by less than a given delta
+            (f32::abs(*a.x - *b.x) <= xy_delta) && (f32::abs(*a.y - *b.y) <= xy_delta)
+        }
+        (Some(DeviceColor::Hs(a)), Some(DeviceColor::Hs(b))) => {
+            // Light state is equal if all components differ by less than a given delta
+            (u64::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(*a.s - *b.s) <= sat_delta)
+        }
+        (Some(DeviceColor::Ct(a)), Some(DeviceColor::Ct(b))) => {
+            u64::abs_diff(a.ct, b.ct) <= cct_delta
+        }
+        (_, _) => false,
+    }
+}
+
+/// Compares the state of a ControllableDevice to some given ControllableState.
+///
+/// If the states match, the function evaluates to true.
+pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableState) -> bool {
+    if device.state.power != expected.power {
+        return false;
+    }
+
+    // If both lights are turned off, state matches
+    if !device.state.power && !expected.power {
+        return true;
+    }
+
+    // Compare colors if supported
+    if device.state.color.is_some() {
+        return cmp_light_color(
+            &device.capabilities,
+            &device.state.color,
+            &device.state.brightness.map(|b| b.into_inner()),
+            &expected.color,
+            &expected.brightness.map(|b| b.into_inner()),
+        );
+    }
+
+    true
+}
+
+/// Compares the state of two sensor devices.
+///
+/// If the states match, the function evaluates to true.
+fn cmp_sensor_states(sensor: &SensorDevice, previous: &SensorDevice) -> bool {
+    sensor == previous
+}
+
 pub struct DeviceRow {
     pub device_id: String,
     pub name: String,
@@ -247,6 +352,9 @@ pub struct Device {
     pub name: String,
     pub integration_id: IntegrationId,
     pub data: DeviceData,
+
+    #[ts(type = "Record<string, any> | null")]
+    pub raw: Option<serde_json::Value>,
 }
 
 impl Display for Device {
@@ -262,6 +370,7 @@ impl From<DeviceRow> for Device {
             name: row.name,
             integration_id: row.integration_id.into(),
             data: row.state.0,
+            raw: None,
         }
     }
 }
@@ -272,12 +381,14 @@ impl Device {
         id: DeviceId,
         name: String,
         state: DeviceData,
+        raw: Option<serde_json::Value>,
     ) -> Device {
         Device {
             id,
             name,
             integration_id,
             data: state,
+            raw,
         }
     }
 
@@ -402,6 +513,10 @@ impl Device {
             DeviceData::Controllable(ref data) => serde_json::to_value(data).unwrap(),
             DeviceData::Sensor(ref data) => serde_json::to_value(data).unwrap(),
         }
+    }
+
+    pub fn get_raw_value(&self) -> &Option<serde_json::Value> {
+        &self.raw
     }
 
     pub fn is_managed(&self) -> bool {

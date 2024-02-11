@@ -27,14 +27,14 @@ pub type EvalContext = HashMapContext;
 
 fn value_kv_pairs_deep(
     value: &serde_json::Value,
-    prefix: String,
+    prefix: &str,
 ) -> Vec<(String, serde_json::Value)> {
     match value {
         serde_json::Value::Object(object) => object
             .iter()
             .flat_map(|(key, value)| {
                 let key = format!("{prefix}.{key}");
-                value_kv_pairs_deep(value, key)
+                value_kv_pairs_deep(value, &key)
             })
             .collect(),
         serde_json::Value::Array(array) => array
@@ -42,10 +42,10 @@ fn value_kv_pairs_deep(
             .enumerate()
             .flat_map(|(i, value)| {
                 let key = format!("{prefix}.{i}");
-                value_kv_pairs_deep(value, key)
+                value_kv_pairs_deep(value, &key)
             })
             .collect(),
-        _ => vec![(prefix, value.clone())],
+        _ => vec![(prefix.to_string(), value.clone())],
     }
 }
 
@@ -94,18 +94,28 @@ pub fn state_to_eval_context(
     let mut context = HashMapContext::new();
     context.set_type_safety_checks_disabled(true)?;
 
+    let mut set_values = |prefix: &str, root: &serde_json::Value| {
+        let values = value_kv_pairs_deep(root, prefix);
+
+        for (key, value) in values {
+            let value = serde_value_to_evalexpr(&value)?;
+            context.set_value(key, value)?;
+        }
+
+        Ok::<(), eyre::Error>(())
+    };
+
     for device in devices.0.values() {
-        let root_value = device.get_value();
         let prefix = format!(
             "devices.{}.{}",
             device.integration_id,
             name_to_evalexpr(&device.name)
         );
-        let values = value_kv_pairs_deep(&root_value, prefix);
 
-        for (key, value) in values {
-            let value = serde_value_to_evalexpr(&value).unwrap();
-            context.set_value(key, value)?;
+        set_values(&prefix, &device.get_value())?;
+        if let Some(raw_value) = device.get_raw_value() {
+            let raw_prefix = format!("{prefix}.raw");
+            set_values(&raw_prefix, raw_value)?;
         }
     }
 
@@ -124,7 +134,7 @@ pub fn state_to_eval_context(
             let prefix = format!("{prefix}.{integration_id}.{name}");
 
             let value = serde_json::to_value(state)?;
-            let values = value_kv_pairs_deep(&value, prefix.clone());
+            let values = value_kv_pairs_deep(&value, &prefix.clone());
 
             for (key, value) in values {
                 let value = serde_value_to_evalexpr(&value)?;

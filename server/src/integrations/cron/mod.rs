@@ -64,7 +64,13 @@ impl Integration for Cron {
                 ManageKind::Full,
             ));
 
-            let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);
+            let device = Device::new(
+                self.id.clone(),
+                id.clone(),
+                device.name.clone(),
+                state,
+                None,
+            );
             {
                 let mut devices = self.devices.write().await;
                 devices.insert(id.clone(), device.clone());

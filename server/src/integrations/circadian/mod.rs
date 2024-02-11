@@ -177,5 +177,6 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         name: circadian.config.device_name.clone(),
         integration_id: circadian.id.clone(),
         data: state,
+        raw: None,
     }
 }

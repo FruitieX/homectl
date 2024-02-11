@@ -59,7 +59,13 @@ impl Integration for Dummy {
                     ManageKind::Full,
                 )));
 
-            let device = Device::new(self.id.clone(), id.clone(), device.name.clone(), state);
+            let device = Device::new(
+                self.id.clone(),
+                id.clone(),
+                device.name.clone(),
+                state,
+                None,
+            );
             self.event_tx.send(Message::RecvDeviceState { device });
         }
 

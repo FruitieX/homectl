@@ -7,7 +7,8 @@ use async_trait::async_trait;
 use color_eyre::Result;
 use eyre::Context;
 use serde::Deserialize;
-use std::time::Duration;
+use serde_json::json;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::task::JoinHandle;
 use tokio::time;
 
@@ -40,7 +41,7 @@ impl Integration for Timer {
     }
 
     async fn register(&mut self) -> Result<()> {
-        let device = mk_timer_device(&self.id, &self.config, false);
+        let device = mk_timer_device(&self.id, &self.config, false, None, None);
 
         self.event_tx.send(Message::RecvDeviceState { device });
 
@@ -48,12 +49,19 @@ impl Integration for Timer {
     }
 
     async fn run_integration_action(&mut self, action: &IntegrationActionPayload) -> Result<()> {
-        let device = mk_timer_device(&self.id, &self.config, true);
-
-        self.event_tx.send(Message::RecvDeviceState { device });
-
         let payload = action.to_string();
         let timeout_ms: u64 = payload.parse()?;
+        let started_at = SystemTime::now().duration_since(UNIX_EPOCH)?;
+
+        let device = mk_timer_device(
+            &self.id,
+            &self.config,
+            true,
+            Some(started_at),
+            Some(timeout_ms),
+        );
+
+        self.event_tx.send(Message::RecvDeviceState { device });
 
         let sender = self.event_tx.clone();
         let id = self.id.clone();
@@ -62,7 +70,7 @@ impl Integration for Timer {
             let sleep_duration = Duration::from_millis(timeout_ms);
             time::sleep(sleep_duration).await;
 
-            let device = mk_timer_device(&id, &config, false);
+            let device = mk_timer_device(&id, &config, false, Some(started_at), Some(timeout_ms));
             sender.send(Message::RecvDeviceState { device });
         });
 
@@ -76,7 +84,13 @@ impl Integration for Timer {
     }
 }
 
-fn mk_timer_device(id: &IntegrationId, config: &TimerConfig, value: bool) -> Device {
+fn mk_timer_device(
+    id: &IntegrationId,
+    config: &TimerConfig,
+    value: bool,
+    started_at: Option<Duration>,
+    timeout_ms: Option<u64>,
+) -> Device {
     let state = DeviceData::Sensor(SensorDevice::Boolean { value });
 
     Device {
@@ -84,5 +98,8 @@ fn mk_timer_device(id: &IntegrationId, config: &TimerConfig, value: bool) -> Dev
         name: config.device_name.clone(),
         integration_id: id.clone(),
         data: state,
+        raw: Some(
+            json!({ "timeout_ms": timeout_ms, "started_at": started_at.map(|t| t.as_millis()) }),
+        ),
     }
 }

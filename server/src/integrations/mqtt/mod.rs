@@ -41,6 +41,7 @@ pub struct MqttConfig {
     sensor_value_field: Option<jsonptr::Pointer>,
     transition_ms_field: Option<jsonptr::Pointer>,
     capabilities_field: Option<jsonptr::Pointer>,
+    raw_field: Option<jsonptr::Pointer>,
 }
 
 pub struct Mqtt {

@@ -1,13 +1,10 @@
 use crate::db::actions::{db_find_device, db_update_device};
-use crate::types::color::{Capabilities, DeviceColor};
 use crate::types::integration::IntegrationId;
 
 use super::expr::EvalContext;
 use super::groups::Groups;
 use super::scenes::{get_next_cycled_scene, Scenes};
-use crate::types::device::{
-    ControllableDevice, ControllableState, DeviceRef, ManageKind, SensorDevice,
-};
+use crate::types::device::{cmp_device_states, ControllableState, DeviceRef, ManageKind};
 use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
@@ -15,7 +12,6 @@ use crate::types::{
     scene::{SceneDescriptor, SceneId},
 };
 use color_eyre::Result;
-use eyre::eyre;
 use ordered_float::OrderedFloat;
 use std::collections::BTreeMap;
 
@@ -24,90 +20,6 @@ pub struct Devices {
     event_tx: TxEventChannel,
     state: DevicesState,
     keys_by_name: BTreeMap<(IntegrationId, String), DeviceKey>,
-}
-
-/// Compares light colors in the color mode as preferred by the device, allowing
-/// slight deltas to account for rounding errors.
-///
-/// If the colors match, the function evaluates to true.
-fn cmp_light_color(
-    capabilities: &Capabilities,
-    incoming: &Option<DeviceColor>,
-    incoming_bri: &Option<f32>,
-    expected: &Option<DeviceColor>,
-    expected_bri: &Option<f32>,
-) -> bool {
-    // If brightness mismatches, the light state is not equal
-    let bri_delta = 0.01;
-    if f32::abs(incoming_bri.unwrap_or(1.0) - expected_bri.unwrap_or(1.0)) > bri_delta {
-        return false;
-    }
-
-    // Convert expected color to supported color mode before performing comparison
-    let expected_converted = expected
-        .as_ref()
-        .and_then(|c| c.to_device_preferred_mode(capabilities));
-
-    // If colors are equal by PartialEq, the light state is equal
-    if incoming.as_ref() == expected_converted.as_ref() {
-        return true;
-    }
-
-    // Otherwise compare colors by components, allow slight deltas to account
-    // for rounding errors
-    let hue_delta = 1;
-    let sat_delta = 0.01;
-    let xy_delta = 0.01;
-    let cct_delta = 10;
-
-    match (incoming, expected_converted) {
-        (Some(DeviceColor::Xy(a)), Some(DeviceColor::Xy(b))) => {
-            // Light state is equal if all components differ by less than a given delta
-            (f32::abs(*a.x - *b.x) <= xy_delta) && (f32::abs(*a.y - *b.y) <= xy_delta)
-        }
-        (Some(DeviceColor::Hs(a)), Some(DeviceColor::Hs(b))) => {
-            // Light state is equal if all components differ by less than a given delta
-            (u64::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(*a.s - *b.s) <= sat_delta)
-        }
-        (Some(DeviceColor::Ct(a)), Some(DeviceColor::Ct(b))) => {
-            u64::abs_diff(a.ct, b.ct) <= cct_delta
-        }
-        (_, _) => false,
-    }
-}
-
-/// Compares the state of a ControllableDevice to some given ControllableState.
-///
-/// If the states match, the function evaluates to true.
-fn cmp_device_states(device: &ControllableDevice, expected: &ControllableState) -> bool {
-    if device.state.power != expected.power {
-        return false;
-    }
-
-    // If both lights are turned off, state matches
-    if !device.state.power && !expected.power {
-        return true;
-    }
-
-    // Compare colors if supported
-    if device.state.color.is_some() {
-        return cmp_light_color(
-            &device.capabilities,
-            &device.state.color,
-            &device.state.brightness.map(|b| b.into_inner()),
-            &expected.color,
-            &expected.brightness.map(|b| b.into_inner()),
-        );
-    }
-
-    true
-}
-
-/// Compares the state of two sensor devices.
-///
-/// If the states match, the function evaluates to true.
-fn cmp_sensor_states(sensor: &SensorDevice, previous: &SensorDevice) -> bool {
-    sensor == previous
 }
 
 impl Devices {
@@ -176,12 +88,9 @@ impl Devices {
                 }
             }
 
-            (DeviceData::Sensor(incoming_sensor), Some(current), _) => {
-                let previous = current.get_sensor_state().ok_or_else(|| eyre!("Previous state is not of type SensorDevice for {}. Maybe there is an ID collision with another ManagedDevice",
-                    current.get_device_key()))?;
-
+            (DeviceData::Sensor(_), Some(current), _) => {
                 // If there's no change in sensor state, ignore this update
-                if cmp_sensor_states(incoming_sensor, previous) {
+                if current.data.is_state_eq(&incoming.data) {
                     return Ok(());
                 }
 
@@ -191,7 +100,8 @@ impl Devices {
                     .await;
             }
 
-            (DeviceData::Controllable(ref incoming_state), _, Some(expected_state)) => {
+            (DeviceData::Controllable(ref incoming_state), Some(current), Some(expected_state)) => {
+                // If device is not managed, we set internal state and bail
                 if !incoming.is_managed() {
                     self.set_device_state(incoming, scenes, false, false, true)
                         .await;
@@ -199,10 +109,7 @@ impl Devices {
                 }
 
                 if cmp_device_states(incoming_state, &expected_state) {
-                    if let ManageKind::Partial {
-                        prev_change_committed: false,
-                    } = incoming_state.managed
-                    {
+                    if incoming_state.has_partial_uncommitted_changes() {
                         // Set prev_change_committed flag
                         let mut incoming_state = incoming_state.clone();
                         incoming_state.managed = ManageKind::Partial {
@@ -214,9 +121,17 @@ impl Devices {
 
                         self.set_device_state(&incoming, scenes, false, false, true)
                             .await;
-                    };
+                    } else if current.raw != incoming.raw {
+                        self.set_device_state(incoming, scenes, false, false, true)
+                            .await;
+                    }
 
                     return Ok(());
+                }
+
+                if current.raw != incoming.raw {
+                    self.set_device_state(incoming, scenes, false, false, true)
+                        .await;
                 }
 
                 let expected_converted =

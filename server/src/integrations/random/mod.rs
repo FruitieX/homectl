@@ -97,5 +97,6 @@ fn mk_random_device(random: &Random) -> Device {
         name: random.config.device_name.clone(),
         integration_id: random.id.clone(),
         data: state,
+        raw: None,
     }
 }
