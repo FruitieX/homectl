@@ -1,5 +1,47 @@
 # Changelog
 
+## [0.8.0](https://github.com/FruitieX/homectl-next/compare/v0.7.1...v0.8.0) (2024-02-12)
+
+
+### Features
+
+* car heater loading indicator ([3daa8d6](https://github.com/FruitieX/homectl-next/commit/3daa8d6e4b17306f4126e5c7c9267bd326dcb55f))
+
+
+### Bug Fixes
+
+* **deps:** update dependency @uiw/react-color-circle to v2.0.6 ([af2f338](https://github.com/FruitieX/homectl-next/commit/af2f33864da55e1aa93c00c9cdda817eccfb4b8f))
+* **deps:** update dependency @uiw/react-color-wheel to v2.0.6 ([7e1adf8](https://github.com/FruitieX/homectl-next/commit/7e1adf87d75f355dad3ccf6cd350125555a31ca0))
+* **deps:** update dependency daisyui to v4.6.0 ([6a4e4e7](https://github.com/FruitieX/homectl-next/commit/6a4e4e74fefc07155c692a6c1495f54928f9c9d2))
+* **deps:** update dependency daisyui to v4.6.1 ([8c48fc6](https://github.com/FruitieX/homectl-next/commit/8c48fc65efcef3d08ac07c27255cc6557c3cfb87))
+* **deps:** update dependency daisyui to v4.6.2 ([9e239d0](https://github.com/FruitieX/homectl-next/commit/9e239d02e3209ac8534d33bfe5a64e0382ee86ef))
+* **deps:** update dependency jotai to v2.6.2 ([e1b04ad](https://github.com/FruitieX/homectl-next/commit/e1b04adf7e16cdf4256896bc83c98a32279714c5))
+* **deps:** update dependency jotai to v2.6.3 ([c14fb56](https://github.com/FruitieX/homectl-next/commit/c14fb56c733d5115369bd80346cb9a59c7d2654a))
+* **deps:** update dependency jotai to v2.6.4 ([ad20c38](https://github.com/FruitieX/homectl-next/commit/ad20c38abb0ff91de2e9cfda48121cff44c787e0))
+* **deps:** update dependency konva to v9.3.1 ([377045e](https://github.com/FruitieX/homectl-next/commit/377045e2686d234dac3552994bded51a48614cb4))
+* **deps:** update dependency konva to v9.3.2 ([4230fb5](https://github.com/FruitieX/homectl-next/commit/4230fb542a6bdd3e9445ab9f20552680693fa25b))
+* **deps:** update dependency konva to v9.3.3 ([ecf8c53](https://github.com/FruitieX/homectl-next/commit/ecf8c534e8669ce3ced1dfdd8f0aad2d073a4a88))
+* **deps:** update dependency lucide-react to v0.309.0 ([f86da0b](https://github.com/FruitieX/homectl-next/commit/f86da0b90155addc74b81d5738cc310dc524090f))
+* **deps:** update dependency lucide-react to v0.311.0 ([b78edd7](https://github.com/FruitieX/homectl-next/commit/b78edd77ea0ba5f74074406ffda43b81a2eada6e))
+* **deps:** update dependency lucide-react to v0.312.0 ([814ee30](https://github.com/FruitieX/homectl-next/commit/814ee30de27203fe47a0c12108acbcf9ba0dce82))
+* **deps:** update dependency lucide-react to v0.314.0 ([97e7564](https://github.com/FruitieX/homectl-next/commit/97e7564b3d81e77c7e0be9693836e49b23ad720e))
+* **deps:** update dependency lucide-react to v0.315.0 ([31cadbd](https://github.com/FruitieX/homectl-next/commit/31cadbd5421d1a118ce561f7f8c659092608d536))
+* **deps:** update dependency lucide-react to v0.316.0 ([7eb8386](https://github.com/FruitieX/homectl-next/commit/7eb838630fe481420e0de784f363f4a7d36178ca))
+* **deps:** update dependency lucide-react to v0.317.0 ([10c4e42](https://github.com/FruitieX/homectl-next/commit/10c4e428101670a0ab1ac27604a24777804cb2f9))
+* **deps:** update dependency lucide-react to v0.319.0 ([85a805f](https://github.com/FruitieX/homectl-next/commit/85a805f8a992fa9def855a7122533acea6e9e424))
+* **deps:** update dependency lucide-react to v0.320.0 ([8137e95](https://github.com/FruitieX/homectl-next/commit/8137e95db54ce8850e5d32d376c14bbddf5c020e))
+* **deps:** update dependency lucide-react to v0.321.0 ([f3e58a3](https://github.com/FruitieX/homectl-next/commit/f3e58a313bafb4065347c390ea4a690c0ee28795))
+* **deps:** update dependency lucide-react to v0.323.0 ([b3273a4](https://github.com/FruitieX/homectl-next/commit/b3273a458293de98fc2f6319f27033f802b77f2d))
+* **deps:** update dependency lucide-react to v0.324.0 ([92c4e7b](https://github.com/FruitieX/homectl-next/commit/92c4e7baacf342a67d05e587622a21e2a41dd7ac))
+* **deps:** update dependency lucide-react to v0.325.0 ([a541c6b](https://github.com/FruitieX/homectl-next/commit/a541c6baf3791c87da804687ee55df384275fae2))
+* **deps:** update dependency react-konva-utils to v1.0.6 ([c55d181](https://github.com/FruitieX/homectl-next/commit/c55d1811139f7175f007dbba55add1fff52be7ca))
+* **deps:** update dependency usehooks-ts to v2.10.0 ([8680d38](https://github.com/FruitieX/homectl-next/commit/8680d38678c97ee9901a1bdd0e6b9dfc9977d8c5))
+* **deps:** update dependency usehooks-ts to v2.12.1 ([d8f5558](https://github.com/FruitieX/homectl-next/commit/d8f55582c280e7b676f26287d6c530e8951eaf5a))
+* **deps:** update dependency usehooks-ts to v2.13.0 ([4963931](https://github.com/FruitieX/homectl-next/commit/496393155ba356b50dcc099c20d57987796d1a07))
+* **deps:** update dependency usehooks-ts to v2.14.0 ([8fa06cc](https://github.com/FruitieX/homectl-next/commit/8fa06cc971d375e90cf44ea413e5b91703fc0f4b))
+* **deps:** update dependency usehooks-ts to v2.9.4 ([8f00869](https://github.com/FruitieX/homectl-next/commit/8f008691ce0ba08290aa0489baf13b87e9180f58))
+* **deps:** update dependency usehooks-ts to v2.9.5 ([0dc6f3b](https://github.com/FruitieX/homectl-next/commit/0dc6f3b77f9f8511f5975143220f06e5a16b58d7))
+
 ## [0.7.1](https://github.com/FruitieX/homectl-next/compare/v0.7.0...v0.7.1) (2024-01-10)
 
 
