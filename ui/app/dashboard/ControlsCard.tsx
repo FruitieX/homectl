@@ -27,6 +27,15 @@ export const ControlsCard = () => {
     carHeater = carHeaterDevice.data.Controllable.state.power;
   }
 
+  const carHeaterRawValues = carHeaterDevice?.raw;
+  let carHeaterLoading = false;
+  if (carHeater && carHeaterRawValues) {
+    // https://developer.tuya.com/en/docs/connect-subdevices-to-gateways/tuya-zigbee-measuring-smart-plug-access-standard?id=K9ik6zvofpzqk#title-15-DP19%20Power
+    // Value seems to be in units of 0.1W
+    const carHeaterPowerValue = (carHeaterRawValues['19'] ?? 0) / 10;
+    carHeaterLoading = carHeaterPowerValue < 1400;
+  }
+
   const toggleCarHeater = () => {
     if (carHeaterDevice) {
       const device = produce(carHeaterDevice, (draft) => {
@@ -105,6 +114,7 @@ export const ControlsCard = () => {
           size="lg"
           startIcon={<Car size="3rem" />}
           onClick={toggleCarHeater}
+          loading={carHeaterLoading}
         />
       </Card.Body>
     </Card>
