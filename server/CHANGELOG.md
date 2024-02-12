@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.8.0](https://github.com/FruitieX/homectl-server/compare/v0.7.0...v0.8.0) (2024-02-12)
+
+
+### Features
+
+* support numeric sensor values ([81f01d1](https://github.com/FruitieX/homectl-server/commit/81f01d1a0036a8a69dc350b0260ef4602f99b470))
+* support raw device values ([e37602f](https://github.com/FruitieX/homectl-server/commit/e37602f685da7a542ba8f6a389867611f77cab10))
+* wait for devices to be discovered at launch ([de0af33](https://github.com/FruitieX/homectl-server/commit/de0af33bbd0092e28c306e61f5171a9c45f233cf))
+
+
+### Bug Fixes
+
+* **deps:** update rust crate chrono to v0.4.34 ([9b406b2](https://github.com/FruitieX/homectl-server/commit/9b406b278c09ba45242a3c7c88177fe6de6fa0e0))
+* **deps:** update rust crate toml to v0.8.10 ([bca9d3e](https://github.com/FruitieX/homectl-server/commit/bca9d3e74442b8bf6b92ee86da1d37e3b828a618))
+
 ## [0.7.0](https://github.com/FruitieX/homectl-server/compare/v0.6.3...v0.7.0) (2024-02-05)
 
 
