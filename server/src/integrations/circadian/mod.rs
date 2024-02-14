@@ -60,7 +60,7 @@ impl Integration for Circadian {
     async fn register(&mut self) -> Result<()> {
         let device = mk_circadian_device(self);
 
-        self.event_tx.send(Message::RecvDeviceState { device });
+        self.event_tx.send(Message::ExternalStateUpdate { device });
 
         Ok(())
     }

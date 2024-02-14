@@ -79,7 +79,7 @@ async fn put_device_impl(
 
     app_state
         .devices
-        .set_device_state(&device, &scenes, true, false, false)
+        .set_internal_state(&device, &scenes, true, false, false)
         .await;
 
     let devices = app_state.devices.get_state();

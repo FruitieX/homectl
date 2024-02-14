@@ -113,10 +113,10 @@ pub fn flattened_groups_to_eval_context_values(
 
             // group_scene_id is set only if all devices have the same scene activated
             let group_scene_id = {
-                let first_device_scene_id = first_group_device.and_then(|d| d.get_scene());
+                let first_device_scene_id = first_group_device.and_then(|d| d.get_scene_id());
                 if group_devices
                     .iter()
-                    .all(|device| device.get_scene() == first_device_scene_id)
+                    .all(|device| device.get_scene_id() == first_device_scene_id)
                 {
                     first_device_scene_id
                 } else {

@@ -5,6 +5,8 @@ use std::{
     fmt::{self, Display},
 };
 
+use crate::core::scenes::Scenes;
+
 use super::{
     color::{Capabilities, ColorMode, DeviceColor},
     integration::IntegrationId,
@@ -151,7 +153,7 @@ pub enum ManageKind {
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableDevice {
-    pub scene: Option<SceneId>,
+    pub scene_id: Option<SceneId>,
     pub capabilities: Capabilities,
     pub state: ControllableState,
     pub managed: ManageKind,
@@ -168,7 +170,7 @@ impl ControllableDevice {
         managed: ManageKind,
     ) -> ControllableDevice {
         ControllableDevice {
-            scene,
+            scene_id: scene,
             state: ControllableState {
                 power,
                 brightness: brightness.map(OrderedFloat),
@@ -400,18 +402,31 @@ impl Device {
         }
     }
 
-    pub fn get_scene(&self) -> Option<SceneId> {
+    pub fn get_scene_id(&self) -> Option<SceneId> {
         match &self.data {
-            DeviceData::Controllable(ControllableDevice { scene, .. }) => scene.clone(),
+            DeviceData::Controllable(ControllableDevice { scene_id, .. }) => scene_id.clone(),
             DeviceData::Sensor(_) => None,
         }
     }
 
-    pub fn set_scene(&self, scene: Option<SceneId>) -> Self {
+    pub fn set_scene(&self, scene_id: Option<&SceneId>, scenes: &Scenes) -> Self {
         let mut device = self.clone();
 
         if let DeviceData::Controllable(ref mut data) = device.data {
-            data.scene = scene;
+            data.scene_id = scene_id.cloned();
+
+            if let Some(scene_id) = scene_id {
+                let state = scenes.get_device_scene_state(scene_id, &self.get_device_key());
+
+                if let Some(state) = state {
+                    data.state = state.clone();
+                } else {
+                    warn!(
+                        "Could not find device scene state for device: {device_key}, scene_id: {scene_id}",
+                        device_key = self.get_device_key(),
+                    );
+                }
+            }
         }
 
         device
@@ -541,19 +556,19 @@ impl Device {
         if let DeviceData::Controllable(ref mut data) = device.data {
             if let Some(brightness) = value.get("brightness").and_then(|b| b.as_f64()) {
                 data.state.brightness = Some(OrderedFloat(brightness as f32));
-                data.scene = None;
+                data.scene_id = None;
             }
             if let Some(power) = value.get("power").and_then(|b| b.as_bool()) {
                 data.state.power = power;
-                data.scene = None;
+                data.scene_id = None;
             }
             if let Some(transition_ms) = value.get("transition_ms").and_then(|b| b.as_u64()) {
                 data.state.transition_ms = Some(transition_ms);
-                data.scene = None;
+                data.scene_id = None;
             }
             if let Some(color) = value.get("color") {
                 data.state.color = Some(serde_json::from_value(color.clone())?);
-                data.scene = None;
+                data.scene_id = None;
             }
         }
 

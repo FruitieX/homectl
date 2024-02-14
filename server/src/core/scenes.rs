@@ -159,7 +159,7 @@ fn find_active_scene_index(
                 }
 
                 let device = devices.get_device_by_ref(&device_key.into());
-                let device_scene = device.and_then(|d| d.get_scene());
+                let device_scene = device.and_then(|d| d.get_scene_id());
 
                 device_scene.map_or(false, |ds| ds == sd.scene_id)
             })
@@ -352,7 +352,7 @@ impl Scenes {
 
     /// Finds current state of given device in its current scene
     pub fn find_scene_device_state(&self, device: &Device) -> Option<&ControllableState> {
-        let scene_id = device.get_scene()?;
+        let scene_id = device.get_scene_id()?;
         let scene = self.flattened_scenes.0.get(&scene_id)?;
         scene.devices.0.get(&device.get_device_key())
     }
@@ -446,6 +446,19 @@ impl Scenes {
 
     pub fn get_flattened_scenes(&self) -> &FlattenedScenesConfig {
         &self.flattened_scenes
+    }
+
+    pub fn get_device_scene_state(
+        &self,
+        scene_id: &SceneId,
+        device_key: &DeviceKey,
+    ) -> Option<&ControllableState> {
+        self.flattened_scenes
+            .0
+            .get(scene_id)?
+            .devices
+            .0
+            .get(device_key)
     }
 
     fn get_invalidated_devices_for_scene(

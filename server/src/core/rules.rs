@@ -181,7 +181,7 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool> {
         | Rule::Device(DeviceRule { scene, power, .. }) => {
             #[allow(clippy::if_same_then_else)]
             // Check for scene field mismatch (if provided)
-            if scene.is_some() && scene.as_ref() != device.get_scene().as_ref() {
+            if scene.is_some() && scene.as_ref() != device.get_scene_id().as_ref() {
                 Ok(false)
             }
             // Check for power field mismatch (if provided)

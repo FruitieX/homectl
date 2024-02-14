@@ -13,7 +13,7 @@ pub enum Message {
     /// An integration has informed us of current device state. We'll want to
     /// check if this matches with our internal "expected" state. If there's a
     /// mismatch, we'll try to correct it.
-    RecvDeviceState { device: Device },
+    ExternalStateUpdate { device: Device },
 
     /// Tell integration to trigger state change for the device.
     SendDeviceState { device: Device },

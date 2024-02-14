@@ -15,10 +15,10 @@ use super::{expr::eval_action_expr, state::AppState};
 
 pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
     match msg {
-        Message::RecvDeviceState { device } => {
+        Message::ExternalStateUpdate { device } => {
             state
                 .devices
-                .handle_recv_device_state(device, &state.scenes)
+                .handle_external_state_update(device, &state.scenes)
                 .await
         }
         Message::StartupCompleted => {
@@ -63,7 +63,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 .expr
                 .invalidate(new_state, &state.groups, &state.scenes);
 
-            let _invalidated_scenes = state.scenes.invalidate(
+            let invalidated_scenes = state.scenes.invalidate(
                 old_state,
                 new_state,
                 invalidated_device,
@@ -71,6 +71,8 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 &state.groups,
                 state.expr.get_context(),
             );
+
+            state.devices.invalidate(&invalidated_scenes, &state.scenes);
 
             // TODO: only invalidate changed devices/groups/scenes in expr context
             state
@@ -100,7 +102,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
         } => {
             state
                 .devices
-                .set_device_state(device, &state.scenes, *set_scene, false, *skip_send)
+                .set_internal_state(device, &state.scenes, *set_scene, false, *skip_send)
                 .await;
 
             Ok(())
@@ -199,7 +201,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
         Message::Action(Action::SetDeviceState(device)) => {
             state
                 .devices
-                .set_device_state(device, &state.scenes, false, false, false)
+                .set_internal_state(device, &state.scenes, false, false, false)
                 .await;
 
             Ok(())

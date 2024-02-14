@@ -13,7 +13,7 @@ use crate::types::{
 };
 use color_eyre::Result;
 use ordered_float::OrderedFloat;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone)]
 pub struct Devices {
@@ -35,13 +35,33 @@ impl Devices {
         &self.state
     }
 
+    pub fn invalidate(&self, invalidated_scenes: &HashSet<SceneId>, scenes: &Scenes) {
+        for scene_id in invalidated_scenes {
+            let devices: Vec<&Device> = self
+                .state
+                .0
+                .values()
+                .filter(|d| d.get_scene_id().as_ref() == Some(scene_id))
+                .collect();
+
+            for device in devices {
+                let device = device.set_scene(Some(scene_id), scenes);
+                self.event_tx.send(Message::SetExpectedState {
+                    device,
+                    set_scene: false,
+                    skip_send: false,
+                });
+            }
+        }
+    }
+
     /// Checks whether device values were changed or not due to refresh
-    pub async fn handle_recv_device_state(
+    pub async fn handle_external_state_update(
         &mut self,
         incoming: &Device,
         scenes: &Scenes,
     ) -> Result<()> {
-        trace!("handle_recv_device_state {incoming:?}");
+        trace!("handle_external_state_update {incoming:?}");
         let current = self.get_device(&incoming.get_device_key());
 
         // recompute expected_state here as it may have changed since we last
@@ -63,20 +83,20 @@ impl Devices {
                         // of possibly old/stale devices.
 
                         // Restore device scene from DB
-                        let scene = db_device.get_scene();
+                        let scene = db_device.get_scene_id();
 
-                        let device = incoming.set_scene(scene);
+                        let device = incoming.set_scene(scene.as_ref(), scenes);
 
                         info!(
                             "Discovered previously seen device, restored scene from DB: {device}",
                         );
 
-                        self.set_device_state(&device, scenes, true, true, !device.is_managed())
+                        self.set_internal_state(&device, scenes, true, true, !device.is_managed())
                             .await;
                     }
                     None => {
                         info!("Discovered device: {incoming}");
-                        self.set_device_state(
+                        self.set_internal_state(
                             incoming,
                             scenes,
                             true,
@@ -96,14 +116,14 @@ impl Devices {
 
                 // Sensor state has changed, defer handling of this update to
                 // other subsystems
-                self.set_device_state(incoming, scenes, false, false, false)
+                self.set_internal_state(incoming, scenes, false, false, false)
                     .await;
             }
 
             (DeviceData::Controllable(ref incoming_state), Some(current), Some(expected_state)) => {
                 // If device is not managed, we set internal state and bail
                 if !incoming.is_managed() {
-                    self.set_device_state(incoming, scenes, false, false, true)
+                    self.set_internal_state(incoming, scenes, false, false, true)
                         .await;
                     return Ok(());
                 }
@@ -119,10 +139,10 @@ impl Devices {
                         let mut incoming = incoming.clone();
                         incoming.data = DeviceData::Controllable(incoming_state);
 
-                        self.set_device_state(&incoming, scenes, false, false, true)
+                        self.set_internal_state(&incoming, scenes, false, false, true)
                             .await;
                     } else if current.raw != incoming.raw {
-                        self.set_device_state(incoming, scenes, false, false, true)
+                        self.set_internal_state(incoming, scenes, false, false, true)
                             .await;
                     }
 
@@ -130,7 +150,7 @@ impl Devices {
                 }
 
                 if current.raw != incoming.raw {
-                    self.set_device_state(incoming, scenes, false, false, true)
+                    self.set_internal_state(incoming, scenes, false, false, true)
                         .await;
                 }
 
@@ -169,7 +189,7 @@ impl Devices {
 
             // Expected device state was not found
             (_, _, None) => {
-                self.set_device_state(incoming, scenes, false, false, false)
+                self.set_internal_state(incoming, scenes, false, false, false)
                     .await;
             }
         }
@@ -241,7 +261,7 @@ impl Devices {
 
     /// Sets internal state for given device and dispatches device state to
     /// integration
-    pub async fn set_device_state(
+    pub async fn set_internal_state(
         &mut self,
         device: &Device,
         scenes: &Scenes,
@@ -250,7 +270,7 @@ impl Devices {
         skip_send: bool,
     ) -> Device {
         let old_states = { self.state.clone() };
-        let old = old_states.0.get(&device.get_device_key()).cloned();
+        let old: Option<Device> = old_states.0.get(&device.get_device_key()).cloned();
 
         // Insert new device into keys_by_name map
         if old.is_none() {
@@ -264,8 +284,8 @@ impl Devices {
 
         // Restore scene if set_scene is false
         if let (false, Some(old)) = (set_scene, &old) {
-            let old_device_scene = old.get_scene();
-            device = device.set_scene(old_device_scene);
+            let old_device_scene = old.get_scene_id();
+            device = device.set_scene(old_device_scene.as_ref(), scenes);
         }
 
         if set_scene || device.is_managed() {
@@ -337,8 +357,8 @@ impl Devices {
             let device = self.get_device(device_key);
 
             if let Some(device) = device {
-                let device = device.set_scene(Some(scene_id.clone()));
-                self.set_device_state(&device, scenes, true, false, false)
+                let device = device.set_scene(Some(scene_id), scenes);
+                self.set_internal_state(&device, scenes, true, false, false)
                     .await;
             }
         }
@@ -359,8 +379,9 @@ impl Devices {
         for device in devices.0 {
             let mut d = device.1.clone();
             d = d.dim_device(step.unwrap_or(0.1));
-            d = d.set_scene(Some(SceneId::new("dimmed".to_string())));
-            self.set_device_state(&d, scenes, false, false, false).await;
+            d = d.set_scene(Some(&SceneId::new("dimmed".to_string())), scenes);
+            self.set_internal_state(&d, scenes, false, false, false)
+                .await;
         }
 
         Some(true)

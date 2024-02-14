@@ -75,7 +75,7 @@ impl Integration for Cron {
                 let mut devices = self.devices.write().await;
                 devices.insert(id.clone(), device.clone());
             }
-            self.event_tx.send(Message::RecvDeviceState { device });
+            self.event_tx.send(Message::ExternalStateUpdate { device });
         }
 
         Ok(())
