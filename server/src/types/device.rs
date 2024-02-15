@@ -538,6 +538,16 @@ impl Device {
         device
     }
 
+    pub fn set_transition_ms(&self, transition_ms: Option<u64>) -> Device {
+        let mut device = self.clone();
+
+        if let DeviceData::Controllable(ref mut data) = device.data {
+            data.state.transition_ms = transition_ms;
+        }
+
+        device
+    }
+
     pub fn get_value(&self) -> serde_json::Value {
         match self.data {
             DeviceData::Controllable(ref data) => serde_json::to_value(data).unwrap(),
