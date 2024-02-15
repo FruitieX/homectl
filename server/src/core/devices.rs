@@ -100,7 +100,9 @@ impl Devices {
 
         let expected_state = current.get_controllable_state().ok_or_else(|| {
             eyre!(
-                "Could not find state for controllable device with key {device_key}. Maybe there is a device key collision with a sensor?",
+                "Could not find state for controllable device {integration_id}/{name}. Maybe there is a device key ({device_key}) collision with a sensor?",
+                integration_id = incoming.integration_id,
+                name = incoming.name
             )
         })?;
 
@@ -129,8 +131,11 @@ impl Devices {
                 expected_state.color_to_device_preferred_mode(&incoming_state.capabilities);
 
             info!(
-                "Device state mismatch detected ({device_key}):\nwas:      {}\nexpected: {}\n",
-                incoming_state.state, expected_converted,
+                "{integration_id}/{name} state mismatch detected:\nwas:      {}\nexpected: {}\n",
+                incoming_state.state,
+                expected_converted,
+                integration_id = incoming.integration_id,
+                name = incoming.name,
             );
 
             self.event_tx
@@ -236,8 +241,9 @@ impl Devices {
     pub async fn set_raw(&mut self, incoming: &Device) -> Result<()> {
         let device = self.get_device(&incoming.get_device_key()).ok_or_else(|| {
             eyre!(
-                "Could not find device with key {device_key} while trying to set raw field",
-                device_key = incoming.get_device_key()
+                "Could not find device {integration_id}/{name} while trying to set raw field",
+                integration_id = incoming.integration_id,
+                name = incoming.name
             )
         })?;
 

@@ -86,8 +86,9 @@ impl Integrations {
     pub async fn set_integration_device_state(&self, device: Device) -> Result<()> {
         if device.is_readonly() {
             debug!(
-                "Skipping ReadOnly device {device_key} state update: {state}",
-                device_key = device.get_device_key(),
+                "Skipping ReadOnly device {integration_id}/{name} state update: {state}",
+                integration_id = device.integration_id,
+                name = device.name,
                 state = device
                     .get_controllable_state()
                     .map(|s| s.to_string())

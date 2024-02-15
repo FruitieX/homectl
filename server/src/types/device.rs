@@ -443,8 +443,9 @@ impl Device {
                     data.state = state.clone();
                 } else {
                     warn!(
-                        "Could not find device scene state for device: {device_key}, scene_id: {scene_id}",
-                        device_key = self.get_device_key(),
+                        "Could not find device scene state for device: {integration_id}/{name}, scene_id: {scene_id}",
+                        integration_id = self.integration_id,
+                        name = self.name,
                     );
                 }
             }
