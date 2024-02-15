@@ -5,6 +5,8 @@ use std::{
     fmt::{self, Display},
 };
 
+use crate::core::scenes::Scenes;
+
 use super::{
     color::{Capabilities, ColorMode, DeviceColor},
     integration::IntegrationId,
@@ -141,17 +143,26 @@ pub enum ManageKind {
     /// state commands sent to the device will be fire-and-forget.
     Unmanaged,
 
-    /// Device is read-only and cannot be controlled by homectl.
+    /// Device is read-only and external state update messages are dropped,
+    /// otherwise behaves like ManageKind::Full
     ///
-    /// Intended for debugging purposes.
-    ReadOnly,
+    /// Intended for debugging purposes. (E.g. avoid flashing lights in the
+    /// middle of the night)
+    FullReadOnly,
+
+    /// Device is read-only and external state update messages are dropped,
+    /// otherwise behaves like ManageKind::Unmanaged
+    ///
+    /// Intended for debugging purposes. (E.g. avoid flashing lights in the
+    /// middle of the night)
+    UnmanagedReadOnly,
 }
 
 /// lights with adjustable brightness and/or color
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableDevice {
-    pub scene: Option<SceneId>,
+    pub scene_id: Option<SceneId>,
     pub capabilities: Capabilities,
     pub state: ControllableState,
     pub managed: ManageKind,
@@ -168,7 +179,7 @@ impl ControllableDevice {
         managed: ManageKind,
     ) -> ControllableDevice {
         ControllableDevice {
-            scene,
+            scene_id: scene,
             state: ControllableState {
                 power,
                 brightness: brightness.map(OrderedFloat),
@@ -393,6 +404,10 @@ impl Device {
         }
     }
 
+    pub fn is_state_eq(&self, other: &Device) -> bool {
+        self.data.is_state_eq(&other.data) && self.raw == other.raw
+    }
+
     pub fn get_device_key(&self) -> DeviceKey {
         DeviceKey {
             integration_id: self.integration_id.clone(),
@@ -400,18 +415,39 @@ impl Device {
         }
     }
 
-    pub fn get_scene(&self) -> Option<SceneId> {
+    pub fn get_scene_id(&self) -> Option<SceneId> {
         match &self.data {
-            DeviceData::Controllable(ControllableDevice { scene, .. }) => scene.clone(),
+            DeviceData::Controllable(ControllableDevice { scene_id, .. }) => scene_id.clone(),
             DeviceData::Sensor(_) => None,
         }
     }
 
-    pub fn set_scene(&self, scene: Option<SceneId>) -> Self {
+    /// Sets scene to the provided scene_id.
+    ///
+    /// If scene_id is set, the returned device's state will be computed from
+    /// that scene.
+    pub fn set_scene(&self, scene_id: Option<&SceneId>, scenes: &Scenes) -> Self {
         let mut device = self.clone();
 
+        if !device.is_managed() {
+            return device;
+        }
+
         if let DeviceData::Controllable(ref mut data) = device.data {
-            data.scene = scene;
+            data.scene_id = scene_id.cloned();
+
+            if let Some(scene_id) = scene_id {
+                let state = scenes.get_device_scene_state(scene_id, &self.get_device_key());
+
+                if let Some(state) = state {
+                    data.state = state.clone();
+                } else {
+                    warn!(
+                        "Could not find device scene state for device: {device_key}, scene_id: {scene_id}",
+                        device_key = self.get_device_key(),
+                    );
+                }
+            }
         }
 
         device
@@ -465,6 +501,7 @@ impl Device {
         }
     }
 
+    /// Converts device color to the preferred color mode of the device
     pub fn color_to_preferred_mode(&self) -> Device {
         let state = self.get_controllable_state();
         let capabilities = self.get_supported_color_modes();
@@ -486,7 +523,7 @@ impl Device {
         matches!(
             self.data,
             DeviceData::Controllable(ControllableDevice {
-                managed: ManageKind::ReadOnly,
+                managed: ManageKind::UnmanagedReadOnly | ManageKind::FullReadOnly,
                 ..
             })
         )
@@ -509,6 +546,16 @@ impl Device {
         device
     }
 
+    pub fn set_transition_ms(&self, transition_ms: Option<u64>) -> Device {
+        let mut device = self.clone();
+
+        if let DeviceData::Controllable(ref mut data) = device.data {
+            data.state.transition_ms = transition_ms;
+        }
+
+        device
+    }
+
     pub fn get_value(&self) -> serde_json::Value {
         match self.data {
             DeviceData::Controllable(ref data) => serde_json::to_value(data).unwrap(),
@@ -526,6 +573,7 @@ impl Device {
                 matches!(
                     data.managed,
                     ManageKind::Full
+                        | ManageKind::FullReadOnly
                         | ManageKind::Partial {
                             prev_change_committed: false
                         }
@@ -541,19 +589,19 @@ impl Device {
         if let DeviceData::Controllable(ref mut data) = device.data {
             if let Some(brightness) = value.get("brightness").and_then(|b| b.as_f64()) {
                 data.state.brightness = Some(OrderedFloat(brightness as f32));
-                data.scene = None;
+                data.scene_id = None;
             }
             if let Some(power) = value.get("power").and_then(|b| b.as_bool()) {
                 data.state.power = power;
-                data.scene = None;
+                data.scene_id = None;
             }
             if let Some(transition_ms) = value.get("transition_ms").and_then(|b| b.as_u64()) {
                 data.state.transition_ms = Some(transition_ms);
-                data.scene = None;
+                data.scene_id = None;
             }
             if let Some(color) = value.get("color") {
                 data.state.color = Some(serde_json::from_value(color.clone())?);
-                data.scene = None;
+                data.scene_id = None;
             }
         }
 

@@ -3,14 +3,14 @@ use crate::integrations::{
     circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, timer::Timer,
 };
 use crate::types::{
-    device::{Device, DeviceKey},
+    device::Device,
     event::TxEventChannel,
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use color_eyre::Result;
 use eyre::eyre;
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::Mutex;
 
 #[derive(Clone)]
 pub struct LoadedIntegration {
@@ -19,22 +19,18 @@ pub struct LoadedIntegration {
 }
 
 pub type CustomIntegrationsMap = HashMap<IntegrationId, LoadedIntegration>;
-pub type DeviceStates = HashMap<DeviceKey, Device>;
 
 #[derive(Clone)]
 pub struct Integrations {
-    expected_device_states: Arc<RwLock<DeviceStates>>,
     custom_integrations: CustomIntegrationsMap,
     event_tx: TxEventChannel,
 }
 
 impl Integrations {
     pub fn new(event_tx: TxEventChannel) -> Self {
-        let expected_device_states = Default::default();
         let integrations = Default::default();
 
         Integrations {
-            expected_device_states,
             custom_integrations: integrations,
             event_tx,
         }
@@ -87,10 +83,17 @@ impl Integrations {
         Ok(())
     }
 
-    pub async fn set_integration_device_state(&self, device: &Device) -> Result<()> {
-        {
-            let mut expected_device_states = self.expected_device_states.write().await;
-            expected_device_states.insert(device.get_device_key(), device.clone());
+    pub async fn set_integration_device_state(&self, device: Device) -> Result<()> {
+        if device.is_readonly() {
+            debug!(
+                "Skipping ReadOnly device {device_key} state update: {state}",
+                device_key = device.get_device_key(),
+                state = device
+                    .get_controllable_state()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default()
+            );
+            return Ok(());
         }
 
         let li = self
@@ -102,6 +105,7 @@ impl Integrations {
                     device.integration_id
                 )
             })?;
+
         let mut integration = li.integration.lock().await;
 
         integration

@@ -66,7 +66,7 @@ impl Integration for Dummy {
                 state,
                 None,
             );
-            self.event_tx.send(Message::RecvDeviceState { device });
+            self.event_tx.send(Message::ExternalStateUpdate { device });
         }
 
         Ok(())

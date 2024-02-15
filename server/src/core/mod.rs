@@ -4,7 +4,7 @@ pub mod expr;
 pub mod groups;
 pub mod integrations;
 pub mod message;
-pub mod rules;
+pub mod routines;
 pub mod scenes;
 pub mod state;
 pub mod websockets;

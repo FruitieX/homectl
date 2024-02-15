@@ -43,7 +43,7 @@ impl Integration for Timer {
     async fn register(&mut self) -> Result<()> {
         let device = mk_timer_device(&self.id, &self.config, false, None, None);
 
-        self.event_tx.send(Message::RecvDeviceState { device });
+        self.event_tx.send(Message::ExternalStateUpdate { device });
 
         Ok(())
     }
@@ -61,7 +61,7 @@ impl Integration for Timer {
             Some(timeout_ms),
         );
 
-        self.event_tx.send(Message::RecvDeviceState { device });
+        self.event_tx.send(Message::ExternalStateUpdate { device });
 
         let sender = self.event_tx.clone();
         let id = self.id.clone();
@@ -71,7 +71,7 @@ impl Integration for Timer {
             time::sleep(sleep_duration).await;
 
             let device = mk_timer_device(&id, &config, false, Some(started_at), Some(timeout_ms));
-            sender.send(Message::RecvDeviceState { device });
+            sender.send(Message::ExternalStateUpdate { device });
         });
 
         if let Some(timer_task) = self.timer_task.take() {

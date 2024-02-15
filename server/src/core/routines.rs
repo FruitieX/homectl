@@ -12,23 +12,23 @@ use std::collections::HashSet;
 use super::{devices::Devices, expr::Expr, groups::Groups};
 
 #[derive(Clone)]
-pub struct Rules {
+pub struct Routines {
     config: RoutinesConfig,
     event_tx: TxEventChannel,
     prev_triggered_routine_ids: Option<HashSet<RoutineId>>,
 }
 
-impl Rules {
+impl Routines {
     pub fn new(config: RoutinesConfig, event_tx: TxEventChannel) -> Self {
-        Rules {
+        Routines {
             config,
             event_tx,
             prev_triggered_routine_ids: Default::default(),
         }
     }
 
-    /// An internal state update has occurred, we need to check if any rules are
-    /// triggered by this change and run actions of triggered rules.
+    /// An internal state update has occurred, we need to check if any routines
+    /// are triggered by this change and run actions of triggered rules.
     pub async fn handle_internal_state_update(
         &mut self,
         old_state: &DevicesState,
@@ -181,7 +181,7 @@ fn compare_rule_device_state(rule: &Rule, device: &Device) -> Result<bool> {
         | Rule::Device(DeviceRule { scene, power, .. }) => {
             #[allow(clippy::if_same_then_else)]
             // Check for scene field mismatch (if provided)
-            if scene.is_some() && scene.as_ref() != device.get_scene().as_ref() {
+            if scene.is_some() && scene.as_ref() != device.get_scene_id().as_ref() {
                 Ok(false)
             }
             // Check for power field mismatch (if provided)
