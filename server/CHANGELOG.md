@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/FruitieX/homectl-server/compare/v0.8.0...v0.9.0) (2024-02-15)
+
+
+### Features
+
+* expected state recomputed only when needed ([da23524](https://github.com/FruitieX/homectl-server/commit/da23524bc35451f6079c4fb2688db9594fbfd345))
+* FullReadOnly mode for debugging managed devices ([8b75afb](https://github.com/FruitieX/homectl-server/commit/8b75afb513f8b40bca41c974c82ca0ac5da9ffd2))
+* recompute scene device states when scene invalidated ([e961dda](https://github.com/FruitieX/homectl-server/commit/e961dda30b150d74532c99b57d1e228c6787dd13))
+
+
+### Bug Fixes
+
+* disable state transitions when activating scenes ([db8134f](https://github.com/FruitieX/homectl-server/commit/db8134f5ae03441530e0f8f8e76c4c0a0a9d60a0))
+
 ## [0.8.0](https://github.com/FruitieX/homectl-server/compare/v0.7.0...v0.8.0) (2024-02-12)
 
 
