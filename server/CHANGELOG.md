@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.1](https://github.com/FruitieX/homectl-server/compare/v0.9.0...v0.9.1) (2024-02-15)
+
+
+### Features
+
+* use device name in logs ([9576765](https://github.com/FruitieX/homectl-server/commit/95767650fcd9dfea617517ce0e40839703762666))
+
+
+### Miscellaneous Chores
+
+* release 0.9.1 ([557051f](https://github.com/FruitieX/homectl-server/commit/557051f53a0adc8096a9e79befc39470df94449d))
+
 ## [0.9.0](https://github.com/FruitieX/homectl-server/compare/v0.8.0...v0.9.0) (2024-02-15)
 
 
