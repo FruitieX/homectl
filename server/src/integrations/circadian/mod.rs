@@ -156,10 +156,9 @@ async fn poll_sensor(circadian: Circadian) {
 
         let device = mk_circadian_device(&circadian);
 
-        event_tx.send(Message::SetExpectedState {
+        event_tx.send(Message::SetInternalState {
             device,
-            set_scene: false,
-            skip_send: false,
+            skip_external_update: false,
         });
     }
 }

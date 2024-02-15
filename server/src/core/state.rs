@@ -6,7 +6,7 @@ use crate::types::{
 };
 
 use super::{
-    devices::Devices, expr::Expr, groups::Groups, integrations::Integrations, rules::Rules,
+    devices::Devices, expr::Expr, groups::Groups, integrations::Integrations, routines::Routines,
     scenes::Scenes, websockets::WebSockets,
 };
 
@@ -17,7 +17,7 @@ pub struct AppState {
     pub groups: Groups,
     pub scenes: Scenes,
     pub devices: Devices,
-    pub rules: Rules,
+    pub rules: Routines,
     pub event_tx: TxEventChannel,
     pub expr: Expr,
     pub ws: WebSockets,

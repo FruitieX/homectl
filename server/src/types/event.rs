@@ -15,12 +15,6 @@ pub enum Message {
     /// mismatch, we'll try to correct it.
     ExternalStateUpdate { device: Device },
 
-    /// Tell integration to trigger state change for the device.
-    SendDeviceState { device: Device },
-
-    /// Wait for a bit for devices to come online before starting up.
-    StartupCompleted,
-
     /// Internal device state update has taken place, need to take appropriate
     /// actions such as checking (and possibly triggering) routines.
     InternalStateUpdate {
@@ -30,16 +24,19 @@ pub enum Message {
         new: Device,
     },
 
-    /// Sets internal expected state for the device.
-    SetExpectedState {
+    /// Tell integration to trigger state change for a device.
+    SetExternalState { device: Device },
+
+    /// Sets internal / "expected" state for a device.
+    SetInternalState {
         device: Device,
 
-        /// Whether to honor the scene field in the device data or not.
-        set_scene: bool,
-
-        /// Whether to skip sending [Message::SendDeviceState] as a result of this state update.
-        skip_send: bool,
+        /// Whether to skip sending [Message::SetExternalState] as a result of this state update.
+        skip_external_update: bool,
     },
+
+    /// Wait for a bit for devices to come online before starting up.
+    StartupCompleted,
 
     /// Store new scene in DB.
     DbStoreScene {

@@ -350,13 +350,6 @@ impl Scenes {
         Some(scene_devices_config)
     }
 
-    /// Finds current state of given device in its current scene
-    pub fn find_scene_device_state(&self, device: &Device) -> Option<&ControllableState> {
-        let scene_id = device.get_scene_id()?;
-        let scene = self.flattened_scenes.0.get(&scene_id)?;
-        scene.devices.0.get(&device.get_device_key())
-    }
-
     pub fn mk_flattened_scene(
         &self,
         scene_id: &SceneId,

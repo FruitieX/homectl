@@ -75,12 +75,8 @@ async fn put_device_impl(
     }
 
     let mut app_state = app_state.write().await;
-    let scenes = app_state.scenes.clone();
 
-    app_state
-        .devices
-        .set_internal_state(&device, &scenes, true, false, false)
-        .await;
+    app_state.devices.set_state(&device, false);
 
     let devices = app_state.devices.get_state();
     let response = DevicesResponse {

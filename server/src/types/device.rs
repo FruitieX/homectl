@@ -145,7 +145,8 @@ pub enum ManageKind {
 
     /// Device is read-only and cannot be controlled by homectl.
     ///
-    /// Intended for debugging purposes.
+    /// Intended for debugging purposes. (E.g. avoid flashing lights in the
+    /// middle of the night)
     ReadOnly,
 }
 
@@ -395,6 +396,10 @@ impl Device {
         }
     }
 
+    pub fn is_state_eq(&self, other: &Device) -> bool {
+        self.data.is_state_eq(&other.data) && self.raw == other.raw
+    }
+
     pub fn get_device_key(&self) -> DeviceKey {
         DeviceKey {
             integration_id: self.integration_id.clone(),
@@ -409,8 +414,16 @@ impl Device {
         }
     }
 
+    /// Sets scene to the provided scene_id.
+    ///
+    /// If scene_id is set, the returned device's state will be computed from
+    /// that scene.
     pub fn set_scene(&self, scene_id: Option<&SceneId>, scenes: &Scenes) -> Self {
         let mut device = self.clone();
+
+        if !device.is_managed() {
+            return device;
+        }
 
         if let DeviceData::Controllable(ref mut data) = device.data {
             data.scene_id = scene_id.cloned();
@@ -480,6 +493,7 @@ impl Device {
         }
     }
 
+    /// Converts device color to the preferred color mode of the device
     pub fn color_to_preferred_mode(&self) -> Device {
         let state = self.get_controllable_state();
         let capabilities = self.get_supported_color_modes();

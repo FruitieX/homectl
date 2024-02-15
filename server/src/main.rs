@@ -21,7 +21,7 @@ use crate::core::expr::Expr;
 // use db::{actions::find_floorplans, establish_connection};
 use crate::core::{
     devices::Devices, groups::Groups, integrations::Integrations, message::handle_message,
-    rules::Rules, scenes::Scenes, state::AppState,
+    routines::Routines, scenes::Scenes, state::AppState,
 };
 use crate::types::event::{mk_event_channel, Message};
 use api::init_api;
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     scenes.refresh_db_scenes().await;
     let devices = Devices::new(event_tx.clone());
     let expr = Expr::new();
-    let rules = Rules::new(config.routines.unwrap_or_default(), event_tx.clone());
+    let rules = Routines::new(config.routines.unwrap_or_default(), event_tx.clone());
 
     for (id, integration_config) in &config.integrations.unwrap_or_default() {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
