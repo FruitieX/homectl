@@ -84,6 +84,18 @@ impl Integrations {
     }
 
     pub async fn set_integration_device_state(&self, device: Device) -> Result<()> {
+        if device.is_readonly() {
+            debug!(
+                "Skipping ReadOnly device {device_key} state update: {state}",
+                device_key = device.get_device_key(),
+                state = device
+                    .get_controllable_state()
+                    .map(|s| s.to_string())
+                    .unwrap_or_default()
+            );
+            return Ok(());
+        }
+
         let li = self
             .custom_integrations
             .get(&device.integration_id)

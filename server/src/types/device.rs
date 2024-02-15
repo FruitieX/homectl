@@ -143,11 +143,19 @@ pub enum ManageKind {
     /// state commands sent to the device will be fire-and-forget.
     Unmanaged,
 
-    /// Device is read-only and cannot be controlled by homectl.
+    /// Device is read-only and external state update messages are dropped,
+    /// otherwise behaves like ManageKind::Full
     ///
     /// Intended for debugging purposes. (E.g. avoid flashing lights in the
     /// middle of the night)
-    ReadOnly,
+    FullReadOnly,
+
+    /// Device is read-only and external state update messages are dropped,
+    /// otherwise behaves like ManageKind::Unmanaged
+    ///
+    /// Intended for debugging purposes. (E.g. avoid flashing lights in the
+    /// middle of the night)
+    UnmanagedReadOnly,
 }
 
 /// lights with adjustable brightness and/or color
@@ -515,7 +523,7 @@ impl Device {
         matches!(
             self.data,
             DeviceData::Controllable(ControllableDevice {
-                managed: ManageKind::ReadOnly,
+                managed: ManageKind::UnmanagedReadOnly | ManageKind::FullReadOnly,
                 ..
             })
         )
@@ -565,6 +573,7 @@ impl Device {
                 matches!(
                     data.managed,
                     ManageKind::Full
+                        | ManageKind::FullReadOnly
                         | ManageKind::Partial {
                             prev_change_committed: false
                         }

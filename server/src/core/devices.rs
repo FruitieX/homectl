@@ -219,7 +219,7 @@ impl Devices {
             new: device.clone(),
         });
 
-        if !skip_external_update && !device.is_sensor() && !device.is_readonly() {
+        if !skip_external_update && !device.is_sensor() {
             let device = device.clone();
             self.event_tx.send(Message::SetExternalState { device });
         }
