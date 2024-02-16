@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.9.2](https://github.com/FruitieX/homectl-server/compare/v0.9.1...v0.9.2) (2024-02-16)
+
+
+### Features
+
+* set SetInternalState skip_external_update field as optional ([c3861f0](https://github.com/FruitieX/homectl-server/commit/c3861f0ce35ac8264d8a6ee567414c58fc791615))
+
+
+### Miscellaneous Chores
+
+* release 0.9.2 ([c6b828e](https://github.com/FruitieX/homectl-server/commit/c6b828ed56603f5fc3d8736b6c69456ae266013a))
+
 ## [0.9.1](https://github.com/FruitieX/homectl-server/compare/v0.9.0...v0.9.1) (2024-02-15)
 
 
