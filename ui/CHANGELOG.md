@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.9.2](https://github.com/FruitieX/homectl-next/compare/v0.8.0...v0.9.2) (2024-02-16)
+
+
+### Bug Fixes
+
+* **deps:** update dependency daisyui to v4.6.3 ([8fadf72](https://github.com/FruitieX/homectl-next/commit/8fadf721d47c9ba063c58c0cc4707830e35e7f09))
+* **deps:** update dependency daisyui to v4.7.0 ([0337828](https://github.com/FruitieX/homectl-next/commit/0337828ed3f23a5c9d8182c61dabd3cc2248c7e8))
+* **deps:** update dependency daisyui to v4.7.2 ([a90569c](https://github.com/FruitieX/homectl-next/commit/a90569ca40386e61a7949e2d82e7c8390a329462))
+* **deps:** update dependency lucide-react to v0.330.0 ([9012803](https://github.com/FruitieX/homectl-next/commit/90128034a574a240566e3512343e86f43ec6ee32))
+* **deps:** update dependency lucide-react to v0.331.0 ([c5ff738](https://github.com/FruitieX/homectl-next/commit/c5ff738ae9a86be88ed3f293b93bd2a27aa5a438))
+* update homectl ts-bindings ([ff36ecf](https://github.com/FruitieX/homectl-next/commit/ff36ecf4d3d5dc78d86971be449c83b937dcd737))
+
+
+### Miscellaneous Chores
+
+* release 0.9.2 ([3ed31ec](https://github.com/FruitieX/homectl-next/commit/3ed31ecb0c5b6a215277dce37796c884723a8d81))
+
 ## [0.8.0](https://github.com/FruitieX/homectl-next/compare/v0.7.1...v0.8.0) (2024-02-12)
 
 
