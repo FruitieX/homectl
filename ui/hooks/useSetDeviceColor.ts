@@ -22,7 +22,7 @@ export const useSetDeviceColor = () => {
             s: hsv.saturationv() / 100,
           };
 
-          draft.data.Controllable.scene = null;
+          draft.data.Controllable.scene_id = null;
 
           if (brightness !== undefined) {
             draft.data.Controllable.state.brightness = brightness;
@@ -36,7 +36,7 @@ export const useSetDeviceColor = () => {
 
       const msg: WebSocketRequest = {
         Message: {
-          SetExpectedState: { device, set_scene: true, skip_send: false },
+          SetInternalState: { device, skip_external_update: false },
         },
       };
       ws?.send(JSON.stringify(msg));

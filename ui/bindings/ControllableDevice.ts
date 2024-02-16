@@ -5,7 +5,7 @@ import type { ManageKind } from './ManageKind';
 import type { SceneId } from './SceneId';
 
 export interface ControllableDevice {
-  scene: SceneId | null;
+  scene_id: SceneId | null;
   capabilities: Capabilities;
   state: ControllableState;
   managed: ManageKind;

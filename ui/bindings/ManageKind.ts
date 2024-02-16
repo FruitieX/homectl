@@ -4,4 +4,5 @@ export type ManageKind =
   | 'Full'
   | { Partial: { prev_change_committed: boolean } }
   | 'Unmanaged'
-  | 'ReadOnly';
+  | 'FullReadOnly'
+  | 'UnmanagedReadOnly';

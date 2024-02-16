@@ -11,13 +11,13 @@ export const useSetDevicePower = () => {
       const device = produce(clickedDevice, (draft) => {
         if ('Controllable' in draft.data) {
           draft.data.Controllable.state.power = power;
-          draft.data.Controllable.scene = null;
+          draft.data.Controllable.scene_id = null;
         }
       });
 
       const msg: WebSocketRequest = {
         Message: {
-          SetExpectedState: { device, set_scene: true, skip_send: false },
+          SetInternalState: { device, skip_external_update: false },
         },
       };
       ws?.send(JSON.stringify(msg));

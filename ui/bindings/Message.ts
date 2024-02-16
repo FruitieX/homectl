@@ -6,9 +6,7 @@ import type { SceneConfig } from './SceneConfig';
 import type { SceneId } from './SceneId';
 
 export type Message =
-  | { RecvDeviceState: { device: Device } }
-  | { SendDeviceState: { device: Device } }
-  | 'StartupCompleted'
+  | { ExternalStateUpdate: { device: Device } }
   | {
       InternalStateUpdate: {
         old_state: DevicesState;
@@ -17,13 +15,14 @@ export type Message =
         new: Device;
       };
     }
+  | { SetExternalState: { device: Device } }
   | {
-      SetExpectedState: {
+      SetInternalState: {
         device: Device;
-        set_scene: boolean;
-        skip_send: boolean;
+        skip_external_update: boolean | null;
       };
     }
+  | 'StartupCompleted'
   | { DbStoreScene: { scene_id: SceneId; config: SceneConfig } }
   | { DbEditScene: { scene_id: SceneId; name: string } }
   | { DbDeleteScene: { scene_id: SceneId } }
