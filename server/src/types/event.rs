@@ -32,7 +32,7 @@ pub enum Message {
         device: Device,
 
         /// Whether to skip sending [Message::SetExternalState] as a result of this state update.
-        skip_external_update: bool,
+        skip_external_update: Option<bool>,
     },
 
     /// Wait for a bit for devices to come online before starting up.

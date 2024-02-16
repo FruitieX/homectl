@@ -97,7 +97,9 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
         } => {
             let device = device.set_scene(device.get_scene_id().as_ref(), &state.scenes);
 
-            state.devices.set_state(&device, *skip_external_update);
+            state
+                .devices
+                .set_state(&device, skip_external_update.unwrap_or_default());
         }
         Message::SetExternalState { device } => {
             let device = device.color_to_preferred_mode();

@@ -158,7 +158,7 @@ async fn poll_sensor(circadian: Circadian) {
 
         event_tx.send(Message::SetInternalState {
             device,
-            skip_external_update: false,
+            skip_external_update: None,
         });
     }
 }
