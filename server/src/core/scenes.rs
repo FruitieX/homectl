@@ -250,28 +250,12 @@ impl Scenes {
         sd: &SceneDescriptor,
         eval_context: &EvalContext,
     ) -> Option<SceneDevicesConfig> {
+        let mut scene_devices_config: SceneDevicesConfig = Default::default();
+
         let scene_id = &sd.scene_id;
         let scene = self.find_scene(scene_id)?;
 
-        let expr_device_configs = scene
-            .expr
-            .and_then(|expr| {
-                let result = eval_scene_expr(&expr, eval_context, devices.get_state());
-
-                if let Err(e) = &result {
-                    warn!("Error evaluating scene expression: {e:?}");
-                }
-
-                result.ok()
-            })
-            .unwrap_or_default();
-
-        let scene_devices_search_config =
-            scene.devices.map(|devices| devices.0).unwrap_or_default();
-
-        let filter_device_by_keys = |device: &Device| -> bool {
-            let device_key = &DeviceKey::new(device.integration_id.clone(), device.id.clone());
-
+        let filter_device_by_keys = |device_key: &DeviceKey| -> bool {
             // Skip this device if it's not in device_keys
             if let Some(device_keys) = &sd.device_keys {
                 if !device_keys.contains(device_key) {
@@ -300,7 +284,23 @@ impl Scenes {
             true
         };
 
-        let mut scene_devices_config: SceneDevicesConfig = Default::default();
+        let expr_device_configs = scene
+            .expr
+            .and_then(|expr| {
+                let result = eval_scene_expr(&expr, eval_context, devices.get_state());
+
+                if let Err(e) = &result {
+                    warn!("Error evaluating scene expression: {e:?}");
+                }
+
+                result.ok()
+            })
+            .map(|c| {
+                c.into_iter()
+                    .filter(|(device_key, _)| filter_device_by_keys(device_key))
+                    .collect::<HashMap<DeviceKey, SceneDeviceConfig>>()
+            })
+            .unwrap_or_default();
 
         // Inserts devices from groups
         let scene_groups = scene.groups.map(|groups| groups.0).unwrap_or_default();
@@ -308,16 +308,20 @@ impl Scenes {
             let group_devices = groups.find_group_devices(devices.get_state(), &group_id);
 
             for device in group_devices {
+                let device_key = device.get_device_key();
+
                 // Skip this device if it's not in device_keys or group_keys
-                if !filter_device_by_keys(device) {
+                if !filter_device_by_keys(&device_key) {
                     continue;
                 }
 
-                scene_devices_config.insert(device.get_device_key(), scene_device_config.clone());
+                scene_devices_config.insert(device_key, scene_device_config.clone());
             }
         }
 
         // Insert scene devices
+        let scene_devices_search_config =
+            scene.devices.map(|devices| devices.0).unwrap_or_default();
         for (integration_id, scene_device_configs) in scene_devices_search_config {
             for (device_name, scene_device_config) in scene_device_configs {
                 let device = devices.get_device_by_ref(&DeviceRef::new_with_name(
@@ -333,12 +337,14 @@ impl Scenes {
                     continue;
                 };
 
+                let device_key = device.get_device_key();
+
                 // Skip this device if it's not in device_keys or group_keys
-                if !filter_device_by_keys(device) {
+                if !filter_device_by_keys(&device_key) {
                     continue;
                 }
 
-                scene_devices_config.insert(device.get_device_key(), scene_device_config.clone());
+                scene_devices_config.insert(device_key, scene_device_config.clone());
             }
         }
 
