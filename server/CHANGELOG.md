@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.3](https://github.com/FruitieX/homectl-server/compare/v0.9.2...v0.9.3) (2024-02-19)
+
+
+### Bug Fixes
+
+* also filter scene expr devices by sd device/group keys ([4dfb3b8](https://github.com/FruitieX/homectl-server/commit/4dfb3b8c9c449aa5ed39cfecd6b6d9938465e50d))
+
 ## [0.9.2](https://github.com/FruitieX/homectl-server/compare/v0.9.1...v0.9.2) (2024-02-16)
 
 
