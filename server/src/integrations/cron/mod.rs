@@ -2,7 +2,7 @@ use crate::types::{
     action::Action,
     color::Capabilities,
     device::{ControllableDevice, Device, DeviceData, DeviceId, ManageKind},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use async_trait::async_trait;
@@ -75,7 +75,7 @@ impl Integration for Cron {
                 let mut devices = self.devices.write().await;
                 devices.insert(id.clone(), device.clone());
             }
-            self.event_tx.send(Message::ExternalStateUpdate { device });
+            self.event_tx.send(Event::ExternalStateUpdate { device });
         }
 
         Ok(())
@@ -103,7 +103,7 @@ impl Integration for Cron {
                     let devices = devices.read().await;
                     let device = devices.get(&id).unwrap();
                     if device.is_powered_on() == Some(true) {
-                        event_tx.send(Message::Action(action.clone()));
+                        event_tx.send(Event::Action(action.clone()));
                     }
                 }
             });

@@ -20,10 +20,10 @@ mod utils;
 use crate::core::expr::Expr;
 // use db::{actions::find_floorplans, establish_connection};
 use crate::core::{
-    devices::Devices, groups::Groups, integrations::Integrations, message::handle_message,
+    devices::Devices, event::handle_event, groups::Groups, integrations::Integrations,
     routines::Routines, scenes::Scenes, state::AppState,
 };
-use crate::types::event::{mk_event_channel, Message};
+use crate::types::event::{mk_event_channel, Event};
 use api::init_api;
 use color_eyre::Result;
 use db::init_db;
@@ -92,25 +92,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .await;
             let mut state = state.write().await;
             state.warming_up = false;
-            state.event_tx.send(Message::StartupCompleted);
+            state.event_tx.send(Event::StartupCompleted);
         });
     }
 
     loop {
-        let msg = event_rx
+        let event = event_rx
             .recv()
             .await
             .expect("Expected sender end of channel to never be dropped");
 
-        // trace!("Received message: {:.100}", format!("{msg:?}"));
+        // trace!("Received event: {:.100}", format!("{event:?}"));
 
         let mut state = state.write().await;
-        let result = handle_message(&mut state, &msg).await;
+        let result = handle_event(&mut state, &event).await;
 
         if let Err(err) = result {
             error!(
-                "Error while handling message:\n    Msg:\n    {:#?}\n\n    Err:\n    {:#?}",
-                msg, err
+                "Error while handling event:\n    Event:\n    {event:#?}\n\n    Err:\n    {err:#?}",
             );
         }
     }

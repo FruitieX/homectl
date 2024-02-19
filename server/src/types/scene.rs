@@ -39,9 +39,10 @@ pub struct SceneDeviceLink {
     pub device_ref: DeviceRef,
 }
 
+/// Contains the information needed to activate a scene
 #[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
-pub struct SceneDescriptor {
+pub struct ActivateSceneDescriptor {
     pub scene_id: SceneId,
 
     /// Optionally only apply scene to these devices
@@ -54,7 +55,7 @@ pub struct SceneDescriptor {
 #[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct CycleScenesDescriptor {
-    pub scenes: Vec<SceneDescriptor>,
+    pub scenes: Vec<ActivateSceneDescriptor>,
     pub nowrap: Option<bool>,
 }
 
@@ -90,7 +91,7 @@ pub enum SceneDeviceConfig {
 
     /// Link to another scene, means the scene should merge all state from another
     /// scene
-    SceneLink(SceneDescriptor),
+    SceneLink(ActivateSceneDescriptor),
 
     /// State to be applied to a device
     DeviceState(SceneDeviceState),

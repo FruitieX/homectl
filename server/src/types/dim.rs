@@ -1,21 +1,15 @@
 use super::color::DeviceColor;
-use super::device::{
-    // DeviceRef,
-    ControllableState,
-    DeviceKey,
-};
+use super::device::{ControllableState, DeviceKey};
 
-use super::{device::DeviceId, group::GroupId, integration::IntegrationId};
+use super::{group::GroupId, integration::IntegrationId};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-// use std::convert::Infallible;
 use ts_rs::TS;
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
 #[ts(export)]
 pub struct DimDeviceLink {
-    pub integration_id: IntegrationId,
-    pub device_id: Option<DeviceId>,
+    pub device_key: Option<DeviceKey>,
     pub name: Option<String>,
     pub brightness: Option<f32>, // allow overriding brightness
 }
@@ -23,10 +17,10 @@ pub struct DimDeviceLink {
 #[derive(TS, Clone, Deserialize, Serialize, Debug)]
 #[ts(export)]
 pub struct DimDescriptor {
-    /// Optionally only apply scene to these devices
+    /// Optionally only apply dimming to these devices
     pub device_keys: Option<Vec<DeviceKey>>,
 
-    /// Optionally only apply scene to these groups
+    /// Optionally only apply dimming to these groups
     pub group_keys: Option<Vec<GroupId>>,
 
     // The amount to dim

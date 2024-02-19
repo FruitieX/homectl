@@ -1,7 +1,7 @@
 use crate::types::{
     color::DeviceColor,
     device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     integration::{Integration, IntegrationId},
 };
 use async_trait::async_trait;
@@ -43,7 +43,7 @@ impl Integration for Random {
     async fn register(&mut self) -> Result<()> {
         let device = mk_random_device(self);
 
-        self.event_tx.send(Message::ExternalStateUpdate { device });
+        self.event_tx.send(Event::ExternalStateUpdate { device });
 
         Ok(())
     }
@@ -80,7 +80,7 @@ async fn poll_sensor(random: Random) {
 
         let device = mk_random_device(&random);
 
-        event_tx.send(Message::ExternalStateUpdate { device });
+        event_tx.send(Event::ExternalStateUpdate { device });
     }
 }
 

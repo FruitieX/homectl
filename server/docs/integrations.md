@@ -21,7 +21,7 @@ In the end, the consequences of not discovering all devices here aren't too seve
 After homectl has finished running the registration pass for all integrations, it runs the `start` associated function of each integration. A good place to start listening for incoming events from your devices, or if you need to do polling, start the polling loops here. Last chance to run some code before homectl core starts running the main loop, basically.
 
 ## set_integration_device_state:
-Called by homectl core when it wants to update the state of one of your integration's devices. Unpack this message from the parameter you get passed to the function using pattern matching, and forward an appropriate message to your physical device.
+Called by homectl core when it wants to update the state of one of your integration's devices. Unpack this event from the parameter you get passed to the function using pattern matching, and forward an appropriate message to your physical device.
 
 ## run_integration_action:
 Called by homectl core when it wants to run an "action" on one of your integration's devices. Basically I made this escape hatch for state updates that don't map cleanly to this concept of a device having some state, which it should maintain until homectl says otherwise. For example I have a `neato` integration which uses this to start my robot vacuums after some specific conditions. The issue with using "normal" device state, is that the robot vacuum eventually finishes cleaning, and I don't want homectl to think this means it somehow forgot its state, and try to start it again over and over :-)

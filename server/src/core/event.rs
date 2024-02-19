@@ -6,22 +6,22 @@ use crate::types::{
     event::*,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
+    scene::{ActivateSceneDescriptor, CycleScenesDescriptor},
 };
 
 use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
 
 use super::{expr::eval_action_expr, state::AppState};
 
-pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
-    match msg {
-        Message::ExternalStateUpdate { device } => {
+pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
+    match event {
+        Event::ExternalStateUpdate { device } => {
             state
                 .devices
                 .handle_external_state_update(device, &state.scenes)
                 .await?;
         }
-        Message::StartupCompleted => {
+        Event::StartupCompleted => {
             state.groups.force_invalidate(&state.devices);
 
             state
@@ -39,7 +39,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
             let device_count = state.devices.get_state().0.len();
             info!("Startup completed, discovered {device_count} devices");
         }
-        Message::InternalStateUpdate {
+        Event::InternalStateUpdate {
             old_state,
             new_state,
             old,
@@ -89,9 +89,9 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 )
                 .await;
 
-            state.event_tx.send(Message::WsBroadcastState);
+            state.event_tx.send(Event::WsBroadcastState);
         }
-        Message::SetInternalState {
+        Event::SetInternalState {
             device,
             skip_external_update,
         } => {
@@ -101,7 +101,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 .devices
                 .set_state(&device, skip_external_update.unwrap_or_default());
         }
-        Message::SetExternalState { device } => {
+        Event::SetExternalState { device } => {
             let device = device.color_to_preferred_mode();
 
             state
@@ -109,25 +109,25 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 .set_integration_device_state(device)
                 .await?;
         }
-        Message::WsBroadcastState => {
+        Event::WsBroadcastState => {
             state.send_state_ws(None).await;
         }
-        Message::DbStoreScene { scene_id, config } => {
+        Event::DbStoreScene { scene_id, config } => {
             db_store_scene(scene_id, config).await.ok();
             state.scenes.refresh_db_scenes().await;
             state.send_state_ws(None).await;
         }
-        Message::DbDeleteScene { scene_id } => {
+        Event::DbDeleteScene { scene_id } => {
             db_delete_scene(scene_id).await.ok();
             state.scenes.refresh_db_scenes().await;
             state.send_state_ws(None).await;
         }
-        Message::DbEditScene { scene_id, name } => {
+        Event::DbEditScene { scene_id, name } => {
             db_edit_scene(scene_id, name).await.ok();
             state.scenes.refresh_db_scenes().await;
             state.send_state_ws(None).await;
         }
-        Message::Action(Action::ActivateScene(SceneDescriptor {
+        Event::Action(Action::ActivateScene(ActivateSceneDescriptor {
             scene_id,
             device_keys,
             group_keys,
@@ -145,7 +145,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 )
                 .await;
         }
-        Message::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
+        Event::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
             let eval_context = state.expr.get_context();
             state
                 .devices
@@ -158,7 +158,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 )
                 .await;
         }
-        Message::Action(Action::Dim(DimDescriptor {
+        Event::Action(Action::Dim(DimDescriptor {
             device_keys,
             group_keys,
             step,
@@ -168,7 +168,7 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 .dim(device_keys, group_keys, step, &state.scenes)
                 .await;
         }
-        Message::Action(Action::Custom(CustomActionDescriptor {
+        Event::Action(Action::Custom(CustomActionDescriptor {
             integration_id,
             payload,
         })) => {
@@ -177,15 +177,15 @@ pub async fn handle_message(state: &mut AppState, msg: &Message) -> Result<()> {
                 .run_integration_action(integration_id, payload)
                 .await?;
         }
-        Message::Action(Action::ForceTriggerRoutine(ForceTriggerRoutineDescriptor {
+        Event::Action(Action::ForceTriggerRoutine(ForceTriggerRoutineDescriptor {
             routine_id,
         })) => {
             state.rules.force_trigger_routine(routine_id)?;
         }
-        Message::Action(Action::SetDeviceState(device)) => {
+        Event::Action(Action::SetDeviceState(device)) => {
             state.devices.set_state(device, false);
         }
-        Message::Action(Action::EvalExpr(expr)) => {
+        Event::Action(Action::EvalExpr(expr)) => {
             let eval_context = state.expr.get_context();
             eval_action_expr(
                 expr,

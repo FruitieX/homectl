@@ -3,7 +3,7 @@ use crate::types::{
         ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
     },
     scene::{
-        FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig, SceneDescriptor,
+        ActivateSceneDescriptor, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
         SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneDevicesConfigs, SceneId,
         ScenesConfig,
     },
@@ -100,7 +100,7 @@ fn compute_scene_device_state(
 type SceneDeviceList = HashSet<DeviceKey>;
 /// Gathers a Vec<HashSet<DeviceKey>> of all devices in provided scenes
 fn find_scene_device_lists(
-    scene_devices_configs: &[(&SceneDescriptor, Option<SceneDevicesConfig>)],
+    scene_devices_configs: &[(&ActivateSceneDescriptor, Option<SceneDevicesConfig>)],
 ) -> Vec<SceneDeviceList> {
     let scenes_devices = scene_devices_configs
         .iter()
@@ -140,7 +140,7 @@ fn find_scenes_common_devices(scene_device_lists: Vec<SceneDeviceList>) -> HashS
 /// * `scenes_common_devices` - list of devices that are common in all given scenes
 /// * `devices` - current state of devices
 fn find_active_scene_index(
-    scene_devices_configs: &[(&SceneDescriptor, Option<SceneDevicesConfig>)],
+    scene_devices_configs: &[(&ActivateSceneDescriptor, Option<SceneDevicesConfig>)],
     scenes_common_devices: &HashSet<DeviceKey>,
     devices: &Devices,
 ) -> Option<usize> {
@@ -174,14 +174,14 @@ fn find_active_scene_index(
 /// * `devices` - current state of devices
 /// * `scenes` - current state of scenes
 pub fn get_next_cycled_scene(
-    scene_descriptors: &[SceneDescriptor],
+    scene_descriptors: &[ActivateSceneDescriptor],
     nowrap: bool,
     devices: &Devices,
     groups: &Groups,
     scenes: &Scenes,
     eval_context: &EvalContext,
-) -> Option<SceneDescriptor> {
-    let scene_devices_configs: Vec<(&SceneDescriptor, Option<SceneDevicesConfig>)> =
+) -> Option<ActivateSceneDescriptor> {
+    let scene_devices_configs: Vec<(&ActivateSceneDescriptor, Option<SceneDevicesConfig>)> =
         scene_descriptors
             .iter()
             .map(|sd| {
@@ -247,7 +247,7 @@ impl Scenes {
         &self,
         devices: &Devices,
         groups: &Groups,
-        sd: &SceneDescriptor,
+        sd: &ActivateSceneDescriptor,
         eval_context: &EvalContext,
     ) -> Option<SceneDevicesConfig> {
         let mut scene_devices_config: SceneDevicesConfig = Default::default();
@@ -404,7 +404,7 @@ impl Scenes {
                     let scene_devices_config = self.find_scene_devices_config(
                         devices,
                         groups,
-                        &SceneDescriptor {
+                        &ActivateSceneDescriptor {
                             scene_id: scene_id.clone(),
                             device_keys: None,
                             group_keys: None,

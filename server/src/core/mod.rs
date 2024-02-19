@@ -1,9 +1,9 @@
 pub mod config;
 pub mod devices;
+pub mod event;
 pub mod expr;
 pub mod groups;
 pub mod integrations;
-pub mod message;
 pub mod routines;
 pub mod scenes;
 pub mod state;

@@ -1,7 +1,7 @@
 use crate::types::{
     color::Capabilities,
     device::{ControllableDevice, Device, DeviceData, DeviceId, ManageKind},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use async_trait::async_trait;
@@ -66,7 +66,7 @@ impl Integration for Dummy {
                 state,
                 None,
             );
-            self.event_tx.send(Message::ExternalStateUpdate { device });
+            self.event_tx.send(Event::ExternalStateUpdate { device });
         }
 
         Ok(())

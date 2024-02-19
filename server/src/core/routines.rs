@@ -4,7 +4,7 @@ use eyre::{ContextCompat, Result};
 use crate::types::{
     action::Actions,
     device::{Device, DevicesState, SensorDevice},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     rule::{AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule},
 };
 use std::collections::HashSet;
@@ -44,7 +44,7 @@ impl Routines {
                     self.find_matching_actions(old_state, new_state, devices, groups, expr);
 
                 for action in matching_actions {
-                    self.event_tx.send(Message::Action(action.clone()));
+                    self.event_tx.send(Event::Action(action.clone()));
                 }
             }
             None => {}
@@ -60,7 +60,7 @@ impl Routines {
         let routine_actions = routine.actions.clone();
 
         for action in routine_actions {
-            self.event_tx.send(Message::Action(action.clone()));
+            self.event_tx.send(Event::Action(action.clone()));
         }
 
         Ok(())

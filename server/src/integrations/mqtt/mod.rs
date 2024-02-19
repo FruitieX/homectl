@@ -4,7 +4,7 @@ mod utils;
 
 use crate::types::{
     device::{Device, ManageKind},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
 use async_trait::async_trait;
@@ -112,8 +112,8 @@ impl Integration for Mqtt {
 
                         rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) => {
                             let device = mqtt_to_homectl(&msg.payload, id.clone(), &config)?;
-                            let msg = Message::ExternalStateUpdate { device };
-                            event_tx.send(msg);
+                            let event = Event::ExternalStateUpdate { device };
+                            event_tx.send(event);
                         }
                         _ => {}
                     }

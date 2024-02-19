@@ -8,8 +8,8 @@ use crate::types::device::{cmp_device_states, ControllableDevice, DeviceRef, Man
 use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
-    event::{Message, TxEventChannel},
-    scene::{SceneDescriptor, SceneId},
+    event::{Event, TxEventChannel},
+    scene::{ActivateSceneDescriptor, SceneId},
 };
 use color_eyre::Result;
 use ordered_float::OrderedFloat;
@@ -124,8 +124,7 @@ impl Devices {
         } else {
             // Device state does not match internal state, maybe the device
             // missed a state update or forgot its state? We will try fixing
-            // this by emitting a SetIntegrationDeviceState message back to
-            // integration
+            // this by emitting a SetExternalState event back to integration
 
             let expected_converted =
                 expected_state.color_to_device_preferred_mode(&incoming_state.capabilities);
@@ -139,7 +138,7 @@ impl Devices {
             );
 
             self.event_tx
-                .send(Message::SetExternalState { device: current });
+                .send(Event::SetExternalState { device: current });
         }
 
         // Always make sure device raw state is up to date, note that set_raw
@@ -217,7 +216,7 @@ impl Devices {
         let old = old.cloned();
         self.state.0.insert(device_key, device.clone());
 
-        self.event_tx.send(Message::InternalStateUpdate {
+        self.event_tx.send(Event::InternalStateUpdate {
             old_state: old_states,
             new_state: self.state.clone(),
             old,
@@ -226,7 +225,7 @@ impl Devices {
 
         if !skip_external_update && !device.is_sensor() {
             let device = device.clone();
-            self.event_tx.send(Message::SetExternalState { device });
+            self.event_tx.send(Event::SetExternalState { device });
         }
 
         tokio::spawn(async move {
@@ -278,7 +277,7 @@ impl Devices {
         let scene_devices_config = scenes.find_scene_devices_config(
             self,
             groups,
-            &SceneDescriptor {
+            &ActivateSceneDescriptor {
                 scene_id: scene_id.clone(),
                 device_keys: device_keys.clone(),
                 group_keys: group_keys.clone(),
@@ -324,7 +323,7 @@ impl Devices {
 
     pub async fn cycle_scenes(
         &mut self,
-        scene_descriptors: &[SceneDescriptor],
+        scene_descriptors: &[ActivateSceneDescriptor],
         nowrap: bool,
         groups: &Groups,
         scenes: &Scenes,

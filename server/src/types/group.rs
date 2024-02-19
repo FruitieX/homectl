@@ -41,7 +41,7 @@ pub type GroupsConfig = BTreeMap<GroupId, GroupConfig>;
 #[ts(export)]
 pub struct FlattenedGroupConfig {
     pub name: String,
-    pub device_ids: Vec<DeviceKey>,
+    pub device_keys: Vec<DeviceKey>,
     pub hidden: Option<bool>,
 }
 

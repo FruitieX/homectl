@@ -75,8 +75,8 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
             let msg = serde_json::from_str::<WebSocketRequest>(json);
 
             match msg {
-                Ok(WebSocketRequest::Message(msg)) => {
-                    app_state.event_tx.send(msg);
+                Ok(WebSocketRequest::EventMessage(event)) => {
+                    app_state.event_tx.send(event);
                 }
                 Err(e) => warn!("Error while deserializing websocket message: {e}"),
             }

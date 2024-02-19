@@ -2,14 +2,13 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
-    device::DevicesState, event::Message, group::FlattenedGroupsConfig,
-    scene::FlattenedScenesConfig,
+    device::DevicesState, event::Event, group::FlattenedGroupsConfig, scene::FlattenedScenesConfig,
 };
 
 #[derive(TS, Deserialize, Serialize, Debug)]
 #[ts(export)]
 pub enum WebSocketRequest {
-    Message(Message),
+    EventMessage(Event),
 }
 
 #[derive(TS, Deserialize, Serialize, Debug)]

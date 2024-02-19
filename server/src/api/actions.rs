@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::core::state::AppState;
-use crate::types::{action::Action, event::Message};
+use crate::types::{action::Action, event::Event};
 use tokio::sync::RwLock;
 use warp::Filter;
 
@@ -23,7 +23,7 @@ fn post_action(
         .map(|action: Action, app_state: Arc<RwLock<AppState>>| {
             let app_state = app_state.blocking_read();
             let sender = app_state.event_tx.clone();
-            sender.send(Message::Action(action));
+            sender.send(Event::Action(action));
 
             warp::reply::json(&())
         })

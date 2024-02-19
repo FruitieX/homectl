@@ -6,7 +6,7 @@ use super::{
     dim::DimDescriptor,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
-    scene::{CycleScenesDescriptor, SceneDescriptor},
+    scene::{ActivateSceneDescriptor, CycleScenesDescriptor},
 };
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
@@ -14,7 +14,7 @@ use super::{
 #[ts(export)]
 pub enum Action {
     /// Request to activate given scene.
-    ActivateScene(SceneDescriptor),
+    ActivateScene(ActivateSceneDescriptor),
 
     /// Request to cycle between given scenes.
     CycleScenes(CycleScenesDescriptor),

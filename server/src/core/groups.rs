@@ -77,7 +77,7 @@ fn mk_flattened_groups(
                 group_id.clone(),
                 FlattenedGroupConfig {
                     name: group.name.clone(),
-                    device_ids: device_refs
+                    device_keys: device_refs
                         .iter()
                         .filter_map(|device_ref| devices.get_device_by_ref(device_ref))
                         .map(|device| device.get_device_key())
@@ -100,7 +100,7 @@ pub fn flattened_groups_to_eval_context_values(
         .iter()
         .flat_map(|(group_id, group)| {
             let group_devices: Vec<&Device> = group
-                .device_ids
+                .device_keys
                 .iter()
                 .filter_map(|device_key| devices.0.get(device_key))
                 .collect();
@@ -173,10 +173,10 @@ impl Groups {
         let group = flattened_groups.0.get(group_id);
         let Some(group) = group else { return vec![] };
 
-        let group_device_keys = &group.device_ids;
+        let group_device_keys = &group.device_keys;
         group_device_keys
             .iter()
-            .filter_map(|device_id| devices.0.get(device_id))
+            .filter_map(|device_key| devices.0.get(device_key))
             .collect()
     }
 

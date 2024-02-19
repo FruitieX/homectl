@@ -1,7 +1,7 @@
 use crate::types::{
     color::DeviceColor,
     device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     integration::{Integration, IntegrationId},
 };
 use crate::utils::from_hh_mm;
@@ -60,7 +60,7 @@ impl Integration for Circadian {
     async fn register(&mut self) -> Result<()> {
         let device = mk_circadian_device(self);
 
-        self.event_tx.send(Message::ExternalStateUpdate { device });
+        self.event_tx.send(Event::ExternalStateUpdate { device });
 
         Ok(())
     }
@@ -156,7 +156,7 @@ async fn poll_sensor(circadian: Circadian) {
 
         let device = mk_circadian_device(&circadian);
 
-        event_tx.send(Message::SetInternalState {
+        event_tx.send(Event::SetInternalState {
             device,
             skip_external_update: None,
         });

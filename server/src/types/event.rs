@@ -9,7 +9,7 @@ use super::{action::Action, device::Device, device::DevicesState};
 #[allow(clippy::large_enum_variant)]
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
 #[ts(export)]
-pub enum Message {
+pub enum Event {
     /// An integration has informed us of current device state. We'll want to
     /// check if this matches with our internal "expected" state. If there's a
     /// mismatch, we'll try to correct it.
@@ -31,7 +31,7 @@ pub enum Message {
     SetInternalState {
         device: Device,
 
-        /// Whether to skip sending [Message::SetExternalState] as a result of this state update.
+        /// Whether to skip sending [Event::SetExternalState] as a result of this state update.
         skip_external_update: Option<bool>,
     },
 
@@ -63,16 +63,16 @@ pub struct Sender<T> {
 }
 
 impl<T: std::fmt::Debug> Sender<T> {
-    pub fn send(&self, msg: T) {
-        self.tx.send(msg).expect("Receiver end of channel closed");
+    pub fn send(&self, event: T) {
+        self.tx.send(event).expect("Receiver end of channel closed");
     }
 }
 
-pub type TxEventChannel = Sender<Message>;
-pub type RxEventChannel = UnboundedReceiver<Message>;
+pub type TxEventChannel = Sender<Event>;
+pub type RxEventChannel = UnboundedReceiver<Event>;
 
 pub fn mk_event_channel() -> (TxEventChannel, RxEventChannel) {
-    let (tx, rx) = unbounded_channel::<Message>();
+    let (tx, rx) = unbounded_channel::<Event>();
 
     let sender = Sender { tx };
 

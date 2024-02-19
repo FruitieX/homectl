@@ -11,11 +11,11 @@ use serde_json_path::{JsonPath, NormalizedPath};
 use crate::types::{
     action::Action,
     device::{Device, DeviceKey, DevicesState},
-    event::{Message, TxEventChannel},
+    event::{Event, TxEventChannel},
     group::{FlattenedGroupsConfig, GroupId},
     integration::{CustomActionDescriptor, IntegrationActionPayload, IntegrationId},
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
-    scene::{FlattenedScenesConfig, SceneDescriptor, SceneDeviceConfig, SceneId},
+    scene::{ActivateSceneDescriptor, FlattenedScenesConfig, SceneDeviceConfig, SceneId},
 };
 
 use super::{
@@ -327,7 +327,7 @@ pub fn eval_action_expr(
                     Some(group_ids).transpose()
                 })?;
 
-                Action::ActivateScene(SceneDescriptor {
+                Action::ActivateScene(ActivateSceneDescriptor {
                     scene_id,
                     device_keys: None,
                     group_keys,
@@ -344,7 +344,7 @@ pub fn eval_action_expr(
             }
         };
 
-        event_tx.send(Message::Action(action));
+        event_tx.send(Event::Action(action));
     }
 
     let scenes_path = JsonPath::parse("$.devices.*.*.scene").unwrap();
@@ -366,11 +366,13 @@ pub fn eval_action_expr(
         let scene_id = scene_id.as_str().map(|s| SceneId::new(s.to_string()));
 
         if let Some(scene_id) = scene_id {
-            event_tx.send(Message::Action(Action::ActivateScene(SceneDescriptor {
-                scene_id,
-                device_keys: Some(vec![device.get_device_key()]),
-                group_keys: None,
-            })));
+            event_tx.send(Event::Action(Action::ActivateScene(
+                ActivateSceneDescriptor {
+                    scene_id,
+                    device_keys: Some(vec![device.get_device_key()]),
+                    group_keys: None,
+                },
+            )));
         }
     }
 
@@ -384,7 +386,7 @@ pub fn eval_action_expr(
 
         match device.set_value(state) {
             Ok(device) => {
-                event_tx.send(Message::Action(Action::SetDeviceState(device)));
+                event_tx.send(Event::Action(Action::SetDeviceState(device)));
             }
             Err(e) => {
                 error!(
@@ -484,7 +486,7 @@ pub fn get_expr_group_device_deps(
 
             groups.0.get(&GroupId(group_id.to_string()))
         })
-        .flat_map(|group| group.device_ids.clone())
+        .flat_map(|group| group.device_keys.clone())
         .collect()
 }
 

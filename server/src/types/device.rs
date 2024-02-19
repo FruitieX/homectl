@@ -143,14 +143,14 @@ pub enum ManageKind {
     /// state commands sent to the device will be fire-and-forget.
     Unmanaged,
 
-    /// Device is read-only and external state update messages are dropped,
+    /// Device is read-only and external state update events are dropped,
     /// otherwise behaves like ManageKind::Full
     ///
     /// Intended for debugging purposes. (E.g. avoid flashing lights in the
     /// middle of the night)
     FullReadOnly,
 
-    /// Device is read-only and external state update messages are dropped,
+    /// Device is read-only and external state update events are dropped,
     /// otherwise behaves like ManageKind::Unmanaged
     ///
     /// Intended for debugging purposes. (E.g. avoid flashing lights in the
