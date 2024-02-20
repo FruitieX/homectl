@@ -17,7 +17,7 @@ chrono = { version = "=0.4.34", features = ["serde"] }
 config = "=0.13.4"
 futures = "=0.3.30"
 serde = { version = "=1.0.197", features = ["derive"] }
-serde_json = "=1.0.113"
+serde_json = "=1.0.114"
 palette = { version = "=0.7.4", features = ["serializing"] }
 async-trait = "=0.1.77"
 rand = "=0.8.5"
