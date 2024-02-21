@@ -46,7 +46,7 @@ export const ControlsCard = () => {
       });
 
       const msg: WebSocketRequest = {
-        Message: {
+        EventMessage: {
           SetInternalState: {
             device,
             skip_external_update: false,
@@ -61,7 +61,7 @@ export const ControlsCard = () => {
 
   const toggleLights = () => {
     const msg: WebSocketRequest = {
-      Message: {
+      EventMessage: {
         Action: {
           action: 'ForceTriggerRoutine',
           routine_id: lightsOn ? 'leave_home' : 'entryway',
@@ -75,7 +75,7 @@ export const ControlsCard = () => {
 
   const cleanHouse = () => {
     const msg: WebSocketRequest = {
-      Message: {
+      EventMessage: {
         Action: {
           action: 'Custom',
           integration_id: 'neato',

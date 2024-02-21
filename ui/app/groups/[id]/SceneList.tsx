@@ -42,7 +42,7 @@ export const SceneList = (props: Props) => {
 
   const handleSceneClick = (sceneId: SceneId) => () => {
     const msg: WebSocketRequest = {
-      Message: {
+      EventMessage: {
         Action: {
           action: 'ActivateScene',
           device_keys: props.deviceKeys,

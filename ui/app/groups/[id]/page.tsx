@@ -13,7 +13,7 @@ export default function Page(props: Props) {
 
   const group: FlattenedGroupConfig | undefined =
     state?.groups[props.params.id];
-  const groupDevices = group?.device_ids;
+  const groupDevices = group?.device_keys;
 
   if (!groupDevices) return null;
 

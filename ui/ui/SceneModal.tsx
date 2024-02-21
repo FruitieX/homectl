@@ -43,7 +43,7 @@ const Component = (props: Props) => {
       if (sceneModalState === null) return;
 
       const msg: WebSocketRequest = {
-        Message: {
+        EventMessage: {
           DbEditScene: {
             scene_id: sceneModalState,
             name: value,
@@ -72,7 +72,7 @@ const Component = (props: Props) => {
       if (sceneModalState === null) return;
 
       const msg: WebSocketRequest = {
-        Message: {
+        EventMessage: {
           DbDeleteScene: {
             scene_id: sceneModalState,
           },

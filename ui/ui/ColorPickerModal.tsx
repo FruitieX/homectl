@@ -655,7 +655,7 @@ export const ColorPickerModal = () => {
   // A group is active if the list of active devices == the devices contained in
   // the group
   const activeGroup = Object.values(groups).find((group) => {
-    const groupDevicesSet = new Set(group.device_ids);
+    const groupDevicesSet = new Set(group.device_keys);
 
     return eqSet(selectedDevicesSet, groupDevicesSet);
   });

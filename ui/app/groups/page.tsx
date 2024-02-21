@@ -32,7 +32,7 @@ export default function Page() {
       <Menu className="flex-1 flex-nowrap overflow-y-auto">
         {filteredGroups.map(([groupId, group]) => {
           const filteredDevices = devices.filter((device) =>
-            group.device_ids.includes(getDeviceKey(device)),
+            group.device_keys.includes(getDeviceKey(device)),
           );
 
           return (

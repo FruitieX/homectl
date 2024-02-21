@@ -35,7 +35,7 @@ export const useSetDeviceColor = () => {
       });
 
       const msg: WebSocketRequest = {
-        Message: {
+        EventMessage: {
           SetInternalState: { device, skip_external_update: false },
         },
       };

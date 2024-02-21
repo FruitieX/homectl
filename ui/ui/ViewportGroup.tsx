@@ -37,7 +37,7 @@ export const ViewportGroup = (props: Props) => {
   const groupId = props.groupId;
 
   const group = props.group;
-  const groupDeviceKeys = group.device_ids;
+  const groupDeviceKeys = group.device_keys;
   const rect = groupRects[group.name];
 
   const [selectedDevices] = useSelectedDevices();
