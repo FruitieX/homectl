@@ -12,8 +12,8 @@ dependencies:
     specifier: 2.1.0
     version: 2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
   '@uiw/react-color-wheel':
-    specifier: 2.0.8
-    version: 2.0.8(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
+    specifier: 2.1.0
+    version: 2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
   clsx:
     specifier: 2.1.0
     version: 2.1.0
@@ -661,14 +661,6 @@ packages:
       eslint-visitor-keys: 3.4.3
     dev: true
 
-  /@uiw/color-convert@2.0.8(@babel/runtime@7.23.9):
-    resolution: {integrity: sha512-yh0Q91FwTNCl5rMpNSQSlpazMz65V6V0LMIyssHk0ris4af9xQi+t01snLP+Dbjbk4HaSy7b8AptTP3NudggdQ==}
-    peerDependencies:
-      '@babel/runtime': '>=7.19.0'
-    dependencies:
-      '@babel/runtime': 7.23.9
-    dev: false
-
   /@uiw/color-convert@2.1.0(@babel/runtime@7.23.9):
     resolution: {integrity: sha512-BQuZSOfJINS0mWEEcKdeGW7puL5x8XHMlTiWPn+sReuLBjLnjKdjCoAMAXTwPZB9x2nHcDVGFmiWTgi3G0B77g==}
     peerDependencies:
@@ -704,22 +696,22 @@ packages:
       react-dom: 18.2.0(react@18.2.0)
     dev: false
 
-  /@uiw/react-color-wheel@2.0.8(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-tDoLK87twaa/0Y9vyRzodti25kQjznvHvATpsyO1mhI7v92qSFHJd2UJlk+Hfxin4m3L491KHlZcS5aKXcaE+g==}
+  /@uiw/react-color-wheel@2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-mSH8J+jj5kwE1P/V1T6x6G14V8wj6Y2CihP/UwwjiWfmyqcBo0L0QQQ4lFvJxeBvqmi2tW2Srel8PRT31sgcOA==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
     dependencies:
       '@babel/runtime': 7.23.9
-      '@uiw/color-convert': 2.0.8(@babel/runtime@7.23.9)
-      '@uiw/react-drag-event-interactive': 2.0.8(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
+      '@uiw/color-convert': 2.1.0(@babel/runtime@7.23.9)
+      '@uiw/react-drag-event-interactive': 2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
     dev: false
 
-  /@uiw/react-drag-event-interactive@2.0.8(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-Z8awDfUV7970Q6GfJmx6x7fx5KeHn6RPinQVRYRAnKS7QP6XgQOIvVn8bYKe5vd4vQeBbzIVYYySjYRWjA5heA==}
+  /@uiw/react-drag-event-interactive@2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-BkC5sc4wQmEfQWWu6JImWz/aMViE1IGAEVGg3G5v7y//G2Hm0veZdHT/shRl4KbLQNQ/OJzXgJYFs/Y9GPB0VQ==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
