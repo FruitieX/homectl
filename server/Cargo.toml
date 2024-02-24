@@ -49,5 +49,5 @@ evalexpr = { git = "https://github.com/FruitieX/evalexpr", branch = "rasmus/type
 ] }
 ordered-float = { version = "=4.2.0", features = ["serde"] }
 jsonptr = "=0.4.5"
-serde_json_path = "=0.6.5"
+serde_json_path = "=0.6.6"
 serde-this-or-that = "=0.4.2"
