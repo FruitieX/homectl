@@ -83,8 +83,8 @@ devDependencies:
     specifier: 18.2.59
     version: 18.2.59
   '@types/react-color':
-    specifier: 3.0.11
-    version: 3.0.11
+    specifier: 3.0.12
+    version: 3.0.12
   '@types/react-dom':
     specifier: 18.2.19
     version: 18.2.19
@@ -426,8 +426,8 @@ packages:
   /@types/prop-types@15.7.11:
     resolution: {integrity: sha512-ga8y9v9uyeiLdpKddhxYQkxNDrfvuPrlFb0N1qnZZByvcElJaXthF1UhvCh9TLWJBEHeNtdnbysW7Y6Uq8CVng==}
 
-  /@types/react-color@3.0.11:
-    resolution: {integrity: sha512-20m5GpzmdqwmSdnPeMs4UPPUuvkS4ESwakL6u2YN1hbo+ajWiiTwGYIMGhdcJFGeoLyAsr7TVonbZrMhU3+pdw==}
+  /@types/react-color@3.0.12:
+    resolution: {integrity: sha512-pr3uKE3lSvf7GFo1Rn2K3QktiZQFFrSgSGJ/3iMvSOYWt2pPAJ97rVdVfhWxYJZ8prAEXzoP2XX//3qGSQgu7Q==}
     dependencies:
       '@types/react': 18.2.59
       '@types/reactcss': 1.2.11
