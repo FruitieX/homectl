@@ -9,8 +9,8 @@ dependencies:
     specifier: 2.2.0
     version: 2.2.0(react@18.2.0)
   '@uiw/react-color-circle':
-    specifier: 2.1.0
-    version: 2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
+    specifier: 2.1.1
+    version: 2.1.1(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
   '@uiw/react-color-wheel':
     specifier: 2.1.0
     version: 2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
@@ -669,29 +669,37 @@ packages:
       '@babel/runtime': 7.23.9
     dev: false
 
-  /@uiw/react-color-circle@2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-C3aw8KpbntnKYdQ1OHK+9v2QQ6pj/oi9xblJljJlabyJTbKrwv3SIGcjK1B37bQqOirXyNwAyph473boBPfUHg==}
+  /@uiw/color-convert@2.1.1(@babel/runtime@7.23.9):
+    resolution: {integrity: sha512-L421mBAT2NRsmYv7BQvofOEwV0iKee1upPVxMjo2NnkJWyIu4I+H1RxK9m3uT8yvcOlStZhv7BQBsFyJCGmIMg==}
+    peerDependencies:
+      '@babel/runtime': '>=7.19.0'
+    dependencies:
+      '@babel/runtime': 7.23.9
+    dev: false
+
+  /@uiw/react-color-circle@2.1.1(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-t/Wr6eT9GLOzywaTmJclOZ3NuirJlMk8eVxoLKM7eRePbN5WowIEMwug/towSU3YrBrEbSSWjZRhfVUqdh7kMw==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
     dependencies:
       '@babel/runtime': 7.23.9
-      '@uiw/color-convert': 2.1.0(@babel/runtime@7.23.9)
-      '@uiw/react-color-swatch': 2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
+      '@uiw/color-convert': 2.1.1(@babel/runtime@7.23.9)
+      '@uiw/react-color-swatch': 2.1.1(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0)
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
     dev: false
 
-  /@uiw/react-color-swatch@2.1.0(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
-    resolution: {integrity: sha512-MD04YRx5Q+skIf3kiCsAQSpV9P6FB6uTZwiSqqF2oBfKCBTrazSNRFeoVzaP4BBYdLsnXnIcGibEvLsn7v4LpA==}
+  /@uiw/react-color-swatch@2.1.1(@babel/runtime@7.23.9)(react-dom@18.2.0)(react@18.2.0):
+    resolution: {integrity: sha512-soKsfVgflcKSBx47PaBocKZ0beIXfk9ruE4r9778mGnDDpxc2RC5zPNfvzQkSLKW+siXIS0cscuvb/8s1zK5jw==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
     dependencies:
       '@babel/runtime': 7.23.9
-      '@uiw/color-convert': 2.1.0(@babel/runtime@7.23.9)
+      '@uiw/color-convert': 2.1.1(@babel/runtime@7.23.9)
       react: 18.2.0
       react-dom: 18.2.0(react@18.2.0)
     dev: false
