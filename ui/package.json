@@ -34,7 +34,7 @@
     "react-konva": "18.2.10",
     "react-konva-utils": "1.0.6",
     "use-image": "1.1.1",
-    "usehooks-ts": "2.15.1"
+    "usehooks-ts": "2.16.0"
   },
   "devDependencies": {
     "@types/color": "3.0.6",
