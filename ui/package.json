@@ -40,7 +40,7 @@
     "@types/color": "3.0.6",
     "@types/lodash": "4.14.202",
     "@types/node": "20.11.24",
-    "@types/react": "18.2.62",
+    "@types/react": "18.2.63",
     "@types/react-color": "3.0.12",
     "@types/react-dom": "18.2.19",
     "@typescript-eslint/eslint-plugin": "7.1.1",
