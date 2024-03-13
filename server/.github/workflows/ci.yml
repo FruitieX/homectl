@@ -90,7 +90,7 @@ jobs:
       - run: cargo build --release --target x86_64-unknown-linux-musl
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3
+        uses: docker/login-action@e92390c5fb421da1463c202d546fed0ec5c39f20 # v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
