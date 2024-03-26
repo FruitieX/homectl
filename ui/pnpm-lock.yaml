@@ -31,7 +31,7 @@ dependencies:
     version: 10.0.4
   jotai:
     specifier: 2.7.1
-    version: 2.7.1(@types/react@18.2.70)(react@18.2.0)
+    version: 2.7.1(@types/react@18.2.71)(react@18.2.0)
   konva:
     specifier: 9.3.6
     version: 9.3.6
@@ -80,8 +80,8 @@ devDependencies:
     specifier: 20.11.30
     version: 20.11.30
   '@types/react':
-    specifier: 18.2.70
-    version: 18.2.70
+    specifier: 18.2.71
+    version: 18.2.71
   '@types/react-color':
     specifier: 3.0.12
     version: 3.0.12
@@ -429,24 +429,24 @@ packages:
   /@types/react-color@3.0.12:
     resolution: {integrity: sha512-pr3uKE3lSvf7GFo1Rn2K3QktiZQFFrSgSGJ/3iMvSOYWt2pPAJ97rVdVfhWxYJZ8prAEXzoP2XX//3qGSQgu7Q==}
     dependencies:
-      '@types/react': 18.2.70
+      '@types/react': 18.2.71
       '@types/reactcss': 1.2.12
     dev: true
 
   /@types/react-dom@18.2.22:
     resolution: {integrity: sha512-fHkBXPeNtfvri6gdsMYyW+dW7RXFo6Ad09nLFK0VQWR7yGLai/Cyvyj696gbwYvBnhGtevUG9cET0pmUbMtoPQ==}
     dependencies:
-      '@types/react': 18.2.70
+      '@types/react': 18.2.71
     dev: true
 
   /@types/react-reconciler@0.28.8:
     resolution: {integrity: sha512-SN9c4kxXZonFhbX4hJrZy37yw9e7EIxcpHCxQv5JUS18wDE5ovkQKlqQEkufdJCCMfuI9BnjUJvhYeJ9x5Ra7g==}
     dependencies:
-      '@types/react': 18.2.70
+      '@types/react': 18.2.71
     dev: false
 
-  /@types/react@18.2.70:
-    resolution: {integrity: sha512-hjlM2hho2vqklPhopNkXkdkeq6Lv8WSZTpr7956zY+3WS5cfYUewtCzsJLsbW5dEv3lfSeQ4W14ZFeKC437JRQ==}
+  /@types/react@18.2.71:
+    resolution: {integrity: sha512-PxEsB9OjmQeYGffoWnYAd/r5FiJuUw2niFQHPc2v2idwh8wGPkkYzOHuinNJJY6NZqfoTCiOIizDOz38gYNsyw==}
     dependencies:
       '@types/prop-types': 15.7.12
       '@types/scheduler': 0.16.8
@@ -455,7 +455,7 @@ packages:
   /@types/reactcss@1.2.12:
     resolution: {integrity: sha512-BrXUQ86/wbbFiZv8h/Q1/Q1XOsaHneYmCb/tHe9+M8XBAAUc2EHfdY0DY22ZZjVSaXr5ix7j+zsqO2eGZub8lQ==}
     dependencies:
-      '@types/react': 18.2.70
+      '@types/react': 18.2.71
     dev: true
 
   /@types/scheduler@0.16.8:
@@ -2326,7 +2326,7 @@ packages:
     resolution: {integrity: sha512-gFqAIbuKyyso/3G2qhiO2OM6shY6EPP/R0+mkDbyspxKazh8BXDC5FiFsUjlczgdNz/vfra0da2y+aHrusLG/Q==}
     hasBin: true
 
-  /jotai@2.7.1(@types/react@18.2.70)(react@18.2.0):
+  /jotai@2.7.1(@types/react@18.2.71)(react@18.2.0):
     resolution: {integrity: sha512-bsaTPn02nFgWNP6cBtg/htZhCu4s0wxqoklRHePp6l/vlsypR9eLn7diRliwXYWMXDpPvW/LLA2afI8vwgFFaw==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
@@ -2338,7 +2338,7 @@ packages:
       react:
         optional: true
     dependencies:
-      '@types/react': 18.2.70
+      '@types/react': 18.2.71
       react: 18.2.0
     dev: false
 
