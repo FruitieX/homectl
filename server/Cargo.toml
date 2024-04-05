@@ -21,7 +21,7 @@ serde_json = "=1.0.115"
 palette = { version = "=0.7.5", features = ["serializing"] }
 async-trait = "=0.1.79"
 rand = "=0.8.5"
-warp = "=0.3.6"
+warp = "=0.3.7"
 serde_path_to_error = "=0.1.16"
 tokio = { version = "=1.37.0", features = ["full"] }
 futures-util = "=0.3.30"
