@@ -3,7 +3,7 @@ import { Stage, Layer, Image } from 'react-konva';
 import useImage from 'use-image';
 import { Device } from '@/bindings/Device';
 import { useCallback, useRef } from 'react';
-import { useElementSize } from 'usehooks-ts';
+import { useResizeObserver } from 'usehooks-ts';
 import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from '@/ui/ViewportDevice';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
@@ -24,7 +24,10 @@ export const Viewport = () => {
   const devices: Device[] = Object.values(state?.devices ?? {});
   const groups: FlattenedGroupsConfig = state?.groups ?? {};
 
-  const [containerRef, { width, height }] = useElementSize();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { width, height } = useResizeObserver({
+    ref: containerRef,
+  });
 
   const touchRegistersAsTap = useRef(true);
   const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);
