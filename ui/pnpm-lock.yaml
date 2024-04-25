@@ -10,13 +10,13 @@ importers:
     dependencies:
       '@react-hook/throttle':
         specifier: 2.2.0
-        version: 2.2.0(react@18.2.0)
+        version: 2.2.0(react@18.3.0)
       '@uiw/react-color-circle':
         specifier: 2.1.1
-        version: 2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
       '@uiw/react-color-wheel':
         specifier: 2.1.1
-        version: 2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
       clsx:
         specifier: 2.1.1
         version: 2.1.1
@@ -34,7 +34,7 @@ importers:
         version: 10.0.4
       jotai:
         specifier: 2.8.0
-        version: 2.8.0(@types/react@18.2.79)(react@18.2.0)
+        version: 2.8.0(@types/react@18.3.0)(react@18.3.0)
       konva:
         specifier: 9.3.6
         version: 9.3.6
@@ -43,34 +43,34 @@ importers:
         version: 4.17.21
       lucide-react:
         specifier: 0.373.0
-        version: 0.373.0(react@18.2.0)
+        version: 0.373.0(react@18.3.0)
       next:
         specifier: 13.4.19
-        version: 13.4.19(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 13.4.19(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
       react:
-        specifier: 18.2.0
-        version: 18.2.0
+        specifier: 18.3.0
+        version: 18.3.0
       react-color:
         specifier: 2.19.3
-        version: 2.19.3(react@18.2.0)
+        version: 2.19.3(react@18.3.0)
       react-daisyui:
         specifier: 5.0.0
-        version: 5.0.0(daisyui@4.10.2(postcss@8.4.38))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(tailwindcss@3.4.3)
+        version: 5.0.0(daisyui@4.10.2(postcss@8.4.38))(react-dom@18.3.0(react@18.3.0))(react@18.3.0)(tailwindcss@3.4.3)
       react-dom:
-        specifier: 18.2.0
-        version: 18.2.0(react@18.2.0)
+        specifier: 18.3.0
+        version: 18.3.0(react@18.3.0)
       react-konva:
         specifier: 18.2.10
-        version: 18.2.10(konva@9.3.6)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 18.2.10(konva@9.3.6)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
       react-konva-utils:
         specifier: 1.0.6
-        version: 1.0.6(konva@9.3.6)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 1.0.6(konva@9.3.6)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
       use-image:
         specifier: 1.1.1
-        version: 1.1.1(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+        version: 1.1.1(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
       usehooks-ts:
         specifier: 3.1.0
-        version: 3.1.0(react@18.2.0)
+        version: 3.1.0(react@18.3.0)
     devDependencies:
       '@types/color':
         specifier: 3.0.6
@@ -82,14 +82,14 @@ importers:
         specifier: 20.12.7
         version: 20.12.7
       '@types/react':
-        specifier: 18.2.79
-        version: 18.2.79
+        specifier: 18.3.0
+        version: 18.3.0
       '@types/react-color':
         specifier: 3.0.12
         version: 3.0.12
       '@types/react-dom':
-        specifier: 18.2.25
-        version: 18.2.25
+        specifier: 18.3.0
+        version: 18.3.0
       '@typescript-eslint/eslint-plugin':
         specifier: 7.7.1
         version: 7.7.1(@typescript-eslint/parser@7.7.1(eslint@9.1.1)(typescript@5.4.5))(eslint@9.1.1)(typescript@5.4.5)
@@ -104,13 +104,13 @@ importers:
         version: 9.1.1
       eslint-config-next:
         specifier: latest
-        version: 14.2.2(eslint@9.1.1)(typescript@5.4.5)
+        version: 14.2.3(eslint@9.1.1)(typescript@5.4.5)
       eslint-plugin-react:
         specifier: 7.34.1
         version: 7.34.1(eslint@9.1.1)
       eslint-plugin-react-hooks:
-        specifier: 4.6.0
-        version: 4.6.0(eslint@9.1.1)
+        specifier: 4.6.1
+        version: 4.6.1(eslint@9.1.1)
       postcss:
         specifier: 8.4.38
         version: 8.4.38
@@ -207,8 +207,8 @@ packages:
   '@next/env@13.4.19':
     resolution: {integrity: sha512-FsAT5x0jF2kkhNkKkukhsyYOrRqtSxrEhfliniIq0bwWbuXLgyt3Gv0Ml+b91XwjwArmuP7NxCiGd++GGKdNMQ==}
 
-  '@next/eslint-plugin-next@14.2.2':
-    resolution: {integrity: sha512-q+Ec2648JtBpKiu/FSJm8HAsFXlNvioHeBCbTP12T1SGcHYwhqHULSfQgFkPgHDu3kzNp2Kem4J54bK4rPQ5SQ==}
+  '@next/eslint-plugin-next@14.2.3':
+    resolution: {integrity: sha512-L3oDricIIjgj1AVnRdRor21gI7mShlSwU/1ZGHmqM3LzHhXXhdkrfeNY5zif25Bi5Dd7fiJHsbhoZCHfXYvlAw==}
 
   '@next/swc-darwin-arm64@13.4.19':
     resolution: {integrity: sha512-vv1qrjXeGbuF2mOkhkdxMDtv9np7W4mcBtaDnHU+yJG+bBwa6rYsYSCI/9Xm5+TuF5SbZbrWO6G1NfTh1TMjvQ==}
@@ -323,14 +323,14 @@ packages:
   '@types/react-color@3.0.12':
     resolution: {integrity: sha512-pr3uKE3lSvf7GFo1Rn2K3QktiZQFFrSgSGJ/3iMvSOYWt2pPAJ97rVdVfhWxYJZ8prAEXzoP2XX//3qGSQgu7Q==}
 
-  '@types/react-dom@18.2.25':
-    resolution: {integrity: sha512-o/V48vf4MQh7juIKZU2QGDfli6p1+OOi5oXx36Hffpc9adsHeXjVp8rHuPkjd8VT8sOJ2Zp05HR7CdpGTIUFUA==}
+  '@types/react-dom@18.3.0':
+    resolution: {integrity: sha512-EhwApuTmMBmXuFOikhQLIBUn6uFg81SwLMOAUgodJF14SOBOCMdU04gDoYi0WOJJHD144TL32z4yDqCW3dnkQg==}
 
   '@types/react-reconciler@0.28.8':
     resolution: {integrity: sha512-SN9c4kxXZonFhbX4hJrZy37yw9e7EIxcpHCxQv5JUS18wDE5ovkQKlqQEkufdJCCMfuI9BnjUJvhYeJ9x5Ra7g==}
 
-  '@types/react@18.2.79':
-    resolution: {integrity: sha512-RwGAGXPl9kSXwdNTafkOEuFrTBD5SA2B3iEB96xi8+xu5ddUa/cpvyVCSNn+asgLCTHkb5ZxN8gbuibYJi4s1w==}
+  '@types/react@18.3.0':
+    resolution: {integrity: sha512-DiUcKjzE6soLyln8NNZmyhcQjVv+WsUIFSqetMN0p8927OztKT4VTfFTqsbAi5oAGIcgOmOajlfBqyptDDjZRw==}
 
   '@types/reactcss@1.2.12':
     resolution: {integrity: sha512-BrXUQ86/wbbFiZv8h/Q1/Q1XOsaHneYmCb/tHe9+M8XBAAUc2EHfdY0DY22ZZjVSaXr5ix7j+zsqO2eGZub8lQ==}
@@ -829,8 +829,8 @@ packages:
     resolution: {integrity: sha512-TtpcNJ3XAzx3Gq8sWRzJaVajRs0uVxA2YAkdb1jm2YkPz4G6egUFAyA3n5vtEIZefPk5Wa4UXbKuS5fKkJWdgA==}
     engines: {node: '>=10'}
 
-  eslint-config-next@14.2.2:
-    resolution: {integrity: sha512-12/uFc0KX+wUs7EDpOUGKMXBXZJiBVGdK5/m/QgXOCg2mQ0bQWoKSWNrCeOg7Vum6Kw1d1TW453W6xh+GbHquw==}
+  eslint-config-next@14.2.3:
+    resolution: {integrity: sha512-ZkNztm3Q7hjqvB1rRlOX8P9E/cXRL9ajRcs8jufEtwMfTVYRqnmtnaSu57QqHyBlovMuiB8LEzfLBkh5RYV6Fg==}
     peerDependencies:
       eslint: ^7.23.0 || ^8.0.0
       typescript: '>=3.3.1'
@@ -885,8 +885,8 @@ packages:
     peerDependencies:
       eslint: ^3 || ^4 || ^5 || ^6 || ^7 || ^8
 
-  eslint-plugin-react-hooks@4.6.0:
-    resolution: {integrity: sha512-oFc7Itz9Qxh2x4gNHStv3BqJq54ExXmfC+a1NjAta66IAN87Wu0R/QArgIS9qKzX3dXKPI9H5crl9QchNMY9+g==}
+  eslint-plugin-react-hooks@4.6.1:
+    resolution: {integrity: sha512-Ck77j8hF7l9N4S/rzSLOWEKpn994YH6iwUK8fr9mXIaQvGpQYmOnQLbiue1u5kI5T1y+gdgqosnEAO9NCz0DBg==}
     engines: {node: '>=10'}
     peerDependencies:
       eslint: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0
@@ -1721,10 +1721,10 @@ packages:
       react-dom: '>=16'
       tailwindcss: '>=3.2.7'
 
-  react-dom@18.2.0:
-    resolution: {integrity: sha512-6IMTriUmvsjHUjNtEDudZfuDQUoWXVxKHhlEGSk81n4YFS+r/Kl99wXiwlVXtPBtJenozv2P+hxDsw9eA7Xo6g==}
+  react-dom@18.3.0:
+    resolution: {integrity: sha512-zaKdLBftQJnvb7FtDIpZtsAIb2MZU087RM8bRDZU8LVCCFYjPTsDZJNFUWPcVz3HFSN1n/caxi0ca4B/aaVQGQ==}
     peerDependencies:
-      react: ^18.2.0
+      react: ^18.3.0
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -1749,8 +1749,8 @@ packages:
     peerDependencies:
       react: ^18.2.0
 
-  react@18.2.0:
-    resolution: {integrity: sha512-/3IjMdb2L9QbBdWiW5e3P2/npwMBaU9mHCSCUzNln0ZCYbcfTsGbTJrU/kGemdH2IWmB2ioZ+zkxtmq6g09fGQ==}
+  react@18.3.0:
+    resolution: {integrity: sha512-RPutkJftSAldDibyrjuku7q11d3oy6wKOyPe5K1HA/HwwrXcEqBdHsLypkC2FFYjP7bPUa6gbzSBhw4sY2JcDg==}
     engines: {node: '>=0.10.0'}
 
   reactcss@1.2.3:
@@ -1819,6 +1819,9 @@ packages:
 
   scheduler@0.23.0:
     resolution: {integrity: sha512-CtuThmgHNg7zIZWAXi3AsyIzA3n4xx7aNyjwC2VJldO2LMVDhFK+63xGqq6CsJH4rTAt6/M+N4GhZiDYPx9eUw==}
+
+  scheduler@0.23.1:
+    resolution: {integrity: sha512-5GKS5JGfiah1O38Vfa9srZE4s3wdHbwjlCrvIookrg2FO9aIwKLOJXuJQFlEfNcVSOXuaL2hzDeY20uVXcUtrw==}
 
   semver@6.3.1:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
@@ -2153,9 +2156,9 @@ snapshots:
 
   '@humanwhocodes/retry@0.2.3': {}
 
-  '@icons/material@0.2.4(react@18.2.0)':
+  '@icons/material@0.2.4(react@18.3.0)':
     dependencies:
-      react: 18.2.0
+      react: 18.3.0
 
   '@isaacs/cliui@8.0.2':
     dependencies:
@@ -2187,7 +2190,7 @@ snapshots:
 
   '@next/env@13.4.19': {}
 
-  '@next/eslint-plugin-next@14.2.2':
+  '@next/eslint-plugin-next@14.2.3':
     dependencies:
       glob: 10.3.10
 
@@ -2233,14 +2236,14 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
-  '@react-hook/latest@1.0.3(react@18.2.0)':
+  '@react-hook/latest@1.0.3(react@18.3.0)':
     dependencies:
-      react: 18.2.0
+      react: 18.3.0
 
-  '@react-hook/throttle@2.2.0(react@18.2.0)':
+  '@react-hook/throttle@2.2.0(react@18.3.0)':
     dependencies:
-      '@react-hook/latest': 1.0.3(react@18.2.0)
-      react: 18.2.0
+      '@react-hook/latest': 1.0.3(react@18.3.0)
+      react: 18.3.0
 
   '@rushstack/eslint-patch@1.10.1': {}
 
@@ -2272,25 +2275,25 @@ snapshots:
 
   '@types/react-color@3.0.12':
     dependencies:
-      '@types/react': 18.2.79
+      '@types/react': 18.3.0
       '@types/reactcss': 1.2.12
 
-  '@types/react-dom@18.2.25':
+  '@types/react-dom@18.3.0':
     dependencies:
-      '@types/react': 18.2.79
+      '@types/react': 18.3.0
 
   '@types/react-reconciler@0.28.8':
     dependencies:
-      '@types/react': 18.2.79
+      '@types/react': 18.3.0
 
-  '@types/react@18.2.79':
+  '@types/react@18.3.0':
     dependencies:
       '@types/prop-types': 15.7.12
       csstype: 3.1.3
 
   '@types/reactcss@1.2.12':
     dependencies:
-      '@types/react': 18.2.79
+      '@types/react': 18.3.0
 
   '@types/semver@7.5.8': {}
 
@@ -2424,34 +2427,34 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.1
 
-  '@uiw/react-color-circle@2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)':
+  '@uiw/react-color-circle@2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)':
     dependencies:
       '@babel/runtime': 7.24.1
       '@uiw/color-convert': 2.1.1(@babel/runtime@7.24.1)
-      '@uiw/react-color-swatch': 2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
+      '@uiw/react-color-swatch': 2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
 
-  '@uiw/react-color-swatch@2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)':
+  '@uiw/react-color-swatch@2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)':
     dependencies:
       '@babel/runtime': 7.24.1
       '@uiw/color-convert': 2.1.1(@babel/runtime@7.24.1)
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
 
-  '@uiw/react-color-wheel@2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)':
+  '@uiw/react-color-wheel@2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)':
     dependencies:
       '@babel/runtime': 7.24.1
       '@uiw/color-convert': 2.1.1(@babel/runtime@7.24.1)
-      '@uiw/react-drag-event-interactive': 2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
+      '@uiw/react-drag-event-interactive': 2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
 
-  '@uiw/react-drag-event-interactive@2.1.1(@babel/runtime@7.24.1)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)':
+  '@uiw/react-drag-event-interactive@2.1.1(@babel/runtime@7.24.1)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)':
     dependencies:
       '@babel/runtime': 7.24.1
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
 
   acorn-jsx@5.3.2(acorn@8.11.3):
     dependencies:
@@ -2907,9 +2910,9 @@ snapshots:
 
   escape-string-regexp@4.0.0: {}
 
-  eslint-config-next@14.2.2(eslint@9.1.1)(typescript@5.4.5):
+  eslint-config-next@14.2.3(eslint@9.1.1)(typescript@5.4.5):
     dependencies:
-      '@next/eslint-plugin-next': 14.2.2
+      '@next/eslint-plugin-next': 14.2.3
       '@rushstack/eslint-patch': 1.10.1
       '@typescript-eslint/parser': 6.21.0(eslint@9.1.1)(typescript@5.4.5)
       eslint: 9.1.1
@@ -2918,7 +2921,7 @@ snapshots:
       eslint-plugin-import: 2.29.1(@typescript-eslint/parser@7.7.1(eslint@9.1.1)(typescript@5.4.5))(eslint@9.1.1)
       eslint-plugin-jsx-a11y: 6.8.0(eslint@9.1.1)
       eslint-plugin-react: 7.34.1(eslint@9.1.1)
-      eslint-plugin-react-hooks: 4.6.0(eslint@9.1.1)
+      eslint-plugin-react-hooks: 4.6.1(eslint@9.1.1)
     optionalDependencies:
       typescript: 5.4.5
     transitivePeerDependencies:
@@ -3018,7 +3021,7 @@ snapshots:
       object.entries: 1.1.8
       object.fromentries: 2.0.8
 
-  eslint-plugin-react-hooks@4.6.0(eslint@9.1.1):
+  eslint-plugin-react-hooks@4.6.1(eslint@9.1.1):
     dependencies:
       eslint: 9.1.1
 
@@ -3442,10 +3445,10 @@ snapshots:
       reflect.getprototypeof: 1.0.6
       set-function-name: 2.0.2
 
-  its-fine@1.1.3(react@18.2.0):
+  its-fine@1.1.3(react@18.3.0):
     dependencies:
       '@types/react-reconciler': 0.28.8
-      react: 18.2.0
+      react: 18.3.0
 
   jackspeak@2.3.6:
     dependencies:
@@ -3455,10 +3458,10 @@ snapshots:
 
   jiti@1.21.0: {}
 
-  jotai@2.8.0(@types/react@18.2.79)(react@18.2.0):
+  jotai@2.8.0(@types/react@18.3.0)(react@18.3.0):
     optionalDependencies:
-      '@types/react': 18.2.79
-      react: 18.2.0
+      '@types/react': 18.3.0
+      react: 18.3.0
 
   jpeg-js@0.4.4: {}
 
@@ -3543,9 +3546,9 @@ snapshots:
     dependencies:
       yallist: 4.0.0
 
-  lucide-react@0.373.0(react@18.2.0):
+  lucide-react@0.373.0(react@18.3.0):
     dependencies:
-      react: 18.2.0
+      react: 18.3.0
 
   material-colors@1.2.6: {}
 
@@ -3602,16 +3605,16 @@ snapshots:
       iota-array: 1.0.0
       is-buffer: 1.1.6
 
-  next@13.4.19(react-dom@18.2.0(react@18.2.0))(react@18.2.0):
+  next@13.4.19(react-dom@18.3.0(react@18.3.0))(react@18.3.0):
     dependencies:
       '@next/env': 13.4.19
       '@swc/helpers': 0.5.1
       busboy: 1.6.0
       caniuse-lite: 1.0.30001603
       postcss: 8.4.14
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
-      styled-jsx: 5.1.1(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
+      styled-jsx: 5.1.1(react@18.3.0)
       watchpack: 2.4.0
       zod: 3.21.4
     optionalDependencies:
@@ -3803,64 +3806,64 @@ snapshots:
 
   queue-microtask@1.2.3: {}
 
-  react-color@2.19.3(react@18.2.0):
+  react-color@2.19.3(react@18.3.0):
     dependencies:
-      '@icons/material': 0.2.4(react@18.2.0)
+      '@icons/material': 0.2.4(react@18.3.0)
       lodash: 4.17.21
       lodash-es: 4.17.21
       material-colors: 1.2.6
       prop-types: 15.8.1
-      react: 18.2.0
-      reactcss: 1.2.3(react@18.2.0)
+      react: 18.3.0
+      reactcss: 1.2.3(react@18.3.0)
       tinycolor2: 1.6.0
 
-  react-daisyui@5.0.0(daisyui@4.10.2(postcss@8.4.38))(react-dom@18.2.0(react@18.2.0))(react@18.2.0)(tailwindcss@3.4.3):
+  react-daisyui@5.0.0(daisyui@4.10.2(postcss@8.4.38))(react-dom@18.3.0(react@18.3.0))(react@18.3.0)(tailwindcss@3.4.3):
     dependencies:
       daisyui: 4.10.2(postcss@8.4.38)
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
       tailwindcss: 3.4.3
 
-  react-dom@18.2.0(react@18.2.0):
+  react-dom@18.3.0(react@18.3.0):
     dependencies:
       loose-envify: 1.4.0
-      react: 18.2.0
-      scheduler: 0.23.0
+      react: 18.3.0
+      scheduler: 0.23.1
 
   react-is@16.13.1: {}
 
-  react-konva-utils@1.0.6(konva@9.3.6)(react-dom@18.2.0(react@18.2.0))(react@18.2.0):
+  react-konva-utils@1.0.6(konva@9.3.6)(react-dom@18.3.0(react@18.3.0))(react@18.3.0):
     dependencies:
       konva: 9.3.6
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
-      react-konva: 18.2.10(konva@9.3.6)(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
-      use-image: 1.1.1(react-dom@18.2.0(react@18.2.0))(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
+      react-konva: 18.2.10(konva@9.3.6)(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
+      use-image: 1.1.1(react-dom@18.3.0(react@18.3.0))(react@18.3.0)
 
-  react-konva@18.2.10(konva@9.3.6)(react-dom@18.2.0(react@18.2.0))(react@18.2.0):
+  react-konva@18.2.10(konva@9.3.6)(react-dom@18.3.0(react@18.3.0))(react@18.3.0):
     dependencies:
       '@types/react-reconciler': 0.28.8
-      its-fine: 1.1.3(react@18.2.0)
+      its-fine: 1.1.3(react@18.3.0)
       konva: 9.3.6
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
-      react-reconciler: 0.29.0(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
+      react-reconciler: 0.29.0(react@18.3.0)
       scheduler: 0.23.0
 
-  react-reconciler@0.29.0(react@18.2.0):
+  react-reconciler@0.29.0(react@18.3.0):
     dependencies:
       loose-envify: 1.4.0
-      react: 18.2.0
+      react: 18.3.0
       scheduler: 0.23.0
 
-  react@18.2.0:
+  react@18.3.0:
     dependencies:
       loose-envify: 1.4.0
 
-  reactcss@1.2.3(react@18.2.0):
+  reactcss@1.2.3(react@18.3.0):
     dependencies:
       lodash: 4.17.21
-      react: 18.2.0
+      react: 18.3.0
 
   read-cache@1.0.0:
     dependencies:
@@ -3952,6 +3955,10 @@ snapshots:
   safer-buffer@2.1.2: {}
 
   scheduler@0.23.0:
+    dependencies:
+      loose-envify: 1.4.0
+
+  scheduler@0.23.1:
     dependencies:
       loose-envify: 1.4.0
 
@@ -4072,10 +4079,10 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  styled-jsx@5.1.1(react@18.2.0):
+  styled-jsx@5.1.1(react@18.3.0):
     dependencies:
       client-only: 0.0.1
-      react: 18.2.0
+      react: 18.3.0
 
   sucrase@3.35.0:
     dependencies:
@@ -4225,15 +4232,15 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  use-image@1.1.1(react-dom@18.2.0(react@18.2.0))(react@18.2.0):
+  use-image@1.1.1(react-dom@18.3.0(react@18.3.0))(react@18.3.0):
     dependencies:
-      react: 18.2.0
-      react-dom: 18.2.0(react@18.2.0)
+      react: 18.3.0
+      react-dom: 18.3.0(react@18.3.0)
 
-  usehooks-ts@3.1.0(react@18.2.0):
+  usehooks-ts@3.1.0(react@18.3.0):
     dependencies:
       lodash.debounce: 4.0.8
-      react: 18.2.0
+      react: 18.3.0
 
   util-deprecate@1.0.2: {}
 
