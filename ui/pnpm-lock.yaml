@@ -12,8 +12,8 @@ importers:
         specifier: 2.2.0
         version: 2.2.0(react@18.3.1)
       '@uiw/react-color-circle':
-        specifier: 2.2.0
-        version: 2.2.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+        specifier: 2.3.0
+        version: 2.3.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@uiw/react-color-wheel':
         specifier: 2.2.0
         version: 2.2.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -432,15 +432,20 @@ packages:
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
 
-  '@uiw/react-color-circle@2.2.0':
-    resolution: {integrity: sha512-zohwYF24AWH6IkR1Oeog7MrhYAioRjCoJz+WRMKKsZhmZLIffrfdpVNmeT1x2kzLaIUnaVgILVpqyxGs5b4Z3g==}
+  '@uiw/color-convert@2.3.0':
+    resolution: {integrity: sha512-cBkJ6L2vgHlrAnM6XkeLAusOXxl2b+5HsX1URhCSmBzJSshM50hW096kY7ItS5B3CffabZr7Y2+NbJiCWfdaSw==}
+    peerDependencies:
+      '@babel/runtime': '>=7.19.0'
+
+  '@uiw/react-color-circle@2.3.0':
+    resolution: {integrity: sha512-eTA9ZoXKQ55SC91I71dG50pBqyjhSD98H3CEB8NFhpB7k9AQSBvf54gvBIIlmO+JRbYxjccD1jjbsLHoP/740w==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
 
-  '@uiw/react-color-swatch@2.2.0':
-    resolution: {integrity: sha512-vUvY3570/DG+WBjV09Uil3OZhoYOfgu0QUpMzJxo9grgFxcnjpH3DWrupl6WEVJHju8/bs70uZyuURsyUV/yAg==}
+  '@uiw/react-color-swatch@2.3.0':
+    resolution: {integrity: sha512-Z9EgQ2hKmNlbiMb5nYnLw2d08FZF8LetfTe60jFbSsTwUsdoDeVf2JvKSlmodBMMlFC0fK4h+2RfVR1Z1HeO+Q==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
@@ -2427,18 +2432,22 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.24.1
 
-  '@uiw/react-color-circle@2.2.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@uiw/color-convert@2.3.0(@babel/runtime@7.24.1)':
     dependencies:
       '@babel/runtime': 7.24.1
-      '@uiw/color-convert': 2.2.0(@babel/runtime@7.24.1)
-      '@uiw/react-color-swatch': 2.2.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+
+  '@uiw/react-color-circle@2.3.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@babel/runtime': 7.24.1
+      '@uiw/color-convert': 2.3.0(@babel/runtime@7.24.1)
+      '@uiw/react-color-swatch': 2.3.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
-  '@uiw/react-color-swatch@2.2.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+  '@uiw/react-color-swatch@2.3.0(@babel/runtime@7.24.1)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
       '@babel/runtime': 7.24.1
-      '@uiw/color-convert': 2.2.0(@babel/runtime@7.24.1)
+      '@uiw/color-convert': 2.3.0(@babel/runtime@7.24.1)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
 
