@@ -34,7 +34,7 @@ importers:
         version: 10.1.1
       jotai:
         specifier: 2.8.1
-        version: 2.8.1(@types/react@18.3.2)(react@18.3.1)
+        version: 2.8.1(@types/react@18.3.3)(react@18.3.1)
       konva:
         specifier: 9.3.11
         version: 9.3.11
@@ -82,8 +82,8 @@ importers:
         specifier: 20.12.12
         version: 20.12.12
       '@types/react':
-        specifier: 18.3.2
-        version: 18.3.2
+        specifier: 18.3.3
+        version: 18.3.3
       '@types/react-color':
         specifier: 3.0.12
         version: 3.0.12
@@ -326,8 +326,8 @@ packages:
   '@types/react-reconciler@0.28.8':
     resolution: {integrity: sha512-SN9c4kxXZonFhbX4hJrZy37yw9e7EIxcpHCxQv5JUS18wDE5ovkQKlqQEkufdJCCMfuI9BnjUJvhYeJ9x5Ra7g==}
 
-  '@types/react@18.3.2':
-    resolution: {integrity: sha512-Btgg89dAnqD4vV7R3hlwOxgqobUQKgx3MmrQRi0yYbs/P0ym8XozIAlkqVilPqHQwXs4e9Tf63rrCgl58BcO4w==}
+  '@types/react@18.3.3':
+    resolution: {integrity: sha512-hti/R0pS0q1/xx+TsI73XIqk26eBsISZ2R0wUijXIngRK9R/e7Xw/cXVxQK7R5JjW+SV4zGcn5hXjudkN/pLIw==}
 
   '@types/reactcss@1.2.12':
     resolution: {integrity: sha512-BrXUQ86/wbbFiZv8h/Q1/Q1XOsaHneYmCb/tHe9+M8XBAAUc2EHfdY0DY22ZZjVSaXr5ix7j+zsqO2eGZub8lQ==}
@@ -2267,25 +2267,25 @@ snapshots:
 
   '@types/react-color@3.0.12':
     dependencies:
-      '@types/react': 18.3.2
+      '@types/react': 18.3.3
       '@types/reactcss': 1.2.12
 
   '@types/react-dom@18.3.0':
     dependencies:
-      '@types/react': 18.3.2
+      '@types/react': 18.3.3
 
   '@types/react-reconciler@0.28.8':
     dependencies:
-      '@types/react': 18.3.2
+      '@types/react': 18.3.3
 
-  '@types/react@18.3.2':
+  '@types/react@18.3.3':
     dependencies:
       '@types/prop-types': 15.7.12
       csstype: 3.1.3
 
   '@types/reactcss@1.2.12':
     dependencies:
-      '@types/react': 18.3.2
+      '@types/react': 18.3.3
 
   '@typescript-eslint/eslint-plugin@7.10.0(@typescript-eslint/parser@7.10.0(eslint@9.3.0)(typescript@5.4.5))(eslint@9.3.0)(typescript@5.4.5)':
     dependencies:
@@ -3443,9 +3443,9 @@ snapshots:
 
   jiti@1.21.0: {}
 
-  jotai@2.8.1(@types/react@18.3.2)(react@18.3.1):
+  jotai@2.8.1(@types/react@18.3.3)(react@18.3.1):
     optionalDependencies:
-      '@types/react': 18.3.2
+      '@types/react': 18.3.3
       react: 18.3.1
 
   jpeg-js@0.4.4: {}
