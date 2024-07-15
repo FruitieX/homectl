@@ -55,7 +55,7 @@ importers:
         version: 2.19.3(react@18.3.1)
       react-daisyui:
         specifier: 5.0.0
-        version: 5.0.0(daisyui@4.12.10(postcss@8.4.39))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.4)
+        version: 5.0.0(daisyui@4.12.10(postcss@8.4.39))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.5)
       react-dom:
         specifier: 18.3.1
         version: 18.3.1(react@18.3.1)
@@ -121,8 +121,8 @@ importers:
         specifier: 0.6.5
         version: 0.6.5(prettier@3.3.3)
       tailwindcss:
-        specifier: 3.4.4
-        version: 3.4.4
+        specifier: 3.4.5
+        version: 3.4.5
       typescript:
         specifier: 5.5.3
         version: 5.5.3
@@ -1943,8 +1943,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  tailwindcss@3.4.4:
-    resolution: {integrity: sha512-ZoyXOdJjISB7/BcLTR6SEsLgKtDStYyYZVLsUtWChO4Ps20CBad7lfJKVDiejocV4ME1hLmyY0WJE3hSDcmQ2A==}
+  tailwindcss@3.4.5:
+    resolution: {integrity: sha512-DlTxttYcogpDfx3tf/8jfnma1nfAYi2cBUYV2YNoPPecwmO3YGiFlOX9D8tGAu+EDF38ryBzvrDKU/BLMsUwbw==}
     engines: {node: '>=14.0.0'}
     hasBin: true
 
@@ -3767,7 +3767,7 @@ snapshots:
   postcss@8.4.14:
     dependencies:
       nanoid: 3.3.7
-      picocolors: 1.0.0
+      picocolors: 1.0.1
       source-map-js: 1.2.0
 
   postcss@8.4.39:
@@ -3809,12 +3809,12 @@ snapshots:
       reactcss: 1.2.3(react@18.3.1)
       tinycolor2: 1.6.0
 
-  react-daisyui@5.0.0(daisyui@4.12.10(postcss@8.4.39))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.4):
+  react-daisyui@5.0.0(daisyui@4.12.10(postcss@8.4.39))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(tailwindcss@3.4.5):
     dependencies:
       daisyui: 4.12.10(postcss@8.4.39)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      tailwindcss: 3.4.4
+      tailwindcss: 3.4.5
 
   react-dom@18.3.1(react@18.3.1):
     dependencies:
@@ -4097,7 +4097,7 @@ snapshots:
 
   supports-preserve-symlinks-flag@1.0.0: {}
 
-  tailwindcss@3.4.4:
+  tailwindcss@3.4.5:
     dependencies:
       '@alloc/quick-lru': 5.2.0
       arg: 5.0.2
@@ -4112,7 +4112,7 @@ snapshots:
       micromatch: 4.0.5
       normalize-path: 3.0.0
       object-hash: 3.0.0
-      picocolors: 1.0.0
+      picocolors: 1.0.1
       postcss: 8.4.39
       postcss-import: 15.1.0(postcss@8.4.39)
       postcss-js: 4.0.1(postcss@8.4.39)
