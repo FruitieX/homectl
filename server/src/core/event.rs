@@ -113,18 +113,27 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.send_state_ws(None).await;
         }
         Event::DbStoreScene { scene_id, config } => {
-            db_store_scene(scene_id, config).await.ok();
+            db_store_scene(scene_id, config).await?;
             state.scenes.refresh_db_scenes().await;
+            state
+                .scenes
+                .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
             state.send_state_ws(None).await;
         }
         Event::DbDeleteScene { scene_id } => {
-            db_delete_scene(scene_id).await.ok();
+            db_delete_scene(scene_id).await?;
             state.scenes.refresh_db_scenes().await;
+            state
+                .scenes
+                .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
             state.send_state_ws(None).await;
         }
         Event::DbEditScene { scene_id, name } => {
-            db_edit_scene(scene_id, name).await.ok();
+            db_edit_scene(scene_id, name).await?;
             state.scenes.refresh_db_scenes().await;
+            state
+                .scenes
+                .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
             state.send_state_ws(None).await;
         }
         Event::Action(Action::ActivateScene(ActivateSceneDescriptor {

@@ -106,7 +106,7 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
         scene_id.to_string(),
         Json(config) as _
     )
-    .fetch_one(db)
+    .execute(db)
     .await?;
 
     Ok(())
@@ -122,7 +122,7 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
         "#,
         scene_id.to_string(),
     )
-    .fetch_one(db)
+    .execute(db)
     .await?;
 
     Ok(())
@@ -142,7 +142,7 @@ pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
         scene_id.to_string(),
         name
     )
-    .fetch_one(db)
+    .execute(db)
     .await?;
 
     Ok(())
