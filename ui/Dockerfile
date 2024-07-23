@@ -2,6 +2,7 @@ FROM node:21.7.3-alpine@sha256:78c45726ea205bbe2f23889470f03b46ac988d14b6d813d09
 
 # Install dependencies
 FROM base AS deps
+RUN apk add npm pango-dev g++ make jpeg-dev giflib-dev librsvg-dev
 WORKDIR /app
 COPY package.json pnpm-lock.yaml ./
 RUN yarn global add pnpm && pnpm i --frozen-lockfile
