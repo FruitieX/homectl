@@ -329,6 +329,11 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
         return true;
     }
 
+    // If one state has color and the other doesn't, states don't match
+    if device.state.color.is_some() != expected.color.is_some() {
+        return false;
+    }
+
     // Compare colors if supported
     if device.state.color.is_some() {
         return cmp_light_color(
