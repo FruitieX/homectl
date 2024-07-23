@@ -33,15 +33,15 @@ pub struct MqttConfig {
     /// devices' expected states or not.
     managed: Option<ManageKind>,
 
-    id_field: Option<jsonptr::Pointer>,
-    name_field: Option<jsonptr::Pointer>,
-    color_field: Option<jsonptr::Pointer>,
-    power_field: Option<jsonptr::Pointer>,
-    brightness_field: Option<jsonptr::Pointer>,
-    sensor_value_field: Option<jsonptr::Pointer>,
-    transition_ms_field: Option<jsonptr::Pointer>,
-    capabilities_field: Option<jsonptr::Pointer>,
-    raw_field: Option<jsonptr::Pointer>,
+    id_field: Option<jsonptr::PointerBuf>,
+    name_field: Option<jsonptr::PointerBuf>,
+    color_field: Option<jsonptr::PointerBuf>,
+    power_field: Option<jsonptr::PointerBuf>,
+    brightness_field: Option<jsonptr::PointerBuf>,
+    sensor_value_field: Option<jsonptr::PointerBuf>,
+    transition_ms_field: Option<jsonptr::PointerBuf>,
+    capabilities_field: Option<jsonptr::PointerBuf>,
+    raw_field: Option<jsonptr::PointerBuf>,
 }
 
 pub struct Mqtt {

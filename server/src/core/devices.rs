@@ -252,7 +252,7 @@ impl Devices {
         }
 
         let mut device = device.clone();
-        device.raw = incoming.raw.clone();
+        device.raw.clone_from(&incoming.raw);
 
         self.set_state(&device, true);
 

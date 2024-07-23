@@ -197,7 +197,7 @@ fn context_write_vars_obj(expr: &Node, context: &HashMapContext) -> Result<serde
         let value = context.get_value(var).ok_or_eyre(
             "Could not find value of expr variable that we're currently looping over",
         )?;
-        let json_pointer = jsonptr::Pointer::try_from(format!("/{}", var.replace('.', "/")))?;
+        let json_pointer = jsonptr::PointerBuf::try_from(format!("/{}", var.replace('.', "/")))?;
         let new_value = evalexpr_value_to_serde(value)?;
         obj.assign(&json_pointer, new_value)?;
     }
