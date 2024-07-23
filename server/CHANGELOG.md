@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.5](https://github.com/FruitieX/homectl-server/compare/v0.9.4...v0.9.5) (2024-07-23)
+
+
+### Bug Fixes
+
+* fix scene list not refreshing after edits ([e027b2a](https://github.com/FruitieX/homectl-server/commit/e027b2a430ab7e04cc6824118c7c86c3b7575d2d))
+
 ## [0.9.4](https://github.com/FruitieX/homectl-server/compare/v0.9.3...v0.9.4) (2024-07-23)
 
 
