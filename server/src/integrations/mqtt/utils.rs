@@ -6,7 +6,7 @@ use crate::types::{
 };
 use color_eyre::Result;
 use eyre::eyre;
-use jsonptr::Assign;
+use jsonptr::{Assign, Pointer};
 
 pub fn mqtt_to_homectl(
     payload: &[u8],
@@ -15,101 +15,130 @@ pub fn mqtt_to_homectl(
 ) -> Result<Device> {
     let value: serde_json::Value = serde_json::from_slice(payload)?;
 
-    let id_field = config.id_field.as_deref().unwrap_or("/id");
-    let name_field = config.name_field.as_deref().unwrap_or("/name");
-    let color_field = config.color_field.as_deref().unwrap_or("/color");
-    let power_field = config.power_field.as_deref().unwrap_or("/power");
-    let brightness_field = config.brightness_field.as_deref().unwrap_or("/brightness");
+    let id_field = config
+        .id_field
+        .as_deref()
+        .unwrap_or(Pointer::from_static("/id"));
+    let name_field = config
+        .name_field
+        .as_deref()
+        .unwrap_or(Pointer::from_static("/name"));
+    let color_field = config
+        .color_field
+        .as_deref()
+        .unwrap_or(Pointer::from_static("/color"));
+    let power_field = config
+        .power_field
+        .as_deref()
+        .unwrap_or(Pointer::from_static("/power"));
+    let brightness_field = config
+        .brightness_field
+        .as_deref()
+        .unwrap_or(Pointer::from_static("/brightness"));
     let sensor_value_field = config
         .sensor_value_field
         .as_deref()
-        .unwrap_or("/sensor_value");
+        .unwrap_or(Pointer::from_static("/sensor_value"));
     let transition_ms_field = config
         .transition_ms_field
         .as_deref()
-        .unwrap_or("/transition_ms");
+        .unwrap_or(Pointer::from_static("/transition_ms"));
     let capabilities_field = config
         .capabilities_field
         .as_deref()
-        .unwrap_or("/capabilities");
+        .unwrap_or(Pointer::from_static("/capabilities"));
 
-    let id = value
-        .pointer(id_field)
+    let id = id_field
+        .resolve(&value)
+        .ok()
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| eyre!("Missing '{id_field}' field in MQTT message"))?
         .to_string();
 
-    let name = value
-        .pointer(name_field)
+    let name = name_field
+        .resolve(&value)
+        .ok()
         .and_then(serde_json::Value::as_str)
         .ok_or_else(|| eyre!("Missing '{name_field}' field in MQTT message"))?
         .to_string();
 
-    let color = value
-        .pointer(color_field)
+    let color = color_field
+        .resolve(&value)
+        .ok()
         .and_then(|value| serde_json::from_value::<DeviceColor>(value.clone()).ok());
 
-    let power = value
-        .pointer(power_field)
+    let power = power_field
+        .resolve(&value)
+        .ok()
         .and_then(serde_json::Value::as_bool)
         .unwrap_or_default();
 
-    let brightness = value
-        .pointer(brightness_field)
+    let brightness = brightness_field
+        .resolve(&value)
+        .ok()
         .and_then(serde_json::Value::as_f64)
         .map(|value| value as f32);
 
-    let transition_ms = value
-        .pointer(transition_ms_field)
+    let transition_ms = transition_ms_field
+        .resolve(&value)
+        .ok()
         .and_then(serde_json::Value::as_u64);
 
-    let device_state =
-        if let Some(value) = value.pointer(sensor_value_field).filter(|v| !v.is_null()) {
-            DeviceData::Sensor(match value {
-                serde_json::Value::Number(value) => SensorDevice::Number {
-                    value: value.as_f64().unwrap(),
-                },
+    let device_state = if let Some(value) = sensor_value_field
+        .resolve(&value)
+        .ok()
+        .filter(|v| !v.is_null())
+    {
+        DeviceData::Sensor(match value {
+            serde_json::Value::Number(value) => SensorDevice::Number {
+                value: value.as_f64().unwrap(),
+            },
 
-                serde_json::Value::Bool(value) => SensorDevice::Boolean { value: *value },
+            serde_json::Value::Bool(value) => SensorDevice::Boolean { value: *value },
 
-                // TODO: get rid of this hack and use proper booleans
-                serde_json::Value::String(value) if value == "true" => {
-                    SensorDevice::Boolean { value: true }
-                }
-                serde_json::Value::String(value) if value == "false" => {
-                    SensorDevice::Boolean { value: false }
-                }
+            // TODO: get rid of this hack and use proper booleans
+            serde_json::Value::String(value) if value == "true" => {
+                SensorDevice::Boolean { value: true }
+            }
+            serde_json::Value::String(value) if value == "false" => {
+                SensorDevice::Boolean { value: false }
+            }
 
-                serde_json::Value::String(value) => SensorDevice::Text {
-                    value: value.clone(),
-                },
-                _ => {
-                    return Err(eyre!(
-                        "Unsupported value for sensor field '{sensor_value_field}'",
-                    ))
-                }
-            })
-        } else {
-            let capabilities: Capabilities = value
-                .pointer(capabilities_field)
-                .and_then(|value| serde_json::from_value(value.clone()).ok())
-                .unwrap_or_default();
+            serde_json::Value::String(value) => SensorDevice::Text {
+                value: value.clone(),
+            },
+            _ => {
+                return Err(eyre!(
+                    "Unsupported value for sensor field '{sensor_value_field}'",
+                ))
+            }
+        })
+    } else {
+        let capabilities: Capabilities = capabilities_field
+            .resolve(&value)
+            .ok()
+            .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .unwrap_or_default();
 
-            let controllable_device = ControllableDevice::new(
-                None,
-                power,
-                brightness,
-                color,
-                transition_ms,
-                capabilities,
-                config.managed.clone().unwrap_or_default(),
-            );
+        let controllable_device = ControllableDevice::new(
+            None,
+            power,
+            brightness,
+            color,
+            transition_ms,
+            capabilities,
+            config.managed.clone().unwrap_or_default(),
+        );
 
-            DeviceData::Controllable(controllable_device)
-        };
+        DeviceData::Controllable(controllable_device)
+    };
 
-    let raw = value
-        .pointer(config.raw_field.as_deref().unwrap_or("/raw"))
+    let raw = config
+        .raw_field
+        .as_deref()
+        .unwrap_or(Pointer::from_static("/raw"))
+        .resolve(&value)
+        .ok()
         .cloned();
 
     Ok(Device {
@@ -127,27 +156,27 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
     let id_field = config
         .id_field
         .clone()
-        .unwrap_or_else(|| jsonptr::Pointer::new(["id"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["id"]));
     let name_field = config
         .name_field
         .clone()
-        .unwrap_or_else(|| jsonptr::Pointer::new(["name"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["name"]));
     let color_field = config
         .color_field
         .clone()
-        .unwrap_or_else(|| jsonptr::Pointer::new(["color"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["color"]));
     let power_field = config
         .power_field
         .clone()
-        .unwrap_or_else(|| jsonptr::Pointer::new(["power"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["power"]));
     let brightness_field = config
         .brightness_field
         .clone()
-        .unwrap_or_else(|| jsonptr::Pointer::new(["brightness"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["brightness"]));
     let transition_ms_field = config
         .transition_ms_field
         .clone()
-        .unwrap_or_else(|| jsonptr::Pointer::new(["transition_ms"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["transition_ms"]));
 
     payload.assign(&id_field, serde_json::Value::String(device.id.to_string()))?;
     payload.assign(&name_field, serde_json::Value::String(device.name))?;
