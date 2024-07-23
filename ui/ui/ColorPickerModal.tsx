@@ -17,11 +17,10 @@ import {
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { black, getBrightness, getColor, getPower } from '@/lib/colors';
 import { useThrottleCallback } from '@react-hook/throttle';
-import { useSetDeviceColor } from '@/hooks/useSetDeviceColor';
+import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
 import { useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
 import { Clipboard, X, Dices } from 'lucide-react';
-import { useSetDevicePower } from '@/hooks/useSetDevicePower';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
 
@@ -565,7 +564,7 @@ const ImageTab = ({
   );
 
   const state = useWebsocketState();
-  const setDeviceColor = useSetDeviceColor();
+  const setDeviceState = useSetDeviceState();
   const handleApplyToDevices = useCallback(() => {
     const randomizedDeviceKeyOrder = deviceKeys
       ?.concat()
@@ -580,10 +579,10 @@ const ImageTab = ({
       const color = randomizedColorOrder[index % computedColors.length];
 
       if (match) {
-        setDeviceColor(match, Color(color, 'rgb'), color.value() / 100);
+        setDeviceState(match, true, Color(color, 'rgb'), color.value() / 100);
       }
     });
-  }, [deviceKeys, computedColors, state, setDeviceColor]);
+  }, [deviceKeys, computedColors, state, setDeviceState]);
 
   return (
     <>
@@ -677,8 +676,7 @@ export const ColorPickerModal = () => {
   const deviceModalPower =
     firstDevice?.data === undefined ? null : getPower(firstDevice.data);
 
-  const setDeviceColor = useSetDeviceColor();
-  const setDevicePower = useSetDevicePower();
+  const setDeviceState = useSetDeviceState();
 
   const partialSetDeviceColor = useCallback(
     (color: Color, brightness: number) => {
@@ -687,12 +685,12 @@ export const ColorPickerModal = () => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            setDeviceColor(match, color, brightness, 250);
+            setDeviceState(match, true, color, brightness, 250);
           }
         });
       }
     },
-    [deviceModalState, setDeviceColor, state],
+    [deviceModalState, setDeviceState, state],
   );
 
   const partialSetDevicePower = useCallback(
@@ -702,12 +700,24 @@ export const ColorPickerModal = () => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            setDevicePower(match, power);
+            setDeviceState(
+              match,
+              power,
+              deviceModalColor ?? undefined,
+              deviceModalBrightness ?? undefined,
+              250,
+            );
           }
         });
       }
     },
-    [deviceModalState, setDevicePower, state],
+    [
+      deviceModalBrightness,
+      deviceModalColor,
+      deviceModalState,
+      setDeviceState,
+      state,
+    ],
   );
 
   const throttledSetDeviceColor = useThrottleCallback(

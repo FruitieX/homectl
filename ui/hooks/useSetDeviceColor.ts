@@ -5,24 +5,28 @@ import Color from 'color';
 import { produce } from 'immer';
 import { useCallback } from 'react';
 
-export const useSetDeviceColor = () => {
+export const useSetDeviceState = () => {
   const ws = useWebsocket();
   const setDeviceColor = useCallback(
     (
       clickedDevice: Device,
-      color: Color,
+      power: boolean,
+      color?: Color,
       brightness?: number,
       transitionMs?: number,
     ) => {
       const device = produce(clickedDevice, (draft) => {
         if ('Controllable' in draft.data) {
-          const hsv = color.hsv();
-          draft.data.Controllable.state.color = {
-            h: Math.round(hsv.hue()),
-            s: hsv.saturationv() / 100,
-          };
-
           draft.data.Controllable.scene_id = null;
+          draft.data.Controllable.state.power = power;
+
+          if (color !== undefined) {
+            const hsv = color.hsv();
+            draft.data.Controllable.state.color = {
+              h: Math.round(hsv.hue()),
+              s: hsv.saturationv() / 100,
+            };
+          }
 
           if (brightness !== undefined) {
             draft.data.Controllable.state.brightness = brightness;
