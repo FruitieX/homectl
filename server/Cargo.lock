@@ -335,9 +335,9 @@ checksum = "19d374276b40fb8bbdee95aef7c7fa6b5316ec764510eb64b8dd0e2ed0d7e7f5"
 
 [[package]]
 name = "croner"
-version = "2.0.4"
+version = "2.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "516aad5374ea0ea75a0f0f4512fb4e7ad46c5eeff9971cb8ebc8fd74f1cd16c1"
+checksum = "eba3aaaafb3c313b352ff02626adb2dfaf9663159d339a878f6e5b2f6259a97c"
 dependencies = [
  "chrono",
 ]
