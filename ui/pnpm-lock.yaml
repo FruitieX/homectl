@@ -54,8 +54,8 @@ dependencies:
     specifier: 2.19.3
     version: 2.19.3(react@18.3.1)
   react-daisyui:
-    specifier: 5.0.3
-    version: 5.0.3(daisyui@4.12.10)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.10)
+    specifier: 5.0.4
+    version: 5.0.4(daisyui@4.12.10)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.10)
   react-dom:
     specifier: 18.3.1
     version: 18.3.1(react@18.3.1)
@@ -3498,8 +3498,8 @@ packages:
       tinycolor2: 1.6.0
     dev: false
 
-  /react-daisyui@5.0.3(daisyui@4.12.10)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.10):
-    resolution: {integrity: sha512-zTlWwqp08dlvdk7fHnYbkZETYqcd2yZhMteAN9nTSHmOzy/XgiIGqmjuw/Yi6qfMk87/IYexr/J5QceHECrXdg==}
+  /react-daisyui@5.0.4(daisyui@4.12.10)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.10):
+    resolution: {integrity: sha512-/IWWxtalVcenm9Nf2mmFVpIMU7zJAnJvY+RbYO4S2KKVNIIfh018tXEztevQf99UZszVmS3l+HRb98Qb6Dbvng==}
     peerDependencies:
       daisyui: ^4.12.10
       react: '>=16'
