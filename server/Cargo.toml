@@ -25,7 +25,7 @@ warp = "=0.3.7"
 serde_path_to_error = "=0.1.16"
 tokio = { version = "=1.40.0", features = ["full"] }
 futures-util = "=0.3.30"
-tokio-stream = "=0.1.15"
+tokio-stream = "=0.1.16"
 itertools = "=0.13.0"
 sqlx = { version = "=0.8.2", features = [
 	"runtime-tokio-rustls",
