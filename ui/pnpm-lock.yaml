@@ -27,8 +27,8 @@ dependencies:
     specifier: 2.4.0
     version: 2.4.0
   daisyui:
-    specifier: 4.12.10
-    version: 4.12.10(postcss@8.4.47)
+    specifier: 4.12.11
+    version: 4.12.11(postcss@8.4.47)
   immer:
     specifier: 10.1.1
     version: 10.1.1
@@ -55,7 +55,7 @@ dependencies:
     version: 2.19.3(react@18.3.1)
   react-daisyui:
     specifier: 5.0.5
-    version: 5.0.5(daisyui@4.12.10)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.13)
+    version: 5.0.5(daisyui@4.12.11)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.13)
   react-dom:
     specifier: 18.3.1
     version: 18.3.1(react@18.3.1)
@@ -1383,13 +1383,13 @@ packages:
       uniq: 1.0.1
     dev: false
 
-  /daisyui@4.12.10(postcss@8.4.47):
-    resolution: {integrity: sha512-jp1RAuzbHhGdXmn957Z2XsTZStXGHzFfF0FgIOZj3Wv9sH7OZgLfXTRZNfKVYxltGUOBsG1kbWAdF5SrqjebvA==}
+  /daisyui@4.12.11(postcss@8.4.47):
+    resolution: {integrity: sha512-D9OJTlnU1ATiDsKkw5/TB0997Hm73zu9SFeUTthDtKd06OEJQlOLoYrGXlP2YhHZDW4VAcQnmhEphTgPFUYqSw==}
     engines: {node: '>=16.9.0'}
     dependencies:
       css-selector-tokenizer: 0.8.0
       culori: 3.3.0
-      picocolors: 1.0.1
+      picocolors: 1.1.0
       postcss-js: 4.0.1(postcss@8.4.47)
     transitivePeerDependencies:
       - postcss
@@ -3294,6 +3294,7 @@ packages:
 
   /picocolors@1.0.1:
     resolution: {integrity: sha512-anP1Z8qwhkbmu7MFP5iTt+wQKXgwzf7zTyGlcdzabySa9vd0Xt392U0rVmz9poOaBj0uHJKyyo9/upk0HrEQew==}
+    dev: true
 
   /picocolors@1.1.0:
     resolution: {integrity: sha512-TQ92mBOW0l3LeMeyLV6mzy/kWr8lkd/hp3mTg7wYK7zJhuBStmGMBG0BdeDZS/dZx1IukaX6Bk11zcln25o1Aw==}
@@ -3516,7 +3517,7 @@ packages:
       tinycolor2: 1.6.0
     dev: false
 
-  /react-daisyui@5.0.5(daisyui@4.12.10)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.13):
+  /react-daisyui@5.0.5(daisyui@4.12.11)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.13):
     resolution: {integrity: sha512-bh2XjayCeCmV855GqdhvCwIGDsrHxDfbczuVSMze4B71Ou6VwIesMTaHu8LQ6qYFi7tN59mBF073b0EUh2khFA==}
     peerDependencies:
       daisyui: ^4.12.10
@@ -3524,7 +3525,7 @@ packages:
       react-dom: '>=16'
       tailwindcss: '>=3.2.7'
     dependencies:
-      daisyui: 4.12.10(postcss@8.4.47)
+      daisyui: 4.12.11(postcss@8.4.47)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       tailwindcss: 3.4.13
