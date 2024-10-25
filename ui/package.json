@@ -38,7 +38,7 @@
     "usehooks-ts": "3.1.0"
   },
   "devDependencies": {
-    "@types/color": "3.0.6",
+    "@types/color": "4.2.0",
     "@types/lodash": "4.17.12",
     "@types/node": "20.17.0",
     "@types/react": "18.3.12",
