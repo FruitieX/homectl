@@ -2,6 +2,7 @@ use crate::types::{
     device::{
         ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
     },
+    group::GroupId,
     scene::{
         ActivateSceneDescriptor, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
         SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneDevicesConfigs, SceneId,
@@ -100,7 +101,7 @@ fn compute_scene_device_state(
 type SceneDeviceList = HashSet<DeviceKey>;
 /// Gathers a Vec<HashSet<DeviceKey>> of all devices in provided scenes
 fn find_scene_device_lists(
-    scene_devices_configs: &[(&ActivateSceneDescriptor, Option<SceneDevicesConfig>)],
+    scene_devices_configs: &[(ActivateSceneDescriptor, Option<SceneDevicesConfig>)],
 ) -> Vec<SceneDeviceList> {
     let scenes_devices = scene_devices_configs
         .iter()
@@ -140,7 +141,7 @@ fn find_scenes_common_devices(scene_device_lists: Vec<SceneDeviceList>) -> HashS
 /// * `scenes_common_devices` - list of devices that are common in all given scenes
 /// * `devices` - current state of devices
 fn find_active_scene_index(
-    scene_devices_configs: &[(&ActivateSceneDescriptor, Option<SceneDevicesConfig>)],
+    scene_devices_configs: &[(ActivateSceneDescriptor, Option<SceneDevicesConfig>)],
     scenes_common_devices: &HashSet<DeviceKey>,
     devices: &Devices,
 ) -> Option<usize> {
@@ -173,22 +174,36 @@ fn find_active_scene_index(
 /// * `nowrap` - whether to cycle back to first scene when last scene is reached
 /// * `devices` - current state of devices
 /// * `scenes` - current state of scenes
+/// * `detection_device_keys` - optionally only consider these devices for detecting current scene
+/// * `detection_group_keys` - optionally only consider these groups for detecting current scene
+#[allow(clippy::too_many_arguments)]
 pub fn get_next_cycled_scene(
     scene_descriptors: &[ActivateSceneDescriptor],
     nowrap: bool,
     devices: &Devices,
     groups: &Groups,
+    detection_device_keys: &Option<Vec<DeviceKey>>,
+    detection_group_keys: &Option<Vec<GroupId>>,
     scenes: &Scenes,
     eval_context: &EvalContext,
 ) -> Option<ActivateSceneDescriptor> {
-    let scene_devices_configs: Vec<(&ActivateSceneDescriptor, Option<SceneDevicesConfig>)> =
+    let scene_devices_configs: Vec<(ActivateSceneDescriptor, Option<SceneDevicesConfig>)> =
         scene_descriptors
             .iter()
             .map(|sd| {
-                (
-                    sd,
-                    scenes.find_scene_devices_config(devices, groups, sd, eval_context),
-                )
+                let mut sd = sd.clone();
+
+                if detection_device_keys.is_some() {
+                    sd.device_keys = detection_device_keys.clone();
+                }
+                if detection_group_keys.is_some() {
+                    sd.group_keys = detection_group_keys.clone();
+                }
+
+                let scene_devices_config =
+                    scenes.find_scene_devices_config(devices, groups, &sd, eval_context);
+
+                (sd, scene_devices_config)
             })
             .collect();
 

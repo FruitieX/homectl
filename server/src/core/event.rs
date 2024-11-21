@@ -154,7 +154,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 )
                 .await;
         }
-        Event::Action(Action::CycleScenes(CycleScenesDescriptor { scenes, nowrap })) => {
+        Event::Action(Action::CycleScenes(CycleScenesDescriptor {
+            scenes,
+            nowrap,
+            group_keys,
+            device_keys,
+        })) => {
             let eval_context = state.expr.get_context();
             state
                 .devices
@@ -162,6 +167,8 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     scenes,
                     nowrap.unwrap_or(false),
                     &state.groups,
+                    device_keys,
+                    group_keys,
                     &state.scenes,
                     eval_context,
                 )

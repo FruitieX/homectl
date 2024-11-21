@@ -57,6 +57,12 @@ pub struct ActivateSceneDescriptor {
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<ActivateSceneDescriptor>,
     pub nowrap: Option<bool>,
+
+    /// Optionally only detect current scene from these devices
+    pub device_keys: Option<Vec<DeviceKey>>,
+
+    /// Optionally only detect current scene from these groups
+    pub group_keys: Option<Vec<GroupId>>,
 }
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]

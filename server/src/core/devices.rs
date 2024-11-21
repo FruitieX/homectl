@@ -321,11 +321,14 @@ impl Devices {
         Some(true)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn cycle_scenes(
         &mut self,
         scene_descriptors: &[ActivateSceneDescriptor],
         nowrap: bool,
         groups: &Groups,
+        detection_device_keys: &Option<Vec<DeviceKey>>,
+        detection_group_keys: &Option<Vec<GroupId>>,
         scenes: &Scenes,
         eval_context: &EvalContext,
     ) -> Option<()> {
@@ -335,6 +338,8 @@ impl Devices {
                 nowrap,
                 self,
                 groups,
+                detection_device_keys,
+                detection_group_keys,
                 scenes,
                 eval_context,
             )
