@@ -163,8 +163,10 @@ pub enum ManageKind {
 #[ts(export)]
 pub struct ControllableDevice {
     pub scene_id: Option<SceneId>,
+    #[serde(default)]
     pub capabilities: Capabilities,
     pub state: ControllableState,
+    #[serde(default)]
     pub managed: ManageKind,
 }
 
