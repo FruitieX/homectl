@@ -20,11 +20,16 @@ fn post_action(
         .and(warp::post())
         .and(warp::body::json())
         .and(with_state(app_state))
-        .map(|action: Action, app_state: Arc<RwLock<AppState>>| {
-            let app_state = app_state.blocking_read();
-            let sender = app_state.event_tx.clone();
-            sender.send(Event::Action(action));
+        .and_then(post_action_impl)
+}
 
-            warp::reply::json(&())
-        })
+async fn post_action_impl(
+    action: Action,
+    app_state: Arc<RwLock<AppState>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let app_state = app_state.read().await;
+    let sender = app_state.event_tx.clone();
+    sender.send(Event::Action(action));
+
+    Ok(warp::reply::json(&()))
 }

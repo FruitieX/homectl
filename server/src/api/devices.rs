@@ -34,24 +34,27 @@ fn get_devices(
     warp::get()
         .and(warp::query::<GetQuery>())
         .and(with_state(app_state))
-        .map(|q: GetQuery, app_state: Arc<RwLock<AppState>>| {
-            let app_state = app_state.blocking_read();
-            let devices = app_state.devices.get_state();
+        .and_then(get_devices_impl)
+}
 
-            let devices_converted = devices
-                .0
-                .values()
-                .map(|device| {
-                    device.color_to_mode(q.color_mode.clone().unwrap_or(ColorMode::Hs), true)
-                })
-                .collect::<Vec<Device>>();
+async fn get_devices_impl(
+    query: GetQuery,
+    app_state: Arc<RwLock<AppState>>,
+) -> Result<impl warp::Reply, Infallible> {
+    let app_state = app_state.read().await;
+    let devices = app_state.devices.get_state();
 
-            let response = DevicesResponse {
-                devices: devices_converted,
-            };
+    let devices_converted = devices
+        .0
+        .values()
+        .map(|device| device.color_to_mode(query.color_mode.clone().unwrap_or(ColorMode::Hs), true))
+        .collect::<Vec<Device>>();
 
-            warp::reply::json(&response)
-        })
+    let response = DevicesResponse {
+        devices: devices_converted,
+    };
+
+    Ok(warp::reply::json(&response))
 }
 
 fn put_device(
