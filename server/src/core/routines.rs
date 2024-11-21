@@ -38,16 +38,13 @@ impl Routines {
         groups: &Groups,
         expr: &Expr,
     ) {
-        match old {
-            Some(_) => {
-                let matching_actions =
-                    self.find_matching_actions(old_state, new_state, devices, groups, expr);
+        if old.is_some() {
+            let matching_actions =
+                self.find_matching_actions(old_state, new_state, devices, groups, expr);
 
-                for action in matching_actions {
-                    self.event_tx.send(Event::Action(action.clone()));
-                }
+            for action in matching_actions {
+                self.event_tx.send(Event::Action(action.clone()));
             }
-            None => {}
         }
     }
 
