@@ -80,8 +80,8 @@ devDependencies:
     specifier: 4.17.13
     version: 4.17.13
   '@types/node':
-    specifier: 22.10.0
-    version: 22.10.0
+    specifier: 22.10.1
+    version: 22.10.1
   '@types/react':
     specifier: 18.3.12
     version: 18.3.12
@@ -699,8 +699,8 @@ packages:
     resolution: {integrity: sha512-oANmFZMnFQvb219SSBIhI1Ih/r4CvHDOzkWyJS/XRqkMrGH5/kaPSA1hQhdIBzouaE+5KpE/f5ylI9cujmckQg==}
     dev: false
 
-  /@types/node@22.10.0:
-    resolution: {integrity: sha512-XC70cRZVElFHfIUB40FgZOBbgJYFKKMa5nb9lxcwYstFG/Mi+/Y0bGS+rs6Dmhmkpq4pnNiLiuZAbc02YCOnmA==}
+  /@types/node@22.10.1:
+    resolution: {integrity: sha512-qKgsUwfHZV2WCWLAnVP1JqnpE6Im6h3Y0+fYgMTasNQ7V++CBX5OT1as0g0f+OyubbFqhf6XVNIsmN4IIhEgGQ==}
     dependencies:
       undici-types: 6.20.0
     dev: true
@@ -2845,7 +2845,7 @@ packages:
     resolution: {integrity: sha512-7vuh85V5cdDofPyxn58nrPjBktZo0u9x1g8WtjQol+jZDaE+fhN+cIvTj11GndBnMnyfrUOG1sZQxCdjKh+DKg==}
     engines: {node: '>= 10.13.0'}
     dependencies:
-      '@types/node': 22.10.0
+      '@types/node': 22.10.1
       merge-stream: 2.0.0
       supports-color: 8.1.1
     dev: true
