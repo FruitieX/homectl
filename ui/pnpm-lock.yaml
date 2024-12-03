@@ -55,7 +55,7 @@ dependencies:
     version: 2.19.3(react@18.3.1)
   react-daisyui:
     specifier: 5.0.5
-    version: 5.0.5(daisyui@4.12.14)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.15)
+    version: 5.0.5(daisyui@4.12.14)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.16)
   react-dom:
     specifier: 18.3.1
     version: 18.3.1(react@18.3.1)
@@ -125,8 +125,8 @@ devDependencies:
     specifier: 4.0.2
     version: 4.0.2(webpack@5.93.0)
   tailwindcss:
-    specifier: 3.4.15
-    version: 3.4.15
+    specifier: 3.4.16
+    version: 3.4.16
   typescript:
     specifier: 5.7.2
     version: 5.7.2
@@ -2939,12 +2939,8 @@ packages:
       type-check: 0.4.0
     dev: true
 
-  /lilconfig@2.1.0:
-    resolution: {integrity: sha512-utWOt/GHzuUxnLKxB6dk81RoOeoNeHgbrXiuGk4yyF5qlRz+iIVWu56E2fqGHFrXz0QNUhLB/8nKqvRH66JKGQ==}
-    engines: {node: '>=10'}
-
-  /lilconfig@3.1.2:
-    resolution: {integrity: sha512-eop+wDAvpItUys0FWkHIKeC9ybYrTGbU41U5K7+bttZZeohvnY7M9dZ5kB21GNWiFT2q1OoPTvncPCgSOVO5ow==}
+  /lilconfig@3.1.3:
+    resolution: {integrity: sha512-/vlFKAoH5Cgt3Ie+JLhRbwOsCQePABiU3tJ1egGvyQ+33R/vcwM2Zl2QR/LzjsBeItPt3oSVXapn+m4nQDvpzw==}
     engines: {node: '>=14'}
 
   /lines-and-columns@1.2.4:
@@ -3446,7 +3442,7 @@ packages:
       ts-node:
         optional: true
     dependencies:
-      lilconfig: 3.1.2
+      lilconfig: 3.1.3
       postcss: 8.4.49
       yaml: 2.4.5
 
@@ -3602,7 +3598,7 @@ packages:
       tinycolor2: 1.6.0
     dev: false
 
-  /react-daisyui@5.0.5(daisyui@4.12.14)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.15):
+  /react-daisyui@5.0.5(daisyui@4.12.14)(react-dom@18.3.1)(react@18.3.1)(tailwindcss@3.4.16):
     resolution: {integrity: sha512-bh2XjayCeCmV855GqdhvCwIGDsrHxDfbczuVSMze4B71Ou6VwIesMTaHu8LQ6qYFi7tN59mBF073b0EUh2khFA==}
     peerDependencies:
       daisyui: ^4.12.10
@@ -3613,7 +3609,7 @@ packages:
       daisyui: 4.12.14(postcss@8.4.49)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
-      tailwindcss: 3.4.15
+      tailwindcss: 3.4.16
     dev: false
 
   /react-dom@18.3.1(react@18.3.1):
@@ -4129,8 +4125,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  /tailwindcss@3.4.15:
-    resolution: {integrity: sha512-r4MeXnfBmSOuKUWmXe6h2CcyfzJCEk4F0pptO5jlnYSIViUkVmsawj80N5h2lO3gwcmSb4n3PuN+e+GC1Guylw==}
+  /tailwindcss@3.4.16:
+    resolution: {integrity: sha512-TI4Cyx7gDiZ6r44ewaJmt0o6BrMCT5aK5e0rmJ/G9Xq3w7CX/5VXl/zIPEJZFUK5VEqwByyhqNPycPlvcK4ZNw==}
     engines: {node: '>=14.0.0'}
     hasBin: true
     dependencies:
@@ -4143,7 +4139,7 @@ packages:
       glob-parent: 6.0.2
       is-glob: 4.0.3
       jiti: 1.21.6
-      lilconfig: 2.1.0
+      lilconfig: 3.1.3
       micromatch: 4.0.8
       normalize-path: 3.0.0
       object-hash: 3.0.0
