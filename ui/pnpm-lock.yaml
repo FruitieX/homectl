@@ -34,7 +34,7 @@ dependencies:
     version: 10.1.1
   jotai:
     specifier: 2.10.3
-    version: 2.10.3(@types/react@18.3.13)(react@18.3.1)
+    version: 2.10.3(@types/react@18.3.14)(react@18.3.1)
   konva:
     specifier: 9.3.16
     version: 9.3.16
@@ -83,14 +83,14 @@ devDependencies:
     specifier: 22.10.1
     version: 22.10.1
   '@types/react':
-    specifier: 18.3.13
-    version: 18.3.13
+    specifier: 18.3.14
+    version: 18.3.14
   '@types/react-color':
     specifier: 3.0.12
     version: 3.0.12
   '@types/react-dom':
-    specifier: 18.3.1
-    version: 18.3.1
+    specifier: 18.3.2
+    version: 18.3.2
   '@typescript-eslint/eslint-plugin':
     specifier: 8.17.0
     version: 8.17.0(@typescript-eslint/parser@8.17.0)(eslint@9.16.0)(typescript@5.7.2)
@@ -110,8 +110,8 @@ devDependencies:
     specifier: 7.37.2
     version: 7.37.2(eslint@9.16.0)
   eslint-plugin-react-hooks:
-    specifier: 5.0.0
-    version: 5.0.0(eslint@9.16.0)
+    specifier: 5.1.0
+    version: 5.1.0(eslint@9.16.0)
   postcss:
     specifier: 8.4.49
     version: 8.4.49
@@ -711,24 +711,24 @@ packages:
   /@types/react-color@3.0.12:
     resolution: {integrity: sha512-pr3uKE3lSvf7GFo1Rn2K3QktiZQFFrSgSGJ/3iMvSOYWt2pPAJ97rVdVfhWxYJZ8prAEXzoP2XX//3qGSQgu7Q==}
     dependencies:
-      '@types/react': 18.3.13
+      '@types/react': 18.3.14
       '@types/reactcss': 1.2.12
     dev: true
 
-  /@types/react-dom@18.3.1:
-    resolution: {integrity: sha512-qW1Mfv8taImTthu4KoXgDfLuk4bydU6Q/TkADnDWWHwi4NX4BR+LWfTp2sVmTqRrsHvyDDTelgelxJ+SsejKKQ==}
+  /@types/react-dom@18.3.2:
+    resolution: {integrity: sha512-Fqp+rcvem9wEnGr3RY8dYNvSQ8PoLqjZ9HLgaPUOjJJD120uDyOxOjc/39M4Kddp9JQCxpGQbnhVQF0C0ncYVg==}
     dependencies:
-      '@types/react': 18.3.13
+      '@types/react': 18.3.14
     dev: true
 
   /@types/react-reconciler@0.28.8:
     resolution: {integrity: sha512-SN9c4kxXZonFhbX4hJrZy37yw9e7EIxcpHCxQv5JUS18wDE5ovkQKlqQEkufdJCCMfuI9BnjUJvhYeJ9x5Ra7g==}
     dependencies:
-      '@types/react': 18.3.13
+      '@types/react': 18.3.14
     dev: false
 
-  /@types/react@18.3.13:
-    resolution: {integrity: sha512-ii/gswMmOievxAJed4PAHT949bpYjPKXvXo1v6cRB/kqc2ZR4n+SgyCyvyc5Fec5ez8VnUumI1Vk7j6fRyRogg==}
+  /@types/react@18.3.14:
+    resolution: {integrity: sha512-NzahNKvjNhVjuPBQ+2G7WlxstQ+47kXZNHlUvFakDViuIEfGY926GqhMueQFZ7woG+sPiQKlF36XfrIUVSUfFg==}
     dependencies:
       '@types/prop-types': 15.7.12
       csstype: 3.1.3
@@ -736,7 +736,7 @@ packages:
   /@types/reactcss@1.2.12:
     resolution: {integrity: sha512-BrXUQ86/wbbFiZv8h/Q1/Q1XOsaHneYmCb/tHe9+M8XBAAUc2EHfdY0DY22ZZjVSaXr5ix7j+zsqO2eGZub8lQ==}
     dependencies:
-      '@types/react': 18.3.13
+      '@types/react': 18.3.14
     dev: true
 
   /@typescript-eslint/eslint-plugin@8.17.0(@typescript-eslint/parser@8.17.0)(eslint@9.16.0)(typescript@5.7.2):
@@ -2083,8 +2083,8 @@ packages:
       eslint: 9.16.0
     dev: true
 
-  /eslint-plugin-react-hooks@5.0.0(eslint@9.16.0):
-    resolution: {integrity: sha512-hIOwI+5hYGpJEc4uPRmz2ulCjAGD/N13Lukkh8cLV0i2IRk/bdZDYjgLVHj+U9Z704kLIdIO6iueGvxNur0sgw==}
+  /eslint-plugin-react-hooks@5.1.0(eslint@9.16.0):
+    resolution: {integrity: sha512-mpJRtPgHN2tNAvZ35AMfqeB3Xqeo273QxrHJsbBEPWODRM4r0yB6jfoROqKEYrOn27UtRPpcpHc2UqyBSuUNTw==}
     engines: {node: '>=10'}
     peerDependencies:
       eslint: ^3.0.0 || ^4.0.0 || ^5.0.0 || ^6.0.0 || ^7.0.0 || ^8.0.0-0 || ^9.0.0
@@ -2845,7 +2845,7 @@ packages:
     resolution: {integrity: sha512-2yTgeWTWzMWkHu6Jp9NKgePDaYHbntiwvYuuJLbbN9vl7DC9DvXKOB2BC3ZZ92D3cvV/aflH0osDfwpHepQ53w==}
     hasBin: true
 
-  /jotai@2.10.3(@types/react@18.3.13)(react@18.3.1):
+  /jotai@2.10.3(@types/react@18.3.14)(react@18.3.1):
     resolution: {integrity: sha512-Nnf4IwrLhNfuz2JOQLI0V/AgwcpxvVy8Ec8PidIIDeRi4KCFpwTFIpHAAcU+yCgnw/oASYElq9UY0YdUUegsSA==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
@@ -2857,7 +2857,7 @@ packages:
       react:
         optional: true
     dependencies:
-      '@types/react': 18.3.13
+      '@types/react': 18.3.14
       react: 18.3.1
     dev: false
 
