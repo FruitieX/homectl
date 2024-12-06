@@ -60,8 +60,8 @@ dependencies:
     specifier: 18.3.1
     version: 18.3.1(react@18.3.1)
   react-konva:
-    specifier: 19.0.0
-    version: 19.0.0(konva@9.3.16)(react-dom@18.3.1)(react@18.3.1)
+    specifier: 19.0.1
+    version: 19.0.1(konva@9.3.16)(react-dom@18.3.1)(react@18.3.1)
   react-konva-utils:
     specifier: 1.0.6
     version: 1.0.6(konva@9.3.16)(react-dom@18.3.1)(react@18.3.1)
@@ -3655,12 +3655,12 @@ packages:
       scheduler: 0.23.2
     dev: false
 
-  /react-konva@19.0.0(konva@9.3.16)(react-dom@18.3.1)(react@18.3.1):
-    resolution: {integrity: sha512-jJNlcdSubm30iTVZ0ot4yFhe45G8V4Kb7Ov2ioxoLR7ZlIB/QIpGYU9jJThgEYdvATYrOXGri55qNXnPNQWJ4A==}
+  /react-konva@19.0.1(konva@9.3.16)(react-dom@18.3.1)(react@18.3.1):
+    resolution: {integrity: sha512-vQ2gORgt0C2OTVt2PDWsZhQuYY1C8qZ1Tj+mDhm6GJ7iD2y4066X/YieSMvd/CxakqrO1OwjOW8Y69B6FXPpYg==}
     peerDependencies:
       konva: ^8.0.1 || ^7.2.5 || ^9.0.0
-      react: ^18.3.0 || ^19.0.0
-      react-dom: ^18.3.0 || ^19.0.0
+      react: ^19.0.0
+      react-dom: ^19.0.0
     dependencies:
       '@types/react-reconciler': 0.28.8
       its-fine: 1.2.5(react@18.3.1)
