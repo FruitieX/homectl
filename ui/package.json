@@ -27,11 +27,11 @@
     "konva": "9.3.16",
     "lodash": "4.17.21",
     "lucide-react": "0.468.0",
-    "next": "14.2.20",
-    "react": "18.3.1",
+    "next": "15.0.4",
+    "react": "19.0.0",
     "react-color": "2.19.3",
     "react-daisyui": "5.0.5",
-    "react-dom": "18.3.1",
+    "react-dom": "19.0.0",
     "react-konva": "19.0.1",
     "react-konva-utils": "1.0.7",
     "use-image": "1.1.1",
@@ -41,14 +41,14 @@
     "@types/color": "4.2.0",
     "@types/lodash": "4.17.13",
     "@types/node": "22.10.1",
-    "@types/react": "18.3.14",
+    "@types/react": "19.0.1",
     "@types/react-color": "3.0.12",
-    "@types/react-dom": "18.3.2",
+    "@types/react-dom": "19.0.1",
     "@typescript-eslint/eslint-plugin": "8.17.0",
     "@typescript-eslint/parser": "8.17.0",
     "autoprefixer": "10.4.20",
     "eslint": "9.16.0",
-    "eslint-config-next": "latest",
+    "eslint-config-next": "15.0.4",
     "eslint-plugin-react": "7.37.2",
     "eslint-plugin-react-hooks": "5.1.0",
     "postcss": "8.4.49",
@@ -58,5 +58,11 @@
     "tailwindcss": "3.4.16",
     "typescript": "5.7.2"
   },
-  "version": "0.11.0"
+  "version": "0.11.0",
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.0.1",
+      "@types/react-dom": "19.0.1"
+    }
+  }
 }
