@@ -26,6 +26,7 @@ export const Viewport = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const { width, height } = useResizeObserver({
+    // @ts-expect-error: I'm literally doing what the docs say
     ref: containerRef,
   });
 
