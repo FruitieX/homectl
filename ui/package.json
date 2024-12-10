@@ -43,7 +43,7 @@
     "@types/node": "22.10.1",
     "@types/react": "19.0.1",
     "@types/react-color": "3.0.12",
-    "@types/react-dom": "19.0.1",
+    "@types/react-dom": "19.0.2",
     "@typescript-eslint/eslint-plugin": "8.18.0",
     "@typescript-eslint/parser": "8.18.0",
     "autoprefixer": "10.4.20",
@@ -62,7 +62,7 @@
   "pnpm": {
     "overrides": {
       "@types/react": "19.0.1",
-      "@types/react-dom": "19.0.1"
+      "@types/react-dom": "19.0.2"
     }
   }
 }

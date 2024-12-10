@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@types/react': 19.0.1
-  '@types/react-dom': 19.0.1
+  '@types/react-dom': 19.0.2
 
 dependencies:
   '@react-hook/throttle':
@@ -93,8 +93,8 @@ devDependencies:
     specifier: 3.0.12
     version: 3.0.12
   '@types/react-dom':
-    specifier: 19.0.1
-    version: 19.0.1
+    specifier: 19.0.2
+    version: 19.0.2(@types/react@19.0.1)
   '@typescript-eslint/eslint-plugin':
     specifier: 8.18.0
     version: 8.18.0(@typescript-eslint/parser@8.18.0)(eslint@9.16.0)(typescript@5.7.2)
@@ -710,8 +710,10 @@ packages:
       '@types/reactcss': 1.2.12
     dev: true
 
-  /@types/react-dom@19.0.1:
-    resolution: {integrity: sha512-hljHij7MpWPKF6u5vojuyfV0YA4YURsQG7KT6SzV0Zs2BXAtgdTxG6A229Ub/xiWV4w/7JL8fi6aAyjshH4meA==}
+  /@types/react-dom@19.0.2(@types/react@19.0.1):
+    resolution: {integrity: sha512-c1s+7TKFaDRRxr1TxccIX2u7sfCnc3RxkVyBIUA2lCpyqCF+QoAwQ/CBg7bsMdVwP120HEH143VQezKtef5nCg==}
+    peerDependencies:
+      '@types/react': 19.0.1
     dependencies:
       '@types/react': 19.0.1
     dev: true
