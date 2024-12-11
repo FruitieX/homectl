@@ -42,7 +42,7 @@
     "@types/lodash": "4.17.13",
     "@types/node": "22.10.2",
     "@types/react": "19.0.1",
-    "@types/react-color": "3.0.12",
+    "@types/react-color": "3.0.13",
     "@types/react-dom": "19.0.2",
     "@typescript-eslint/eslint-plugin": "8.18.0",
     "@typescript-eslint/parser": "8.18.0",

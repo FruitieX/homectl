@@ -90,8 +90,8 @@ devDependencies:
     specifier: 19.0.1
     version: 19.0.1
   '@types/react-color':
-    specifier: 3.0.12
-    version: 3.0.12
+    specifier: 3.0.13
+    version: 3.0.13(@types/react@19.0.1)
   '@types/react-dom':
     specifier: 19.0.2
     version: 19.0.2(@types/react@19.0.1)
@@ -703,8 +703,10 @@ packages:
       undici-types: 6.20.0
     dev: true
 
-  /@types/react-color@3.0.12:
-    resolution: {integrity: sha512-pr3uKE3lSvf7GFo1Rn2K3QktiZQFFrSgSGJ/3iMvSOYWt2pPAJ97rVdVfhWxYJZ8prAEXzoP2XX//3qGSQgu7Q==}
+  /@types/react-color@3.0.13(@types/react@19.0.1):
+    resolution: {integrity: sha512-2c/9FZ4ixC5T3JzN0LP5Cke2Mf0MKOP2Eh0NPDPWmuVH3NjPyhEjqNMQpN1Phr5m74egAy+p2lYNAFrX1z9Yrg==}
+    peerDependencies:
+      '@types/react': 19.0.1
     dependencies:
       '@types/react': 19.0.1
       '@types/reactcss': 1.2.12
