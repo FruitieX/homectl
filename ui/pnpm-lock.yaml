@@ -13,8 +13,8 @@ dependencies:
     specifier: 2.2.0
     version: 2.2.0(react@19.0.0)
   '@uiw/react-color-circle':
-    specifier: 2.3.3
-    version: 2.3.3(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0)
+    specifier: 2.3.4
+    version: 2.3.4(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0)
   '@uiw/react-color-wheel':
     specifier: 2.3.3
     version: 2.3.3(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0)
@@ -152,7 +152,7 @@ packages:
     resolution: {integrity: sha512-XMBySMuNZs3DM96xcJmLW4EfGnf+uGmFNjzpehMjuX5PLB5j87ar2Zc4e3PVeZ3I5g3tYtAqskB28manlF69Zw==}
     requiresBuild: true
     dependencies:
-      tslib: 2.6.3
+      tslib: 2.8.1
     dev: false
     optional: true
 
@@ -859,29 +859,37 @@ packages:
       '@babel/runtime': 7.24.8
     dev: false
 
-  /@uiw/react-color-circle@2.3.3(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0):
-    resolution: {integrity: sha512-nDXKPViP6xj5X5AYc8rzygaD0t2ettBevyuLy0EXB/CIguxjsPQBbZ2/hpXyO7UXiISdwj1Ilqsuug4UYzD2Aw==}
+  /@uiw/color-convert@2.3.4(@babel/runtime@7.24.8):
+    resolution: {integrity: sha512-av3PvCeP8o4H2a81n+vJwEEv8qGnQNonfCTiH9kO/CMQR1BvhGYijduM7RJzgHaAaVpE01opjNICQRyEx5qKVg==}
+    peerDependencies:
+      '@babel/runtime': '>=7.19.0'
+    dependencies:
+      '@babel/runtime': 7.24.8
+    dev: false
+
+  /@uiw/react-color-circle@2.3.4(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0):
+    resolution: {integrity: sha512-3uhDZB/TYqE0+f2sKGVuJl3d8ogBGrjHeGDz6dZu0F25CLVNqO7g3xzwYYqI1ea/8d2cRd2s6GtM2LmvVJtIpQ==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
     dependencies:
       '@babel/runtime': 7.24.8
-      '@uiw/color-convert': 2.3.3(@babel/runtime@7.24.8)
-      '@uiw/react-color-swatch': 2.3.3(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0)
+      '@uiw/color-convert': 2.3.4(@babel/runtime@7.24.8)
+      '@uiw/react-color-swatch': 2.3.4(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0)
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
     dev: false
 
-  /@uiw/react-color-swatch@2.3.3(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0):
-    resolution: {integrity: sha512-UHgiS7OxeBWiw8h1q/lMy0AMnxyBFIbo89vTEePyQomirt71gVmCIDgmIoCvZfaH+btDV72IVrMg8vf28z3cWQ==}
+  /@uiw/react-color-swatch@2.3.4(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0):
+    resolution: {integrity: sha512-tl0wsu58MUeWUaKwi7zBKSkgLqugUWEYMOHDtooUvd96/dox0aPrB8KjH7J/2SaxAZzqUNMEEumGwuD3cmI2iw==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
     dependencies:
       '@babel/runtime': 7.24.8
-      '@uiw/color-convert': 2.3.3(@babel/runtime@7.24.8)
+      '@uiw/color-convert': 2.3.4(@babel/runtime@7.24.8)
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
     dev: false
@@ -3994,12 +4002,6 @@ packages:
       minimist: 1.2.8
       strip-bom: 3.0.0
     dev: true
-
-  /tslib@2.6.3:
-    resolution: {integrity: sha512-xNvxJEOUiWPGhUuUdQgAJPKOOJfGnIyKySOc09XkKsgdUV/3E2zvwZYdejjmRgPCgcym1juLH3226yA7sEFJKQ==}
-    requiresBuild: true
-    dev: false
-    optional: true
 
   /tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
