@@ -59,7 +59,7 @@ dependencies:
     version: 2.19.3(react@19.0.0)
   react-daisyui:
     specifier: 5.0.5
-    version: 5.0.5(daisyui@4.12.22)(react-dom@19.0.0)(react@19.0.0)(tailwindcss@3.4.16)
+    version: 5.0.5(daisyui@4.12.22)(react-dom@19.0.0)(react@19.0.0)(tailwindcss@3.4.17)
   react-dom:
     specifier: 19.0.0
     version: 19.0.0(react@19.0.0)
@@ -129,8 +129,8 @@ devDependencies:
     specifier: 4.0.2
     version: 4.0.2(webpack@5.93.0)
   tailwindcss:
-    specifier: 3.4.16
-    version: 3.4.16
+    specifier: 3.4.17
+    version: 3.4.17
   typescript:
     specifier: 5.7.2
     version: 5.7.2
@@ -1439,14 +1439,6 @@ packages:
     resolution: {integrity: sha512-ty/fTekppD2fIwRvnZAVdeOiGd1c7YXEixbgJTNzqcxJWKQnjJ/V1bNEEE6hygpM3WjwHFUVK6HTjWSzV4a8sQ==}
     dev: false
 
-  /cross-spawn@7.0.5:
-    resolution: {integrity: sha512-ZVJrKKYunU38/76t0RMOulHOnUcbU9GbpWKAOZ0mhjr7CX6FVrH+4FrAapSOekrgFQ3f/8gwMEuIft0aKq6Hug==}
-    engines: {node: '>= 8'}
-    dependencies:
-      path-key: 3.1.1
-      shebang-command: 2.0.0
-      which: 2.0.2
-
   /cross-spawn@7.0.6:
     resolution: {integrity: sha512-uV2QOWP2nWzsy2aMp8aRibhi9dlzF5Hgh5SHaB9OiTGEyDTiJJyx0uy51QXdyWbtAHNua4XJzUKca3OzKUd3vA==}
     engines: {node: '>= 8'}
@@ -1454,7 +1446,6 @@ packages:
       path-key: 3.1.1
       shebang-command: 2.0.0
       which: 2.0.2
-    dev: true
 
   /css-selector-tokenizer@0.8.0:
     resolution: {integrity: sha512-Jd6Ig3/pe62/qe5SBPTN8h8LeUg/pT4lLgtavPf7updwwHpvFzxvOQBHYj2LZDMjUnBzgvIUSjRcf6oT5HzHFg==}
@@ -2150,7 +2141,7 @@ packages:
     resolution: {integrity: sha512-PXUUyLqrR2XCWICfv6ukppP96sdFwWbNEnfEMt7jNsISjMsvaLNinAHNDYyvkyU+SZG2BTSbT5NjG+vZslfGTA==}
     engines: {node: '>=14'}
     dependencies:
-      cross-spawn: 7.0.5
+      cross-spawn: 7.0.6
       signal-exit: 4.1.0
 
   /fraction.js@4.3.7:
@@ -3358,7 +3349,7 @@ packages:
       tinycolor2: 1.6.0
     dev: false
 
-  /react-daisyui@5.0.5(daisyui@4.12.22)(react-dom@19.0.0)(react@19.0.0)(tailwindcss@3.4.16):
+  /react-daisyui@5.0.5(daisyui@4.12.22)(react-dom@19.0.0)(react@19.0.0)(tailwindcss@3.4.17):
     resolution: {integrity: sha512-bh2XjayCeCmV855GqdhvCwIGDsrHxDfbczuVSMze4B71Ou6VwIesMTaHu8LQ6qYFi7tN59mBF073b0EUh2khFA==}
     peerDependencies:
       daisyui: ^4.12.10
@@ -3369,7 +3360,7 @@ packages:
       daisyui: 4.12.22(postcss@8.4.49)
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      tailwindcss: 3.4.16
+      tailwindcss: 3.4.17
     dev: false
 
   /react-dom@19.0.0(react@19.0.0):
@@ -3870,8 +3861,8 @@ packages:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
 
-  /tailwindcss@3.4.16:
-    resolution: {integrity: sha512-TI4Cyx7gDiZ6r44ewaJmt0o6BrMCT5aK5e0rmJ/G9Xq3w7CX/5VXl/zIPEJZFUK5VEqwByyhqNPycPlvcK4ZNw==}
+  /tailwindcss@3.4.17:
+    resolution: {integrity: sha512-w33E2aCvSDP0tW9RZuNXadXlkHXqFzSkQew/aIa2i/Sj8fThxwovwlXHSPXTbAHwEIhBFXAedUhP2tueAKP8Og==}
     engines: {node: '>=14.0.0'}
     hasBin: true
     dependencies:
