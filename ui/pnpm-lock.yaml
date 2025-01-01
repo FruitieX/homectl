@@ -19,8 +19,8 @@ dependencies:
     specifier: 2.3.4
     version: 2.3.4(@babel/runtime@7.24.8)(react-dom@19.0.0)(react@19.0.0)
   canvas:
-    specifier: 3.0.0
-    version: 3.0.0
+    specifier: 3.0.1
+    version: 3.0.1
   clsx:
     specifier: 2.1.1
     version: 2.1.1
@@ -1322,8 +1322,8 @@ packages:
   /caniuse-lite@1.0.30001646:
     resolution: {integrity: sha512-dRg00gudiBDDTmUhClSdv3hqRfpbOnU28IpI1T6PBTLWa+kOj0681C8uML3PifYfREuBrVjDGhL3adYpBT6spw==}
 
-  /canvas@3.0.0:
-    resolution: {integrity: sha512-NtcIBY88FjymQy+g2g5qnuP5IslrbWCQ3A6rSr1PeuYxVRapRZ3BZCrDyAakvI6CuDYidgZaf55ygulFVwROdg==}
+  /canvas@3.0.1:
+    resolution: {integrity: sha512-PcpVF4f8RubAeN/jCQQ/UymDKzOiLmRPph8fOTzDnlsUihkO/AUlxuhaa7wGRc3vMcCbV1fzuvyu5cWZlIcn1w==}
     engines: {node: ^18.12.0 || >= 20.9.0}
     requiresBuild: true
     dependencies:
