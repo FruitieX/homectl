@@ -39,7 +39,7 @@
   },
   "devDependencies": {
     "@types/color": "4.2.0",
-    "@types/lodash": "4.17.13",
+    "@types/lodash": "4.17.14",
     "@types/node": "22.10.5",
     "@types/react": "19.0.2",
     "@types/react-color": "3.0.13",
