@@ -64,11 +64,11 @@ dependencies:
     specifier: 19.0.0
     version: 19.0.0(react@19.0.0)
   react-konva:
-    specifier: 19.0.1
-    version: 19.0.1(konva@9.3.18)(react-dom@19.0.0)(react@19.0.0)
+    specifier: 19.0.2
+    version: 19.0.2(konva@9.3.18)(react-dom@19.0.0)(react@19.0.0)
   react-konva-utils:
     specifier: 1.0.7
-    version: 1.0.7(konva@9.3.18)(react-dom@19.0.0)(react-konva@19.0.1)(react@19.0.0)
+    version: 1.0.7(konva@9.3.18)(react-dom@19.0.0)(react-konva@19.0.2)(react@19.0.0)
   use-image:
     specifier: 1.1.1
     version: 1.1.1(react-dom@19.0.0)(react@19.0.0)
@@ -3348,7 +3348,7 @@ packages:
   /react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
 
-  /react-konva-utils@1.0.7(konva@9.3.18)(react-dom@19.0.0)(react-konva@19.0.1)(react@19.0.0):
+  /react-konva-utils@1.0.7(konva@9.3.18)(react-dom@19.0.0)(react-konva@19.0.2)(react@19.0.0):
     resolution: {integrity: sha512-+z/707f6wii9q/Zt4SSUSQ09LmzWiz//HvitCrP8nNudq1pedC1nKX7CxDUg/gRnJ952ILWYewID6pASiewM3A==}
     peerDependencies:
       konva: ^8.3.5 || ^9.0.0
@@ -3359,16 +3359,16 @@ packages:
       konva: 9.3.18
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      react-konva: 19.0.1(konva@9.3.18)(react-dom@19.0.0)(react@19.0.0)
+      react-konva: 19.0.2(konva@9.3.18)(react-dom@19.0.0)(react@19.0.0)
       use-image: 1.1.1(react-dom@19.0.0)(react@19.0.0)
     dev: false
 
-  /react-konva@19.0.1(konva@9.3.18)(react-dom@19.0.0)(react@19.0.0):
-    resolution: {integrity: sha512-vQ2gORgt0C2OTVt2PDWsZhQuYY1C8qZ1Tj+mDhm6GJ7iD2y4066X/YieSMvd/CxakqrO1OwjOW8Y69B6FXPpYg==}
+  /react-konva@19.0.2(konva@9.3.18)(react-dom@19.0.0)(react@19.0.0):
+    resolution: {integrity: sha512-JNCfMO2V7Wm4fh+YwvMkuo3G7/2yq0/JhLbqG2yyuw+vHOn1qj9jm0+Jxq7R83x0M6mi45uK0GKn4lDWMhHReQ==}
     peerDependencies:
       konva: ^8.0.1 || ^7.2.5 || ^9.0.0
-      react: ^19.0.0
-      react-dom: ^19.0.0
+      react: ^18.3.1 || ^19.0.0
+      react-dom: ^18.3.1 || ^19.0.0
     dependencies:
       '@types/react-reconciler': 0.28.8
       its-fine: 1.2.5(react@19.0.0)
