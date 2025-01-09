@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@types/react': 19.0.3
+  '@types/react': 19.0.4
   '@types/react-dom': 19.0.2
 
 dependencies:
@@ -38,7 +38,7 @@ dependencies:
     version: 10.1.1
   jotai:
     specifier: 2.11.0
-    version: 2.11.0(@types/react@19.0.3)(react@19.0.0)
+    version: 2.11.0(@types/react@19.0.4)(react@19.0.0)
   konva:
     specifier: 9.3.18
     version: 9.3.18
@@ -87,14 +87,14 @@ devDependencies:
     specifier: 22.10.5
     version: 22.10.5
   '@types/react':
-    specifier: 19.0.3
-    version: 19.0.3
+    specifier: 19.0.4
+    version: 19.0.4
   '@types/react-color':
     specifier: 3.0.13
-    version: 3.0.13(@types/react@19.0.3)
+    version: 3.0.13(@types/react@19.0.4)
   '@types/react-dom':
     specifier: 19.0.2
-    version: 19.0.2(@types/react@19.0.3)
+    version: 19.0.2(@types/react@19.0.4)
   '@typescript-eslint/eslint-plugin':
     specifier: 8.19.1
     version: 8.19.1(@typescript-eslint/parser@8.19.1)(eslint@9.17.0)(typescript@5.7.2)
@@ -685,38 +685,38 @@ packages:
       undici-types: 6.20.0
     dev: true
 
-  /@types/react-color@3.0.13(@types/react@19.0.3):
+  /@types/react-color@3.0.13(@types/react@19.0.4):
     resolution: {integrity: sha512-2c/9FZ4ixC5T3JzN0LP5Cke2Mf0MKOP2Eh0NPDPWmuVH3NjPyhEjqNMQpN1Phr5m74egAy+p2lYNAFrX1z9Yrg==}
     peerDependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
     dependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
       '@types/reactcss': 1.2.12
     dev: true
 
-  /@types/react-dom@19.0.2(@types/react@19.0.3):
+  /@types/react-dom@19.0.2(@types/react@19.0.4):
     resolution: {integrity: sha512-c1s+7TKFaDRRxr1TxccIX2u7sfCnc3RxkVyBIUA2lCpyqCF+QoAwQ/CBg7bsMdVwP120HEH143VQezKtef5nCg==}
     peerDependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
     dependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
     dev: true
 
   /@types/react-reconciler@0.28.8:
     resolution: {integrity: sha512-SN9c4kxXZonFhbX4hJrZy37yw9e7EIxcpHCxQv5JUS18wDE5ovkQKlqQEkufdJCCMfuI9BnjUJvhYeJ9x5Ra7g==}
     dependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
     dev: false
 
-  /@types/react@19.0.3:
-    resolution: {integrity: sha512-UavfHguIjnnuq9O67uXfgy/h3SRJbidAYvNjLceB+2RIKVRBzVsh0QO+Pw6BCSQqFS9xwzKfwstXx0m6AbAREA==}
+  /@types/react@19.0.4:
+    resolution: {integrity: sha512-3O4QisJDYr1uTUMZHA2YswiQZRq+Pd8D+GdVFYikTutYsTz+QZgWkAPnP7rx9txoI6EXKcPiluMqWPFV3tT9Wg==}
     dependencies:
       csstype: 3.1.3
 
   /@types/reactcss@1.2.12:
     resolution: {integrity: sha512-BrXUQ86/wbbFiZv8h/Q1/Q1XOsaHneYmCb/tHe9+M8XBAAUc2EHfdY0DY22ZZjVSaXr5ix7j+zsqO2eGZub8lQ==}
     dependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
     dev: true
 
   /@typescript-eslint/eslint-plugin@8.19.1(@typescript-eslint/parser@8.19.1)(eslint@9.17.0)(typescript@5.7.2):
@@ -2593,11 +2593,11 @@ packages:
     resolution: {integrity: sha512-2yTgeWTWzMWkHu6Jp9NKgePDaYHbntiwvYuuJLbbN9vl7DC9DvXKOB2BC3ZZ92D3cvV/aflH0osDfwpHepQ53w==}
     hasBin: true
 
-  /jotai@2.11.0(@types/react@19.0.3)(react@19.0.0):
+  /jotai@2.11.0(@types/react@19.0.4)(react@19.0.0):
     resolution: {integrity: sha512-zKfoBBD1uDw3rljwHkt0fWuja1B76R7CjznuBO+mSX6jpsO1EBeWNRKpeaQho9yPI/pvCv4recGfgOXGxwPZvQ==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
       react: '>=17.0.0'
     peerDependenciesMeta:
       '@types/react':
@@ -2605,7 +2605,7 @@ packages:
       react:
         optional: true
     dependencies:
-      '@types/react': 19.0.3
+      '@types/react': 19.0.4
       react: 19.0.0
     dev: false
 
