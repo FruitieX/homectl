@@ -12,10 +12,14 @@
   body {
     /* Disables pull-to-refresh and overscroll effects. */
     overscroll-behavior: none;
+    user-select: none;
   }
-  html, body {
+  html,
+  body {
     height: 100%;
   }
 }
 
-:root { --rounded-badge: 1.9rem; }
+:root {
+  --rounded-badge: 1.9rem;
+}
