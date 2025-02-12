@@ -70,14 +70,38 @@ pub fn mqtt_to_homectl(
     let power = power_field
         .resolve(&value)
         .ok()
-        .and_then(serde_json::Value::as_bool)
+        .and_then(|value| {
+            if config
+                .power_on_value
+                .as_ref()
+                .unwrap_or_else(|| &serde_json::Value::Bool(true))
+                == value
+            {
+                Some(true)
+            } else if config
+                .power_off_value
+                .as_ref()
+                .unwrap_or_else(|| &serde_json::Value::Bool(false))
+                == value
+            {
+                Some(false)
+            } else {
+                None
+            }
+        })
         .unwrap_or_default();
 
-    let brightness = brightness_field
-        .resolve(&value)
-        .ok()
-        .and_then(serde_json::Value::as_f64)
-        .map(|value| value as f32);
+    let brightness = {
+        let range = config.brightness_range.clone().unwrap_or((0.0, 1.0));
+
+        brightness_field
+            .resolve(&value)
+            .ok()
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32)
+            // scale value from [range.0, range.1] to [0, 1]
+            .map(|value| (value - range.0) / (range.1 - range.0))
+    };
 
     let transition_ms = transition_ms_field
         .resolve(&value)
@@ -182,12 +206,26 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
     payload.assign(&name_field, serde_json::Value::String(device.name))?;
 
     if let DeviceData::Controllable(device) = device.data {
-        payload.assign(&power_field, serde_json::Value::Bool(device.state.power))?;
+        let power_value = if device.state.power == true {
+            config
+                .power_on_value
+                .clone()
+                .unwrap_or_else(|| serde_json::Value::Bool(true))
+        } else {
+            config
+                .power_off_value
+                .clone()
+                .unwrap_or_else(|| serde_json::Value::Bool(false))
+        };
+        payload.assign(&power_field, power_value)?;
 
         if let Some(brightness) = device.state.brightness {
+            let range = config.brightness_range.clone().unwrap_or((0.0, 1.0));
+            // scale value from [0, 1] to [range.0, range.1]
+            let value = brightness * (range.1 - range.0) + range.0;
             payload.assign(
                 &brightness_field,
-                serde_json::Number::from_f64((*brightness).into())
+                serde_json::Number::from_f64((*value).into())
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
