@@ -7,6 +7,7 @@ use crate::types::{
 use color_eyre::Result;
 use eyre::eyre;
 use jsonptr::{Assign, Pointer};
+use ordered_float::OrderedFloat;
 
 pub fn mqtt_to_homectl(
     payload: &[u8],
@@ -39,10 +40,10 @@ pub fn mqtt_to_homectl(
         .sensor_value_field
         .as_deref()
         .unwrap_or(Pointer::from_static("/sensor_value"));
-    let transition_ms_field = config
-        .transition_ms_field
+    let transition_field = config
+        .transition_field
         .as_deref()
-        .unwrap_or(Pointer::from_static("/transition_ms"));
+        .unwrap_or(Pointer::from_static("/transition"));
     let capabilities_field = config
         .capabilities_field
         .as_deref()
@@ -103,10 +104,17 @@ pub fn mqtt_to_homectl(
             .map(|value| (value - range.0) / (range.1 - range.0))
     };
 
-    let transition_ms = transition_ms_field
-        .resolve(&value)
-        .ok()
-        .and_then(serde_json::Value::as_u64);
+    let transition = {
+        let range = config.transition_range.clone().unwrap_or((0.0, 1.0));
+
+        transition_field
+            .resolve(&value)
+            .ok()
+            .and_then(serde_json::Value::as_f64)
+            .map(|value| value as f32)
+            // scale value from [range.0, range.1] to [0, 1]
+            .map(|value| (value - range.0) / (range.1 - range.0))
+    };
 
     let device_state = if let Some(value) = sensor_value_field
         .resolve(&value)
@@ -142,6 +150,7 @@ pub fn mqtt_to_homectl(
             .resolve(&value)
             .ok()
             .and_then(|value| serde_json::from_value(value.clone()).ok())
+            .or_else(|| config.capabilities_override.clone())
             .unwrap_or_default();
 
         let controllable_device = ControllableDevice::new(
@@ -149,7 +158,7 @@ pub fn mqtt_to_homectl(
             power,
             brightness,
             color,
-            transition_ms,
+            transition,
             capabilities,
             config.managed.clone().unwrap_or_default(),
         );
@@ -197,30 +206,32 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
         .brightness_field
         .clone()
         .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["brightness"]));
-    let transition_ms_field = config
-        .transition_ms_field
+    let transition_field = config
+        .transition_field
         .clone()
-        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["transition_ms"]));
+        .unwrap_or_else(|| jsonptr::PointerBuf::from_tokens(["transition"]));
 
-    payload.assign(&id_field, serde_json::Value::String(device.id.to_string()))?;
-    payload.assign(&name_field, serde_json::Value::String(device.name))?;
+    if config.include_id_name_in_set_payload.unwrap_or_default() {
+        payload.assign(&id_field, serde_json::Value::String(device.id.to_string()))?;
+        payload.assign(&name_field, serde_json::Value::String(device.name))?;
+    }
 
     if let DeviceData::Controllable(device) = device.data {
-        let power_value = if device.state.power == true {
+        let power_value = if device.state.power {
             config
                 .power_on_value
                 .clone()
-                .unwrap_or_else(|| serde_json::Value::Bool(true))
+                .unwrap_or(serde_json::Value::Bool(true))
         } else {
             config
                 .power_off_value
                 .clone()
-                .unwrap_or_else(|| serde_json::Value::Bool(false))
+                .unwrap_or(serde_json::Value::Bool(false))
         };
         payload.assign(&power_field, power_value)?;
 
         if let Some(brightness) = device.state.brightness {
-            let range = config.brightness_range.clone().unwrap_or((0.0, 1.0));
+            let range = config.brightness_range.unwrap_or((0.0, 1.0));
             // scale value from [0, 1] to [range.0, range.1]
             let value = brightness * (range.1 - range.0) + range.0;
             payload.assign(
@@ -235,10 +246,17 @@ pub fn homectl_to_mqtt(device: Device, config: &MqttConfig) -> Result<serde_json
             payload.assign(&color_field, serde_json::to_value(color)?)?;
         }
 
-        if let Some(transition_ms) = device.state.transition_ms {
+        let transition = device
+            .state
+            .transition
+            .or(config.default_transition.map(OrderedFloat));
+        if let Some(transition) = transition {
+            let range = config.transition_range.unwrap_or((0.0, 1.0));
+            // scale value from [0, 1] to [range.0, range.1]
+            let value = transition * (range.1 - range.0) + range.0;
             payload.assign(
-                &transition_ms_field,
-                serde_json::Number::from_f64(transition_ms as f64)
+                &transition_field,
+                serde_json::Number::from_f64((*value).into())
                     .map(serde_json::Value::Number)
                     .unwrap(),
             )?;
@@ -275,7 +293,7 @@ mod tests {
                     h: 45,
                     s: OrderedFloat(1.0),
                 })),
-                Some(1000),
+                Some(0.6),
                 Capabilities::default(),
                 ManageKind::Full,
             )),
@@ -298,7 +316,7 @@ mod tests {
             "color": { "h": 45, "s": 1.0 },
             "power": true,
             "brightness": 0.5,
-            "transition_ms": serde_json::json!(1000.0),
+            "transition": serde_json::json!(0.6),
         });
 
         assert_eq!(mqtt_json, expected);
@@ -312,7 +330,7 @@ mod tests {
             "color": { "h": 45, "s": 1.0 },
             "power": true,
             "brightness": 0.5,
-            "transition_ms": 1000,
+            "transition": 0.6,
             "capabilities": { "ct": serde_json::Value::Null, "hs": true, "rgb": false, "xy": false }
         });
 
@@ -345,7 +363,7 @@ mod tests {
                     h: 45,
                     s: OrderedFloat(1.0),
                 })),
-                Some(1000),
+                Some(0.6),
                 Capabilities::singleton(ColorMode::Hs),
                 ManageKind::Unmanaged,
             )),

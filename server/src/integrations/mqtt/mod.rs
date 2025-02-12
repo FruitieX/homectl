@@ -3,6 +3,7 @@
 mod utils;
 
 use crate::types::{
+    color::Capabilities,
     device::{Device, ManageKind},
     event::{Event, TxEventChannel},
     integration::{Integration, IntegrationActionPayload, IntegrationId},
@@ -42,9 +43,13 @@ pub struct MqttConfig {
     brightness_field: Option<jsonptr::PointerBuf>,
     brightness_range: Option<(f32, f32)>,
     sensor_value_field: Option<jsonptr::PointerBuf>,
-    transition_ms_field: Option<jsonptr::PointerBuf>,
+    transition_field: Option<jsonptr::PointerBuf>,
+    transition_range: Option<(f32, f32)>,
+    default_transition: Option<f32>,
     capabilities_field: Option<jsonptr::PointerBuf>,
+    capabilities_override: Option<Capabilities>,
     raw_field: Option<jsonptr::PointerBuf>,
+    include_id_name_in_set_payload: Option<bool>,
 }
 
 pub struct Mqtt {
@@ -147,7 +152,8 @@ impl Integration for Mqtt {
         let topic = self
             .config
             .topic_set
-            .replace("{id}", &device.id.to_string());
+            .replace("{id}", &device.id.to_string())
+            .replace("{name}", &device.name.to_string());
 
         let mqtt_device = homectl_to_mqtt(device.clone(), &self.config)?;
         let json = serde_json::to_string(&mqtt_device)?;
