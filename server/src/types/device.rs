@@ -51,9 +51,9 @@ pub struct ControllableState {
     /// Current color, if supported
     pub color: Option<DeviceColor>,
 
-    /// Transition time in milliseconds
+    /// Transition time in seconds
     #[ts(type = "number")]
-    pub transition_ms: Option<u64>,
+    pub transition: Option<OrderedFloat<f32>>,
 }
 
 impl Display for ControllableState {
@@ -176,7 +176,7 @@ impl ControllableDevice {
         power: bool,
         brightness: Option<f32>,
         color: Option<DeviceColor>,
-        transition_ms: Option<u64>,
+        transition: Option<f32>,
         capabilities: Capabilities,
         managed: ManageKind,
     ) -> ControllableDevice {
@@ -186,7 +186,7 @@ impl ControllableDevice {
                 power,
                 brightness: brightness.map(OrderedFloat),
                 color,
-                transition_ms,
+                transition: transition.map(OrderedFloat),
             },
             capabilities,
             managed,
@@ -554,11 +554,11 @@ impl Device {
         device
     }
 
-    pub fn set_transition_ms(&self, transition_ms: Option<u64>) -> Device {
+    pub fn set_transition(&self, transition: Option<f32>) -> Device {
         let mut device = self.clone();
 
         if let DeviceData::Controllable(ref mut data) = device.data {
-            data.state.transition_ms = transition_ms;
+            data.state.transition = transition.map(OrderedFloat);
         }
 
         device
@@ -603,8 +603,8 @@ impl Device {
                 data.state.power = power;
                 data.scene_id = None;
             }
-            if let Some(transition_ms) = value.get("transition_ms").and_then(|b| b.as_u64()) {
-                data.state.transition_ms = Some(transition_ms);
+            if let Some(transition) = value.get("transition_ms").and_then(|b| b.as_f64()) {
+                data.state.transition = Some(OrderedFloat(transition as f32));
                 data.scene_id = None;
             }
             if let Some(color) = value.get("color") {

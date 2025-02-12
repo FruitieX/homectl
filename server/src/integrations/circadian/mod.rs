@@ -143,10 +143,10 @@ fn get_circadian_brightness(circadian: &Circadian) -> Option<f32> {
     }
 }
 
-static POLL_RATE: u64 = 60 * 1000;
+static POLL_RATE: f32 = 60.0;
 
 async fn poll_sensor(circadian: Circadian) {
-    let poll_rate = Duration::from_millis(POLL_RATE);
+    let poll_rate = Duration::from_secs_f32(POLL_RATE);
     let mut interval = time::interval(poll_rate);
 
     loop {
@@ -168,7 +168,7 @@ fn mk_circadian_device(circadian: &Circadian) -> Device {
         power: true,
         color: Some(get_circadian_color(circadian)),
         brightness: get_circadian_brightness(circadian).map(OrderedFloat),
-        transition_ms: Some(POLL_RATE),
+        transition: Some(OrderedFloat(POLL_RATE)),
     }));
 
     Device {

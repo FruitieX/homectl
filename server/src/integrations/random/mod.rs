@@ -89,7 +89,7 @@ fn mk_random_device(random: &Random) -> Device {
         power: true,
         color: Some(get_random_color()),
         brightness: Some(OrderedFloat(1.0)),
-        transition_ms: Some(1000),
+        transition: Some(OrderedFloat(0.6)),
     }));
 
     Device {

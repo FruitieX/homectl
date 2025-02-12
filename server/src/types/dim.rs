@@ -34,7 +34,7 @@ pub struct DimDeviceState {
     pub color: Option<DeviceColor>,
     pub brightness: Option<f32>,
     #[ts(type = "number | null")]
-    pub transition_ms: Option<u64>,
+    pub transition: Option<f32>,
 }
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]

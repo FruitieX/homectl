@@ -66,8 +66,8 @@ fn compute_scene_device_state(
             }
 
             if ignore_transition {
-                // Ignore device's transition_ms value
-                state.transition_ms = None;
+                // Ignore device's transition value
+                state.transition = None;
             }
 
             Some(state.clone())
@@ -91,7 +91,7 @@ fn compute_scene_device_state(
                     brightness: scene_device.brightness,
                     color: scene_device.color.clone(),
                     power: scene_device.power.unwrap_or(true),
-                    transition_ms: scene_device.transition_ms,
+                    transition: scene_device.transition,
                 },
             )
         }

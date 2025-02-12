@@ -73,7 +73,7 @@ pub struct SceneDeviceState {
     #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>,
     #[ts(type = "number | null")]
-    pub transition_ms: Option<u64>,
+    pub transition: Option<OrderedFloat<f32>>,
 }
 
 impl From<ControllableState> for SceneDeviceState {
@@ -82,7 +82,7 @@ impl From<ControllableState> for SceneDeviceState {
             power: Some(state.power),
             color: state.color,
             brightness: state.brightness,
-            transition_ms: state.transition_ms,
+            transition: state.transition,
         }
     }
 }

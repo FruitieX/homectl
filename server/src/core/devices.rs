@@ -292,7 +292,7 @@ impl Devices {
                 // Set scene state without transition when activating scene
                 let device = device
                     .set_scene(Some(scene_id), scenes)
-                    .set_transition_ms(None);
+                    .set_transition(None);
 
                 self.set_state(&device, false);
             }
