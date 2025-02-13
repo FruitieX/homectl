@@ -162,7 +162,7 @@ fn find_active_scene_index(
                 let device = devices.get_device_by_ref(&device_key.into());
                 let device_scene = device.and_then(|d| d.get_scene_id());
 
-                device_scene.map_or(false, |ds| ds == sd.scene_id)
+                device_scene.as_ref() == Some(&sd.scene_id)
             })
         })
 }

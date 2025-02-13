@@ -708,7 +708,7 @@ impl Serialize for DeviceKey {
 
 struct DeviceKeyVisitor;
 
-impl<'de> Visitor<'de> for DeviceKeyVisitor {
+impl Visitor<'_> for DeviceKeyVisitor {
     type Value = DeviceKey;
 
     fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {

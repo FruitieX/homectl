@@ -75,14 +75,14 @@ pub fn mqtt_to_homectl(
             if config
                 .power_on_value
                 .as_ref()
-                .unwrap_or_else(|| &serde_json::Value::Bool(true))
+                .unwrap_or(&serde_json::Value::Bool(true))
                 == value
             {
                 Some(true)
             } else if config
                 .power_off_value
                 .as_ref()
-                .unwrap_or_else(|| &serde_json::Value::Bool(false))
+                .unwrap_or(&serde_json::Value::Bool(false))
                 == value
             {
                 Some(false)
@@ -93,7 +93,7 @@ pub fn mqtt_to_homectl(
         .unwrap_or_default();
 
     let brightness = {
-        let range = config.brightness_range.clone().unwrap_or((0.0, 1.0));
+        let range = config.brightness_range.unwrap_or((0.0, 1.0));
 
         brightness_field
             .resolve(&value)
@@ -105,7 +105,7 @@ pub fn mqtt_to_homectl(
     };
 
     let transition = {
-        let range = config.transition_range.clone().unwrap_or((0.0, 1.0));
+        let range = config.transition_range.unwrap_or((0.0, 1.0));
 
         transition_field
             .resolve(&value)
