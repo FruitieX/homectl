@@ -161,7 +161,7 @@ color_field = "/color"
 power_field = "/power"
 brightness_field = "/brightness"
 sensor_value_field = "/sensor_value"
-transition_ms_field = "/transition_ms"
+transition_field = "/transition"
 capabilities_field = "/capabilities"
 ```
 

@@ -147,7 +147,7 @@ name = "All off"
   #
   # Slowly fade out entryway light so we can still see
   [scenes.off.devices.dummy_ha1]
-  "Entryway" = { power = false, transition_ms = 180000 }
+  "Entryway" = { power = false, transition = 180 }
 
 # Default scene for upstairs lights
 [scenes.default_upstairs]
