@@ -293,7 +293,7 @@ mod tests {
                     h: 45,
                     s: OrderedFloat(1.0),
                 })),
-                Some(0.6),
+                None,
                 Capabilities::default(),
                 ManageKind::Full,
             )),
@@ -305,6 +305,7 @@ mod tests {
             port: 1883,
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
+            include_id_name_in_set_payload: Some(true),
             ..Default::default()
         };
 
@@ -316,7 +317,6 @@ mod tests {
             "color": { "h": 45, "s": 1.0 },
             "power": true,
             "brightness": 0.5,
-            "transition": serde_json::json!(0.6),
         });
 
         assert_eq!(mqtt_json, expected);
@@ -389,6 +389,7 @@ mod tests {
             topic: "homectl/devices/{id}".to_string(),
             topic_set: "homectl/set/{id}".to_string(),
             managed: Some(ManageKind::Unmanaged),
+            include_id_name_in_set_payload: Some(true),
             ..Default::default()
         };
 
