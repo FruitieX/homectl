@@ -272,7 +272,31 @@ impl Devices {
         scenes: &Scenes,
         eval_context: &EvalContext,
     ) -> Option<bool> {
-        info!("Activating scene {scene_id}");
+        let group_keys_description = if let Some(group_keys) = group_keys {
+            format!(
+                " for groups: {}",
+                group_keys
+                    .iter()
+                    .map(|g| g.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+        } else {
+            "".to_string()
+        };
+        let device_keys_description = if let Some(device_keys) = device_keys {
+            format!(
+                " for devices: {}",
+                device_keys
+                    .iter()
+                    .map(|d| d.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ")
+            )
+        } else {
+            "".to_string()
+        };
+        info!("Activating scene {scene_id}{group_keys_description}{device_keys_description}");
 
         let scene_devices_config = scenes.find_scene_devices_config(
             self,
