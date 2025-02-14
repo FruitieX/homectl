@@ -42,7 +42,7 @@ pub struct MqttConfig {
     power_off_value: Option<serde_json::Value>,
     brightness_field: Option<jsonptr::PointerBuf>,
     brightness_range: Option<(f32, f32)>,
-    sensor_value_field: Option<jsonptr::PointerBuf>,
+    sensor_value_fields: Option<Vec<jsonptr::PointerBuf>>,
     transition_field: Option<jsonptr::PointerBuf>,
     transition_range: Option<(f32, f32)>,
     default_transition: Option<f32>,

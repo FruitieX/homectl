@@ -36,10 +36,11 @@ pub fn mqtt_to_homectl(
         .brightness_field
         .as_deref()
         .unwrap_or(Pointer::from_static("/brightness"));
-    let sensor_value_field = config
-        .sensor_value_field
-        .as_deref()
-        .unwrap_or(Pointer::from_static("/sensor_value"));
+    let sensor_value_fields = config
+        .sensor_value_fields
+        .as_ref()
+        .map(|v| v.iter().map(|p| p.as_ref()).collect())
+        .unwrap_or(vec![Pointer::from_static("/sensor_value")]);
     let transition_field = config
         .transition_field
         .as_deref()
@@ -116,11 +117,11 @@ pub fn mqtt_to_homectl(
             .map(|value| (value - range.0) / (range.1 - range.0))
     };
 
-    let device_state = if let Some(value) = sensor_value_field
-        .resolve(&value)
-        .ok()
-        .filter(|v| !v.is_null())
-    {
+    let resolved_sensor_value_field = sensor_value_fields
+        .iter()
+        .find_map(|field| Some((field, field.resolve(&value).ok()?)))
+        .filter(|(_, v)| !v.is_null());
+    let device_state = if let Some((field, value)) = resolved_sensor_value_field {
         DeviceData::Sensor(match value {
             serde_json::Value::Number(value) => SensorDevice::Number {
                 value: value.as_f64().unwrap(),
@@ -139,11 +140,7 @@ pub fn mqtt_to_homectl(
             serde_json::Value::String(value) => SensorDevice::Text {
                 value: value.clone(),
             },
-            _ => {
-                return Err(eyre!(
-                    "Unsupported value for sensor field '{sensor_value_field}'",
-                ))
-            }
+            _ => return Err(eyre!("Unsupported value for sensor field '{field}'",)),
         })
     } else {
         let capabilities: Capabilities = capabilities_field
