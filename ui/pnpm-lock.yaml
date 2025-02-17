@@ -5,8 +5,8 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@types/react': 19.0.9
-  '@types/react-dom': 19.0.3
+  '@types/react': 19.0.10
+  '@types/react-dom': 19.0.4
 
 importers:
 
@@ -41,7 +41,7 @@ importers:
         version: 10.1.1
       jotai:
         specifier: 2.12.0
-        version: 2.12.0(@types/react@19.0.9)(react@19.0.0)
+        version: 2.12.0(@types/react@19.0.10)(react@19.0.0)
       konva:
         specifier: 9.3.18
         version: 9.3.18
@@ -68,10 +68,10 @@ importers:
         version: 19.0.0(react@19.0.0)
       react-konva:
         specifier: 19.0.2
-        version: 19.0.2(@types/react@19.0.9)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+        version: 19.0.2(@types/react@19.0.10)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       react-konva-utils:
         specifier: 1.0.7
-        version: 1.0.7(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react-konva@19.0.2(@types/react@19.0.9)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0)
+        version: 1.0.7(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react-konva@19.0.2(@types/react@19.0.10)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0)
       use-image:
         specifier: 1.1.1
         version: 1.1.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
@@ -89,14 +89,14 @@ importers:
         specifier: 22.13.4
         version: 22.13.4
       '@types/react':
-        specifier: 19.0.9
-        version: 19.0.9
+        specifier: 19.0.10
+        version: 19.0.10
       '@types/react-color':
         specifier: 3.0.13
-        version: 3.0.13(@types/react@19.0.9)
+        version: 3.0.13(@types/react@19.0.10)
       '@types/react-dom':
-        specifier: 19.0.3
-        version: 19.0.3(@types/react@19.0.9)
+        specifier: 19.0.4
+        version: 19.0.4(@types/react@19.0.10)
       '@typescript-eslint/eslint-plugin':
         specifier: 8.24.0
         version: 8.24.0(@typescript-eslint/parser@8.24.0(eslint@9.20.1(jiti@1.21.7))(typescript@5.7.3))(eslint@9.20.1(jiti@1.21.7))(typescript@5.7.3)
@@ -481,25 +481,25 @@ packages:
   '@types/react-color@3.0.13':
     resolution: {integrity: sha512-2c/9FZ4ixC5T3JzN0LP5Cke2Mf0MKOP2Eh0NPDPWmuVH3NjPyhEjqNMQpN1Phr5m74egAy+p2lYNAFrX1z9Yrg==}
     peerDependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
-  '@types/react-dom@19.0.3':
-    resolution: {integrity: sha512-0Knk+HJiMP/qOZgMyNFamlIjw9OFCsyC2ZbigmEEyXXixgre6IQpm/4V+r3qH4GC1JPvRJKInw+on2rV6YZLeA==}
+  '@types/react-dom@19.0.4':
+    resolution: {integrity: sha512-4fSQ8vWFkg+TGhePfUzVmat3eC14TXYSsiiDSLI0dVLsrm9gZFABjPy/Qu6TKgl1tq1Bu1yDsuQgY3A3DOjCcg==}
     peerDependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
   '@types/react-reconciler@0.28.9':
     resolution: {integrity: sha512-HHM3nxyUZ3zAylX8ZEyrDNd2XZOnQ0D5XfunJF5FLQnZbHHYq4UWvW1QfelQNXv1ICNkwYhfxjwfnqivYB6bFg==}
     peerDependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
-  '@types/react@19.0.9':
-    resolution: {integrity: sha512-FedNTYgmMwSZmD1Sru/W1gJKuiYCN/3SuBkmZkcxX+FpO5zL76B22A9YNfAKg4HQO3Neh/30AiynP6BELdU0qQ==}
+  '@types/react@19.0.10':
+    resolution: {integrity: sha512-JuRQ9KXLEjaUNjTWpzuR231Z2WpIwczOkBEIvbHNCzQefFIT0L8IqE6NV6ULLyC1SI/i234JnDoMkfg+RjQj2g==}
 
   '@types/reactcss@1.2.13':
     resolution: {integrity: sha512-gi3S+aUi6kpkF5vdhUsnkwbiSEIU/BEJyD7kBy2SudWBUuKmJk8AQKE0OVcQQeEy40Azh0lV6uynxlikYIJuwg==}
     peerDependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
   '@typescript-eslint/eslint-plugin@8.24.0':
     resolution: {integrity: sha512-aFcXEJJCI4gUdXgoo/j9udUYIHgF23MFkg09LFz2dzEmU0+1Plk4rQWv/IYKvPHAtlkkGoB3m5e6oUp+JPsNaQ==}
@@ -1507,7 +1507,7 @@ packages:
     resolution: {integrity: sha512-j5B4NmUw8gbuN7AG4NufWw00rfpm6hexL2CVhKD7juoP2YyD9FEUV5ar921JMvadyrxQhU1NpuKUL3QfsAlVpA==}
     engines: {node: '>=12.20.0'}
     peerDependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
       react: '>=17.0.0'
     peerDependenciesMeta:
       '@types/react':
@@ -2755,26 +2755,26 @@ snapshots:
     dependencies:
       undici-types: 6.20.0
 
-  '@types/react-color@3.0.13(@types/react@19.0.9)':
+  '@types/react-color@3.0.13(@types/react@19.0.10)':
     dependencies:
-      '@types/react': 19.0.9
-      '@types/reactcss': 1.2.13(@types/react@19.0.9)
+      '@types/react': 19.0.10
+      '@types/reactcss': 1.2.13(@types/react@19.0.10)
 
-  '@types/react-dom@19.0.3(@types/react@19.0.9)':
+  '@types/react-dom@19.0.4(@types/react@19.0.10)':
     dependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
-  '@types/react-reconciler@0.28.9(@types/react@19.0.9)':
+  '@types/react-reconciler@0.28.9(@types/react@19.0.10)':
     dependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
-  '@types/react@19.0.9':
+  '@types/react@19.0.10':
     dependencies:
       csstype: 3.1.3
 
-  '@types/reactcss@1.2.13(@types/react@19.0.9)':
+  '@types/reactcss@1.2.13(@types/react@19.0.10)':
     dependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
 
   '@typescript-eslint/eslint-plugin@8.24.0(@typescript-eslint/parser@8.24.0(eslint@9.20.1(jiti@1.21.7))(typescript@5.7.3))(eslint@9.20.1(jiti@1.21.7))(typescript@5.7.3)':
     dependencies:
@@ -3997,9 +3997,9 @@ snapshots:
       has-symbols: 1.1.0
       set-function-name: 2.0.2
 
-  its-fine@1.2.5(@types/react@19.0.9)(react@19.0.0):
+  its-fine@1.2.5(@types/react@19.0.10)(react@19.0.0):
     dependencies:
-      '@types/react-reconciler': 0.28.9(@types/react@19.0.9)
+      '@types/react-reconciler': 0.28.9(@types/react@19.0.10)
       react: 19.0.0
     transitivePeerDependencies:
       - '@types/react'
@@ -4018,9 +4018,9 @@ snapshots:
 
   jiti@1.21.7: {}
 
-  jotai@2.12.0(@types/react@19.0.9)(react@19.0.0):
+  jotai@2.12.0(@types/react@19.0.10)(react@19.0.0):
     optionalDependencies:
-      '@types/react': 19.0.9
+      '@types/react': 19.0.10
       react: 19.0.0
 
   js-tokens@4.0.0: {}
@@ -4431,18 +4431,18 @@ snapshots:
 
   react-is@16.13.1: {}
 
-  react-konva-utils@1.0.7(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react-konva@19.0.2(@types/react@19.0.9)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0):
+  react-konva-utils@1.0.7(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react-konva@19.0.2(@types/react@19.0.10)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0))(react@19.0.0):
     dependencies:
       konva: 9.3.18
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
-      react-konva: 19.0.2(@types/react@19.0.9)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
+      react-konva: 19.0.2(@types/react@19.0.10)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
       use-image: 1.1.1(react-dom@19.0.0(react@19.0.0))(react@19.0.0)
 
-  react-konva@19.0.2(@types/react@19.0.9)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0):
+  react-konva@19.0.2(@types/react@19.0.10)(konva@9.3.18)(react-dom@19.0.0(react@19.0.0))(react@19.0.0):
     dependencies:
-      '@types/react-reconciler': 0.28.9(@types/react@19.0.9)
-      its-fine: 1.2.5(@types/react@19.0.9)(react@19.0.0)
+      '@types/react-reconciler': 0.28.9(@types/react@19.0.10)
+      its-fine: 1.2.5(@types/react@19.0.10)(react@19.0.0)
       konva: 9.3.18
       react: 19.0.0
       react-dom: 19.0.0(react@19.0.0)
