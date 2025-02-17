@@ -3,8 +3,7 @@
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { produce } from 'immer';
-import { Bot, Car, LampCeiling } from 'lucide-react';
-import { useState } from 'react';
+import { Car, LampCeiling } from 'lucide-react';
 import { Button, Card } from 'react-daisyui';
 
 const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
@@ -20,7 +19,7 @@ export const ControlsCard = () => {
   }
 
   let carHeater = false;
-  const [vacuumActive, setVacuumActive] = useState(false);
+  // const [vacuumActive, setVacuumActive] = useState(false);
 
   const carHeaterDevice = state?.devices[carHeaterDeviceKey];
   if (carHeaterDevice && 'Controllable' in carHeaterDevice.data) {
@@ -73,22 +72,22 @@ export const ControlsCard = () => {
     ws?.send(data);
   };
 
-  const cleanHouse = () => {
-    const msg: WebSocketRequest = {
-      EventMessage: {
-        Action: {
-          action: 'Custom',
-          integration_id: 'neato',
-          payload: vacuumActive ? 'stop_cleaning' : 'clean_house_force',
-        },
-      },
-    };
+  // const cleanHouse = () => {
+  //   const msg: WebSocketRequest = {
+  //     EventMessage: {
+  //       Action: {
+  //         action: 'Custom',
+  //         integration_id: 'neato',
+  //         payload: vacuumActive ? 'stop_cleaning' : 'clean_house_force',
+  //       },
+  //     },
+  //   };
 
-    const data = JSON.stringify(msg);
-    ws?.send(data);
+  //   const data = JSON.stringify(msg);
+  //   ws?.send(data);
 
-    setVacuumActive(!vacuumActive);
-  };
+  //   setVacuumActive(!vacuumActive);
+  // };
 
   return (
     <Card compact className="col-span-2">
