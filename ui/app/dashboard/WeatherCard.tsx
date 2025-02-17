@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
-import { Card } from 'react-daisyui';
-import { useInterval } from 'usehooks-ts';
+import { Button, Card, Modal } from 'react-daisyui';
+import { useInterval, useToggle } from 'usehooks-ts';
 import { cachedPromise } from './cachedPromise';
 import { useAppConfig } from '@/hooks/appConfig';
+import { X } from 'lucide-react';
+import clsx from 'clsx';
 
 type WeatherTimeSeries = {
+  time: Date;
   data: {
     instant: {
       details: {
@@ -48,6 +51,7 @@ export const WeatherCard = () => {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
 
   const weatherApiUrl = useAppConfig().weatherApiUrl;
+  const [detailsModalOpen, toggleDetailsModal] = useToggle(false);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -70,32 +74,111 @@ export const WeatherCard = () => {
     setWeather(weather);
   }, 1000);
 
-  const jsx =
-    weather !== null ? (
-      <div className="flex flex-1 flex-col items-center justify-center">
-        <img
-          className="w-16"
-          src={`/weathericons/${weather.properties.timeseries[0]?.data.next_1_hours.summary.symbol_code}.svg`}
-        />
-        <div className="flex flex-col items-center">
-          <span className="whitespace-nowrap text-2xl">
-            {
-              weather.properties.timeseries[0]?.data.instant.details
-                .air_temperature
-            }{' '}
-            °C
-          </span>
-          <span className="stat-title">
-            {weather.properties.timeseries[0]?.data.instant.details.wind_speed}{' '}
-            m/s
-          </span>
-        </div>
-      </div>
-    ) : null;
+  const roundToHour = (date: Date) => {
+    const p = 60 * 60 * 1000; // milliseconds in an hour
+    return new Date(Math.round(date.getTime() / p) * p);
+  };
+  const currentAndFutureSeries = weather?.properties.timeseries.filter(
+    (series) => {
+      return new Date(series.time) >= roundToHour(new Date());
+    },
+  );
 
   return (
-    <Card compact className="col-span-1">
-      <Card.Body className="shadow-lg">{jsx}</Card.Body>
-    </Card>
+    <>
+      <Card compact className="col-span-1 shadow-lg">
+        <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
+          <Card.Body>
+            {renderWeatherDetail(
+              currentAndFutureSeries && currentAndFutureSeries[0],
+              true,
+            )}
+          </Card.Body>
+        </Button>
+      </Card>
+      <Modal.Legacy
+        open={detailsModalOpen}
+        onClickBackdrop={toggleDetailsModal}
+      >
+        <Modal.Header className="flex items-center justify-between font-bold">
+          <div className="mx-4 text-center">Weather forecast</div>
+          <Button onClick={toggleDetailsModal} variant="outline">
+            <X />
+          </Button>
+        </Modal.Header>
+        <Modal.Body className="flex flex-col gap-3">
+          <div className="flex flex-row">
+            <span className="stat-title w-24">Time</span>
+            <span className="stat-title">Forecast</span>
+            <span className="stat-title flex-1 text-right">
+              Probability of rain
+            </span>
+          </div>
+          {currentAndFutureSeries &&
+            currentAndFutureSeries
+              .map((series, index) => {
+                const rainProbability =
+                  series.data.next_1_hours?.details
+                    .probability_of_precipitation;
+                return (
+                  <div key={index} className="flex flex-row">
+                    <span className="w-24 text-2xl flex items-center">
+                      {new Date(series.time).toLocaleTimeString('fi-FI', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </span>
+                    {renderWeatherDetail(series, false)}
+                    <span className="flex-1" />
+                    <span
+                      className={clsx(
+                        'flex items-center',
+                        rainProbability > 20
+                          ? rainProbability > 50
+                            ? 'text-red-500'
+                            : 'text-yellow-500'
+                          : 'text-green-500',
+                      )}
+                    >
+                      {rainProbability} %
+                    </span>
+                  </div>
+                );
+              })
+              .slice(0, 24)}
+        </Modal.Body>
+      </Modal.Legacy>
+    </>
+  );
+};
+
+const renderWeatherDetail = (
+  series?: WeatherTimeSeries,
+  horizontal?: boolean,
+) => {
+  if (series === undefined) {
+    return null;
+  }
+
+  return (
+    <div
+      className={clsx(
+        'flex items-center justify-center',
+        horizontal ? 'flex-col' : 'gap-3',
+      )}
+    >
+      <img
+        className="w-16"
+        src={`/weathericons/${series.data.next_1_hours?.summary.symbol_code}.svg`}
+      />
+      <div className={clsx('flex flex-col', horizontal ? 'items-center' : '')}>
+        <span className="whitespace-nowrap text-2xl">
+          {series.data.instant.details.air_temperature} °C
+        </span>
+        <span className="stat-title">
+          {series.data.instant.details.wind_speed} m/s
+        </span>
+      </div>
+    </div>
   );
 };
