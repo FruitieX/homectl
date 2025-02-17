@@ -100,13 +100,13 @@ export const ControlsCard = () => {
           startIcon={<LampCeiling size="3rem" />}
           onClick={toggleLights}
         />
-        <Button
+        {/* <Button
           color="ghost"
           className={vacuumActive ? '' : 'text-zinc-700'}
           size="lg"
           startIcon={<Bot size="3rem" />}
           onClick={cleanHouse}
-        />
+        /> */}
         <Button
           color="ghost"
           className={carHeater ? '' : 'text-zinc-700'}

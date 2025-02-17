@@ -99,8 +99,10 @@ export const WeatherCard = () => {
       <Modal.Legacy
         open={detailsModalOpen}
         onClickBackdrop={toggleDetailsModal}
+        responsive
+        className="pt-0"
       >
-        <Modal.Header className="flex items-center justify-between font-bold">
+        <Modal.Header className="flex items-center justify-between font-bold sticky top-0 bg-base-100 py-6 m-0">
           <div className="mx-4 text-center">Weather forecast</div>
           <Button onClick={toggleDetailsModal} variant="outline">
             <X />
