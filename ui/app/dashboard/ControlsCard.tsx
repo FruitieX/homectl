@@ -7,7 +7,7 @@ import { Bot, Car, LampCeiling } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Card } from 'react-daisyui';
 
-const lightDeviceKey = 'hue1/c72e661d-9918-4070-afa6-767ddbeaf687';
+const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
 export const ControlsCard = () => {
   const ws = useWebsocket();
@@ -31,7 +31,7 @@ export const ControlsCard = () => {
   let carHeaterLoading = false;
   if (carHeater && carHeaterRawValues) {
     // https://developer.tuya.com/en/docs/connect-subdevices-to-gateways/tuya-zigbee-measuring-smart-plug-access-standard?id=K9ik6zvofpzqk#title-15-DP19%20Power
-    // Value seems to be in units of 0.1W
+    // Value seems to be in units of 10W
     const carHeaterPowerValue = (carHeaterRawValues['19'] ?? 0) / 10;
     carHeaterLoading = carHeaterPowerValue < 1400;
   }
