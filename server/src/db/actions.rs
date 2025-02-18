@@ -66,6 +66,39 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Device> {
     Ok(device)
 }
 
+pub async fn db_get_devices() -> Result<HashMap<DeviceKey, Device>> {
+    let db = get_db_connection().await?;
+
+    let result = sqlx::query!(
+        r#"
+            select
+                integration_id,
+                device_id,
+                name,
+                state as "state: Json<DeviceData>"
+            from devices
+        "#
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(result
+        .into_iter()
+        .map(|row| {
+            let key = DeviceKey::new(row.integration_id.into(), row.device_id.into());
+            let device = Device {
+                id: key.device_id.clone(),
+                integration_id: key.integration_id.clone(),
+                name: row.name,
+                data: row.state.0,
+                raw: None,
+            };
+
+            (key, device)
+        })
+        .collect())
+}
+
 pub async fn db_get_scenes() -> Result<ScenesConfig> {
     let db = get_db_connection().await?;
 

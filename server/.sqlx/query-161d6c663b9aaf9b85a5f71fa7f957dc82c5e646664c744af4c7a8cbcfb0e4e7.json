@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            select\n                integration_id,\n                device_id,\n                name,\n                state as \"state: Json<DeviceData>\"\n            from devices\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "integration_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "device_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "state: Json<DeviceData>",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "161d6c663b9aaf9b85a5f71fa7f957dc82c5e646664c744af4c7a8cbcfb0e4e7"
+}

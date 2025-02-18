@@ -35,6 +35,26 @@ impl Devices {
         &self.state
     }
 
+    pub async fn refresh_db_devices(&mut self) {
+        let devices = db_get_devices().await;
+
+        match devices {
+            Ok(devices) => {
+                for device in devices.values() {
+                    debug!(
+                        "Restoring device from DB: {device_key}",
+                        device_key = device.get_device_key()
+                    );
+                    self.set_state(device, true, true);
+                }
+                info!("Restored devices from DB");
+            }
+            Err(e) => {
+                error!("Failed to refresh devices from DB: {e}");
+            }
+        }
+    }
+
     /// Recomputes scene state for all devices and updates both internal and
     /// external state accordingly
     pub fn invalidate(&mut self, invalidated_scenes: &HashSet<SceneId>, scenes: &Scenes) {

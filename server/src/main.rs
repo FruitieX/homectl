@@ -51,7 +51,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let groups = Groups::new(config.groups.unwrap_or_default());
     let mut scenes = Scenes::new(config.scenes.unwrap_or_default());
     scenes.refresh_db_scenes().await;
-    let devices = Devices::new(event_tx.clone());
+    let mut devices = Devices::new(event_tx.clone());
+    devices.refresh_db_devices().await;
     let expr = Expr::new();
     let rules = Routines::new(config.routines.unwrap_or_default(), event_tx.clone());
     let mut ui = Ui::new();
