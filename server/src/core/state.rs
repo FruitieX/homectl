@@ -7,7 +7,7 @@ use crate::types::{
 
 use super::{
     devices::Devices, expr::Expr, groups::Groups, integrations::Integrations, routines::Routines,
-    scenes::Scenes, websockets::WebSockets,
+    scenes::Scenes, ui::Ui, websockets::WebSockets,
 };
 
 #[derive(Clone)]
@@ -21,6 +21,7 @@ pub struct AppState {
     pub event_tx: TxEventChannel,
     pub expr: Expr,
     pub ws: WebSockets,
+    pub ui: Ui,
 }
 
 impl AppState {
@@ -50,10 +51,13 @@ impl AppState {
             })
             .collect();
 
+        let ui_state = self.ui.get_state().clone();
+
         let message = WebSocketResponse::State(StateUpdate {
             devices: DevicesState(devices_converted),
             scenes,
             groups,
+            ui_state,
         });
 
         self.ws.send(user_id, &message).await;

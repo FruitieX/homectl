@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -17,6 +19,8 @@ pub struct StateUpdate {
     pub devices: DevicesState,
     pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
+    #[ts(type = "Record<String, any>")]
+    pub ui_state: HashMap<String, serde_json::Value>,
 }
 
 #[derive(TS, Deserialize, Serialize, Debug)]

@@ -26,6 +26,7 @@ use crate::core::{
 use crate::types::event::{mk_event_channel, Event};
 use api::init_api;
 use color_eyre::Result;
+use core::ui::Ui;
 use db::init_db;
 use eyre::eyre;
 use std::time::Duration;
@@ -53,6 +54,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let devices = Devices::new(event_tx.clone());
     let expr = Expr::new();
     let rules = Routines::new(config.routines.unwrap_or_default(), event_tx.clone());
+    let mut ui = Ui::new();
+    ui.refresh_db_state().await;
 
     for (id, integration_config) in &config.integrations.unwrap_or_default() {
         let opaque_integration_config: &config::Value = opaque_integrations_configs
@@ -76,6 +79,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         rules,
         event_tx,
         expr,
+        ui,
         ws: Default::default(),
     };
 

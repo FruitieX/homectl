@@ -7,6 +7,7 @@ use crate::types::{
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
     scene::{ActivateSceneDescriptor, CycleScenesDescriptor},
+    ui::UiActionDescriptor,
 };
 
 use crate::db::actions::{db_delete_scene, db_edit_scene, db_store_scene};
@@ -209,6 +210,11 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 state.devices.get_state(),
                 &state.event_tx,
             )?;
+        }
+        Event::Action(Action::Ui(action)) => {
+            let UiActionDescriptor::StoreUIState { key, value } = action;
+            state.ui.store_state(key.clone(), value.clone()).await?;
+            state.send_state_ws(None).await;
         }
     }
 

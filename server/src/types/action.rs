@@ -7,6 +7,7 @@ use super::{
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
     scene::{ActivateSceneDescriptor, CycleScenesDescriptor},
+    ui::UiActionDescriptor,
 };
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize)]
@@ -30,6 +31,9 @@ pub enum Action {
 
     /// Sets device state to given state.
     SetDeviceState(Device),
+
+    /// Special category of actions that are only used by UI.
+    Ui(UiActionDescriptor),
 
     /// Evaluates given expression.
     #[serde(untagged, skip_serializing)]

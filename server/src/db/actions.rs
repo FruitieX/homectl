@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use super::get_db_connection;
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
 use crate::types::scene::ScenesConfig;
@@ -146,4 +148,45 @@ pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
     .await?;
 
     Ok(())
+}
+
+pub async fn db_store_ui_state(key: &String, value: &serde_json::Value) -> Result<()> {
+    let db = get_db_connection().await?;
+
+    sqlx::query!(
+        r#"
+            insert into ui_state (key, value)
+            values ($1, $2)
+
+            on conflict (key)
+            do update set
+                value = excluded.value
+        "#,
+        key,
+        Json(value) as _
+    )
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_get_ui_state() -> Result<HashMap<String, serde_json::Value>> {
+    let db = get_db_connection().await?;
+
+    let result = sqlx::query!(
+        r#"
+            select
+                key,
+                value as "value: Json<serde_json::Value>"
+            from ui_state
+        "#
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(result
+        .into_iter()
+        .map(|row| (row.key, row.value.0))
+        .collect())
 }
