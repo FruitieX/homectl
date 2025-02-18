@@ -59,6 +59,10 @@ impl Devices {
 
         let device = match db_device {
             Some(db_device) => {
+                // Restore state from DB
+                let mut device = device.clone();
+                device.data = db_device.data.clone();
+
                 // Restore device scene from DB
                 let scene = db_device.get_scene_id();
 
