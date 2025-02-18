@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into ui_state (key, value)\n            values ($1, $2)\n\n            on conflict (key)\n            do update set\n                value = excluded.value\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6fdddbc555e2b9b739b8a76f56a18b5e27e2ca4f908113c98d253d76d09150d1"
+}
