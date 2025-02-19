@@ -1,8 +1,11 @@
-use crate::types::{
-    color::Capabilities,
-    device::{ControllableDevice, Device, DeviceData, DeviceId, ManageKind},
-    event::{Event, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+use crate::{
+    types::{
+        color::Capabilities,
+        device::{ControllableDevice, Device, DeviceData, DeviceId, ManageKind},
+        event::{Event, TxEventChannel},
+        integration::{Integration, IntegrationActionPayload, IntegrationId},
+    },
+    utils::cli::Cli,
 };
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -30,7 +33,12 @@ pub struct Dummy {
 
 #[async_trait]
 impl Integration for Dummy {
-    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
+    fn new(
+        id: &IntegrationId,
+        config: &config::Value,
+        _cli: &Cli,
+        event_tx: TxEventChannel,
+    ) -> Result<Self> {
         let config = config
             .clone()
             .try_deserialize()

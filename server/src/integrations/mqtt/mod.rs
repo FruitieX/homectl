@@ -2,11 +2,14 @@
 
 mod utils;
 
-use crate::types::{
-    color::Capabilities,
-    device::{Device, ManageKind},
-    event::{Event, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+use crate::{
+    types::{
+        color::Capabilities,
+        device::{Device, ManageKind},
+        event::{Event, TxEventChannel},
+        integration::{Integration, IntegrationActionPayload, IntegrationId},
+    },
+    utils::cli::Cli,
 };
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -56,6 +59,7 @@ pub struct Mqtt {
     id: IntegrationId,
     event_tx: TxEventChannel,
     config: MqttConfig,
+    cli: Cli,
     client: Option<AsyncClient>,
 }
 
@@ -67,7 +71,12 @@ pub struct CustomMqttAction {
 
 #[async_trait]
 impl Integration for Mqtt {
-    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
+    fn new(
+        id: &IntegrationId,
+        config: &config::Value,
+        cli: &Cli,
+        event_tx: TxEventChannel,
+    ) -> Result<Self> {
         let config = config
             .clone()
             .try_deserialize()
@@ -76,6 +85,7 @@ impl Integration for Mqtt {
         Ok(Mqtt {
             id: id.clone(),
             config,
+            cli: cli.clone(),
             event_tx,
             client: None,
         })
@@ -158,7 +168,11 @@ impl Integration for Mqtt {
         let mqtt_device = homectl_to_mqtt(device.clone(), &self.config)?;
         let json = serde_json::to_string(&mqtt_device)?;
 
-        client.publish(topic, QoS::AtLeastOnce, true, json).await?;
+        if !self.cli.dry_run {
+            client.publish(topic, QoS::AtLeastOnce, true, json).await?;
+        } else {
+            debug!("(dry run) would publish device state: {device}");
+        }
 
         Ok(())
     }

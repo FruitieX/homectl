@@ -1,7 +1,10 @@
-use crate::types::{
-    device::{Device, DeviceData, DeviceId, SensorDevice},
-    event::{Event, TxEventChannel},
-    integration::{Integration, IntegrationActionPayload, IntegrationId},
+use crate::{
+    types::{
+        device::{Device, DeviceData, DeviceId, SensorDevice},
+        event::{Event, TxEventChannel},
+        integration::{Integration, IntegrationActionPayload, IntegrationId},
+    },
+    utils::cli::Cli,
 };
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -26,7 +29,12 @@ pub struct Timer {
 
 #[async_trait]
 impl Integration for Timer {
-    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
+    fn new(
+        id: &IntegrationId,
+        config: &config::Value,
+        _cli: &Cli,
+        event_tx: TxEventChannel,
+    ) -> Result<Self> {
         let config: TimerConfig = config
             .clone()
             .try_deserialize()

@@ -1,5 +1,6 @@
-use crate::db::actions::{db_find_device, db_get_devices, db_update_device};
+use crate::db::actions::{db_get_devices, db_update_device};
 use crate::types::integration::IntegrationId;
+use crate::utils::cli::Cli;
 
 use super::expr::EvalContext;
 use super::groups::Groups;
@@ -20,14 +21,16 @@ pub struct Devices {
     event_tx: TxEventChannel,
     state: DevicesState,
     keys_by_name: BTreeMap<(IntegrationId, String), DeviceKey>,
+    cli: Cli,
 }
 
 impl Devices {
-    pub fn new(event_tx: TxEventChannel) -> Self {
+    pub fn new(event_tx: TxEventChannel, cli: &Cli) -> Self {
         Devices {
             event_tx,
             state: Default::default(),
             keys_by_name: Default::default(),
+            cli: cli.clone(),
         }
     }
 
@@ -238,9 +241,13 @@ impl Devices {
         }
 
         if !skip_db_update {
-            tokio::spawn(async move {
-                db_update_device(&device).await.ok();
-            });
+            if !self.cli.dry_run {
+                tokio::spawn(async move {
+                    db_update_device(&device).await.ok();
+                });
+            } else {
+                debug!("(dry run) would store device: {device}");
+            }
         }
     }
 

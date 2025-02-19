@@ -7,6 +7,7 @@ use crate::types::{
     event::TxEventChannel,
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
+use crate::utils::cli::Cli;
 use color_eyre::Result;
 use eyre::eyre;
 use std::{collections::HashMap, sync::Arc};
@@ -41,11 +42,13 @@ impl Integrations {
         module_name: &str,
         integration_id: &IntegrationId,
         config: &config::Value,
+        cli: &Cli,
     ) -> Result<()> {
         info!("loading integration with module_name {module_name}");
 
         let event_tx = self.event_tx.clone();
-        let integration = load_custom_integration(module_name, integration_id, config, event_tx)?;
+        let integration =
+            load_custom_integration(module_name, integration_id, config, cli, event_tx)?;
 
         let loaded_integration = LoadedIntegration {
             integration: Arc::new(Mutex::new(integration)),
@@ -135,15 +138,16 @@ fn load_custom_integration(
     module_name: &str,
     id: &IntegrationId,
     config: &config::Value,
+    cli: &Cli,
     event_tx: TxEventChannel,
 ) -> Result<Box<dyn Integration>> {
     match module_name {
-        "circadian" => Ok(Box::new(Circadian::new(id, config, event_tx)?)),
-        "cron" => Ok(Box::new(Cron::new(id, config, event_tx)?)),
-        "random" => Ok(Box::new(Random::new(id, config, event_tx)?)),
-        "timer" => Ok(Box::new(Timer::new(id, config, event_tx)?)),
-        "dummy" => Ok(Box::new(Dummy::new(id, config, event_tx)?)),
-        "mqtt" => Ok(Box::new(Mqtt::new(id, config, event_tx)?)),
+        "circadian" => Ok(Box::new(Circadian::new(id, config, cli, event_tx)?)),
+        "cron" => Ok(Box::new(Cron::new(id, config, cli, event_tx)?)),
+        "random" => Ok(Box::new(Random::new(id, config, cli, event_tx)?)),
+        "timer" => Ok(Box::new(Timer::new(id, config, cli, event_tx)?)),
+        "dummy" => Ok(Box::new(Dummy::new(id, config, cli, event_tx)?)),
+        "mqtt" => Ok(Box::new(Mqtt::new(id, config, cli, event_tx)?)),
         _ => Err(eyre!("Unknown module name {module_name}!")),
     }
 }

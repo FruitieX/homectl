@@ -1,10 +1,13 @@
-use crate::types::{
-    color::DeviceColor,
-    device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
-    event::{Event, TxEventChannel},
-    integration::{Integration, IntegrationId},
-};
 use crate::utils::from_hh_mm;
+use crate::{
+    types::{
+        color::DeviceColor,
+        device::{ControllableState, Device, DeviceData, DeviceId, SensorDevice},
+        event::{Event, TxEventChannel},
+        integration::{Integration, IntegrationId},
+    },
+    utils::cli::Cli,
+};
 use async_trait::async_trait;
 use color_eyre::Result;
 use eyre::Context;
@@ -42,7 +45,12 @@ pub struct Circadian {
 
 #[async_trait]
 impl Integration for Circadian {
-    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self> {
+    fn new(
+        id: &IntegrationId,
+        config: &config::Value,
+        _cli: &Cli,
+        event_tx: TxEventChannel,
+    ) -> Result<Self> {
         let config: CircadianConfig = config
             .clone()
             .try_deserialize()

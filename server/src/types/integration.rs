@@ -1,3 +1,5 @@
+use crate::utils::cli::Cli;
+
 use super::{device::Device, event::TxEventChannel};
 use async_trait::async_trait;
 use color_eyre::Result;
@@ -46,7 +48,12 @@ pub struct CustomActionDescriptor {
 #[async_trait]
 pub trait Integration: Send {
     // rustc --explain E0038
-    fn new(id: &IntegrationId, config: &config::Value, event_tx: TxEventChannel) -> Result<Self>
+    fn new(
+        id: &IntegrationId,
+        config: &config::Value,
+        cli: &Cli,
+        event_tx: TxEventChannel,
+    ) -> Result<Self>
     where
         Self: Sized;
 

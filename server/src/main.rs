@@ -18,13 +18,13 @@ mod types;
 mod utils;
 
 use crate::core::expr::Expr;
-// use db::{actions::find_floorplans, establish_connection};
 use crate::core::{
     devices::Devices, event::handle_event, groups::Groups, integrations::Integrations,
     routines::Routines, scenes::Scenes, state::AppState,
 };
 use crate::types::event::{mk_event_channel, Event};
 use api::init_api;
+use clap::Parser;
 use color_eyre::Result;
 use core::ui::Ui;
 use db::init_db;
@@ -32,9 +32,11 @@ use eyre::eyre;
 use std::time::Duration;
 use std::{error::Error, sync::Arc};
 use tokio::sync::RwLock;
+use utils::cli::Cli;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    let cli = Cli::parse();
     color_eyre::install()?;
     pretty_env_logger::init();
 
@@ -51,7 +53,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let groups = Groups::new(config.groups.unwrap_or_default());
     let mut scenes = Scenes::new(config.scenes.unwrap_or_default());
     scenes.refresh_db_scenes().await;
-    let mut devices = Devices::new(event_tx.clone());
+    let mut devices = Devices::new(event_tx.clone(), &cli);
     devices.refresh_db_devices(&scenes).await;
     let expr = Expr::new();
     let rules = Routines::new(config.routines.unwrap_or_default(), event_tx.clone());
@@ -64,7 +66,12 @@ async fn main() -> Result<(), Box<dyn Error>> {
             .ok_or_else(|| eyre!("Expected to find config for integration with id {id}"))?;
 
         integrations
-            .load_integration(&integration_config.plugin, id, opaque_integration_config)
+            .load_integration(
+                &integration_config.plugin,
+                id,
+                opaque_integration_config,
+                &cli,
+            )
             .await?;
     }
 
