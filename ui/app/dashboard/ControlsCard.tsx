@@ -3,8 +3,9 @@
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { produce } from 'immer';
-import { Car, LampCeiling } from 'lucide-react';
-import { Button, Card } from 'react-daisyui';
+import { Car, Edit, LampCeiling, X } from 'lucide-react';
+import { Button, Card, Modal } from 'react-daisyui';
+import { useToggle } from 'usehooks-ts';
 
 const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
@@ -58,6 +59,7 @@ export const ControlsCard = () => {
     }
   };
 
+  /*
   const toggleLights = () => {
     const msg: WebSocketRequest = {
       EventMessage: {
@@ -71,6 +73,7 @@ export const ControlsCard = () => {
     const data = JSON.stringify(msg);
     ws?.send(data);
   };
+  */
 
   // const cleanHouse = () => {
   //   const msg: WebSocketRequest = {
@@ -89,32 +92,83 @@ export const ControlsCard = () => {
   //   setVacuumActive(!vacuumActive);
   // };
 
+  const [mapVisible, toggleMapVisible] = useToggle(false);
+
+  const [selectedDevices, setSelectedDevices] = useSelectedDevices();
+  const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
+    useDeviceModalState();
+
+  const clearSelectedDevices = useCallback(() => {
+    setSelectedDevices([]);
+  }, [setSelectedDevices]);
+
+  useEffect(() => {
+    clearSelectedDevices();
+  }, [mapVisible, clearSelectedDevices]);
+
+  const editSelectedDevices = useCallback(() => {
+    setDeviceModalState(selectedDevices);
+    setDeviceModalOpen(true);
+  }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
+
   return (
-    <Card compact className="col-span-2">
-      <Card.Body className="flex-row items-center justify-around overflow-x-auto shadow-lg">
-        <Button
-          color="ghost"
-          className={lightsOn ? '' : 'text-zinc-700'}
-          size="lg"
-          startIcon={<LampCeiling size="3rem" />}
-          onClick={toggleLights}
-        />
-        {/* <Button
+    <>
+      <Card compact className="col-span-2">
+        <Card.Body className="flex-row items-center justify-around overflow-x-auto shadow-lg">
+          <Button
+            color="ghost"
+            className={lightsOn ? '' : 'text-zinc-700'}
+            size="lg"
+            startIcon={<LampCeiling size="3rem" />}
+            onClick={toggleMapVisible}
+          />
+          {/* <Button
           color="ghost"
           className={vacuumActive ? '' : 'text-zinc-700'}
           size="lg"
           startIcon={<Bot size="3rem" />}
           onClick={cleanHouse}
         /> */}
-        <Button
-          color="ghost"
-          className={carHeater ? '' : 'text-zinc-700'}
-          size="lg"
-          startIcon={<Car size="3rem" />}
-          onClick={toggleCarHeater}
-          loading={carHeaterLoading}
-        />
-      </Card.Body>
-    </Card>
+          <Button
+            color="ghost"
+            className={carHeater ? '' : 'text-zinc-700'}
+            size="lg"
+            startIcon={<Car size="3rem" />}
+            onClick={toggleCarHeater}
+            loading={carHeaterLoading}
+          />
+        </Card.Body>
+      </Card>
+      <Modal.Legacy
+        responsive
+        open={mapVisible}
+        onClickBackdrop={toggleMapVisible}
+        className="h-full pt-0 overflow-hidden"
+      >
+        <Modal.Header className="gap-3 flex items-center justify-between font-bold sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur">
+          <div className="mx-4 text-center">Floorplan</div>
+          <div className="flex-1" />
+          {selectedDevices.length > 0 && (
+            <Button
+              color="ghost"
+              startIcon={<Edit />}
+              onClick={editSelectedDevices}
+            />
+          )}
+          <Button onClick={toggleMapVisible} variant="outline">
+            <X />
+          </Button>
+        </Modal.Header>
+        {mapVisible && <NoSSRViewport />}
+      </Modal.Legacy>
+    </>
   );
 };
+
+import dynamicImport from 'next/dynamic';
+import { useSelectedDevices } from '@/hooks/selectedDevices';
+import { useCallback, useEffect } from 'react';
+import { useDeviceModalState } from '@/hooks/deviceModalState';
+const NoSSRViewport = dynamicImport(() => import('../map/Viewport'), {
+  ssr: false,
+});

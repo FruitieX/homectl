@@ -102,20 +102,22 @@ export const WeatherCard = () => {
         responsive
         className="pt-0"
       >
-        <Modal.Header className="flex items-center justify-between font-bold sticky top-0 bg-base-100 py-6 m-0">
-          <div className="mx-4 text-center">Weather forecast</div>
-          <Button onClick={toggleDetailsModal} variant="outline">
-            <X />
-          </Button>
-        </Modal.Header>
-        <Modal.Body className="flex flex-col gap-3">
-          <div className="flex flex-row">
+        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur">
+          <div className="flex items-center justify-between font-bold">
+            <div className="mx-4 text-center">Weather forecast</div>
+            <Button onClick={toggleDetailsModal} variant="outline">
+              <X />
+            </Button>
+          </div>
+          <div className="flex flex-row pt-6 text-base">
             <span className="stat-title w-24">Time</span>
             <span className="stat-title">Forecast</span>
             <span className="stat-title flex-1 text-right">
               Probability of rain
             </span>
           </div>
+        </Modal.Header>
+        <Modal.Body className="flex flex-col gap-3">
           {currentAndFutureSeries &&
             currentAndFutureSeries
               .map((series, index) => {

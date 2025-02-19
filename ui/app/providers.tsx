@@ -53,12 +53,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <>
-      <ColorPickerModal />
-      <SaveSceneModal />
-      <SceneModal />
       <Navbar />
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>
       <BottomNavigation />
+      <ColorPickerModal />
+      <SaveSceneModal />
+      <SceneModal />
     </>
   );
 };

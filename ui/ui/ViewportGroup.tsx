@@ -9,16 +9,24 @@ import { GroupId } from '@/bindings/GroupId';
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { KonvaEventObject } from 'konva/lib/Node';
 
-const groupRects: Record<
+export const groupRects: Record<
   string,
-  { x: number; y: number; width: number; height: number }
+  { x: number; y: number; width: number; height: number; zIndex?: number }
 > = {
+  'Downstairs lights': {
+    x: 0,
+    y: -120,
+    width: 720,
+    height: 1400,
+    zIndex: -100,
+  },
+  'Upstairs lights': { x: 850, y: 250, width: 640, height: 1030, zIndex: -100 },
+  Entryway: { x: 63, y: 852, width: 224, height: 335, zIndex: -50 },
   Kitchen: { x: 260, y: 596, width: 293, height: 250 },
   'Living room': { x: 63, y: 327, width: 490, height: 260 },
-  Entryway: { x: 63, y: 1062, width: 224, height: 125 },
   'Downstairs bathroom': { x: 63, y: 852, width: 104, height: 187 },
   Office: { x: 317, y: 937, width: 235, height: 250 },
-  'Outdoor lights': { x: 317, y: -70, width: 400, height: 375 },
+  'Outdoor lights': { x: 317, y: -70, width: 350, height: 375 },
   'Kids room': { x: 930, y: 914, width: 220, height: 268 },
   'Upstairs office': { x: 1180, y: 882, width: 240, height: 300 },
   'Upstairs bathroom': { x: 1287, y: 337, width: 135, height: 480 },

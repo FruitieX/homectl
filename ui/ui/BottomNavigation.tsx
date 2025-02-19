@@ -3,13 +3,13 @@ import { LayoutDashboard, List, Map } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 
-type Route = 'Dashboard' | 'Map' | 'Groups';
+type Route = 'Dashboard' | 'Floorplan' | 'Groups';
 
 const getRoute = (pathname: string | null): Route => {
   if (pathname === '/' || pathname === '/dashboard') {
     return 'Dashboard';
   } else if (pathname === '/map') {
-    return 'Map';
+    return 'Floorplan';
   } else if (pathname === '/groups') {
     return 'Groups';
   } else if (pathname?.startsWith('/groups/')) {
@@ -39,11 +39,11 @@ export const BottomNavigation = () => {
         <span className="btm-nav-label">Dashboard</span>
       </Link>
       <Link
-        className={route === 'Map' ? 'active bg-opacity-0' : ''}
+        className={route === 'Floorplan' ? 'active bg-opacity-0' : ''}
         href="/map"
       >
         <Map />
-        <span className="btm-nav-label">Map</span>
+        <span className="btm-nav-label">Floorplan</span>
       </Link>
       <Link
         className={route === 'Groups' ? 'active bg-opacity-0' : ''}

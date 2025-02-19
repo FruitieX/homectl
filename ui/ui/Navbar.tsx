@@ -20,7 +20,7 @@ export const Navbar = () => {
   if (pathname === '/' || pathname === '/dashboard') {
     title = 'Dashboard';
   } else if (pathname === '/map') {
-    title = 'Map';
+    title = 'Floorplan';
   } else if (pathname === '/groups') {
     title = 'Groups';
   } else if (pathname?.startsWith('/groups/')) {
@@ -85,7 +85,7 @@ export const Navbar = () => {
           onClick={navigateBack}
         />
       )}
-      {selectedDevices.length === 0 || title !== 'Map' ? (
+      {selectedDevices.length === 0 || title !== 'Floorplan' ? (
         <a className="btn-ghost btn text-xl normal-case">{title}</a>
       ) : (
         <>

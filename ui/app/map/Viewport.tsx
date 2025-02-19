@@ -2,16 +2,16 @@ import { useWebsocketState } from '@/hooks/websocket';
 import { Stage, Layer, Image } from 'react-konva';
 import useImage from 'use-image';
 import { Device } from '@/bindings/Device';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useResizeObserver } from 'usehooks-ts';
 import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from '@/ui/ViewportDevice';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
-import { ViewportGroup } from '@/ui/ViewportGroup';
+import { groupRects, ViewportGroup } from '@/ui/ViewportGroup';
 
-const scale = { x: 0.265, y: 0.265 };
+const scaleFactor = 0.39;
 
 const Floorplan = () => {
   const [image] = useImage('/floorplan.svg');
@@ -43,52 +43,80 @@ export const Viewport = () => {
     touchRegistersAsTap.current = false;
   }, []);
 
+  const [initialScale, setInitialScale] = useState<
+    { x: number; y: number } | undefined
+  >();
+
+  useEffect(() => {
+    if (width && height) {
+      const scale = scaleFactor * Math.min(width / 600, height / 800);
+      setInitialScale({ x: scale, y: scale });
+    }
+  }, [width, height]);
+
+  const sortedGroups = Object.entries(groups);
+  sortedGroups.sort(([, a], [, b]) => {
+    const groupRectA = groupRects[a.name];
+    const groupRectB = groupRects[b.name];
+
+    if (!groupRectA) {
+      return 1;
+    }
+    if (!groupRectB) {
+      return -1;
+    }
+
+    return (groupRectA.zIndex ?? 0) - (groupRectB.zIndex ?? 0);
+  });
+
   return (
-    <div ref={containerRef} className="absolute left-0 top-0 h-screen w-screen">
-      <Stage
-        // fix for 0 dimension errors
-        width={width || 1}
-        height={height || 1}
-        scale={scale}
-        offsetY={-800}
-        draggable
-        onDragStart={onDragStart}
-        ref={(stage) => {
-          if (stage !== null) {
-            konvaStageMultiTouchScale(stage, onDragStart);
-          }
-        }}
-      >
-        <Layer name="bottom-layer" />
-        <Layer>
-          <Floorplan />
+    <div ref={containerRef} className="absolute left-0 top-0 h-full w-full">
+      {initialScale && height && width && (
+        <Stage
+          width={width}
+          height={height}
+          scale={initialScale}
+          offsetX={750 + (width * -0.5) / initialScale.y}
+          offsetY={600 + (height * -0.5) / initialScale.y}
+          draggable
+          onDragStart={onDragStart}
+          ref={(stage) => {
+            if (stage !== null) {
+              konvaStageMultiTouchScale(stage, onDragStart);
+            }
+          }}
+        >
+          <Layer name="bottom-layer" />
+          <Layer>
+            <Floorplan />
 
-          {Object.entries(groups).map(([groupId, group]) => (
-            <ViewportGroup
-              key={groupId}
-              groupId={groupId}
-              group={group}
-              touchRegistersAsTap={touchRegistersAsTap}
-              deviceTouchTimer={deviceTouchTimer}
-            />
-          ))}
+            {sortedGroups.map(([groupId, group]) => (
+              <ViewportGroup
+                key={groupId}
+                groupId={groupId}
+                group={group}
+                touchRegistersAsTap={touchRegistersAsTap}
+                deviceTouchTimer={deviceTouchTimer}
+              />
+            ))}
 
-          {devices.map((device) => (
-            <ViewportDevice
-              key={getDeviceKey(device)}
-              device={device}
-              touchRegistersAsTap={touchRegistersAsTap}
-              deviceTouchTimer={deviceTouchTimer}
-              selected={
-                selectedDevices.find(
-                  (deviceKey) => deviceKey === getDeviceKey(device),
-                ) !== undefined
-              }
-              interactive
-            />
-          ))}
-        </Layer>
-      </Stage>
+            {devices.map((device) => (
+              <ViewportDevice
+                key={getDeviceKey(device)}
+                device={device}
+                touchRegistersAsTap={touchRegistersAsTap}
+                deviceTouchTimer={deviceTouchTimer}
+                selected={
+                  selectedDevices.find(
+                    (deviceKey) => deviceKey === getDeviceKey(device),
+                  ) !== undefined
+                }
+                interactive
+              />
+            ))}
+          </Layer>
+        </Stage>
+      )}
     </div>
   );
 };
