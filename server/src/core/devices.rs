@@ -40,12 +40,17 @@ impl Devices {
 
         match devices {
             Ok(devices) => {
-                for device in devices.values() {
+                for (device_key, device) in devices {
                     debug!(
-                        "Restoring device from DB: {device_key}",
-                        device_key = device.get_device_key()
+                        "Restoring device from DB: {integration_id}/{name}",
+                        integration_id = device.integration_id,
+                        name = device.name,
                     );
-                    self.set_state(device, true, true);
+                    self.keys_by_name.insert(
+                        (device.integration_id.clone(), device.name.clone()),
+                        device_key,
+                    );
+                    self.set_state(&device, true, true);
                 }
                 info!("Restored devices from DB");
             }
