@@ -40,6 +40,7 @@ pub async fn db_update_device(device: &Device) -> Result<Device> {
     Ok(device)
 }
 
+#[allow(dead_code)]
 pub async fn db_find_device(key: &DeviceKey) -> Result<Device> {
     let db = get_db_connection().await?;
 
