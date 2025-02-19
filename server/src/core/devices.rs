@@ -62,7 +62,7 @@ impl Devices {
 
                     let device = db_device;
 
-                    self.set_state(&device, !device.is_managed(), true);
+                    self.set_state(&device, true, true);
                 }
                 info!("Restored devices from DB");
             }
