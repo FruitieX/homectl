@@ -35,22 +35,24 @@ impl Devices {
         &self.state
     }
 
-    pub async fn refresh_db_devices(&mut self) {
-        let devices = db_get_devices().await;
+    pub async fn refresh_db_devices(&mut self, scenes: &Scenes) {
+        let db_devices = db_get_devices().await;
 
-        match devices {
-            Ok(devices) => {
-                for (device_key, device) in devices {
+        match db_devices {
+            Ok(db_devices) => {
+                for (device_key, db_device) in db_devices {
                     debug!(
                         "Restoring device from DB: {integration_id}/{name}",
-                        integration_id = device.integration_id,
-                        name = device.name,
+                        integration_id = db_device.integration_id,
+                        name = db_device.name,
                     );
                     self.keys_by_name.insert(
-                        (device.integration_id.clone(), device.name.clone()),
+                        (db_device.integration_id.clone(), db_device.name.clone()),
                         device_key,
                     );
-                    self.set_state(&device, true, true);
+                    let scene = db_device.get_scene_id();
+                    let device = db_device.set_scene(scene.as_ref(), scenes);
+                    self.set_state(&device, !device.is_managed(), true);
                 }
                 info!("Restored devices from DB");
             }
@@ -79,32 +81,10 @@ impl Devices {
     }
 
     pub async fn discover_device(&mut self, device: &Device, scenes: &Scenes) {
-        let device_key = device.get_device_key();
-        let db_device = db_find_device(&device_key).await.ok();
+        info!("Discovered device: {device}");
+        let device = device.set_scene(device.get_scene_id().as_ref(), scenes);
 
-        let device = match db_device {
-            Some(db_device) => {
-                // Restore state from DB
-                let mut device = device.clone();
-                device.data = db_device.data.clone();
-
-                // Restore device scene from DB
-                let scene = db_device.get_scene_id();
-
-                let device = device.set_scene(scene.as_ref(), scenes);
-
-                info!("Discovered previously seen device, restored scene from DB: {device}",);
-
-                device
-            }
-            None => {
-                info!("Discovered device: {device}");
-
-                device.set_scene(device.get_scene_id().as_ref(), scenes)
-            }
-        };
-
-        self.set_state(&device, !device.is_managed());
+        self.set_state(&device, !device.is_managed(), false);
     }
 
     /// Handles an incoming state update for a controllable device.
