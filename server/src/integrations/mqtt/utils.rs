@@ -5,16 +5,24 @@ use crate::types::{
     integration::IntegrationId,
 };
 use color_eyre::Result;
-use eyre::eyre;
 use jsonptr::{Assign, Pointer};
 use ordered_float::OrderedFloat;
 
 pub fn mqtt_to_homectl(
     payload: &[u8],
+    topic: &str,
     integration_id: IntegrationId,
     config: &MqttConfig,
-) -> Result<Device> {
-    let value: serde_json::Value = serde_json::from_slice(payload)?;
+) -> Option<Device> {
+    let value: Result<serde_json::Value, serde_json::Error> = serde_json::from_slice(payload);
+
+    let value = match value {
+        Ok(value) => value,
+        Err(err) => {
+            error!("Failed to parse MQTT message: {topic} {err}");
+            return None;
+        }
+    };
 
     let id_field = config
         .id_field
@@ -54,44 +62,48 @@ pub fn mqtt_to_homectl(
         .resolve(&value)
         .ok()
         .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| eyre!("Missing '{id_field}' field in MQTT message"))?
-        .to_string();
+        .map(|id| id.to_string());
+
+    let Some(id) = id else {
+        error!("Missing '{id_field}' field in MQTT message");
+        return None;
+    };
 
     let name = name_field
         .resolve(&value)
         .ok()
         .and_then(serde_json::Value::as_str)
-        .ok_or_else(|| eyre!("Missing '{name_field}' field in MQTT message"))?
-        .to_string();
+        .map(|name| name.to_string());
+
+    let Some(name) = name else {
+        error!("Missing '{name_field}' field in MQTT message");
+        return None;
+    };
 
     let color = color_field
         .resolve(&value)
         .ok()
         .and_then(|value| serde_json::from_value::<DeviceColor>(value.clone()).ok());
 
-    let power = power_field
-        .resolve(&value)
-        .ok()
-        .and_then(|value| {
-            if config
-                .power_on_value
-                .as_ref()
-                .unwrap_or(&serde_json::Value::Bool(true))
-                == value
-            {
-                Some(true)
-            } else if config
-                .power_off_value
-                .as_ref()
-                .unwrap_or(&serde_json::Value::Bool(false))
-                == value
-            {
-                Some(false)
-            } else {
-                None
-            }
-        })
-        .unwrap_or_default();
+    let power = power_field.resolve(&value).ok().and_then(|value| {
+        if config
+            .power_on_value
+            .as_ref()
+            .unwrap_or(&serde_json::Value::Bool(true))
+            == value
+        {
+            Some(true)
+        } else if config
+            .power_off_value
+            .as_ref()
+            .unwrap_or(&serde_json::Value::Bool(false))
+            == value
+        {
+            Some(false)
+        } else {
+            None
+        }
+    });
 
     let brightness = {
         let range = config.brightness_range.unwrap_or((0.0, 1.0));
@@ -140,8 +152,14 @@ pub fn mqtt_to_homectl(
             serde_json::Value::String(value) => SensorDevice::Text {
                 value: value.clone(),
             },
-            _ => return Err(eyre!("Unsupported value for sensor field '{field}'",)),
+            _ => {
+                error!("Unsupported value for sensor field '{field}'");
+                return None;
+            }
         })
+    } else if power.is_none() && brightness.is_none() && color.is_none() {
+        warn!("Unable to determine device type for {topic}, discarding MQTT message");
+        return None;
     } else {
         let capabilities: Capabilities = capabilities_field
             .resolve(&value)
@@ -152,7 +170,7 @@ pub fn mqtt_to_homectl(
 
         let controllable_device = ControllableDevice::new(
             None,
-            power,
+            power.unwrap_or_default(),
             brightness,
             color,
             transition,
@@ -171,7 +189,7 @@ pub fn mqtt_to_homectl(
         .ok()
         .cloned();
 
-    Ok(Device {
+    Some(Device {
         id: DeviceId::new(&id),
         name,
         integration_id,
@@ -343,6 +361,7 @@ mod tests {
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
         let device = mqtt_to_homectl(
             mqtt_json.to_string().as_bytes(),
+            "homectl/devices/device1",
             integration_id.clone(),
             &config,
         )
@@ -391,8 +410,13 @@ mod tests {
         };
 
         let integration_id = IntegrationId::from_str("mqtt").unwrap();
-        let device =
-            mqtt_to_homectl(mqtt_json.to_string().as_bytes(), integration_id, &config).unwrap();
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "homectl/devices/device1",
+            integration_id,
+            &config,
+        )
+        .unwrap();
         let mqtt_message_value = homectl_to_mqtt(device, &config).unwrap();
 
         assert_eq!(mqtt_json, mqtt_message_value);

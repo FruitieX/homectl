@@ -129,9 +129,13 @@ impl Integration for Mqtt {
                         }
 
                         rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) => {
-                            let device = mqtt_to_homectl(&msg.payload, id.clone(), &config)?;
-                            let event = Event::ExternalStateUpdate { device };
-                            event_tx.send(event);
+                            let device =
+                                mqtt_to_homectl(&msg.payload, &msg.topic, id.clone(), &config);
+
+                            if let Some(device) = device {
+                                let event = Event::ExternalStateUpdate { device };
+                                event_tx.send(event);
+                            }
                         }
                         _ => {}
                     }
