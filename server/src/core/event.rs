@@ -100,7 +100,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
 
             state
                 .devices
-                .set_state(&device, skip_external_update.unwrap_or_default());
+                .set_state(&device, skip_external_update.unwrap_or_default(), true);
         }
         Event::SetExternalState { device } => {
             let device = device.color_to_preferred_mode();
@@ -200,7 +200,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.rules.force_trigger_routine(routine_id)?;
         }
         Event::Action(Action::SetDeviceState(device)) => {
-            state.devices.set_state(device, false);
+            state.devices.set_state(device, false, false);
         }
         Event::Action(Action::EvalExpr(expr)) => {
             let eval_context = state.expr.get_context();

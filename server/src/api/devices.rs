@@ -79,7 +79,7 @@ async fn put_device_impl(
 
     let mut app_state = app_state.write().await;
 
-    app_state.devices.set_state(&device, false);
+    app_state.devices.set_state(&device, false, false);
 
     let devices = app_state.devices.get_state();
     let response = DevicesResponse {

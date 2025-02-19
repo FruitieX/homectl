@@ -1,4 +1,4 @@
-use crate::db::actions::{db_find_device, db_update_device};
+use crate::db::actions::{db_find_device, db_get_devices, db_update_device};
 use crate::types::integration::IntegrationId;
 
 use super::expr::EvalContext;
@@ -75,7 +75,7 @@ impl Devices {
                 .collect();
 
             for device in invalidated_devices {
-                self.set_state(&device, false);
+                self.set_state(&device, false, true);
             }
         }
     }
@@ -100,7 +100,7 @@ impl Devices {
     ) -> Result<()> {
         // If device is not managed, we set internal state and bail
         if !incoming.is_managed() {
-            self.set_state(incoming, true);
+            self.set_state(incoming, true, false);
 
             return Ok(());
         }
@@ -183,7 +183,7 @@ impl Devices {
 
             // Previously seen sensor, state is always updated
             (DeviceData::Sensor(_), _) => {
-                self.set_state(incoming, false);
+                self.set_state(incoming, false, false);
             }
 
             // Previously seen controllable device
@@ -199,7 +199,7 @@ impl Devices {
     }
 
     /// Sets internal (and possibly external) state for given device
-    pub fn set_state(&mut self, device: &Device, skip_external_update: bool) {
+    pub fn set_state(&mut self, device: &Device, skip_external_update: bool, skip_db_update: bool) {
         let device_key = device.get_device_key();
         let old = self.get_device(&device_key);
 
@@ -237,9 +237,11 @@ impl Devices {
             self.event_tx.send(Event::SetExternalState { device });
         }
 
-        tokio::spawn(async move {
-            db_update_device(&device).await.ok();
-        });
+        if !skip_db_update {
+            tokio::spawn(async move {
+                db_update_device(&device).await.ok();
+            });
+        }
     }
 
     /// Sets only the raw part of device state. Otherwise identical to
@@ -263,7 +265,7 @@ impl Devices {
         let mut device = device.clone();
         device.raw.clone_from(&incoming.raw);
 
-        self.set_state(&device, true);
+        self.set_state(&device, true, true);
 
         Ok(())
     }
@@ -327,7 +329,7 @@ impl Devices {
                     .set_scene(Some(scene_id), scenes)
                     .set_transition(None);
 
-                self.set_state(&device, false);
+                self.set_state(&device, false, false);
             }
         }
 
@@ -348,7 +350,7 @@ impl Devices {
             let mut d = device.1.clone();
             d = d.dim_device(step.unwrap_or(0.1));
             d = d.set_scene(None, scenes);
-            self.set_state(&d, false);
+            self.set_state(&d, false, false);
         }
 
         Some(true)
