@@ -38,7 +38,7 @@ impl Devices {
         &self.state
     }
 
-    pub async fn refresh_db_devices(&mut self, scenes: &Scenes) {
+    pub async fn refresh_db_devices(&mut self, _scenes: &Scenes) {
         let db_devices = db_get_devices().await;
 
         match db_devices {
@@ -53,8 +53,15 @@ impl Devices {
                         (db_device.integration_id.clone(), db_device.name.clone()),
                         device_key,
                     );
-                    let scene = db_device.get_scene_id();
-                    let device = db_device.set_scene(scene.as_ref(), scenes);
+
+                    // Don't restore scene state at this point, because we might
+                    // not have data for other devices that our scene depends on
+                    // yet
+                    // let scene = db_device.get_scene_id();
+                    // let device = db_device.set_scene(scene.as_ref(), scenes);
+
+                    let device = db_device;
+
                     self.set_state(&device, !device.is_managed(), true);
                 }
                 info!("Restored devices from DB");
@@ -78,7 +85,7 @@ impl Devices {
                 .collect();
 
             for device in invalidated_devices {
-                self.set_state(&device, false, true);
+                self.set_state(&device, false, false);
             }
         }
     }
