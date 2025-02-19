@@ -22,7 +22,7 @@
 					"kind": "bin"
 				}
 			},
-			"args": [],
+			"args": ["--dry-run"],
 			"cwd": "${workspaceFolder}"
 		},
 		{
