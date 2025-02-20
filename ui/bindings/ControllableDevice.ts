@@ -4,4 +4,7 @@ import type { ControllableState } from "./ControllableState";
 import type { ManageKind } from "./ManageKind";
 import type { SceneId } from "./SceneId";
 
-export interface ControllableDevice { scene_id: SceneId | null, capabilities: Capabilities, state: ControllableState, managed: ManageKind, }
+/**
+ * lights with adjustable brightness and/or color
+ */
+export type ControllableDevice = { scene_id: SceneId | null, capabilities: Capabilities, state: ControllableState, managed: ManageKind, };

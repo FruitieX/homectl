@@ -5,4 +5,8 @@ import type { DevicesState } from "./DevicesState";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
 
-export type Event = { "ExternalStateUpdate": { device: Device, } } | { "InternalStateUpdate": { old_state: DevicesState, new_state: DevicesState, old: Device | null, new: Device, } } | { "SetExternalState": { device: Device, } } | { "SetInternalState": { device: Device, skip_external_update: boolean | null, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | "WsBroadcastState" | { "Action": Action };
+export type Event = { "ExternalStateUpdate": { device: Device, } } | { "InternalStateUpdate": { old_state: DevicesState, new_state: DevicesState, old: Device | null, new: Device, } } | { "SetExternalState": { device: Device, } } | { "SetInternalState": { device: Device, 
+/**
+ * Whether to skip sending [Event::SetExternalState] as a result of this state update.
+ */
+skip_external_update: boolean | null, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | "WsBroadcastState" | { "Action": Action };

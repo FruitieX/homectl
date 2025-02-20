@@ -2,4 +2,4 @@
 import type { Device } from "./Device";
 import type { DeviceKey } from "./DeviceKey";
 
-export type DevicesState = Record<DeviceKey, Device>;
+export type DevicesState = { [key in DeviceKey]?: Device };

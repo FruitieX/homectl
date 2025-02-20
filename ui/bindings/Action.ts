@@ -5,5 +5,6 @@ import type { CycleScenesDescriptor } from "./CycleScenesDescriptor";
 import type { Device } from "./Device";
 import type { DimDescriptor } from "./DimDescriptor";
 import type { ForceTriggerRoutineDescriptor } from "./ForceTriggerRoutineDescriptor";
+import type { UiActionDescriptor } from "./UiActionDescriptor";
 
-export type Action = { "action": "ActivateScene" } & ActivateSceneDescriptor | { "action": "CycleScenes" } & CycleScenesDescriptor | { "action": "Custom" } & CustomActionDescriptor | { "action": "Dim" } & DimDescriptor | { "action": "ForceTriggerRoutine" } & ForceTriggerRoutineDescriptor | { "action": "SetDeviceState" } & Device;
+export type Action = { "action": "ActivateScene" } & ActivateSceneDescriptor | { "action": "CycleScenes" } & CycleScenesDescriptor | { "action": "Custom" } & CustomActionDescriptor | { "action": "Dim" } & DimDescriptor | { "action": "ForceTriggerRoutine" } & ForceTriggerRoutineDescriptor | { "action": "SetDeviceState" } & Device | { "action": "Ui" } & UiActionDescriptor;

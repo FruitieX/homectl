@@ -3,4 +3,15 @@ import type { DeviceKey } from "./DeviceKey";
 import type { GroupId } from "./GroupId";
 import type { SceneId } from "./SceneId";
 
-export interface ActivateSceneDescriptor { scene_id: SceneId, device_keys: Array<DeviceKey> | null, group_keys: Array<GroupId> | null, }
+/**
+ * Contains the information needed to activate a scene
+ */
+export type ActivateSceneDescriptor = { scene_id: SceneId, 
+/**
+ * Optionally only apply scene to these devices
+ */
+device_keys: Array<DeviceKey> | null, 
+/**
+ * Optionally only apply scene to these groups
+ */
+group_keys: Array<GroupId> | null, };

@@ -2,4 +2,4 @@
 import type { GroupId } from "./GroupId";
 import type { SceneDeviceConfig } from "./SceneDeviceConfig";
 
-export type SceneGroupsConfig = Record<GroupId, SceneDeviceConfig>;
+export type SceneGroupsConfig = { [key in GroupId]?: SceneDeviceConfig };

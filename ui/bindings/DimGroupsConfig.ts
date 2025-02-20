@@ -2,4 +2,4 @@
 import type { DimDeviceConfig } from "./DimDeviceConfig";
 import type { GroupId } from "./GroupId";
 
-export type DimGroupsConfig = Record<GroupId, DimDeviceConfig>;
+export type DimGroupsConfig = { [key in GroupId]?: DimDeviceConfig };

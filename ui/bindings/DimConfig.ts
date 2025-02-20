@@ -2,4 +2,4 @@
 import type { DimDevicesSearchConfig } from "./DimDevicesSearchConfig";
 import type { DimGroupsConfig } from "./DimGroupsConfig";
 
-export interface DimConfig { name: string, devices: DimDevicesSearchConfig | null, groups: DimGroupsConfig | null, hidden: boolean | null, }
+export type DimConfig = { name: string, devices: DimDevicesSearchConfig | null, groups: DimGroupsConfig | null, hidden: boolean | null, };

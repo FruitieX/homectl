@@ -2,4 +2,4 @@
 import type { FlattenedSceneConfig } from "./FlattenedSceneConfig";
 import type { SceneId } from "./SceneId";
 
-export type FlattenedScenesConfig = Record<SceneId, FlattenedSceneConfig>;
+export type FlattenedScenesConfig = { [key in SceneId]?: FlattenedSceneConfig };

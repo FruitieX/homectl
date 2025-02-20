@@ -2,4 +2,4 @@
 import type { ControllableState } from "./ControllableState";
 import type { DeviceKey } from "./DeviceKey";
 
-export type SceneDeviceStates = Record<DeviceKey, ControllableState>;
+export type SceneDeviceStates = { [key in DeviceKey]?: ControllableState };

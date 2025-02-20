@@ -2,4 +2,7 @@
 import type { DimDeviceConfig } from "./DimDeviceConfig";
 import type { IntegrationId } from "./IntegrationId";
 
-export type DimDevicesSearchConfig = Record<IntegrationId, Record<string, DimDeviceConfig>>;
+/**
+ * Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
+ */
+export type DimDevicesSearchConfig = { [key in IntegrationId]?: { [key in string]?: DimDeviceConfig } };

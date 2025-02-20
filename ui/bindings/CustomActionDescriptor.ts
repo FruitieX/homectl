@@ -2,4 +2,4 @@
 import type { IntegrationActionPayload } from "./IntegrationActionPayload";
 import type { IntegrationId } from "./IntegrationId";
 
-export interface CustomActionDescriptor { integration_id: IntegrationId, payload: IntegrationActionPayload, }
+export type CustomActionDescriptor = { integration_id: IntegrationId, payload: IntegrationActionPayload, };

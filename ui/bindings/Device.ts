@@ -3,4 +3,4 @@ import type { DeviceData } from "./DeviceData";
 import type { DeviceId } from "./DeviceId";
 import type { IntegrationId } from "./IntegrationId";
 
-export interface Device { id: DeviceId, name: string, integration_id: IntegrationId, data: DeviceData, raw: Record<string, any> | null, }
+export type Device = { id: DeviceId, name: string, integration_id: IntegrationId, data: DeviceData, raw: Record<string, any> | null, };

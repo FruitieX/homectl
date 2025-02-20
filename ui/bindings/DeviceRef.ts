@@ -2,4 +2,7 @@
 import type { DeviceIdRef } from "./DeviceIdRef";
 import type { DeviceNameRef } from "./DeviceNameRef";
 
+/**
+ * A reference to a device, either by name or by id
+ */
 export type DeviceRef = DeviceIdRef | DeviceNameRef;

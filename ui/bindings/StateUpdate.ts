@@ -2,5 +2,6 @@
 import type { DevicesState } from "./DevicesState";
 import type { FlattenedGroupsConfig } from "./FlattenedGroupsConfig";
 import type { FlattenedScenesConfig } from "./FlattenedScenesConfig";
+import type { JsonValue } from "./serde_json/JsonValue";
 
-export interface StateUpdate { devices: DevicesState, scenes: FlattenedScenesConfig, groups: FlattenedGroupsConfig, }
+export type StateUpdate = { devices: DevicesState, scenes: FlattenedScenesConfig, groups: FlattenedGroupsConfig, ui_state: { [key in string]?: JsonValue }, };

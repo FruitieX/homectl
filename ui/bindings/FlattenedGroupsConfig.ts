@@ -2,4 +2,4 @@
 import type { FlattenedGroupConfig } from "./FlattenedGroupConfig";
 import type { GroupId } from "./GroupId";
 
-export type FlattenedGroupsConfig = Record<GroupId, FlattenedGroupConfig>;
+export type FlattenedGroupsConfig = { [key in GroupId]?: FlattenedGroupConfig };

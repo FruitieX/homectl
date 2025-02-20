@@ -2,4 +2,12 @@
 import type { DeviceKey } from "./DeviceKey";
 import type { GroupId } from "./GroupId";
 
-export interface DimDescriptor { device_keys: Array<DeviceKey> | null, group_keys: Array<GroupId> | null, step: number | null, }
+export type DimDescriptor = { 
+/**
+ * Optionally only apply dimming to these devices
+ */
+device_keys: Array<DeviceKey> | null, 
+/**
+ * Optionally only apply dimming to these groups
+ */
+group_keys: Array<GroupId> | null, step: number | null, };

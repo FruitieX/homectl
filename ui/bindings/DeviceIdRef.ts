@@ -2,4 +2,4 @@
 import type { DeviceId } from "./DeviceId";
 import type { IntegrationId } from "./IntegrationId";
 
-export interface DeviceIdRef { integration_id: IntegrationId, device_id: DeviceId, }
+export type DeviceIdRef = { integration_id: IntegrationId, device_id: DeviceId, };
