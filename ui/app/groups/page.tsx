@@ -9,23 +9,21 @@ import dynamicImport from 'next/dynamic';
 import Link from 'next/link';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
-import { DevicesState } from '@/bindings/DevicesState';
 import Color from 'color';
+import { excludeUndefined } from 'utils/excludeUndefined';
 const NoSSRPreview = dynamicImport(() => import('./Preview'), { ssr: false });
 
 export default function Page() {
   const state = useWebsocketState();
 
   const groups: [GroupId, FlattenedGroupConfig][] = Object.entries(
-    state?.groups ?? {},
+    excludeUndefined(state?.groups),
   );
 
   const filteredGroups = groups.filter(([, group]) => !group.hidden);
   filteredGroups.sort((a, b) => a[1].name.localeCompare(b[1].name));
 
-  const devices: Device[] = Object.values(
-    state?.devices ?? ({} as DevicesState),
-  );
+  const devices: Device[] = Object.values(excludeUndefined(state?.devices));
 
   return (
     <>

@@ -8,6 +8,7 @@ import { SceneDeviceState } from '@/bindings/SceneDeviceState';
 import { findDevice } from '@/lib/device';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { SceneDevicesSearchConfig } from '@/bindings/SceneDevicesSearchConfig';
+import { ExcludeUndefined } from 'utils/excludeUndefined';
 
 type Props = {
   visible: boolean;
@@ -62,7 +63,7 @@ const Component = (props: Props) => {
             power: light.state.power,
             color,
             brightness: light.state.brightness,
-            transition_ms: null,
+            transition: null,
           };
 
           return [
@@ -79,7 +80,8 @@ const Component = (props: Props) => {
         }
       });
 
-      const devicesByIntegration: SceneDevicesSearchConfig = {};
+      const devicesByIntegration: ExcludeUndefined<SceneDevicesSearchConfig> =
+        {};
 
       devicesByKey.forEach(([deviceKey, state]) => {
         if (devicesByIntegration[deviceKey.integrationId] === undefined) {

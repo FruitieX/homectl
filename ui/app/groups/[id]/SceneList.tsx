@@ -9,6 +9,7 @@ import { getDeviceKey } from '@/lib/device';
 import { SceneId } from '@/bindings/SceneId';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useSceneModalState } from '@/hooks/sceneModalState';
+import { excludeUndefined } from 'utils/excludeUndefined';
 const NoSSRPreview = dynamicImport(() => import('../Preview'), { ssr: false });
 
 type Props = { deviceKeys: string[] };
@@ -19,7 +20,7 @@ export const SceneList = (props: Props) => {
   const { setOpen: setSceneModalOpen, setState: setSceneModalState } =
     useSceneModalState();
 
-  const scenes = state?.scenes;
+  const scenes = excludeUndefined(state?.scenes);
 
   if (!scenes) return null;
 
@@ -38,7 +39,7 @@ export const SceneList = (props: Props) => {
 
   filteredScenes.sort((a, b) => a[1].name.localeCompare(b[1].name));
 
-  const devices: Device[] = Object.values(state?.devices ?? {});
+  const devices: Device[] = Object.values(excludeUndefined(state?.devices));
 
   const handleSceneClick = (sceneId: SceneId) => () => {
     const msg: WebSocketRequest = {

@@ -23,6 +23,7 @@ import { findDevice } from '@/lib/device';
 import { Clipboard, X, Dices } from 'lucide-react';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
+import { excludeUndefined } from 'utils/excludeUndefined';
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
@@ -647,7 +648,7 @@ export const ColorPickerModal = () => {
 
   const firstDevice =
     state !== null ? findDevice(state, deviceModalState[0]) : null;
-  const groups = state?.groups ?? {};
+  const groups = excludeUndefined(state?.groups);
 
   const selectedDevicesSet = new Set(deviceModalState);
 

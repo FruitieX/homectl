@@ -5,12 +5,13 @@ import { getColor } from '@/lib/colors';
 import clsx from 'clsx';
 import Color from 'color';
 import { uniqBy } from 'lodash';
+import { excludeUndefined } from 'utils/excludeUndefined';
 
 export const ColorPickerTray = () => {
   const state = useWebsocketState();
   const [activeColor, setActiveColor] = useActiveColor();
 
-  const devices: Device[] = Object.values(state?.devices ?? {});
+  const devices: Device[] = Object.values(excludeUndefined(state?.devices));
 
   const colors = uniqBy(
     devices.map((device) => {

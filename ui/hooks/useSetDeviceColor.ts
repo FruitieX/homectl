@@ -33,7 +33,7 @@ export const useSetDeviceState = () => {
           }
 
           if (transitionMs !== undefined) {
-            draft.data.Controllable.state.transition_ms = transitionMs;
+            draft.data.Controllable.state.transition = transitionMs;
           }
         }
       });

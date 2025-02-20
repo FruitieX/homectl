@@ -8,8 +8,8 @@ import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from '@/ui/ViewportDevice';
 import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { groupRects, ViewportGroup } from '@/ui/ViewportGroup';
+import { excludeUndefined } from 'utils/excludeUndefined';
 
 const scaleFactor = 0.39;
 
@@ -21,8 +21,8 @@ const Floorplan = () => {
 export const Viewport = () => {
   const state = useWebsocketState();
 
-  const devices: Device[] = Object.values(state?.devices ?? {});
-  const groups: FlattenedGroupsConfig = state?.groups ?? {};
+  const devices: Device[] = Object.values(excludeUndefined(state?.devices));
+  const groups = excludeUndefined(state?.groups);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const { width, height } = useResizeObserver({
