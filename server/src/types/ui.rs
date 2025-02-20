@@ -6,7 +6,6 @@ use ts_rs::TS;
 pub enum UiActionDescriptor {
     StoreUIState {
         key: String,
-        #[ts(type = "any")]
         value: serde_json::Value,
     },
 }

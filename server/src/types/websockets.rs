@@ -19,7 +19,6 @@ pub struct StateUpdate {
     pub devices: DevicesState,
     pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
-    #[ts(type = "Record<String, any>")]
     pub ui_state: HashMap<String, serde_json::Value>,
 }
 

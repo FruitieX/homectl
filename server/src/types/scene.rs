@@ -31,7 +31,6 @@ impl std::str::FromStr for SceneId {
 #[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct SceneDeviceLink {
-    #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>, // allow overriding brightness
 
     #[serde(flatten)]
@@ -70,9 +69,7 @@ pub struct CycleScenesDescriptor {
 pub struct SceneDeviceState {
     pub power: Option<bool>,
     pub color: Option<DeviceColor>,
-    #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>,
-    #[ts(type = "number | null")]
     pub transition: Option<OrderedFloat<f32>>,
 }
 

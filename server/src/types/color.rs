@@ -70,10 +70,8 @@ impl Capabilities {
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Xy {
-    #[ts(type = "number")]
     pub x: OrderedFloat<f32>,
 
-    #[ts(type = "number")]
     pub y: OrderedFloat<f32>,
 }
 
@@ -84,7 +82,6 @@ pub struct Hs {
     #[ts(type = "number")]
     pub h: u64,
 
-    #[ts(type = "number")]
     pub s: OrderedFloat<f32>,
 }
 

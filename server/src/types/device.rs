@@ -45,14 +45,12 @@ pub struct ControllableState {
     pub power: bool,
 
     /// Current brightness, if supported
-    #[ts(type = "number | null")]
     pub brightness: Option<OrderedFloat<f32>>,
 
     /// Current color, if supported
     pub color: Option<DeviceColor>,
 
     /// Transition time in seconds
-    #[ts(type = "number")]
     pub transition: Option<OrderedFloat<f32>>,
 }
 
@@ -677,6 +675,7 @@ impl From<&DeviceKey> for DeviceRef {
 
 /// A reference to a device, always by id, serializes to `integration_id/device_id`
 #[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Ord, PartialOrd)]
+#[ts(type = "string")]
 pub struct DeviceKey {
     pub integration_id: IntegrationId,
     pub device_id: DeviceId,
