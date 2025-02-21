@@ -14,6 +14,7 @@
     "singleQuote": true
   },
   "dependencies": {
+    "@influxdata/influxdb-client-browser": "1.35.0",
     "@react-hook/throttle": "2.2.0",
     "@uiw/react-color-circle": "2.4.0",
     "@uiw/react-color-wheel": "2.4.0",
@@ -22,6 +23,7 @@
     "color": "4.2.3",
     "colorthief": "2.6.0",
     "daisyui": "4.12.23",
+    "deep-equal": "2.2.3",
     "immer": "10.1.1",
     "jotai": "2.12.1",
     "konva": "9.3.18",
@@ -39,6 +41,7 @@
   },
   "devDependencies": {
     "@types/color": "4.2.0",
+    "@types/deep-equal": "1.0.4",
     "@types/lodash": "4.17.15",
     "@types/node": "22.13.4",
     "@types/react": "19.0.10",

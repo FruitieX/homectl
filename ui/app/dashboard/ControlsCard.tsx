@@ -6,6 +6,11 @@ import { produce } from 'immer';
 import { Car, Edit, LampCeiling, X } from 'lucide-react';
 import { Button, Card, Modal } from 'react-daisyui';
 import { useToggle } from 'usehooks-ts';
+import dynamicImport from 'next/dynamic';
+import { useSelectedDevices } from '@/hooks/selectedDevices';
+import { useCallback, useEffect } from 'react';
+import { useDeviceModalState } from '@/hooks/deviceModalState';
+import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
 
 const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
@@ -36,11 +41,11 @@ export const ControlsCard = () => {
     carHeaterLoading = carHeaterPowerValue < 1400;
   }
 
-  const toggleCarHeater = () => {
+  const toggleCarHeater = (power?: boolean) => {
     if (carHeaterDevice) {
       const device = produce(carHeaterDevice, (draft) => {
         if ('Controllable' in draft.data) {
-          draft.data.Controllable.state.power = !carHeater;
+          draft.data.Controllable.state.power = power ?? !carHeater;
           draft.data.Controllable.scene_id = null;
         }
       });
@@ -111,6 +116,8 @@ export const ControlsCard = () => {
     setDeviceModalOpen(true);
   }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
 
+  const carHeaterModalOpenState = useCarHeaterModalOpenState();
+
   return (
     <>
       <Card compact className="col-span-2">
@@ -134,7 +141,8 @@ export const ControlsCard = () => {
             className={carHeater ? '' : 'text-zinc-700'}
             size="lg"
             startIcon={<Car size="3rem" />}
-            onClick={toggleCarHeater}
+            onClick={() => toggleCarHeater()}
+            onContextMenu={() => carHeaterModalOpenState.setOpen(true)}
             loading={carHeaterLoading}
           />
         </Card.Body>
@@ -165,10 +173,6 @@ export const ControlsCard = () => {
   );
 };
 
-import dynamicImport from 'next/dynamic';
-import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { useCallback, useEffect } from 'react';
-import { useDeviceModalState } from '@/hooks/deviceModalState';
 const NoSSRViewport = dynamicImport(() => import('../map/Viewport'), {
   ssr: false,
 });

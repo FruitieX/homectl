@@ -10,6 +10,7 @@ import { SaveSceneModal } from '@/ui/SaveSceneModal';
 import { SceneModal } from '@/ui/SceneModal';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useEffect } from 'react';
+import { CarHeaterModal } from './dashboard/CarHeaterModal';
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
   return <JotaiProvider>{children}</JotaiProvider>;
@@ -59,6 +60,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <ColorPickerModal />
       <SaveSceneModal />
       <SceneModal />
+      <CarHeaterModal />
     </>
   );
 };

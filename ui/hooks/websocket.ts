@@ -5,6 +5,8 @@ import { WebSocketResponse } from '@/bindings/WebSocketResponse';
 import { useEffect, useRef } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { useAppConfig } from './appConfig';
+import deepEq from 'deep-equal';
+import { selectAtom } from 'jotai/utils';
 
 const websocketStateAtom = atom<StateUpdate | null>(null);
 const websocketAtom = atom<WebSocket | null>(null);
@@ -69,4 +71,17 @@ export const useWebsocketState = (): StateUpdate | null => {
 export const useWebsocket = (): WebSocket | null => {
   const state = useAtomValue(websocketAtom);
   return state;
+};
+
+export const uiStateAtom = selectAtom(
+  websocketStateAtom,
+  (state) => state?.ui_state,
+  (a, b) => {
+    return deepEq(a, b);
+  },
+);
+
+export const useUiState = <T>(key: string): T | undefined => {
+  const state = useAtomValue(uiStateAtom);
+  return state ? (state[key] as T) : undefined;
 };
