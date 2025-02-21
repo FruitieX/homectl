@@ -13,7 +13,7 @@ export const useSetDeviceState = () => {
       power: boolean,
       color?: Color,
       brightness?: number,
-      transitionMs?: number,
+      transition?: number,
     ) => {
       const device = produce(clickedDevice, (draft) => {
         if ('Controllable' in draft.data) {
@@ -32,8 +32,8 @@ export const useSetDeviceState = () => {
             draft.data.Controllable.state.brightness = brightness;
           }
 
-          if (transitionMs !== undefined) {
-            draft.data.Controllable.state.transition = transitionMs;
+          if (transition !== undefined) {
+            draft.data.Controllable.state.transition = transition;
           }
         }
       });

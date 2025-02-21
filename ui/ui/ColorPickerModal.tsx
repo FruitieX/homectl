@@ -686,7 +686,7 @@ export const ColorPickerModal = () => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            setDeviceState(match, true, color, brightness, 250);
+            setDeviceState(match, true, color, brightness, 0.25);
           }
         });
       }
@@ -706,7 +706,7 @@ export const ColorPickerModal = () => {
               power,
               deviceModalColor ?? undefined,
               deviceModalBrightness ?? undefined,
-              250,
+              0.25,
             );
           }
         });
