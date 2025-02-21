@@ -47,7 +47,7 @@ const devicePositions: Record<string, Vector2d> = {
   'Kitchen downlight 2': { x: 460, y: 725 },
   'Kitchen downlight 3': { x: 460, y: 800 },
   'Kitchen downlight 4': { x: 390, y: 800 },
-  // 'Entryway table lamp': { x: 150, y: 1070 },
+  'Entryway table lamp': { x: 100, y: 730 },
   'Entryway downlight 1': { x: 130, y: 1125 },
   'Entryway downlight 2': { x: 240, y: 1125 },
   'Entryway downlight 3': { x: 240, y: 950 },
