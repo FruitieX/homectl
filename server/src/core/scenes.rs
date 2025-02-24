@@ -1,14 +1,18 @@
-use crate::types::{
-    device::{
-        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
-    },
-    group::GroupId,
-    scene::{
-        ActivateSceneDescriptor, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
-        SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneDevicesConfigs, SceneId,
-        ScenesConfig,
+use crate::{
+    db::actions::db_store_scene,
+    types::{
+        device::{
+            ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
+        },
+        group::GroupId,
+        scene::{
+            ActivateSceneDescriptor, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
+            SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneDevicesConfigs, SceneId,
+            ScenesConfig,
+        },
     },
 };
+use eyre::Result;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
@@ -244,10 +248,45 @@ impl Scenes {
         self.db_scenes = db_scenes;
     }
 
+    pub async fn store_scene_override(
+        &mut self,
+        device: &Device,
+        store_override: bool,
+    ) -> Result<()> {
+        if let Some(scene_id) = device.get_scene_id().as_ref() {
+            let scene = self.find_scene(scene_id);
+            if let Some(scene) = scene {
+                let mut scene = scene.clone();
+                let mut overrides = scene.overrides.unwrap_or_default();
+
+                if store_override {
+                    if let Some(state) = device.get_controllable_state() {
+                        let scene_device_config =
+                            SceneDeviceConfig::DeviceState(state.clone().into());
+                        overrides.insert(device.get_device_key(), scene_device_config);
+                    }
+                } else {
+                    overrides.remove(&device.get_device_key());
+                }
+
+                if overrides.is_empty() {
+                    scene.overrides = None;
+                } else {
+                    scene.overrides = Some(overrides);
+                }
+
+                db_store_scene(scene_id, &scene).await?;
+                self.refresh_db_scenes().await;
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn get_scenes(&self) -> ScenesConfig {
-        let mut db_scenes = self.db_scenes.clone();
-        db_scenes.extend(self.config.clone());
-        db_scenes
+        let mut scenes = self.config.clone();
+        scenes.extend(self.db_scenes.clone());
+        scenes
     }
 
     pub fn get_scene_ids(&self) -> Vec<SceneId> {
@@ -368,6 +407,13 @@ impl Scenes {
             scene_devices_config.insert(device_key, device_config);
         }
 
+        // Insert devices from scene overrides
+        if let Some(overrides) = &scene.overrides {
+            for (device_key, device_config) in overrides {
+                scene_devices_config.insert(device_key.clone(), device_config.clone());
+            }
+        }
+
         Some(scene_devices_config)
     }
 
@@ -397,9 +443,16 @@ impl Scenes {
             })
             .collect();
 
+        let active_overrides = scene_config
+            .overrides
+            .as_ref()
+            .map(|overrides| overrides.keys().cloned().collect())
+            .unwrap_or_default();
+
         Some(FlattenedSceneConfig {
             name: scene_config.name.clone(),
             devices: SceneDeviceStates(devices),
+            active_overrides,
             hidden: scene_config.hidden,
         })
     }

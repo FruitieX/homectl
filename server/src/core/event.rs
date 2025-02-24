@@ -1,7 +1,10 @@
+use std::collections::BTreeMap;
+
 use color_eyre::Result;
 
 use crate::types::{
     action::Action,
+    device::{Device, DeviceKey},
     dim::DimDescriptor,
     event::*,
     integration::CustomActionDescriptor,
@@ -96,6 +99,27 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             device,
             skip_external_update,
         } => {
+            let scene_config = device
+                .get_scene_id()
+                .and_then(|id| state.scenes.find_scene(&id));
+
+            let should_store_scene_override = scene_config
+                .and_then(|scene| {
+                    scene
+                        .overrides
+                        .map(|o| o.contains_key(&device.get_device_key()))
+                })
+                .unwrap_or_default();
+
+            if should_store_scene_override {
+                state.scenes.store_scene_override(device, true).await?;
+                state.scenes.force_invalidate(
+                    &state.devices,
+                    &state.groups,
+                    state.expr.get_context(),
+                );
+            }
+
             let device = device.set_scene(device.get_scene_id().as_ref(), &state.scenes);
 
             state
@@ -200,7 +224,33 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.rules.force_trigger_routine(routine_id)?;
         }
         Event::Action(Action::SetDeviceState(device)) => {
-            state.devices.set_state(device, false, false);
+            state.event_tx.send(Event::SetInternalState {
+                device: device.clone(),
+                skip_external_update: None,
+            });
+        }
+        Event::Action(Action::ToggleDeviceOverride {
+            device_keys,
+            override_state,
+        }) => {
+            let affected_devices: BTreeMap<&DeviceKey, &Device> = state
+                .devices
+                .get_state()
+                .0
+                .iter()
+                .filter(|(k, _)| device_keys.iter().any(|dk| &dk == k))
+                .collect();
+
+            for device in affected_devices.values() {
+                state
+                    .scenes
+                    .store_scene_override(device, *override_state)
+                    .await?;
+            }
+            state
+                .scenes
+                .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
+            state.send_state_ws(None).await;
         }
         Event::Action(Action::EvalExpr(expr)) => {
             let eval_context = state.expr.get_context();

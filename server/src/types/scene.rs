@@ -122,6 +122,8 @@ pub struct SceneConfig {
     pub groups: Option<SceneGroupsConfig>,
     pub hidden: Option<bool>,
 
+    pub overrides: Option<SceneDevicesConfig>,
+
     /// Evaluates given expression to compute scene config.
     #[ts(skip)]
     #[serde(skip_serializing)]
@@ -139,6 +141,7 @@ pub struct SceneDeviceStates(pub BTreeMap<DeviceKey, ControllableState>);
 pub struct FlattenedSceneConfig {
     pub name: String,
     pub devices: SceneDeviceStates,
+    pub active_overrides: Vec<DeviceKey>,
     pub hidden: Option<bool>,
 }
 

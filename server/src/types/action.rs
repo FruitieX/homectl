@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
-    device::Device,
+    device::{Device, DeviceKey},
     dim::DimDescriptor,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
@@ -31,6 +31,12 @@ pub enum Action {
 
     /// Sets device state to given state.
     SetDeviceState(Device),
+
+    /// Enables / disables device scene state overrides.
+    ToggleDeviceOverride {
+        device_keys: Vec<DeviceKey>,
+        override_state: bool,
+    },
 
     /// Special category of actions that are only used by UI.
     Ui(UiActionDescriptor),
