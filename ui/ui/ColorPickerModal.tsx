@@ -18,12 +18,16 @@ import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { black, getBrightness, getColor, getPower } from '@/lib/colors';
 import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
 import { Clipboard, X, Dices } from 'lucide-react';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
 import { excludeUndefined } from 'utils/excludeUndefined';
+import { WebSocketRequest } from '@/bindings/WebSocketRequest';
+import { StateUpdate } from '@/bindings/StateUpdate';
+import { DeviceKey } from '@/bindings/DeviceKey';
+import clsx from 'clsx';
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
@@ -579,8 +583,16 @@ const ImageTab = ({
       const match = state !== null ? findDevice(state, deviceKey) : null;
       const color = randomizedColorOrder[index % computedColors.length];
 
-      if (match) {
-        setDeviceState(match, true, Color(color, 'rgb'), color.value() / 100);
+      if (match && state) {
+        const persistEnabled = isDevicePersistEnabled(state, deviceKey);
+
+        setDeviceState(
+          match,
+          persistEnabled,
+          true,
+          Color(color, 'rgb'),
+          color.value() / 100,
+        );
       }
     });
   }, [deviceKeys, computedColors, state, setDeviceState]);
@@ -630,8 +642,54 @@ const ImageTab = ({
   );
 };
 
+const isDevicePersistEnabled = (
+  state: StateUpdate,
+  deviceKey: DeviceKey,
+): boolean => {
+  const device = findDevice(state, deviceKey);
+  if (device && 'Controllable' in device?.data) {
+    let scene_id = device?.data?.Controllable?.scene_id;
+    if (!scene_id) return false;
+    let scene = state?.scenes[scene_id];
+    if (!scene) return false;
+    return scene.active_overrides.includes(deviceKey);
+  }
+  return false;
+};
+
 const ScenesTab = (props: { deviceKeys: string[] }) => {
-  return <SceneList deviceKeys={props.deviceKeys} />;
+  const ws = useWebsocket();
+  const state = useWebsocketState();
+  console.log(props.deviceKeys);
+  const persistEnabled = props.deviceKeys.every((deviceKey) => {
+    if (state === null) return false;
+
+    return isDevicePersistEnabled(state, deviceKey);
+  });
+
+  const togglePersist = () => {
+    const msg: WebSocketRequest = {
+      EventMessage: {
+        Action: {
+          action: 'ToggleDeviceOverride',
+          device_keys: props.deviceKeys,
+          override_state: !persistEnabled,
+        },
+      },
+    };
+
+    const data = JSON.stringify(msg);
+    ws?.send(data);
+  };
+
+  return (
+    <>
+      <SceneList deviceKeys={props.deviceKeys} />
+      <Button onClick={togglePersist}>
+        {persistEnabled ? 'Disable autosave' : 'Enable autosave'}
+      </Button>
+    </>
+  );
 };
 
 const eqSet = <T,>(xs: Set<T>, ys: Set<T>) =>
@@ -681,12 +739,20 @@ export const ColorPickerModal = () => {
 
   const partialSetDeviceColor = useCallback(
     (color: Color, brightness: number) => {
-      if (deviceModalState !== null) {
+      if (deviceModalState !== null && state !== null) {
         deviceModalState.forEach((deviceKey) => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
-            setDeviceState(match, true, color, brightness, 0.25);
+            const persistEnabled = isDevicePersistEnabled(state, deviceKey);
+            setDeviceState(
+              match,
+              persistEnabled,
+              true,
+              color,
+              brightness,
+              0.25,
+            );
           }
         });
       }
@@ -696,13 +762,16 @@ export const ColorPickerModal = () => {
 
   const partialSetDevicePower = useCallback(
     (power: boolean) => {
-      if (deviceModalState !== null) {
+      if (deviceModalState !== null && state !== null) {
         deviceModalState.forEach((deviceKey) => {
           const match = state !== null ? findDevice(state, deviceKey) : null;
 
           if (match) {
+            const persistEnabled = isDevicePersistEnabled(state, deviceKey);
+
             setDeviceState(
               match,
+              persistEnabled,
               power,
               deviceModalColor ?? undefined,
               deviceModalBrightness ?? undefined,
@@ -727,6 +796,12 @@ export const ColorPickerModal = () => {
     true,
   );
 
+  const persistEnabled = deviceModalState.every((deviceKey) => {
+    if (state === null) return false;
+
+    return isDevicePersistEnabled(state, deviceKey);
+  });
+
   const closeDeviceModal = useCallback(() => {
     setDeviceModalOpen(false);
   }, [setDeviceModalOpen]);
@@ -744,7 +819,11 @@ export const ColorPickerModal = () => {
           onChange={() => partialSetDevicePower(!deviceModalPower)}
           size="lg"
         />
-        <div className="mx-4 text-center">{deviceModalTitle}</div>
+        <div
+          className={clsx('mx-4 text-center', persistEnabled && 'text-accent')}
+        >
+          {deviceModalTitle}
+        </div>
         <Button onClick={closeDeviceModal} variant="outline">
           <X />
         </Button>

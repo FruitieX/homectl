@@ -1,6 +1,6 @@
 import { Device } from '@/bindings/Device';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { useWebsocket } from '@/hooks/websocket';
+import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import Color from 'color';
 import { produce } from 'immer';
 import { useCallback } from 'react';
@@ -10,6 +10,7 @@ export const useSetDeviceState = () => {
   const setDeviceColor = useCallback(
     (
       clickedDevice: Device,
+      persistEnabled: boolean,
       power: boolean,
       color?: Color,
       brightness?: number,
@@ -17,7 +18,9 @@ export const useSetDeviceState = () => {
     ) => {
       const device = produce(clickedDevice, (draft) => {
         if ('Controllable' in draft.data) {
-          draft.data.Controllable.scene_id = null;
+          if (!persistEnabled) {
+            draft.data.Controllable.scene_id = null;
+          }
           draft.data.Controllable.state.power = power;
 
           if (color !== undefined) {

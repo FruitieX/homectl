@@ -96,6 +96,7 @@ const Component = (props: Props) => {
         devices: devicesByIntegration,
         groups: null,
         hidden: false,
+        overrides: null,
       };
 
       const msg: WebSocketRequest = {

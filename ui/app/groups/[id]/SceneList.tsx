@@ -1,7 +1,6 @@
 'use client';
 
 import { Menu } from 'react-daisyui';
-
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import dynamicImport from 'next/dynamic';
 import { Device } from '@/bindings/Device';
@@ -10,6 +9,7 @@ import { SceneId } from '@/bindings/SceneId';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useSceneModalState } from '@/hooks/sceneModalState';
 import { excludeUndefined } from 'utils/excludeUndefined';
+import clsx from 'clsx';
 const NoSSRPreview = dynamicImport(() => import('../Preview'), { ssr: false });
 
 type Props = { deviceKeys: string[] };
@@ -68,24 +68,32 @@ export const SceneList = (props: Props) => {
     <>
       <Menu className="flex-1 flex-nowrap overflow-y-auto">
         {filteredScenes.map(([sceneId, scene]) => {
-          const previewDevices = Object.entries(scene.devices).flatMap(
-            ([id, state]) => {
-              const origDevice = devices.find(
-                (device) => getDeviceKey(device) === id,
-              );
+          const previewDevices = Object.entries(
+            excludeUndefined(scene.devices),
+          ).flatMap(([id, state]) => {
+            const origDevice = devices.find(
+              (device) => getDeviceKey(device) === id,
+            );
 
-              if (!origDevice) return [];
-              if (!props.deviceKeys?.includes(getDeviceKey(origDevice)))
-                return [];
+            if (!origDevice) return [];
+            if (!props.deviceKeys?.includes(getDeviceKey(origDevice)))
+              return [];
 
-              const device = JSON.parse(JSON.stringify(origDevice));
-              if ('Controllable' in device.data) {
-                device.data.Controllable.state = state;
-              }
+            const device = JSON.parse(JSON.stringify(origDevice)) as Device;
+            if ('Controllable' in device.data) {
+              device.data.Controllable.state = state;
+            }
 
-              return [device];
-            },
-          );
+            return [device];
+          });
+
+          const active = previewDevices.every((device) => {
+            if ('Controllable' in device.data) {
+              return device.data.Controllable.scene_id === sceneId;
+            }
+
+            return true;
+          });
 
           return (
             <Menu.Item
@@ -93,7 +101,13 @@ export const SceneList = (props: Props) => {
               onClick={handleSceneClick(sceneId)}
               onContextMenu={openSceneModal(sceneId)}
             >
-              <div className="flex py-0">
+              <div
+                className={clsx(
+                  'flex py-0',
+
+                  active && 'active',
+                )}
+              >
                 <div className="flex-1 truncate">{scene.name}</div>
                 <div className="h-[96px] w-[112px]">
                   <NoSSRPreview devices={previewDevices} />
