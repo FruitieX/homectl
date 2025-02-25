@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use super::get_db_connection;
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
-use crate::types::scene::ScenesConfig;
 use crate::types::scene::{SceneConfig, SceneId};
+use crate::types::scene::{SceneDevicesConfig, SceneOverridesConfig, ScenesConfig};
 use color_eyre::Result;
 use sqlx::types::Json;
 
@@ -146,6 +146,50 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
     .await?;
 
     Ok(())
+}
+
+pub async fn db_store_scene_overrides(
+    scene_id: &SceneId,
+    overrides: &SceneDevicesConfig,
+) -> Result<()> {
+    let db = get_db_connection().await?;
+
+    sqlx::query!(
+        r#"
+            insert into scene_overrides (scene_id, overrides)
+            values ($1, $2)
+
+            on conflict (scene_id)
+            do update set
+                overrides = excluded.overrides
+        "#,
+        scene_id.to_string(),
+        Json(overrides) as _
+    )
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
+    let db = get_db_connection().await?;
+
+    let result = sqlx::query!(
+        r#"
+            select
+                scene_id,
+                overrides as "overrides: Json<SceneDevicesConfig>"
+            from scene_overrides
+        "#
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(result
+        .into_iter()
+        .map(|row| (SceneId::new(row.scene_id), row.overrides.0))
+        .collect())
 }
 
 pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {

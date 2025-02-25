@@ -122,8 +122,6 @@ pub struct SceneConfig {
     pub groups: Option<SceneGroupsConfig>,
     pub hidden: Option<bool>,
 
-    pub overrides: Option<SceneDevicesConfig>,
-
     /// Evaluates given expression to compute scene config.
     #[ts(skip)]
     #[serde(skip_serializing)]
@@ -131,6 +129,7 @@ pub struct SceneConfig {
 }
 
 pub type ScenesConfig = BTreeMap<SceneId, SceneConfig>;
+pub type SceneOverridesConfig = BTreeMap<SceneId, SceneDevicesConfig>;
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug, PartialEq, Eq, Hash)]
 #[ts(export)]

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            insert into scene_overrides (scene_id, overrides)\n            values ($1, $2)\n\n            on conflict (scene_id)\n            do update set\n                overrides = excluded.overrides\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0a98dac18cf26b97b7338b37e525d4b745e2ee5a2ccfef7c0120f490d07925e"
+}

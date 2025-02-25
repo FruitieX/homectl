@@ -1,5 +1,5 @@
 use crate::{
-    db::actions::db_store_scene,
+    db::actions::{db_get_scene_overrides, db_store_scene_overrides},
     types::{
         device::{
             ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
@@ -8,7 +8,7 @@ use crate::{
         scene::{
             ActivateSceneDescriptor, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
             SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneDevicesConfigs, SceneId,
-            ScenesConfig,
+            SceneOverridesConfig, ScenesConfig,
         },
     },
 };
@@ -32,6 +32,7 @@ use std::collections::{HashMap, HashSet};
 pub struct Scenes {
     config: ScenesConfig,
     db_scenes: ScenesConfig,
+    db_scene_overrides: SceneOverridesConfig,
     flattened_scenes: FlattenedScenesConfig,
     scene_devices_configs: SceneDevicesConfigs,
     device_invalidation_map: HashMap<DeviceKey, HashSet<SceneId>>,
@@ -246,6 +247,8 @@ impl Scenes {
     pub async fn refresh_db_scenes(&mut self) {
         let db_scenes = db_get_scenes().await.unwrap_or_default();
         self.db_scenes = db_scenes;
+        let scene_overrides = db_get_scene_overrides().await.unwrap_or_default();
+        self.db_scene_overrides = scene_overrides
     }
 
     pub async fn store_scene_override(
@@ -253,34 +256,41 @@ impl Scenes {
         device: &Device,
         store_override: bool,
     ) -> Result<()> {
-        if let Some(scene_id) = device.get_scene_id().as_ref() {
-            let scene = self.find_scene(scene_id);
-            if let Some(scene) = scene {
-                let mut scene = scene.clone();
-                let mut overrides = scene.overrides.unwrap_or_default();
+        let scene_id = device.get_scene_id().ok_or_else(|| {
+            eyre::eyre!(
+                "Device {name} is not associated with any scene",
+                name = device.name
+            )
+        })?;
 
-                if store_override {
-                    if let Some(state) = device.get_controllable_state() {
-                        let scene_device_config =
-                            SceneDeviceConfig::DeviceState(state.clone().into());
-                        overrides.insert(device.get_device_key(), scene_device_config);
-                    }
-                } else {
-                    overrides.remove(&device.get_device_key());
-                }
+        let overrides = self.db_scene_overrides.entry(scene_id.clone()).or_default();
 
-                if overrides.is_empty() {
-                    scene.overrides = None;
-                } else {
-                    scene.overrides = Some(overrides);
-                }
-
-                db_store_scene(scene_id, &scene).await?;
-                self.refresh_db_scenes().await;
+        if store_override {
+            if let Some(state) = device.get_controllable_state() {
+                let scene_device_config = SceneDeviceConfig::DeviceState(state.clone().into());
+                overrides.insert(device.get_device_key(), scene_device_config);
             }
+        } else {
+            overrides.remove(&device.get_device_key());
         }
 
+        db_store_scene_overrides(&scene_id, overrides).await?;
+        self.refresh_db_scenes().await;
+
         Ok(())
+    }
+
+    pub fn has_override(&self, device: &Device) -> bool {
+        let scene_id = device.get_scene_id();
+
+        let Some(scene_id) = scene_id else {
+            return false;
+        };
+
+        self.db_scene_overrides
+            .get(&scene_id)
+            .map(|overrides| overrides.contains_key(&device.get_device_key()))
+            .unwrap_or_default()
     }
 
     pub fn get_scenes(&self) -> ScenesConfig {
@@ -408,7 +418,7 @@ impl Scenes {
         }
 
         // Insert devices from scene overrides
-        if let Some(overrides) = &scene.overrides {
+        if let Some(overrides) = self.db_scene_overrides.get(scene_id) {
             for (device_key, device_config) in overrides {
                 scene_devices_config.insert(device_key.clone(), device_config.clone());
             }
@@ -443,9 +453,9 @@ impl Scenes {
             })
             .collect();
 
-        let active_overrides = scene_config
-            .overrides
-            .as_ref()
+        let active_overrides = self
+            .db_scene_overrides
+            .get(scene_id)
             .map(|overrides| overrides.keys().cloned().collect())
             .unwrap_or_default();
 

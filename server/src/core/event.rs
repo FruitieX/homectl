@@ -99,19 +99,8 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             device,
             skip_external_update,
         } => {
-            let scene_config = device
-                .get_scene_id()
-                .and_then(|id| state.scenes.find_scene(&id));
-
-            let should_store_scene_override = scene_config
-                .and_then(|scene| {
-                    scene
-                        .overrides
-                        .map(|o| o.contains_key(&device.get_device_key()))
-                })
-                .unwrap_or_default();
-
-            if should_store_scene_override {
+            let has_scene_override = state.scenes.has_override(device);
+            if has_scene_override {
                 state.scenes.store_scene_override(device, true).await?;
                 state.scenes.force_invalidate(
                     &state.devices,
