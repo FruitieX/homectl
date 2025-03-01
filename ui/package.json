@@ -42,7 +42,7 @@
   "devDependencies": {
     "@types/color": "4.2.0",
     "@types/deep-equal": "1.0.4",
-    "@types/lodash": "4.17.15",
+    "@types/lodash": "4.17.16",
     "@types/node": "22.13.7",
     "@types/react": "19.0.10",
     "@types/react-color": "3.0.13",
