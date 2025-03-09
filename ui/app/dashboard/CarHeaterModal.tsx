@@ -10,7 +10,7 @@ import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import clsx from 'clsx';
 import deepEqual from 'deep-equal';
 import { produce } from 'immer';
-import { Edit, Save, Trash, X } from 'lucide-react';
+import { Edit, Settings, Trash, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Accordion, Button, Input, Modal, Tabs, Toggle } from 'react-daisyui';
 import { useToggle } from 'usehooks-ts';
@@ -182,6 +182,7 @@ const UnmemoizedCarHeaterModal = () => {
           {formState.timers.map((timer, index) => (
             <CarHeaterModalForm
               key={index}
+              modalOpen={open}
               state={timer}
               storedState={state.timers[index]}
               setState={(index, state) => {
@@ -216,14 +217,16 @@ type CarHeaterModalFormProps = {
   remove: (index: number) => void;
   index: number;
   submit: (index: number, state?: CarHeaterTimer) => void;
+  modalOpen: boolean;
 };
 
 const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
-  const { state, storedState, setState, remove, index, submit } = props;
+  const { state, storedState, setState, remove, index, submit, modalOpen } =
+    props;
   const { enabled, repeat, hour, minute, name } = state;
 
   const timerOffDate = new Date();
-  timerOffDate.setHours(storedState?.hour, storedState?.minute, 0, 0);
+  timerOffDate.setHours(state?.hour, state?.minute, 0, 0);
 
   // TODO: depends on outside temperature
   const warmupMinutes = 40;
@@ -233,14 +236,31 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
 
   const [nameInput, setNameInput] = useState(state.name);
   const [renameActive, toggleRenameActive, setRenameActive] = useToggle(false);
+  const openRef = useRef(modalOpen);
 
-  const save = () => {
-    const trimmedName = nameInput.trim();
-    const newState = { ...state, name: trimmedName };
-    submit(index, newState);
-    setNameInput(trimmedName);
-    setRenameActive(false);
-  };
+  useEffect(() => {
+    if (openRef.current !== modalOpen && !modalOpen) {
+      const trimmedName = nameInput.trim();
+      const newState = { ...state, name: trimmedName };
+      if (!deepEqual(newState, storedState)) {
+        // console.log(`submitting ${index}`, newState);
+        submit(index, newState);
+        setNameInput(trimmedName);
+        setRenameActive(false);
+      }
+    }
+    openRef.current = modalOpen;
+  }, [
+    modalOpen,
+    nameInput,
+    state,
+    storedState,
+    index,
+    setRenameActive,
+    submit,
+  ]);
+
+  const [showSettings, toggleShowSettings] = useToggle(false);
 
   return (
     <Accordion defaultChecked={index === 0} icon="plus" className="bg-base-200">
@@ -389,58 +409,60 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
             </Tabs>
           </div>
         </div>
-        <div className="flex pt-6 gap-3 flex-wrap">
-          <Button
-            color="primary"
-            disabled={deepEqual(state, storedState) && nameInput === state.name}
-            onClick={save}
-            startIcon={<Save />}
-          >
-            Save
-          </Button>
-          <div className="flex-1" />
-          {renameActive ? (
-            <>
-              <Input
-                value={nameInput}
-                onChange={(event) => setNameInput(event.currentTarget.value)}
-              />
-              <Button
-                onClick={() => {
-                  setNameInput(state.name);
-                  setRenameActive(false);
-                }}
-              >
-                Cancel
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button onClick={toggleRenameActive} startIcon={<Edit />}>
-                Rename
-              </Button>
-              <Button
-                onClick={() => remove(index)}
-                startIcon={<Trash />}
-                color="error"
-              >
-                Delete
-              </Button>
-            </>
-          )}
-        </div>
+        {showSettings && (
+          <>
+            <div className="flex pt-6 gap-3 flex-wrap">
+              {renameActive ? (
+                <>
+                  <Input
+                    value={nameInput}
+                    onChange={(event) =>
+                      setNameInput(event.currentTarget.value)
+                    }
+                  />
+                  <Button
+                    onClick={() => {
+                      setNameInput(state.name);
+                      setRenameActive(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button onClick={toggleRenameActive} startIcon={<Edit />}>
+                    Rename
+                  </Button>
+                  <Button
+                    onClick={() => remove(index)}
+                    startIcon={<Trash />}
+                    color="error"
+                  >
+                    Delete
+                  </Button>
+                </>
+              )}
+            </div>
+          </>
+        )}
         <div className="pt-3">
-          {storedState?.enabled
+          {state?.enabled
             ? `Heater will turn on at ${String(timerOnDate.getHours()).padStart(
                 2,
                 '0',
               )}:${String(timerOnDate.getMinutes()).padStart(2, '0')}` +
-              (storedState?.repeat === 'once'
+              (state?.repeat === 'once'
                 ? ''
-                : storedState?.repeat === 'weekday'
+                : state?.repeat === 'weekday'
                   ? ' every weekday'
                   : ' daily')
             : 'Heater timer is off'}
+          <Button
+            className="absolute bottom-0 right-0 bg-transparent border-transparent"
+            onClick={toggleShowSettings}
+            startIcon={<Settings />}
+          />
         </div>
       </Accordion.Content>
     </Accordion>
