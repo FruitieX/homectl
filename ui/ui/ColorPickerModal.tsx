@@ -1,6 +1,15 @@
 'use client';
 
-import { Button, Input, Modal, Range, Tabs, Toggle } from 'react-daisyui';
+import {
+  Button,
+  Checkbox,
+  Form,
+  Input,
+  Modal,
+  Range,
+  Tabs,
+  Toggle,
+} from 'react-daisyui';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
@@ -20,7 +29,7 @@ import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { findDevice } from '@/lib/device';
-import { Clipboard, X, Dices } from 'lucide-react';
+import { Clipboard, X, Dices, Settings } from 'lucide-react';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
 import { excludeUndefined } from 'utils/excludeUndefined';
@@ -28,6 +37,7 @@ import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { StateUpdate } from '@/bindings/StateUpdate';
 import { DeviceKey } from '@/bindings/DeviceKey';
 import clsx from 'clsx';
+import { useToggle } from 'usehooks-ts';
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
@@ -682,12 +692,32 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
     ws?.send(data);
   };
 
+  const [showAll, toggleShowAll] = useToggle(false);
+  const [showSettings, toggleShowSettings] = useToggle(false);
+
   return (
     <>
-      <SceneList deviceKeys={props.deviceKeys} />
-      <Button onClick={togglePersist}>
-        {persistEnabled ? 'Disable autosave' : 'Enable autosave'}
-      </Button>
+      <SceneList deviceKeys={props.deviceKeys} showAll={showAll} />
+
+      {showSettings ? (
+        <div className="flex gap-3">
+          <Form className="flex-1 shadow bg-base-200 w-64 rounded-lg px-2 pt-1">
+            <Form.Label title="Show all scenes">
+              <Checkbox checked={showAll} onChange={toggleShowAll} />
+            </Form.Label>
+          </Form>
+
+          <Button className="flex-1" onClick={togglePersist}>
+            {persistEnabled ? 'Disable autosave' : 'Enable autosave'}
+          </Button>
+        </div>
+      ) : (
+        <Button
+          className="absolute bottom-0 right-0 bg-transparent border-transparent"
+          onClick={toggleShowSettings}
+          startIcon={<Settings />}
+        />
+      )}
     </>
   );
 };

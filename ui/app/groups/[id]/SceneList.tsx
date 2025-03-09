@@ -12,7 +12,7 @@ import { excludeUndefined } from 'utils/excludeUndefined';
 import clsx from 'clsx';
 const NoSSRPreview = dynamicImport(() => import('../Preview'), { ssr: false });
 
-type Props = { deviceKeys: string[] };
+type Props = { deviceKeys: string[]; showAll?: boolean };
 export const SceneList = (props: Props) => {
   const ws = useWebsocket();
   const state = useWebsocketState();
@@ -25,6 +25,8 @@ export const SceneList = (props: Props) => {
   if (!scenes) return null;
 
   const filteredScenes = Object.entries(scenes).filter(([, scene]) => {
+    if (props.showAll) return true;
+
     const devices = scene.devices;
     if (
       props.deviceKeys.find((deviceKey) =>
@@ -87,13 +89,15 @@ export const SceneList = (props: Props) => {
             return [device];
           });
 
-          const active = previewDevices.every((device) => {
-            if ('Controllable' in device.data) {
-              return device.data.Controllable.scene_id === sceneId;
-            }
+          const active =
+            previewDevices.length !== 0 &&
+            previewDevices.every((device) => {
+              if ('Controllable' in device.data) {
+                return device.data.Controllable.scene_id === sceneId;
+              }
 
-            return true;
-          });
+              return false;
+            });
 
           return (
             <Menu.Item
