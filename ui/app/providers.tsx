@@ -3,7 +3,7 @@
 import { Provider as JotaiProvider } from 'jotai';
 import { useProvideWebsocketState } from '@/hooks/websocket';
 import '@/styles/globals.css';
-import { BottomNavigation } from '@/ui/BottomNavigation';
+import { HomectlBottomNavigation } from '@/ui/BottomNavigation';
 import { ColorPickerModal } from '@/ui/ColorPickerModal';
 import { Navbar } from '@/ui/Navbar';
 import { SaveSceneModal } from '@/ui/SaveSceneModal';
@@ -56,7 +56,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     <>
       <Navbar />
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>
-      <BottomNavigation />
+      <HomectlBottomNavigation />
       <ColorPickerModal />
       <SaveSceneModal />
       <SceneModal />

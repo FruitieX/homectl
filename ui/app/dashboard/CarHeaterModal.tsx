@@ -12,7 +12,15 @@ import deepEqual from 'deep-equal';
 import { produce } from 'immer';
 import { Edit, Settings, Trash, X } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { Accordion, Button, Input, Modal, Tabs, Toggle } from 'react-daisyui';
+import {
+  Accordion,
+  Button,
+  Divider,
+  Form,
+  Input,
+  Modal,
+  Toggle,
+} from 'react-daisyui';
 import { useToggle } from 'usehooks-ts';
 
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
@@ -277,16 +285,17 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
       </Accordion.Title>
       <Accordion.Content>
         <div>When do you need to leave?</div>
-        <div className="flex gap-6 pt-3 pb-6 flex-wrap">
-          <div className="form-control">
-            <label className="text-center">
+        <div className="flex gap-6 pt-3 pb-6 flex-wrap justify-around">
+          <Form>
+            <Form.Label className="text-center">
               <span className="label-text">Hour</span>
-            </label>
+            </Form.Label>
             <div className="flex">
               <Button
                 size="lg"
                 variant="outline"
                 className="border-zinc-700"
+                type="button"
                 onClick={() =>
                   setState(index, {
                     ...state,
@@ -297,16 +306,21 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 -
               </Button>
               <Input
-                type="number"
                 size="lg"
-                className="w-20 text-2xl"
+                className="w-14 text-2xl text-center"
                 value={String(state.hour).padStart(2, '0')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.valueAsNumber;
+
+                  if (isNaN(value)) {
+                    return;
+                  }
+
                   setState(index, {
                     ...state,
                     hour: event.currentTarget.valueAsNumber,
-                  })
-                }
+                  });
+                }}
                 min={0}
                 max={23}
               />
@@ -314,6 +328,7 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 size="lg"
                 variant="outline"
                 className="border-zinc-700"
+                type="button"
                 onClick={() =>
                   setState(index, {
                     ...state,
@@ -324,16 +339,17 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 +
               </Button>
             </div>
-          </div>
-          <div className="form-control">
-            <label className="text-center">
+          </Form>
+          <Form>
+            <Form.Label className="text-center">
               <span className="label-text">Minute</span>
-            </label>
+            </Form.Label>
             <div className="flex">
               <Button
                 size="lg"
                 variant="outline"
                 className="border-zinc-700"
+                type="button"
                 onClick={() =>
                   setState(index, {
                     ...state,
@@ -344,16 +360,21 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 -
               </Button>
               <Input
-                type="number"
                 size="lg"
-                className="w-20 text-2xl"
+                className="w-14 text-2xl text-center"
                 value={String(state.minute).padStart(2, '0')}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const value = event.currentTarget.valueAsNumber;
+
+                  if (isNaN(value)) {
+                    return;
+                  }
+
                   setState(index, {
                     ...state,
                     minute: event.currentTarget.valueAsNumber,
-                  })
-                }
+                  });
+                }}
                 step={5}
                 min={0}
                 max={59}
@@ -362,6 +383,7 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 size="lg"
                 variant="outline"
                 className="border-zinc-700"
+                type="button"
                 onClick={() =>
                   setState(index, {
                     ...state,
@@ -372,46 +394,55 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 +
               </Button>
             </div>
-          </div>
+          </Form>
         </div>
-        <div className="flex gap-6 flex-wrap">
-          <div className="form-control pr-6">
-            <label className="pb-1">Enabled</label>
-            <Toggle
-              checked={state.enabled}
-              onChange={() =>
-                setState(index, { ...state, enabled: !state.enabled })
-              }
-              size="lg"
-            />
-          </div>
-          <div className="form-control">
-            <label>Repeat</label>
-            <Tabs variant="boxed">
-              <Tabs.Tab
-                active={state.repeat === 'once'}
+        <div className="flex gap-6 flex-wrap pb-3">
+          <Form className="flex flex-1 flex-col">
+            <Form.Label title="Enabled" className="flex-col">
+              <Toggle
+                checked={state.enabled}
+                className="flex-1"
+                onChange={() =>
+                  setState(index, { ...state, enabled: !state.enabled })
+                }
+                size="lg"
+              />
+            </Form.Label>
+          </Form>
+          <Form className="flex flex-1 flex-col">
+            <Form.Label title="Repeat" className="flex-col w-full pb-1" />
+            <div className="flex justify-center w-full">
+              <Button
+                type="button"
+                color={state.repeat === 'once' ? 'primary' : 'ghost'}
                 onClick={() => setState(index, { ...state, repeat: 'once' })}
+                size="sm"
               >
                 Once
-              </Tabs.Tab>
-              <Tabs.Tab
-                active={state.repeat === 'weekday'}
+              </Button>
+              <Button
+                type="button"
+                color={state.repeat === 'weekday' ? 'primary' : 'ghost'}
                 onClick={() => setState(index, { ...state, repeat: 'weekday' })}
+                size="sm"
               >
                 Weekdays
-              </Tabs.Tab>
-              <Tabs.Tab
-                active={state.repeat === 'daily'}
+              </Button>
+              <Button
+                type="button"
+                color={state.repeat === 'daily' ? 'primary' : 'ghost'}
                 onClick={() => setState(index, { ...state, repeat: 'daily' })}
+                size="sm"
               >
                 Daily
-              </Tabs.Tab>
-            </Tabs>
-          </div>
+              </Button>
+            </div>
+          </Form>
         </div>
+        <Divider className="my-0" />
         {showSettings && (
           <>
-            <div className="flex pt-6 gap-3 flex-wrap">
+            <div className="flex py-3 gap-3 flex-wrap">
               {renameActive ? (
                 <>
                   <Input
@@ -431,13 +462,18 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 </>
               ) : (
                 <>
-                  <Button onClick={toggleRenameActive} startIcon={<Edit />}>
+                  <Button
+                    onClick={toggleRenameActive}
+                    startIcon={<Edit />}
+                    className="flex-1"
+                  >
                     Rename
                   </Button>
                   <Button
                     onClick={() => remove(index)}
                     startIcon={<Trash />}
                     color="error"
+                    className="flex-1"
                   >
                     Delete
                   </Button>
@@ -446,7 +482,7 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
             </div>
           </>
         )}
-        <div className="pt-3">
+        <div className="pt-3 flex justify-between items-center">
           {state?.enabled
             ? `Heater will turn on at ${String(timerOnDate.getHours()).padStart(
                 2,
@@ -459,9 +495,10 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                   : ' daily')
             : 'Heater timer is off'}
           <Button
-            className="absolute bottom-0 right-0 bg-transparent border-transparent"
+            className="bg-transparent border-transparent"
             onClick={toggleShowSettings}
             startIcon={<Settings />}
+            color="ghost"
           />
         </div>
       </Accordion.Content>

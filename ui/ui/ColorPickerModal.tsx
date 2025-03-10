@@ -3,7 +3,6 @@
 import {
   Button,
   Checkbox,
-  Form,
   Input,
   Modal,
   Range,
@@ -128,7 +127,7 @@ const ColorWheelTab = ({
         />
       </div>
       <Range
-        className="mt-6"
+        className="w-full"
         size="lg"
         onChange={handleBrightnessChange}
         onTouchEnd={handleChangeComplete}
@@ -225,7 +224,7 @@ const SwatchesTab = ({
         />
       </div>
       <Range
-        className="mt-6"
+        className="mt-6 w-full"
         size="lg"
         onChange={handleBrightnessChange}
         onTouchEnd={handleChangeComplete}
@@ -394,6 +393,7 @@ const SlidersTab = ({
       Hue:
       <div className="flex items-center">
         <Range
+          className="w-full"
           size="lg"
           onChange={handleHueChange}
           onTouchEnd={handleChangeComplete}
@@ -415,6 +415,7 @@ const SlidersTab = ({
       Saturation:
       <div className="flex items-center">
         <Range
+          className="w-full"
           size="lg"
           onChange={handleSatChange}
           onTouchEnd={handleChangeComplete}
@@ -436,6 +437,7 @@ const SlidersTab = ({
       Brightness:
       <div className="flex items-center">
         <Range
+          className="w-full"
           size="lg"
           onChange={handleBriChange}
           onTouchEnd={handleChangeComplete}
@@ -622,7 +624,7 @@ const ImageTab = ({
         colors={computedColors.map((color) => color.hex())}
         color={hsva}
         onChange={handleChange}
-        className="min-h-[40px] !flex-nowrap overflow-x-auto pl-4 pt-4 [&>*]:flex-shrink-0"
+        className="min-h-[40px] !flex-nowrap overflow-x-auto justify-center pt-4 [&>*]:flex-shrink-0"
       />
       <div className="flex flex-nowrap gap-4">
         <div>
@@ -701,19 +703,28 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
 
       {showSettings ? (
         <div className="flex gap-3">
-          <Form className="flex-1 shadow bg-base-200 w-64 rounded-lg px-2 pt-1">
-            <Form.Label title="Show all scenes">
-              <Checkbox checked={showAll} onChange={toggleShowAll} />
-            </Form.Label>
-          </Form>
+          <Button
+            className="flex-1"
+            onClick={toggleShowAll}
+            endIcon={<Checkbox checked={showAll} onChange={console.log} />}
+          >
+            Show all scenes
+          </Button>
 
-          <Button className="flex-1" onClick={togglePersist}>
-            {persistEnabled ? 'Disable autosave' : 'Enable autosave'}
+          <Button
+            className="flex-1"
+            onClick={togglePersist}
+            endIcon={
+              <Checkbox checked={persistEnabled} onChange={console.log} />
+            }
+          >
+            Autosave scene state
           </Button>
         </div>
       ) : (
         <Button
-          className="absolute bottom-0 right-0 bg-transparent border-transparent"
+          className="absolute bottom-0 right-0 px-2"
+          color="ghost"
           onClick={toggleShowSettings}
           startIcon={<Settings />}
         />
@@ -850,7 +861,10 @@ export const ColorPickerModal = () => {
           size="lg"
         />
         <div
-          className={clsx('mx-4 text-center', persistEnabled && 'text-accent')}
+          className={clsx(
+            'mx-4 text-center',
+            persistEnabled && 'text-secondary',
+          )}
         >
           {deviceModalTitle}
         </div>
@@ -861,9 +875,9 @@ export const ColorPickerModal = () => {
 
       <Modal.Body>
         <Tabs
-          onChange={console.log}
           className="mb-3 flex-nowrap overflow-x-auto pb-3"
           variant="bordered"
+          size="lg"
         >
           <Tabs.Tab active={tab === 0} onClick={() => setTab(0)}>
             Wheel

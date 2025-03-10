@@ -68,7 +68,7 @@ export const SceneList = (props: Props) => {
 
   return (
     <>
-      <Menu className="flex-1 flex-nowrap overflow-y-auto">
+      <Menu className="flex-1 flex-nowrap overflow-y-auto w-full">
         {filteredScenes.map(([sceneId, scene]) => {
           const previewDevices = Object.entries(
             excludeUndefined(scene.devices),

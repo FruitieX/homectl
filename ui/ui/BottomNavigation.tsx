@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { LayoutDashboard, List, Map } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
+import { BottomNavigation, Button } from 'react-daisyui';
 
 type Route = 'Dashboard' | 'Floorplan' | 'Groups';
 
@@ -19,7 +20,7 @@ const getRoute = (pathname: string | null): Route => {
   }
 };
 
-export const BottomNavigation = () => {
+export const HomectlBottomNavigation = () => {
   const pathname = usePathname();
   const route = getRoute(pathname);
 
@@ -30,28 +31,37 @@ export const BottomNavigation = () => {
   }
 
   return (
-    <div className="btm-nav relative z-30 min-h-0 flex-shrink-0 bg-opacity-75 backdrop-blur">
-      <Link
-        className={route === 'Dashboard' ? 'active bg-opacity-0' : ''}
-        href="/"
-      >
-        <LayoutDashboard />
-        <span className="btm-nav-label">Dashboard</span>
+    <BottomNavigation className="flex justify-around items-center h-12 z-30 min-h-0 flex-shrink-0 bg-opacity-75 backdrop-blur">
+      <Link href="/" passHref className="h-full flex-1">
+        <Button
+          active={route === 'Dashboard'}
+          className="flex gap-3 items-center h-full w-full"
+          color={route === 'Dashboard' ? 'primary' : 'ghost'}
+        >
+          <LayoutDashboard />
+          <BottomNavigation.Label>Dashboard</BottomNavigation.Label>
+        </Button>
       </Link>
-      <Link
-        className={route === 'Floorplan' ? 'active bg-opacity-0' : ''}
-        href="/map"
-      >
-        <Map />
-        <span className="btm-nav-label">Floorplan</span>
+      <Link href="/map" passHref className="h-full flex-1">
+        <Button
+          active={route === 'Floorplan'}
+          className="flex gap-3 items-center h-full w-full"
+          color={route === 'Floorplan' ? 'primary' : 'ghost'}
+        >
+          <Map />
+          <BottomNavigation.Label>Floorplan</BottomNavigation.Label>
+        </Button>
       </Link>
-      <Link
-        className={route === 'Groups' ? 'active bg-opacity-0' : ''}
-        href="/groups"
-      >
-        <List />
-        <span className="btm-nav-label">Groups</span>
+      <Link href="/groups" passHref className="h-full flex-1">
+        <Button
+          active={route === 'Groups'}
+          className="flex gap-3 items-center h-full w-full"
+          color={route === 'Groups' ? 'primary' : 'ghost'}
+        >
+          <List />
+          <BottomNavigation.Label>Groups</BottomNavigation.Label>
+        </Button>
       </Link>
-    </div>
+    </BottomNavigation>
   );
 };
