@@ -420,6 +420,11 @@ impl Scenes {
         // Insert devices from scene overrides
         if let Some(overrides) = self.db_scene_overrides.get(scene_id) {
             for (device_key, device_config) in overrides {
+                // Skip this device if it's not in device_keys or group_keys
+                if !filter_device_by_keys(device_key) {
+                    continue;
+                }
+
                 scene_devices_config.insert(device_key.clone(), device_config.clone());
             }
         }
