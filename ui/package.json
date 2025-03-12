@@ -26,7 +26,7 @@
     "deep-equal": "2.2.3",
     "immer": "10.1.1",
     "jotai": "2.12.2",
-    "konva": "9.3.18",
+    "konva": "9.3.19",
     "lodash": "4.17.21",
     "lucide-react": "0.479.0",
     "next": "15.2.2",
