@@ -1,5 +1,8 @@
 [package]
 name = "homectl-server"
+homepage = "https://github.com/FruitieX/homectl-server"
+license = "MIT"
+description = "A simple home automation server written in Rust"
 version = "0.9.5"
 authors = ["Rasmus Lövegren <fruitiex@gmail.com>"]
 edition = "2021"
