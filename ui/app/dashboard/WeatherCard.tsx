@@ -72,7 +72,7 @@ export const WeatherCard = () => {
   useInterval(async () => {
     const weather = await fetchCachedWeather(weatherApiUrl);
     setWeather(weather);
-  }, 1000);
+  }, 60 * 1000);
 
   const roundToHour = (date: Date) => {
     const p = 60 * 60 * 1000; // milliseconds in an hour

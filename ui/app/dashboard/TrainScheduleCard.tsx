@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Card, Table } from 'react-daisyui';
 import { useInterval } from 'usehooks-ts';
 import { cachedPromise } from './cachedPromise';
+import { useAppConfig } from '@/hooks/appConfig';
 
 type Trip = {
   routeShortName: string;
@@ -51,16 +52,16 @@ type HslResponse = {
   };
 };
 
-const fetchCachedTrainSchedule = async (): Promise<Train[]> => {
+const fetchCachedTrainSchedule = async (
+  trainApiUrl: string,
+): Promise<Train[]> => {
   const json = await cachedPromise('trainScheduleCache', 1, async () => {
-    const res = await fetch(
-      'https://api.digitransit.fi/routing/v1/routers/hsl/index/graphql?digitransit-subscription-key=57e33952e51842a2b78d620428c5efc0',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/graphql',
-        },
-        body: `
+    const res = await fetch(trainApiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/graphql',
+      },
+      body: `
 {
   stop(id: "HSL:2131551") {
     name
@@ -78,8 +79,7 @@ const fetchCachedTrainSchedule = async (): Promise<Train[]> => {
   }
 }
       `,
-      },
-    );
+    });
     const json: HslResponse = await res.json();
     return json;
   });
@@ -134,11 +134,13 @@ function getSecSinceMidnight(d: Date) {
 export const TrainScheduleCard = () => {
   const [trains, setTrains] = useState<Train[]>([]);
 
+  const trainApiUrl = useAppConfig().trainApiUrl;
+
   useEffect(() => {
     let isSubscribed = true;
 
     const fetch = async () => {
-      const trains = await fetchCachedTrainSchedule();
+      const trains = await fetchCachedTrainSchedule(trainApiUrl);
       if (isSubscribed === true) {
         setTrains(trains);
       }
@@ -148,12 +150,12 @@ export const TrainScheduleCard = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [trainApiUrl]);
 
   useInterval(async () => {
-    const trains = await fetchCachedTrainSchedule();
+    const trains = await fetchCachedTrainSchedule(trainApiUrl);
     setTrains(trains);
-  }, 1000);
+  }, 60 * 1000);
 
   return (
     <Card compact className="col-span-2">
