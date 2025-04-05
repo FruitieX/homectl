@@ -5,6 +5,7 @@ import { cachedPromise } from './cachedPromise';
 import { useAppConfig } from '@/hooks/appConfig';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
+import { useTempSensorsQuery } from '@/hooks/influxdb';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -53,6 +54,12 @@ export const WeatherCard = () => {
   const weatherApiUrl = useAppConfig().weatherApiUrl;
   const [detailsModalOpen, toggleDetailsModal] = useToggle(false);
 
+  const tempSensors = useTempSensorsQuery();
+
+  const latestFrontyardTemp = tempSensors?.findLast(
+    (row) => row.device_id === 'D83534387029',
+  )?._value;
+
   useEffect(() => {
     let isSubscribed = true;
 
@@ -84,14 +91,29 @@ export const WeatherCard = () => {
     },
   );
 
+  // const weatherData = currentAndFutureSeries?.filter(series => {
+  //   new Date(series.time).getTime() < new Date().getTime() + 24 * 60 * 60 * 1000;
+  // }).map((series) => {
+  //   const rainProbability =
+  //     series.data.next_1_hours?.details.probability_of_precipitation;
+  //   return {
+  //     time: series.time,
+  //     temp: series.data.instant.details.air_temperature,
+  //     rainProbability: rainProbability,
+  //   };
+  // });
+
+  // console.log(weatherData);
+
   return (
     <>
-      <Card compact className="col-span-1 shadow-lg">
+      <Card compact className="col-span-1 bg-base-300">
         <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
           <Card.Body>
             {renderWeatherDetail(
               currentAndFutureSeries && currentAndFutureSeries[0],
               true,
+              latestFrontyardTemp ? latestFrontyardTemp.toFixed(1) : undefined,
             )}
           </Card.Body>
         </Button>
@@ -109,6 +131,32 @@ export const WeatherCard = () => {
               <X />
             </Button>
           </div>
+          {/* <ResponsiveContainer width="100%" height="300px"> */}
+          {/* <LineChart
+            width={500}
+            height={300}
+            data={weatherData}
+            margin={{
+              top: 5,
+              right: 30,
+              left: 20,
+              bottom: 5,
+            }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="time"
+              tickFormatter={(date) =>
+                new Date(date).toLocaleDateString('en-FI')
+              }
+            />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            <Line type="monotone" dataKey="temp" stroke="#82ca9d" />
+            <Line type="monotone" dataKey="rainProbability" stroke="#8884d8" />
+          </LineChart> */}
+          {/* </ResponsiveContainer> */}
           <div className="flex flex-row pt-6 text-base">
             <span className="stat-title w-24">Time</span>
             <span className="stat-title">Forecast</span>
@@ -159,6 +207,7 @@ export const WeatherCard = () => {
 const renderWeatherDetail = (
   series?: WeatherTimeSeries,
   horizontal?: boolean,
+  overrideTemp?: string | number,
 ) => {
   if (series === undefined) {
     return null;
@@ -177,7 +226,10 @@ const renderWeatherDetail = (
       />
       <div className={clsx('flex flex-col', horizontal ? 'items-center' : '')}>
         <span className="whitespace-nowrap text-2xl">
-          {series.data.instant.details.air_temperature} °C
+          {overrideTemp !== undefined
+            ? overrideTemp
+            : series.data.instant.details.air_temperature}{' '}
+          °C
         </span>
         <span className="stat-title">
           {series.data.instant.details.wind_speed} m/s

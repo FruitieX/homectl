@@ -36,7 +36,7 @@ export const HomectlBottomNavigation = () => {
         <Button
           active={route === 'Dashboard'}
           className="flex gap-3 items-center h-full w-full"
-          color={route === 'Dashboard' ? 'primary' : 'ghost'}
+          color={route === 'Dashboard' ? 'neutral' : 'ghost'}
         >
           <LayoutDashboard />
           <BottomNavigation.Label>Dashboard</BottomNavigation.Label>
@@ -46,7 +46,7 @@ export const HomectlBottomNavigation = () => {
         <Button
           active={route === 'Floorplan'}
           className="flex gap-3 items-center h-full w-full"
-          color={route === 'Floorplan' ? 'primary' : 'ghost'}
+          color={route === 'Floorplan' ? 'neutral' : 'ghost'}
         >
           <Map />
           <BottomNavigation.Label>Floorplan</BottomNavigation.Label>
@@ -56,7 +56,7 @@ export const HomectlBottomNavigation = () => {
         <Button
           active={route === 'Groups'}
           className="flex gap-3 items-center h-full w-full"
-          color={route === 'Groups' ? 'primary' : 'ghost'}
+          color={route === 'Groups' ? 'neutral' : 'ghost'}
         >
           <List />
           <BottomNavigation.Label>Groups</BottomNavigation.Label>

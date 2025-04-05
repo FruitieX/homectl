@@ -120,8 +120,8 @@ export const ControlsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-2">
-        <Card.Body className="flex-row items-center justify-around overflow-x-auto shadow-lg">
+      <Card compact className="col-span-2 bg-base-300">
+        <Card.Body className="flex-row items-center justify-around overflow-x-auto">
           <Button
             color="ghost"
             className={lightsOn ? '' : 'text-zinc-700'}

@@ -158,8 +158,8 @@ export const TrainScheduleCard = () => {
   }, 60 * 1000);
 
   return (
-    <Card compact className="col-span-2">
-      <Card.Body className="shadow-lg">
+    <Card compact className="col-span-2 bg-base-300">
+      <Card.Body>
         <Table>
           <Table.Head>
             <span>Train</span>
