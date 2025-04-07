@@ -3,6 +3,7 @@
 import { ClockCard } from './ClockCard';
 import { ControlsCard } from './ControlsCard';
 import { SensorsCard } from './SensorsCard';
+import { SpotPriceCard } from './SpotPriceCard';
 import { TrainScheduleCard } from './TrainScheduleCard';
 import { WeatherCard } from './WeatherCard';
 
@@ -12,6 +13,7 @@ export default function Page() {
       <WeatherCard />
       <ClockCard />
       <SensorsCard />
+      <SpotPriceCard />
       <ControlsCard />
       <TrainScheduleCard />
     </div>

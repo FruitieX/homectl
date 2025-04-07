@@ -39,7 +39,7 @@ export const SensorsCard = () => {
         <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
           <Card.Body>
             <div className="stat-title">
-              Back yard: {latestBackyardTemp?.toFixed(1)} °C
+              Backyard: {latestBackyardTemp?.toFixed(1)} °C
             </div>
           </Card.Body>
         </Button>

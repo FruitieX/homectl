@@ -40,7 +40,7 @@ export const useInfluxDbQueryApi = (): QueryApi | null => {
 };
 
 export const useCachedInfluxDbQuery = (query: string, cacheKey: string) => {
-  const [state, setState] = useState<any>(null);
+  const [state, setState] = useState<any>([]);
   const queryApi = useInfluxDbQueryApi();
 
   useEffect(() => {
@@ -104,4 +104,27 @@ export const useTempSensorsQuery = () => {
   );
 
   return tempSensors;
+};
+
+interface SpotPriceRow {
+  _time: Date;
+  _value: number;
+}
+
+export const useSpotPriceQuery = () => {
+  const spotPrices: SpotPriceRow[] = useCachedInfluxDbQuery(
+    `
+      import "date"
+      import "timezone"
+
+      option location = timezone.location(name: "Europe/Helsinki")
+
+      from(bucket: "nordpool")
+        |> range(start: date.truncate(t: now(), unit: 1d), stop: 24h)
+        |> filter(fn: (r) => r["_measurement"] == "price")
+    `,
+    'spotPriceQuery',
+  );
+
+  return spotPrices;
 };
