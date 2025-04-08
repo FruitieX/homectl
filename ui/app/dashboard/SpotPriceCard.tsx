@@ -74,7 +74,7 @@ export const SpotPriceCard = () => {
                 fillOpacity={1}
                 fill="url(#colorTemp)"
               />
-              <Customized component={CurrentTimeMarker} />
+              {/* <Customized component={CurrentTimeMarker} /> */}
             </BarChart>
           </ResponsiveContainer>
         </Card.Body>
@@ -120,13 +120,13 @@ const CurrentTimeMarker = (props: any) => {
   // Draw vertical line at current time
   return (
     <Rectangle
-      x={currentX}
+      x={currentX - 4}
       y={0}
       width={2}
       height={1000}
       stroke={spotPriceToColor(currentPrice?.value)}
       strokeWidth={2}
-      opacity={0.8}
+      opacity={0.5}
     />
   );
 };
