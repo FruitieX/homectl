@@ -35,7 +35,10 @@ export const SensorsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-2 flex-row justify-around bg-base-300">
+      <Card
+        compact
+        className="col-span-2 flex-row justify-around bg-base-300 overflow-x-auto min-h-16"
+      >
         <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
           <Card.Body>
             <div className="stat-title">

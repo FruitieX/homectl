@@ -10,6 +10,7 @@ import {
   Bar,
   Customized,
   Rectangle,
+  ResponsiveContainer,
 } from 'recharts';
 
 const spotPriceToColor = (spotPrice: number) => {
@@ -42,44 +43,40 @@ export const SpotPriceCard = () => {
     <>
       <Card compact className="col-span-2 flex-row justify-around bg-base-300">
         <Card.Body>
-          <BarChart
-            width={500}
-            height={250}
-            data={data}
-            margin={{
-              top: 0,
-              right: 0,
-              left: 0,
-              bottom: 0,
-            }}
-          >
-            <defs>
-              <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" opacity={0.5} />
-            <XAxis
-              dataKey="time"
-              scale="time"
-              interval="equidistantPreserveStart"
-              tickFormatter={(date) =>
-                new Date(date).toLocaleTimeString('en-FI', {
-                  second: undefined,
-                  timeStyle: 'short',
-                })
-              }
-            />
-            <YAxis />
-            <Bar
-              type="step"
-              dataKey="value"
-              fillOpacity={1}
-              fill="url(#colorTemp)"
-            />
-            <Customized component={CurrentTimeMarker} />
-          </BarChart>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart
+              width={500}
+              height={200}
+              data={data}
+              margin={{
+                top: 0,
+                right: 0,
+                left: 0,
+                bottom: 0,
+              }}
+            >
+              <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
+              <XAxis
+                dataKey="time"
+                scale="time"
+                interval="equidistantPreserveStart"
+                tickFormatter={(date) =>
+                  new Date(date).toLocaleTimeString('en-FI', {
+                    second: undefined,
+                    timeStyle: 'short',
+                  })
+                }
+              />
+              <YAxis />
+              <Bar
+                type="step"
+                dataKey="value"
+                fillOpacity={1}
+                fill="url(#colorTemp)"
+              />
+              <Customized component={CurrentTimeMarker} />
+            </BarChart>
+          </ResponsiveContainer>
         </Card.Body>
       </Card>
     </>
