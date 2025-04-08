@@ -29,6 +29,8 @@ use self::utils::homectl_to_mqtt;
 pub struct MqttConfig {
     host: String,
     port: u16,
+    username: Option<String>,
+    password: Option<String>,
     topic: String,
     topic_set: String,
 
@@ -104,6 +106,12 @@ impl Integration for Mqtt {
             self.config.port,
         );
         options.set_keep_alive(Duration::from_secs(5));
+        
+        // Set credentials if provided
+        if let Some(username) = &self.config.username {
+            options.set_credentials(username, self.config.password.as_deref().unwrap_or(""));
+        }
+        
         let (client, mut eventloop) = AsyncClient::new(options, 10);
 
         self.client = Some(client.clone());
