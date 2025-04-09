@@ -741,3 +741,81 @@ impl<'de> Deserialize<'de> for DeviceKey {
 #[derive(TS, Clone, Debug, Default, Deserialize, Serialize, PartialEq)]
 #[ts(export)]
 pub struct DevicesState(pub BTreeMap<DeviceKey, Device>);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json;
+    use crate::types::color::Rgb;
+
+    #[test]
+    fn test_sensor_device_serialization() {
+        // Test Boolean variant
+        let boolean_sensor = SensorDevice::Boolean { value: true };
+        let serialized = serde_json::to_string(&boolean_sensor).unwrap();
+        println!("Boolean sensor serialized: {}", serialized);
+        assert_eq!(serialized, r#"{"value":true}"#);
+
+        // Test Text variant
+        let text_sensor = SensorDevice::Text { value: "test".to_string() };
+        let serialized = serde_json::to_string(&text_sensor).unwrap();
+        println!("Text sensor serialized: {}", serialized);
+        assert_eq!(serialized, r#"{"value":"test"}"#);
+
+        // Test Number variant
+        let number_sensor = SensorDevice::Number { value: 42.5 };
+        let serialized = serde_json::to_string(&number_sensor).unwrap();
+        println!("Number sensor serialized: {}", serialized);
+        assert_eq!(serialized, r#"{"value":42.5}"#);
+
+        // Test Color variant
+        let color_sensor = SensorDevice::Color(ControllableState {
+            power: true,
+            brightness: Some(OrderedFloat(0.8)),
+            color: Some(DeviceColor::Rgb(Rgb {
+                r: 255,
+                g: 0,
+                b: 0,
+            })),
+            transition: Some(OrderedFloat(1.0)),
+        });
+        let serialized = serde_json::to_string(&color_sensor).unwrap();
+        println!("Color sensor serialized: {}", serialized);
+        assert_eq!(serialized, r#"{"power":true,"brightness":0.8,"color":{"r":255,"g":0,"b":0},"transition":1.0}"#);
+    }
+
+    #[test]
+    fn test_sensor_device_deserialization() {
+        // Test Boolean variant
+        let json = r#"{"value":true}"#;
+        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        assert_eq!(deserialized, SensorDevice::Boolean { value: true });
+
+        // Test Text variant
+        let json = r#"{"value":"test"}"#;
+        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        assert_eq!(deserialized, SensorDevice::Text { value: "test".to_string() });
+
+        // Test Number variant
+        let json = r#"{"value":42.5}"#;
+        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        assert_eq!(deserialized, SensorDevice::Number { value: 42.5 });
+
+        // Test Color variant
+        let json = r#"{"power":true,"brightness":0.8,"color":{"r":255,"g":0,"b":0},"transition":1.0}"#;
+        let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
+        assert_eq!(
+            deserialized,
+            SensorDevice::Color(ControllableState {
+                power: true,
+                brightness: Some(OrderedFloat(0.8)),
+                color: Some(DeviceColor::Rgb(Rgb {
+                    r: 255,
+                    g: 0,
+                    b: 0,
+                })),
+                transition: Some(OrderedFloat(1.0)),
+            })
+        );
+    }
+}
