@@ -745,8 +745,8 @@ pub struct DevicesState(pub BTreeMap<DeviceKey, Device>);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json;
     use crate::types::color::Rgb;
+    use serde_json;
 
     #[test]
     fn test_sensor_device_serialization() {
@@ -757,7 +757,9 @@ mod tests {
         assert_eq!(serialized, r#"{"value":true}"#);
 
         // Test Text variant
-        let text_sensor = SensorDevice::Text { value: "test".to_string() };
+        let text_sensor = SensorDevice::Text {
+            value: "test".to_string(),
+        };
         let serialized = serde_json::to_string(&text_sensor).unwrap();
         println!("Text sensor serialized: {}", serialized);
         assert_eq!(serialized, r#"{"value":"test"}"#);
@@ -772,16 +774,15 @@ mod tests {
         let color_sensor = SensorDevice::Color(ControllableState {
             power: true,
             brightness: Some(OrderedFloat(0.8)),
-            color: Some(DeviceColor::Rgb(Rgb {
-                r: 255,
-                g: 0,
-                b: 0,
-            })),
+            color: Some(DeviceColor::Rgb(Rgb { r: 255, g: 0, b: 0 })),
             transition: Some(OrderedFloat(1.0)),
         });
         let serialized = serde_json::to_string(&color_sensor).unwrap();
         println!("Color sensor serialized: {}", serialized);
-        assert_eq!(serialized, r#"{"power":true,"brightness":0.8,"color":{"r":255,"g":0,"b":0},"transition":1.0}"#);
+        assert_eq!(
+            serialized,
+            r#"{"power":true,"brightness":0.8,"color":{"r":255,"g":0,"b":0},"transition":1.0}"#
+        );
     }
 
     #[test]
@@ -794,7 +795,12 @@ mod tests {
         // Test Text variant
         let json = r#"{"value":"test"}"#;
         let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
-        assert_eq!(deserialized, SensorDevice::Text { value: "test".to_string() });
+        assert_eq!(
+            deserialized,
+            SensorDevice::Text {
+                value: "test".to_string()
+            }
+        );
 
         // Test Number variant
         let json = r#"{"value":42.5}"#;
@@ -802,18 +808,15 @@ mod tests {
         assert_eq!(deserialized, SensorDevice::Number { value: 42.5 });
 
         // Test Color variant
-        let json = r#"{"power":true,"brightness":0.8,"color":{"r":255,"g":0,"b":0},"transition":1.0}"#;
+        let json =
+            r#"{"power":true,"brightness":0.8,"color":{"r":255,"g":0,"b":0},"transition":1.0}"#;
         let deserialized: SensorDevice = serde_json::from_str(json).unwrap();
         assert_eq!(
             deserialized,
             SensorDevice::Color(ControllableState {
                 power: true,
                 brightness: Some(OrderedFloat(0.8)),
-                color: Some(DeviceColor::Rgb(Rgb {
-                    r: 255,
-                    g: 0,
-                    b: 0,
-                })),
+                color: Some(DeviceColor::Rgb(Rgb { r: 255, g: 0, b: 0 })),
                 transition: Some(OrderedFloat(1.0)),
             })
         );
