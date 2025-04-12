@@ -94,7 +94,10 @@ export const useTempSensorsQuery = () => {
             (r["device_id"] == "D4343037362D" and r["integration_id"] == "ble1") or
 
             // living room
-            (r["device_id"] == "D7353530665A" and r["integration_id"] == "ble1")
+            (r["device_id"] == "D7353530665A" and r["integration_id"] == "ble1") or
+
+            // car
+            (r["device_id"] == "C76A0246647E" and r["integration_id"] == "ble2")
         )
         |> filter(fn: (r) => r["_field"] == "tempc")
         |> aggregateWindow(every: 10m, fn: mean, createEmpty: false)

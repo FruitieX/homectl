@@ -42,11 +42,9 @@ export const SpotPriceCard = () => {
   return (
     <>
       <Card compact className="col-span-2 flex-row justify-around bg-base-300">
-        <Card.Body>
+        <Card.Body className="pr-12">
           <ResponsiveContainer width="100%" height={200}>
             <BarChart
-              width={500}
-              height={200}
               data={data}
               margin={{
                 top: 0,

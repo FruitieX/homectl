@@ -3,6 +3,7 @@ import { useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
 import { XAxis, YAxis, CartesianGrid, AreaChart, Area } from 'recharts';
+import clsx from 'clsx';
 
 export const SensorsCard = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -12,7 +13,7 @@ export const SensorsCard = () => {
 
   const latestBackyardTemp = tempSensors?.findLast(
     (row) => row.device_id === 'D9353438450D',
-  )?._value;
+  );
 
   // const latestFrontyardTemp = tempSensors?.findLast(
   //   (row) => row.device_id === 'D83534387029',
@@ -20,11 +21,15 @@ export const SensorsCard = () => {
 
   const latestPatioTemp = tempSensors?.findLast(
     (row) => row.device_id === 'D4343037362D',
-  )?._value;
+  );
 
   const latestLivingRoomTemp = tempSensors?.findLast(
     (row) => row.device_id === 'D7353530665A',
-  )?._value;
+  );
+
+  const latestCarTemp = tempSensors?.findLast(
+    (row) => row.device_id === 'C76A0246647E',
+  );
 
   const patioTemp = tempSensors
     ?.filter((row) => row.device_id === 'D4343037362D')
@@ -37,26 +42,81 @@ export const SensorsCard = () => {
     <>
       <Card
         compact
-        className="col-span-2 flex-row justify-around bg-base-300 overflow-x-auto min-h-16"
+        className="col-span-2 flex-row justify-around bg-base-300 overflow-x-auto overflow-y-hidden min-h-16"
       >
-        <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
+        <Button
+          color="ghost"
+          className="h-full px-0"
+          onClick={toggleDetailsModal}
+        >
           <Card.Body>
-            <div className="stat-title">
-              Backyard: {latestBackyardTemp?.toFixed(1)} °C
+            <div
+              className={clsx(
+                'stat-title',
+                (latestBackyardTemp?._time ?? 0) <
+                  new Date(Date.now() - 15 * 60 * 1000)
+                  ? 'text-stone-500'
+                  : '',
+              )}
+            >
+              Backyard: {latestBackyardTemp?._value.toFixed(1)} °C
             </div>
           </Card.Body>
         </Button>
-        <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
+        <Button
+          color="ghost"
+          className="h-full px-0"
+          onClick={toggleDetailsModal}
+        >
           <Card.Body>
-            <div className="stat-title">
-              Patio: {latestPatioTemp?.toFixed(1)} °C
+            <div
+              className={clsx(
+                'stat-title',
+                (latestPatioTemp?._time ?? 0) <
+                  new Date(Date.now() - 15 * 60 * 1000)
+                  ? 'text-stone-500'
+                  : '',
+              )}
+            >
+              Patio: {latestPatioTemp?._value.toFixed(1)} °C
             </div>
           </Card.Body>
         </Button>
-        <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
+        <Button
+          color="ghost"
+          className="h-full px-0"
+          onClick={toggleDetailsModal}
+        >
           <Card.Body>
-            <div className="stat-title">
-              Indoors: {latestLivingRoomTemp?.toFixed(1)} °C
+            <div
+              className={clsx(
+                'stat-title',
+                (latestCarTemp?._time ?? 0) <
+                  new Date(Date.now() - 15 * 60 * 1000)
+                  ? 'text-stone-500'
+                  : '',
+              )}
+            >
+              Car: {latestCarTemp?._value.toFixed(1)} °C
+            </div>
+          </Card.Body>
+        </Button>
+        <Button
+          color="ghost"
+          className="h-full px-0"
+          onClick={toggleDetailsModal}
+        >
+          <Card.Body>
+            <div
+              className={clsx(
+                'stat-title',
+                (latestLivingRoomTemp?._time ?? 0) <
+                  new Date(Date.now() - 15 * 60 * 1000)
+                  ? 'text-stone-500'
+                  : '',
+              )}
+            >
+              Indoors: {latestLivingRoomTemp?._value.toFixed(1)} °C
             </div>
           </Card.Body>
         </Button>
