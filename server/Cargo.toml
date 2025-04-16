@@ -30,7 +30,7 @@ tokio = { version = "=1.44.2", features = ["full"] }
 futures-util = "=0.3.31"
 tokio-stream = "=0.1.17"
 itertools = "=0.14.0"
-sqlx = { version = "=0.8.4", features = [
+sqlx = { version = "=0.8.5", features = [
 	"runtime-tokio-rustls",
 	"postgres",
 	"json",
