@@ -1,5 +1,12 @@
 # homectl-next
 
+<div>
+<img title="Dashboard" style="height: 420px" src="https://github.com/user-attachments/assets/5281e8bd-bf23-4b0d-9a02-e4dee423d2f5" />
+<img title="Device color selector" style="height: 420px" src="https://github.com/user-attachments/assets/d1f29311-86a8-471e-a9e5-2319ea257f3b" />
+<img title="Groups list" style="height: 420px" src="https://github.com/user-attachments/assets/e2400776-f778-4b25-a3a5-99a3e8f12c01" />
+<img title="Scenes list" style="height: 420px" src="https://github.com/user-attachments/assets/d1066f45-8339-4b80-8271-48c3c4dc6917" />
+</div>
+
 ## Setup
 
 1. Install dependencies: `npm install`
