@@ -7,6 +7,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useWebsocketState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
+import useIdle from '@/hooks/useIdle';
 
 export const Navbar = () => {
   const router = useRouter();
@@ -75,6 +76,24 @@ export const Navbar = () => {
       setIsFullscreen(true);
     }
   }, [isFullscreen, setIsFullscreen]);
+
+  const isIdle = useIdle();
+
+  if (isFullscreen) {
+    return (
+      <>
+        <div className="h-2" />
+        {!isIdle && (
+          <Button
+            className="absolute top-2 right-0 z-10 opacity-20"
+            color="ghost"
+            startIcon={isFullscreen ? <Shrink /> : <Expand />}
+            onClick={toggleFullscreen}
+          />
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur">
