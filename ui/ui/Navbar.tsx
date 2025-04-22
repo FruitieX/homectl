@@ -85,7 +85,7 @@ export const Navbar = () => {
         <div className="h-2" />
         {!isIdle && (
           <Button
-            className="absolute top-2 right-0 z-10 opacity-20"
+            className="absolute top-3 right-1 z-10 opacity-20"
             color="ghost"
             startIcon={isFullscreen ? <Shrink /> : <Expand />}
             onClick={toggleFullscreen}
