@@ -42,12 +42,12 @@ export const SpotPriceCard = () => {
   return (
     <>
       <Card compact className="col-span-2 flex-row justify-around bg-base-300">
-        <Card.Body className="pr-12">
-          <ResponsiveContainer width="100%" height={200}>
+        <Card.Body className="pr-12 min-h-60 -mt-4 -mb-2">
+          <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
               margin={{
-                top: 0,
+                top: 20,
                 right: 0,
                 left: 0,
                 bottom: 0,
@@ -64,8 +64,9 @@ export const SpotPriceCard = () => {
                     timeStyle: 'short',
                   })
                 }
+                tickMargin={8}
               />
-              <YAxis />
+              <YAxis tickMargin={8} />
               <Bar
                 type="step"
                 dataKey="value"

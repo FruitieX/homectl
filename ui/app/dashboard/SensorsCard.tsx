@@ -2,12 +2,37 @@ import { Button, Card, Modal } from 'react-daisyui';
 import { useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
-import { XAxis, YAxis, CartesianGrid, AreaChart, Area } from 'recharts';
+import {
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  AreaChart,
+  Area,
+  ResponsiveContainer,
+} from 'recharts';
 import clsx from 'clsx';
+import { useState } from 'react';
+
+const sensorIdToName = (sensorId: string | null) => {
+  switch (sensorId) {
+    case 'D9353438450D':
+      return 'Backyard';
+    case 'D4343037362D':
+      return 'Patio';
+    case 'C76A0246647E':
+      return 'Car';
+    case 'D7353530665A':
+      return 'Living Room';
+    default:
+      return 'Unknown';
+  }
+};
 
 export const SensorsCard = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [detailsModalOpen, toggleDetailsModal] = useToggle(false);
+  const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
+    useToggle(false);
+  const [activeSensorId, setActiveSensorId] = useState<string | null>(null);
 
   const tempSensors = useTempSensorsQuery();
 
@@ -31,8 +56,8 @@ export const SensorsCard = () => {
     (row) => row.device_id === 'C76A0246647E',
   );
 
-  const patioTemp = tempSensors
-    ?.filter((row) => row.device_id === 'D4343037362D')
+  const tempData = tempSensors
+    ?.filter((row) => row.device_id === activeSensorId)
     .map((row) => ({
       time: new Date(row._time),
       temp: row._value,
@@ -47,7 +72,10 @@ export const SensorsCard = () => {
         <Button
           color="ghost"
           className="h-full px-0"
-          onClick={toggleDetailsModal}
+          onClick={() => {
+            setActiveSensorId('D9353438450D');
+            setDetailsModalOpen(true);
+          }}
         >
           <Card.Body>
             <div
@@ -66,7 +94,10 @@ export const SensorsCard = () => {
         <Button
           color="ghost"
           className="h-full px-0"
-          onClick={toggleDetailsModal}
+          onClick={() => {
+            setActiveSensorId('D4343037362D');
+            setDetailsModalOpen(true);
+          }}
         >
           <Card.Body>
             <div
@@ -85,7 +116,10 @@ export const SensorsCard = () => {
         <Button
           color="ghost"
           className="h-full px-0"
-          onClick={toggleDetailsModal}
+          onClick={() => {
+            setActiveSensorId('C76A0246647E');
+            setDetailsModalOpen(true);
+          }}
         >
           <Card.Body>
             <div
@@ -104,7 +138,10 @@ export const SensorsCard = () => {
         <Button
           color="ghost"
           className="h-full px-0"
-          onClick={toggleDetailsModal}
+          onClick={() => {
+            setActiveSensorId('D7353530665A');
+            setDetailsModalOpen(true);
+          }}
         >
           <Card.Body>
             <div
@@ -122,59 +159,76 @@ export const SensorsCard = () => {
         </Button>
       </Card>
       <Modal.Legacy
-        open={false}
+        open={detailsModalOpen}
         onClickBackdrop={toggleDetailsModal}
         responsive
         className="pt-0"
       >
-        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur">
+        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 bg-base-100 bg-opacity-75 backdrop-blur z-0">
           <div className="flex items-center justify-between font-bold">
-            <div className="mx-4 text-center">Historical data</div>
+            <div className="mx-4 text-center">
+              {sensorIdToName(activeSensorId)} temperature
+            </div>
             <Button onClick={toggleDetailsModal} variant="outline">
               <X />
             </Button>
           </div>
         </Modal.Header>
-        <Modal.Body className="flex flex-col gap-3">
-          {/* <ResponsiveContainer width="100%" height="300px"> */}
-          <AreaChart
-            width={500}
-            height={300}
-            data={patioTemp}
-            margin={{
-              top: 5,
-              right: 30,
-              left: 20,
-              bottom: 5,
-            }}
-          >
-            <defs>
-              <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
-                <stop offset="95%" stopColor="#82ca9d" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis
-              dataKey="time"
-              scale="time"
-              tickFormatter={(date) =>
-                new Date(date).toLocaleTimeString('en-FI', {
-                  second: undefined,
-                  timeStyle: 'short',
-                })
-              }
-            />
-            <YAxis />
-            <Area
-              type="step"
-              dataKey="temp"
-              stroke="#82ca9d"
-              fillOpacity={1}
-              fill="url(#colorTemp)"
-            />
-          </AreaChart>
-          {/* </ResponsiveContainer> */}
+        <Modal.Body className="flex flex-col gap-3 -mt-4 z-10">
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart
+              width={500}
+              height={300}
+              data={tempData}
+              margin={{
+                top: 20,
+                right: 50,
+                left: 0,
+                bottom: 0,
+              }}
+            >
+              <defs>
+                <linearGradient
+                  id="colorTemp"
+                  x1="0%"
+                  y1="0%"
+                  x2="0%"
+                  y2="100%"
+                >
+                  <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
+                  {/* <stop offset="0%" stopColor="blue" /> */}
+                  {/* <stop offset={cold} stopColor="blue" /> */}
+                  {/* <stop offset={comfortable} stopColor="green" /> */}
+                  {/* <stop offset={hot} stopColor="red" /> */}
+                  {/* <stop offset="100%" stopColor="red" /> */}
+                  <stop offset="100%" stopColor="#82ca9d" stopOpacity={0.05} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="time"
+                scale="time"
+                interval="equidistantPreserveStart"
+                tickFormatter={(date) =>
+                  new Date(date).toLocaleTimeString('en-FI', {
+                    second: undefined,
+                    timeStyle: 'short',
+                  })
+                }
+                tickMargin={8}
+              />
+              <YAxis tickMargin={8} domain={['auto', 'auto']} />
+              <Area
+                type="step"
+                dataKey="temp"
+                stroke="rgba(40, 40, 40, 0.5)"
+                strokeWidth={2}
+                fillOpacity={1}
+                fill="url(#colorTemp)"
+                animationDuration={500}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
         </Modal.Body>
       </Modal.Legacy>
     </>
