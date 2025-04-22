@@ -8,15 +8,14 @@ import {
   CartesianGrid,
   BarChart,
   Bar,
-  Customized,
   Rectangle,
   ResponsiveContainer,
 } from 'recharts';
 
 const spotPriceToColor = (spotPrice: number) => {
   const h = Math.min(Math.max(0, 120 - 5 * spotPrice), 300);
-  const s = 0.65;
-  const v = 0.35;
+  const s = 0.45;
+  const v = 0.4;
   return `hsl(${h}, ${s * 100}%, ${v * 100}%)`;
 };
 
@@ -41,8 +40,11 @@ export const SpotPriceCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-2 flex-row justify-around bg-base-300">
-        <Card.Body className="pr-12 min-h-60 -mt-4 -mb-2">
+      <Card
+        compact
+        className="col-span-2 flex-row justify-around bg-base-300 overflow-hidden"
+      >
+        <Card.Body className="pr-12 min-h-60 -mt-4 -mb-2 -mx-6">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
@@ -56,7 +58,6 @@ export const SpotPriceCard = () => {
               <CartesianGrid strokeDasharray="3 3" opacity={0.25} />
               <XAxis
                 dataKey="time"
-                scale="time"
                 interval="equidistantPreserveStart"
                 tickFormatter={(date) =>
                   new Date(date).toLocaleTimeString('en-FI', {
@@ -67,12 +68,7 @@ export const SpotPriceCard = () => {
                 tickMargin={8}
               />
               <YAxis tickMargin={8} />
-              <Bar
-                type="step"
-                dataKey="value"
-                fillOpacity={1}
-                fill="url(#colorTemp)"
-              />
+              <Bar type="step" dataKey="value" radius={3} />
               {/* <Customized component={CurrentTimeMarker} /> */}
             </BarChart>
           </ResponsiveContainer>

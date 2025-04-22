@@ -9,9 +9,12 @@ import {
   AreaChart,
   Area,
   ResponsiveContainer,
+  Bar,
+  BarChart,
 } from 'recharts';
 import clsx from 'clsx';
 import { useState } from 'react';
+import Color from 'color';
 
 const sensorIdToName = (sensorId: string | null) => {
   switch (sensorId) {
@@ -28,6 +31,53 @@ const sensorIdToName = (sensorId: string | null) => {
   }
 };
 
+const tempToColor = (temp: number) => {
+  const iceTemp = 0;
+  const coldTemp = 8;
+  const coolTemp = 15;
+  const comfortableTemp = 23;
+  const hotTemp = 30;
+
+  const s = 45;
+  const v = 55;
+  const iceColor = new Color({ h: 240, s: 0, v });
+  const coldColor = new Color({ h: 240, s, v });
+  const coolColor = new Color({ h: 180, s, v });
+  const comfortableColor = new Color({ h: 120, s, v });
+  const hotColor = new Color({ h: 0, s, v });
+
+  if (temp < iceTemp) {
+    return iceTemp;
+  } else if (temp < coldTemp) {
+    return iceColor.mix(coldColor, (temp - iceTemp) / (coldTemp - iceTemp));
+  } else if (temp < coolTemp) {
+    return coldColor.mix(coolColor, (temp - coldTemp) / (coolTemp - coldTemp));
+  } else if (temp < comfortableTemp) {
+    return coolColor.mix(
+      comfortableColor,
+      (temp - coolTemp) / (comfortableTemp - coolTemp),
+    );
+  } else if (temp < hotTemp) {
+    return comfortableColor.mix(
+      hotColor,
+      (temp - comfortableTemp) / (hotTemp - comfortableTemp),
+    );
+  }
+
+  return hotColor;
+};
+
+const sensorOffline = (
+  lastSeen: Date | undefined,
+  threshold = 15 * 60 * 1000, // 15 minutes
+) => {
+  if (!lastSeen) {
+    return true;
+  }
+
+  return new Date(lastSeen).getTime() < Date.now() - threshold;
+};
+
 export const SensorsCard = () => {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
@@ -36,32 +86,20 @@ export const SensorsCard = () => {
 
   const tempSensors = useTempSensorsQuery();
 
-  const latestBackyardTemp = tempSensors?.findLast(
-    (row) => row.device_id === 'D9353438450D',
-  );
-
-  // const latestFrontyardTemp = tempSensors?.findLast(
-  //   (row) => row.device_id === 'D83534387029',
-  // )?._value;
-
-  const latestPatioTemp = tempSensors?.findLast(
-    (row) => row.device_id === 'D4343037362D',
-  );
-
-  const latestLivingRoomTemp = tempSensors?.findLast(
-    (row) => row.device_id === 'D7353530665A',
-  );
-
-  const latestCarTemp = tempSensors?.findLast(
-    (row) => row.device_id === 'C76A0246647E',
-  );
-
   const tempData = tempSensors
     ?.filter((row) => row.device_id === activeSensorId)
     .map((row) => ({
       time: new Date(row._time),
       temp: row._value,
+      fill: tempToColor(row._value).toString(),
     }));
+
+  const sensorIds = [
+    'D9353438450D',
+    'D4343037362D',
+    'D7353530665A',
+    'C76A0246647E',
+  ];
 
   return (
     <>
@@ -69,94 +107,33 @@ export const SensorsCard = () => {
         compact
         className="col-span-2 flex-row justify-around bg-base-300 overflow-x-auto overflow-y-hidden min-h-16"
       >
-        <Button
-          color="ghost"
-          className="h-full px-0"
-          onClick={() => {
-            setActiveSensorId('D9353438450D');
-            setDetailsModalOpen(true);
-          }}
-        >
-          <Card.Body>
-            <div
-              className={clsx(
-                'stat-title',
-                (latestBackyardTemp?._time ?? 0) <
-                  new Date(Date.now() - 15 * 60 * 1000)
-                  ? 'text-stone-500'
-                  : '',
-              )}
+        {sensorIds.map((sensorId) => {
+          const sensor = tempSensors?.findLast(
+            (row) => row.device_id === sensorId,
+          );
+
+          const offline = sensorOffline(sensor?._time);
+
+          return (
+            <Button
+              key={sensorId}
+              color="ghost"
+              className="h-full px-0"
+              onClick={() => {
+                setActiveSensorId(sensorId);
+                setDetailsModalOpen(true);
+              }}
             >
-              Backyard: {latestBackyardTemp?._value.toFixed(1)} °C
-            </div>
-          </Card.Body>
-        </Button>
-        <Button
-          color="ghost"
-          className="h-full px-0"
-          onClick={() => {
-            setActiveSensorId('D4343037362D');
-            setDetailsModalOpen(true);
-          }}
-        >
-          <Card.Body>
-            <div
-              className={clsx(
-                'stat-title',
-                (latestPatioTemp?._time ?? 0) <
-                  new Date(Date.now() - 15 * 60 * 1000)
-                  ? 'text-stone-500'
-                  : '',
-              )}
-            >
-              Patio: {latestPatioTemp?._value.toFixed(1)} °C
-            </div>
-          </Card.Body>
-        </Button>
-        <Button
-          color="ghost"
-          className="h-full px-0"
-          onClick={() => {
-            setActiveSensorId('C76A0246647E');
-            setDetailsModalOpen(true);
-          }}
-        >
-          <Card.Body>
-            <div
-              className={clsx(
-                'stat-title',
-                (latestCarTemp?._time ?? 0) <
-                  new Date(Date.now() - 15 * 60 * 1000)
-                  ? 'text-stone-500'
-                  : '',
-              )}
-            >
-              Car: {latestCarTemp?._value.toFixed(1)} °C
-            </div>
-          </Card.Body>
-        </Button>
-        <Button
-          color="ghost"
-          className="h-full px-0"
-          onClick={() => {
-            setActiveSensorId('D7353530665A');
-            setDetailsModalOpen(true);
-          }}
-        >
-          <Card.Body>
-            <div
-              className={clsx(
-                'stat-title',
-                (latestLivingRoomTemp?._time ?? 0) <
-                  new Date(Date.now() - 15 * 60 * 1000)
-                  ? 'text-stone-500'
-                  : '',
-              )}
-            >
-              Indoors: {latestLivingRoomTemp?._value.toFixed(1)} °C
-            </div>
-          </Card.Body>
-        </Button>
+              <Card.Body>
+                <div
+                  className={clsx('stat-title', offline && 'text-stone-500')}
+                >
+                  {sensorIdToName(sensorId)}: {sensor?._value.toFixed(1)} °C
+                </div>
+              </Card.Body>
+            </Button>
+          );
+        })}
       </Card>
       <Modal.Legacy
         open={detailsModalOpen}
@@ -168,6 +145,9 @@ export const SensorsCard = () => {
           <div className="flex items-center justify-between font-bold">
             <div className="mx-4 text-center">
               {sensorIdToName(activeSensorId)} temperature
+              {sensorOffline(tempData[tempData.length - 1]?.time) && (
+                <span className="pl-2 text-stone-500">(offline)</span>
+              )}
             </div>
             <Button onClick={toggleDetailsModal} variant="outline">
               <X />
@@ -176,9 +156,7 @@ export const SensorsCard = () => {
         </Modal.Header>
         <Modal.Body className="flex flex-col gap-3 -mt-4 z-10">
           <ResponsiveContainer width="100%" height={300}>
-            <AreaChart
-              width={500}
-              height={300}
+            <BarChart
               data={tempData}
               margin={{
                 top: 20,
@@ -187,28 +165,11 @@ export const SensorsCard = () => {
                 bottom: 0,
               }}
             >
-              <defs>
-                <linearGradient
-                  id="colorTemp"
-                  x1="0%"
-                  y1="0%"
-                  x2="0%"
-                  y2="100%"
-                >
-                  <stop offset="5%" stopColor="#82ca9d" stopOpacity={0.8} />
-                  {/* <stop offset="0%" stopColor="blue" /> */}
-                  {/* <stop offset={cold} stopColor="blue" /> */}
-                  {/* <stop offset={comfortable} stopColor="green" /> */}
-                  {/* <stop offset={hot} stopColor="red" /> */}
-                  {/* <stop offset="100%" stopColor="red" /> */}
-                  <stop offset="100%" stopColor="#82ca9d" stopOpacity={0.05} />
-                </linearGradient>
-              </defs>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis
                 dataKey="time"
-                scale="time"
                 interval="equidistantPreserveStart"
+                domain={['auto', 'auto']}
                 tickFormatter={(date) =>
                   new Date(date).toLocaleTimeString('en-FI', {
                     second: undefined,
@@ -218,16 +179,8 @@ export const SensorsCard = () => {
                 tickMargin={8}
               />
               <YAxis tickMargin={8} domain={['auto', 'auto']} />
-              <Area
-                type="step"
-                dataKey="temp"
-                stroke="rgba(40, 40, 40, 0.5)"
-                strokeWidth={2}
-                fillOpacity={1}
-                fill="url(#colorTemp)"
-                animationDuration={500}
-              />
-            </AreaChart>
+              <Bar dataKey="temp" radius={3} />
+            </BarChart>
           </ResponsiveContainer>
         </Modal.Body>
       </Modal.Legacy>

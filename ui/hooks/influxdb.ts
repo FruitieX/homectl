@@ -123,7 +123,7 @@ export const useSpotPriceQuery = () => {
       option location = timezone.location(name: "Europe/Helsinki")
 
       from(bucket: "nordpool")
-        |> range(start: date.truncate(t: now(), unit: 1d), stop: 24h)
+        |> range(start: date.truncate(t: now(), unit: 1d), stop: 48h)
         |> filter(fn: (r) => r["_measurement"] == "price")
     `,
     'spotPriceQuery',
