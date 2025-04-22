@@ -2,8 +2,8 @@
 layer(base);
 
 @import 'tailwindcss';
-
 @config '../tailwind.config.js';
+@plugin "daisyui";
 
 @layer base {
   html {
