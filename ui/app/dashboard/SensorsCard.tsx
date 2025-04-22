@@ -128,7 +128,10 @@ export const SensorsCard = () => {
                 <div
                   className={clsx('stat-title', offline && 'text-stone-500')}
                 >
-                  {sensorIdToName(sensorId)}: {sensor?._value.toFixed(1)} °C
+                  {sensorIdToName(sensorId)}
+                  {sensor === undefined ? null : (
+                    <>: {sensor._value.toFixed(1)} °C</>
+                  )}
                 </div>
               </Card.Body>
             </Button>
@@ -155,33 +158,37 @@ export const SensorsCard = () => {
           </div>
         </Modal.Header>
         <Modal.Body className="flex flex-col gap-3 -mt-4 z-10">
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart
-              data={tempData}
-              margin={{
-                top: 20,
-                right: 50,
-                left: 0,
-                bottom: 0,
-              }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="time"
-                interval="equidistantPreserveStart"
-                domain={['auto', 'auto']}
-                tickFormatter={(date) =>
-                  new Date(date).toLocaleTimeString('en-FI', {
-                    second: undefined,
-                    timeStyle: 'short',
-                  })
-                }
-                tickMargin={8}
-              />
-              <YAxis tickMargin={8} domain={['auto', 'auto']} />
-              <Bar dataKey="temp" radius={3} />
-            </BarChart>
-          </ResponsiveContainer>
+          {tempData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart
+                data={tempData}
+                margin={{
+                  top: 20,
+                  right: 50,
+                  left: 0,
+                  bottom: 0,
+                }}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis
+                  dataKey="time"
+                  interval="equidistantPreserveStart"
+                  domain={['auto', 'auto']}
+                  tickFormatter={(date) =>
+                    new Date(date).toLocaleTimeString('en-FI', {
+                      second: undefined,
+                      timeStyle: 'short',
+                    })
+                  }
+                  tickMargin={8}
+                />
+                <YAxis tickMargin={8} domain={['auto', 'auto']} />
+                <Bar dataKey="temp" radius={3} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="p-8 text-stone-500">Sensor offline</div>
+          )}
         </Modal.Body>
       </Modal.Legacy>
     </>
