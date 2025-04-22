@@ -167,9 +167,9 @@ export const ControlsCard = () => {
         responsive
         open={mapVisible}
         onClickBackdrop={toggleMapVisible}
-        className="!h-svh pt-0 overflow-hidden"
+        className="h-svh! pt-0 overflow-hidden"
       >
-        <Modal.Header className="gap-3 flex items-center justify-between font-bold sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur">
+        <Modal.Header className="gap-3 flex items-center justify-between font-bold sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
           <div className="mx-4 text-center">Floorplan</div>
           <div className="flex-1" />
           {selectedDevices.length > 0 && (

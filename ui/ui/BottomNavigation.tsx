@@ -31,7 +31,7 @@ export const HomectlBottomNavigation = () => {
   }
 
   return (
-    <BottomNavigation className="flex justify-around items-center h-12 z-30 min-h-0 flex-shrink-0 bg-opacity-75 backdrop-blur">
+    <BottomNavigation className="flex justify-around items-center h-12 z-30 min-h-0 shrink-0 bg-opacity-75 backdrop-blur-sm">
       <Link href="/" passHref className="h-full flex-1">
         <Button
           active={route === 'Dashboard'}

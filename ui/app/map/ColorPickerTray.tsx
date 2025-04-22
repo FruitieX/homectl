@@ -30,13 +30,13 @@ export const ColorPickerTray = () => {
   };
 
   return (
-    <div className="flex h-12 flex-shrink-0 gap-4 overflow-x-auto overflow-y-hidden p-2">
+    <div className="flex h-12 shrink-0 gap-4 overflow-x-auto overflow-y-hidden p-2">
       {colors.map((color) => (
         <div
           key={color.hsl().string()}
           style={{ backgroundColor: color.hsl().string() }}
           className={clsx([
-            'h-9 w-9 flex-shrink-0 rounded-full shadow outline transition-all',
+            'h-9 w-9 shrink-0 rounded-full shadow-sm outline transition-all',
             activeColor?.hsl().string() === color.hsl().string()
               ? 'outline-4 outline-white'
               : 'outline-2 outline-black',

@@ -91,7 +91,7 @@ export const Navbar = () => {
   }
 
   return (
-    <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur">
+    <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
       {back !== null && (
         <Button
           color="ghost"

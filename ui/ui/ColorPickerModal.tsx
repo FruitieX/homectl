@@ -624,7 +624,7 @@ const ImageTab = ({
         colors={computedColors.map((color) => color.hex())}
         color={hsva}
         onChange={handleChange}
-        className="min-h-[40px] !flex-nowrap overflow-x-auto justify-center pt-4 [&>*]:flex-shrink-0"
+        className="min-h-[40px] flex-nowrap! overflow-x-auto justify-center pt-4 *:shrink-0"
       />
       <div className="flex flex-nowrap gap-4">
         <div>

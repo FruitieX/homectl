@@ -141,7 +141,7 @@ export const SensorsCard = () => {
         responsive
         className="pt-0"
       >
-        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 bg-base-100 bg-opacity-75 backdrop-blur z-0">
+        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 bg-base-100 bg-opacity-75 backdrop-blur-sm z-0">
           <div className="flex items-center justify-between font-bold">
             <div className="mx-4 text-center">
               {sensorIdToName(activeSensorId)} temperature
