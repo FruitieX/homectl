@@ -5,12 +5,13 @@ import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { produce } from 'immer';
 import { Car, Edit, LampCeiling, X } from 'lucide-react';
 import { Button, Card, Modal } from 'react-daisyui';
-import { useToggle } from 'usehooks-ts';
+import { useTimeout, useToggle } from 'usehooks-ts';
 import dynamicImport from 'next/dynamic';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { useCallback, useEffect } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
+import useIdle from '@/hooks/useIdle';
 
 const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
@@ -97,7 +98,15 @@ export const ControlsCard = () => {
   //   setVacuumActive(!vacuumActive);
   // };
 
-  const [mapVisible, toggleMapVisible] = useToggle(false);
+  const isIdle = useIdle();
+  const [mapVisible, toggleMapVisible, setMapVisible] = useToggle(false);
+
+  useTimeout(
+    () => {
+      setMapVisible(false);
+    },
+    isIdle && mapVisible ? 60 * 1000 : null,
+  );
 
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
@@ -117,6 +126,13 @@ export const ControlsCard = () => {
   }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
 
   const carHeaterModalOpenState = useCarHeaterModalOpenState();
+
+  useTimeout(
+    () => {
+      carHeaterModalOpenState.setOpen(false);
+    },
+    carHeaterModalOpenState.open && isIdle ? 60 * 1000 : null,
+  );
 
   return (
     <>
@@ -151,7 +167,7 @@ export const ControlsCard = () => {
         responsive
         open={mapVisible}
         onClickBackdrop={toggleMapVisible}
-        className="h-svh pt-0 overflow-hidden"
+        className="!h-svh pt-0 overflow-hidden"
       >
         <Modal.Header className="gap-3 flex items-center justify-between font-bold sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur">
           <div className="mx-4 text-center">Floorplan</div>

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Modal } from 'react-daisyui';
-import { useInterval, useToggle } from 'usehooks-ts';
+import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import { cachedPromise } from './cachedPromise';
 import { useAppConfig } from '@/hooks/appConfig';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
+import useIdle from '@/hooks/useIdle';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -52,7 +53,9 @@ export const WeatherCard = () => {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
 
   const weatherApiUrl = useAppConfig().weatherApiUrl;
-  const [detailsModalOpen, toggleDetailsModal] = useToggle(false);
+  const isIdle = useIdle();
+  const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
+    useToggle(false);
 
   const tempSensors = useTempSensorsQuery();
 
@@ -80,6 +83,13 @@ export const WeatherCard = () => {
     const weather = await fetchCachedWeather(weatherApiUrl);
     setWeather(weather);
   }, 60 * 1000);
+
+  useTimeout(
+    () => {
+      setDetailsModalOpen(false);
+    },
+    detailsModalOpen && isIdle ? 10 * 1000 : null,
+  );
 
   const roundToHour = (date: Date) => {
     const p = 60 * 60 * 1000; // milliseconds in an hour
