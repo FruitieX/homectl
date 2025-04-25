@@ -1,4 +1,4 @@
-import { Button, Card, Modal } from 'react-daisyui';
+import { Badge, Button, Card, Modal } from 'react-daisyui';
 import { useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
@@ -32,6 +32,7 @@ const sensorIdToName = (sensorId: string | null) => {
 };
 
 const tempToColor = (temp: number) => {
+  const subZeroTemp = -20;
   const iceTemp = 0;
   const coldTemp = 8;
   const coolTemp = 15;
@@ -40,14 +41,20 @@ const tempToColor = (temp: number) => {
 
   const s = 45;
   const v = 55;
+  const subZeroColor = new Color({ h: 240, s: 0, v: 0 });
   const iceColor = new Color({ h: 240, s: 0, v });
   const coldColor = new Color({ h: 240, s, v });
   const coolColor = new Color({ h: 180, s, v });
   const comfortableColor = new Color({ h: 120, s, v });
   const hotColor = new Color({ h: 0, s, v });
 
-  if (temp < iceTemp) {
-    return iceTemp;
+  if (temp < subZeroTemp) {
+    return subZeroColor;
+  } else if (temp < iceTemp) {
+    return subZeroColor.mix(
+      iceColor,
+      (temp - subZeroTemp) / (iceTemp - subZeroTemp),
+    );
   } else if (temp < coldTemp) {
     return iceColor.mix(coldColor, (temp - iceTemp) / (coldTemp - iceTemp));
   } else if (temp < coolTemp) {
@@ -124,16 +131,32 @@ export const SensorsCard = () => {
                 setDetailsModalOpen(true);
               }}
             >
-              <Card.Body>
-                <div
-                  className={clsx('stat-title', offline && 'text-stone-500')}
-                >
-                  {sensorIdToName(sensorId)}
-                  {sensor === undefined ? null : (
-                    <>: {sensor._value.toFixed(1)} °C</>
-                  )}
-                </div>
-              </Card.Body>
+              <div
+                className={clsx(
+                  'flex items-center gap-1 stat-title',
+                  offline && 'text-stone-500',
+                )}
+              >
+                {sensor === undefined ? null : (
+                  <Badge
+                    size="xs"
+                    className="text-stone-500"
+                    style={
+                      offline
+                        ? {}
+                        : {
+                            backgroundColor: tempToColor(
+                              sensor._value,
+                            ).toString(),
+                          }
+                    }
+                  />
+                )}
+                {sensorIdToName(sensorId)}
+                {sensor === undefined ? null : (
+                  <>: {sensor._value.toFixed(1)} °C</>
+                )}
+              </div>
             </Button>
           );
         })}
@@ -148,8 +171,12 @@ export const SensorsCard = () => {
           <div className="flex items-center justify-between font-bold">
             <div className="mx-4 text-center">
               {sensorIdToName(activeSensorId)} temperature
-              {sensorOffline(tempData[tempData.length - 1]?.time) && (
+              {sensorOffline(tempData[tempData.length - 1]?.time) ? (
                 <span className="pl-2 text-stone-500">(offline)</span>
+              ) : (
+                <span className="pl-2">
+                  {tempData[tempData.length - 1]?.temp.toFixed(1)} °C
+                </span>
               )}
             </div>
             <Button onClick={toggleDetailsModal} variant="outline">
