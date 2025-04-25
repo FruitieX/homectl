@@ -112,7 +112,7 @@ export const SensorsCard = () => {
     <>
       <Card
         compact
-        className="col-span-2 flex-row justify-around bg-base-300 overflow-x-auto overflow-y-hidden min-h-16"
+        className="col-span-2 flex-row gap-3 justify-around bg-base-300 overflow-x-auto overflow-y-hidden min-h-16 px-3"
       >
         {sensorIds.map((sensorId) => {
           const sensor = tempSensors?.findLast(
