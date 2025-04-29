@@ -22,8 +22,8 @@ importers:
         specifier: 2.5.2
         version: 2.5.2(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       '@uiw/react-color-wheel':
-        specifier: 2.5.1
-        version: 2.5.1(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: 2.5.2
+        version: 2.5.2(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       canvas:
         specifier: 3.1.0
         version: 3.1.0
@@ -795,11 +795,6 @@ packages:
     resolution: {integrity: sha512-I+/rgqOVBn6f0o7NDTmAPWWC6NuqhV174lfYvAm9fUaWeiefLdux9/YI3/nLugEn9L8fcSi0XmpKi/r5u0nmpw==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
 
-  '@uiw/color-convert@2.5.1':
-    resolution: {integrity: sha512-p+P8Ho0Z1AbUprES0hcLEDAaXbGH92TmjckkRQZ5S7HcyQ+9ZXlSsDFILjFbYu/okVjx5VG59T57Dx84lv9AWA==}
-    peerDependencies:
-      '@babel/runtime': '>=7.19.0'
-
   '@uiw/color-convert@2.5.2':
     resolution: {integrity: sha512-wIFMAJ0/AoUE5cisHMGIenoZJhF7ZNesJOofuAR0S7wo/vxnLs3pRDcSr4phEGDFhNKmzlPLFplXo9bQGA+KMw==}
     peerDependencies:
@@ -819,15 +814,15 @@ packages:
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
 
-  '@uiw/react-color-wheel@2.5.1':
-    resolution: {integrity: sha512-e3tDwDoC2T7zTapRRm/QxcOJ7IWJwNCoxZ/f97RL1Ib3gAN/k67H1bkR9TK7euRCUxGy031guxTgdKO9v19XFg==}
+  '@uiw/react-color-wheel@2.5.2':
+    resolution: {integrity: sha512-Z2mVjr04ueIX+5XJ4Q/uF6QKPpD+mnF67GhJgAX4qq1D0BWlDOsoHlSFJPtTJvhw6dWaadDM2RJ9rXkYtmNpTA==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
       react-dom: '>=16.9.0'
 
-  '@uiw/react-drag-event-interactive@2.5.1':
-    resolution: {integrity: sha512-GNxhxk5L4O5Gpi20A/BG5sO0GNBNwtNWJidJsJu3pgHUBErN4rhqTDXXu3BQTz5C8yOG5D02Y6Zq/6yu6ckImw==}
+  '@uiw/react-drag-event-interactive@2.5.2':
+    resolution: {integrity: sha512-sdRBiaPGP5J7jl9uUFWP7MvExNG+EQsa4jb23EBrNMEFoDmNKE57mIWqNbgewLfoXA95mwQoZnK9aVYRyJZhtw==}
     peerDependencies:
       '@babel/runtime': '>=7.19.0'
       react: '>=16.9.0'
@@ -3325,10 +3320,6 @@ snapshots:
       '@typescript-eslint/types': 8.31.1
       eslint-visitor-keys: 4.2.0
 
-  '@uiw/color-convert@2.5.1(@babel/runtime@7.27.0)':
-    dependencies:
-      '@babel/runtime': 7.27.0
-
   '@uiw/color-convert@2.5.2(@babel/runtime@7.27.0)':
     dependencies:
       '@babel/runtime': 7.27.0
@@ -3348,15 +3339,15 @@ snapshots:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
 
-  '@uiw/react-color-wheel@2.5.1(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@uiw/react-color-wheel@2.5.2(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@babel/runtime': 7.27.0
-      '@uiw/color-convert': 2.5.1(@babel/runtime@7.27.0)
-      '@uiw/react-drag-event-interactive': 2.5.1(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@uiw/color-convert': 2.5.2(@babel/runtime@7.27.0)
+      '@uiw/react-drag-event-interactive': 2.5.2(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
 
-  '@uiw/react-drag-event-interactive@2.5.1(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@uiw/react-drag-event-interactive@2.5.2(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
     dependencies:
       '@babel/runtime': 7.27.0
       react: 19.1.0
