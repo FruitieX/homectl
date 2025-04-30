@@ -1,5 +1,5 @@
 import { Badge, Button, Card, Modal } from 'react-daisyui';
-import { useToggle } from 'usehooks-ts';
+import { useTimeout, useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
 import {
@@ -15,6 +15,7 @@ import {
 import clsx from 'clsx';
 import { useState } from 'react';
 import Color from 'color';
+import useIdle from '@/hooks/useIdle';
 
 const sensorIdToName = (sensorId: string | null) => {
   switch (sensorId) {
@@ -91,6 +92,7 @@ export const SensorsCard = () => {
     useToggle(false);
   const [activeSensorId, setActiveSensorId] = useState<string | null>(null);
 
+  const isIdle = useIdle();
   const tempSensors = useTempSensorsQuery();
 
   const tempData = tempSensors
@@ -107,6 +109,13 @@ export const SensorsCard = () => {
     'D7353530665A',
     'C76A0246647E',
   ];
+
+  useTimeout(
+    () => {
+      setDetailsModalOpen(false);
+    },
+    detailsModalOpen && isIdle ? 10 * 1000 : null,
+  );
 
   return (
     <>
