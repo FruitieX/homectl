@@ -82,8 +82,8 @@ importers:
         specifier: 2.15.3
         version: 2.15.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       use-image:
-        specifier: 1.1.2
-        version: 1.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        specifier: 1.1.3
+        version: 1.1.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       usehooks-ts:
         specifier: 3.1.1
         version: 3.1.1(react@19.1.0)
@@ -2727,8 +2727,8 @@ packages:
   uri-js@4.4.1:
     resolution: {integrity: sha512-7rKUyy33Q1yc98pQ1DAmLtwX109F7TIfWlW1Ydo8Wl1ii1SeHieeh0HHfPeL2fMXK6z0s8ecKs9frCuLJvndBg==}
 
-  use-image@1.1.2:
-    resolution: {integrity: sha512-RO3/15N1n20dhU9/QC4iSSUoNh4FCTcZi8Oul75SQWQT5dtkmwtkLV5Ti9MGm4YLsuGamsenOf1imu86i1/uqA==}
+  use-image@1.1.3:
+    resolution: {integrity: sha512-/5Ks8255FFti/lEp7Pxr8w2eCo3Fn9nMlOPTc/GPhM0asx8ARkLjBUhp015iAiVojv8Cc1+40DCI83/N3uB5Ww==}
     peerDependencies:
       react: '>=16.8.0'
       react-dom: '>=16.8.0'
@@ -5015,7 +5015,7 @@ snapshots:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
       react-konva: 19.0.3(@types/react@19.1.5)(konva@9.3.20)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      use-image: 1.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      use-image: 1.1.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
 
   react-konva@19.0.3(@types/react@19.1.5)(konva@9.3.20)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
@@ -5562,7 +5562,7 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  use-image@1.1.2(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  use-image@1.1.3(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
     dependencies:
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
