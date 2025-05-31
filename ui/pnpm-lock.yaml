@@ -37,8 +37,8 @@ importers:
         specifier: 2.6.0
         version: 2.6.0
       daisyui:
-        specifier: 5.0.42
-        version: 5.0.42
+        specifier: 5.0.43
+        version: 5.0.43
       deep-equal:
         specifier: 2.2.3
         version: 2.2.3
@@ -68,7 +68,7 @@ importers:
         version: 2.19.3(react@19.1.0)
       react-daisyui:
         specifier: 5.0.5
-        version: 5.0.5(daisyui@5.0.42)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwindcss@4.1.8)
+        version: 5.0.5(daisyui@5.0.43)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwindcss@4.1.8)
       react-dom:
         specifier: 19.1.0
         version: 19.1.0(react@19.1.0)
@@ -1239,8 +1239,8 @@ packages:
     resolution: {integrity: sha512-ndfJ/JxxMd3nw31uyKoY2naivF+r29V+Lc0svZxe1JvvIRmi8hUsrMvdOwgS1o6uBHmiz91geQ0ylPP0aj1VUA==}
     engines: {node: '>=12'}
 
-  daisyui@5.0.42:
-    resolution: {integrity: sha512-sZlqpPyu0wvjKtdryS62Njq18AJScr0V7Kruqc0ruSsl74SfGqaY8RMFkJoyNTorUx1OxWkAvkQP81uTyzNBqg==}
+  daisyui@5.0.43:
+    resolution: {integrity: sha512-2pshHJ73vetSpsbAyaOncGnNYL0mwvgseS1EWy1I9Qpw8D11OuBoDNIWrPIME4UFcq2xuff3A9x+eXbuFR9fUQ==}
 
   damerau-levenshtein@1.0.8:
     resolution: {integrity: sha512-sdQSFB7+llfUcQHUQO3+B8ERRj0Oa4w9POWMI/puGtuf7gFywGmkaLCElnudfTiKZV+NvHqL0ifzdrI8Ro7ESA==}
@@ -3858,7 +3858,7 @@ snapshots:
 
   d3-timer@3.0.1: {}
 
-  daisyui@5.0.42: {}
+  daisyui@5.0.43: {}
 
   damerau-levenshtein@1.0.8: {}
 
@@ -5024,9 +5024,9 @@ snapshots:
       reactcss: 1.2.3(react@19.1.0)
       tinycolor2: 1.6.0
 
-  react-daisyui@5.0.5(daisyui@5.0.42)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwindcss@4.1.8):
+  react-daisyui@5.0.5(daisyui@5.0.43)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwindcss@4.1.8):
     dependencies:
-      daisyui: 5.0.42
+      daisyui: 5.0.43
       react: 19.1.0
       react-dom: 19.1.0(react@19.1.0)
       tailwindcss: 4.1.8
