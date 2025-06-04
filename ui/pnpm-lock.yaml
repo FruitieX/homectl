@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@types/react': 19.1.6
-  '@types/react-dom': 19.1.5
+  '@types/react-dom': 19.1.6
 
 importers:
 
@@ -110,8 +110,8 @@ importers:
         specifier: 3.0.13
         version: 3.0.13(@types/react@19.1.6)
       '@types/react-dom':
-        specifier: 19.1.5
-        version: 19.1.5(@types/react@19.1.6)
+        specifier: 19.1.6
+        version: 19.1.6(@types/react@19.1.6)
       '@typescript-eslint/eslint-plugin':
         specifier: 8.33.1
         version: 8.33.1(@typescript-eslint/parser@8.33.1(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3))(eslint@9.28.0(jiti@2.4.2))(typescript@5.8.3)
@@ -738,8 +738,8 @@ packages:
     peerDependencies:
       '@types/react': 19.1.6
 
-  '@types/react-dom@19.1.5':
-    resolution: {integrity: sha512-CMCjrWucUBZvohgZxkjd6S9h0nZxXjzus6yDfUb+xLxYM7VvjKNH1tQrE9GWLql1XoOP4/Ds3bwFqShHUYraGg==}
+  '@types/react-dom@19.1.6':
+    resolution: {integrity: sha512-4hOiT/dwO8Ko0gV1m/TJZYk3y0KBnY9vzDh7W+DH17b2HFSOGgdj33dhihPeuy3l0q23+4e+hoXHV6hCC4dCXw==}
     peerDependencies:
       '@types/react': 19.1.6
 
@@ -3300,7 +3300,7 @@ snapshots:
       '@types/react': 19.1.6
       '@types/reactcss': 1.2.13(@types/react@19.1.6)
 
-  '@types/react-dom@19.1.5(@types/react@19.1.6)':
+  '@types/react-dom@19.1.6(@types/react@19.1.6)':
     dependencies:
       '@types/react': 19.1.6
 
