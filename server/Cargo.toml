@@ -45,7 +45,7 @@ log = "=0.4.27"
 pretty_env_logger = "=0.5.0"
 eyre = "=0.6.12"
 color-eyre = "=0.6.5"
-croner = "=2.1.0"
+croner = "=2.2.0"
 evalexpr = { git = "https://github.com/FruitieX/evalexpr", branch = "rasmus/type-unsafe-context", features = [
 	"serde_support",
 	"rand",
