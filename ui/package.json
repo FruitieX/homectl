@@ -36,7 +36,7 @@
     "react-dom": "19.1.0",
     "react-konva": "19.0.6",
     "react-konva-utils": "1.1.0",
-    "recharts": "2.15.4",
+    "recharts": "3.0.0",
     "use-image": "1.1.4",
     "usehooks-ts": "3.1.1"
   },
