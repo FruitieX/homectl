@@ -25,8 +25,8 @@ importers:
         specifier: 2.6.0
         version: 2.6.0(@babel/runtime@7.27.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
       canvas:
-        specifier: 3.1.1
-        version: 3.1.1
+        specifier: 3.1.2
+        version: 3.1.2
       clsx:
         specifier: 2.1.1
         version: 2.1.1
@@ -1158,8 +1158,8 @@ packages:
   caniuse-lite@1.0.30001712:
     resolution: {integrity: sha512-MBqPpGYYdQ7/hfKiet9SCI+nmN5/hp4ZzveOJubl5DTAMa5oggjAuoi0Z4onBpKPFI2ePGnQuQIzF3VxDjDJig==}
 
-  canvas@3.1.1:
-    resolution: {integrity: sha512-o8JptL14zrYFYSh5r7ClVzuwG77tvjRBgSJECyIF6AAHpL4MgORhlI+rru3/ZPKtdC7uopl+biESZWz1l/NpFA==}
+  canvas@3.1.2:
+    resolution: {integrity: sha512-Z/tzFAcBzoCvJlOSlCnoekh1Gu8YMn0J51+UAuXJAbW1Z6I9l2mZgdD7738MepoeeIcUdDtbMnOg6cC7GJxy/g==}
     engines: {node: ^18.12.0 || >= 20.9.0}
 
   chalk@4.1.2:
@@ -3811,7 +3811,7 @@ snapshots:
 
   caniuse-lite@1.0.30001712: {}
 
-  canvas@3.1.1:
+  canvas@3.1.2:
     dependencies:
       node-addon-api: 7.1.1
       prebuild-install: 7.1.3
