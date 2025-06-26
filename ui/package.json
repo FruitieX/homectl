@@ -41,7 +41,7 @@
     "usehooks-ts": "3.1.1"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "4.1.10",
+    "@tailwindcss/postcss": "4.1.11",
     "@types/color": "4.2.0",
     "@types/deep-equal": "1.0.4",
     "@types/lodash": "4.17.19",
@@ -59,7 +59,7 @@
     "prettier": "3.6.1",
     "prettier-plugin-tailwindcss": "0.6.13",
     "raw-loader": "4.0.2",
-    "tailwindcss": "4.1.10",
+    "tailwindcss": "4.1.11",
     "typescript": "5.8.3"
   },
   "version": "1.0.0",
