@@ -44,7 +44,7 @@
     "@tailwindcss/postcss": "4.1.10",
     "@types/color": "4.2.0",
     "@types/deep-equal": "1.0.4",
-    "@types/lodash": "4.17.18",
+    "@types/lodash": "4.17.19",
     "@types/node": "22.15.33",
     "@types/react": "19.1.8",
     "@types/react-color": "3.0.13",
