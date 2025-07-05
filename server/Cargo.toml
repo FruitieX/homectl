@@ -26,7 +26,7 @@ async-trait = "=0.1.88"
 rand = "=0.8.5"
 warp = "=0.3.7"
 serde_path_to_error = "=0.1.17"
-tokio = { version = "=1.46.0", features = ["full"] }
+tokio = { version = "=1.46.1", features = ["full"] }
 futures-util = "=0.3.31"
 tokio-stream = "=0.1.17"
 itertools = "=0.14.0"
