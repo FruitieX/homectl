@@ -4,6 +4,8 @@ export type Config = {
   trainApiUrl: string;
   influxUrl: string;
   influxToken: string;
+  calendarApiUrl: string;
+  calendarIcsUrl: string;
 };
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +18,8 @@ export async function GET() {
       trainApiUrl: process.env.TRAIN_API_URL,
       influxUrl: process.env.INFLUX_URL,
       influxToken: process.env.INFLUX_TOKEN,
+      calendarApiUrl: process.env.CALENDAR_API_URL || '/api/calendar',
+      calendarIcsUrl: process.env.GOOGLE_CALENDAR_ICS_URL || '',
     } as Config),
   );
 }

@@ -24,6 +24,7 @@
     "colorthief": "2.6.0",
     "daisyui": "5.0.46",
     "deep-equal": "2.2.3",
+    "ical.js": "2.2.0",
     "immer": "10.1.1",
     "jotai": "2.12.5",
     "konva": "9.3.20",

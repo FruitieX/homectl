@@ -183,7 +183,10 @@ export const TrainScheduleCard = () => {
               );
             })}
             {trains.length === 0 && (
-              <div className="text-stone-500 p-4">No scheduled trains</div>
+              <Table.Row>
+                <span className="text-stone-500 p-4">No scheduled trains</span>
+                <span />
+              </Table.Row>
             )}
           </Table.Body>
         </Table>
