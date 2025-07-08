@@ -14,7 +14,7 @@
     "singleQuote": true
   },
   "dependencies": {
-    "@influxdata/influxdb-client-browser": "1.35.0",
+    "@influxdata/influxdb-client": "1.35.0",
     "@react-hook/throttle": "2.2.0",
     "@uiw/react-color-circle": "2.6.0",
     "@uiw/react-color-wheel": "2.6.0",

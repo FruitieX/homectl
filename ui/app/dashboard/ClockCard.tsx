@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Modal } from 'react-daisyui';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
-import { cachedPromise } from './cachedPromise';
-import { useAppConfig } from '@/hooks/appConfig';
 import { X, Calendar, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import useIdle from '@/hooks/useIdle';
@@ -21,19 +19,12 @@ type CalendarResponse = {
   events: CalendarEvent[];
 };
 
-const fetchCachedCalendar = async (url: string): Promise<CalendarResponse> => {
-  const json = await cachedPromise('calendarResponseCache', 30, async () => {
-    if (url === undefined) {
-      throw new Error('CALENDAR_API_URL is undefined');
-    }
-    const res = await fetch(url);
-    if (!res.ok) {
-      throw new Error(`Failed to fetch calendar: ${res.status}`);
-    }
-    const json: CalendarResponse = await res.json();
-    return json;
-  });
-
+const fetchCalendar = async (): Promise<CalendarResponse> => {
+  const res = await fetch('/api/calendar');
+  if (!res.ok) {
+    throw new Error(`Failed to fetch calendar: ${res.status}`);
+  }
+  const json: CalendarResponse = await res.json();
   return json;
 };
 
@@ -42,7 +33,6 @@ export const ClockCard = () => {
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const calendarApiUrl = useAppConfig().calendarApiUrl;
   const isIdle = useIdle();
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
@@ -58,9 +48,9 @@ export const ClockCard = () => {
   useEffect(() => {
     let isSubscribed = true;
 
-    const fetch = async () => {
+    const fetchData = async () => {
       try {
-        const calendar = await fetchCachedCalendar(calendarApiUrl);
+        const calendar = await fetchCalendar();
         if (isSubscribed === true) {
           setCalendar(calendar);
           setError(null);
@@ -73,17 +63,17 @@ export const ClockCard = () => {
         }
       }
     };
-    fetch();
+    fetchData();
 
     return () => {
       isSubscribed = false;
     };
-  }, [calendarApiUrl]);
+  }, []);
 
   useInterval(
     async () => {
       try {
-        const calendar = await fetchCachedCalendar(calendarApiUrl);
+        const calendar = await fetchCalendar();
         setCalendar(calendar);
         setError(null);
       } catch (err) {

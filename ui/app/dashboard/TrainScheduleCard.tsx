@@ -2,8 +2,6 @@ import clsx from 'clsx';
 import { useEffect, useState } from 'react';
 import { Card, Table } from 'react-daisyui';
 import { useInterval } from 'usehooks-ts';
-import { cachedPromise } from './cachedPromise';
-import { useAppConfig } from '@/hooks/appConfig';
 
 type Trip = {
   routeShortName: string;
@@ -52,70 +50,13 @@ type HslResponse = {
   };
 };
 
-const fetchCachedTrainSchedule = async (
-  trainApiUrl: string,
-): Promise<Train[]> => {
-  const json = await cachedPromise('trainScheduleCache', 1, async () => {
-    const res = await fetch(trainApiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/graphql',
-      },
-      body: `
-{
-  stop(id: "HSL:2131551") {
-    name
-    stoptimesWithoutPatterns {
-      scheduledDeparture
-      realtimeDeparture
-      realtime
-      realtimeState
-      serviceDay
-      headsign
-      trip {
-        routeShortName
-      }
-    }
+const fetchTrainSchedule = async (): Promise<Train[]> => {
+  const res = await fetch('/api/train-schedule');
+  if (!res.ok) {
+    throw new Error(`Failed to fetch train schedule: ${res.status}`);
   }
-}
-      `,
-    });
-    const json: HslResponse = await res.json();
-    return json;
-  });
-
-  const stop = json.data.stop;
-  const trainsToCatch = stop.stoptimesWithoutPatterns.flatMap((st) => {
-    const secSinceMidnight = getSecSinceMidnight(new Date());
-    const departureSecSinceMidnight = st.realtimeDeparture;
-
-    const secUntilDeparture = departureSecSinceMidnight - secSinceMidnight;
-    const minUntilDeparture = secUntilDeparture / 60;
-    const suggestedMinUntilDeparture = 12;
-
-    const minUntilHomeDeparture = Math.floor(
-      minUntilDeparture - suggestedMinUntilDeparture,
-    );
-    if (minUntilHomeDeparture < -5) {
-      return [];
-    }
-
-    const departureFormatted = new Date(st.realtimeDeparture * 1000)
-      .toISOString()
-      .slice(11, 16);
-
-    return [
-      {
-        minUntilHomeDeparture,
-        name: st.trip.routeShortName,
-        departureFormatted,
-        realtime: st.realtime,
-        realtimeState: st.realtimeState,
-      },
-    ];
-  });
-
-  return trainsToCatch.slice(0, 5);
+  const trains: Train[] = await res.json();
+  return trains;
 };
 
 type Train = {
@@ -134,26 +75,24 @@ function getSecSinceMidnight(d: Date) {
 export const TrainScheduleCard = () => {
   const [trains, setTrains] = useState<Train[]>([]);
 
-  const trainApiUrl = useAppConfig().trainApiUrl;
-
   useEffect(() => {
     let isSubscribed = true;
 
-    const fetch = async () => {
-      const trains = await fetchCachedTrainSchedule(trainApiUrl);
+    const fetchData = async () => {
+      const trains = await fetchTrainSchedule();
       if (isSubscribed === true) {
         setTrains(trains);
       }
     };
-    fetch();
+    fetchData();
 
     return () => {
       isSubscribed = false;
     };
-  }, [trainApiUrl]);
+  }, []);
 
   useInterval(async () => {
-    const trains = await fetchCachedTrainSchedule(trainApiUrl);
+    const trains = await fetchTrainSchedule();
     setTrains(trains);
   }, 60 * 1000);
 

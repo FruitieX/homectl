@@ -1,75 +1,7 @@
 'use client';
 
-import { atom, useAtomValue, useSetAtom } from 'jotai';
-import { InfluxDB, QueryApi } from '@influxdata/influxdb-client-browser';
-import { useAppConfig } from './appConfig';
 import { useEffect, useState } from 'react';
-import { cachedPromise } from 'app/dashboard/cachedPromise';
 import { useInterval } from 'usehooks-ts';
-
-const influxdbAtom = atom<InfluxDB | null>(null);
-
-export const useProvideInfluxDb = () => {
-  const appConfig = useAppConfig();
-  const setInfluxdbAtom = useSetAtom(influxdbAtom);
-
-  useEffect(() => {
-    const influxDB = new InfluxDB({
-      url: appConfig.influxUrl,
-      token: appConfig.influxToken,
-    });
-
-    setInfluxdbAtom(influxDB);
-  }, []);
-};
-
-export const useInfluxDbQueryApi = (): QueryApi | null => {
-  const [state, setState] = useState<QueryApi | null>(null);
-  const influxDb = useAtomValue(influxdbAtom);
-
-  useEffect(() => {
-    if (!influxDb) {
-      return;
-    }
-
-    const queryApi = influxDb.getQueryApi('influxdata');
-    setState(queryApi);
-  }, [influxDb]);
-
-  return state;
-};
-
-export const useCachedInfluxDbQuery = (query: string, cacheKey: string) => {
-  const [state, setState] = useState<any>([]);
-  const queryApi = useInfluxDbQueryApi();
-
-  useEffect(() => {
-    if (!queryApi) {
-      return;
-    }
-
-    new Promise(async () => {
-      const result = await cachedPromise(cacheKey, 1, async () => {
-        return await queryApi.collectRows(query);
-      });
-      setState(result);
-    });
-  }, [queryApi]);
-
-  useInterval(async () => {
-    if (!queryApi) {
-      console.log('InfluxDB client not initialized');
-      return null;
-    }
-
-    const result = await cachedPromise(cacheKey, 1, async () => {
-      return await queryApi.collectRows(query);
-    });
-    setState(result);
-  }, 60 * 1000);
-
-  return state;
-};
 
 interface TempSensorRow {
   device_id: string;
@@ -79,32 +11,45 @@ interface TempSensorRow {
 }
 
 export const useTempSensorsQuery = () => {
-  const tempSensors: TempSensorRow[] = useCachedInfluxDbQuery(
-    `
-      from(bucket: "home")
-        |> range(start: -6h)
-        |> filter(fn: (r) =>
-            // backyard
-            (r["device_id"] == "D9353438450D" and r["integration_id"] == "ble1") or
+  const [tempSensors, setTempSensors] = useState<TempSensorRow[]>([]);
 
-            // front yard
-            (r["device_id"] == "D83534387029" and r["integration_id"] == "ble2") or 
+  useEffect(() => {
+    let isSubscribed = true;
 
-            // patio
-            (r["device_id"] == "D4343037362D" and r["integration_id"] == "ble1") or
+    const fetchData = async () => {
+      try {
+        const res = await fetch('/api/influxdb/temp-sensors');
+        if (!res.ok) {
+          throw new Error(`Failed to fetch temp sensors: ${res.status}`);
+        }
+        const data: TempSensorRow[] = await res.json();
+        if (isSubscribed) {
+          setTempSensors(data);
+        }
+      } catch (error) {
+        console.error('Error fetching temp sensors:', error);
+      }
+    };
 
-            // living room
-            (r["device_id"] == "D7353530665A" and r["integration_id"] == "ble1") or
+    fetchData();
 
-            // car
-            (r["device_id"] == "C76A0246647E" and r["integration_id"] == "ble2")
-        )
-        |> filter(fn: (r) => r["_field"] == "tempc")
-        |> aggregateWindow(every: 10m, fn: mean, createEmpty: false)
-        |> yield(name: "mean")
-    `,
-    'tempSensorQuery',
-  );
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
+
+  useInterval(async () => {
+    try {
+      const res = await fetch('/api/influxdb/temp-sensors');
+      if (!res.ok) {
+        throw new Error(`Failed to fetch temp sensors: ${res.status}`);
+      }
+      const data: TempSensorRow[] = await res.json();
+      setTempSensors(data);
+    } catch (error) {
+      console.error('Error fetching temp sensors:', error);
+    }
+  }, 60 * 1000);
 
   return tempSensors;
 };
@@ -115,19 +60,45 @@ interface SpotPriceRow {
 }
 
 export const useSpotPriceQuery = () => {
-  const spotPrices: SpotPriceRow[] = useCachedInfluxDbQuery(
-    `
-      import "date"
-      import "timezone"
+  const [spotPrices, setSpotPrices] = useState<SpotPriceRow[]>([]);
 
-      option location = timezone.location(name: "Europe/Helsinki")
+  useEffect(() => {
+    let isSubscribed = true;
 
-      from(bucket: "nordpool")
-        |> range(start: date.truncate(t: now(), unit: 1d), stop: 48h)
-        |> filter(fn: (r) => r["_measurement"] == "price")
-    `,
-    'spotPriceQuery',
-  );
+    const fetchData = async () => {
+      try {
+        const res = await fetch('/api/influxdb/spot-prices');
+        if (!res.ok) {
+          throw new Error(`Failed to fetch spot prices: ${res.status}`);
+        }
+        const data: SpotPriceRow[] = await res.json();
+        if (isSubscribed) {
+          setSpotPrices(data);
+        }
+      } catch (error) {
+        console.error('Error fetching spot prices:', error);
+      }
+    };
+
+    fetchData();
+
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
+
+  useInterval(async () => {
+    try {
+      const res = await fetch('/api/influxdb/spot-prices');
+      if (!res.ok) {
+        throw new Error(`Failed to fetch spot prices: ${res.status}`);
+      }
+      const data: SpotPriceRow[] = await res.json();
+      setSpotPrices(data);
+    } catch (error) {
+      console.error('Error fetching spot prices:', error);
+    }
+  }, 60 * 1000);
 
   return spotPrices;
 };

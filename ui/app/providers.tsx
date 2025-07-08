@@ -11,7 +11,6 @@ import { SceneModal } from '@/ui/SceneModal';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useEffect } from 'react';
 import { CarHeaterModal } from './dashboard/CarHeaterModal';
-import { useProvideInfluxDb } from '@/hooks/influxdb';
 
 export const Providers = ({ children }: { children: React.ReactNode }) => {
   return <JotaiProvider>{children}</JotaiProvider>;
@@ -30,7 +29,6 @@ export const ProvideAppConfig = ({
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   useProvideWebsocketState();
-  useProvideInfluxDb();
 
   // Reload app at 4am
   useEffect(() => {

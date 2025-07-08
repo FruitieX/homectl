@@ -12,7 +12,7 @@ importers:
 
   .:
     dependencies:
-      '@influxdata/influxdb-client-browser':
+      '@influxdata/influxdb-client':
         specifier: 1.35.0
         version: 1.35.0
       '@react-hook/throttle':
@@ -463,8 +463,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@influxdata/influxdb-client-browser@1.35.0':
-    resolution: {integrity: sha512-qcQK/d+JVEBBkXmN0DFoFSTPZpA+L+oC5GqVWxeJuJEjo7WsbldEeJQGPeftMBnGeMI+fFGoCPYGB/VX1kQoSw==}
+  '@influxdata/influxdb-client@1.35.0':
+    resolution: {integrity: sha512-woWMi8PDpPQpvTsRaUw4Ig+nOGS/CWwAwS66Fa1Vr/EkW+NEwxI8YfPBsdBMn33jK2Y86/qMiiuX/ROHIkJLTw==}
 
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
@@ -3121,7 +3121,7 @@ snapshots:
   '@img/sharp-win32-x64@0.34.2':
     optional: true
 
-  '@influxdata/influxdb-client-browser@1.35.0': {}
+  '@influxdata/influxdb-client@1.35.0': {}
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:

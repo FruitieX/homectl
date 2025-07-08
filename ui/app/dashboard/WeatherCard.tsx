@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, Modal } from 'react-daisyui';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
-import { cachedPromise } from './cachedPromise';
-import { useAppConfig } from '@/hooks/appConfig';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
@@ -36,23 +34,18 @@ type WeatherResponse = {
   };
 };
 
-const fetchCachedWeather = async (url: string): Promise<WeatherResponse> => {
-  const json = await cachedPromise('weatherResponseCache', 60, async () => {
-    if (url === undefined) {
-      throw new Error('WEATHER_API_URL is undefined');
-    }
-    const res = await fetch(url);
-    const json: WeatherResponse = await res.json();
-    return json;
-  });
-
+const fetchWeather = async (): Promise<WeatherResponse> => {
+  const res = await fetch('/api/weather');
+  if (!res.ok) {
+    throw new Error(`Failed to fetch weather: ${res.status}`);
+  }
+  const json: WeatherResponse = await res.json();
   return json;
 };
 
 export const WeatherCard = () => {
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
 
-  const weatherApiUrl = useAppConfig().weatherApiUrl;
   const isIdle = useIdle();
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
@@ -66,21 +59,21 @@ export const WeatherCard = () => {
   useEffect(() => {
     let isSubscribed = true;
 
-    const fetch = async () => {
-      const weather = await fetchCachedWeather(weatherApiUrl);
+    const fetchData = async () => {
+      const weather = await fetchWeather();
       if (isSubscribed === true) {
         setWeather(weather);
       }
     };
-    fetch();
+    fetchData();
 
     return () => {
       isSubscribed = false;
     };
-  }, [weatherApiUrl]);
+  }, []);
 
   useInterval(async () => {
-    const weather = await fetchCachedWeather(weatherApiUrl);
+    const weather = await fetchWeather();
     setWeather(weather);
   }, 60 * 1000);
 
