@@ -36,7 +36,7 @@
     "react-daisyui": "5.0.5",
     "react-dom": "19.1.0",
     "react-konva": "19.0.7",
-    "react-konva-utils": "1.1.0",
+    "react-konva-utils": "1.1.1",
     "recharts": "3.1.0",
     "use-image": "1.1.4",
     "usehooks-ts": "3.1.1"
