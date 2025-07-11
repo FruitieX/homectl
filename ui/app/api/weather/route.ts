@@ -10,6 +10,7 @@ type WeatherTimeSeries = {
       details: {
         air_temperature: number;
         wind_speed: number;
+        ultraviolet_index_clear_sky?: number;
       };
     };
     next_1_hours: {
@@ -35,7 +36,7 @@ type WeatherResponse = {
 export async function GET() {
   try {
     const weatherApiUrl = process.env.WEATHER_API_URL;
-    
+
     if (!weatherApiUrl) {
       return NextResponse.json(
         { error: 'WEATHER_API_URL environment variable not set' },

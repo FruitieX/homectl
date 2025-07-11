@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
 import useIdle from '@/hooks/useIdle';
+import { getUvIndexColor } from '@/lib/uvIndex';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -13,6 +14,7 @@ type WeatherTimeSeries = {
       details: {
         air_temperature: number;
         wind_speed: number;
+        ultraviolet_index_clear_sky?: number;
       };
     };
     next_1_hours: {
@@ -160,11 +162,12 @@ export const WeatherCard = () => {
             <Line type="monotone" dataKey="rainProbability" stroke="#8884d8" />
           </LineChart> */}
           {/* </ResponsiveContainer> */}
+
           <div className="flex flex-row pt-6 text-base">
             <span className="stat-title w-24">Time</span>
             <span className="stat-title">Forecast</span>
             <span className="stat-title flex-1 text-right">
-              Probability of rain
+              Rain probability
             </span>
           </div>
         </Modal.Header>
@@ -234,8 +237,23 @@ const renderWeatherDetail = (
             : series.data.instant.details.air_temperature}{' '}
           °C
         </span>
-        <span className="stat-title">
-          {series.data.instant.details.wind_speed} m/s
+        <span className="flex gap-2">
+          <span className="stat-title">
+            {Math.round(series.data.instant.details.wind_speed)} m/s
+          </span>
+          {series.data.instant.details.ultraviolet_index_clear_sky !==
+            undefined && (
+            <span
+              className={clsx(
+                'stat-title',
+                getUvIndexColor(
+                  series.data.instant.details.ultraviolet_index_clear_sky,
+                ),
+              )}
+            >
+              UV {Math.round(series.data.instant.details.ultraviolet_index_clear_sky)}
+            </span>
+          )}
         </span>
       </div>
     </div>
