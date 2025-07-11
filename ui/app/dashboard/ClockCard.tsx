@@ -101,6 +101,93 @@ export const ClockCard = () => {
     });
   };
 
+  const formatDateTime = (dateString: string, showDate: boolean = false) => {
+    const date = new Date(dateString);
+
+    const timeStr = date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    if (showDate) {
+      const dateStr = date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+      });
+
+      return (
+        <>
+          <span className="font-bold">{dateStr}</span> {timeStr}
+        </>
+      );
+    } else {
+      return timeStr;
+    }
+  };
+
+  const formatDateOnly = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+  };
+
+  const isMultiDayEvent = (event: CalendarEvent) => {
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+
+    // For all-day events, check if it's more than one day
+    if (event.isAllDay) {
+      const startDate = new Date(
+        start.getFullYear(),
+        start.getMonth(),
+        start.getDate(),
+      );
+      const endDate = new Date(
+        end.getFullYear(),
+        end.getMonth(),
+        end.getDate(),
+      );
+      const diffInDays =
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+      return diffInDays > 1;
+    }
+
+    return start.toDateString() !== end.toDateString();
+  };
+
+  const formatEventTimeDisplay = (event: CalendarEvent) => {
+    const isMultiDay = isMultiDayEvent(event);
+
+    if (event.isAllDay) {
+      if (isMultiDay) {
+        const startDate = formatDateOnly(event.start);
+        const endDate = formatDateOnly(event.end);
+        return (
+          <>
+            <span className="font-bold">{startDate}</span> -{' '}
+            <span className="font-bold">{endDate}</span>
+          </>
+        );
+      }
+      return 'All day';
+    }
+
+    if (isMultiDay) {
+      const startDateTime = formatDateTime(event.start, true);
+      const endDateTime = formatDateTime(event.end, true);
+      return (
+        <>
+          {startDateTime} - {endDateTime}
+        </>
+      );
+    }
+
+    return `${formatTime(event.start)} - ${formatTime(event.end)}`;
+  };
+
   const getEventDuration = (event: CalendarEvent) => {
     const start = new Date(event.start);
     const end = new Date(event.end);
@@ -151,7 +238,7 @@ export const ClockCard = () => {
     if (!displayEvent) return null;
 
     return (
-      <div className="text-center mt-1">
+      <div className="text-center mt-1 w-full">
         <div className="flex items-center justify-center gap-1 mb-1">
           <Calendar className="w-3 h-3" />
           {currentEvent && (
@@ -164,15 +251,15 @@ export const ClockCard = () => {
             <div className="badge badge-success badge-xs">All day</div>
           )}
         </div>
-        <div className="text-xs font-medium line-clamp-1">
+        <div className="text-xs font-medium truncate max-w-full">
           {displayEvent.summary}
         </div>
-        {!displayEvent.isAllDay && (
-          <div className="text-xs text-base-content/70 flex items-center justify-center gap-1">
-            <Clock className="w-2 h-2" />
-            {formatTime(displayEvent.start)}
+        <div className="text-xs text-base-content/70 flex items-center justify-center gap-1 min-w-0">
+          <Clock className="w-3 h-3 flex-shrink-0" />
+          <div className="truncate max-w-full">
+            {formatEventTimeDisplay(displayEvent)}
           </div>
-        )}
+        </div>
       </div>
     );
   };
@@ -180,9 +267,13 @@ export const ClockCard = () => {
   return (
     <>
       <Card compact className="col-span-1 bg-base-300">
-        <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
-          <Card.Body className="flex items-center justify-center">
-            <span className="text-6xl">
+        <Button
+          color="ghost"
+          className="h-full w-full"
+          onClick={toggleDetailsModal}
+        >
+          <Card.Body className="flex items-center justify-center w-full px-0">
+            <span className="text-[clamp(1.5rem,8vw,3rem)] leading-none">
               {time !== null && (
                 <>
                   {time.getHours().toString().padStart(2, '0')}:
@@ -258,13 +349,7 @@ export const ClockCard = () => {
                       </h3>
                       <div className="flex items-center gap-2 text-sm text-base-content/70 mb-2">
                         <Clock className="w-4 h-4" />
-                        {event.isAllDay ? (
-                          <span>All day</span>
-                        ) : (
-                          <span>
-                            {formatTime(event.start)} - {formatTime(event.end)}
-                          </span>
-                        )}
+                        <span>{formatEventTimeDisplay(event)}</span>
                       </div>
                       {event.location && (
                         <div className="text-sm text-base-content/70 mb-2">
