@@ -163,7 +163,7 @@ export const SensorsCard = () => {
                 )}
                 {sensorIdToName(sensorId)}
                 {sensor === undefined ? null : (
-                  <>: {sensor._value.toFixed(1)} °C</>
+                  <>: {Math.round(sensor._value)} °C</>
                 )}
               </div>
             </Button>
@@ -184,7 +184,7 @@ export const SensorsCard = () => {
                 <span className="pl-2 text-stone-500">(offline)</span>
               ) : (
                 <span className="pl-2">
-                  {tempData[tempData.length - 1]?.temp.toFixed(1)} °C
+                  {Math.round(tempData[tempData.length - 1]?.temp)} °C
                 </span>
               )}
             </div>

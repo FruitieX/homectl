@@ -118,7 +118,7 @@ export const WeatherCard = () => {
             {renderWeatherDetail(
               currentAndFutureSeries && currentAndFutureSeries[0],
               true,
-              latestFrontyardTemp ? latestFrontyardTemp.toFixed(1) : undefined,
+              latestFrontyardTemp ? Math.round(latestFrontyardTemp) : undefined,
             )}
           </Card.Body>
         </Button>
@@ -198,7 +198,7 @@ export const WeatherCard = () => {
                           : 'text-green-500',
                       )}
                     >
-                      {rainProbability} %
+                      {Math.round(rainProbability)} %
                     </span>
                   </div>
                 );
@@ -234,7 +234,7 @@ const renderWeatherDetail = (
         <span className="whitespace-nowrap text-2xl">
           {overrideTemp !== undefined
             ? overrideTemp
-            : series.data.instant.details.air_temperature}{' '}
+            : Math.round(series.data.instant.details.air_temperature)}{' '}
           °C
         </span>
         <span className="flex gap-2">
@@ -251,7 +251,10 @@ const renderWeatherDetail = (
                 ),
               )}
             >
-              UV {Math.round(series.data.instant.details.ultraviolet_index_clear_sky)}
+              UV{' '}
+              {Math.round(
+                series.data.instant.details.ultraviolet_index_clear_sky,
+              )}
             </span>
           )}
         </span>
