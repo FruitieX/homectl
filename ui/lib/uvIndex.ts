@@ -1,5 +1,5 @@
 export const getUvIndexColor = (uvIndex_: number): string => {
-  let uvIndex = Math.round(uvIndex_);
+  const uvIndex = Math.round(uvIndex_);
   
   if (uvIndex <= 2) {
     return 'text-green-500';
