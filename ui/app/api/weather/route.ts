@@ -13,11 +13,32 @@ type WeatherTimeSeries = {
         ultraviolet_index_clear_sky?: number;
       };
     };
-    next_1_hours: {
+    next_1_hours?: {
       details: {
         probability_of_precipitation: number;
       };
       summary: {
+        symbol_code: string;
+      };
+    };
+    next_6_hours?: {
+      details: {
+        air_temperature_max?: number;
+        air_temperature_min?: number;
+        precipitation_amount?: number;
+        precipitation_amount_max?: number;
+        precipitation_amount_min?: number;
+        probability_of_precipitation?: number;
+      };
+      summary?: {
+        symbol_code: string;
+      };
+    };
+    next_12_hours?: {
+      details: {
+        probability_of_precipitation?: number;
+      };
+      summary?: {
         symbol_code: string;
       };
     };
@@ -48,6 +69,7 @@ export async function GET() {
       'weatherResponseCache',
       60, // Cache for 60 minutes
       async () => {
+        console.info('Fetching weather data...');
         const res = await fetch(weatherApiUrl);
         if (!res.ok) {
           throw new Error(`Failed to fetch weather: ${res.status}`);

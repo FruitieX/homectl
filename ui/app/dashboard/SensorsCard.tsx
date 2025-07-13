@@ -2,16 +2,8 @@ import { Badge, Button, Card, Modal } from 'react-daisyui';
 import { useTimeout, useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
-import {
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Bar,
-  BarChart,
-} from 'recharts';
+import { TemperatureSensorChart } from '@/ui/charts/TemperatureSensorChart';
+import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import clsx from 'clsx';
 import { useState } from 'react';
 import Color from 'color';
@@ -195,35 +187,27 @@ export const SensorsCard = () => {
         </Modal.Header>
         <Modal.Body className="flex flex-col gap-3 -mt-4 z-10">
           {tempData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart
-                data={tempData}
-                margin={{
-                  top: 20,
-                  right: 50,
-                  left: 0,
-                  bottom: 0,
-                }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="time"
-                  interval="equidistantPreserveStart"
-                  domain={['auto', 'auto']}
-                  tickFormatter={(date) =>
-                    new Date(date).toLocaleTimeString('en-FI', {
-                      second: undefined,
-                      timeStyle: 'short',
-                    })
-                  }
-                  tickMargin={8}
+            <ResponsiveChart
+              height={350}
+              className="rounded-lg"
+            >
+              {({ width, height }) => (
+                <TemperatureSensorChart
+                  data={tempData}
+                  width={width}
+                  height={height}
+                  animate={true}
                 />
-                <YAxis tickMargin={8} domain={['auto', 'auto']} />
-                <Bar dataKey="temp" radius={3} />
-              </BarChart>
-            </ResponsiveContainer>
+              )}
+            </ResponsiveChart>
           ) : (
-            <div className="p-8 text-stone-500">Sensor offline</div>
+            <div className="p-8 text-stone-500 text-center">
+              <div className="text-4xl mb-2">📡</div>
+              <div>Sensor offline</div>
+              <div className="text-sm mt-1 text-stone-600">
+                No data available
+              </div>
+            </div>
           )}
         </Modal.Body>
       </Modal.Legacy>
