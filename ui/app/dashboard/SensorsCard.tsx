@@ -5,9 +5,9 @@ import { useTempSensorsQuery } from '@/hooks/influxdb';
 import { TemperatureSensorChart } from '@/ui/charts/TemperatureSensorChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import clsx from 'clsx';
-import { useState } from 'react';
-import Color from 'color';
+import { useState, useMemo } from 'react';
 import useIdle from '@/hooks/useIdle';
+import { getTemperatureColor } from '@/ui/charts/TemperatureSensorChart';
 
 const sensorIdToName = (sensorId: string | null) => {
   switch (sensorId) {
@@ -22,49 +22,6 @@ const sensorIdToName = (sensorId: string | null) => {
     default:
       return 'Unknown';
   }
-};
-
-const tempToColor = (temp: number) => {
-  const subZeroTemp = -20;
-  const iceTemp = 0;
-  const coldTemp = 8;
-  const coolTemp = 15;
-  const comfortableTemp = 23;
-  const hotTemp = 30;
-
-  const s = 45;
-  const v = 55;
-  const subZeroColor = new Color({ h: 240, s: 0, v: 0 });
-  const iceColor = new Color({ h: 240, s: 0, v });
-  const coldColor = new Color({ h: 240, s, v });
-  const coolColor = new Color({ h: 180, s, v });
-  const comfortableColor = new Color({ h: 120, s, v });
-  const hotColor = new Color({ h: 0, s, v });
-
-  if (temp < subZeroTemp) {
-    return subZeroColor;
-  } else if (temp < iceTemp) {
-    return subZeroColor.mix(
-      iceColor,
-      (temp - subZeroTemp) / (iceTemp - subZeroTemp),
-    );
-  } else if (temp < coldTemp) {
-    return iceColor.mix(coldColor, (temp - iceTemp) / (coldTemp - iceTemp));
-  } else if (temp < coolTemp) {
-    return coldColor.mix(coolColor, (temp - coldTemp) / (coolTemp - coldTemp));
-  } else if (temp < comfortableTemp) {
-    return coolColor.mix(
-      comfortableColor,
-      (temp - coolTemp) / (comfortableTemp - coolTemp),
-    );
-  } else if (temp < hotTemp) {
-    return comfortableColor.mix(
-      hotColor,
-      (temp - comfortableTemp) / (hotTemp - comfortableTemp),
-    );
-  }
-
-  return hotColor;
 };
 
 const sensorOffline = (
@@ -87,13 +44,18 @@ export const SensorsCard = () => {
   const isIdle = useIdle();
   const tempSensors = useTempSensorsQuery();
 
-  const tempData = tempSensors
-    ?.filter((row) => row.device_id === activeSensorId)
-    .map((row) => ({
-      time: new Date(row._time),
-      temp: row._value,
-      fill: tempToColor(row._value).toString(),
-    }));
+  // Memoize the temperature data transformation to prevent unnecessary re-renders
+  const tempData = useMemo(() => {
+    if (!tempSensors || !activeSensorId) return [];
+
+    return tempSensors
+      .filter((row) => row.device_id === activeSensorId)
+      .map((row) => ({
+        time: new Date(row._time),
+        temp: row._value,
+        fill: getTemperatureColor(row._value),
+      }));
+  }, [tempSensors, activeSensorId]);
 
   const sensorIds = [
     'D9353438450D',
@@ -146,9 +108,7 @@ export const SensorsCard = () => {
                       offline
                         ? {}
                         : {
-                            backgroundColor: tempToColor(
-                              sensor._value,
-                            ).toString(),
+                            backgroundColor: getTemperatureColor(sensor._value),
                           }
                     }
                   />
@@ -176,7 +136,7 @@ export const SensorsCard = () => {
                 <span className="pl-2 text-stone-500">(offline)</span>
               ) : (
                 <span className="pl-2">
-                  {Math.round(tempData[tempData.length - 1]?.temp)} °C
+                  {tempData[tempData.length - 1]?.temp.toFixed(1)} °C
                 </span>
               )}
             </div>
@@ -187,10 +147,7 @@ export const SensorsCard = () => {
         </Modal.Header>
         <Modal.Body className="flex flex-col gap-3 -mt-4 z-10">
           {tempData.length > 0 ? (
-            <ResponsiveChart
-              height={350}
-              className="rounded-lg"
-            >
+            <ResponsiveChart height={350} className="rounded-lg">
               {({ width, height }) => (
                 <TemperatureSensorChart
                   data={tempData}

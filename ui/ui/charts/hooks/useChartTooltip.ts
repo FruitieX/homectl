@@ -6,8 +6,6 @@ import { debounce } from 'lodash';
 export interface TooltipConfig {
   zIndex?: number;
   debounce?: number;
-  detectBounds?: boolean;
-  scroll?: boolean;
 }
 
 export interface TooltipPosition {
@@ -32,10 +30,12 @@ export interface UseChartTooltipReturn<T> {
   handleMouseMove: (
     event: React.MouseEvent | React.TouchEvent,
     findDataPoint: (position: TooltipPosition) => T | undefined,
+    getDataPointPosition?: (data: T) => { x: number; y: number },
   ) => void;
   handleTouch: (
     event: React.TouchEvent,
     findDataPoint: (position: TooltipPosition) => T | undefined,
+    getDataPointPosition?: (data: T) => { x: number; y: number },
   ) => void;
   TooltipInPortal: any;
   containerRef: any;
@@ -45,8 +45,6 @@ export interface UseChartTooltipReturn<T> {
 const defaultConfig: TooltipConfig = {
   zIndex: 10000,
   debounce: 100,
-  detectBounds: true,
-  scroll: true,
 };
 
 export function useChartTooltip<T>({
@@ -65,35 +63,34 @@ export function useChartTooltip<T>({
     hideTooltip: originalHideTooltip,
   } = useTooltip<T>();
 
-  const { containerRef, TooltipInPortal, forceRefreshBounds } = useTooltipInPortal({
-    scroll: true,
-    detectBounds: true,
-    zIndex: finalConfig.zIndex,
-    debounce: finalConfig.debounce,
-  });
-  
+  const { containerRef, containerBounds, TooltipInPortal, forceRefreshBounds } =
+    useTooltipInPortal({
+      scroll: true,
+      detectBounds: true,
+      zIndex: finalConfig.zIndex,
+      debounce: finalConfig.debounce,
+    });
+
   const debouncedForceRefreshBounds = useCallback(
     debounce(forceRefreshBounds, finalConfig.debounce, { leading: true }),
-    [forceRefreshBounds, finalConfig.debounce]
+    [forceRefreshBounds, finalConfig.debounce],
   );
 
   const svgRef = useRef<SVGSVGElement>(null);
 
   const calculateTooltipPosition = useCallback(
-    (clientX: number, clientY: number, svgX: number, svgY: number) => {
-      const tooltipHeight = 80;
+    (dataPointX: number, dataPointY: number) => {
+      const rect = svgRef.current?.getBoundingClientRect();
 
-      let tooltipTop = svgY - tooltipHeight - 60;
-      let tooltipLeft = svgX - 120;
+      if (!rect) return { tooltipTop: 0, tooltipLeft: 0 };
 
-      // If would go above viewport, position below cursor
-      if (clientY < tooltipHeight + 20) {
-        tooltipTop = svgY + 20;
-      }
+      // Calculate screen coordinates relative to the page
+      const tooltipLeft = margin.left + dataPointX;
+      const tooltipTop = margin.top + dataPointY;
 
       return { tooltipTop, tooltipLeft };
     },
-    [],
+    [containerBounds, margin],
   );
 
   const hideTooltip = useCallback(() => {
@@ -111,9 +108,10 @@ export function useChartTooltip<T>({
     (
       event: React.MouseEvent | React.TouchEvent,
       findDataPoint: (position: TooltipPosition) => T | undefined,
+      getDataPointPosition?: (data: T) => { x: number; y: number },
     ) => {
       debouncedForceRefreshBounds();
-      
+
       const point = localPoint(event);
       if (!point) return;
 
@@ -133,12 +131,19 @@ export function useChartTooltip<T>({
       const dataPoint = findDataPoint(position);
       if (!dataPoint) return;
 
-      // Simple positioning using raw SVG coordinates
+      // Get data point position if available, otherwise use cursor position
+      let dataPointX = position.x;
+      let dataPointY = position.y;
+
+      if (getDataPointPosition) {
+        const dataPos = getDataPointPosition(dataPoint);
+        dataPointX = dataPos.x;
+        dataPointY = dataPos.y;
+      }
+
       const { tooltipTop, tooltipLeft } = calculateTooltipPosition(
-        clientX,
-        clientY,
-        point.x,
-        point.y,
+        dataPointX,
+        dataPointY,
       );
 
       originalShowTooltip({
@@ -147,16 +152,23 @@ export function useChartTooltip<T>({
         tooltipTop,
       });
     },
-    [originalShowTooltip, calculateTooltipPosition, margin.left, margin.top, debouncedForceRefreshBounds],
+    [
+      originalShowTooltip,
+      calculateTooltipPosition,
+      margin.left,
+      margin.top,
+      debouncedForceRefreshBounds,
+    ],
   );
 
   const handleTouch = useCallback(
     (
       event: React.TouchEvent,
       findDataPoint: (position: TooltipPosition) => T | undefined,
+      getDataPointPosition?: (data: T) => { x: number; y: number },
     ) => {
       debouncedForceRefreshBounds();
-      
+
       const rect = svgRef.current?.getBoundingClientRect();
       if (!rect) return;
 
@@ -177,12 +189,19 @@ export function useChartTooltip<T>({
       const dataPoint = findDataPoint(position);
       if (!dataPoint) return;
 
-      // Simple positioning using raw SVG coordinates
+      // Get data point position if available, otherwise use touch position
+      let dataPointX = x - margin.left;
+      let dataPointY = y - margin.top;
+
+      if (getDataPointPosition) {
+        const dataPos = getDataPointPosition(dataPoint);
+        dataPointX = dataPos.x;
+        dataPointY = dataPos.y;
+      }
+
       const { tooltipTop, tooltipLeft } = calculateTooltipPosition(
-        touch.clientX,
-        touch.clientY,
-        x,
-        y,
+        dataPointX,
+        dataPointY,
       );
 
       originalShowTooltip({
@@ -191,7 +210,13 @@ export function useChartTooltip<T>({
         tooltipTop,
       });
     },
-    [originalShowTooltip, calculateTooltipPosition, margin.left, margin.top, debouncedForceRefreshBounds],
+    [
+      originalShowTooltip,
+      calculateTooltipPosition,
+      margin.left,
+      margin.top,
+      debouncedForceRefreshBounds,
+    ],
   );
 
   return {

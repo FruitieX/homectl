@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { TooltipPosition } from './hooks/useChartTooltip';
 
 export interface ChartInteractionOverlayProps<T> {
@@ -7,13 +7,16 @@ export interface ChartInteractionOverlayProps<T> {
   margin: { top: number; right: number; bottom: number; left: number };
   data: T[];
   findDataPoint: (position: TooltipPosition) => T | undefined;
+  getDataPointPosition?: (data: T) => { x: number; y: number };
   handleMouseMove: (
     event: React.MouseEvent | React.TouchEvent,
     findDataPoint: (position: TooltipPosition) => T | undefined,
+    getDataPointPosition?: (data: T) => { x: number; y: number },
   ) => void;
   handleTouch: (
     event: React.TouchEvent,
     findDataPoint: (position: TooltipPosition) => T | undefined,
+    getDataPointPosition?: (data: T) => { x: number; y: number },
   ) => void;
   hideTooltip: () => void;
 }
@@ -24,6 +27,7 @@ export const ChartInteractionOverlay = <T,>({
   margin,
   data,
   findDataPoint,
+  getDataPointPosition,
   handleMouseMove,
   handleTouch,
   hideTooltip,
@@ -40,10 +44,16 @@ export const ChartInteractionOverlay = <T,>({
         width={innerWidth}
         height={innerHeight}
         fill="transparent"
-        onMouseMove={(event) => handleMouseMove(event, findDataPoint)}
+        onMouseMove={(event) =>
+          handleMouseMove(event, findDataPoint, getDataPointPosition)
+        }
         onMouseLeave={hideTooltip}
-        onTouchStart={(event) => handleTouch(event, findDataPoint)}
-        onTouchMove={(event) => handleTouch(event, findDataPoint)}
+        onTouchStart={(event) =>
+          handleTouch(event, findDataPoint, getDataPointPosition)
+        }
+        onTouchMove={(event) =>
+          handleTouch(event, findDataPoint, getDataPointPosition)
+        }
         onTouchEnd={hideTooltip}
         onTouchCancel={hideTooltip}
         style={{ cursor: 'pointer' }}

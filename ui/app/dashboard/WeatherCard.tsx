@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react';
+import { Fragment, useEffect, useState, useRef, useMemo } from 'react';
 import { Button, Card, Modal, Tabs } from 'react-daisyui';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
@@ -14,14 +14,32 @@ type WeatherTimeSeries = {
   data: {
     instant: {
       details: {
+        air_pressure_at_sea_level: number;
         air_temperature: number;
+        air_temperature_percentile_10: number;
+        air_temperature_percentile_90: number;
+        cloud_area_fraction: number;
+        cloud_area_fraction_high: number;
+        cloud_area_fraction_low: number;
+        cloud_area_fraction_medium: number;
+        dew_point_temperature: number;
+        fog_area_fraction: number;
+        relative_humidity: number;
+        ultraviolet_index_clear_sky: number;
+        wind_from_direction: number;
         wind_speed: number;
-        ultraviolet_index_clear_sky?: number;
+        wind_speed_of_gust: number;
+        wind_speed_percentile_10: number;
+        wind_speed_percentile_90: number;
       };
     };
     next_1_hours?: {
       details: {
+        precipitation_amount: number;
+        precipitation_amount_max: number;
+        precipitation_amount_min: number;
         probability_of_precipitation: number;
+        probability_of_thunder: number;
       };
       summary: {
         symbol_code: string;
@@ -75,6 +93,7 @@ export const WeatherCard = () => {
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
   const [activeTab, setActiveTab] = useState(0);
+  const modalBodyRef = useRef<HTMLDivElement>(null);
 
   const tempSensors = useTempSensorsQuery();
 
@@ -110,49 +129,125 @@ export const WeatherCard = () => {
     detailsModalOpen && isIdle ? 10 * 1000 : null,
   );
 
-  const roundToHour = (date: Date) => {
-    const p = 60 * 60 * 1000; // milliseconds in an hour
-    return new Date(Math.round(date.getTime() / p) * p);
-  };
-  const currentAndFutureSeries = weather?.properties.timeseries.filter(
-    (series) => {
-      return new Date(series.time) >= roundToHour(new Date());
-    },
-  );
+  // Reset scroll position and tab when modal closes (after animation)
+  useEffect(() => {
+    if (!detailsModalOpen) {
+      // Wait for modal close animation to complete before resetting
+      const timeoutId = setTimeout(() => {
+        setActiveTab(0);
+        if (modalBodyRef.current) {
+          modalBodyRef.current.scrollTop = 0;
+        }
+      }, 300); // Modal animation duration
 
-  // Get hourly data for next 48 hours
-  const hourlyData = currentAndFutureSeries?.slice(0, 48) || [];
+      return () => clearTimeout(timeoutId);
+    }
+  }, [detailsModalOpen]);
 
-  // Get daily data for next 7 days (one entry per unique date)
-  const dailyData = currentAndFutureSeries
-    ? currentAndFutureSeries
-        .reduce((acc: WeatherTimeSeries[], series) => {
-          const currentDate = new Date(series.time).toDateString();
-          const existingDateIndex = acc.findIndex(
-            (item) => new Date(item.time).toDateString() === currentDate,
-          );
+  // Memoize weather data transformations to prevent unnecessary re-renders
+  const { currentAndFutureSeries, hourlyData, dailyData } = useMemo(() => {
+    const roundToHour = (date: Date) => {
+      const p = 60 * 60 * 1000; // milliseconds in an hour
+      return new Date(Math.round(date.getTime() / p) * p);
+    };
 
-          if (existingDateIndex === -1) {
-            // New date, add this entry
-            acc.push(series);
-          } else {
-            // Date already exists, replace if this entry is closer to noon
-            const currentHour = new Date(series.time).getHours();
-            const existingHour = new Date(
-              acc[existingDateIndex].time,
-            ).getHours();
-            const noonDistance = Math.abs(currentHour - 12);
-            const existingNoonDistance = Math.abs(existingHour - 12);
+    const currentAndFutureSeries =
+      weather?.properties.timeseries.filter((series) => {
+        return new Date(series.time) >= roundToHour(new Date());
+      }) ?? [];
 
-            if (noonDistance < existingNoonDistance) {
-              acc[existingDateIndex] = series;
+    // Get hourly data for next 48 hours
+    const hourlyData = currentAndFutureSeries?.slice(0, 48) || [];
+
+    // Get daily data for next 7 days (one entry per unique date)
+    const dailyData = currentAndFutureSeries
+      ? currentAndFutureSeries
+          .reduce((acc: WeatherTimeSeries[], series) => {
+            const currentDate = new Date(series.time).toDateString();
+            const existingDateIndex = acc.findIndex(
+              (item) => new Date(item.time).toDateString() === currentDate,
+            );
+
+            if (existingDateIndex === -1) {
+              // New date, add this entry
+              acc.push(series);
+            } else {
+              // Date already exists, replace if this entry is closer to noon
+              const currentHour = new Date(series.time).getHours();
+              const existingHour = new Date(
+                acc[existingDateIndex].time,
+              ).getHours();
+              const noonDistance = Math.abs(currentHour - 12);
+              const existingNoonDistance = Math.abs(existingHour - 12);
+
+              if (noonDistance < existingNoonDistance) {
+                acc[existingDateIndex] = series;
+              }
             }
-          }
 
-          return acc;
-        }, [])
-        .slice(0, 7)
-    : [];
+            return acc;
+          }, [])
+          .slice(0, 7)
+      : [];
+
+    return { currentAndFutureSeries, hourlyData, dailyData };
+  }, [weather]);
+
+  // Memoize chart data transformations
+  const temperatureChartData = useMemo(() => {
+    return currentAndFutureSeries.map((series) => {
+      const currentTemp = series.data.instant.details.air_temperature;
+      const maxTemp =
+        series.data.next_6_hours?.details?.air_temperature_max ||
+        currentTemp + 3;
+      const minTemp =
+        series.data.next_6_hours?.details?.air_temperature_min ||
+        currentTemp - 3;
+
+      return {
+        time: new Date(series.time),
+        temp: currentTemp,
+        temp_percentile_10:
+          series.data.instant.details.air_temperature_percentile_10,
+        temp_percentile_90:
+          series.data.instant.details.air_temperature_percentile_90,
+      };
+    });
+  }, [currentAndFutureSeries]);
+
+  const precipitationChartData = useMemo(() => {
+    return currentAndFutureSeries.map((series) => ({
+      time: new Date(series.time),
+      precipitation_amount:
+        series.data.next_1_hours?.details?.precipitation_amount ||
+        series.data.next_6_hours?.details?.precipitation_amount ||
+        0,
+      precipitation_amount_max:
+        series.data.next_1_hours?.details?.precipitation_amount_max ||
+        series.data.next_6_hours?.details?.precipitation_amount_max ||
+        0,
+      precipitation_amount_min:
+        series.data.next_1_hours?.details?.precipitation_amount_min ||
+        series.data.next_6_hours?.details?.precipitation_amount_min ||
+        0,
+      probability_of_precipitation:
+        series.data.next_1_hours?.details?.probability_of_precipitation ||
+        series.data.next_6_hours?.details?.probability_of_precipitation ||
+        0,
+    }));
+  }, [currentAndFutureSeries]);
+
+  const windChartData = useMemo(() => {
+    return currentAndFutureSeries.map((series) => ({
+      time: new Date(series.time),
+      wind_speed: series.data.instant.details.wind_speed,
+      wind_speed_of_gust: series.data.instant.details.wind_speed_of_gust,
+      wind_speed_percentile_10:
+        series.data.instant.details.wind_speed_percentile_10,
+      wind_speed_percentile_90:
+        series.data.instant.details.wind_speed_percentile_90,
+    }));
+  }, [currentAndFutureSeries]);
 
   return (
     <>
@@ -160,7 +255,7 @@ export const WeatherCard = () => {
         <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
           <Card.Body>
             {renderWeatherDetail(
-              currentAndFutureSeries && currentAndFutureSeries[0],
+              currentAndFutureSeries[0],
               true,
               latestFrontyardTemp ? Math.round(latestFrontyardTemp) : undefined,
             )}
@@ -171,7 +266,7 @@ export const WeatherCard = () => {
         open={detailsModalOpen}
         onClickBackdrop={toggleDetailsModal}
         responsive
-        className="pt-0"
+        className="py-0"
       >
         <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
           <div className="flex items-center justify-between font-bold mb-4">
@@ -195,7 +290,10 @@ export const WeatherCard = () => {
           </Tabs>
         </Modal.Header>
 
-        <Modal.Body className="flex flex-col gap-3 relative overflow-y-auto overflow-x-hidden max-h-[70vh] pr-4 -mr-4">
+        <Modal.Body
+          ref={modalBodyRef}
+          className="flex flex-col gap-3 relative overflow-y-auto overflow-x-hidden max-h-[70vh] pr-4 -mr-4 pb-4"
+        >
           {activeTab === 0 && (
             <>
               {hourlyData.map((series, index) => {
@@ -270,7 +368,7 @@ export const WeatherCard = () => {
           {activeTab === 1 && (
             <>
               {/* Daily forecast cards */}
-              <div className="overflow-x-auto flex flex-row gap-2 mb-6 flex-shrink-0">
+              <div className="overflow-x-auto flex flex-row gap-2 flex-shrink-0">
                 {dailyData.map((series, index) => {
                   const date = new Date(series.time);
                   const today = new Date();
@@ -286,7 +384,7 @@ export const WeatherCard = () => {
                   return (
                     <div
                       key={index}
-                      className="bg-base-200 rounded-lg p-3 text-center h-44 w-18 flex-shrink-0"
+                      className="bg-base-200 rounded-lg p-3 text-center w-18 flex-shrink-0"
                     >
                       <div className="text-sm font-semibold mb-2">
                         {isToday
@@ -307,18 +405,10 @@ export const WeatherCard = () => {
                         alt="Weather icon"
                       />
                       <div className="text-lg font-bold">
-                        {Math.round(
-                          maxTemp ||
-                            series.data.instant.details.air_temperature + 2,
-                        )}
-                        °
+                        {maxTemp !== undefined && Math.round(maxTemp)}°
                       </div>
                       <div className="text-sm text-gray-600">
-                        {Math.round(
-                          minTemp ||
-                            series.data.instant.details.air_temperature - 2,
-                        )}
-                        °
+                        {minTemp !== undefined && Math.round(minTemp)}°
                       </div>
                       <div className="text-xs text-blue-600 mt-1">
                         {precipitation > 0
@@ -331,33 +421,14 @@ export const WeatherCard = () => {
               </div>
 
               {/* Temperature chart */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3">
-                  Temperature Forecast
-                </h3>
+              <div>
                 <ResponsiveChart
                   height={250}
                   className="rounded-lg overflow-hidden bg-base-200/50"
                 >
                   {({ width, height }) => (
                     <WeatherChart
-                      data={dailyData.map((series) => {
-                        const currentTemp =
-                          series.data.instant.details.air_temperature;
-                        const maxTemp =
-                          series.data.next_6_hours?.details
-                            ?.air_temperature_max || currentTemp + 3;
-                        const minTemp =
-                          series.data.next_6_hours?.details
-                            ?.air_temperature_min || currentTemp - 3;
-
-                        return {
-                          time: new Date(series.time),
-                          temp: currentTemp,
-                          maxTemp: maxTemp,
-                          minTemp: minTemp,
-                        };
-                      })}
+                      data={temperatureChartData}
                       width={width}
                       height={height}
                       chartType="temperature"
@@ -368,40 +439,14 @@ export const WeatherCard = () => {
               </div>
 
               {/* Precipitation chart */}
-              <div className="mb-6">
-                <h3 className="text-lg font-semibold mb-3">
-                  Precipitation Forecast
-                </h3>
+              <div>
                 <ResponsiveChart
                   height={250}
                   className="rounded-lg overflow-hidden bg-base-200/50"
                 >
                   {({ width, height }) => (
                     <WeatherChart
-                      data={dailyData.map((series) => ({
-                        time: new Date(series.time),
-                        precipitation:
-                          series.data.next_6_hours?.details
-                            ?.precipitation_amount || 0,
-                        precipitationMax:
-                          series.data.next_6_hours?.details
-                            ?.precipitation_amount_max ||
-                          series.data.next_6_hours?.details
-                            ?.precipitation_amount ||
-                          0,
-                        precipitationMin:
-                          series.data.next_6_hours?.details
-                            ?.precipitation_amount_min ||
-                          series.data.next_6_hours?.details
-                            ?.precipitation_amount ||
-                          0,
-                        probability:
-                          series.data.next_6_hours?.details
-                            ?.probability_of_precipitation ||
-                          series.data.next_1_hours?.details
-                            ?.probability_of_precipitation ||
-                          0,
-                      }))}
+                      data={precipitationChartData}
                       width={width}
                       height={height}
                       chartType="precipitation"
@@ -413,19 +458,13 @@ export const WeatherCard = () => {
 
               {/* Wind speed chart */}
               <div>
-                <h3 className="text-lg font-semibold mb-3">
-                  Wind Speed Forecast
-                </h3>
                 <ResponsiveChart
                   height={250}
                   className="rounded-lg overflow-hidden bg-base-200/50"
                 >
                   {({ width, height }) => (
                     <WeatherChart
-                      data={dailyData.map((series) => ({
-                        time: new Date(series.time),
-                        windSpeed: series.data.instant.details.wind_speed,
-                      }))}
+                      data={windChartData}
                       width={width}
                       height={height}
                       chartType="wind"

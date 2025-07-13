@@ -124,7 +124,9 @@ export const TrainScheduleCard = () => {
           </Table.Body>
         </Table>
         {trains.length === 0 && (
-          <span className="text-stone-500 pl-4 font-extrabold py-2">No scheduled trains</span>
+          <span className="text-stone-500 pl-4 font-extrabold py-2">
+            No scheduled trains
+          </span>
         )}
       </Card.Body>
     </Card>

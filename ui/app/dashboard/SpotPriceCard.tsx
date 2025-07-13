@@ -2,34 +2,30 @@
 
 import { Card } from 'react-daisyui';
 import { useSpotPriceQuery } from '@/hooks/influxdb';
-import { SpotPriceChart } from '@/ui/charts/SpotPriceChart';
+import { SpotPriceChart, spotPriceToColor } from '@/ui/charts/SpotPriceChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
-
-const spotPriceToColor = (spotPrice: number) => {
-  const h = Math.min(Math.max(0, 120 - 5 * spotPrice), 300);
-  const s = 0.45;
-  const v = 0.4;
-  return `hsl(${h}, ${s * 100}%, ${v * 100}%)`;
-};
+import { useMemo } from 'react';
 
 export const SpotPriceCard = () => {
   const spotPrice = useSpotPriceQuery();
 
-  const data = spotPrice
-    .filter((row) => {
-      return (
-        new Date(row._time).getTime() >=
-        new Date(new Date().getTime() - 1 * 60 * 60 * 1000).getTime()
-      );
-    })
-    .map((row) => {
-      const color = spotPriceToColor(row._value);
-      return {
-        time: new Date(row._time).getTime(),
-        value: row._value,
-        fill: color,
-      };
-    });
+  // Memoize the data transformation to prevent unnecessary re-renders
+  const data = useMemo(() => {
+    const oneHourAgo = new Date().getTime() - 1 * 60 * 60 * 1000;
+
+    return spotPrice
+      .filter((row) => {
+        return new Date(row._time).getTime() >= oneHourAgo;
+      })
+      .map((row) => {
+        const color = spotPriceToColor(row._value);
+        return {
+          time: new Date(row._time).getTime(),
+          value: row._value,
+          fill: color || '#6b7280',
+        };
+      });
+  }, [spotPrice]);
 
   return (
     <>

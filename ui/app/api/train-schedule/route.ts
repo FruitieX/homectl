@@ -51,7 +51,7 @@ function getSecSinceMidnight(d: Date) {
 export async function GET() {
   try {
     const trainApiUrl = process.env.TRAIN_API_URL;
-    
+
     if (!trainApiUrl) {
       return NextResponse.json(
         { error: 'TRAIN_API_URL environment variable not set' },
@@ -87,26 +87,27 @@ export async function GET() {
 }
           `,
         });
-        
+
         if (!res.ok) {
           throw new Error(`Failed to fetch train schedule: ${res.status}`);
         }
-        
+
         const json: HslResponse = await res.json();
         const stop = json.data.stop;
-        
+
         const trainsToCatch = stop.stoptimesWithoutPatterns.flatMap((st) => {
           const secSinceMidnight = getSecSinceMidnight(new Date());
           const departureSecSinceMidnight = st.realtimeDeparture;
 
-          const secUntilDeparture = departureSecSinceMidnight - secSinceMidnight;
+          const secUntilDeparture =
+            departureSecSinceMidnight - secSinceMidnight;
           const minUntilDeparture = secUntilDeparture / 60;
           const suggestedMinUntilDeparture = 12;
 
           const minUntilHomeDeparture = Math.floor(
             minUntilDeparture - suggestedMinUntilDeparture,
           );
-          
+
           if (minUntilHomeDeparture < -5) {
             return [];
           }

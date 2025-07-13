@@ -1,11 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, memo } from 'react';
 import { Group } from '@visx/group';
 import { AxisBottom, AxisLeft } from '@visx/axis';
-import { scaleBand, scaleLinear } from '@visx/scale';
+import { scaleTime, scaleLinear } from '@visx/scale';
 import { LinearGradient } from '@visx/gradient';
 import { GridRows } from '@visx/grid';
-import { PatternLines } from '@visx/pattern';
-import Color from 'color';
+import { LinePath } from '@visx/shape';
+import { curveCardinal } from '@visx/curve';
 import { useChartTooltip, TooltipPosition } from './hooks/useChartTooltip';
 import { ChartTooltip, TooltipField } from './ChartTooltip';
 import { ChartInteractionOverlay } from './ChartInteractionOverlay';
@@ -26,16 +26,48 @@ interface TemperatureSensorChartProps {
 
 const defaultMargin = { top: 20, right: 20, bottom: 40, left: 40 };
 
-const tempToColor = (temp: number) => {
-  // Define temperature thresholds and corresponding hue values
+// Unified temperature thresholds and categories
+const TEMP_THRESHOLDS = {
+  VERY_COLD: -20,
+  FREEZING: 0,
+  COLD: 8,
+  COOL: 18,
+  COMFORTABLE_MIN: 20,
+  COMFORTABLE_MAX: 25,
+  WARM: 27,
+  HOT: 30,
+} as const;
+
+const getTemperatureCategory = (temp: number): string => {
+  if (temp < TEMP_THRESHOLDS.FREEZING) return 'Freezing';
+  if (temp < TEMP_THRESHOLDS.COLD) return 'Cold';
+  if (temp < TEMP_THRESHOLDS.COOL) return 'Cool';
+  if (temp < TEMP_THRESHOLDS.COMFORTABLE_MIN) return 'Mild';
+  if (temp <= TEMP_THRESHOLDS.COMFORTABLE_MAX) return 'Comfortable';
+  if (temp < TEMP_THRESHOLDS.WARM) return 'Warm';
+  return 'Hot';
+};
+
+// Create dynamic gradient for each temperature value
+const createTemperatureGradientId = (value: number, index: number) => {
+  return `tempGradient_${index}_${Math.round(value * 100)}`;
+};
+
+// Get single temperature color for tooltips and badges
+const getTemperatureColor = (temp: number, boostLightness?: boolean) => {
+  const saturation = boostLightness ? 1 : 0.45;
+  const lightness = boostLightness ? 0.7 : 0.5;
+
+  // Define temperature points and corresponding hue values for smooth interpolation
   const tempPoints = [
-    { temp: -20, hue: 240, sat: 20, light: 30 }, // Deep blue for very cold
-    { temp: 0, hue: 200, sat: 60, light: 50 }, // Blue for freezing
-    { temp: 8, hue: 180, sat: 70, light: 60 }, // Cyan for cold
-    { temp: 15, hue: 120, sat: 60, light: 65 }, // Green for cool
-    { temp: 23, hue: 60, sat: 70, light: 70 }, // Yellow for comfortable
-    { temp: 30, hue: 20, sat: 80, light: 65 }, // Orange for warm
-    { temp: 40, hue: 0, sat: 90, light: 60 }, // Red for hot
+    { temp: TEMP_THRESHOLDS.VERY_COLD, hue: 240 }, // Deep blue for very cold
+    { temp: TEMP_THRESHOLDS.FREEZING, hue: 200 }, // Blue for freezing
+    { temp: TEMP_THRESHOLDS.COLD, hue: 180 }, // Cyan for cold
+    { temp: TEMP_THRESHOLDS.COOL, hue: 150 }, // Light blue for cool
+    { temp: TEMP_THRESHOLDS.COMFORTABLE_MIN, hue: 120 }, // Green for mild/comfortable start
+    { temp: TEMP_THRESHOLDS.COMFORTABLE_MAX, hue: 100 }, // Green for comfortable end
+    { temp: TEMP_THRESHOLDS.WARM, hue: 60 }, // Yellow for warm
+    { temp: TEMP_THRESHOLDS.HOT, hue: 0 }, // Red for hot
   ];
 
   // Find the two points to interpolate between
@@ -54,24 +86,217 @@ const tempToColor = (temp: number) => {
   const factor = (temp - lowerPoint.temp) / (upperPoint.temp - lowerPoint.temp);
   const clampedFactor = Math.max(0, Math.min(1, factor));
 
-  // Interpolate between the two colors
-  const hue =
+  // Interpolate between the two hue values
+  const baseHue =
     lowerPoint.hue + (upperPoint.hue - lowerPoint.hue) * clampedFactor;
-  const sat =
-    lowerPoint.sat + (upperPoint.sat - lowerPoint.sat) * clampedFactor;
-  const light =
-    lowerPoint.light + (upperPoint.light - lowerPoint.light) * clampedFactor;
 
-  return Color(`hsl(${hue}, ${sat}%, ${light}%)`);
+  return `hsl(${baseHue}, ${saturation * 100}%, ${lightness * 100}%)`;
 };
 
-export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
-  data,
-  width,
-  height,
-  margin = defaultMargin,
-  animate = true,
-}) => {
+// Export for use in other components
+export { getTemperatureColor, getTemperatureCategory };
+
+// Memoized Temperature Line Component
+const TemperatureLine = memo(
+  ({
+    data,
+    xScale,
+    yScale,
+    innerHeight,
+  }: {
+    data: TemperatureData[];
+    xScale: any;
+    yScale: any;
+    innerHeight: number;
+  }) => {
+    const validData = data.filter((d) => d.temp !== undefined);
+
+    // Group consecutive data points to handle gaps
+    const dataSegments = useMemo(() => {
+      if (validData.length === 0) return [];
+
+      const segments: TemperatureData[][] = [];
+      let currentSegment: TemperatureData[] = [validData[0]];
+
+      for (let i = 1; i < validData.length; i++) {
+        const timeDiff =
+          validData[i].time.getTime() - validData[i - 1].time.getTime();
+        // If gap is more than 2 hours, start new segment
+        if (timeDiff > 2 * 60 * 60 * 1000) {
+          segments.push(currentSegment);
+          currentSegment = [validData[i]];
+        } else {
+          currentSegment.push(validData[i]);
+        }
+      }
+      segments.push(currentSegment);
+
+      return segments;
+    }, [validData]);
+
+    return (
+      <>
+        {/* Render each segment as a separate line */}
+        {dataSegments.map((segment, segmentIndex) => {
+          if (segment.length < 2) {
+            // Single point - render as circle
+            const d = segment[0];
+            return (
+              <circle
+                key={`point-${segmentIndex}`}
+                cx={xScale(d.time) ?? 0}
+                cy={yScale(d.temp) ?? 0}
+                r={3}
+                fill={getTemperatureColor(d.temp)}
+                stroke="#ffffff"
+                strokeWidth={1}
+              />
+            );
+          }
+
+          return (
+            <g key={`segment-${segmentIndex}`}>
+              {/* Line segments with per-segment coloring */}
+              {segment.map((d, i) => {
+                if (i === segment.length - 1) return null;
+
+                const nextPoint = segment[i + 1];
+                const color = getTemperatureColor(d.temp);
+
+                return (
+                  <LinePath<TemperatureData>
+                    key={`line-${segmentIndex}-${i}`}
+                    data={[d, nextPoint]}
+                    x={(pt) => xScale(pt.time) ?? 0}
+                    y={(pt) => yScale(pt.temp) ?? 0}
+                    stroke={color}
+                    strokeWidth={3}
+                    curve={curveCardinal}
+                    fill="transparent"
+                  />
+                );
+              })}
+
+              {/* Data points */}
+              {segment.map((d, i) => (
+                <circle
+                  key={`point-${segmentIndex}-${i}`}
+                  cx={xScale(d.time) ?? 0}
+                  cy={yScale(d.temp) ?? 0}
+                  r={3}
+                  fill={getTemperatureColor(d.temp)}
+                  stroke="#ffffff"
+                  strokeWidth={1}
+                />
+              ))}
+            </g>
+          );
+        })}
+
+        {/* Gap indicators */}
+        {dataSegments.map((segment, segmentIndex) => {
+          if (segmentIndex === dataSegments.length - 1) return null;
+
+          const lastPoint = segment[segment.length - 1];
+          const nextSegment = dataSegments[segmentIndex + 1];
+          const firstPointNext = nextSegment[0];
+
+          const gapStartX = xScale(lastPoint.time) ?? 0;
+          const gapEndX = xScale(firstPointNext.time) ?? 0;
+          const gapY = innerHeight - 10;
+
+          return (
+            <g key={`gap-${segmentIndex}`}>
+              <line
+                x1={gapStartX}
+                y1={gapY}
+                x2={gapEndX}
+                y2={gapY}
+                stroke="#6b7280"
+                strokeWidth={2}
+                strokeDasharray="5,5"
+                opacity={0.6}
+              />
+              <text
+                x={(gapStartX + gapEndX) / 2}
+                y={gapY - 5}
+                textAnchor="middle"
+                fontSize="10"
+                fill="#9ca3af"
+              >
+                No data
+              </text>
+            </g>
+          );
+        })}
+      </>
+    );
+  },
+);
+
+TemperatureLine.displayName = 'TemperatureLine';
+
+// Memoized Grid Component
+const TemperatureGrid = memo(
+  ({
+    yScale,
+    innerWidth,
+    innerHeight,
+  }: {
+    yScale: any;
+    innerWidth: number;
+    innerHeight: number;
+  }) => (
+    <GridRows
+      scale={yScale}
+      width={innerWidth}
+      height={innerHeight}
+      stroke="#374151"
+      strokeOpacity={0.3}
+      strokeDasharray="2,2"
+    />
+  ),
+);
+
+TemperatureGrid.displayName = 'TemperatureGrid';
+
+// Memoized Hover Indicator Component
+const TemperatureHoverIndicator = memo(
+  ({
+    tooltipOpen,
+    tooltipData,
+    xScale,
+    innerHeight,
+  }: {
+    tooltipOpen: boolean;
+    tooltipData: TemperatureData | undefined;
+    xScale: any;
+    innerHeight: number;
+  }) => {
+    if (!tooltipOpen || !tooltipData) return null;
+
+    const x = xScale(tooltipData.time) ?? 0;
+
+    return (
+      <line
+        x1={x}
+        y1={0}
+        x2={x}
+        y2={innerHeight}
+        stroke="rgba(156, 163, 175, 0.6)"
+        strokeWidth={2}
+        strokeDasharray="3,3"
+        pointerEvents="none"
+      />
+    );
+  },
+);
+
+TemperatureHoverIndicator.displayName = 'TemperatureHoverIndicator';
+
+const TemperatureSensorChartComponent: React.FC<
+  TemperatureSensorChartProps
+> = ({ data, width, height, margin = defaultMargin, animate = true }) => {
   const {
     tooltipData,
     tooltipLeft,
@@ -91,11 +316,14 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
+  // Memoize scales
   const { xScale, yScale } = useMemo(() => {
-    const xScale = scaleBand<Date>({
+    const xScale = scaleTime<number>({
       range: [0, innerWidth],
-      domain: data.map((d) => d.time),
-      padding: 0.2,
+      domain: [
+        Math.min(...data.map((d) => d.time.getTime())),
+        Math.max(...data.map((d) => d.time.getTime())),
+      ],
     });
 
     const yScale = scaleLinear<number>({
@@ -110,25 +338,37 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
     return { xScale, yScale };
   }, [data, innerWidth, innerHeight]);
 
-  // Function to find data point based on position
-  const findDataPoint = (
-    position: TooltipPosition,
-  ): TemperatureData | undefined => {
-    const xPos = position.x;
-    let closestIndex = 0;
-    let closestDistance = Infinity;
+  // Memoize interaction functions
+  const findDataPoint = useMemo(
+    () =>
+      (position: TooltipPosition): TemperatureData | undefined => {
+        const xPos = position.x;
+        const time = xScale.invert(xPos);
 
-    data.forEach((d, i) => {
-      const dataX = xScale(d.time!) ?? 0;
-      const distance = Math.abs(xPos - dataX);
-      if (distance < closestDistance) {
-        closestDistance = distance;
-        closestIndex = i;
-      }
-    });
+        let closestIndex = 0;
+        let closestDistance = Infinity;
 
-    return data[closestIndex];
-  };
+        data.forEach((d, i) => {
+          const distance = Math.abs(d.time.getTime() - time.getTime());
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestIndex = i;
+          }
+        });
+
+        return data[closestIndex];
+      },
+    [data, xScale],
+  );
+
+  const getDataPointPosition = useMemo(
+    () => (datum: TemperatureData) => {
+      const x = xScale(datum.time.getTime()) ?? 0;
+      const y = yScale(datum.temp) ?? 0;
+      return { x, y };
+    },
+    [xScale, yScale],
+  );
 
   if (width < 10) return null;
 
@@ -136,22 +376,14 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
     <div className="relative overflow-hidden" ref={containerRef}>
       <svg ref={svgRef} width={width} height={height}>
         <defs>
-          <LinearGradient
-            id="temperatureGradient"
-            from="#1e40af"
-            to="#06b6d4"
-          />
-          <LinearGradient id="coldGradient" from="#3b82f6" to="#06b6d4" />
-          <LinearGradient id="warmGradient" from="#f59e0b" to="#dc2626" />
-          <LinearGradient id="hotGradient" from="#dc2626" to="#7c2d12" />
-          <PatternLines
-            id="temperaturePattern"
-            height={6}
-            width={6}
-            stroke="#374151"
-            strokeWidth={1}
-            orientation={['diagonal']}
-          />
+          {/* Glow effect for current time marker */}
+          <filter id="glow">
+            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+            <feMerge>
+              <feMergeNode in="coloredBlur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
         <rect
@@ -164,39 +396,25 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
         />
 
         <Group left={margin.left} top={margin.top}>
-          <GridRows
-            scale={yScale}
-            width={innerWidth}
-            height={innerHeight}
-            stroke="#374151"
-            strokeOpacity={0.3}
-            strokeDasharray="2,2"
+          <TemperatureGrid
+            yScale={yScale}
+            innerWidth={innerWidth}
+            innerHeight={innerHeight}
           />
 
-          {data.map((d, i) => {
-            const barWidth = xScale.bandwidth();
-            const barHeight = innerHeight - (yScale(d.temp) ?? 0);
-            const barX = xScale(d.time) ?? 0;
-            const barY = yScale(d.temp) ?? 0;
-            const color = tempToColor(d.temp);
+          <TemperatureLine
+            data={data}
+            xScale={xScale}
+            yScale={yScale}
+            innerHeight={innerHeight}
+          />
 
-            return (
-              <g key={i}>
-                <rect
-                  x={barX}
-                  y={barY}
-                  width={barWidth}
-                  height={barHeight}
-                  fill={color.toString()}
-                  stroke={color.darken(0.2).toString()}
-                  strokeWidth={1}
-                  rx={3}
-                  ry={3}
-                  style={{ cursor: 'pointer' }}
-                />
-              </g>
-            );
-          })}
+          <TemperatureHoverIndicator
+            tooltipOpen={tooltipOpen}
+            tooltipData={tooltipData}
+            xScale={xScale}
+            innerHeight={innerHeight}
+          />
 
           {/* Unified interaction overlay */}
           <ChartInteractionOverlay
@@ -205,6 +423,7 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
             margin={margin}
             data={data}
             findDataPoint={findDataPoint}
+            getDataPointPosition={getDataPointPosition}
             handleMouseMove={handleMouseMove}
             handleTouch={handleTouch}
             hideTooltip={hideTooltip}
@@ -214,7 +433,7 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
             top={innerHeight}
             scale={xScale}
             tickFormat={(value) => {
-              const date = new Date(value);
+              const date = new Date(Number(value));
               return date.toLocaleTimeString('en-FI', {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -247,16 +466,67 @@ export const TemperatureSensorChart: React.FC<TemperatureSensorChartProps> = ({
 
       {tooltipData && (
         <ChartTooltip
-          title={`${Math.round(tooltipData.temp)}°C`}
-          fields={[]}
+          title={
+            <div className="flex items-center gap-2">
+              <div
+                className="w-3 h-3 rounded-full"
+                style={{
+                  backgroundColor: getTemperatureColor(tooltipData.temp),
+                }}
+              />
+              {tooltipData.temp.toFixed(1)}°C
+            </div>
+          }
+          fields={[
+            {
+              label: 'Category',
+              value: getTemperatureCategory(tooltipData.temp),
+              secondary: true,
+            },
+          ]}
           timestamp={tooltipData.time}
           TooltipInPortal={TooltipInPortal}
           tooltipTop={tooltipTop}
           tooltipLeft={tooltipLeft}
           tooltipOpen={tooltipOpen}
           margin={margin}
+          offsetTop={-40}
+          offsetLeft={-10}
         />
       )}
     </div>
   );
 };
+
+export const TemperatureSensorChart = memo(
+  TemperatureSensorChartComponent,
+  (prevProps, nextProps) => {
+    // Custom comparison to avoid unnecessary re-renders
+    return (
+      prevProps.width === nextProps.width &&
+      prevProps.height === nextProps.height &&
+      prevProps.animate === nextProps.animate &&
+      prevProps.data.length === nextProps.data.length &&
+      // Compare data arrays efficiently - only check if lengths and first/last items match
+      (prevProps.data.length === 0 ||
+        (prevProps.data[0]?.time.getTime() ===
+          nextProps.data[0]?.time.getTime() &&
+          prevProps.data[0]?.temp === nextProps.data[0]?.temp &&
+          prevProps.data[prevProps.data.length - 1]?.time.getTime() ===
+            nextProps.data[nextProps.data.length - 1]?.time.getTime() &&
+          prevProps.data[prevProps.data.length - 1]?.temp ===
+            nextProps.data[nextProps.data.length - 1]?.temp)) &&
+      // Compare margin without JSON serialization
+      (prevProps.margin?.top ?? defaultMargin.top) ===
+        (nextProps.margin?.top ?? defaultMargin.top) &&
+      (prevProps.margin?.right ?? defaultMargin.right) ===
+        (nextProps.margin?.right ?? defaultMargin.right) &&
+      (prevProps.margin?.bottom ?? defaultMargin.bottom) ===
+        (nextProps.margin?.bottom ?? defaultMargin.bottom) &&
+      (prevProps.margin?.left ?? defaultMargin.left) ===
+        (nextProps.margin?.left ?? defaultMargin.left)
+    );
+  },
+);
+
+TemperatureSensorChart.displayName = 'TemperatureSensorChart';
