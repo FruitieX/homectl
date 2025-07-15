@@ -9,7 +9,32 @@ interface TempSensorRow {
   integration_id: string;
   _time: Date;
   _value: number;
+  _field: string; // Added to distinguish between tempc and hum
 }
+
+// Mapping from device_id to sensor name
+const DEVICE_ID_TO_NAME: Record<string, string> = {
+  D83431306571: 'Bathroom',
+  C76A05062842: 'Bedroom',
+  D83535301C43: 'Upstairs office',
+  D7353530520F: 'Kids room',
+  D63534385106: 'Office',
+  D7353530665A: 'Living room',
+  CE2A82463674: 'Downstairs bathroom',
+  D9353438450D: 'Backyard',
+  D4343037362D: 'Patio',
+  C76A0246647E: 'Car',
+  D83534387029: 'Front yard',
+  C76A03460A73: 'Storage',
+};
+
+// Priority sensors (currently visible ones) - these will be shown first
+const PRIORITY_SENSORS = [
+  'D9353438450D', // Backyard
+  'D4343037362D', // Patio
+  'D7353530665A', // Living room
+  'C76A0246647E', // Car
+];
 
 export async function GET() {
   try {
@@ -23,8 +48,8 @@ export async function GET() {
       );
     }
 
-    const tempSensors = await serverCache.get<TempSensorRow[]>(
-      'tempSensorQuery',
+    const sensorData = await serverCache.get<TempSensorRow[]>(
+      'tempHumiditySensorQuery',
       1, // Cache for 1 minute
       async () => {
         const influxDB = new InfluxDB({
@@ -34,26 +59,16 @@ export async function GET() {
 
         const queryApi = influxDB.getQueryApi('influxdata');
 
+        // Create dynamic filter for all known device IDs
+        const deviceFilters = Object.keys(DEVICE_ID_TO_NAME)
+          .map((deviceId) => `(r["device_id"] == "${deviceId}")`)
+          .join(' or ');
+
         const query = `
           from(bucket: "home")
             |> range(start: -6h)
-            |> filter(fn: (r) =>
-                // backyard
-                (r["device_id"] == "D9353438450D" and r["integration_id"] == "ble1") or
-
-                // front yard
-                (r["device_id"] == "D83534387029" and r["integration_id"] == "ble2") or 
-
-                // patio
-                (r["device_id"] == "D4343037362D" and r["integration_id"] == "ble1") or
-
-                // living room
-                (r["device_id"] == "D7353530665A" and r["integration_id"] == "ble1") or
-
-                // car
-                (r["device_id"] == "C76A0246647E" and r["integration_id"] == "ble2")
-            )
-            |> filter(fn: (r) => r["_field"] == "tempc")
+            |> filter(fn: (r) => ${deviceFilters})
+            |> filter(fn: (r) => r["_field"] == "tempc" or r["_field"] == "hum")
             |> aggregateWindow(every: 10m, fn: mean, createEmpty: false)
             |> yield(name: "mean")
         `;
@@ -63,11 +78,11 @@ export async function GET() {
       },
     );
 
-    return NextResponse.json(tempSensors);
+    return NextResponse.json(sensorData);
   } catch (error) {
-    console.error('Error fetching temperature sensors:', error);
+    console.error('Error fetching temperature and humidity sensors:', error);
     return NextResponse.json(
-      { error: 'Failed to fetch temperature sensor data' },
+      { error: 'Failed to fetch sensor data' },
       { status: 500 },
     );
   }
