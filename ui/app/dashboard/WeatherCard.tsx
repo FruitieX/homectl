@@ -68,6 +68,15 @@ type WeatherTimeSeries = {
     };
   };
 };
+type DailyWeatherData = {
+  date: Date;
+  minTemp: number;
+  maxTemp: number;
+  symbolCode: string;
+  precipitation: number;
+  representativeDataPoint: WeatherTimeSeries;
+};
+
 type WeatherResponse = {
   properties: {
     meta: {
@@ -159,39 +168,90 @@ export const WeatherCard = () => {
     // Get hourly data for next 48 hours
     const hourlyData = currentAndFutureSeries?.slice(0, 48) || [];
 
-    // Get daily data for next 7 days (one entry per unique date)
-    const dailyData = currentAndFutureSeries
-      ? currentAndFutureSeries
-          .reduce((acc: WeatherTimeSeries[], series) => {
-            const currentDate = new Date(series.time).toDateString();
-            const existingDateIndex = acc.findIndex(
-              (item) => new Date(item.time).toDateString() === currentDate,
-            );
+    // Aggregate daily data for next 7 days with min/max values and improved symbol code logic
+    const dailyData: DailyWeatherData[] = currentAndFutureSeries
+      ? (() => {
+          // Group data points by date
+          const dailyGroups = new Map<string, WeatherTimeSeries[]>();
 
-            if (existingDateIndex === -1) {
-              // New date, add this entry
-              acc.push(series);
-            } else {
-              // Date already exists, replace if this entry is closer to noon
-              const currentHour = new Date(series.time).getHours();
-              const existingHour = new Date(
-                acc[existingDateIndex].time,
-              ).getHours();
-              const noonDistance = Math.abs(currentHour - 12);
-              const existingNoonDistance = Math.abs(existingHour - 12);
-
-              if (noonDistance < existingNoonDistance) {
-                acc[existingDateIndex] = series;
-              }
+          currentAndFutureSeries.forEach((series) => {
+            const dateKey = new Date(series.time).toDateString();
+            if (!dailyGroups.has(dateKey)) {
+              dailyGroups.set(dateKey, []);
             }
+            dailyGroups.get(dateKey)!.push(series);
+          });
 
-            return acc;
-          }, [])
-          .slice(0, 7)
+          // Process each day to get aggregated data
+          return Array.from(dailyGroups.entries())
+            .slice(0, 7) // Limit to 7 days
+            .map(([dateKey, dayDataPoints]) => {
+              const date = new Date(dateKey);
+
+              // Find symbol code: prioritize data points closest to noon with next_12_hours available
+              let bestSymbolDataPoint = dayDataPoints[0];
+              let bestNoonDistance = 24; // Initialize with max possible distance
+
+              for (const dataPoint of dayDataPoints) {
+                const hour = new Date(dataPoint.time).getHours();
+                const noonDistance = Math.abs(hour - 12);
+
+                // Prefer data points with next_12_hours, then closest to noon
+                const hasNext12Hours =
+                  !!dataPoint.data.next_12_hours?.summary?.symbol_code;
+                const currentBestHas12Hours =
+                  !!bestSymbolDataPoint.data.next_12_hours?.summary
+                    ?.symbol_code;
+
+                if (
+                  (hasNext12Hours && !currentBestHas12Hours) ||
+                  (hasNext12Hours === currentBestHas12Hours &&
+                    noonDistance < bestNoonDistance)
+                ) {
+                  bestSymbolDataPoint = dataPoint;
+                  bestNoonDistance = noonDistance;
+                }
+              }
+
+              // Get symbol code with fallback priority
+              const symbolCode =
+                bestSymbolDataPoint.data.next_12_hours?.summary?.symbol_code ||
+                bestSymbolDataPoint.data.next_6_hours?.summary?.symbol_code ||
+                bestSymbolDataPoint.data.next_1_hours?.summary?.symbol_code ||
+                'clearsky_day';
+
+              // Aggregate min/max temperatures from all data points in the day
+              const temperatures = dayDataPoints.map(
+                (dp) => dp.data.instant.details.air_temperature,
+              );
+              const minTemp = Math.min(...temperatures);
+              const maxTemp = Math.max(...temperatures);
+
+              // Aggregate precipitation (use max precipitation for the day)
+              const precipitationAmounts = dayDataPoints.map(
+                (dp) =>
+                  dp.data.next_1_hours?.details?.precipitation_amount ||
+                  dp.data.next_6_hours?.details?.precipitation_amount ||
+                  0,
+              );
+              const precipitation = Math.max(...precipitationAmounts);
+
+              return {
+                date,
+                minTemp,
+                maxTemp,
+                symbolCode,
+                precipitation,
+                representativeDataPoint: bestSymbolDataPoint,
+              };
+            });
+        })()
       : [];
 
     return { currentAndFutureSeries, hourlyData, dailyData };
   }, [weather]);
+
+  console.log(dailyData);
 
   // Memoize chart data transformations
   const temperatureChartData = useMemo(() => {
@@ -369,17 +429,10 @@ export const WeatherCard = () => {
             <>
               {/* Daily forecast cards */}
               <div className="overflow-x-auto flex flex-row gap-2 flex-shrink-0">
-                {dailyData.map((series, index) => {
-                  const date = new Date(series.time);
+                {dailyData.map((dayData, index) => {
                   const today = new Date();
-                  const isToday = date.toDateString() === today.toDateString();
-                  const minTemp =
-                    series.data.next_6_hours?.details?.air_temperature_min;
-                  const maxTemp =
-                    series.data.next_6_hours?.details?.air_temperature_max;
-                  const precipitation =
-                    series.data.next_6_hours?.details?.precipitation_amount ||
-                    0;
+                  const isToday =
+                    dayData.date.toDateString() === today.toDateString();
 
                   return (
                     <div
@@ -389,30 +442,30 @@ export const WeatherCard = () => {
                       <div className="text-sm font-semibold mb-2">
                         {isToday
                           ? 'Today'
-                          : date.toLocaleDateString('en-US', {
+                          : dayData.date.toLocaleDateString('en-US', {
                               weekday: 'short',
                             })}
                       </div>
                       <div className="text-xs text-gray-600 mb-2">
-                        {date.toLocaleDateString('en-FI', {
+                        {dayData.date.toLocaleDateString('en-FI', {
                           month: 'short',
                           day: 'numeric',
                         })}
                       </div>
                       <img
                         className="w-12 h-12 mx-auto mb-2"
-                        src={`/weathericons/${series.data.next_6_hours?.summary?.symbol_code || series.data.next_1_hours?.summary?.symbol_code || 'clearsky_day'}.svg`}
+                        src={`/weathericons/${dayData.symbolCode}.svg`}
                         alt="Weather icon"
                       />
                       <div className="text-lg font-bold">
-                        {maxTemp !== undefined && Math.round(maxTemp)}°
+                        {Math.round(dayData.maxTemp)}°
                       </div>
                       <div className="text-sm text-gray-600">
-                        {minTemp !== undefined && Math.round(minTemp)}°
+                        {Math.round(dayData.minTemp)}°
                       </div>
                       <div className="text-xs text-blue-600 mt-1">
-                        {precipitation > 0
-                          ? `${precipitation.toFixed(1)}mm`
+                        {dayData.precipitation > 0
+                          ? `${dayData.precipitation.toFixed(1)}mm`
                           : ''}
                       </div>
                     </div>

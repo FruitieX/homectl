@@ -117,7 +117,7 @@ export const useSensorData = () => {
   const sensorData = useMemo(() => {
     const deviceMap = new Map<string, SensorData>();
 
-    // Professional color palette for sensors (desaturated)
+    // Color palette for sensors
     const colors = [
       '#5b7c99', // Muted blue
       '#8b9dc3', // Soft blue-gray
