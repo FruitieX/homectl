@@ -251,8 +251,6 @@ export const WeatherCard = () => {
     return { currentAndFutureSeries, hourlyData, dailyData };
   }, [weather]);
 
-  console.log(dailyData);
-
   // Memoize chart data transformations
   const temperatureChartData = useMemo(() => {
     return currentAndFutureSeries.map((series) => {
