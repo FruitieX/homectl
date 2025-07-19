@@ -57,8 +57,8 @@ const TemperatureLine = memo(
       for (let i = 1; i < validData.length; i++) {
         const timeDiff =
           validData[i].time.getTime() - validData[i - 1].time.getTime();
-        // If gap is more than 2 hours, start new segment
-        if (timeDiff > 2 * 60 * 60 * 1000) {
+        // If gap is more than 1 hour, start new segment
+        if (timeDiff > 1 * 60 * 60 * 1000) {
           segments.push(currentSegment);
           currentSegment = [validData[i]];
         } else {
@@ -167,8 +167,8 @@ const HumidityLine = memo(
       for (let i = 1; i < validData.length; i++) {
         const timeDiff =
           validData[i].time.getTime() - validData[i - 1].time.getTime();
-        // If gap is more than 2 hours, start new segment
-        if (timeDiff > 2 * 60 * 60 * 1000) {
+        // If gap is more than 1 hour, start new segment
+        if (timeDiff > 1 * 60 * 60 * 1000) {
           segments.push(currentSegment);
           currentSegment = [validData[i]];
         } else {
@@ -289,6 +289,114 @@ const SensorGrid = memo(
 );
 
 SensorGrid.displayName = 'SensorGrid';
+
+// Component to render "No data" indicators for gaps
+const NoDataIndicators = memo(
+  ({
+    data,
+    xScale,
+    innerHeight,
+    showTemperature,
+    showHumidity,
+  }: {
+    data: SensorDataPoint[];
+    xScale: any;
+    innerHeight: number;
+    showTemperature: boolean;
+    showHumidity: boolean;
+  }) => {
+    // Find gaps in data where there's more than 1 hour between consecutive points
+    const gaps = useMemo(() => {
+      const allDataPoints = [...data].sort(
+        (a, b) => a.time.getTime() - b.time.getTime(),
+      );
+      const gapIndicators: { startTime: Date; endTime: Date; midTime: Date }[] =
+        [];
+
+      for (let i = 1; i < allDataPoints.length; i++) {
+        const timeDiff =
+          allDataPoints[i].time.getTime() - allDataPoints[i - 1].time.getTime();
+        if (timeDiff > 1 * 60 * 60 * 1000) {
+          // More than 1 hour
+          const startTime = allDataPoints[i - 1].time;
+          const endTime = allDataPoints[i].time;
+          const midTime = new Date(
+            (startTime.getTime() + endTime.getTime()) / 2,
+          );
+          gapIndicators.push({
+            startTime,
+            endTime,
+            midTime,
+          });
+        }
+      }
+
+      return gapIndicators;
+    }, [data]);
+
+    if (gaps.length === 0) return null;
+
+    return (
+      <g>
+        {gaps.map((gap, index) => {
+          const startX = xScale(gap.startTime) ?? 0;
+          const endX = xScale(gap.endTime) ?? 0;
+          const midX = xScale(gap.midTime) ?? 0;
+          const y = innerHeight / 2;
+
+          return (
+            <g key={`gap-${index}`}>
+              {/* Left cap */}
+              <line
+                x1={startX}
+                y1={y - 3}
+                x2={startX}
+                y2={y + 3}
+                stroke="#6b7280"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+              {/* Horizontal line */}
+              <line
+                x1={startX}
+                y1={y}
+                x2={endX}
+                y2={y}
+                stroke="#6b7280"
+                strokeWidth={1}
+                strokeDasharray="3,2"
+                opacity={0.7}
+              />
+              {/* Right cap */}
+              <line
+                x1={endX}
+                y1={y - 3}
+                x2={endX}
+                y2={y + 3}
+                stroke="#6b7280"
+                strokeWidth={2}
+                strokeLinecap="round"
+              />
+              {/* "No data" label */}
+              <text
+                x={midX}
+                y={y - 6}
+                textAnchor="middle"
+                fontSize={10}
+                fill="#6b7280"
+                fontWeight="500"
+              >
+                No data
+              </text>
+            </g>
+          );
+        })}
+      </g>
+    );
+  },
+);
+
+NoDataIndicators.displayName = 'NoDataIndicators';
 
 // Memoized Hover Indicator Component
 const SensorHoverIndicator = memo(
@@ -464,6 +572,14 @@ const SensorChartComponent: React.FC<SensorChartProps> = ({
           {showHumidity && humidityScale && (
             <HumidityLine data={data} xScale={xScale} yScale={humidityScale} />
           )}
+
+          <NoDataIndicators
+            data={data}
+            xScale={xScale}
+            innerHeight={innerHeight}
+            showTemperature={showTemperature}
+            showHumidity={showHumidity}
+          />
 
           <SensorHoverIndicator
             tooltipOpen={tooltipOpen}

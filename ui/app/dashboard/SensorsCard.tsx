@@ -384,6 +384,10 @@ export const SensorsCard = () => {
   };
 
   const handleViewAllClick = () => {
+    // Set the sensor filter based on the currently active sensor
+    if (activeSensor) {
+      setSensorFilter(activeSensor.is_indoor ? 'indoor' : 'outdoor');
+    }
     setViewMode('combined');
     setDetailsModalOpen(true);
   };
@@ -597,11 +601,7 @@ export const SensorsCard = () => {
             </div>
             <div className="flex gap-2">
               {viewMode === 'individual' && (
-                <Button
-                  size="sm"
-                  color="ghost"
-                  onClick={() => setViewMode('combined')}
-                >
+                <Button size="sm" color="ghost" onClick={handleViewAllClick}>
                   View All
                 </Button>
               )}

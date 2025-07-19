@@ -42,6 +42,149 @@ interface CombinedSensorsChartProps {
 
 const defaultMargin = { top: 20, right: 60, bottom: 40, left: 50 };
 
+// Utility function to detect gaps in sensor data (>1 hour)
+const hasGap = (time1: Date, time2: Date): boolean => {
+  return time2.getTime() - time1.getTime() > 1 * 60 * 60 * 1000; // 1 hour
+};
+
+// Segment area data by device changes and gaps
+const segmentAreaDataByDeviceChanges = (
+  data: CombinedDataPoint[],
+  type: 'temp' | 'humidity',
+): CombinedDataPoint[][] => {
+  if (data.length === 0) return [];
+
+  const sortedData = [...data].sort(
+    (a, b) => a.time.getTime() - b.time.getTime(),
+  );
+  const segments: CombinedDataPoint[][] = [];
+  let currentSegment: CombinedDataPoint[] = [sortedData[0]];
+
+  // Track active devices in the current segment
+  let currentDevices = new Set(
+    type === 'temp'
+      ? sortedData[0].tempReadings.map((r) => r.deviceId)
+      : sortedData[0].humidityReadings.map((r) => r.deviceId),
+  );
+
+  for (let i = 1; i < sortedData.length; i++) {
+    const currentPoint = sortedData[i];
+    const prevPoint = sortedData[i - 1];
+
+    const currentPointDevices = new Set(
+      type === 'temp'
+        ? currentPoint.tempReadings.map((r) => r.deviceId)
+        : currentPoint.humidityReadings.map((r) => r.deviceId),
+    );
+
+    // Check for time gap
+    const hasTimeGap = hasGap(prevPoint.time, currentPoint.time);
+
+    // Check for device changes (device goes offline or comes online)
+    const devicesChanged =
+      currentDevices.size !== currentPointDevices.size ||
+      [...currentDevices].some((id) => !currentPointDevices.has(id)) ||
+      [...currentPointDevices].some((id) => !currentDevices.has(id));
+
+    if (hasTimeGap || devicesChanged) {
+      // Include transition point in current segment for continuity
+      currentSegment.push(currentPoint);
+
+      // End current segment
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+      }
+
+      // Start new segment with the transition point
+      currentSegment = [currentPoint];
+      currentDevices = currentPointDevices;
+    } else {
+      currentSegment.push(currentPoint);
+    }
+  }
+
+  if (currentSegment.length > 0) {
+    segments.push(currentSegment);
+  }
+
+  return segments;
+};
+
+// Improved segmentation for lines that handles sensor transitions smoothly
+const segmentLineDataBySensorGaps = (
+  data: CombinedDataPoint[],
+  deviceId: string,
+  type: 'temp' | 'humidity',
+): {
+  time: Date;
+  value: number;
+  deviceId: string;
+  deviceName: string;
+  color: string;
+}[][] => {
+  if (data.length === 0) return [];
+
+  // Extract device data points
+  const deviceData = data
+    .map((d) => {
+      const reading =
+        type === 'temp'
+          ? d.tempReadings.find((r) => r.deviceId === deviceId)
+          : d.humidityReadings.find((r) => r.deviceId === deviceId);
+      return reading
+        ? {
+            time: d.time,
+            value: reading.value,
+            deviceId: reading.deviceId,
+            deviceName: reading.deviceName,
+            color: reading.color,
+          }
+        : null;
+    })
+    .map((point, index) => ({ point, originalIndex: index }))
+    .filter(
+      (
+        item,
+      ): item is {
+        point: NonNullable<typeof item.point>;
+        originalIndex: number;
+      } => item.point !== null,
+    );
+
+  if (deviceData.length === 0) return [];
+
+  const segments: (typeof deviceData)[0]['point'][][] = [];
+  let currentSegment: (typeof deviceData)[0]['point'][] = [deviceData[0].point];
+
+  for (let i = 1; i < deviceData.length; i++) {
+    const currentDataPoint = deviceData[i];
+    const prevDataPoint = deviceData[i - 1];
+
+    // Check if there's a gap in the original data (missing readings between these points)
+    const indexGap =
+      currentDataPoint.originalIndex - prevDataPoint.originalIndex;
+    const hasDataGap =
+      indexGap > 1 ||
+      hasGap(prevDataPoint.point.time, currentDataPoint.point.time);
+
+    if (hasDataGap) {
+      // End current segment and start new one
+      if (currentSegment.length > 0) {
+        segments.push(currentSegment);
+      }
+      currentSegment = [currentDataPoint.point];
+    } else {
+      currentSegment.push(currentDataPoint.point);
+    }
+  }
+
+  if (currentSegment.length > 0) {
+    segments.push(currentSegment);
+  }
+
+  return segments;
+};
+
 // Memoized Temperature Area Component (for min/max)
 const TemperatureArea = memo(
   ({
@@ -53,31 +196,43 @@ const TemperatureArea = memo(
     xScale: any;
     yScale: any;
   }) => {
-    const areaData = data
-      .map((d) => {
-        const values = d.tempReadings.map((r) => r.value);
-        if (values.length === 0) return null;
-        return {
-          time: d.time,
-          min: Math.min(...values),
-          max: Math.max(...values),
-        };
-      })
-      .filter((d): d is NonNullable<typeof d> => d !== null);
-
-    if (areaData.length === 0) return null;
+    const segments = useMemo(
+      () => segmentAreaDataByDeviceChanges(data, 'temp'),
+      [data],
+    );
 
     return (
-      <AreaClosed
-        data={areaData}
-        x={(d) => xScale(d.time) ?? 0}
-        y0={(d) => yScale(d.min) ?? 0}
-        y1={(d) => yScale(d.max) ?? 0}
-        yScale={yScale}
-        fill="url(#tempGradient)"
-        fillOpacity={0.2}
-        curve={curveCardinal}
-      />
+      <g>
+        {segments.map((segment, segmentIndex) => {
+          const areaData = segment
+            .map((d) => {
+              const values = d.tempReadings.map((r) => r.value);
+              if (values.length === 0) return null;
+              return {
+                time: d.time,
+                min: Math.min(...values),
+                max: Math.max(...values),
+              };
+            })
+            .filter((d): d is NonNullable<typeof d> => d !== null);
+
+          if (areaData.length === 0) return null;
+
+          return (
+            <AreaClosed
+              key={`temp-area-segment-${segmentIndex}`}
+              data={areaData}
+              x={(d) => xScale(d.time) ?? 0}
+              y0={(d) => yScale(d.min) ?? 0}
+              y1={(d) => yScale(d.max) ?? 0}
+              yScale={yScale}
+              fill="url(#tempGradient)"
+              fillOpacity={0.2}
+              curve={curveCardinal}
+            />
+          );
+        })}
+      </g>
     );
   },
 );
@@ -104,36 +259,26 @@ const TemperatureLines = memo(
     return (
       <g>
         {Array.from(devices).map((deviceId) => {
-          const deviceData = data
-            .map((d) => {
-              const reading = d.tempReadings.find(
-                (r) => r.deviceId === deviceId,
-              );
-              return reading
-                ? {
-                    time: d.time,
-                    value: reading.value,
-                    deviceId: reading.deviceId,
-                    deviceName: reading.deviceName,
-                    color: reading.color,
-                  }
-                : null;
-            })
-            .filter((d): d is NonNullable<typeof d> => d !== null);
+          // Segment the data to handle gaps
+          const segments = segmentLineDataBySensorGaps(data, deviceId, 'temp');
 
-          if (deviceData.length === 0) return null;
+          if (segments.length === 0) return null;
 
           return (
-            <LinePath<(typeof deviceData)[0]>
-              key={`temp-line-${deviceId}`}
-              data={deviceData}
-              x={(d) => xScale(d.time) ?? 0}
-              y={(d) => yScale(d.value) ?? 0}
-              stroke={deviceData[0].color}
-              strokeWidth={2}
-              curve={curveCardinal}
-              fill="transparent"
-            />
+            <g key={`temp-lines-${deviceId}`}>
+              {segments.map((segment, segmentIndex) => (
+                <LinePath<(typeof segment)[0]>
+                  key={`temp-line-${deviceId}-${segmentIndex}`}
+                  data={segment}
+                  x={(d) => xScale(d.time) ?? 0}
+                  y={(d) => yScale(d.value) ?? 0}
+                  stroke={segment[0].color}
+                  strokeWidth={2}
+                  curve={curveCardinal}
+                  fill="transparent"
+                />
+              ))}
+            </g>
           );
         })}
       </g>
@@ -154,31 +299,43 @@ const HumidityArea = memo(
     xScale: any;
     yScale: any;
   }) => {
-    const areaData = data
-      .map((d) => {
-        const values = d.humidityReadings.map((r) => r.value);
-        if (values.length === 0) return null;
-        return {
-          time: d.time,
-          min: Math.min(...values),
-          max: Math.max(...values),
-        };
-      })
-      .filter((d): d is NonNullable<typeof d> => d !== null);
-
-    if (areaData.length === 0) return null;
+    const segments = useMemo(
+      () => segmentAreaDataByDeviceChanges(data, 'humidity'),
+      [data],
+    );
 
     return (
-      <AreaClosed
-        data={areaData}
-        x={(d) => xScale(d.time) ?? 0}
-        y0={(d) => yScale(d.min) ?? 0}
-        y1={(d) => yScale(d.max) ?? 0}
-        yScale={yScale}
-        fill="url(#humidityGradient)"
-        fillOpacity={0.2}
-        curve={curveCardinal}
-      />
+      <g>
+        {segments.map((segment, segmentIndex) => {
+          const areaData = segment
+            .map((d) => {
+              const values = d.humidityReadings.map((r) => r.value);
+              if (values.length === 0) return null;
+              return {
+                time: d.time,
+                min: Math.min(...values),
+                max: Math.max(...values),
+              };
+            })
+            .filter((d): d is NonNullable<typeof d> => d !== null);
+
+          if (areaData.length === 0) return null;
+
+          return (
+            <AreaClosed
+              key={`humidity-area-segment-${segmentIndex}`}
+              data={areaData}
+              x={(d) => xScale(d.time) ?? 0}
+              y0={(d) => yScale(d.min) ?? 0}
+              y1={(d) => yScale(d.max) ?? 0}
+              yScale={yScale}
+              fill="url(#humidityGradient)"
+              fillOpacity={0.2}
+              curve={curveCardinal}
+            />
+          );
+        })}
+      </g>
     );
   },
 );
@@ -205,38 +362,32 @@ const HumidityLines = memo(
     return (
       <g>
         {Array.from(devices).map((deviceId) => {
-          const deviceData = data
-            .map((d) => {
-              const reading = d.humidityReadings.find(
-                (r) => r.deviceId === deviceId,
-              );
-              return reading
-                ? {
-                    time: d.time,
-                    value: reading.value,
-                    deviceId: reading.deviceId,
-                    deviceName: reading.deviceName,
-                    color: reading.color,
-                  }
-                : null;
-            })
-            .filter((d): d is NonNullable<typeof d> => d !== null);
+          // Segment the data to handle gaps
+          const segments = segmentLineDataBySensorGaps(
+            data,
+            deviceId,
+            'humidity',
+          );
 
-          if (deviceData.length === 0) return null;
+          if (segments.length === 0) return null;
 
           return (
-            <LinePath<(typeof deviceData)[0]>
-              key={`humidity-line-${deviceId}`}
-              data={deviceData}
-              x={(d) => xScale(d.time) ?? 0}
-              y={(d) => yScale(d.value) ?? 0}
-              stroke={deviceData[0].color}
-              strokeWidth={2}
-              strokeDasharray="3,3"
-              curve={curveCardinal}
-              fill="transparent"
-              opacity={0.8}
-            />
+            <g key={`humidity-lines-${deviceId}`}>
+              {segments.map((segment, segmentIndex) => (
+                <LinePath<(typeof segment)[0]>
+                  key={`humidity-line-${deviceId}-${segmentIndex}`}
+                  data={segment}
+                  x={(d) => xScale(d.time) ?? 0}
+                  y={(d) => yScale(d.value) ?? 0}
+                  stroke={segment[0].color}
+                  strokeWidth={2}
+                  strokeDasharray="3,3"
+                  curve={curveCardinal}
+                  fill="transparent"
+                  opacity={0.8}
+                />
+              ))}
+            </g>
           );
         })}
       </g>
