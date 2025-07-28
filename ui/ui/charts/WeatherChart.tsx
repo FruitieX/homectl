@@ -38,7 +38,7 @@ interface WeatherChartProps {
   animate?: boolean;
 }
 
-const defaultMargin = { top: 20, right: 20, bottom: 40, left: 50 };
+const defaultMargin = { top: 30, right: 20, bottom: 40, left: 70 };
 
 const bisectDate = bisector<WeatherDataPoint, Date>(
   (d: WeatherDataPoint) => d.time,
@@ -1523,7 +1523,7 @@ const WeatherChartComponent: React.FC<WeatherChartProps> = ({
             tickStroke="#6b7280"
             tickLabelProps={{
               fill: '#9ca3af',
-              fontSize: 10,
+              fontSize: 12,
               textAnchor: 'middle',
             }}
           />
@@ -1534,7 +1534,7 @@ const WeatherChartComponent: React.FC<WeatherChartProps> = ({
             tickStroke="#6b7280"
             tickLabelProps={{
               fill: '#9ca3af',
-              fontSize: 10,
+              fontSize: 12,
               textAnchor: 'end',
             }}
             tickFormat={(value) => formatYValue(Number(value))}
@@ -1544,7 +1544,7 @@ const WeatherChartComponent: React.FC<WeatherChartProps> = ({
           {/* Chart title */}
           <text
             x={innerWidth / 2}
-            y={-5}
+            y={-12}
             textAnchor="middle"
             fontSize={12}
             fill="#f9fafb"

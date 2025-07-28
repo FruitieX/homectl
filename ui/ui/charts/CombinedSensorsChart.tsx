@@ -40,7 +40,7 @@ interface CombinedSensorsChartProps {
   chartId?: string;
 }
 
-const defaultMargin = { top: 20, right: 60, bottom: 40, left: 50 };
+const defaultMargin = { top: 20, right: 60, bottom: 40, left: 60 };
 
 // Utility function to detect gaps in sensor data (>1 hour)
 const hasGap = (time1: Date, time2: Date): boolean => {
@@ -668,10 +668,10 @@ const CombinedSensorsChartComponent: React.FC<CombinedSensorsChartProps> = ({
             tickStroke="#6b7280"
             tickLabelProps={{
               fill: '#9ca3af',
-              fontSize: 10,
+              fontSize: 14,
               textAnchor: 'middle',
             }}
-            numTicks={Math.min(8, data.length)}
+            numTicks={Math.min(5, data.length)}
           />
 
           {yScale && (
@@ -681,7 +681,7 @@ const CombinedSensorsChartComponent: React.FC<CombinedSensorsChartProps> = ({
               tickStroke="#6b7280"
               tickLabelProps={{
                 fill: '#9ca3af',
-                fontSize: 10,
+                fontSize: 14,
                 textAnchor: 'end',
               }}
               tickFormat={(value) =>

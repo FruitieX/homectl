@@ -30,7 +30,7 @@ interface SensorChartProps {
   showHumidity?: boolean;
 }
 
-const defaultMargin = { top: 20, right: 60, bottom: 40, left: 50 };
+const defaultMargin = { top: 20, right: 60, bottom: 40, left: 60 };
 
 // Memoized Temperature Line Component
 const TemperatureLine = memo(
@@ -615,10 +615,10 @@ const SensorChartComponent: React.FC<SensorChartProps> = ({
             tickStroke="#6b7280"
             tickLabelProps={{
               fill: '#9ca3af',
-              fontSize: 10,
+              fontSize: 14,
               textAnchor: 'middle',
             }}
-            numTicks={Math.min(10, data.length)}
+            numTicks={Math.min(5, data.length)}
           />
 
           {showTemperature && tempScale && (
@@ -628,7 +628,7 @@ const SensorChartComponent: React.FC<SensorChartProps> = ({
               tickStroke="#6b7280"
               tickLabelProps={{
                 fill: '#9ca3af',
-                fontSize: 10,
+                fontSize: 14,
                 textAnchor: 'end',
               }}
               tickFormat={(value) => `${value}°C`}
@@ -644,7 +644,7 @@ const SensorChartComponent: React.FC<SensorChartProps> = ({
               tickStroke="#6b7280"
               tickLabelProps={{
                 fill: '#9ca3af',
-                fontSize: 10,
+                fontSize: 14,
                 textAnchor: 'start',
               }}
               tickFormat={(value) => `${value}%`}

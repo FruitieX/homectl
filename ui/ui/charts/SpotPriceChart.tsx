@@ -25,7 +25,7 @@ interface SpotPriceChartProps {
   showCurrentTime?: boolean;
 }
 
-const defaultMargin = { top: 20, right: 20, bottom: 40, left: 45 };
+const defaultMargin = { top: 20, right: 20, bottom: 40, left: 55 };
 
 // Create dynamic gradient for each value
 const createGradientId = (value: number, index: number, type = 'price') => {
@@ -478,7 +478,7 @@ const SpotPriceChartComponent: React.FC<SpotPriceChartProps> = ({
             tickStroke="#6b7280"
             tickLabelProps={{
               fill: '#9ca3af',
-              fontSize: 9,
+              fontSize: 14,
               textAnchor: 'middle',
             }}
             numTicks={Math.min(6, data.length)}
@@ -490,7 +490,7 @@ const SpotPriceChartComponent: React.FC<SpotPriceChartProps> = ({
             tickStroke="#6b7280"
             tickLabelProps={{
               fill: '#9ca3af',
-              fontSize: 9,
+              fontSize: 14,
               textAnchor: 'end',
             }}
             tickFormat={(value) => `${Number(value).toFixed(1)}`}

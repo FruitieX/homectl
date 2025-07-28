@@ -493,7 +493,31 @@ export const SensorsCard = () => {
                 ) : (
                   <>
                     <h3 className="text-lg">
-                      {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'} sensors
+                      {/* Filter Controls */}
+                      {viewMode === 'combined' && (
+                        <div className="flex justify-center gap-2 relative z-10 pt-4">
+                          <div className="join">
+                            <Button
+                              size="sm"
+                              className={`join-item ${
+                                sensorFilter === 'indoor' ? 'btn-active' : ''
+                              }`}
+                              onClick={() => setSensorFilter('indoor')}
+                            >
+                              Indoor sensors
+                            </Button>
+                            <Button
+                              size="sm"
+                              className={`join-item ${
+                                sensorFilter === 'outdoor' ? 'btn-active' : ''
+                              }`}
+                              onClick={() => setSensorFilter('outdoor')}
+                            >
+                              Outdoor sensors
+                            </Button>
+                          </div>
+                        </div>
+                      )}
                     </h3>
                     <div className="flex gap-4 mt-2 text-sm font-normal">
                       <div className="flex items-center gap-1">
@@ -610,32 +634,6 @@ export const SensorsCard = () => {
               </Button>
             </div>
           </div>
-
-          {/* Filter Controls */}
-          {viewMode === 'combined' && (
-            <div className="flex justify-center gap-2 relative z-10 pt-4">
-              <div className="join">
-                <Button
-                  size="sm"
-                  className={`join-item ${
-                    sensorFilter === 'indoor' ? 'btn-active' : ''
-                  }`}
-                  onClick={() => setSensorFilter('indoor')}
-                >
-                  Indoor
-                </Button>
-                <Button
-                  size="sm"
-                  className={`join-item ${
-                    sensorFilter === 'outdoor' ? 'btn-active' : ''
-                  }`}
-                  onClick={() => setSensorFilter('outdoor')}
-                >
-                  Outdoor
-                </Button>
-              </div>
-            </div>
-          )}
         </Modal.Header>
 
         <Modal.Body className="flex flex-col gap-4 relative">
@@ -983,7 +981,7 @@ export const SensorsCard = () => {
                   </h5>
                   {combinedChartData.length > 0 &&
                   combinedChartData.some((d) => d.tempReadings.length > 0) ? (
-                    <ResponsiveChart height={300} className="rounded-lg">
+                    <ResponsiveChart height={250} className="rounded-lg">
                       {({ width, height }) => (
                         <CombinedSensorsChart
                           key={`temp-chart-${sensorFilter}`}
