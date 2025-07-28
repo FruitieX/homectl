@@ -398,8 +398,8 @@ export const SensorsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-2 bg-base-300 overflow-hidden">
-        <Card.Body className="p-3">
+      <Card compact className="col-span-2 bg-base-300">
+        <Card.Body className="p-1">
           {/* Horizontal scrollable sensor list */}
           <div className="flex gap-2 overflow-x-auto pb-2 h-full">
             {sensorData.map((sensor) => (
