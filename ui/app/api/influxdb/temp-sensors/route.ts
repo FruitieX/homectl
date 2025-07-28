@@ -28,14 +28,6 @@ const DEVICE_ID_TO_NAME: Record<string, string> = {
   C76A03460A73: 'Storage',
 };
 
-// Priority sensors (currently visible ones) - these will be shown first
-const PRIORITY_SENSORS = [
-  'D9353438450D', // Backyard
-  'D4343037362D', // Patio
-  'D7353530665A', // Living room
-  'C76A0246647E', // Car
-];
-
 export async function GET() {
   try {
     const influxUrl = process.env.INFLUX_URL;

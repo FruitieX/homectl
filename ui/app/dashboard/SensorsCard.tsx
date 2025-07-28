@@ -74,7 +74,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
   return (
     <Button
       color="ghost"
-      className="h-auto p-2 flex-shrink-0 w-24"
+      className="h-auto p-2 flex-shrink-0 w-22"
       onClick={onClick}
     >
       <div
@@ -84,14 +84,14 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
         )}
       >
         {/* Sensor name */}
-        <div className="text-xs font-medium truncate w-full text-center">
+        <div className="text-xs font-medium truncate w-full text-center" title={sensor.device_name}>
           {sensor.device_name}
         </div>
 
         {/* Values */}
-        <div className="flex flex-col gap-1 text-xs w-full">
+        <div className="flex flex-col gap-1 text-xs">
           {/* Temperature */}
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex items-center gap-1">
             <Thermometer
               size={12}
               className={tempOffline ? 'text-stone-400' : undefined}
@@ -125,7 +125,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
           </div>
 
           {/* Humidity */}
-          <div className="flex items-center justify-center gap-1">
+          <div className="flex items-center gap-1">
             <Droplets
               size={12}
               className={humidityOffline ? 'text-stone-400' : 'text-purple-500'}
@@ -401,7 +401,7 @@ export const SensorsCard = () => {
       <Card compact className="col-span-2 bg-base-300">
         <Card.Body className="p-1">
           {/* Horizontal scrollable sensor list */}
-          <div className="flex gap-2 overflow-x-auto pb-2 h-full">
+          <div className="flex gap-2 overflow-x-auto h-full">
             {sensorData.map((sensor) => (
               <SensorCard
                 key={sensor.device_id}

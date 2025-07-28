@@ -13,7 +13,7 @@ export default function Page() {
       <WeatherCard />
       <ClockCard />
       <SensorsCard />
-      <ControlsCard />
+      {/* <ControlsCard /> */}
       <SpotPriceCard />
       <TrainScheduleCard />
     </div>

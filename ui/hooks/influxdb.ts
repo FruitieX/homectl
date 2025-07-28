@@ -60,11 +60,11 @@ const OUTDOOR_SENSORS = [
 ];
 
 const PRIORITY_SENSORS = [
-  'D9353438450D', // Backyard
   'D4343037362D', // Patio
   'D7353530665A', // Living room
   'C76A0246647E', // Car
   'C76A05062842', // Bedroom
+  'D63534385106', // Office
 ];
 
 export const useTempSensorsQuery = () => {

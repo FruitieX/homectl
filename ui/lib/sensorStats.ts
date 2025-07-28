@@ -43,13 +43,13 @@ export const calculateSensorStats = (
   // Calculate trend based on last few readings
   let trend: 'up' | 'down' | 'stable' = 'stable';
   if (sortedByTime.length >= 3) {
-    const recent = sortedByTime.slice(-3);
+    const recent = sortedByTime.slice(-6);
     const firstRecent = recent[0].value;
     const lastRecent = recent[recent.length - 1].value;
     const diff = lastRecent - firstRecent;
 
-    if (Math.abs(diff) > 0.5) {
-      // Only consider significant changes
+    // Only consider significant changes
+    if (Math.abs(diff) > 1) {
       trend = diff > 0 ? 'up' : 'down';
     }
   }
@@ -87,15 +87,15 @@ export const formatStatValue = (
   return `${value.toFixed(decimals)}${unit}`;
 };
 
-export const getTrendIcon = (trend: 'up' | 'down' | 'stable'): string => {
+export const getTrendIcon = (trend: 'up' | 'down' | 'stable'): string | null => {
   switch (trend) {
     case 'up':
-      return '↗️';
+      return '↗';
     case 'down':
-      return '↘️';
+      return '↘';
     case 'stable':
     default:
-      return '→';
+      return null;
   }
 };
 
