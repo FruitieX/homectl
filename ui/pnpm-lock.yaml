@@ -17,70 +17,70 @@ importers:
         version: 1.35.0
       '@react-hook/throttle':
         specifier: 2.2.0
-        version: 2.2.0(react@19.1.0)
+        version: 2.2.0(react@19.1.1)
       '@uiw/react-color-circle':
         specifier: 2.7.1
-        version: 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@uiw/react-color-wheel':
         specifier: 2.7.1
-        version: 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@visx/annotation':
         specifier: 3.12.0
-        version: 3.12.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 3.12.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@visx/axis':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/brush':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/clip-path':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/curve':
         specifier: 3.12.0
         version: 3.12.0
       '@visx/drag':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/event':
         specifier: 3.12.0
         version: 3.12.0
       '@visx/gradient':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/grid':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/group':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/heatmap':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/legend':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/marker':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/pattern':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/responsive':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/scale':
         specifier: 3.12.0
         version: 3.12.0
       '@visx/shape':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       '@visx/tooltip':
         specifier: 3.12.0
-        version: 3.12.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 3.12.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       '@visx/zoom':
         specifier: 3.12.0
-        version: 3.12.0(react@19.1.0)
+        version: 3.12.0(react@19.1.1)
       canvas:
         specifier: 3.1.2
         version: 3.1.2
@@ -110,7 +110,7 @@ importers:
         version: 2.2.3
       framer-motion:
         specifier: 12.23.11
-        version: 12.23.11(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 12.23.11(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       ical.js:
         specifier: 2.2.0
         version: 2.2.0
@@ -119,7 +119,7 @@ importers:
         version: 10.1.1
       jotai:
         specifier: 2.12.5
-        version: 2.12.5(@types/react@19.1.8)(react@19.1.0)
+        version: 2.12.5(@types/react@19.1.8)(react@19.1.1)
       konva:
         specifier: 9.3.22
         version: 9.3.22
@@ -128,34 +128,34 @@ importers:
         version: 4.17.21
       lucide-react:
         specifier: 0.526.0
-        version: 0.526.0(react@19.1.0)
+        version: 0.526.0(react@19.1.1)
       next:
         specifier: 15.4.4
-        version: 15.4.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 15.4.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       react:
-        specifier: 19.1.0
-        version: 19.1.0
+        specifier: 19.1.1
+        version: 19.1.1
       react-color:
         specifier: 2.19.3
-        version: 2.19.3(react@19.1.0)
+        version: 2.19.3(react@19.1.1)
       react-daisyui:
         specifier: 5.0.5
-        version: 5.0.5(daisyui@5.0.49)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwindcss@4.1.11)
+        version: 5.0.5(daisyui@5.0.49)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(tailwindcss@4.1.11)
       react-dom:
-        specifier: 19.1.0
-        version: 19.1.0(react@19.1.0)
+        specifier: 19.1.1
+        version: 19.1.1(react@19.1.1)
       react-konva:
         specifier: 19.0.7
-        version: 19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       react-konva-utils:
         specifier: 1.1.1
-        version: 1.1.1(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react-konva@19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0)
+        version: 1.1.1(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react-konva@19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1)
       use-image:
         specifier: 1.1.4
-        version: 1.1.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+        version: 1.1.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       usehooks-ts:
         specifier: 3.1.1
-        version: 3.1.1(react@19.1.0)
+        version: 3.1.1(react@19.1.1)
     devDependencies:
       '@tailwindcss/postcss':
         specifier: 4.1.11
@@ -2598,10 +2598,10 @@ packages:
       react-dom: '>=16'
       tailwindcss: '>=3.2.7'
 
-  react-dom@19.1.0:
-    resolution: {integrity: sha512-Xs1hdnE+DyKgeHJeJznQmYMIBG3TKIHJJT95Q58nHLSrElKlGQqDTR2HQ9fx5CN/Gk6Vh/kupBTDLU11/nDk/g==}
+  react-dom@19.1.1:
+    resolution: {integrity: sha512-Dlq/5LAZgF0Gaz6yiqZCf6VCcZs1ghAJyrsu84Q/GT0gV+mCxbfmKNoGRKBYMJ8IEdGPqu49YWXD02GCknEDkw==}
     peerDependencies:
-      react: ^19.1.0
+      react: ^19.1.1
 
   react-is@16.13.1:
     resolution: {integrity: sha512-24e6ynE2H+OKt4kqsOvNd8kBpV65zoxbA4BVsEOB3ARVWQki/DHzaUoC5KuON/BiccDaCCTZBuOcfZs70kR8bQ==}
@@ -2636,8 +2636,8 @@ packages:
       react-dom:
         optional: true
 
-  react@19.1.0:
-    resolution: {integrity: sha512-FS+XFBNvn3GTAWq26joslQgWNoFu08F4kl0J4CgdNKADkdSGXQyTCnKteIAJy96Br6YbpEU1LSzV5dYtjMkMDg==}
+  react@19.1.1:
+    resolution: {integrity: sha512-w8nqGImo45dmMIfljjMwOGtbmC/mk4CMYhWIicdSflH91J9TyCyczcPFXJzrZ/ZXcgGRFeP6BU0BEJTw6tZdfQ==}
     engines: {node: '>=0.10.0'}
 
   reactcss@1.2.3:
@@ -3151,9 +3151,9 @@ snapshots:
 
   '@humanwhocodes/retry@0.4.3': {}
 
-  '@icons/material@0.2.4(react@19.1.0)':
+  '@icons/material@0.2.4(react@19.1.1)':
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
 
   '@img/sharp-darwin-arm64@0.33.5':
     optionalDependencies:
@@ -3394,14 +3394,14 @@ snapshots:
 
   '@nolyfill/is-core-module@1.0.39': {}
 
-  '@react-hook/latest@1.0.3(react@19.1.0)':
+  '@react-hook/latest@1.0.3(react@19.1.1)':
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
 
-  '@react-hook/throttle@2.2.0(react@19.1.0)':
+  '@react-hook/throttle@2.2.0(react@19.1.1)':
     dependencies:
-      '@react-hook/latest': 1.0.3(react@19.1.0)
-      react: 19.1.0
+      '@react-hook/latest': 1.0.3(react@19.1.1)
+      react: 19.1.1
 
   '@rtsao/scc@1.1.0': {}
 
@@ -3690,34 +3690,34 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.27.6
 
-  '@uiw/react-color-circle@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@uiw/react-color-circle@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@babel/runtime': 7.27.6
       '@uiw/color-convert': 2.7.1(@babel/runtime@7.27.6)
-      '@uiw/react-color-swatch': 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      '@uiw/react-color-swatch': 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@uiw/react-color-swatch@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@uiw/react-color-swatch@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@babel/runtime': 7.27.6
       '@uiw/color-convert': 2.7.1(@babel/runtime@7.27.6)
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@uiw/react-color-wheel@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@uiw/react-color-wheel@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@babel/runtime': 7.27.6
       '@uiw/color-convert': 2.7.1(@babel/runtime@7.27.6)
-      '@uiw/react-drag-event-interactive': 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      '@uiw/react-drag-event-interactive': 2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@uiw/react-drag-event-interactive@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@uiw/react-drag-event-interactive@2.7.1(@babel/runtime@7.27.6)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@babel/runtime': 7.27.6
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
   '@unrs/resolver-binding-android-arm-eabi@1.9.2':
     optional: true
@@ -3780,186 +3780,186 @@ snapshots:
 
   '@use-gesture/core@10.3.1': {}
 
-  '@use-gesture/react@10.3.1(react@19.1.0)':
+  '@use-gesture/react@10.3.1(react@19.1.1)':
     dependencies:
       '@use-gesture/core': 10.3.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/annotation@3.12.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@visx/annotation@3.12.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@visx/drag': 3.12.0(react@19.1.0)
-      '@visx/group': 3.12.0(react@19.1.0)
-      '@visx/text': 3.12.0(react@19.1.0)
+      '@visx/drag': 3.12.0(react@19.1.1)
+      '@visx/group': 3.12.0(react@19.1.1)
+      '@visx/text': 3.12.0(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
-      react-use-measure: 2.1.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react: 19.1.1
+      react-use-measure: 2.1.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
     transitivePeerDependencies:
       - react-dom
 
-  '@visx/axis@3.12.0(react@19.1.0)':
+  '@visx/axis@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@visx/group': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
       '@visx/point': 3.12.0
       '@visx/scale': 3.12.0
-      '@visx/shape': 3.12.0(react@19.1.0)
-      '@visx/text': 3.12.0(react@19.1.0)
+      '@visx/shape': 3.12.0(react@19.1.1)
+      '@visx/text': 3.12.0(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/bounds@3.12.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@visx/bounds@3.12.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       '@types/react-dom': 19.1.6(@types/react@19.1.8)
       prop-types: 15.8.1
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  '@visx/brush@3.12.0(react@19.1.0)':
+  '@visx/brush@3.12.0(react@19.1.1)':
     dependencies:
-      '@visx/drag': 3.12.0(react@19.1.0)
+      '@visx/drag': 3.12.0(react@19.1.1)
       '@visx/event': 3.12.0
-      '@visx/group': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
       '@visx/scale': 3.12.0
-      '@visx/shape': 3.12.0(react@19.1.0)
+      '@visx/shape': 3.12.0(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/clip-path@3.12.0(react@19.1.0)':
+  '@visx/clip-path@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
   '@visx/curve@3.12.0':
     dependencies:
       '@types/d3-shape': 1.3.12
       d3-shape: 1.3.7
 
-  '@visx/drag@3.12.0(react@19.1.0)':
+  '@visx/drag@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       '@visx/event': 3.12.0
       '@visx/point': 3.12.0
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
   '@visx/event@3.12.0':
     dependencies:
       '@types/react': 19.1.8
       '@visx/point': 3.12.0
 
-  '@visx/gradient@3.12.0(react@19.1.0)':
+  '@visx/gradient@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/grid@3.12.0(react@19.1.0)':
+  '@visx/grid@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       '@visx/curve': 3.12.0
-      '@visx/group': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
       '@visx/point': 3.12.0
       '@visx/scale': 3.12.0
-      '@visx/shape': 3.12.0(react@19.1.0)
+      '@visx/shape': 3.12.0(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/group@3.12.0(react@19.1.0)':
+  '@visx/group@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/heatmap@3.12.0(react@19.1.0)':
+  '@visx/heatmap@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@visx/group': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/legend@3.12.0(react@19.1.0)':
+  '@visx/legend@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@visx/group': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
       '@visx/scale': 3.12.0
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/marker@3.12.0(react@19.1.0)':
+  '@visx/marker@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@visx/group': 3.12.0(react@19.1.0)
-      '@visx/shape': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
+      '@visx/shape': 3.12.0(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/pattern@3.12.0(react@19.1.0)':
+  '@visx/pattern@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
   '@visx/point@3.12.0': {}
 
-  '@visx/responsive@3.12.0(react@19.1.0)':
+  '@visx/responsive@3.12.0(react@19.1.1)':
     dependencies:
       '@types/lodash': 4.17.20
       '@types/react': 19.1.8
       lodash: 4.17.21
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
   '@visx/scale@3.12.0':
     dependencies:
       '@visx/vendor': 3.12.0
 
-  '@visx/shape@3.12.0(react@19.1.0)':
+  '@visx/shape@3.12.0(react@19.1.1)':
     dependencies:
       '@types/d3-path': 1.0.11
       '@types/d3-shape': 1.3.12
       '@types/lodash': 4.17.20
       '@types/react': 19.1.8
       '@visx/curve': 3.12.0
-      '@visx/group': 3.12.0(react@19.1.0)
+      '@visx/group': 3.12.0(react@19.1.1)
       '@visx/scale': 3.12.0
       classnames: 2.5.1
       d3-path: 1.0.9
       d3-shape: 1.3.7
       lodash: 4.17.21
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
-  '@visx/text@3.12.0(react@19.1.0)':
+  '@visx/text@3.12.0(react@19.1.1)':
     dependencies:
       '@types/lodash': 4.17.20
       '@types/react': 19.1.8
       classnames: 2.5.1
       lodash: 4.17.21
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
       reduce-css-calc: 1.3.0
 
-  '@visx/tooltip@3.12.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)':
+  '@visx/tooltip@3.12.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@visx/bounds': 3.12.0(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      '@visx/bounds': 3.12.0(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       classnames: 2.5.1
       prop-types: 15.8.1
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      react-use-measure: 2.1.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      react-use-measure: 2.1.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
 
   '@visx/vendor@3.12.0':
     dependencies:
@@ -3983,13 +3983,13 @@ snapshots:
       d3-time-format: 4.1.0
       internmap: 2.0.3
 
-  '@visx/zoom@3.12.0(react@19.1.0)':
+  '@visx/zoom@3.12.0(react@19.1.1)':
     dependencies:
       '@types/react': 19.1.8
-      '@use-gesture/react': 10.3.1(react@19.1.0)
+      '@use-gesture/react': 10.3.1(react@19.1.1)
       '@visx/event': 3.12.0
       prop-types: 15.8.1
-      react: 19.1.0
+      react: 19.1.1
 
   '@webassemblyjs/ast@1.14.1':
     dependencies:
@@ -4862,14 +4862,14 @@ snapshots:
     dependencies:
       is-callable: 1.2.7
 
-  framer-motion@12.23.11(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  framer-motion@12.23.11(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       motion-dom: 12.23.9
       motion-utils: 12.23.6
       tslib: 2.8.1
     optionalDependencies:
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
   fs-constants@1.0.0: {}
 
@@ -5125,10 +5125,10 @@ snapshots:
       has-symbols: 1.1.0
       set-function-name: 2.0.2
 
-  its-fine@2.0.0(@types/react@19.1.8)(react@19.1.0):
+  its-fine@2.0.0(@types/react@19.1.8)(react@19.1.1):
     dependencies:
       '@types/react-reconciler': 0.28.9(@types/react@19.1.8)
-      react: 19.1.0
+      react: 19.1.1
     transitivePeerDependencies:
       - '@types/react'
 
@@ -5140,10 +5140,10 @@ snapshots:
 
   jiti@2.4.2: {}
 
-  jotai@2.12.5(@types/react@19.1.8)(react@19.1.0):
+  jotai@2.12.5(@types/react@19.1.8)(react@19.1.1):
     optionalDependencies:
       '@types/react': 19.1.8
-      react: 19.1.0
+      react: 19.1.1
 
   js-tokens@4.0.0: {}
 
@@ -5260,9 +5260,9 @@ snapshots:
     dependencies:
       js-tokens: 4.0.0
 
-  lucide-react@0.526.0(react@19.1.0):
+  lucide-react@0.526.0(react@19.1.1):
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
 
   magic-string@0.30.17:
     dependencies:
@@ -5345,15 +5345,15 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@15.4.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  next@15.4.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       '@next/env': 15.4.4
       '@swc/helpers': 0.5.15
       caniuse-lite: 1.0.30001726
       postcss: 8.4.31
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      styled-jsx: 5.1.6(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      styled-jsx: 5.1.6(react@19.1.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 15.4.4
       '@next/swc-darwin-x64': 15.4.4
@@ -5539,68 +5539,68 @@ snapshots:
       minimist: 1.2.8
       strip-json-comments: 2.0.1
 
-  react-color@2.19.3(react@19.1.0):
+  react-color@2.19.3(react@19.1.1):
     dependencies:
-      '@icons/material': 0.2.4(react@19.1.0)
+      '@icons/material': 0.2.4(react@19.1.1)
       lodash: 4.17.21
       lodash-es: 4.17.21
       material-colors: 1.2.6
       prop-types: 15.8.1
-      react: 19.1.0
-      reactcss: 1.2.3(react@19.1.0)
+      react: 19.1.1
+      reactcss: 1.2.3(react@19.1.1)
       tinycolor2: 1.6.0
 
-  react-daisyui@5.0.5(daisyui@5.0.49)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)(tailwindcss@4.1.11):
+  react-daisyui@5.0.5(daisyui@5.0.49)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)(tailwindcss@4.1.11):
     dependencies:
       daisyui: 5.0.49
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
       tailwindcss: 4.1.11
 
-  react-dom@19.1.0(react@19.1.0):
+  react-dom@19.1.1(react@19.1.1):
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
       scheduler: 0.26.0
 
   react-is@16.13.1: {}
 
-  react-konva-utils@1.1.1(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react-konva@19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react@19.1.0))(react@19.1.0):
+  react-konva-utils@1.1.1(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react-konva@19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react@19.1.1))(react@19.1.1):
     dependencies:
       konva: 9.3.22
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      react-konva: 19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
-      use-image: 1.1.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      react-konva: 19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+      use-image: 1.1.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
 
-  react-konva@19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  react-konva@19.0.7(@types/react@19.1.8)(konva@9.3.22)(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       '@types/react-reconciler': 0.32.0(@types/react@19.1.8)
-      its-fine: 2.0.0(@types/react@19.1.8)(react@19.1.0)
+      its-fine: 2.0.0(@types/react@19.1.8)(react@19.1.1)
       konva: 9.3.22
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
-      react-reconciler: 0.32.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
+      react-reconciler: 0.32.0(react@19.1.1)
       scheduler: 0.26.0
     transitivePeerDependencies:
       - '@types/react'
 
-  react-reconciler@0.32.0(react@19.1.0):
+  react-reconciler@0.32.0(react@19.1.1):
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
       scheduler: 0.26.0
 
-  react-use-measure@2.1.7(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  react-use-measure@2.1.7(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
-      react: 19.1.0
+      react: 19.1.1
     optionalDependencies:
-      react-dom: 19.1.0(react@19.1.0)
+      react-dom: 19.1.1(react@19.1.1)
 
-  react@19.1.0: {}
+  react@19.1.1: {}
 
-  reactcss@1.2.3(react@19.1.0):
+  reactcss@1.2.3(react@19.1.1):
     dependencies:
       lodash: 4.17.21
-      react: 19.1.0
+      react: 19.1.1
 
   readable-stream@3.6.2:
     dependencies:
@@ -5925,10 +5925,10 @@ snapshots:
       '@tokenizer/token': 0.3.0
       peek-readable: 4.1.0
 
-  styled-jsx@5.1.6(react@19.1.0):
+  styled-jsx@5.1.6(react@19.1.1):
     dependencies:
       client-only: 0.0.1
-      react: 19.1.0
+      react: 19.1.1
 
   supports-color@7.2.0:
     dependencies:
@@ -6101,15 +6101,15 @@ snapshots:
     dependencies:
       punycode: 2.3.1
 
-  use-image@1.1.4(react-dom@19.1.0(react@19.1.0))(react@19.1.0):
+  use-image@1.1.4(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
-      react: 19.1.0
-      react-dom: 19.1.0(react@19.1.0)
+      react: 19.1.1
+      react-dom: 19.1.1(react@19.1.1)
 
-  usehooks-ts@3.1.1(react@19.1.0):
+  usehooks-ts@3.1.1(react@19.1.1):
     dependencies:
       lodash.debounce: 4.0.8
-      react: 19.1.0
+      react: 19.1.1
 
   util-deprecate@1.0.2: {}
 
