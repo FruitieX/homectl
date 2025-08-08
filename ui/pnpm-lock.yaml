@@ -112,8 +112,8 @@ importers:
         specifier: 12.23.12
         version: 12.23.12(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       ical.js:
-        specifier: 2.2.0
-        version: 2.2.0
+        specifier: 2.2.1
+        version: 2.2.1
       immer:
         specifier: 10.1.1
         version: 10.1.1
@@ -1914,8 +1914,8 @@ packages:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
 
-  ical.js@2.2.0:
-    resolution: {integrity: sha512-P8gjWkTEd5M/SEEvBVPPO/KC+V+HRNRZh3xfCDTVWmUTEfVbL8JaK5GTWS2MJ55aLMhfXhbh7kYzd0nrBARjsA==}
+  ical.js@2.2.1:
+    resolution: {integrity: sha512-yK/UlPbEs316igb/tjRgbFA8ZV75rCsBJp/hWOatpyaPNlgw0dGDmU+FoicOcwX4xXkeXOkYiOmCqNPFpNPkQg==}
 
   ieee754@1.2.1:
     resolution: {integrity: sha512-dcyqhDvX1C46lXZcVqCpK+FtMRQVdIMN6/Df5js2zouUsqG7I6sFxitIC+7KYK29KdXOLHdu9zL4sFnoVQnqaA==}
@@ -4967,7 +4967,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  ical.js@2.2.0: {}
+  ical.js@2.2.1: {}
 
   ieee754@1.2.1: {}
 
