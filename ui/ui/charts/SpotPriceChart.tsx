@@ -162,13 +162,11 @@ const SpotPriceBars = memo(
 
         {data.map((d, i) => {
           const barWidth = xScale.bandwidth();
-          const barHeight = Math.abs(
-            innerHeight -
-              (yScale(d.value) ?? 0) -
-              (d.value < 0 ? (yScale(0) ?? 0) : 0),
-          );
+          const zeroY = yScale(0) ?? 0;
+          const valueY = yScale(d.value) ?? 0;
+          const barHeight = Math.abs(zeroY - valueY);
           const barX = xScale(d.time) ?? 0;
-          const barY = d.value < 0 ? (yScale(0) ?? 0) : (yScale(d.value) ?? 0);
+          const barY = Math.min(zeroY, valueY);
 
           const gradientId = createGradientId(d.value, i);
 
@@ -412,7 +410,9 @@ const SpotPriceChartComponent: React.FC<SpotPriceChartProps> = ({
   const getDataPointPosition = useMemo(
     () => (datum: SpotPriceData) => {
       const x = (xScale(datum.time) ?? 0) + xScale.bandwidth() / 2;
-      const y = datum.value < 0 ? (yScale(0) ?? 0) : (yScale(datum.value) ?? 0);
+      const zeroY = yScale(0) ?? 0;
+      const valueY = yScale(datum.value) ?? 0;
+      const y = Math.min(zeroY, valueY);
       return { x, y };
     },
     [xScale, yScale],
