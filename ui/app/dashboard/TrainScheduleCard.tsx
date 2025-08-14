@@ -108,7 +108,7 @@ export const TrainScheduleCard = () => {
           <Table.Body>
             {trains.map((train, index) => {
               return (
-                <Table.Row key={index} className={clsx(['text-xl'])}>
+                <Table.Row key={index} className={'text-xl'}>
                   <span>{train.name}</span>
                   <span>{train.departureFormatted}</span>
                   <span

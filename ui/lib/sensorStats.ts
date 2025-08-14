@@ -87,7 +87,9 @@ export const formatStatValue = (
   return `${value.toFixed(decimals)}${unit}`;
 };
 
-export const getTrendIcon = (trend: 'up' | 'down' | 'stable'): string | null => {
+export const getTrendIcon = (
+  trend: 'up' | 'down' | 'stable',
+): string | null => {
   switch (trend) {
     case 'up':
       return '↗';

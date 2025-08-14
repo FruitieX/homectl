@@ -11,6 +11,7 @@ import { useChartTooltip, TooltipPosition } from './hooks/useChartTooltip';
 import { ChartTooltip, TooltipField } from './ChartTooltip';
 import { getTemperatureColor } from './TemperatureSensorChart';
 import { ChartInteractionOverlay } from './ChartInteractionOverlay';
+import Color from 'color';
 
 interface WeatherDataPoint {
   time: Date;
@@ -295,6 +296,40 @@ const PrecipitationChart = memo(
     innerWidth: number;
     innerHeight: number;
   }) => {
+    // Helper function to get color based on probability with smooth interpolation
+    const getProbabilityColor = (probability: number) => {
+      // Clamp probability between 0 and 100
+      const p = Math.max(0, Math.min(100, probability));
+
+      // Define color stops with original large differences
+      const colorStops = [
+        { threshold: 0, color: Color('#93c5fd') }, // Very light blue
+        { threshold: 20, color: Color('#60a5fa') }, // Light blue
+        { threshold: 40, color: Color('#3b82f6') }, // Medium blue
+        { threshold: 60, color: Color('#2563eb') }, // Dark blue
+        { threshold: 80, color: Color('#1e3a8a') }, // Very dark blue
+      ];
+
+      // Find the two color stops to interpolate between
+      let lowerStop = colorStops[0];
+      let upperStop = colorStops[colorStops.length - 1];
+
+      for (let i = 0; i < colorStops.length - 1; i++) {
+        if (p >= colorStops[i].threshold && p <= colorStops[i + 1].threshold) {
+          lowerStop = colorStops[i];
+          upperStop = colorStops[i + 1];
+          break;
+        }
+      }
+
+      // Calculate interpolation factor
+      const range = upperStop.threshold - lowerStop.threshold;
+      const factor = range === 0 ? 0 : (p - lowerStop.threshold) / range;
+
+      // Use Color library to mix between the two colors
+      return lowerStop.color.mix(upperStop.color, factor).hex();
+    };
+
     return (
       <>
         {/* Precipitation range area */}
@@ -322,7 +357,63 @@ const PrecipitationChart = memo(
           />
         )}
 
-        {/* Max precipitation line */}
+        {/* Precipitation bars with probability colors */}
+        {limitedData.map((d, i) => {
+          const precipitation = getYValue(d);
+          const probability = d.probability_of_precipitation || 0;
+          const barWidth = 1.5;
+          const barHeight = innerHeight - (yScale(precipitation) ?? 0);
+          const barX = (xScale(d.time) ?? 0) - barWidth / 2;
+          const barY = yScale(precipitation) ?? 0;
+
+          // Create gradient ID for this specific bar
+          const gradientId = `heatmapGradient-${i}`;
+
+          return (
+            <g key={i}>
+              <defs>
+                <linearGradient
+                  id={gradientId}
+                  x1="0%"
+                  y1="0%"
+                  x2="0%"
+                  y2="100%"
+                >
+                  <stop
+                    offset="0%"
+                    stopColor={getProbabilityColor(probability)}
+                    stopOpacity={0.8}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={getProbabilityColor(probability)}
+                    stopOpacity={0.3}
+                  />
+                </linearGradient>
+              </defs>
+
+              {/* Precipitation bar with probability color */}
+              <rect
+                x={barX}
+                y={barY}
+                width={barWidth}
+                height={barHeight}
+                fill={precipitation > 0 ? `url(#${gradientId})` : '#f3f4f6'}
+                stroke={
+                  probability > 20
+                    ? getProbabilityColor(probability)
+                    : '#e5e7eb'
+                }
+                strokeWidth={probability > 40 ? 1.5 : 0.5}
+                rx={1}
+                ry={1}
+                opacity={precipitation > 0 ? 1 : 0.3}
+              />
+            </g>
+          );
+        })}
+
+        {/* Max and min precipitation lines */}
         {limitedData.some((d) => d.precipitation_amount_max !== undefined) && (
           <LinePath<any>
             data={limitedData.filter(
@@ -339,7 +430,6 @@ const PrecipitationChart = memo(
           />
         )}
 
-        {/* Min precipitation line */}
         {limitedData.some((d) => d.precipitation_amount_min !== undefined) && (
           <LinePath<any>
             data={limitedData.filter(
@@ -355,89 +445,6 @@ const PrecipitationChart = memo(
             fill="transparent"
           />
         )}
-
-        {/* Main precipitation bars */}
-        {limitedData.map((d, i) => {
-          const precipitation = getYValue(d);
-          const barWidth = Math.max(2, (innerWidth / limitedData.length) * 0.8);
-          const barHeight = innerHeight - (yScale(precipitation) ?? 0);
-          const barX = (xScale(d.time) ?? 0) - barWidth / 2;
-          const barY = yScale(precipitation) ?? 0;
-
-          return (
-            <g key={i}>
-              {/* Main precipitation bar */}
-              <rect
-                x={barX}
-                y={barY}
-                width={barWidth}
-                height={barHeight}
-                fill="url(#precipitationBarGradient)"
-                stroke="url(#precipitationLineGradient)"
-                strokeWidth={1}
-                rx={1}
-                ry={1}
-                opacity={precipitation > 0 ? 0.8 : 0.1}
-              />
-            </g>
-          );
-        })}
-
-        {/* Precipitation probability indicators using density dots */}
-        {limitedData.map((d, i) => {
-          if (
-            !d.probability_of_precipitation ||
-            d.probability_of_precipitation <= 10
-          ) {
-            return null;
-          }
-
-          const dataX = xScale(d.time) ?? 0;
-          const probability = d.probability_of_precipitation;
-
-          // Calculate number of dots based on probability (1-5 dots)
-          const numDots = Math.ceil(probability / 20);
-
-          // Calculate dot spacing to avoid overlap with dense data
-          const maxDotWidth = Math.min(20, innerWidth / limitedData.length);
-          const dotSize = Math.min(3, maxDotWidth / 3);
-          const dotSpacing = dotSize + 1;
-
-          // Position dots at bottom of chart
-          const baseY = innerHeight - 1;
-
-          // Color based on probability level
-          const dotColor =
-            probability > 70
-              ? '#1e40af' // Dark blue for high probability
-              : probability > 40
-                ? '#3b82f6' // Medium blue for medium probability
-                : '#60a5fa'; // Light blue for low probability
-
-          return (
-            <g key={`prob-${i}`}>
-              {Array.from({ length: numDots }, (_, dotIndex) => {
-                const dotX =
-                  dataX -
-                  ((numDots - 1) * dotSpacing) / 2 +
-                  dotIndex * dotSpacing;
-                const dotY = baseY - dotIndex * 2; // Stack dots slightly
-
-                return (
-                  <circle
-                    key={dotIndex}
-                    cx={dotX}
-                    cy={dotY}
-                    r={dotSize}
-                    fill={dotColor}
-                    opacity={0.8}
-                    pointerEvents="none"
-                  />
-                );
-              })}
-            </g>
-          );
-        })}
       </>
     );
   },
