@@ -14,7 +14,7 @@ import { SensorChart } from '@/ui/charts/SensorChart';
 import { CombinedSensorsChart } from '@/ui/charts/CombinedSensorsChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import clsx from 'clsx';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import useIdle from '@/hooks/useIdle';
 import { getTemperatureColor } from '@/ui/charts/TemperatureSensorChart';
 import { getHumidityColor } from '@/lib/humidityColors';
@@ -84,7 +84,10 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
         )}
       >
         {/* Sensor name */}
-        <div className="text-xs font-medium truncate w-full text-center" title={sensor.device_name}>
+        <div
+          className="text-xs font-medium truncate w-full text-center"
+          title={sensor.device_name}
+        >
           {sensor.device_name}
         </div>
 
@@ -174,8 +177,17 @@ export const SensorsCard = () => {
     'indoor',
   );
 
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const isIdle = useIdle();
   const sensorData = useSensorData();
+
+  // Reset scroll position to x=0 when user becomes idle
+  useEffect(() => {
+    if (isIdle && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollLeft = 0;
+    }
+  }, [isIdle]);
 
   // Memoize the chart data transformation for individual sensor
   const individualChartData = useMemo(() => {
@@ -401,7 +413,10 @@ export const SensorsCard = () => {
       <Card compact className="col-span-2 bg-base-300">
         <Card.Body className="p-1">
           {/* Horizontal scrollable sensor list */}
-          <div className="flex gap-2 overflow-x-auto h-full">
+          <div
+            ref={scrollContainerRef}
+            className="flex gap-2 overflow-x-auto h-full"
+          >
             {sensorData.map((sensor) => (
               <SensorCard
                 key={sensor.device_id}
