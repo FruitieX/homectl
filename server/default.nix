@@ -1,8 +1,8 @@
 let
   unstable = import (fetchTarball https://nixos.org/channels/nixos-unstable/nixexprs.tar.xz) { };
-  moz_overlay = import (builtins.fetchTarball https://github.com/mozilla/nixpkgs-mozilla/archive/master.tar.gz );
-  nixpkgs = import <nixpkgs> { overlays = [ moz_overlay ]; };
-  rustStableChannel = (nixpkgs.rustChannels.stable).rust.override {
+  rust_overlay = import (builtins.fetchTarball https://github.com/oxalica/rust-overlay/archive/master.tar.gz );
+  nixpkgs = import <nixpkgs> { overlays = [ rust_overlay ]; };
+  rustToolchain = (nixpkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml).override {
     extensions = [
       "rust-src"
       "rust-analysis"
@@ -19,7 +19,7 @@ in
   stdenv.mkDerivation {
     name = "env";
     buildInputs = [
-      rustStableChannel
+      rustToolchain
 
       docker-compose
       pkg-config
