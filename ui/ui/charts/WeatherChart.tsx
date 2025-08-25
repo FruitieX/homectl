@@ -626,11 +626,11 @@ const WeatherChartComponent: React.FC<WeatherChartProps> = ({
   const innerWidth = width - margin.left - margin.right;
   const innerHeight = height - margin.top - margin.bottom;
 
-  // Limit data to next 7 days
+  // Limit data to next 5 days (rolling 120h)
   const limitedData = useMemo(() => {
     const now = new Date();
-    const sevenDaysFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-    return data.filter((d) => d.time <= sevenDaysFromNow);
+    const fiveDaysFromNow = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+    return data.filter((d) => d.time <= fiveDaysFromNow);
   }, [data]);
 
   // Generate midnight markers for multi-day charts
@@ -1503,24 +1503,25 @@ const WeatherChartComponent: React.FC<WeatherChartProps> = ({
           <AxisBottom
             top={innerHeight}
             scale={xScale}
-            numTicks={7}
-            tickFormat={(value) => {
-              const date = new Date(Number(value));
-              // Show time for granular data, date for daily data
-              // Show time for data spanning 48 hours or less
+            numTicks={(() => {
               const hoursDiff =
                 (Math.max(...limitedData.map((d) => d.time.getTime())) -
                   Math.min(...limitedData.map((d) => d.time.getTime()))) /
                 (1000 * 60 * 60);
-
+              return hoursDiff <= 48 ? 8 : 5; // fewer ticks for 5-day view
+            })()}
+            tickFormat={(value) => {
+              const date = new Date(Number(value));
+              const hoursDiff =
+                (Math.max(...limitedData.map((d) => d.time.getTime())) -
+                  Math.min(...limitedData.map((d) => d.time.getTime()))) /
+                (1000 * 60 * 60);
               if (hoursDiff <= 48) {
-                // Show time for data spanning 48 hours or less
                 return date.toLocaleTimeString('en-FI', {
                   hour: '2-digit',
                   minute: '2-digit',
                 });
               } else {
-                // Show date for longer periods
                 return date.toLocaleDateString('en-US', {
                   weekday: 'short',
                 });

@@ -168,7 +168,7 @@ export const WeatherCard = () => {
     // Get hourly data for next 48 hours
     const hourlyData = currentAndFutureSeries?.slice(0, 48) || [];
 
-    // Aggregate daily data for next 7 days with min/max values and improved symbol code logic
+    // Aggregate daily data for next 5 days with min/max values and improved symbol code logic
     const dailyData: DailyWeatherData[] = currentAndFutureSeries
       ? (() => {
           // Group data points by date
@@ -184,7 +184,7 @@ export const WeatherCard = () => {
 
           // Process each day to get aggregated data
           return Array.from(dailyGroups.entries())
-            .slice(0, 7) // Limit to 7 days
+            .slice(0, 5) // Limit to 5 days
             .map(([dateKey, dayDataPoints]) => {
               const date = new Date(dateKey);
 
@@ -251,9 +251,16 @@ export const WeatherCard = () => {
     return { currentAndFutureSeries, hourlyData, dailyData };
   }, [weather]);
 
+  // Limit chart data to the selected long-term range (5 days) matching dailyData
+  const chartSeries = useMemo(() => {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000); // rolling 120h
+    return currentAndFutureSeries.filter((s) => new Date(s.time) <= cutoff);
+  }, [currentAndFutureSeries]);
+
   // Memoize chart data transformations
   const temperatureChartData = useMemo(() => {
-    return currentAndFutureSeries.map((series) => {
+    return chartSeries.map((series) => {
       const currentTemp = series.data.instant.details.air_temperature;
       const maxTemp =
         series.data.next_6_hours?.details?.air_temperature_max ||
@@ -271,10 +278,10 @@ export const WeatherCard = () => {
           series.data.instant.details.air_temperature_percentile_90,
       };
     });
-  }, [currentAndFutureSeries]);
+  }, [chartSeries]);
 
   const precipitationChartData = useMemo(() => {
-    return currentAndFutureSeries.map((series) => ({
+    return chartSeries.map((series) => ({
       time: new Date(series.time),
       precipitation_amount:
         series.data.next_1_hours?.details?.precipitation_amount ||
@@ -293,10 +300,10 @@ export const WeatherCard = () => {
         series.data.next_6_hours?.details?.probability_of_precipitation ||
         0,
     }));
-  }, [currentAndFutureSeries]);
+  }, [chartSeries]);
 
   const windChartData = useMemo(() => {
-    return currentAndFutureSeries.map((series) => ({
+    return chartSeries.map((series) => ({
       time: new Date(series.time),
       wind_speed: series.data.instant.details.wind_speed,
       wind_speed_of_gust: series.data.instant.details.wind_speed_of_gust,
@@ -305,7 +312,7 @@ export const WeatherCard = () => {
       wind_speed_percentile_90:
         series.data.instant.details.wind_speed_percentile_90,
     }));
-  }, [currentAndFutureSeries]);
+  }, [chartSeries]);
 
   return (
     <>
@@ -343,7 +350,7 @@ export const WeatherCard = () => {
               Hourly (48h)
             </Tabs.Tab>
             <Tabs.Tab active={activeTab === 1} onClick={() => setActiveTab(1)}>
-              Long-term (7d)
+              Long-term (5d)
             </Tabs.Tab>
           </Tabs>
         </Modal.Header>
@@ -425,8 +432,8 @@ export const WeatherCard = () => {
 
           {activeTab === 1 && (
             <>
-              {/* Daily forecast cards */}
-              <div className="overflow-x-auto flex flex-row gap-2 flex-shrink-0">
+              {/* Daily forecast cards (stretched to fill width) */}
+              <div className="flex flex-row gap-2 w-full">
                 {dailyData.map((dayData, index) => {
                   const today = new Date();
                   const isToday =
@@ -435,7 +442,7 @@ export const WeatherCard = () => {
                   return (
                     <div
                       key={index}
-                      className="bg-base-200 rounded-lg p-3 text-center w-18 flex-shrink-0"
+                      className="bg-base-200 rounded-lg p-3 text-center flex-1"
                     >
                       <div className="text-sm font-semibold mb-2">
                         {isToday
