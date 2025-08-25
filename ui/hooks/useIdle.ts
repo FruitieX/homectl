@@ -2,6 +2,7 @@
 // https://gist.github.com/KristofferEriksson/9f7c3bd928953c3853f7807b3565ec99
 
 import { useEffect, useState } from 'react';
+import { useIsFullscreen } from './isFullscreen';
 
 const defaultEvents = [
   'mousemove',
@@ -23,7 +24,14 @@ const useIdle = ({
 }: UseIdleOptions = {}) => {
   const [isIdle, setIsIdle] = useState<boolean>(false);
 
+  const [isFullscreen] = useIsFullscreen();
+
   useEffect(() => {
+    if (!isFullscreen) {
+      setIsIdle(false);
+      return;
+    }
+
     let timer: ReturnType<typeof setTimeout>;
 
     const resetTimer = () => {
@@ -43,7 +51,7 @@ const useIdle = ({
       clearTimeout(timer);
       events.forEach((event) => window.removeEventListener(event, resetTimer));
     };
-  }, [timeout, events]);
+  }, [timeout, events, isFullscreen]);
 
   return isIdle;
 };
