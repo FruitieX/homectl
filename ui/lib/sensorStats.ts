@@ -13,10 +13,141 @@ interface SensorStats {
   lastUpdate?: Date;
   minTime?: Date;
   maxTime?: Date;
+  // Enhanced trend metadata (optional consumers)
+  slopePerHour?: number; // linear regression slope (value/hour)
+  netChange?: number; // net change over the analyzed window
+  confidence?: number; // 0..1 heuristic confidence in trend classification
+  pointsUsed?: number; // number of points used for trend calculation
+}
+
+// Options to tune trend detection
+interface TrendOptions {
+  windowMinutes: number; // how far back to look when computing trend
+  minPoints: number; // minimum points required in window for regression
+  slopeThresholdPerHour: number; // absolute slope threshold to consider non-stable
+  netChangeThreshold: number; // minimum absolute net change in window
+  adaptiveStdFactor?: number; // divide thresholds when volatility is low
+  lowStdThreshold?: number; // std deviation below which we adapt
+}
+
+const defaultGenericTrendOptions: TrendOptions = {
+  windowMinutes: 60,
+  minPoints: 4,
+  slopeThresholdPerHour: 0.25, // generic default
+  netChangeThreshold: 0.2,
+  adaptiveStdFactor: 2,
+  lowStdThreshold: 0.3,
+};
+
+const temperatureTrendOptions: TrendOptions = {
+  ...defaultGenericTrendOptions,
+  slopeThresholdPerHour: 0.25, // °C per hour
+  netChangeThreshold: 0.2, // °C
+};
+
+const humidityTrendOptions: TrendOptions = {
+  ...defaultGenericTrendOptions,
+  slopeThresholdPerHour: 1.0, // %RH per hour
+  netChangeThreshold: 0.8, // %RH
+};
+
+// Internal helper to compute linear regression slope (value per ms)
+function linearRegressionSlope(data: SensorReading[]): {
+  slopePerMs: number;
+  stdDev: number;
+} {
+  if (data.length === 0) return { slopePerMs: 0, stdDev: 0 };
+  const times = data.map((d) => d.time.getTime());
+  const values = data.map((d) => d.value);
+  const meanT = times.reduce((a, b) => a + b, 0) / times.length;
+  const meanV = values.reduce((a, b) => a + b, 0) / values.length;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < data.length; i++) {
+    const dt = times[i] - meanT;
+    num += dt * (values[i] - meanV);
+    den += dt * dt;
+  }
+  const slopePerMs = den === 0 ? 0 : num / den; // value per millisecond
+  // Std deviation of values (volatility)
+  const variance =
+    values.reduce((acc, v) => acc + Math.pow(v - meanV, 2), 0) / values.length;
+  const stdDev = Math.sqrt(variance);
+  return { slopePerMs, stdDev };
+}
+
+function classifyTrend(
+  windowData: SensorReading[],
+  opts: TrendOptions,
+): {
+  trend: 'up' | 'down' | 'stable';
+  slopePerHour: number;
+  netChange: number;
+  confidence: number;
+  pointsUsed: number;
+} {
+  if (windowData.length < opts.minPoints) {
+    return {
+      trend: 'stable',
+      slopePerHour: 0,
+      netChange: 0,
+      confidence: 0,
+      pointsUsed: windowData.length,
+    };
+  }
+
+  const sorted = [...windowData].sort(
+    (a, b) => a.time.getTime() - b.time.getTime(),
+  );
+  const { slopePerMs, stdDev } = linearRegressionSlope(sorted);
+  const slopePerHour = slopePerMs * 1000 * 60 * 60; // value per hour
+  const first = sorted[0].value;
+  const last = sorted[sorted.length - 1].value;
+  const netChange = last - first;
+
+  // Adaptive thresholds if low volatility
+  let slopeThreshold = opts.slopeThresholdPerHour;
+  let netChangeThreshold = opts.netChangeThreshold;
+  if (stdDev < (opts.lowStdThreshold ?? 0)) {
+    const factor = opts.adaptiveStdFactor ?? 1;
+    slopeThreshold /= factor;
+    netChangeThreshold /= factor;
+  }
+
+  let trend: 'up' | 'down' | 'stable' = 'stable';
+  if (
+    Math.abs(slopePerHour) >= slopeThreshold &&
+    Math.abs(netChange) >= netChangeThreshold
+  ) {
+    trend = slopePerHour > 0 ? 'up' : 'down';
+  }
+
+  // Confidence heuristic: combine normalized slope & net change, scaled 0..1
+  const slopeComponent = Math.min(
+    1,
+    Math.abs(slopePerHour) / (opts.slopeThresholdPerHour * 2),
+  );
+  const changeComponent = Math.min(
+    1,
+    Math.abs(netChange) / (opts.netChangeThreshold * 2),
+  );
+  const confidence =
+    trend === 'stable'
+      ? 1 - (slopeComponent + changeComponent) / 2
+      : (slopeComponent + changeComponent) / 2;
+
+  return {
+    trend,
+    slopePerHour,
+    netChange,
+    confidence,
+    pointsUsed: sorted.length,
+  };
 }
 
 export const calculateSensorStats = (
   data: SensorReading[],
+  trendOptions: TrendOptions = defaultGenericTrendOptions,
 ): SensorStats | null => {
   if (data.length === 0) {
     return null;
@@ -40,18 +171,25 @@ export const calculateSensorStats = (
   const minTime = minReading?.time;
   const maxTime = maxReading?.time;
 
-  // Calculate trend based on last few readings
+  // --- Enhanced trend detection ---
   let trend: 'up' | 'down' | 'stable' = 'stable';
-  if (sortedByTime.length >= 3) {
-    const recent = sortedByTime.slice(-6);
-    const firstRecent = recent[0].value;
-    const lastRecent = recent[recent.length - 1].value;
-    const diff = lastRecent - firstRecent;
+  let slopePerHour: number | undefined;
+  let netChange: number | undefined;
+  let confidence: number | undefined;
+  let pointsUsed: number | undefined;
 
-    // Only consider significant changes
-    if (Math.abs(diff) > 1) {
-      trend = diff > 0 ? 'up' : 'down';
-    }
+  if (sortedByTime.length >= trendOptions.minPoints) {
+    const windowStartTime = new Date(
+      sortedByTime[sortedByTime.length - 1].time.getTime() -
+        trendOptions.windowMinutes * 60 * 1000,
+    );
+    const windowData = sortedByTime.filter((d) => d.time >= windowStartTime);
+    const classification = classifyTrend(windowData, trendOptions);
+    trend = classification.trend;
+    slopePerHour = classification.slopePerHour;
+    netChange = classification.netChange;
+    confidence = classification.confidence;
+    pointsUsed = classification.pointsUsed;
   }
 
   return {
@@ -64,19 +202,23 @@ export const calculateSensorStats = (
     lastUpdate,
     minTime,
     maxTime,
+    slopePerHour,
+    netChange,
+    confidence,
+    pointsUsed,
   };
 };
 
 export const calculateTemperatureStats = (
   data: SensorReading[],
 ): SensorStats | null => {
-  return calculateSensorStats(data);
+  return calculateSensorStats(data, temperatureTrendOptions);
 };
 
 export const calculateHumidityStats = (
   data: SensorReading[],
 ): SensorStats | null => {
-  return calculateSensorStats(data);
+  return calculateSensorStats(data, humidityTrendOptions);
 };
 
 export const formatStatValue = (
