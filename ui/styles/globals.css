@@ -1,0 +1,29 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900')
+layer(base);
+
+@import 'tailwindcss';
+@config '../tailwind.config.js';
+@plugin "daisyui";
+
+@layer base {
+  html {
+    font-family: 'Inter', sans-serif;
+  }
+
+  body {
+    /* Disables pull-to-refresh and overscroll effects. */
+    overscroll-behavior: none;
+    user-select: none;
+  }
+  html,
+  body {
+    height: 100vh;
+    overflow: hidden;
+    max-width: 100vw;
+    max-height: 100vh;
+  }
+}
+
+:root {
+  --rounded-badge: 1.9rem;
+}
