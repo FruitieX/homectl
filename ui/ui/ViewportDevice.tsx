@@ -28,7 +28,7 @@ const devicePositions: Record<string, Vector2d> = {
   'Lower bathroom lightstrip': { x: 125, y: 1015 },
   'Lower bathroom downlight 1': { x: 115, y: 960 },
   'Lower bathroom downlight 2': { x: 115, y: 885 },
-  'Flowerbed lightstrip': { x: 400, y: 0 },
+  'Flowerbed lightstrip': { x: 575, y: -40 },
   'Hue play L': { x: 520, y: 1015 },
   'Hue play C': { x: 520, y: 1075 },
   'Hue play R': { x: 520, y: 1135 },
