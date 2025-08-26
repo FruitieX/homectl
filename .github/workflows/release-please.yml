@@ -1,0 +1,27 @@
+name: release-please
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - 'server/**'
+      - 'ui/**'
+      - '.github/workflows/release-please.yml'
+      - 'release-please-config.json'
+      - '.release-please-manifest.json'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+      - name: Run release-please (manifest default)
+        uses: google-github-actions/release-please-action@e4dc86ba9405554aeba3c6bb2d169500e7d3b4ee # v4
+        with:
+          # token falls back to GITHUB_TOKEN if ACTIONS_BOT_TOKEN unset
+          token: ${{ secrets.ACTIONS_BOT_TOKEN || secrets.GITHUB_TOKEN }}

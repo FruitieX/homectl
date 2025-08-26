@@ -1,0 +1,43 @@
+# homectl monorepo ignore file
+
+# Global tooling/env
+.direnv/
+.envrc
+.env*
+!.env*.example
+.vscode/
+.DS_Store
+*.pem
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Node / frontend
+ui/node_modules/
+ui/.pnp
+ui/.pnp.js
+ui/coverage/
+ui/.next/
+ui/out/
+ui/build/
+ui/.vercel
+ui/.turbo
+ui/styles/dist.css
+ui/.pnpm-debug.log*
+ui/npm-debug.log*
+ui/yarn-debug.log*
+ui/yarn-error.log*
+
+# Rust / backend
+server/target/
+server/Settings.toml
+
+# Generated / vendored (if ever used)
+server/vendor/
+
+# Generated bindings (Rust -> TS) if produced under server or ui
+server/bindings/
+ui/bindings/generated/
+
+# Misc
+.idea/

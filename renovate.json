@@ -1,0 +1,30 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>FruitieX/renovate-config"
+  ],
+  "enabledManagers": [
+    "cargo",
+    "npm",
+    "dockerfile",
+    "github-actions"
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "cargo"
+      ],
+      "matchPaths": [
+        "server/**"
+      ]
+    },
+    {
+      "matchManagers": [
+        "npm"
+      ],
+      "matchPaths": [
+        "ui/**"
+      ]
+    }
+  ]
+}

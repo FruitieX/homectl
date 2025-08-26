@@ -1,6 +1,4 @@
-# EditorConfig is awesome: https://EditorConfig.org
-
-# top-most EditorConfig file
+# Root EditorConfig for homectl monorepo
 root = true
 
 [*]
@@ -10,3 +8,6 @@ end_of_line = lf
 charset = utf-8
 trim_trailing_whitespace = false
 insert_final_newline = false
+
+[*.rs]
+indent_size = 4
