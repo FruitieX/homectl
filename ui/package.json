@@ -71,7 +71,7 @@
     "@types/d3-scale": "4.0.9",
     "@types/deep-equal": "1.0.4",
     "@types/lodash": "4.17.20",
-    "@types/node": "22.18.1",
+    "@types/node": "22.18.3",
     "@types/react": "19.1.12",
     "@types/react-color": "3.0.13",
     "@types/react-dom": "19.1.9",
