@@ -176,8 +176,8 @@ importers:
         specifier: 4.17.20
         version: 4.17.20
       '@types/node':
-        specifier: 22.18.5
-        version: 22.18.5
+        specifier: 22.18.6
+        version: 22.18.6
       '@types/react':
         specifier: 19.1.13
         version: 19.1.13
@@ -835,8 +835,8 @@ packages:
   '@types/ndarray@1.0.14':
     resolution: {integrity: sha512-oANmFZMnFQvb219SSBIhI1Ih/r4CvHDOzkWyJS/XRqkMrGH5/kaPSA1hQhdIBzouaE+5KpE/f5ylI9cujmckQg==}
 
-  '@types/node@22.18.5':
-    resolution: {integrity: sha512-g9BpPfJvxYBXUWI9bV37j6d6LTMNQ88hPwdWWUeYZnMhlo66FIg9gCc1/DZb15QylJSKwOZjwrckvOTWpOiChg==}
+  '@types/node@22.18.6':
+    resolution: {integrity: sha512-r8uszLPpeIWbNKtvWRt/DbVi5zbqZyj1PTmhRMqBMvDnaz1QpmSKujUtJLrqGZeoM8v72MfYggDceY4K1itzWQ==}
 
   '@types/react-color@3.0.13':
     resolution: {integrity: sha512-2c/9FZ4ixC5T3JzN0LP5Cke2Mf0MKOP2Eh0NPDPWmuVH3NjPyhEjqNMQpN1Phr5m74egAy+p2lYNAFrX1z9Yrg==}
@@ -3574,7 +3574,7 @@ snapshots:
 
   '@types/ndarray@1.0.14': {}
 
-  '@types/node@22.18.5':
+  '@types/node@22.18.6':
     dependencies:
       undici-types: 6.21.0
 
@@ -5144,7 +5144,7 @@ snapshots:
 
   jest-worker@27.5.1:
     dependencies:
-      '@types/node': 22.18.5
+      '@types/node': 22.18.6
       merge-stream: 2.0.0
       supports-color: 8.1.1
 
