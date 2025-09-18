@@ -109,8 +109,8 @@ importers:
         specifier: 2.2.3
         version: 2.2.3
       framer-motion:
-        specifier: 12.23.14
-        version: 12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
+        specifier: 12.23.15
+        version: 12.23.15(react-dom@19.1.1(react@19.1.1))(react@19.1.1)
       ical.js:
         specifier: 2.2.1
         version: 2.2.1
@@ -1815,8 +1815,8 @@ packages:
     resolution: {integrity: sha512-dKx12eRCVIzqCxFGplyFKJMPvLEWgmNtUrpTiJIR5u97zEhRG8ySrtboPHZXx7daLxQVrl643cTzbab2tkQjxg==}
     engines: {node: '>= 0.4'}
 
-  framer-motion@12.23.14:
-    resolution: {integrity: sha512-8BQ6dvqOht2w8P1CwIEvAA0gypDR3fNG/M6/f5lT0QgNIKnJf7J43Bpv++NnCWU8YfmL47UEm2hbI0GRvdVhsQ==}
+  framer-motion@12.23.15:
+    resolution: {integrity: sha512-MBxUEHjWr/fRQ2aHg2CgdcjJpHMJ9ttHiPeClHDGiOJOYgmde3OXZUrbWDeeE8yvFrWA62hsPS4+rKQ9OJaoQA==}
     peerDependencies:
       '@emotion/is-prop-valid': '*'
       react: ^18.0.0 || ^19.0.0
@@ -4872,7 +4872,7 @@ snapshots:
     dependencies:
       is-callable: 1.2.7
 
-  framer-motion@12.23.14(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
+  framer-motion@12.23.15(react-dom@19.1.1(react@19.1.1))(react@19.1.1):
     dependencies:
       motion-dom: 12.23.12
       motion-utils: 12.23.6
