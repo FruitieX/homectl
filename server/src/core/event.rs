@@ -93,7 +93,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 )
                 .await;
 
-            state.event_tx.send(Event::WsBroadcastState);
+            state.schedule_ws_broadcast();
         }
         Event::SetInternalState {
             device,
@@ -123,16 +123,13 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 .set_integration_device_state(device)
                 .await?;
         }
-        Event::WsBroadcastState => {
-            state.send_state_ws(None).await;
-        }
         Event::DbStoreScene { scene_id, config } => {
             db_store_scene(scene_id, config).await?;
             state.scenes.refresh_db_scenes().await;
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
-            state.send_state_ws(None).await;
+            state.schedule_ws_broadcast();
         }
         Event::DbDeleteScene { scene_id } => {
             db_delete_scene(scene_id).await?;
@@ -140,7 +137,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
-            state.send_state_ws(None).await;
+            state.schedule_ws_broadcast();
         }
         Event::DbEditScene { scene_id, name } => {
             db_edit_scene(scene_id, name).await?;
@@ -148,7 +145,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
-            state.send_state_ws(None).await;
+            state.schedule_ws_broadcast();
         }
         Event::Action(Action::ActivateScene(ActivateSceneDescriptor {
             scene_id,
@@ -239,7 +236,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
-            state.send_state_ws(None).await;
+            state.schedule_ws_broadcast();
         }
         Event::Action(Action::EvalExpr(expr)) => {
             let eval_context = state.expr.get_context();
@@ -253,7 +250,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
         Event::Action(Action::Ui(action)) => {
             let UiActionDescriptor::StoreUIState { key, value } = action;
             state.ui.store_state(key.clone(), value.clone()).await?;
-            state.send_state_ws(None).await;
+            state.schedule_ws_broadcast();
         }
     }
 

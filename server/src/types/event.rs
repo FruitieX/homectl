@@ -50,9 +50,6 @@ pub enum Event {
     /// Delete scene from DB.
     DbDeleteScene { scene_id: SceneId },
 
-    /// Broadcast current state to all WS peers
-    WsBroadcastState,
-
     /// Various actions that can be triggered by rules.
     Action(Action),
 }

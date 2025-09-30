@@ -29,8 +29,9 @@ use color_eyre::Result;
 use core::ui::Ui;
 use db::init_db;
 use eyre::eyre;
+use std::error::Error;
+use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
-use std::{error::Error, sync::Arc};
 use tokio::sync::RwLock;
 use utils::cli::Cli;
 
@@ -89,6 +90,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         expr,
         ui,
         ws: Default::default(),
+        ws_broadcast_pending: Arc::new(AtomicBool::new(false)),
     };
 
     let state = Arc::new(RwLock::new(state));

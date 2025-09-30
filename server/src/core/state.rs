@@ -10,6 +10,12 @@ use super::{
     scenes::Scenes, ui::Ui, websockets::WebSockets,
 };
 
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
+use std::time::Duration;
+
 #[derive(Clone)]
 pub struct AppState {
     pub warming_up: bool,
@@ -22,9 +28,26 @@ pub struct AppState {
     pub expr: Expr,
     pub ws: WebSockets,
     pub ui: Ui,
+    pub ws_broadcast_pending: Arc<AtomicBool>,
 }
 
 impl AppState {
+    /// Schedule a debounced WebSocket broadcast
+    /// Batches multiple state updates within 100ms into a single broadcast
+    pub fn schedule_ws_broadcast(&self) {
+        // If broadcast already scheduled, skip
+        if self.ws_broadcast_pending.swap(true, Ordering::SeqCst) {
+            return;
+        }
+
+        let state = self.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            state.ws_broadcast_pending.store(false, Ordering::SeqCst);
+            state.send_state_ws(None).await;
+        });
+    }
+
     /// Sends current state over WebSockets. If user_id is omitted, the message
     /// is broadcast to all connected peers.
     pub async fn send_state_ws(&self, user_id: Option<usize>) {
