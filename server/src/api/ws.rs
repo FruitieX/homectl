@@ -2,13 +2,12 @@ use super::with_state;
 use crate::types::websockets::WebSocketRequest;
 use crate::AppState;
 use futures::SinkExt;
-use futures_util::{StreamExt, TryFutureExt};
+use futures_util::StreamExt;
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
 use tokio::sync::{mpsc, RwLock};
-use tokio_stream::wrappers::UnboundedReceiverStream;
 use warp::{ws::WebSocket, Filter};
 
 /// Our global unique user id counter.
@@ -35,19 +34,19 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
     // Split the socket into a sender and receive of messages.
     let (mut user_ws_tx, mut user_ws_rx) = ws.split();
 
-    // Use an unbounded channel to handle buffering and flushing of messages
-    // to the websocket...
-    let (tx, rx) = mpsc::unbounded_channel();
-    let mut rx = UnboundedReceiverStream::new(rx);
+    // Use a bounded channel to handle buffering and flushing of messages
+    // to the websocket. This prevents slow/dead clients from causing memory issues.
+    let (tx, mut rx) = mpsc::channel(100);
 
     tokio::task::spawn(async move {
-        while let Some(message) = rx.next().await {
-            user_ws_tx
-                .send(message)
-                .unwrap_or_else(|e| {
-                    warn!("websocket send error: {e}");
-                })
-                .await;
+        while let Some(message) = rx.recv().await {
+            match user_ws_tx.send(message).await {
+                Ok(_) => {}
+                Err(e) => {
+                    warn!("websocket send error (uid={my_id}): {e}, closing connection");
+                    break;
+                }
+            }
         }
     });
 
