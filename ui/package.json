@@ -72,7 +72,7 @@
     "@types/deep-equal": "1.0.4",
     "@types/lodash": "4.17.20",
     "@types/node": "22.18.8",
-    "@types/react": "19.2.0",
+    "@types/react": "19.2.1",
     "@types/react-color": "3.0.13",
     "@types/react-dom": "19.2.0",
     "@typescript-eslint/eslint-plugin": "8.46.0",
@@ -91,7 +91,7 @@
   "version": "1.0.0",
   "pnpm": {
     "overrides": {
-      "@types/react": "19.2.0",
+      "@types/react": "19.2.1",
       "@types/react-dom": "19.2.0"
     }
   }
