@@ -24,6 +24,20 @@ To control your home automation systems, you need to edit the generated
 configuration file in `/Settings.toml`. See below sections for
 configuration instructions and examples.
 
+### Health checks
+
+The server exposes health endpoints suitable for Kubernetes or other orchestrators:
+
+- Liveness: GET http://localhost:45289/health/live — always returns 200 OK while the process is up
+- Readiness: GET http://localhost:45289/health/ready — returns 200 OK when startup warmup is complete and the database (if configured) is reachable, otherwise 503
+
+Examples:
+
+```
+curl -sS http://localhost:45289/health/live | jq
+curl -sS http://localhost:45289/health/ready | jq
+```
+
 ## Description
 
 This project aims to unify home automation (HA) systems from different
