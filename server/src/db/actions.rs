@@ -142,7 +142,7 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
     if !is_db_available() {
         warn!(
             "DB not available, skipping store_scene for {scene}",
-            scene = scene_id.to_string()
+            scene = scene_id
         );
         return Ok(());
     }
@@ -173,7 +173,7 @@ pub async fn db_store_scene_overrides(
     if !is_db_available() {
         warn!(
             "DB not available, skipping store_scene_overrides for {scene}",
-            scene = scene_id.to_string()
+            scene = scene_id
         );
         return Ok(());
     }
@@ -224,7 +224,7 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
     if !is_db_available() {
         warn!(
             "DB not available, skipping delete_scene for {scene}",
-            scene = scene_id.to_string()
+            scene = scene_id
         );
         return Ok(());
     }
@@ -243,11 +243,11 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
     Ok(())
 }
 
-pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
+pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
     if !is_db_available() {
         warn!(
             "DB not available, skipping edit_scene for {scene}",
-            scene = scene_id.to_string()
+            scene = scene_id
         );
         return Ok(());
     }
@@ -270,7 +270,7 @@ pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
     Ok(())
 }
 
-pub async fn db_store_ui_state(key: &String, value: &serde_json::Value) -> Result<()> {
+pub async fn db_store_ui_state(key: &str, value: &serde_json::Value) -> Result<()> {
     if !is_db_available() {
         warn!("DB not available, skipping store_ui_state for key {key}");
         return Ok(());

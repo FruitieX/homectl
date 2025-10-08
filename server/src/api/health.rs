@@ -8,8 +8,8 @@ use warp::{http::StatusCode, Filter};
 use super::with_state;
 
 #[derive(Serialize)]
-struct HealthResponse<'a> {
-    status: &'a str,
+struct HealthResponse {
+    status: &'static str,
     details: Option<serde_json::Value>,
 }
 

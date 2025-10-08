@@ -127,7 +127,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             if let Err(e) = db_store_scene(scene_id, config).await {
                 warn!(
                     "DB not available when storing scene {scene}: {e}",
-                    scene = scene_id.to_string()
+                    scene = scene_id
                 );
             }
             state.scenes.refresh_db_scenes().await;
@@ -140,7 +140,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             if let Err(e) = db_delete_scene(scene_id).await {
                 warn!(
                     "DB not available when deleting scene {scene}: {e}",
-                    scene = scene_id.to_string()
+                    scene = scene_id
                 );
             }
             state.scenes.refresh_db_scenes().await;
@@ -153,7 +153,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             if let Err(e) = db_edit_scene(scene_id, name).await {
                 warn!(
                     "DB not available when editing scene {scene}: {e}",
-                    scene = scene_id.to_string()
+                    scene = scene_id
                 );
             }
             state.scenes.refresh_db_scenes().await;
