@@ -124,7 +124,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 .await?;
         }
         Event::DbStoreScene { scene_id, config } => {
-            db_store_scene(scene_id, config).await?;
+            if let Err(e) = db_store_scene(scene_id, config).await {
+                warn!(
+                    "DB not available when storing scene {scene}: {e}",
+                    scene = scene_id.to_string()
+                );
+            }
             state.scenes.refresh_db_scenes().await;
             state
                 .scenes
@@ -132,7 +137,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.schedule_ws_broadcast();
         }
         Event::DbDeleteScene { scene_id } => {
-            db_delete_scene(scene_id).await?;
+            if let Err(e) = db_delete_scene(scene_id).await {
+                warn!(
+                    "DB not available when deleting scene {scene}: {e}",
+                    scene = scene_id.to_string()
+                );
+            }
             state.scenes.refresh_db_scenes().await;
             state
                 .scenes
@@ -140,7 +150,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.schedule_ws_broadcast();
         }
         Event::DbEditScene { scene_id, name } => {
-            db_edit_scene(scene_id, name).await?;
+            if let Err(e) = db_edit_scene(scene_id, name).await {
+                warn!(
+                    "DB not available when editing scene {scene}: {e}",
+                    scene = scene_id.to_string()
+                );
+            }
             state.scenes.refresh_db_scenes().await;
             state
                 .scenes

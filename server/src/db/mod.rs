@@ -20,18 +20,26 @@ pub async fn init_db() -> Option<()> {
     let opt = PoolOptions::new().acquire_timeout(Duration::from_secs(3));
 
     info!("Connecting to PostgreSQL...");
-    let db = opt
-        .connect(&database_url)
-        .await
-        .expect("Could not open DB connection");
-
-    DB_CONNECTION.set(db).unwrap();
-
-    Some(())
+    match opt.connect(&database_url).await {
+        Ok(db) => {
+            if let Err(e) = DB_CONNECTION.set(db) {
+                warn!("DB connection was already set: {e:?}");
+            }
+            Some(())
+        }
+        Err(e) => {
+            warn!("Could not open DB connection, continuing without DB: {e}");
+            None
+        }
+    }
 }
 
 pub async fn get_db_connection<'a>() -> Result<&'a PgPool> {
     DB_CONNECTION
         .get()
         .ok_or_else(|| eyre!("Not connected to database"))
+}
+
+pub fn is_db_available() -> bool {
+    DB_CONNECTION.get().is_some()
 }
