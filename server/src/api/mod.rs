@@ -4,10 +4,12 @@ use crate::AppState;
 
 mod actions;
 mod devices;
+mod health;
 mod ws;
 
 use actions::*;
 use devices::*;
+use health::health;
 
 use color_eyre::Result;
 use tokio::sync::RwLock;
@@ -29,9 +31,12 @@ pub fn init_api(app_state: &Arc<RwLock<AppState>>) -> Result<()> {
         .and(devices(app_state).or(actions(app_state)));
 
     let ws = ws(app_state);
+    let health = health(app_state);
 
     tokio::spawn(async move {
-        warp::serve(ws.or(api)).run(([0, 0, 0, 0], 45289)).await;
+        warp::serve(ws.or(api).or(health))
+            .run(([0, 0, 0, 0], 45289))
+            .await;
     });
 
     Ok(())
