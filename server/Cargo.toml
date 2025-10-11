@@ -31,14 +31,18 @@ futures-util = "=0.3.31"
 tokio-stream = "=0.1.17"
 itertools = "=0.14.0"
 sqlx = { version = "=0.8.6", features = [
-	"runtime-tokio-rustls",
-	"postgres",
-	"json",
+  "runtime-tokio-rustls",
+  "postgres",
+  "json",
 ] }
 once_cell = "=1.21.3"
-rumqttc = "=0.25.0"
+rumqttc = { version = "=0.25.0", default-features = false }
 toml = "=0.9.7"
-ts-rs = { version = "=11.0.1", features = ["ordered-float-impl", "no-serde-warnings", "serde-json-impl"] }
+ts-rs = { version = "=11.0.1", features = [
+  "ordered-float-impl",
+  "no-serde-warnings",
+  "serde-json-impl",
+] }
 macro-attr = "=0.2.0"
 newtype_derive = "=0.1.6"
 log = "=0.4.28"
@@ -47,8 +51,8 @@ eyre = "=0.6.12"
 color-eyre = "=0.6.5"
 croner = "=2.2.0"
 evalexpr = { git = "https://github.com/FruitieX/evalexpr", branch = "rasmus/type-unsafe-context", features = [
-	"serde_support",
-	"rand",
+  "serde_support",
+  "rand",
 ] }
 ordered-float = { version = "=5.0.0", features = ["serde"] }
 jsonptr = "=0.7.1"
