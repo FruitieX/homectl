@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{core::state::AppState, db::get_db_connection};
+use crate::{core::state::AppState, db::is_db_available};
 use serde::Serialize;
 use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter};
@@ -8,8 +8,8 @@ use warp::{http::StatusCode, Filter};
 use super::with_state;
 
 #[derive(Serialize)]
-struct HealthResponse<'a> {
-    status: &'a str,
+struct HealthResponse {
+    status: &'static str,
     details: Option<serde_json::Value>,
 }
 
@@ -57,36 +57,14 @@ async fn ready_impl(
         ));
     }
 
-    // If DB is configured, ensure connection is available. If not configured, we consider ready.
-    let db_configured = std::env::var("DATABASE_URL").is_ok();
-    if db_configured {
-        match get_db_connection().await {
-            Ok(_pool) => {
-                let body = HealthResponse {
-                    status: "ready",
-                    details: None,
-                };
-                let reply = warp::reply::json(&body);
-                Ok(warp::reply::with_status(reply, StatusCode::OK))
-            }
-            Err(e) => {
-                let body = HealthResponse {
-                    status: "db_unavailable",
-                    details: Some(serde_json::json!({ "error": e.to_string() })),
-                };
-                let reply = warp::reply::json(&body);
-                Ok(warp::reply::with_status(
-                    reply,
-                    StatusCode::SERVICE_UNAVAILABLE,
-                ))
-            }
-        }
-    } else {
-        let body = HealthResponse {
-            status: "ready",
-            details: None,
-        };
-        let reply = warp::reply::json(&body);
-        Ok(warp::reply::with_status(reply, StatusCode::OK))
-    }
+    let details = serde_json::json!({
+        "db": if is_db_available() { "available" } else { "unavailable" }
+    });
+
+    let body = HealthResponse {
+        status: "ready",
+        details: Some(details),
+    };
+    let reply = warp::reply::json(&body);
+    Ok(warp::reply::with_status(reply, StatusCode::OK))
 }

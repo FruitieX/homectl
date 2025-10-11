@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::get_db_connection;
+use super::{get_db_connection, is_db_available};
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
 use crate::types::scene::{SceneConfig, SceneId};
 use crate::types::scene::{SceneDevicesConfig, SceneOverridesConfig, ScenesConfig};
@@ -8,6 +8,10 @@ use color_eyre::Result;
 use sqlx::types::Json;
 
 pub async fn db_update_device(device: &Device) -> Result<Device> {
+    if !is_db_available() {
+        // No DB available, just return the device unchanged
+        return Ok(device.clone());
+    }
     let db = get_db_connection().await?;
 
     let row = sqlx::query_as!(
@@ -41,10 +45,13 @@ pub async fn db_update_device(device: &Device) -> Result<Device> {
 }
 
 #[allow(dead_code)]
-pub async fn db_find_device(key: &DeviceKey) -> Result<Device> {
+pub async fn db_find_device(key: &DeviceKey) -> Result<Option<Device>> {
+    if !is_db_available() {
+        return Ok(None);
+    }
     let db = get_db_connection().await?;
 
-    let row = sqlx::query_as!(
+    let row_opt = sqlx::query_as!(
         DeviceRow,
         r#"
             select
@@ -59,15 +66,16 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Device> {
         &key.integration_id.to_string(),
         &key.device_id.to_string()
     )
-    .fetch_one(db)
+    .fetch_optional(db)
     .await?;
 
-    let device = row.into();
-
-    Ok(device)
+    Ok(row_opt.map(|row| row.into()))
 }
 
 pub async fn db_get_devices() -> Result<HashMap<DeviceKey, Device>> {
+    if !is_db_available() {
+        return Ok(Default::default());
+    }
     let db = get_db_connection().await?;
 
     let result = sqlx::query!(
@@ -101,6 +109,9 @@ pub async fn db_get_devices() -> Result<HashMap<DeviceKey, Device>> {
 }
 
 pub async fn db_get_scenes() -> Result<ScenesConfig> {
+    if !is_db_available() {
+        return Ok(Default::default());
+    }
     let db = get_db_connection().await?;
 
     let result = sqlx::query!(
@@ -128,6 +139,13 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
 }
 
 pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<()> {
+    if !is_db_available() {
+        warn!(
+            "DB not available, skipping store_scene for {scene}",
+            scene = scene_id
+        );
+        return Ok(());
+    }
     let db = get_db_connection().await?;
 
     sqlx::query!(
@@ -152,6 +170,13 @@ pub async fn db_store_scene_overrides(
     scene_id: &SceneId,
     overrides: &SceneDevicesConfig,
 ) -> Result<()> {
+    if !is_db_available() {
+        warn!(
+            "DB not available, skipping store_scene_overrides for {scene}",
+            scene = scene_id
+        );
+        return Ok(());
+    }
     let db = get_db_connection().await?;
 
     sqlx::query!(
@@ -173,6 +198,9 @@ pub async fn db_store_scene_overrides(
 }
 
 pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
+    if !is_db_available() {
+        return Ok(Default::default());
+    }
     let db = get_db_connection().await?;
 
     let result = sqlx::query!(
@@ -193,6 +221,13 @@ pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
 }
 
 pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
+    if !is_db_available() {
+        warn!(
+            "DB not available, skipping delete_scene for {scene}",
+            scene = scene_id
+        );
+        return Ok(());
+    }
     let db = get_db_connection().await?;
 
     sqlx::query!(
@@ -208,7 +243,14 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
     Ok(())
 }
 
-pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
+pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
+    if !is_db_available() {
+        warn!(
+            "DB not available, skipping edit_scene for {scene}",
+            scene = scene_id
+        );
+        return Ok(());
+    }
     let db = get_db_connection().await?;
 
     sqlx::query!(
@@ -228,7 +270,11 @@ pub async fn db_edit_scene(scene_id: &SceneId, name: &String) -> Result<()> {
     Ok(())
 }
 
-pub async fn db_store_ui_state(key: &String, value: &serde_json::Value) -> Result<()> {
+pub async fn db_store_ui_state(key: &str, value: &serde_json::Value) -> Result<()> {
+    if !is_db_available() {
+        warn!("DB not available, skipping store_ui_state for key {key}");
+        return Ok(());
+    }
     let db = get_db_connection().await?;
 
     sqlx::query!(
@@ -250,6 +296,9 @@ pub async fn db_store_ui_state(key: &String, value: &serde_json::Value) -> Resul
 }
 
 pub async fn db_get_ui_state() -> Result<HashMap<String, serde_json::Value>> {
+    if !is_db_available() {
+        return Ok(Default::default());
+    }
     let db = get_db_connection().await?;
 
     let result = sqlx::query!(

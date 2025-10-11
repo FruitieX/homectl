@@ -21,7 +21,10 @@ impl Ui {
     }
 
     pub async fn store_state(&mut self, key: String, value: serde_json::Value) -> Result<()> {
-        db_store_ui_state(&key, &value).await?;
+        if let Err(e) = db_store_ui_state(&key, &value).await {
+            // If DB is unavailable, continue and keep memory-only state
+            warn!("DB not available when storing UI state '{key}': {e}");
+        }
         self.ui_state.insert(key, value);
 
         Ok(())
