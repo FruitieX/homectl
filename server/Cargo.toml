@@ -54,7 +54,7 @@ evalexpr = { git = "https://github.com/FruitieX/evalexpr", branch = "rasmus/type
   "serde_support",
   "rand",
 ] }
-ordered-float = { version = "=5.0.0", features = ["serde"] }
+ordered-float = { version = "=5.1.0", features = ["serde"] }
 jsonptr = "=0.7.1"
 serde_json_path = "=0.7.2"
 serde-this-or-that = "=0.5.0"
