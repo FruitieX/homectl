@@ -31,7 +31,7 @@ export const SpotPriceCard = () => {
     <>
       <Card
         compact
-        className="col-span-2 flex-row justify-around bg-base-300 overflow-hidden min-h-60"
+        className="col-span-4 flex-row justify-around bg-base-300 overflow-hidden min-h-60"
       >
         <Card.Body className="p-2 w-full">
           <ResponsiveChart

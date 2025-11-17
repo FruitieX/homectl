@@ -12,6 +12,7 @@ import { useCallback, useEffect } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
 import useIdle from '@/hooks/useIdle';
+import clsx from 'clsx';
 
 const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
@@ -136,15 +137,24 @@ export const ControlsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-2 bg-base-300">
-        <Card.Body className="flex-row items-center justify-around overflow-x-auto">
+      <Card compact className="col-span-1 bg-base-300">
           <Button
+            color="ghost"
+            className={clsx(carHeater ? '' : 'text-zinc-700', 'h-full')}
+            size="lg"
+            startIcon={<Car size="3rem" />}
+            onClick={() => toggleCarHeater()}
+            onContextMenu={() => carHeaterModalOpenState.setOpen(true)}
+            loading={carHeaterLoading}
+            >
+        {/* <Card.Body className="flex-row items-center justify-around overflow-x-auto"> */}
+          {/* <Button
             color="ghost"
             className={lightsOn ? '' : 'text-zinc-700'}
             size="lg"
             startIcon={<LampCeiling size="3rem" />}
             onClick={toggleMapVisible}
-          />
+          /> */}
           {/* <Button
           color="ghost"
           className={vacuumActive ? '' : 'text-zinc-700'}
@@ -152,16 +162,8 @@ export const ControlsCard = () => {
           startIcon={<Bot size="3rem" />}
           onClick={cleanHouse}
         /> */}
-          <Button
-            color="ghost"
-            className={carHeater ? '' : 'text-zinc-700'}
-            size="lg"
-            startIcon={<Car size="3rem" />}
-            onClick={() => toggleCarHeater()}
-            onContextMenu={() => carHeaterModalOpenState.setOpen(true)}
-            loading={carHeaterLoading}
-          />
-        </Card.Body>
+        {/* </Card.Body> */}
+</Button>
       </Card>
       <Modal.Legacy
         responsive

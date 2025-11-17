@@ -266,7 +266,7 @@ export const ClockCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-1 bg-base-300">
+      <Card compact className="col-span-2 bg-base-300">
         <Button
           color="ghost"
           className="h-full w-full"

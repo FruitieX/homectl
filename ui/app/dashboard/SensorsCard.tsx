@@ -410,7 +410,7 @@ export const SensorsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-2 bg-base-300">
+      <Card compact className="col-span-4 bg-base-300">
         <Card.Body className="p-1">
           {/* Horizontal scrollable sensor list */}
           <div
