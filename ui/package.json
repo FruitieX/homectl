@@ -78,7 +78,7 @@
     "@typescript-eslint/eslint-plugin": "8.46.1",
     "@typescript-eslint/parser": "8.46.1",
     "eslint": "9.37.0",
-    "eslint-config-next": "15.5.5",
+    "eslint-config-next": "15.5.7",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "6.1.1",
     "postcss": "8.5.6",
