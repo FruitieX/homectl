@@ -9,6 +9,7 @@ import { Navbar } from '@/ui/Navbar';
 import { SaveSceneModal } from '@/ui/SaveSceneModal';
 import { SceneModal } from '@/ui/SceneModal';
 import { useProvideAppConfig } from '@/hooks/appConfig';
+import { useApplyTheme } from '@/hooks/theme';
 import { useEffect } from 'react';
 import { CarHeaterModal } from './dashboard/CarHeaterModal';
 
@@ -29,6 +30,7 @@ export const ProvideAppConfig = ({
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   useProvideWebsocketState();
+  useApplyTheme();
 
   // Reload app at 4am
   useEffect(() => {

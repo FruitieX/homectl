@@ -140,7 +140,7 @@ export const ControlsCard = () => {
       <Card compact className="col-span-1 bg-base-300">
           <Button
             color="ghost"
-            className={clsx(carHeater ? '' : 'text-zinc-700', 'h-full')}
+            className={clsx(carHeater ? '' : 'opacity-30', 'h-full')}
             size="lg"
             startIcon={<Car size="3rem" />}
             onClick={() => toggleCarHeater()}

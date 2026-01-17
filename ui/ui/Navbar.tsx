@@ -24,6 +24,8 @@ export const Navbar = () => {
     title = 'Floorplan';
   } else if (pathname === '/groups') {
     title = 'Groups';
+  } else if (pathname === '/settings') {
+    title = 'Settings';
   } else if (pathname?.startsWith('/groups/')) {
     const groupId = pathname.split('/')[2];
     const group = (state?.groups ?? {})[groupId];

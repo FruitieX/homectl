@@ -1,10 +1,10 @@
 import Link from 'next/link';
-import { LayoutDashboard, List, Map } from 'lucide-react';
+import { LayoutDashboard, List, Map, Settings } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { BottomNavigation, Button } from 'react-daisyui';
 
-type Route = 'Dashboard' | 'Floorplan' | 'Groups';
+type Route = 'Dashboard' | 'Floorplan' | 'Groups' | 'Settings';
 
 const getRoute = (pathname: string | null): Route => {
   if (pathname === '/' || pathname === '/dashboard') {
@@ -15,6 +15,8 @@ const getRoute = (pathname: string | null): Route => {
     return 'Groups';
   } else if (pathname?.startsWith('/groups/')) {
     return 'Groups';
+  } else if (pathname === '/settings') {
+    return 'Settings';
   } else {
     return 'Dashboard';
   }
@@ -60,6 +62,16 @@ export const HomectlBottomNavigation = () => {
         >
           <List />
           <BottomNavigation.Label>Groups</BottomNavigation.Label>
+        </Button>
+      </Link>
+      <Link href="/settings" passHref className="h-full flex-1">
+        <Button
+          active={route === 'Settings'}
+          className="flex gap-3 items-center h-full w-full"
+          color={route === 'Settings' ? 'neutral' : 'ghost'}
+        >
+          <Settings />
+          <BottomNavigation.Label>Settings</BottomNavigation.Label>
         </Button>
       </Link>
     </BottomNavigation>
