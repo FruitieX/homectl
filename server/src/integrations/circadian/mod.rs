@@ -47,13 +47,11 @@ pub struct Circadian {
 impl Integration for Circadian {
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        config: &serde_json::Value,
         _cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self> {
-        let config: CircadianConfig = config
-            .clone()
-            .try_deserialize()
+        let config: CircadianConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Circadian integration")?;
 
         Ok(Circadian {
@@ -167,6 +165,7 @@ async fn poll_sensor(circadian: Circadian) {
         event_tx.send(Event::SetInternalState {
             device,
             skip_external_update: None,
+            skip_db_update: None,
         });
     }
 }

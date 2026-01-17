@@ -4,7 +4,8 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
-    device::DevicesState, event::Event, group::FlattenedGroupsConfig, scene::FlattenedScenesConfig,
+    device::DevicesState, event::Event, group::FlattenedGroupsConfig,
+    routine_status::RoutineStatuses, scene::FlattenedScenesConfig,
 };
 
 #[derive(TS, Deserialize, Serialize, Debug)]
@@ -19,6 +20,7 @@ pub struct StateUpdate {
     pub devices: DevicesState,
     pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
+    pub routine_statuses: RoutineStatuses,
     pub ui_state: HashMap<String, serde_json::Value>,
 }
 

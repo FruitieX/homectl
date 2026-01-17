@@ -1,4 +1,7 @@
-use crate::db::actions::{db_get_devices, db_update_device};
+use crate::db::{
+    actions::{db_get_devices, db_update_device},
+    config_queries::{db_get_device_positions, DevicePositionRow},
+};
 use crate::types::integration::IntegrationId;
 use crate::utils::cli::Cli;
 
@@ -10,11 +13,88 @@ use crate::types::group::GroupId;
 use crate::types::{
     device::{Device, DeviceData, DeviceKey, DevicesState},
     event::{Event, TxEventChannel},
-    scene::{ActivateSceneDescriptor, SceneId},
+    scene::{ActivateSceneDescriptor, RolloutStyle, SceneId},
 };
 use color_eyre::Result;
 use ordered_float::OrderedFloat;
 use std::collections::{BTreeMap, HashSet};
+use std::time::Duration;
+
+#[derive(Debug, PartialEq, Eq)]
+struct SpatialRolloutPlan {
+    immediate_device_keys: Vec<DeviceKey>,
+    delayed_device_keys: Vec<(DeviceKey, u64)>,
+}
+
+fn compute_rollout_delay_ms(distance: f32, max_distance: f32, duration_ms: u64) -> u64 {
+    if duration_ms == 0 || max_distance <= f32::EPSILON {
+        return 0;
+    }
+
+    ((duration_ms as f64) * (distance as f64) / (max_distance as f64)).round() as u64
+}
+
+fn compute_distance(source: &DevicePositionRow, target: &DevicePositionRow) -> f32 {
+    (source.x - target.x).hypot(source.y - target.y)
+}
+
+fn build_spatial_rollout_plan(
+    source_device_key: &DeviceKey,
+    target_device_keys: &[DeviceKey],
+    positions: &BTreeMap<String, DevicePositionRow>,
+    duration_ms: u64,
+) -> Option<SpatialRolloutPlan> {
+    let source_position = positions.get(&source_device_key.to_string())?;
+
+    let mut immediate_device_keys = Vec::new();
+    let mut positioned_targets = Vec::new();
+    let mut max_distance = 0.0_f32;
+
+    for device_key in target_device_keys {
+        let Some(target_position) = positions.get(&device_key.to_string()) else {
+            immediate_device_keys.push(device_key.clone());
+            continue;
+        };
+
+        let distance = compute_distance(source_position, target_position);
+        max_distance = max_distance.max(distance);
+        positioned_targets.push((device_key.clone(), distance));
+    }
+
+    if max_distance <= f32::EPSILON {
+        immediate_device_keys.extend(
+            positioned_targets
+                .into_iter()
+                .map(|(device_key, _)| device_key),
+        );
+        return Some(SpatialRolloutPlan {
+            immediate_device_keys,
+            delayed_device_keys: Vec::new(),
+        });
+    }
+
+    let mut delayed_device_keys = Vec::new();
+    for (device_key, distance) in positioned_targets {
+        let delay_ms = compute_rollout_delay_ms(distance, max_distance, duration_ms);
+
+        if delay_ms == 0 {
+            immediate_device_keys.push(device_key);
+        } else {
+            delayed_device_keys.push((device_key, delay_ms));
+        }
+    }
+
+    delayed_device_keys.sort_by(|(left_key, left_delay), (right_key, right_delay)| {
+        left_delay
+            .cmp(right_delay)
+            .then_with(|| left_key.cmp(right_key))
+    });
+
+    Some(SpatialRolloutPlan {
+        immediate_device_keys,
+        delayed_device_keys,
+    })
+}
 
 #[derive(Clone)]
 pub struct Devices {
@@ -36,6 +116,34 @@ impl Devices {
 
     pub fn get_state(&self) -> &DevicesState {
         &self.state
+    }
+
+    /// Remove all devices belonging to a specific integration.
+    pub fn remove_devices_by_integration(&mut self, integration_id: &IntegrationId) {
+        let keys_to_remove: Vec<DeviceKey> = self
+            .state
+            .0
+            .keys()
+            .filter(|k| &k.integration_id == integration_id)
+            .cloned()
+            .collect();
+
+        for key in &keys_to_remove {
+            self.state.0.remove(key);
+        }
+
+        self.keys_by_name
+            .retain(|(iid, _), _| iid != integration_id);
+    }
+
+    /// Registers a device in the name lookup map, allowing it to be found by
+    /// DeviceRef::Name references in routine rules.
+    pub fn register_device_name(&mut self, device: &Device) {
+        let device_key = device.get_device_key();
+        self.keys_by_name.insert(
+            (device.integration_id.clone(), device.name.clone()),
+            device_key,
+        );
     }
 
     pub async fn refresh_db_devices(&mut self, _scenes: &Scenes) {
@@ -211,11 +319,19 @@ impl Devices {
     /// Sets internal (and possibly external) state for given device
     pub fn set_state(&mut self, device: &Device, skip_external_update: bool, skip_db_update: bool) {
         let device_key = device.get_device_key();
+
+        // Register device in name lookup map for DeviceRef::Name resolution
+        self.register_device_name(device);
+
         let old = self.get_device(&device_key);
 
         let state_eq = old.map(|d| d.is_state_eq(device)).unwrap_or_default();
 
-        if state_eq {
+        // For sensors, we always emit the event even if state is equal.
+        // This is needed for pulse mode routines that trigger on every update,
+        // even when the value is the same (e.g., repeated button presses).
+        // For controllable devices, we skip if state is unchanged.
+        if state_eq && !device.is_sensor() {
             return;
         }
 
@@ -288,11 +404,144 @@ impl Devices {
         self.state.0.get(device_key)
     }
 
+    fn resolve_scene_devices(
+        &self,
+        scene_id: &SceneId,
+        device_keys: &Option<Vec<DeviceKey>>,
+        group_keys: &Option<Vec<GroupId>>,
+        groups: &Groups,
+        scenes: &Scenes,
+        eval_context: &EvalContext,
+    ) -> Option<Vec<Device>> {
+        let scene_devices_config = scenes.find_scene_devices_config(
+            self,
+            groups,
+            &ActivateSceneDescriptor {
+                scene_id: scene_id.clone(),
+                device_keys: device_keys.clone(),
+                group_keys: group_keys.clone(),
+            },
+            eval_context,
+        )?;
+
+        let resolved_devices = scene_devices_config
+            .keys()
+            .filter_map(|device_key| self.get_device(device_key))
+            .map(|device| {
+                device
+                    .set_scene(Some(scene_id), scenes)
+                    .set_transition(None)
+            })
+            .collect();
+
+        Some(resolved_devices)
+    }
+
+    fn apply_devices_immediately(&mut self, devices: Vec<Device>) {
+        for device in devices {
+            self.set_state(&device, false, false);
+        }
+    }
+
+    async fn apply_devices_with_rollout(
+        &mut self,
+        devices: Vec<Device>,
+        rollout: &Option<RolloutStyle>,
+        rollout_source_device_key: &Option<DeviceKey>,
+        rollout_duration_ms: &Option<u64>,
+    ) {
+        if devices.is_empty() {
+            return;
+        }
+
+        if !matches!(rollout, Some(RolloutStyle::Spatial)) {
+            self.apply_devices_immediately(devices);
+            return;
+        }
+
+        let Some(source_device_key) = rollout_source_device_key.as_ref() else {
+            warn!(
+                "Spatial rollout requested without rollout_source_device_key, applying immediately"
+            );
+            self.apply_devices_immediately(devices);
+            return;
+        };
+
+        let duration_ms = rollout_duration_ms.unwrap_or_default();
+        if duration_ms == 0 {
+            self.apply_devices_immediately(devices);
+            return;
+        }
+
+        let mut devices_by_key = devices
+            .into_iter()
+            .map(|device| (device.get_device_key(), device))
+            .collect::<BTreeMap<DeviceKey, Device>>();
+
+        let positions = match db_get_device_positions().await {
+            Ok(rows) => rows
+                .into_iter()
+                .map(|row| (row.device_key.clone(), row))
+                .collect::<BTreeMap<String, DevicePositionRow>>(),
+            Err(error) => {
+                warn!("Failed to load device positions for spatial rollout: {error}");
+                self.apply_devices_immediately(devices_by_key.into_values().collect());
+                return;
+            }
+        };
+
+        let target_device_keys = devices_by_key.keys().cloned().collect::<Vec<_>>();
+        let Some(rollout_plan) = build_spatial_rollout_plan(
+            source_device_key,
+            &target_device_keys,
+            &positions,
+            duration_ms,
+        ) else {
+            warn!(
+                "Spatial rollout origin {source_device_key} has no saved position, applying immediately"
+            );
+            self.apply_devices_immediately(devices_by_key.into_values().collect());
+            return;
+        };
+
+        let mut immediate_devices = Vec::new();
+        for device_key in rollout_plan.immediate_device_keys {
+            if let Some(device) = devices_by_key.remove(&device_key) {
+                immediate_devices.push(device);
+            }
+        }
+
+        let mut delayed_devices = Vec::new();
+        for (device_key, delay_ms) in rollout_plan.delayed_device_keys {
+            if let Some(device) = devices_by_key.remove(&device_key) {
+                delayed_devices.push((delay_ms, device));
+            }
+        }
+
+        self.apply_devices_immediately(immediate_devices);
+
+        for (delay_ms, device) in delayed_devices {
+            let event_tx = self.event_tx.clone();
+
+            tokio::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                event_tx.send(Event::ApplyDeviceState {
+                    device,
+                    skip_external_update: Some(false),
+                    skip_db_update: Some(false),
+                });
+            });
+        }
+    }
+
     pub async fn activate_scene(
         &mut self,
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        rollout: &Option<RolloutStyle>,
+        rollout_source_device_key: &Option<DeviceKey>,
+        rollout_duration_ms: &Option<u64>,
         groups: &Groups,
         scenes: &Scenes,
         eval_context: &EvalContext,
@@ -321,31 +570,30 @@ impl Devices {
         } else {
             "".to_string()
         };
-        info!("Activating scene {scene_id}{group_keys_description}{device_keys_description}");
+        let rollout_description = rollout
+            .as_ref()
+            .map(|style| format!(" with {style:?} rollout"))
+            .unwrap_or_default();
+        info!(
+            "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}"
+        );
 
-        let scene_devices_config = scenes.find_scene_devices_config(
-            self,
+        let resolved_devices = self.resolve_scene_devices(
+            scene_id,
+            device_keys,
+            group_keys,
             groups,
-            &ActivateSceneDescriptor {
-                scene_id: scene_id.clone(),
-                device_keys: device_keys.clone(),
-                group_keys: group_keys.clone(),
-            },
+            scenes,
             eval_context,
         )?;
 
-        for device_key in scene_devices_config.keys() {
-            let device = self.get_device(device_key);
-
-            if let Some(device) = device {
-                // Set scene state without transition when activating scene
-                let device = device
-                    .set_scene(Some(scene_id), scenes)
-                    .set_transition(None);
-
-                self.set_state(&device, false, false);
-            }
-        }
+        self.apply_devices_with_rollout(
+            resolved_devices,
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
+        )
+        .await;
 
         Some(true)
     }
@@ -378,6 +626,9 @@ impl Devices {
         groups: &Groups,
         detection_device_keys: &Option<Vec<DeviceKey>>,
         detection_group_keys: &Option<Vec<GroupId>>,
+        rollout: &Option<RolloutStyle>,
+        rollout_source_device_key: &Option<DeviceKey>,
+        rollout_duration_ms: &Option<u64>,
         scenes: &Scenes,
         eval_context: &EvalContext,
     ) -> Option<()> {
@@ -398,6 +649,9 @@ impl Devices {
             &next_scene.scene_id,
             &next_scene.device_keys,
             &next_scene.group_keys,
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
             groups,
             scenes,
             eval_context,
@@ -417,5 +671,88 @@ impl Devices {
         }?;
 
         self.state.0.get(&device_key)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{build_spatial_rollout_plan, SpatialRolloutPlan};
+    use crate::db::config_queries::DevicePositionRow;
+    use crate::types::device::{DeviceId, DeviceKey};
+    use crate::types::integration::IntegrationId;
+    use std::collections::BTreeMap;
+
+    fn device_key(id: &str) -> DeviceKey {
+        DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
+    }
+
+    fn position(device_key: &DeviceKey, x: f32, y: f32) -> (String, DevicePositionRow) {
+        (
+            device_key.to_string(),
+            DevicePositionRow {
+                device_key: device_key.to_string(),
+                x,
+                y,
+                scale: 1.0,
+                rotation: 0.0,
+            },
+        )
+    }
+
+    #[test]
+    fn spatial_rollout_plan_returns_none_when_source_has_no_position() {
+        let source = device_key("source");
+        let target = device_key("target");
+        let positions = BTreeMap::from([position(&target, 1.0, 0.0)]);
+
+        let plan = build_spatial_rollout_plan(&source, &[target], &positions, 600);
+
+        assert_eq!(plan, None);
+    }
+
+    #[test]
+    fn spatial_rollout_plan_scales_delays_and_keeps_unpositioned_targets_immediate() {
+        let source = device_key("source");
+        let near = device_key("near");
+        let far = device_key("far");
+        let missing = device_key("missing");
+        let positions = BTreeMap::from([
+            position(&source, 0.0, 0.0),
+            position(&near, 1.0, 0.0),
+            position(&far, 3.0, 0.0),
+        ]);
+
+        let plan = build_spatial_rollout_plan(
+            &source,
+            &[near.clone(), far.clone(), missing.clone()],
+            &positions,
+            900,
+        );
+
+        assert_eq!(
+            plan,
+            Some(SpatialRolloutPlan {
+                immediate_device_keys: vec![missing],
+                delayed_device_keys: vec![(near, 300), (far, 900)],
+            })
+        );
+    }
+
+    #[test]
+    fn spatial_rollout_plan_makes_same_position_targets_immediate() {
+        let source = device_key("source");
+        let target = device_key("target");
+        let positions = BTreeMap::from([position(&source, 2.0, 2.0), position(&target, 2.0, 2.0)]);
+
+        let plan =
+            build_spatial_rollout_plan(&source, std::slice::from_ref(&target), &positions, 500);
+
+        assert_eq!(
+            plan,
+            Some(SpatialRolloutPlan {
+                immediate_device_keys: vec![target],
+                delayed_device_keys: Vec::new(),
+            })
+        );
     }
 }

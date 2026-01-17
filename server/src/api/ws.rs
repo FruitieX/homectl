@@ -1,6 +1,6 @@
 use super::with_state;
+use crate::core::state::AppState;
 use crate::types::websockets::WebSocketRequest;
-use crate::AppState;
 use futures::SinkExt;
 use futures_util::StreamExt;
 use std::sync::{

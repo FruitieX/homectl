@@ -52,6 +52,36 @@ pub struct ActivateSceneDescriptor {
 }
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum RolloutStyle {
+    Spatial,
+}
+
+/// Contains the information needed to activate a scene as an action.
+#[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
+#[ts(export)]
+pub struct ActivateSceneActionDescriptor {
+    pub scene_id: SceneId,
+
+    /// Optionally only apply scene to these devices
+    pub device_keys: Option<Vec<DeviceKey>>,
+
+    /// Optionally only apply scene to these groups
+    pub group_keys: Option<Vec<GroupId>>,
+
+    /// Optional rollout style for the activation.
+    pub rollout: Option<RolloutStyle>,
+
+    /// Origin device key used by rollout styles that need a source location.
+    pub rollout_source_device_key: Option<DeviceKey>,
+
+    /// Total rollout duration in milliseconds.
+    #[ts(type = "number | null")]
+    pub rollout_duration_ms: Option<u64>,
+}
+
+#[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct CycleScenesDescriptor {
     pub scenes: Vec<ActivateSceneDescriptor>,
@@ -62,6 +92,16 @@ pub struct CycleScenesDescriptor {
 
     /// Optionally only detect current scene from these groups
     pub group_keys: Option<Vec<GroupId>>,
+
+    /// Optional rollout style for the activation.
+    pub rollout: Option<RolloutStyle>,
+
+    /// Origin device key used by rollout styles that need a source location.
+    pub rollout_source_device_key: Option<DeviceKey>,
+
+    /// Total rollout duration in milliseconds.
+    #[ts(type = "number | null")]
+    pub rollout_duration_ms: Option<u64>,
 }
 
 #[derive(TS, Clone, Deserialize, Debug, Serialize, Eq, PartialEq, Hash)]

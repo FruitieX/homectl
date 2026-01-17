@@ -15,7 +15,7 @@ use crate::types::{
     group::{FlattenedGroupsConfig, GroupId},
     integration::{CustomActionDescriptor, IntegrationActionPayload, IntegrationId},
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
-    scene::{ActivateSceneDescriptor, FlattenedScenesConfig, SceneDeviceConfig, SceneId},
+    scene::{ActivateSceneActionDescriptor, FlattenedScenesConfig, SceneDeviceConfig, SceneId},
 };
 
 use super::{
@@ -327,10 +327,13 @@ pub fn eval_action_expr(
                     Some(group_ids).transpose()
                 })?;
 
-                Action::ActivateScene(ActivateSceneDescriptor {
+                Action::ActivateScene(ActivateSceneActionDescriptor {
                     scene_id,
                     device_keys: None,
                     group_keys,
+                    rollout: None,
+                    rollout_source_device_key: None,
+                    rollout_duration_ms: None,
                 })
             }
             EvalExprAction::Custom(integration_id, payload) => {
@@ -367,10 +370,13 @@ pub fn eval_action_expr(
 
         if let Some(scene_id) = scene_id {
             event_tx.send(Event::Action(Action::ActivateScene(
-                ActivateSceneDescriptor {
+                ActivateSceneActionDescriptor {
                     scene_id,
                     device_keys: Some(vec![device.get_device_key()]),
                     group_keys: None,
+                    rollout: None,
+                    rollout_source_device_key: None,
+                    rollout_duration_ms: None,
                 },
             )));
         }

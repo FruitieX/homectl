@@ -12,37 +12,90 @@ macro_attr! {
     pub struct RoutineId(pub String);
 }
 
-#[derive(Clone, Deserialize, Debug)]
+/// Determines how a rule triggers in response to state changes.
+#[derive(TS, Clone, Debug, Deserialize, Serialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum TriggerMode {
+    /// Trigger on every state update that matches, even if the value is the same.
+    /// The rule only triggers if the device is the source of the current event.
+    /// This is the default for sensor rules (button presses).
+    #[default]
+    Pulse,
+
+    /// Trigger only when the state transitions from non-matching to matching.
+    /// Unlike pulse, this won't re-trigger if the same value is sent again.
+    Edge,
+
+    /// Trigger while the state matches (current behavior).
+    /// The routine fires on transition from not-triggered to triggered.
+    Level,
+}
+
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct SensorRule {
     pub state: SensorDevice,
 
+    /// How this rule should trigger. Defaults to `pulse` for sensors.
+    #[serde(default)]
+    pub trigger_mode: TriggerMode,
+
     #[serde(flatten)]
+    #[ts(skip)]
     pub device_ref: DeviceRef,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct DeviceRule {
     pub power: Option<bool>,
     pub scene: Option<SceneId>,
 
+    /// How this rule should trigger. Defaults to `level` for device rules.
+    #[serde(default = "default_level_trigger_mode")]
+    pub trigger_mode: TriggerMode,
+
     #[serde(flatten)]
+    #[ts(skip)]
     pub device_ref: DeviceRef,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+fn default_level_trigger_mode() -> TriggerMode {
+    TriggerMode::Level
+}
+
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct GroupRule {
     pub group_id: GroupId,
     pub power: Option<bool>,
     pub scene: Option<SceneId>,
+
+    /// How this rule should trigger. Defaults to `level` for group rules.
+    #[serde(default = "default_level_trigger_mode")]
+    pub trigger_mode: TriggerMode,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Debug)]
+#[ts(export)]
 pub struct AnyRule {
+    #[ts(skip)]
     pub any: Rules,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+/// A JavaScript-based rule that evaluates a script returning boolean
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
+pub struct ScriptRule {
+    /// JavaScript code that should return a boolean value.
+    /// Has access to `devices` and `groups` global objects.
+    pub script: String,
+}
+
+#[derive(TS, Clone, Deserialize, Debug)]
 #[serde(untagged)]
+#[ts(export)]
 pub enum Rule {
     /// Match fields on individual sensors.
     Sensor(SensorRule),
@@ -58,15 +111,22 @@ pub enum Rule {
     /// one of the contained rules need to match.
     Any(AnyRule),
 
-    /// Evaluates given expression.
+    /// Evaluates given expression (legacy evalexpr).
+    #[ts(skip)]
     EvalExpr(evalexpr::Node),
+
+    /// Evaluates JavaScript script that returns boolean.
+    /// The script has access to `devices` and `groups` globals.
+    Script(ScriptRule),
 }
 
 pub type Rules = Vec<Rule>;
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Debug)]
+#[ts(export)]
 pub struct Routine {
     pub name: String,
+    #[ts(skip)]
     pub rules: Rules,
     pub actions: Actions,
 }

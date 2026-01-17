@@ -33,6 +33,21 @@ pub enum Event {
 
         /// Whether to skip sending [Event::SetExternalState] as a result of this state update.
         skip_external_update: Option<bool>,
+
+        /// Whether to skip persisting the device state to DB as a result of this state update.
+        skip_db_update: Option<bool>,
+    },
+
+    /// Applies a fully resolved device state without re-evaluating scenes or
+    /// creating scene overrides.
+    ApplyDeviceState {
+        device: Device,
+
+        /// Whether to skip sending [Event::SetExternalState] as a result of this state update.
+        skip_external_update: Option<bool>,
+
+        /// Whether to skip persisting the device state to DB as a result of this state update.
+        skip_db_update: Option<bool>,
     },
 
     /// Wait for a bit for devices to come online before starting up.

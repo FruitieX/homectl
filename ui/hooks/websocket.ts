@@ -1,5 +1,6 @@
 'use client';
 
+import { RoutineStatuses } from '@/bindings/RoutineStatuses';
 import { StateUpdate } from '@/bindings/StateUpdate';
 import { WebSocketResponse } from '@/bindings/WebSocketResponse';
 import { useEffect, useRef } from 'react';
@@ -81,7 +82,19 @@ export const uiStateAtom = selectAtom(
   },
 );
 
+export const routineStatusesAtom = selectAtom(
+  websocketStateAtom,
+  (state) => state?.routine_statuses,
+  (a, b) => {
+    return deepEq(a, b);
+  },
+);
+
 export const useUiState = <T>(key: string): T | undefined => {
   const state = useAtomValue(uiStateAtom);
   return state ? (state[key] as T) : undefined;
+};
+
+export const useRoutineStatuses = (): RoutineStatuses | undefined => {
+  return useAtomValue(routineStatusesAtom);
 };

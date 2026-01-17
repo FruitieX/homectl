@@ -32,13 +32,11 @@ pub struct Random {
 impl Integration for Random {
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        config: &serde_json::Value,
         _cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self> {
-        let config: RandomConfig = config
-            .clone()
-            .try_deserialize()
+        let config: RandomConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Random integration")?;
 
         Ok(Random {

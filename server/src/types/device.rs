@@ -357,13 +357,6 @@ fn cmp_sensor_states(sensor: &SensorDevice, previous: &SensorDevice) -> bool {
     sensor == previous
 }
 
-pub struct DeviceRow {
-    pub device_id: String,
-    pub name: String,
-    pub integration_id: String,
-    pub state: sqlx::types::Json<DeviceData>,
-}
-
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[ts(export)]
 pub struct Device {
@@ -379,18 +372,6 @@ pub struct Device {
 impl Display for Device {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}/{} [{}]", self.integration_id, self.name, self.data)
-    }
-}
-
-impl From<DeviceRow> for Device {
-    fn from(row: DeviceRow) -> Self {
-        Device {
-            id: row.device_id.into(),
-            name: row.name,
-            integration_id: row.integration_id.into(),
-            data: row.state.0,
-            raw: None,
-        }
     }
 }
 

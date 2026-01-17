@@ -332,6 +332,40 @@ actions = [
 ]
 ```
 
+### Add a spatial rollout to scene actions:
+
+This uses the saved floorplan positions for the source device and each target
+device. `rollout_duration_ms` is the total time it takes for the effect to
+reach the farthest positioned target.
+
+```
+[routines.entryway_wave]
+name = "Entryway wave"
+rules = [
+  { integration_id = "hue", name = "Entryway switch button 1", state = { value = true } }
+]
+actions = [
+  {
+    action = "ActivateScene",
+    scene_id = "normal_downstairs",
+    rollout = "spatial",
+    rollout_source_device_key = "hue/entryway_switch",
+    rollout_duration_ms = 1500,
+  },
+]
+```
+
+`CycleScenes` supports the same rollout fields:
+
+```
+{ action = "CycleScenes", scenes = [ { scene_id = "normal" }, { scene_id = "bright" } ], rollout = "spatial", rollout_source_device_key = "hue/entryway_switch", rollout_duration_ms = 1500 }
+```
+
+Currently `spatial` is the only supported rollout style. If the source device
+has no saved position, if a target device has no saved position, or if
+`rollout_duration_ms` is `0`, the affected device changes are applied
+immediately.
+
 ### Make a light switch dim/brighten lights:
 
 ```

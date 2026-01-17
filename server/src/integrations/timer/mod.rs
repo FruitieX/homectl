@@ -31,13 +31,11 @@ pub struct Timer {
 impl Integration for Timer {
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        config: &serde_json::Value,
         _cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self> {
-        let config: TimerConfig = config
-            .clone()
-            .try_deserialize()
+        let config: TimerConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Timer integration")?;
 
         Ok(Timer {

@@ -2,6 +2,7 @@
 import type { ActivateSceneDescriptor } from "./ActivateSceneDescriptor";
 import type { DeviceKey } from "./DeviceKey";
 import type { GroupId } from "./GroupId";
+import type { RolloutStyle } from "./RolloutStyle";
 
 export type CycleScenesDescriptor = { scenes: Array<ActivateSceneDescriptor>, nowrap: boolean | null, 
 /**
@@ -11,4 +12,16 @@ device_keys: Array<DeviceKey> | null,
 /**
  * Optionally only detect current scene from these groups
  */
-group_keys: Array<GroupId> | null, };
+group_keys: Array<GroupId> | null, 
+/**
+ * Optional rollout style for the activation.
+ */
+rollout: RolloutStyle | null, 
+/**
+ * Origin device key used by rollout styles that need a source location.
+ */
+rollout_source_device_key: DeviceKey | null, 
+/**
+ * Total rollout duration in milliseconds.
+ */
+rollout_duration_ms: number | null, };

@@ -3,6 +3,7 @@
 # Global tooling/env
 .direnv/
 .envrc
+.moon/cache/
 .env*
 !.env*.example
 .vscode/
@@ -41,3 +42,10 @@ ui/bindings/generated/
 
 # Misc
 .idea/
+
+# Database / configs
+*.db
+*.db-shm
+*.db-wal
+*.toml
+*.toml.bak

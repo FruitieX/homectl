@@ -9,7 +9,7 @@ use crate::types::{
     event::*,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
-    scene::{ActivateSceneDescriptor, CycleScenesDescriptor},
+    scene::{ActivateSceneActionDescriptor, CycleScenesDescriptor},
     ui::UiActionDescriptor,
 };
 
@@ -39,6 +39,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .expr
                 .invalidate(state.devices.get_state(), &state.groups, &state.scenes);
+
+            state.refresh_routine_statuses();
+            state.schedule_ws_broadcast();
 
             let device_count = state.devices.get_state().0.len();
             info!("Startup completed, discovered {device_count} devices");
@@ -87,6 +90,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     old_state,
                     new_state,
                     old,
+                    new,
                     &state.devices,
                     &state.groups,
                     &state.expr,
@@ -98,6 +102,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
         Event::SetInternalState {
             device,
             skip_external_update,
+            skip_db_update,
         } => {
             let has_scene_override = state.scenes.has_override(device);
             if has_scene_override {
@@ -111,9 +116,11 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
 
             let device = device.set_scene(device.get_scene_id().as_ref(), &state.scenes);
 
-            state
-                .devices
-                .set_state(&device, skip_external_update.unwrap_or_default(), true);
+            state.devices.set_state(
+                &device,
+                skip_external_update.unwrap_or_default(),
+                skip_db_update.unwrap_or(true),
+            );
         }
         Event::SetExternalState { device } => {
             let device = device.color_to_preferred_mode();
@@ -122,6 +129,17 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 .integrations
                 .set_integration_device_state(device)
                 .await?;
+        }
+        Event::ApplyDeviceState {
+            device,
+            skip_external_update,
+            skip_db_update,
+        } => {
+            state.devices.set_state(
+                device,
+                skip_external_update.unwrap_or_default(),
+                skip_db_update.unwrap_or_default(),
+            );
         }
         Event::DbStoreScene { scene_id, config } => {
             if let Err(e) = db_store_scene(scene_id, config).await {
@@ -134,6 +152,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
+            state.refresh_routine_statuses();
             state.schedule_ws_broadcast();
         }
         Event::DbDeleteScene { scene_id } => {
@@ -147,6 +166,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
+            state.refresh_routine_statuses();
             state.schedule_ws_broadcast();
         }
         Event::DbEditScene { scene_id, name } => {
@@ -160,12 +180,16 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
+            state.refresh_routine_statuses();
             state.schedule_ws_broadcast();
         }
-        Event::Action(Action::ActivateScene(ActivateSceneDescriptor {
+        Event::Action(Action::ActivateScene(ActivateSceneActionDescriptor {
             scene_id,
             device_keys,
             group_keys,
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
         })) => {
             let eval_context = state.expr.get_context();
             state
@@ -174,6 +198,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     scene_id,
                     device_keys,
                     group_keys,
+                    rollout,
+                    rollout_source_device_key,
+                    rollout_duration_ms,
                     &state.groups,
                     &state.scenes,
                     eval_context,
@@ -185,6 +212,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             nowrap,
             group_keys,
             device_keys,
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
         })) => {
             let eval_context = state.expr.get_context();
             state
@@ -195,6 +225,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     &state.groups,
                     device_keys,
                     group_keys,
+                    rollout,
+                    rollout_source_device_key,
+                    rollout_duration_ms,
                     &state.scenes,
                     eval_context,
                 )
@@ -228,6 +261,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.event_tx.send(Event::SetInternalState {
                 device: device.clone(),
                 skip_external_update: None,
+                skip_db_update: None,
             });
         }
         Event::Action(Action::ToggleDeviceOverride {
@@ -251,6 +285,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state
                 .scenes
                 .force_invalidate(&state.devices, &state.groups, state.expr.get_context());
+            state.refresh_routine_statuses();
             state.schedule_ws_broadcast();
         }
         Event::Action(Action::EvalExpr(expr)) => {

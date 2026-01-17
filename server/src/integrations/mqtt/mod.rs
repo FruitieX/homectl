@@ -75,13 +75,11 @@ pub struct CustomMqttAction {
 impl Integration for Mqtt {
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        config: &serde_json::Value,
         cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self> {
-        let config = config
-            .clone()
-            .try_deserialize()
+        let config: MqttConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Mqtt integration")?;
 
         Ok(Mqtt {
@@ -164,7 +162,6 @@ impl Integration for Mqtt {
 
         Ok(())
     }
-
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let client = self
             .client

@@ -1,0 +1,64 @@
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+# Use system platform since toolchains are provided by the Nix devShell
+platform: 'system'
+
+tasks:
+  dev:
+    command: 'pnpm dev'
+    env:
+      API_ENDPOINT: 'http://localhost:45289'
+      WS_ENDPOINT: 'ws://localhost:45289/ws'
+    local: true
+    options:
+      persistent: true
+
+  build:
+    command: 'pnpm build'
+    inputs:
+      - 'app/**/*'
+      - 'hooks/**/*'
+      - 'lib/**/*'
+      - 'ui/**/*'
+      - 'utils/**/*'
+      - 'types/**/*'
+      - 'bindings/**/*'
+      - 'styles/**/*'
+      - 'package.json'
+      - 'tsconfig.json'
+      - 'next.config.mjs'
+    options:
+      runInCI: true
+
+  lint:
+    command: 'pnpm lint'
+    inputs:
+      - 'app/**/*'
+      - 'hooks/**/*'
+      - 'lib/**/*'
+      - 'ui/**/*'
+      - 'utils/**/*'
+      - 'types/**/*'
+      - 'package.json'
+    options:
+      runInCI: true
+
+  typecheck:
+    command: 'pnpm tsc'
+    inputs:
+      - 'app/**/*'
+      - 'hooks/**/*'
+      - 'lib/**/*'
+      - 'ui/**/*'
+      - 'utils/**/*'
+      - 'types/**/*'
+      - 'bindings/**/*'
+      - 'tsconfig.json'
+    options:
+      runInCI: true
+
+  install:
+    command: 'pnpm install'
+    inputs:
+      - 'package.json'
+      - 'pnpm-lock.yaml'

@@ -1,6 +1,6 @@
 'use client';
 
-import { Config } from 'app/config/route';
+import { Config } from '@/types/appConfig';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useState } from 'react';
 
@@ -12,7 +12,7 @@ export const useProvideAppConfig = () => {
 
   useEffect(() => {
     const performFetch = async () => {
-      const res = await fetch('/config');
+      const res = await fetch('/api/config');
       const json = await res.json();
       setConfig(json);
       setLoaded(true);

@@ -1,165 +1,217 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
-use super::{get_db_connection, is_db_available};
-use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRow};
-use crate::types::scene::{SceneConfig, SceneId};
-use crate::types::scene::{SceneDevicesConfig, SceneOverridesConfig, ScenesConfig};
+use super::get_db_connection;
+use crate::types::device::{Device, DeviceData, DeviceKey};
+use crate::types::group::GroupId;
+use crate::types::integration::IntegrationId;
+use crate::types::scene::{
+    SceneConfig, SceneDeviceConfig, SceneDevicesConfig, SceneDevicesSearchConfig,
+    SceneGroupsConfig, SceneId, SceneOverridesConfig, ScenesConfig,
+};
 use color_eyre::Result;
-use sqlx::types::Json;
 
 pub async fn db_update_device(device: &Device) -> Result<Device> {
-    if !is_db_available() {
-        // No DB available, just return the device unchanged
-        return Ok(device.clone());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    let row = sqlx::query_as!(
-        DeviceRow,
-        r#"
-            insert into devices (integration_id, device_id, name, state)
-            values ($1, $2, $3, $4)
+    let state_str = serde_json::to_string(&device.data)?;
 
-            on conflict (integration_id, device_id)
-            do update set
-                name = excluded.name,
-                state = excluded.state
-
-            returning
-                integration_id,
-                device_id,
-                name,
-                state as "state: Json<DeviceData>"
-        "#,
-        &device.integration_id.to_string(),
-        &device.id.to_string(),
-        &device.name,
-        Json(device.data.clone()) as _
+    sqlx::query(
+        "INSERT INTO devices (integration_id, device_id, name, state) \
+         VALUES (?, ?, ?, ?) \
+         ON CONFLICT (integration_id, device_id) DO UPDATE SET \
+             name = excluded.name, state = excluded.state",
     )
-    .fetch_one(db)
+    .bind(&device.integration_id.to_string())
+    .bind(&device.id.to_string())
+    .bind(&device.name)
+    .bind(&state_str)
+    .execute(db)
     .await?;
 
-    let device = row.into();
+    // Re-fetch to get the full row
+    let row: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT integration_id, device_id, name, state FROM devices \
+         WHERE integration_id = ? AND device_id = ?",
+    )
+    .bind(&device.integration_id.to_string())
+    .bind(&device.id.to_string())
+    .fetch_optional(db)
+    .await?;
 
-    Ok(device)
+    match row {
+        Some((integration_id, device_id, name, state)) => {
+            let data: DeviceData = serde_json::from_str(&state)?;
+            Ok(Device {
+                id: device_id.into(),
+                integration_id: integration_id.into(),
+                name,
+                data,
+                raw: None,
+            })
+        }
+        None => Ok(device.clone()),
+    }
 }
 
 #[allow(dead_code)]
 pub async fn db_find_device(key: &DeviceKey) -> Result<Option<Device>> {
-    if !is_db_available() {
-        return Ok(None);
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    let row_opt = sqlx::query_as!(
-        DeviceRow,
-        r#"
-            select
-                integration_id,
-                device_id,
-                name,
-                state as "state: Json<DeviceData>"
-            from devices
-            where integration_id = $1
-              and device_id = $2
-        "#,
-        &key.integration_id.to_string(),
-        &key.device_id.to_string()
+    let row: Option<(String, String, String, String)> = sqlx::query_as(
+        "SELECT integration_id, device_id, name, state FROM devices \
+         WHERE integration_id = ? AND device_id = ?",
     )
+    .bind(&key.integration_id.to_string())
+    .bind(&key.device_id.to_string())
     .fetch_optional(db)
     .await?;
 
-    Ok(row_opt.map(|row| row.into()))
+    Ok(row.and_then(|(integration_id, device_id, name, state)| {
+        let data: DeviceData = match serde_json::from_str(&state) {
+            Ok(d) => d,
+            Err(e) => {
+                warn!("Failed to parse device state: {e}");
+                return None;
+            }
+        };
+        Some(Device {
+            id: device_id.into(),
+            integration_id: integration_id.into(),
+            name,
+            data,
+            raw: None,
+        })
+    }))
 }
 
 pub async fn db_get_devices() -> Result<HashMap<DeviceKey, Device>> {
-    if !is_db_available() {
-        return Ok(Default::default());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    let result = sqlx::query!(
-        r#"
-            select
-                integration_id,
-                device_id,
-                name,
-                state as "state: Json<DeviceData>"
-            from devices
-        "#
-    )
-    .fetch_all(db)
-    .await?;
+    let rows: Vec<(String, String, String, String)> =
+        sqlx::query_as("SELECT integration_id, device_id, name, state FROM devices")
+            .fetch_all(db)
+            .await?;
 
-    Ok(result
+    Ok(rows
         .into_iter()
-        .map(|row| {
-            let key = DeviceKey::new(row.integration_id.into(), row.device_id.into());
+        .filter_map(|(integration_id, device_id, name, state)| {
+            let key = DeviceKey::new(integration_id.clone().into(), device_id.clone().into());
+            let data: DeviceData = match serde_json::from_str(&state) {
+                Ok(d) => d,
+                Err(e) => {
+                    warn!("Failed to parse device state for {integration_id}/{device_id}: {e}");
+                    return None;
+                }
+            };
             let device = Device {
-                id: key.device_id.clone(),
-                integration_id: key.integration_id.clone(),
-                name: row.name,
-                data: row.state.0,
+                id: device_id.into(),
+                integration_id: integration_id.into(),
+                name,
+                data,
                 raw: None,
             };
-
-            (key, device)
+            Some((key, device))
         })
         .collect())
 }
 
 pub async fn db_get_scenes() -> Result<ScenesConfig> {
-    if !is_db_available() {
-        return Ok(Default::default());
+    let db = get_db_connection()?;
+
+    let scene_rows: Vec<(String, String, Option<bool>, Option<String>)> =
+        sqlx::query_as("SELECT id, name, hidden, script FROM scenes")
+            .fetch_all(db)
+            .await?;
+
+    let mut scenes = ScenesConfig::new();
+
+    for (id, name, hidden, _script) in scene_rows {
+        let device_states: Vec<(String, String)> =
+            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = ?")
+                .bind(&id)
+                .fetch_all(db)
+                .await
+                .unwrap_or_default();
+
+        let group_states: Vec<(String, String)> =
+            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = ?")
+                .bind(&id)
+                .fetch_all(db)
+                .await
+                .unwrap_or_default();
+
+        // Convert device states to SceneDevicesSearchConfig
+        let devices = if device_states.is_empty() {
+            None
+        } else {
+            let mut devices_map: BTreeMap<IntegrationId, BTreeMap<String, SceneDeviceConfig>> =
+                BTreeMap::new();
+            for (device_key, config_json) in &device_states {
+                if let Some((integration_id, device_name)) = device_key.split_once('/') {
+                    match serde_json::from_str::<SceneDeviceConfig>(config_json) {
+                        Ok(config) => {
+                            devices_map
+                                .entry(IntegrationId::from(integration_id.to_string()))
+                                .or_default()
+                                .insert(device_name.to_string(), config);
+                        }
+                        Err(e) => {
+                            warn!(
+                                "Failed to parse scene device config for {}: {e}",
+                                device_key
+                            );
+                        }
+                    }
+                }
+            }
+            Some(SceneDevicesSearchConfig(devices_map))
+        };
+
+        // Convert group states to SceneGroupsConfig
+        let groups = if group_states.is_empty() {
+            None
+        } else {
+            let mut groups_map: BTreeMap<GroupId, SceneDeviceConfig> = BTreeMap::new();
+            for (group_id, config_json) in &group_states {
+                match serde_json::from_str::<SceneDeviceConfig>(config_json) {
+                    Ok(config) => {
+                        groups_map.insert(GroupId(group_id.clone()), config);
+                    }
+                    Err(e) => {
+                        warn!("Failed to parse scene group config for {}: {e}", group_id);
+                    }
+                }
+            }
+            Some(SceneGroupsConfig(groups_map))
+        };
+
+        let config = SceneConfig {
+            name,
+            hidden,
+            devices,
+            groups,
+            expr: None,
+        };
+
+        scenes.insert(SceneId::new(id), config);
     }
-    let db = get_db_connection().await?;
-
-    let result = sqlx::query!(
-        r#"
-            select
-                scene_id,
-                config as "config: Json<SceneConfig>"
-
-            from scenes
-        "#
-    )
-    .fetch_all(db)
-    .await;
-
-    if let Err(err) = &result {
-        error!("Error fetching scenes from DB: {err:?}");
-    }
-
-    let scenes = result?
-        .into_iter()
-        .map(|row| (SceneId::new(row.scene_id), row.config.0))
-        .collect();
 
     Ok(scenes)
 }
 
 pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<()> {
-    if !is_db_available() {
-        warn!(
-            "DB not available, skipping store_scene for {scene}",
-            scene = scene_id
-        );
-        return Ok(());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    sqlx::query!(
-        r#"
-            insert into scenes (scene_id, config)
-            values ($1, $2)
-
-            on conflict (scene_id)
-            do update set
-                config = excluded.config
-        "#,
-        scene_id.to_string(),
-        Json(config) as _
+    sqlx::query(
+        "INSERT INTO scenes (id, name, hidden, updated_at) \
+         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+         ON CONFLICT (id) DO UPDATE SET \
+             name = excluded.name, hidden = excluded.hidden, \
+             updated_at = CURRENT_TIMESTAMP",
     )
+    .bind(&scene_id.to_string())
+    .bind(&config.name)
+    .bind(config.hidden)
     .execute(db)
     .await?;
 
@@ -170,27 +222,16 @@ pub async fn db_store_scene_overrides(
     scene_id: &SceneId,
     overrides: &SceneDevicesConfig,
 ) -> Result<()> {
-    if !is_db_available() {
-        warn!(
-            "DB not available, skipping store_scene_overrides for {scene}",
-            scene = scene_id
-        );
-        return Ok(());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    sqlx::query!(
-        r#"
-            insert into scene_overrides (scene_id, overrides)
-            values ($1, $2)
+    let overrides_str = serde_json::to_string(overrides)?;
 
-            on conflict (scene_id)
-            do update set
-                overrides = excluded.overrides
-        "#,
-        scene_id.to_string(),
-        Json(overrides) as _
+    sqlx::query(
+        "INSERT INTO scene_overrides (scene_id, overrides) VALUES (?, ?) \
+         ON CONFLICT (scene_id) DO UPDATE SET overrides = excluded.overrides",
     )
+    .bind(&scene_id.to_string())
+    .bind(&overrides_str)
     .execute(db)
     .await?;
 
@@ -198,97 +239,56 @@ pub async fn db_store_scene_overrides(
 }
 
 pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
-    if !is_db_available() {
-        return Ok(Default::default());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    let result = sqlx::query!(
-        r#"
-            select
-                scene_id,
-                overrides as "overrides: Json<SceneDevicesConfig>"
-            from scene_overrides
-        "#
-    )
-    .fetch_all(db)
-    .await?;
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT scene_id, overrides FROM scene_overrides")
+            .fetch_all(db)
+            .await?;
 
-    Ok(result
+    Ok(rows
         .into_iter()
-        .map(|row| (SceneId::new(row.scene_id), row.overrides.0))
+        .filter_map(|(scene_id, overrides)| {
+            let overrides: SceneDevicesConfig = serde_json::from_str(&overrides).ok()?;
+            Some((SceneId::new(scene_id), overrides))
+        })
         .collect())
 }
 
 pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
-    if !is_db_available() {
-        warn!(
-            "DB not available, skipping delete_scene for {scene}",
-            scene = scene_id
-        );
-        return Ok(());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    sqlx::query!(
-        r#"
-            delete from scenes
-            where scene_id = $1
-        "#,
-        scene_id.to_string(),
-    )
-    .execute(db)
-    .await?;
+    sqlx::query("DELETE FROM scenes WHERE id = ?")
+        .bind(&scene_id.to_string())
+        .execute(db)
+        .await?;
 
     Ok(())
 }
 
 pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
-    if !is_db_available() {
-        warn!(
-            "DB not available, skipping edit_scene for {scene}",
-            scene = scene_id
-        );
-        return Ok(());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    sqlx::query!(
-        r#"
-            update scenes
-            set
-                scene_id = $2,
-                config = config::jsonb || format('{"name":"%s"}', $2::text)::jsonb
-            where scene_id = $1;
-        "#,
-        scene_id.to_string(),
-        name
-    )
-    .execute(db)
-    .await?;
+    sqlx::query("UPDATE scenes SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(name)
+        .bind(&scene_id.to_string())
+        .execute(db)
+        .await?;
 
     Ok(())
 }
 
 pub async fn db_store_ui_state(key: &str, value: &serde_json::Value) -> Result<()> {
-    if !is_db_available() {
-        warn!("DB not available, skipping store_ui_state for key {key}");
-        return Ok(());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    sqlx::query!(
-        r#"
-            insert into ui_state (key, value)
-            values ($1, $2)
+    let value_str = serde_json::to_string(value)?;
 
-            on conflict (key)
-            do update set
-                value = excluded.value
-        "#,
-        key,
-        Json(value) as _
+    sqlx::query(
+        "INSERT INTO ui_state (key, value) VALUES (?, ?) \
+         ON CONFLICT (key) DO UPDATE SET value = excluded.value",
     )
+    .bind(key)
+    .bind(&value_str)
     .execute(db)
     .await?;
 
@@ -296,24 +296,17 @@ pub async fn db_store_ui_state(key: &str, value: &serde_json::Value) -> Result<(
 }
 
 pub async fn db_get_ui_state() -> Result<HashMap<String, serde_json::Value>> {
-    if !is_db_available() {
-        return Ok(Default::default());
-    }
-    let db = get_db_connection().await?;
+    let db = get_db_connection()?;
 
-    let result = sqlx::query!(
-        r#"
-            select
-                key,
-                value as "value: Json<serde_json::Value>"
-            from ui_state
-        "#
-    )
-    .fetch_all(db)
-    .await?;
+    let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM ui_state")
+        .fetch_all(db)
+        .await?;
 
-    Ok(result
+    Ok(rows
         .into_iter()
-        .map(|row| (row.key, row.value.0))
+        .filter_map(|(key, value)| {
+            let value: serde_json::Value = serde_json::from_str(&value).ok()?;
+            Some((key, value))
+        })
         .collect())
 }

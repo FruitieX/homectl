@@ -35,13 +35,11 @@ pub struct Dummy {
 impl Integration for Dummy {
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        config: &serde_json::Value,
         _cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self> {
-        let config = config
-            .clone()
-            .try_deserialize()
+        let config: DummyConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Dummy integration")?;
 
         Ok(Dummy {

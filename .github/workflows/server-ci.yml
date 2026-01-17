@@ -5,10 +5,16 @@ on:
     branches: ["main"]
     paths:
       - 'server/**'
+      - 'prod-config.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/server-ci.yml'
   pull_request:
     paths:
       - 'server/**'
+      - 'prod-config.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
       - '.github/workflows/server-ci.yml'
   workflow_dispatch: {}
 
@@ -30,43 +36,15 @@ jobs:
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
       - run: cargo check
 
-  sqlx:
-    name: SQLx
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18@sha256:bfe50b2b0ddd9b55eadedd066fe24c7c6fe06626185b73358c480ea37868024d
-        env:
-          POSTGRES_PASSWORD: postgres
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost/postgres
-    defaults:
-      run:
-        working-directory: server
-    steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
-      - run: cargo install sqlx-cli --no-default-features --features native-tls,postgres
-      - run: cargo sqlx database setup
-      - run: cargo sqlx prepare --check
-
   test:
     name: Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: server
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: Swatinem/rust-cache@779680da715d629ac1d338a641029a2f4372abb5 # v2
-      - run: cargo test --all --locked
+        with:
+          workspaces: server -> target
+      - run: cargo test --all --locked -- --test-threads=1
 
   fmt:
     name: Rustfmt
@@ -93,7 +71,7 @@ jobs:
   build-image:
     name: Build & (optionally) push image
     runs-on: ubuntu-latest
-    needs: [check, sqlx, test, fmt, clippy]
+    needs: [check, test, fmt, clippy]
     permissions:
       packages: write
       contents: read

@@ -12,7 +12,7 @@
 ## Setup
 
 1. Install dependencies: `npm install`
-2. Make sure `WS_ENDPOINT` in `.env` points to your homectl server
+2. Make sure both `API_ENDPOINT` and `WS_ENDPOINT` in `.env` point to your homectl server (default local port: `45289`)
 3. Build the project with `npm run build`
 
 ### Running in development mode (immediately see your changes)

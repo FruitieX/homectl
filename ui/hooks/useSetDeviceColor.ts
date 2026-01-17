@@ -43,7 +43,11 @@ export const useSetDeviceState = () => {
 
       const msg: WebSocketRequest = {
         EventMessage: {
-          SetInternalState: { device, skip_external_update: false },
+          SetInternalState: {
+            device,
+            skip_external_update: false,
+            skip_db_update: null,
+          },
         },
       };
       ws?.send(JSON.stringify(msg));

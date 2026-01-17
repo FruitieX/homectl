@@ -52,6 +52,7 @@ const UnmemoizedCarHeaterModal = () => {
             SetInternalState: {
               device,
               skip_external_update: false,
+              skip_db_update: null,
             },
           },
         };

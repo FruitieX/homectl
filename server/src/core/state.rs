@@ -10,6 +10,7 @@ use super::{
     scenes::Scenes, ui::Ui, websockets::WebSockets,
 };
 
+use color_eyre::Result;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -32,6 +33,11 @@ pub struct AppState {
 }
 
 impl AppState {
+    pub fn refresh_routine_statuses(&mut self) {
+        self.rules
+            .refresh_runtime_statuses(&self.devices, &self.groups, &self.expr);
+    }
+
     /// Schedule a debounced WebSocket broadcast
     /// Batches multiple state updates within 100ms into a single broadcast
     pub fn schedule_ws_broadcast(&self) {
@@ -62,6 +68,7 @@ impl AppState {
         let devices = self.devices.get_state();
         let scenes = self.scenes.get_flattened_scenes().clone();
         let groups = self.groups.get_flattened_groups().clone();
+        let routine_statuses = self.rules.get_runtime_statuses();
 
         let devices_converted = devices
             .0
@@ -80,9 +87,75 @@ impl AppState {
             devices: DevicesState(devices_converted),
             scenes,
             groups,
+            routine_statuses,
             ui_state,
         });
 
         self.ws.send(user_id, &message).await;
+    }
+
+    /// Hot-reload integrations from the database with full lifecycle support.
+    /// Adds new integrations, removes deleted ones (cleaning up their devices),
+    /// and restarts modified ones.
+    pub async fn reload_integrations(&mut self) -> Result<()> {
+        info!("Hot-reloading integrations from database...");
+        match self.integrations.reload_integrations().await {
+            Ok(removed_ids) => {
+                // Clean up devices belonging to removed integrations
+                for id in &removed_ids {
+                    self.devices.remove_devices_by_integration(id);
+                }
+                if !removed_ids.is_empty() {
+                    self.refresh_routine_statuses();
+                    self.schedule_ws_broadcast();
+                }
+            }
+            Err(e) => {
+                warn!("Failed to reload integrations: {e}");
+            }
+        }
+        Ok(())
+    }
+
+    /// Hot-reload groups from the database
+    pub async fn reload_groups(&mut self) -> Result<()> {
+        info!("Hot-reloading groups from database...");
+        self.groups.reload_from_db().await?;
+
+        self.groups.force_invalidate(&self.devices);
+        self.expr
+            .invalidate(self.devices.get_state(), &self.groups, &self.scenes);
+        self.scenes
+            .force_invalidate(&self.devices, &self.groups, self.expr.get_context());
+        self.expr
+            .invalidate(self.devices.get_state(), &self.groups, &self.scenes);
+
+        self.refresh_routine_statuses();
+        self.schedule_ws_broadcast();
+        Ok(())
+    }
+
+    /// Hot-reload scenes from the database
+    pub async fn reload_scenes(&mut self) -> Result<()> {
+        info!("Hot-reloading scenes from database...");
+        self.scenes.refresh_db_scenes().await;
+
+        self.scenes
+            .force_invalidate(&self.devices, &self.groups, self.expr.get_context());
+        self.expr
+            .invalidate(self.devices.get_state(), &self.groups, &self.scenes);
+
+        self.refresh_routine_statuses();
+        self.schedule_ws_broadcast();
+        Ok(())
+    }
+
+    /// Hot-reload routines from the database
+    pub async fn reload_routines(&mut self) -> Result<()> {
+        info!("Hot-reloading routines from database...");
+        self.rules.reload_from_db().await?;
+        self.refresh_routine_statuses();
+        self.schedule_ws_broadcast();
+        Ok(())
     }
 }
