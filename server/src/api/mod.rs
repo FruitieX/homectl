@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::AppState;
+use crate::core::state::AppState;
 
 mod actions;
 mod devices;

@@ -158,17 +158,24 @@ fn find_active_scene_index(
                 return false;
             };
 
-            scene_devices_config.iter().any(|(device_key, _)| {
-                // only consider devices which are common across all cycled scenes
-                if !scenes_common_devices.contains(device_key) {
-                    return false;
-                }
+            // Filter to only online devices that are common across all scenes,
+            // then check if any of them have this scene active.
+            // Offline devices are skipped (ignored) rather than causing detection to fail.
+            scene_devices_config
+                .iter()
+                .filter_map(|(device_key, _)| {
+                    // only consider devices which are common across all cycled scenes
+                    if !scenes_common_devices.contains(device_key) {
+                        return None;
+                    }
 
-                let device = devices.get_device_by_ref(&device_key.into());
-                let device_scene = device.and_then(|d| d.get_scene_id());
+                    // Skip offline devices - they are ignored for scene detection
+                    let device = devices.get_device_by_ref(&device_key.into())?;
+                    let device_scene = device.get_scene_id();
 
-                device_scene.as_ref() == Some(&sd.scene_id)
-            })
+                    Some(device_scene.as_ref() == Some(&sd.scene_id))
+                })
+                .any(|matches| matches)
         })
 }
 

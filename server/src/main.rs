@@ -1,39 +1,23 @@
 #[macro_use]
-extern crate macro_attr;
-
-#[macro_use]
-extern crate newtype_derive;
-
-#[macro_use]
 extern crate log;
 
-#[macro_use]
-extern crate eyre;
-
-mod api;
-mod core;
-mod db;
-mod integrations;
-mod types;
-mod utils;
-
-use crate::core::expr::Expr;
-use crate::core::{
+use homectl_server::api::init_api;
+use homectl_server::core::expr::Expr;
+use homectl_server::core::{
     devices::Devices, event::handle_event, groups::Groups, integrations::Integrations,
-    routines::Routines, scenes::Scenes, state::AppState,
+    routines::Routines, scenes::Scenes, state::AppState, ui::Ui,
 };
-use crate::types::event::{mk_event_channel, Event};
-use api::init_api;
+use homectl_server::db::init_db;
+use homectl_server::types::event::{mk_event_channel, Event};
+use homectl_server::utils::cli::Cli;
+
 use clap::Parser;
 use color_eyre::Result;
-use core::ui::Ui;
-use db::init_db;
 use eyre::eyre;
 use std::error::Error;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::RwLock;
-use utils::cli::Cli;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -44,7 +28,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     // Attempt connecting to Postgres
     init_db().await;
 
-    let (config, opaque_integrations_configs) = core::config::read_config()?;
+    let (config, opaque_integrations_configs) = homectl_server::core::config::read_config()?;
 
     trace!("Using config:\n    {:#?}", config);
 
