@@ -258,7 +258,9 @@ impl DeviceData {
     pub fn is_state_eq(&self, other: &DeviceData) -> bool {
         match (&self, &other) {
             (DeviceData::Controllable(a), DeviceData::Controllable(b)) => {
-                cmp_device_states(a, &b.state)
+                // Also compare scene_id - if scene changes, state should be considered
+                // different even if visual state (power, color, brightness) is identical
+                a.scene_id == b.scene_id && cmp_device_states(a, &b.state)
             }
             (DeviceData::Sensor(a), DeviceData::Sensor(b)) => cmp_sensor_states(a, b),
             _ => false,
