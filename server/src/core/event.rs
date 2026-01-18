@@ -87,6 +87,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     old_state,
                     new_state,
                     old,
+                    new,
                     &state.devices,
                     &state.groups,
                     &state.expr,

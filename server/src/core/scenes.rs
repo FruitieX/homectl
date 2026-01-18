@@ -155,13 +155,14 @@ fn find_active_scene_index(
         .position(|(sd, scene_devices_config)| {
             // try finding any device in scene_devices_config that has this scene active
             let Some(scene_devices_config) = scene_devices_config else {
+                debug!("Scene {} has no device config", sd.scene_id);
                 return false;
             };
 
             // Filter to only online devices that are common across all scenes,
             // then check if any of them have this scene active.
             // Offline devices are skipped (ignored) rather than causing detection to fail.
-            scene_devices_config
+            let result = scene_devices_config
                 .iter()
                 .filter_map(|(device_key, _)| {
                     // only consider devices which are common across all cycled scenes
@@ -172,10 +173,20 @@ fn find_active_scene_index(
                     // Skip offline devices - they are ignored for scene detection
                     let device = devices.get_device_by_ref(&device_key.into())?;
                     let device_scene = device.get_scene_id();
+                    let matches = device_scene.as_ref() == Some(&sd.scene_id);
 
-                    Some(device_scene.as_ref() == Some(&sd.scene_id))
+                    debug!(
+                        "Checking device {} for scene {}: device_scene={:?}, matches={}",
+                        device_key, sd.scene_id, device_scene, matches
+                    );
+
+                    Some(matches)
                 })
-                .any(|matches| matches)
+                .any(|matches| matches);
+
+            debug!("Scene {} active check result: {}", sd.scene_id, result);
+
+            result
         })
 }
 
@@ -222,11 +233,32 @@ pub fn get_next_cycled_scene(
     // gather a Vec<HashSet<DeviceKey>> of all devices in cycled scenes
     let scene_device_lists = find_scene_device_lists(&scene_devices_configs);
 
+    // Log scene device lists for debugging
+    debug!(
+        "Scene device lists: {:?}",
+        scene_device_lists
+            .iter()
+            .enumerate()
+            .map(|(i, devices)| format!("Scene {}: {} devices", i, devices.len()))
+            .collect::<Vec<_>>()
+    );
+
     // gather devices which exist in all cycled scenes
     let scenes_common_devices = find_scenes_common_devices(scene_device_lists);
 
+    debug!(
+        "Common devices across all scenes: {} devices: {:?}",
+        scenes_common_devices.len(),
+        scenes_common_devices
+    );
+
     let active_scene_index =
         find_active_scene_index(&scene_devices_configs, &scenes_common_devices, devices);
+
+    debug!(
+        "Active scene index: {:?}, cycling to next scene",
+        active_scene_index
+    );
 
     let next_scene = match active_scene_index {
         Some(index) => {
@@ -235,10 +267,23 @@ pub fn get_next_cycled_scene(
             } else {
                 (index + 1) % scene_descriptors.len()
             };
+            debug!(
+                "Current scene index: {}, next scene index: {}",
+                index, next_scene_index
+            );
             scene_descriptors.get(next_scene_index)
         }
-        None => scene_descriptors.first(),
+        None => {
+            debug!("No active scene detected, defaulting to first scene");
+            scene_descriptors.first()
+        }
     }?;
+
+    info!(
+        "Cycling scenes: detected {:?}, next scene: {}",
+        active_scene_index.map(|i| scene_descriptors.get(i).map(|s| s.scene_id.to_string())),
+        next_scene.scene_id
+    );
 
     Some(next_scene.clone())
 }
