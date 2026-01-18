@@ -16,34 +16,20 @@
         targets = [ "x86_64-unknown-linux-gnu" "x86_64-unknown-linux-musl" ];
       };
     in {
-      devShells = {
-        default = pkgs.mkShell {
-          name = "homectl";
-          buildInputs = [
-            rustToolchain
-            pkgs.pkg-config
-            pkgs.postgresql
-            pkgs.openssl
-            pkgs.nodejs
-            pkgs.docker-compose
-          ];
-          shellHook = ''
-            echo "Loaded homectl dev shell (server + ui)"
-          '';
-        };
-        server = pkgs.mkShell {
-          name = "homectl-server";
-            buildInputs = [
-              rustToolchain
-              pkgs.pkg-config
-              pkgs.postgresql
-              pkgs.openssl
-            ];
-        };
-        ui = pkgs.mkShell {
-          name = "homectl-ui";
-          buildInputs = [ pkgs.nodejs ];
-        };
+      devShells.default = pkgs.mkShell {
+        name = "homectl";
+        buildInputs = [
+          rustToolchain
+          pkgs.pkg-config
+          pkgs.postgresql
+          pkgs.openssl
+          pkgs.nodejs
+          pkgs.docker-compose
+          pkgs.hurl
+        ];
+        shellHook = ''
+          echo "Loaded homectl dev shell"
+        '';
       };
     }
   );
