@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM group_devices WHERE group_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9dbea486e438c0f49c08b0605be20bbc33ed48e56b9e84081e60c3bb0f17c8ec"
+}

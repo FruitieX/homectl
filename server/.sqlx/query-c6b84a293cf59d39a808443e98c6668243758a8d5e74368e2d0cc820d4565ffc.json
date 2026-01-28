@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE floorplan\n        SET image_data = $1,\n            image_mime_type = $2,\n            width = $3,\n            height = $4,\n            updated_at = NOW()\n        WHERE id = 1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bytea",
+        "Text",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c6b84a293cf59d39a808443e98c6668243758a8d5e74368e2d0cc820d4565ffc"
+}

@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT child_group_id\n        FROM group_links\n        WHERE parent_group_id = $1\n        ORDER BY sort_order\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "child_group_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "cb5032f4c635d536ff133999abe0fee51eed98a733ba37b8141c8aaacd0009eb"
+}

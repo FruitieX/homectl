@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO scene_device_states (scene_id, device_key, config)\n            VALUES ($1, $2, $3)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1c173ec40fa028e59b7a4e01cf35f9efd4d33bd1e21fe2f42b0cce7b383a6e31"
+}

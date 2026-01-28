@@ -10,6 +10,7 @@ use super::{
     scenes::Scenes, ui::Ui, websockets::WebSockets,
 };
 
+use color_eyre::Result;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -84,5 +85,39 @@ impl AppState {
         });
 
         self.ws.send(user_id, &message).await;
+    }
+
+    /// Hot-reload integrations from the database
+    /// Note: This reloads the integration configs but currently loaded integrations
+    /// will need to be re-initialized to pick up changes.
+    pub async fn reload_integrations(&mut self) -> Result<()> {
+        // TODO: Implement full integration reload from DB
+        // For now this is a placeholder - integrations will be loaded from DB
+        // once the full migration is complete
+        info!("Hot-reloading integrations from database...");
+        Ok(())
+    }
+
+    /// Hot-reload groups from the database
+    pub async fn reload_groups(&mut self) -> Result<()> {
+        info!("Hot-reloading groups from database...");
+        self.groups.reload_from_db().await?;
+        self.schedule_ws_broadcast();
+        Ok(())
+    }
+
+    /// Hot-reload scenes from the database
+    pub async fn reload_scenes(&mut self) -> Result<()> {
+        info!("Hot-reloading scenes from database...");
+        self.scenes.refresh_db_scenes().await;
+        self.schedule_ws_broadcast();
+        Ok(())
+    }
+
+    /// Hot-reload routines from the database
+    pub async fn reload_routines(&mut self) -> Result<()> {
+        info!("Hot-reloading routines from database...");
+        self.rules.reload_from_db().await?;
+        Ok(())
     }
 }

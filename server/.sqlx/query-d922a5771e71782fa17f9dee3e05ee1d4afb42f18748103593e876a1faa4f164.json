@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO device_positions (device_key, x, y, scale, rotation)\n        VALUES ($1, $2, $3, $4, $5)\n        ON CONFLICT (device_key) DO UPDATE SET\n            x = EXCLUDED.x,\n            y = EXCLUDED.y,\n            scale = EXCLUDED.scale,\n            rotation = EXCLUDED.rotation\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Float4",
+        "Float4",
+        "Float4",
+        "Float4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d922a5771e71782fa17f9dee3e05ee1d4afb42f18748103593e876a1faa4f164"
+}

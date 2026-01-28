@@ -1,18 +1,20 @@
+use color_eyre::Result;
 use evalexpr::HashMapContext;
-use eyre::{ContextCompat, Result};
+use eyre::ContextCompat;
 
+use crate::db::config_queries;
 use crate::types::{
     action::Actions,
     device::{Device, DeviceKey, DevicesState, SensorDevice},
     event::{Event, TxEventChannel},
     rule::{
-        AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule, SensorRule,
-        TriggerMode,
+        AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule, ScriptRule,
+        SensorRule, TriggerMode,
     },
 };
 use std::collections::HashSet;
 
-use super::{devices::Devices, expr::Expr, groups::Groups};
+use super::{devices::Devices, expr::Expr, groups::Groups, scripting::ScriptEngine};
 
 #[derive(Clone)]
 pub struct Routines {
@@ -30,6 +32,39 @@ impl Routines {
             event_tx,
             prev_edge_triggered: HashSet::new(),
         }
+    }
+
+    /// Hot-reload routines configuration from the database
+    pub async fn reload_from_db(&mut self) -> Result<()> {
+        let db_routines = config_queries::db_get_routines().await?;
+
+        // Convert DB rows to RoutinesConfig
+        let mut new_config = RoutinesConfig::new();
+        for routine in db_routines {
+            // Skip disabled routines
+            if !routine.enabled {
+                continue;
+            }
+
+            // Parse rules and actions from JSON
+            let rules: Vec<Rule> = serde_json::from_value(routine.rules).unwrap_or_default();
+            let actions: Actions = serde_json::from_value(routine.actions).unwrap_or_default();
+
+            new_config.insert(
+                RoutineId::from(routine.id),
+                Routine {
+                    name: routine.name,
+                    rules,
+                    actions,
+                },
+            );
+        }
+
+        self.config = new_config;
+        // Reset triggered state on reload
+        self.prev_edge_triggered.clear();
+
+        Ok(())
     }
 
     /// An internal state update has occurred, we need to check if any routines
@@ -221,6 +256,19 @@ impl Routines {
             Rule::EvalExpr(expr) => {
                 let result = expr.eval_boolean_with_context(eval_context)?;
                 Ok(result)
+            }
+            Rule::Script(ScriptRule { script }) => {
+                // Evaluate JavaScript script
+                let mut engine = ScriptEngine::new();
+                let device_state = devices.get_state();
+                let flattened_groups = groups.get_flattened_groups();
+                match engine.eval_rule_script(script, device_state, flattened_groups) {
+                    Ok(result) => Ok(result),
+                    Err(e) => {
+                        error!("Script rule evaluation error: {e}");
+                        Ok(false)
+                    }
+                }
             }
         }
     }

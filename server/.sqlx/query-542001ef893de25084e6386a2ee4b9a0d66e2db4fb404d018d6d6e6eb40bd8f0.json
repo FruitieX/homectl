@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO scene_group_states (scene_id, group_id, config)\n            VALUES ($1, $2, $3)\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "542001ef893de25084e6386a2ee4b9a0d66e2db4fb404d018d6d6e6eb40bd8f0"
+}

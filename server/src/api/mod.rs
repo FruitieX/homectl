@@ -3,11 +3,13 @@ use std::sync::Arc;
 use crate::core::state::AppState;
 
 mod actions;
+mod config;
 mod devices;
 mod health;
 mod ws;
 
 use actions::*;
+use config::*;
 use devices::*;
 use health::health;
 
@@ -26,9 +28,11 @@ pub fn with_state(
 
 // Example of warp usage: https://github.com/seanmonstar/warp/blob/master/examples/todos.rs
 pub fn init_api(app_state: &Arc<RwLock<AppState>>, port: u16) -> Result<()> {
-    let api = warp::path("api")
-        .and(warp::path("v1"))
-        .and(devices(app_state).or(actions(app_state)));
+    let api = warp::path("api").and(warp::path("v1")).and(
+        devices(app_state)
+            .or(actions(app_state))
+            .or(config(app_state)),
+    );
 
     let ws = ws(app_state);
     let health = health(app_state);

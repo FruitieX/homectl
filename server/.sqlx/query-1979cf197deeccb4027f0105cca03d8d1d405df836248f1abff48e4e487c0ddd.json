@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, plugin, config, enabled\n        FROM integrations\n        ORDER BY id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "plugin",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "config",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 3,
+        "name": "enabled",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "1979cf197deeccb4027f0105cca03d8d1d405df836248f1abff48e4e487c0ddd"
+}

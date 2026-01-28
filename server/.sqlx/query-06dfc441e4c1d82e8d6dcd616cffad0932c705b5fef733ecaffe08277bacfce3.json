@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        INSERT INTO scenes (id, name, hidden, script, updated_at)\n        VALUES ($1, $2, $3, $4, NOW())\n        ON CONFLICT (id) DO UPDATE SET\n            name = EXCLUDED.name,\n            hidden = EXCLUDED.hidden,\n            script = EXCLUDED.script,\n            updated_at = NOW()\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Bool",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "06dfc441e4c1d82e8d6dcd616cffad0932c705b5fef733ecaffe08277bacfce3"
+}

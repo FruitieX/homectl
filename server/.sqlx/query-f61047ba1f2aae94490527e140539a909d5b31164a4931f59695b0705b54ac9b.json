@@ -1,0 +1,20 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT warmup_time_seconds\n        FROM core_config\n        WHERE id = 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "warmup_time_seconds",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "f61047ba1f2aae94490527e140539a909d5b31164a4931f59695b0705b54ac9b"
+}

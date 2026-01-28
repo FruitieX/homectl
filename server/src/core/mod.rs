@@ -6,6 +6,7 @@ pub mod groups;
 pub mod integrations;
 pub mod routines;
 pub mod scenes;
+pub mod scripting;
 pub mod state;
 pub mod ui;
 pub mod websockets;

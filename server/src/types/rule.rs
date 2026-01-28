@@ -77,6 +77,14 @@ pub struct AnyRule {
     pub any: Rules,
 }
 
+/// A JavaScript-based rule that evaluates a script returning boolean
+#[derive(Clone, Deserialize, Debug)]
+pub struct ScriptRule {
+    /// JavaScript code that should return a boolean value.
+    /// Has access to `devices` and `groups` global objects.
+    pub script: String,
+}
+
 #[derive(Clone, Deserialize, Debug)]
 #[serde(untagged)]
 pub enum Rule {
@@ -94,8 +102,12 @@ pub enum Rule {
     /// one of the contained rules need to match.
     Any(AnyRule),
 
-    /// Evaluates given expression.
+    /// Evaluates given expression (legacy evalexpr).
     EvalExpr(evalexpr::Node),
+
+    /// Evaluates JavaScript script that returns boolean.
+    /// The script has access to `devices` and `groups` globals.
+    Script(ScriptRule),
 }
 
 pub type Rules = Vec<Rule>;

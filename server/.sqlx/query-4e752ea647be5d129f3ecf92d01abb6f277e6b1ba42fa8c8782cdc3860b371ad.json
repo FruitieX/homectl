@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        UPDATE core_config\n        SET warmup_time_seconds = $1,\n            updated_at = NOW()\n        WHERE id = 1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4e752ea647be5d129f3ecf92d01abb6f277e6b1ba42fa8c8782cdc3860b371ad"
+}

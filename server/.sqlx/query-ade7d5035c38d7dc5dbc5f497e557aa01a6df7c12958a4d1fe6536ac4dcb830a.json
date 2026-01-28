@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT image_data, image_mime_type, width, height\n        FROM floorplan\n        WHERE id = 1\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "image_data",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 1,
+        "name": "image_mime_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "width",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 3,
+        "name": "height",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "ade7d5035c38d7dc5dbc5f497e557aa01a6df7c12958a4d1fe6536ac4dcb830a"
+}

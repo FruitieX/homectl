@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE scenes\n            SET name = $2, updated_at = NOW()\n            WHERE id = $1\n        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cd3ba11adb5f9f70501096c5c9f84ef8ac1060c62c8c8c70a30a0df4576dde6e"
+}

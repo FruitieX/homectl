@@ -116,11 +116,8 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
 
     let result = sqlx::query!(
         r#"
-            select
-                scene_id,
-                config as "config: Json<SceneConfig>"
-
-            from scenes
+            SELECT id, name, hidden
+            FROM scenes
         "#
     )
     .fetch_all(db)
@@ -132,7 +129,16 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
 
     let scenes = result?
         .into_iter()
-        .map(|row| (SceneId::new(row.scene_id), row.config.0))
+        .map(|row| {
+            let config = SceneConfig {
+                name: row.name,
+                hidden: row.hidden,
+                devices: None,
+                groups: None,
+                expr: None,
+            };
+            (SceneId::new(row.id), config)
+        })
         .collect();
 
     Ok(scenes)
@@ -150,15 +156,16 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
 
     sqlx::query!(
         r#"
-            insert into scenes (scene_id, config)
-            values ($1, $2)
-
-            on conflict (scene_id)
-            do update set
-                config = excluded.config
+            INSERT INTO scenes (id, name, hidden, updated_at)
+            VALUES ($1, $2, $3, NOW())
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                hidden = EXCLUDED.hidden,
+                updated_at = NOW()
         "#,
         scene_id.to_string(),
-        Json(config) as _
+        config.name,
+        config.hidden
     )
     .execute(db)
     .await?;
@@ -232,8 +239,8 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
 
     sqlx::query!(
         r#"
-            delete from scenes
-            where scene_id = $1
+            DELETE FROM scenes
+            WHERE id = $1
         "#,
         scene_id.to_string(),
     )
@@ -255,11 +262,9 @@ pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
 
     sqlx::query!(
         r#"
-            update scenes
-            set
-                scene_id = $2,
-                config = config::jsonb || format('{"name":"%s"}', $2::text)::jsonb
-            where scene_id = $1;
+            UPDATE scenes
+            SET name = $2, updated_at = NOW()
+            WHERE id = $1
         "#,
         scene_id.to_string(),
         name

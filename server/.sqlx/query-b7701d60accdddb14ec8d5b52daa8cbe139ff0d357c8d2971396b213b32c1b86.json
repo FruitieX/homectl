@@ -1,0 +1,38 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, name, hidden, script\n        FROM scenes\n        ORDER BY name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "hidden",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "script",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "b7701d60accdddb14ec8d5b52daa8cbe139ff0d357c8d2971396b213b32c1b86"
+}

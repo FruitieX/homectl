@@ -5,6 +5,7 @@ use sqlx::{pool::PoolOptions, PgPool};
 use std::{env, time::Duration};
 
 pub mod actions;
+pub mod config_queries;
 
 static DB_CONNECTION: OnceCell<PgPool> = OnceCell::new();
 

@@ -1,9 +1,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use color_eyre::Result;
+
 use crate::{
+    db::config_queries,
     types::{
         device::{Device, DeviceRef, DevicesState},
-        group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupConfig, GroupId, GroupsConfig},
+        group::{
+            FlattenedGroupConfig, FlattenedGroupsConfig, GroupConfig, GroupId, GroupLink,
+            GroupsConfig,
+        },
+        integration::IntegrationId,
     },
     utils::keys_match,
 };
@@ -155,6 +162,61 @@ impl Groups {
             device_refs_by_groups,
             flattened_groups: Default::default(),
         }
+    }
+
+    /// Hot-reload groups configuration from the database
+    pub async fn reload_from_db(&mut self) -> Result<()> {
+        let db_groups = config_queries::db_get_groups().await?;
+
+        // Convert DB rows to GroupsConfig
+        let mut new_config = GroupsConfig::new();
+        for group in db_groups {
+            let devices: Option<Vec<DeviceRef>> = if group.devices.is_empty() {
+                None
+            } else {
+                Some(
+                    group
+                        .devices
+                        .into_iter()
+                        .map(|d| {
+                            DeviceRef::new_with_name(
+                                IntegrationId::from(d.integration_id),
+                                d.device_name,
+                            )
+                        })
+                        .collect(),
+                )
+            };
+
+            let groups: Option<Vec<GroupLink>> = if group.linked_groups.is_empty() {
+                None
+            } else {
+                Some(
+                    group
+                        .linked_groups
+                        .into_iter()
+                        .map(|g| GroupLink {
+                            group_id: GroupId(g),
+                        })
+                        .collect(),
+                )
+            };
+
+            new_config.insert(
+                GroupId(group.id),
+                GroupConfig {
+                    name: group.name,
+                    devices,
+                    groups,
+                    hidden: Some(group.hidden),
+                },
+            );
+        }
+
+        self.config = new_config;
+        self.device_refs_by_groups = mk_device_refs_by_groups(&self.config);
+
+        Ok(())
     }
 
     /// Returns a flattened version of the groups config, with any contained

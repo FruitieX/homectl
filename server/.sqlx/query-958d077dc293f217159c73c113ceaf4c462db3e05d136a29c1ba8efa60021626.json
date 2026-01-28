@@ -1,0 +1,44 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, name, enabled, rules, actions\n        FROM routines\n        ORDER BY name\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "enabled",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "rules",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "actions",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "958d077dc293f217159c73c113ceaf4c462db3e05d136a29c1ba8efa60021626"
+}

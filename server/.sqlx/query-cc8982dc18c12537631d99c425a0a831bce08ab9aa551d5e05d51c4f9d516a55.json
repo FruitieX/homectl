@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE dashboard_layouts\n            SET name = $2, is_default = $3, updated_at = NOW()\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4",
+        "Text",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc8982dc18c12537631d99c425a0a831bce08ab9aa551d5e05d51c4f9d516a55"
+}

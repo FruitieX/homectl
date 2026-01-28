@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT device_key, config\n            FROM scene_device_states\n            WHERE scene_id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "device_key",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "config",
+        "type_info": "Jsonb"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "fba487fb46a223aa982bf5e11a6088faccea10ec1b3759824914b1acd1db70af"
+}
