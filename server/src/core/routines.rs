@@ -45,7 +45,9 @@ impl Routines {
         groups: &Groups,
         expr: &Expr,
     ) {
-        if old.is_some() {
+        // For sensors in pulse mode, we need to process even when the device
+        // already exists and state hasn't changed. Skip only for truly new devices.
+        if old.is_some() || event_source.is_sensor() {
             let event_source_key = event_source.get_device_key();
             let matching_actions = self.find_matching_actions(
                 old_state,
@@ -88,10 +90,9 @@ impl Routines {
         groups: &Groups,
         expr: &Expr,
     ) -> Actions {
-        // if states are equal we can bail out early
-        if old_state == new_state {
-            return vec![];
-        }
+        // Note: We do NOT bail out early when old_state == new_state, because
+        // pulse mode routines need to trigger on every sensor update, even when
+        // the value is the same (e.g., repeated button presses).
 
         let eval_context = expr.get_context();
         let mut triggered_actions = Vec::new();

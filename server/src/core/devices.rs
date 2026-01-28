@@ -38,6 +38,16 @@ impl Devices {
         &self.state
     }
 
+    /// Registers a device in the name lookup map, allowing it to be found by
+    /// DeviceRef::Name references in routine rules.
+    pub fn register_device_name(&mut self, device: &Device) {
+        let device_key = device.get_device_key();
+        self.keys_by_name.insert(
+            (device.integration_id.clone(), device.name.clone()),
+            device_key,
+        );
+    }
+
     pub async fn refresh_db_devices(&mut self, _scenes: &Scenes) {
         let db_devices = db_get_devices().await;
 
@@ -211,11 +221,19 @@ impl Devices {
     /// Sets internal (and possibly external) state for given device
     pub fn set_state(&mut self, device: &Device, skip_external_update: bool, skip_db_update: bool) {
         let device_key = device.get_device_key();
+
+        // Register device in name lookup map for DeviceRef::Name resolution
+        self.register_device_name(device);
+
         let old = self.get_device(&device_key);
 
         let state_eq = old.map(|d| d.is_state_eq(device)).unwrap_or_default();
 
-        if state_eq {
+        // For sensors, we always emit the event even if state is equal.
+        // This is needed for pulse mode routines that trigger on every update,
+        // even when the value is the same (e.g., repeated button presses).
+        // For controllable devices, we skip if state is unchanged.
+        if state_eq && !device.is_sensor() {
             return;
         }
 
