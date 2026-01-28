@@ -12,6 +12,7 @@ use std::{collections::HashMap, fs::File, io::Read};
 #[derive(Deserialize, Debug)]
 pub struct CoreConfig {
     pub warmup_time_seconds: Option<u64>,
+    pub port: Option<u16>,
 }
 
 #[derive(Deserialize, Debug)]

@@ -79,14 +79,14 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let state = Arc::new(RwLock::new(state));
 
-    init_api(&state)?;
+    let port = config.core.as_ref().and_then(|c| c.port).unwrap_or(45289);
+    init_api(&state, port)?;
 
     {
         let state = state.clone();
+        let warmup_time = config.core.as_ref().and_then(|c| c.warmup_time_seconds).unwrap_or(1);
         tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_secs(
-                config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1),
-            ))
+            tokio::time::sleep(Duration::from_secs(warmup_time))
             .await;
             let mut state = state.write().await;
             state.warming_up = false;

@@ -25,7 +25,7 @@ pub fn with_state(
 }
 
 // Example of warp usage: https://github.com/seanmonstar/warp/blob/master/examples/todos.rs
-pub fn init_api(app_state: &Arc<RwLock<AppState>>) -> Result<()> {
+pub fn init_api(app_state: &Arc<RwLock<AppState>>, port: u16) -> Result<()> {
     let api = warp::path("api")
         .and(warp::path("v1"))
         .and(devices(app_state).or(actions(app_state)));
@@ -33,9 +33,10 @@ pub fn init_api(app_state: &Arc<RwLock<AppState>>) -> Result<()> {
     let ws = ws(app_state);
     let health = health(app_state);
 
+    info!("Starting API server on port {}", port);
     tokio::spawn(async move {
         warp::serve(ws.or(api).or(health))
-            .run(([0, 0, 0, 0], 45289))
+            .run(([0, 0, 0, 0], port))
             .await;
     });
 
