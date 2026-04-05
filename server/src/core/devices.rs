@@ -38,6 +38,24 @@ impl Devices {
         &self.state
     }
 
+    /// Remove all devices belonging to a specific integration.
+    pub fn remove_devices_by_integration(&mut self, integration_id: &IntegrationId) {
+        let keys_to_remove: Vec<DeviceKey> = self
+            .state
+            .0
+            .keys()
+            .filter(|k| &k.integration_id == integration_id)
+            .cloned()
+            .collect();
+
+        for key in &keys_to_remove {
+            self.state.0.remove(key);
+        }
+
+        self.keys_by_name
+            .retain(|(iid, _), _| iid != integration_id);
+    }
+
     /// Registers a device in the name lookup map, allowing it to be found by
     /// DeviceRef::Name references in routine rules.
     pub fn register_device_name(&mut self, device: &Device) {

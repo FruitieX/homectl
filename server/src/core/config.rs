@@ -1,13 +1,12 @@
 use crate::types::{
     group::GroupsConfig,
-    integration::{IntegrationId, IntegrationsConfig},
+    integration::IntegrationsConfig,
     rule::RoutinesConfig,
     scene::ScenesConfig,
 };
 use color_eyre::Result;
-use eyre::Context;
 use serde::Deserialize;
-use std::{collections::HashMap, fs::File, io::Read};
+use std::{fs::File, io::Read, path::Path};
 
 #[derive(Deserialize, Debug)]
 pub struct CoreConfig {
@@ -15,8 +14,9 @@ pub struct CoreConfig {
     pub port: Option<u16>,
 }
 
+/// TOML file config structure, used only for importing/seeding the DB.
 #[derive(Deserialize, Debug)]
-pub struct Config {
+pub struct TomlConfig {
     pub core: Option<CoreConfig>,
     pub integrations: Option<IntegrationsConfig>,
     pub scenes: Option<ScenesConfig>,
@@ -24,41 +24,27 @@ pub struct Config {
     pub routines: Option<RoutinesConfig>,
 }
 
-type OpaqueIntegrationsConfigs = HashMap<IntegrationId, config::Value>;
+/// Opaque integration configs: maps integration ID strings to their full
+/// TOML values, which we convert to serde_json::Value for the integration
+/// constructors.
+pub type OpaqueIntegrationsConfigs =
+    std::collections::HashMap<String, toml::Value>;
 
-pub fn read_config() -> Result<(Config, OpaqueIntegrationsConfigs)> {
-    let builder = config::Config::builder();
+/// Full raw TOML config including opaque integrations.
+#[derive(Deserialize, Debug)]
+struct RawTomlConfig {
+    #[serde(default)]
+    integrations: Option<OpaqueIntegrationsConfigs>,
+}
 
-    let root = std::env::current_dir().unwrap();
-    let sample_path = root.join("Settings.toml.example");
+/// Parse a TOML config file into typed config + opaque integration values.
+pub fn parse_toml_file(path: &Path) -> Result<(TomlConfig, OpaqueIntegrationsConfigs)> {
+    let mut file = File::open(path)?;
+    let mut contents = String::new();
+    file.read_to_string(&mut contents)?;
 
-    let path = root.join("Settings.toml");
+    let config: TomlConfig = toml::from_str(&contents)?;
+    let raw: RawTomlConfig = toml::from_str(&contents)?;
 
-    if !path.exists() && std::env::var("SKIP_SAMPLE_CONFIG").is_err() {
-        error!("Settings.toml not found, generating sample configuration.");
-        error!("Set SKIP_SAMPLE_CONFIG environment variable to opt out of this behavior.");
-        std::fs::copy(sample_path, path.clone()).unwrap();
-    }
-
-    let builder = builder.add_source(config::File::with_name("Settings"));
-
-    let settings = builder.build()?;
-
-    // TODO: until https://github.com/mehcode/config-rs/issues/531 is fixed
-    let config = {
-        let mut file = File::open(&path)?;
-        let mut contents = Default::default();
-        file.read_to_string(&mut contents)?;
-        toml::from_str(&contents)?
-    };
-
-    // let config: Config = serde_path_to_error::deserialize(settings.clone()).wrap_err(
-    //     "Failed to deserialize config, compare your config file to Settings.toml.example!",
-    // )?;
-
-    let integrations_config = settings
-        .get::<OpaqueIntegrationsConfigs>("integrations")
-        .wrap_err("Expected to find integrations key in config")?;
-
-    Ok((config, integrations_config))
+    Ok((config, raw.integrations.unwrap_or_default()))
 }

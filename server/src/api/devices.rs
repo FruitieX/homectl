@@ -1,5 +1,7 @@
 use std::{convert::Infallible, sync::Arc};
 
+use percent_encoding::percent_decode_str;
+
 use crate::types::{
     color::ColorMode,
     device::{Device, DeviceId},
@@ -60,7 +62,7 @@ async fn get_devices_impl(
 fn put_device(
     app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path!(DeviceId)
+    warp::path::tail()
         .and(warp::put())
         .and(warp::body::json())
         .and(with_state(app_state))
@@ -68,10 +70,14 @@ fn put_device(
 }
 
 async fn put_device_impl(
-    device_id: DeviceId,
+    tail: warp::path::Tail,
     device: Device,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl warp::Reply, Infallible> {
+    // Decode percent-encoded path segment to get the device ID
+    let decoded = percent_decode_str(tail.as_str()).decode_utf8_lossy();
+    let device_id = DeviceId::new(&decoded);
+
     // Make sure device_id matches with provided device
     if device_id != device.id {
         return Ok(warp::reply::json(&DevicesResponse { devices: vec![] }));

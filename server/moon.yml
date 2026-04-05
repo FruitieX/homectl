@@ -1,0 +1,45 @@
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+tasks:
+  build:
+    command: 'cargo build -p homectl-server'
+    inputs:
+      - 'src/**/*'
+      - 'Cargo.toml'
+    options:
+      runInCI: true
+
+  build-release:
+    command: 'cargo build -p homectl-server --release'
+    inputs:
+      - 'src/**/*'
+      - 'Cargo.toml'
+
+  test:
+    command: 'cargo test -p homectl-server'
+    inputs:
+      - 'src/**/*'
+      - 'tests/**/*'
+      - 'Cargo.toml'
+    options:
+      runInCI: true
+
+  run:
+    command: 'cargo run -p homectl-server'
+    local: true
+    options:
+      persistent: true
+
+  simulate:
+    command: 'cargo run -p homectl-server -- simulate --config prod-config.toml'
+    local: true
+    options:
+      persistent: true
+
+  clippy:
+    command: 'cargo clippy -p homectl-server -- -D warnings'
+    inputs:
+      - 'src/**/*'
+      - 'Cargo.toml'
+    options:
+      runInCI: true

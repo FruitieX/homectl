@@ -1,12 +1,19 @@
 'use client';
 
-import { useScenes, Scene } from '@/hooks/useConfig';
+import { useScenes, Scene, SceneDeviceConfig } from '@/hooks/useConfig';
 import { useState } from 'react';
+import { useWebsocketState } from '@/hooks/websocket';
+import SceneDeviceStateEditor from '@/ui/SceneDeviceStateEditor';
 
 export default function ScenesPage() {
   const { data: scenes, loading, error, create, update, remove } = useScenes();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDeviceStates, setEditingDeviceStates] = useState<string | null>(
+    null,
+  );
   const [showCreate, setShowCreate] = useState(false);
+  const wsState = useWebsocketState();
+  const devices = wsState?.devices ?? {};
 
   if (loading) {
     return (
@@ -24,6 +31,8 @@ export default function ScenesPage() {
     );
   }
 
+  const editingScene = scenes.find((s) => s.id === editingDeviceStates);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -33,26 +42,40 @@ export default function ScenesPage() {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {scenes.map((scene) => (
-          <SceneCard
-            key={scene.id}
-            scene={scene}
-            isEditing={editingId === scene.id}
-            onEdit={() => setEditingId(scene.id)}
-            onSave={async (updated) => {
-              await update(scene.id, updated);
-              setEditingId(null);
-            }}
-            onCancel={() => setEditingId(null)}
-            onDelete={async () => {
-              if (confirm(`Delete scene "${scene.name}"?`)) {
-                await remove(scene.id);
-              }
-            }}
-          />
-        ))}
-      </div>
+      {editingDeviceStates && editingScene ? (
+        <SceneDeviceStateEditor
+          scene={editingScene}
+          devices={devices}
+          scenes={scenes}
+          onSave={async (deviceStates: Record<string, SceneDeviceConfig>) => {
+            await update(editingDeviceStates, { device_states: deviceStates });
+            setEditingDeviceStates(null);
+          }}
+          onCancel={() => setEditingDeviceStates(null)}
+        />
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {scenes.map((scene) => (
+            <SceneCard
+              key={scene.id}
+              scene={scene}
+              isEditing={editingId === scene.id}
+              onEdit={() => setEditingId(scene.id)}
+              onEditDeviceStates={() => setEditingDeviceStates(scene.id)}
+              onSave={async (updated) => {
+                await update(scene.id, updated);
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+              onDelete={async () => {
+                if (confirm(`Delete scene "${scene.name}"?`)) {
+                  await remove(scene.id);
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {showCreate && (
         <CreateSceneModal
@@ -71,6 +94,7 @@ function SceneCard({
   scene,
   isEditing,
   onEdit,
+  onEditDeviceStates,
   onSave,
   onCancel,
   onDelete,
@@ -78,6 +102,7 @@ function SceneCard({
   scene: Scene;
   isEditing: boolean;
   onEdit: () => void;
+  onEditDeviceStates: () => void;
   onSave: (scene: Partial<Scene>) => Promise<void>;
   onCancel: () => void;
   onDelete: () => void;
@@ -85,6 +110,8 @@ function SceneCard({
   const [name, setName] = useState(scene.name);
   const [hidden, setHidden] = useState(scene.hidden);
   const [script, setScript] = useState(scene.script || '');
+  const deviceStateCount = Object.keys(scene.device_states || {}).length;
+  const groupStateCount = Object.keys(scene.group_states || {}).length;
 
   if (isEditing) {
     return (
@@ -153,15 +180,31 @@ function SceneCard({
             <h2 className="card-title">{scene.name}</h2>
             <div className="text-sm opacity-70">{scene.id}</div>
           </div>
-          <div className="flex gap-1">
+          <div className="flex flex-wrap gap-1">
             {scene.hidden && <div className="badge badge-ghost">Hidden</div>}
             {scene.script && <div className="badge badge-info">Script</div>}
+            {deviceStateCount > 0 && (
+              <div className="badge badge-secondary">
+                {deviceStateCount} device{deviceStateCount !== 1 ? 's' : ''}
+              </div>
+            )}
+            {groupStateCount > 0 && (
+              <div className="badge badge-accent">
+                {groupStateCount} group{groupStateCount !== 1 ? 's' : ''}
+              </div>
+            )}
           </div>
         </div>
 
         <div className="card-actions justify-end mt-2">
           <button className="btn btn-sm btn-ghost" onClick={onEdit}>
             Edit
+          </button>
+          <button
+            className="btn btn-sm btn-secondary btn-outline"
+            onClick={onEditDeviceStates}
+          >
+            Device States
           </button>
           <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
             Delete

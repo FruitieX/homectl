@@ -6,14 +6,17 @@
 //! - Scenes: GET/POST/PUT/DELETE /api/v1/config/scenes
 //! - Routines: GET/POST/PUT/DELETE /api/v1/config/routines
 //! - Import/Export: GET/POST /api/v1/config/export, /api/v1/config/import
+//! - Migration: POST /api/v1/config/migrate/preview, /api/v1/config/migrate/apply
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::core::state::AppState;
 use crate::db::config_queries::{
-    self, ConfigExport, DashboardLayoutRow, DashboardWidgetRow, DevicePositionRow, FloorplanRow,
-    GroupRow, IntegrationRow, RoutineRow, SceneRow,
+    self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow, DevicePositionRow,
+    FloorplanRow, GroupDeviceRow, GroupRow, IntegrationRow, RoutineRow, SceneRow,
 };
+use bytes::Buf;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter, Reply};
@@ -82,14 +85,60 @@ pub fn config(
     app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("config").and(
-        integrations_routes(app_state)
+        core_routes(app_state)
+            .or(integrations_routes(app_state))
             .or(groups_routes(app_state))
             .or(scenes_routes(app_state))
             .or(routines_routes(app_state))
             .or(floorplan_routes(app_state))
             .or(dashboard_routes(app_state))
-            .or(export_import_routes(app_state)),
+            .or(export_import_routes(app_state))
+            .or(migrate_routes(app_state)),
     )
+}
+
+// ============================================================================
+// Core Config
+// ============================================================================
+
+fn core_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let get = warp::path("core")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(get_core_config);
+
+    let update = warp::path("core")
+        .and(warp::path::end())
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(update_core_config);
+
+    get.or(update)
+}
+
+async fn get_core_config(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_core_config().await {
+        Ok(Some(config)) => Ok(ApiResponse::success(config)),
+        Ok(None) => Ok(error_response(
+            "Database not available",
+            StatusCode::SERVICE_UNAVAILABLE,
+        )),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn update_core_config(
+    config: config_queries::CoreConfigRow,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_update_core_config(&config).await {
+        Ok(()) => Ok(ApiResponse::success(config)),
+        Err(e) => Ok(internal_error(e)),
+    }
 }
 
 // ============================================================================
@@ -550,6 +599,30 @@ fn floorplan_routes(
         .and(with_state(app_state))
         .and_then(upload_floorplan);
 
+    // Grid endpoints (JSON data for the floor grid)
+    let get_grid = warp::path!("floorplan" / "grid")
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(get_floorplan_grid);
+
+    let save_grid = warp::path!("floorplan" / "grid")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(save_floorplan_grid);
+
+    // Separate image endpoints
+    let get_image = warp::path!("floorplan" / "image")
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(get_floorplan_image);
+
+    let upload_image = warp::path!("floorplan" / "image")
+        .and(warp::post())
+        .and(warp::multipart::form().max_length(10 * 1024 * 1024))
+        .and(with_state(app_state))
+        .and_then(upload_floorplan_image);
+
     let get_positions = warp::path!("floorplan" / "devices")
         .and(warp::get())
         .and(with_state(app_state))
@@ -568,6 +641,10 @@ fn floorplan_routes(
 
     get_floorplan
         .or(upload_floorplan)
+        .or(get_grid)
+        .or(save_grid)
+        .or(get_image)
+        .or(upload_image)
         .or(get_positions)
         .or(upsert_position)
         .or(delete_position)
@@ -629,6 +706,97 @@ async fn delete_device_position(
         Ok(true) => Ok(ApiResponse::success(())),
         Ok(false) => Ok(not_found("Device position")),
         Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn get_floorplan_grid(
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_floorplan_grid().await {
+        Ok(Some(grid)) => Ok(ApiResponse::success(grid.grid)),
+        Ok(None) => Ok(ApiResponse::success(Option::<String>::None)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+#[derive(Deserialize)]
+struct SaveGridRequest {
+    grid: String,
+}
+
+async fn save_floorplan_grid(
+    request: SaveGridRequest,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_upsert_floorplan_grid(&request.grid).await {
+        Ok(()) => Ok(ApiResponse::success(())),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn get_floorplan_image(
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<Box<dyn Reply>, warp::Rejection> {
+    match config_queries::db_get_floorplan().await {
+        Ok(Some(floorplan)) => {
+            if let Some(image_data) = floorplan.image_data {
+                let mime_type = floorplan
+                    .image_mime_type
+                    .unwrap_or_else(|| "image/png".to_string());
+                Ok(Box::new(warp::reply::with_header(
+                    image_data,
+                    "Content-Type",
+                    mime_type,
+                )))
+            } else {
+                Ok(Box::new(not_found("Floorplan image")))
+            }
+        }
+        Ok(None) => Ok(Box::new(not_found("Floorplan image"))),
+        Err(e) => Ok(Box::new(internal_error(e))),
+    }
+}
+
+async fn upload_floorplan_image(
+    mut form: warp::multipart::FormData,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    use futures::TryStreamExt;
+
+    let mut image_data: Option<Vec<u8>> = None;
+    let mut mime_type: Option<String> = None;
+
+    while let Ok(Some(part)) = form.try_next().await {
+        if part.name() == "image" {
+            mime_type = part.content_type().map(|s| s.to_string());
+
+            let mut data = Vec::new();
+            let mut stream = part.stream();
+            while let Ok(Some(chunk)) = stream.try_next().await {
+                data.extend_from_slice(chunk.chunk());
+            }
+
+            image_data = Some(data);
+        }
+    }
+
+    if let Some(data) = image_data {
+        let floorplan = FloorplanRow {
+            image_data: Some(data),
+            image_mime_type: mime_type,
+            width: None,
+            height: None,
+        };
+
+        match config_queries::db_upsert_floorplan(&floorplan).await {
+            Ok(()) => Ok(ApiResponse::success(())),
+            Err(e) => Ok(internal_error(e)),
+        }
+    } else {
+        Ok(error_response(
+            "No image data found",
+            StatusCode::BAD_REQUEST,
+        ))
     }
 }
 
@@ -806,4 +974,335 @@ async fn import_config(
         }
         Err(e) => Ok(internal_error(e)),
     }
+}
+
+// ============================================================================
+// TOML Migration
+// ============================================================================
+
+/// Intermediate types for TOML parsing that mirror the Config structure
+
+#[derive(Deserialize)]
+struct TomlConfig {
+    core: Option<TomlCoreConfig>,
+    integrations: Option<HashMap<String, toml::Value>>,
+    groups: Option<HashMap<String, TomlGroupConfig>>,
+    scenes: Option<HashMap<String, TomlSceneConfig>>,
+    routines: Option<HashMap<String, TomlRoutineConfig>>,
+}
+
+#[derive(Deserialize)]
+struct TomlCoreConfig {
+    warmup_time_seconds: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct TomlGroupConfig {
+    name: String,
+    #[serde(default)]
+    hidden: Option<bool>,
+    devices: Option<Vec<TomlGroupDevice>>,
+    groups: Option<Vec<TomlGroupLink>>,
+}
+
+#[derive(Deserialize)]
+struct TomlGroupDevice {
+    integration_id: String,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    device_id: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TomlGroupLink {
+    group_id: String,
+}
+
+#[derive(Deserialize)]
+struct TomlSceneConfig {
+    name: String,
+    #[serde(default)]
+    hidden: Option<bool>,
+    #[serde(default)]
+    devices: Option<HashMap<String, HashMap<String, serde_json::Value>>>,
+    #[serde(default)]
+    groups: Option<HashMap<String, serde_json::Value>>,
+    #[serde(default)]
+    expr: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TomlRoutineConfig {
+    name: String,
+    #[serde(default)]
+    rules: Option<serde_json::Value>,
+    #[serde(default)]
+    actions: Option<serde_json::Value>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct MigratePreviewResult {
+    integrations: Vec<IntegrationRow>,
+    groups: Vec<GroupRow>,
+    scenes: Vec<SceneRow>,
+    routines: Vec<RoutineRow>,
+    core: CoreConfigRow,
+}
+
+#[derive(Serialize)]
+struct MigrateApplyResult {
+    integrations: usize,
+    groups: usize,
+    scenes: usize,
+    routines: usize,
+}
+
+fn migrate_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let preview = warp::path!("migrate" / "preview")
+        .and(warp::post())
+        .and(warp::body::bytes())
+        .and(with_state(app_state))
+        .and_then(migrate_preview);
+
+    let apply = warp::path!("migrate" / "apply")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(migrate_apply);
+
+    preview.or(apply)
+}
+
+pub fn parse_toml_config(
+    toml_str: &str,
+) -> Result<MigratePreviewResult, String> {
+    let config: TomlConfig =
+        toml::from_str(toml_str).map_err(|e| format!("Failed to parse TOML: {e}"))?;
+
+    // Convert core config
+    let core = CoreConfigRow {
+        warmup_time_seconds: config
+            .core
+            .and_then(|c| c.warmup_time_seconds)
+            .unwrap_or(1) as i32,
+    };
+
+    // Convert integrations
+    let integrations: Vec<IntegrationRow> = config
+        .integrations
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(id, value)| {
+            let plugin = value.get("plugin")?.as_str()?.to_string();
+            // Convert the remaining config (exclude "plugin") to JSON
+            let mut config_map = value
+                .as_table()
+                .cloned()
+                .unwrap_or_default();
+            config_map.remove("plugin");
+            let config_json =
+                serde_json::to_value(&config_map).unwrap_or(serde_json::Value::Object(Default::default()));
+            Some(IntegrationRow {
+                id,
+                plugin,
+                config: config_json,
+                enabled: true,
+            })
+        })
+        .collect();
+
+    // Convert groups
+    let groups: Vec<GroupRow> = config
+        .groups
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, group)| {
+            let devices: Vec<GroupDeviceRow> = group
+                .devices
+                .unwrap_or_default()
+                .into_iter()
+                .map(|d| GroupDeviceRow {
+                    integration_id: d.integration_id,
+                    device_name: d.name.unwrap_or_default(),
+                    device_id: d.device_id,
+                })
+                .collect();
+
+            let linked_groups: Vec<String> = group
+                .groups
+                .unwrap_or_default()
+                .into_iter()
+                .map(|g| g.group_id)
+                .collect();
+
+            GroupRow {
+                id,
+                name: group.name,
+                hidden: group.hidden.unwrap_or(false),
+                devices,
+                linked_groups,
+            }
+        })
+        .collect();
+
+    // Convert scenes
+    let scenes: Vec<SceneRow> = config
+        .scenes
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, scene)| {
+            // Convert device states: { integration_id: { device_name: config } }
+            // → HashMap<"integration_id/device_name", config_json>
+            let device_states: HashMap<String, serde_json::Value> = scene
+                .devices
+                .unwrap_or_default()
+                .into_iter()
+                .flat_map(|(integration_id, devices)| {
+                    devices.into_iter().map(move |(device_name, config)| {
+                        let key = format!("{integration_id}/{device_name}");
+                        (key, config)
+                    })
+                })
+                .collect();
+
+            // Convert group states: { group_id: config }
+            let group_states: HashMap<String, serde_json::Value> = scene
+                .groups
+                .unwrap_or_default();
+
+            SceneRow {
+                id,
+                name: scene.name,
+                hidden: scene.hidden.unwrap_or(false),
+                script: scene.expr, // Store evalexpr as script (for reference/migration)
+                device_states,
+                group_states,
+            }
+        })
+        .collect();
+
+    // Convert routines
+    let routines: Vec<RoutineRow> = config
+        .routines
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(id, routine)| RoutineRow {
+            id,
+            name: routine.name,
+            enabled: true,
+            rules: routine.rules.unwrap_or(serde_json::Value::Array(vec![])),
+            actions: routine.actions.unwrap_or(serde_json::Value::Array(vec![])),
+        })
+        .collect();
+
+    Ok(MigratePreviewResult {
+        integrations,
+        groups,
+        scenes,
+        routines,
+        core,
+    })
+}
+
+/// Apply a parsed TOML migration result to the database.
+pub async fn apply_migration(preview: &MigratePreviewResult) -> color_eyre::Result<()> {
+    config_queries::db_update_core_config(&preview.core).await?;
+
+    for integration in &preview.integrations {
+        config_queries::db_upsert_integration(integration).await?;
+    }
+
+    // Collect valid group IDs so we can skip invalid group links
+    let valid_group_ids: std::collections::HashSet<&str> =
+        preview.groups.iter().map(|g| g.id.as_str()).collect();
+
+    // Two-pass group import: insert all group rows first (without links),
+    // then insert links in a second pass. This avoids FK violations when
+    // a group links to another group that hasn't been inserted yet.
+    for group in &preview.groups {
+        let group_without_links = config_queries::GroupRow {
+            linked_groups: Vec::new(),
+            ..group.clone()
+        };
+        config_queries::db_upsert_group(&group_without_links).await?;
+    }
+    for group in &preview.groups {
+        if group.linked_groups.is_empty() {
+            continue;
+        }
+        // Filter out links to non-existent groups
+        let valid_links: Vec<String> = group
+            .linked_groups
+            .iter()
+            .filter(|id| {
+                if valid_group_ids.contains(id.as_str()) {
+                    true
+                } else {
+                    log::warn!(
+                        "Group '{}' links to non-existent group '{}', skipping",
+                        group.id,
+                        id
+                    );
+                    false
+                }
+            })
+            .cloned()
+            .collect();
+        if !valid_links.is_empty() {
+            let filtered_group = config_queries::GroupRow {
+                linked_groups: valid_links,
+                ..group.clone()
+            };
+            config_queries::db_upsert_group(&filtered_group).await?;
+        }
+    }
+
+    for scene in &preview.scenes {
+        config_queries::db_upsert_config_scene(scene).await?;
+    }
+    for routine in &preview.routines {
+        config_queries::db_upsert_routine(routine).await?;
+    }
+
+    Ok(())
+}
+
+async fn migrate_preview(
+    body: bytes::Bytes,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    let toml_str = String::from_utf8_lossy(&body);
+
+    match parse_toml_config(&toml_str) {
+        Ok(result) => Ok(ApiResponse::success(result)),
+        Err(e) => Ok(error_response(&e, StatusCode::BAD_REQUEST)),
+    }
+}
+
+async fn migrate_apply(
+    preview: MigratePreviewResult,
+    app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    let counts = MigrateApplyResult {
+        integrations: preview.integrations.len(),
+        groups: preview.groups.len(),
+        scenes: preview.scenes.len(),
+        routines: preview.routines.len(),
+    };
+
+    if let Err(e) = apply_migration(&preview).await {
+        return Ok(internal_error(e));
+    }
+
+    // Hot-reload all config
+    let mut state = app_state.write().await;
+    let _ = state.reload_integrations().await;
+    let _ = state.reload_groups().await;
+    let _ = state.reload_scenes().await;
+    let _ = state.reload_routines().await;
+
+    Ok(ApiResponse::success(counts))
 }

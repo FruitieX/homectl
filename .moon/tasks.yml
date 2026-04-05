@@ -1,0 +1,5 @@
+$schema: 'https://moonrepo.dev/schemas/tasks.json'
+
+# Inherited tasks are available in all projects.
+# Project-specific tasks override these in their own moon.yml files.
+

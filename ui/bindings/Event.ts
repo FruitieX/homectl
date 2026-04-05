@@ -9,4 +9,4 @@ export type Event = { "ExternalStateUpdate": { device: Device, } } | { "Internal
 /**
  * Whether to skip sending [Event::SetExternalState] as a result of this state update.
  */
-skip_external_update: boolean | null, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | "WsBroadcastState" | { "Action": Action };
+skip_external_update: boolean | null, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };

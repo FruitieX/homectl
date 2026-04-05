@@ -11,6 +11,7 @@ const configTabs = [
   { href: '/config/routines', label: 'Routines' },
   { href: '/config/dashboard', label: 'Dashboard' },
   { href: '/config/floorplan', label: 'Floorplan' },
+  { href: '/config/settings', label: 'Settings' },
   { href: '/config/import-export', label: 'Import/Export' },
   { href: '/config/migration', label: 'TOML Migration' },
 ];

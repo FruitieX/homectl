@@ -122,6 +122,7 @@ fn run_hurl_test_inner(path: &Path, content: &str) -> datatest_stable::Result<()
     // Build server configuration
     let server_config = TestServerConfig {
         extra_config: config.extra_config,
+        ..Default::default()
     };
 
     // Create and start the test server

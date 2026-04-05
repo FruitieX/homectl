@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::{core::state::AppState, db::is_db_available};
+use crate::core::state::AppState;
 use serde::Serialize;
 use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter};
@@ -57,13 +57,9 @@ async fn ready_impl(
         ));
     }
 
-    let details = serde_json::json!({
-        "db": if is_db_available() { "available" } else { "unavailable" }
-    });
-
     let body = HealthResponse {
         status: "ready",
-        details: Some(details),
+        details: None,
     };
     let reply = warp::reply::json(&body);
     Ok(warp::reply::with_status(reply, StatusCode::OK))

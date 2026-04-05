@@ -1,14 +1,31 @@
 'use client';
 
-import { useRoutines, Routine } from '@/hooks/useConfig';
+import { useRoutines, useScenes, Routine } from '@/hooks/useConfig';
 import { useState } from 'react';
+import { useWebsocketState } from '@/hooks/websocket';
+import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
+import { ActionBuilder, Action } from '@/ui/ActionBuilder';
 
 export default function RoutinesPage() {
-  const { data: routines, loading, error, create, update, remove } = useRoutines();
+  const {
+    data: routines,
+    loading,
+    error,
+    create,
+    update,
+    remove,
+  } = useRoutines();
+  const { data: scenes, loading: scenesLoading } = useScenes();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const wsState = useWebsocketState();
+  const devices = wsState?.devices ?? {};
+  const groups = wsState?.groups ?? {};
 
-  if (loading) {
+  const sceneList = scenes.map((s) => ({ id: s.id, name: s.name }));
+  const routineList = routines.map((r) => ({ id: r.id, name: r.name }));
+
+  if (loading || scenesLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <span className="loading loading-spinner loading-lg"></span>
@@ -39,6 +56,10 @@ export default function RoutinesPage() {
             key={routine.id}
             routine={routine}
             isEditing={editingId === routine.id}
+            devices={devices}
+            groups={groups}
+            scenes={sceneList}
+            routines={routineList}
             onEdit={() => setEditingId(routine.id)}
             onSave={async (updated) => {
               await update(routine.id, updated);
@@ -67,9 +88,16 @@ export default function RoutinesPage() {
   );
 }
 
+import type { DevicesState } from '@/bindings/DevicesState';
+import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
+
 function RoutineCard({
   routine,
   isEditing,
+  devices,
+  groups,
+  scenes,
+  routines,
   onEdit,
   onSave,
   onCancel,
@@ -77,6 +105,10 @@ function RoutineCard({
 }: {
   routine: Routine;
   isEditing: boolean;
+  devices: DevicesState;
+  groups: FlattenedGroupsConfig;
+  scenes: { id: string; name: string }[];
+  routines: { id: string; name: string }[];
   onEdit: () => void;
   onSave: (routine: Partial<Routine>) => Promise<void>;
   onCancel: () => void;
@@ -84,8 +116,15 @@ function RoutineCard({
 }) {
   const [name, setName] = useState(routine.name);
   const [enabled, setEnabled] = useState(routine.enabled);
-  const [rules, setRules] = useState(JSON.stringify(routine.rules, null, 2));
-  const [actions, setActions] = useState(JSON.stringify(routine.actions, null, 2));
+  const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
+  const [actions, setActions] = useState<Action[]>(routine.actions as Action[]);
+  const [editMode, setEditMode] = useState<'visual' | 'json'>('visual');
+  const [rulesJson, setRulesJson] = useState(
+    JSON.stringify(routine.rules, null, 2),
+  );
+  const [actionsJson, setActionsJson] = useState(
+    JSON.stringify(routine.actions, null, 2),
+  );
 
   if (isEditing) {
     return (
@@ -98,43 +137,99 @@ function RoutineCard({
             onChange={(e) => setName(e.target.value)}
           />
 
-          <div className="form-control">
-            <label className="label cursor-pointer">
-              <span className="label-text">Enabled</span>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-            </label>
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
+          <div className="flex justify-between items-center">
             <div className="form-control">
-              <label className="label">
-                <span className="label-text">Rules (JSON)</span>
+              <label className="label cursor-pointer gap-3">
+                <span className="label-text">Enabled</span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-primary"
+                  checked={enabled}
+                  onChange={(e) => setEnabled(e.target.checked)}
+                />
               </label>
-              <textarea
-                className="textarea textarea-bordered h-48 font-mono text-xs"
-                value={rules}
-                onChange={(e) => setRules(e.target.value)}
-                placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
-              />
             </div>
 
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text">Actions (JSON)</span>
-              </label>
-              <textarea
-                className="textarea textarea-bordered h-48 font-mono text-xs"
-                value={actions}
-                onChange={(e) => setActions(e.target.value)}
-                placeholder='[{"ActivateScene": {"scene_id": "..."}]'
-              />
+            <div className="btn-group">
+              <button
+                className={`btn btn-sm ${editMode === 'visual' ? 'btn-active' : ''}`}
+                onClick={() => {
+                  if (editMode === 'json') {
+                    try {
+                      setRules(JSON.parse(rulesJson));
+                      setActions(JSON.parse(actionsJson));
+                    } catch {
+                      alert('Invalid JSON - fix before switching to visual');
+                      return;
+                    }
+                  }
+                  setEditMode('visual');
+                }}
+              >
+                Visual
+              </button>
+              <button
+                className={`btn btn-sm ${editMode === 'json' ? 'btn-active' : ''}`}
+                onClick={() => {
+                  setRulesJson(JSON.stringify(rules, null, 2));
+                  setActionsJson(JSON.stringify(actions, null, 2));
+                  setEditMode('json');
+                }}
+              >
+                JSON
+              </button>
             </div>
           </div>
+
+          {editMode === 'visual' ? (
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="border border-base-300 rounded-lg p-4">
+                <RuleBuilder
+                  rules={rules}
+                  devices={devices}
+                  groups={groups}
+                  scenes={scenes}
+                  onChange={setRules}
+                />
+              </div>
+              <div className="border border-base-300 rounded-lg p-4">
+                <ActionBuilder
+                  actions={actions}
+                  devices={devices}
+                  groups={groups}
+                  scenes={scenes}
+                  routines={routines}
+                  onChange={setActions}
+                />
+              </div>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Rules (JSON)</span>
+                </label>
+                <textarea
+                  className="textarea textarea-bordered h-48 font-mono text-xs"
+                  value={rulesJson}
+                  onChange={(e) => setRulesJson(e.target.value)}
+                  placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+                />
+              </div>
+
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text">Actions (JSON)</span>
+                </label>
+                <textarea
+                  className="textarea textarea-bordered h-48 font-mono text-xs"
+                  value={actionsJson}
+                  onChange={(e) => setActionsJson(e.target.value)}
+                  placeholder='[{"ActivateScene": {"scene_id": "..."}]'
+                />
+              </div>
+            </div>
+          )}
 
           <div className="card-actions justify-end mt-2">
             <button className="btn btn-sm btn-ghost" onClick={onCancel}>
@@ -144,11 +239,15 @@ function RoutineCard({
               className="btn btn-sm btn-primary"
               onClick={() => {
                 try {
+                  const finalRules =
+                    editMode === 'json' ? JSON.parse(rulesJson) : rules;
+                  const finalActions =
+                    editMode === 'json' ? JSON.parse(actionsJson) : actions;
                   onSave({
                     name,
                     enabled,
-                    rules: JSON.parse(rules),
-                    actions: JSON.parse(actions),
+                    rules: finalRules,
+                    actions: finalActions,
                   });
                 } catch {
                   alert('Invalid JSON in rules or actions');

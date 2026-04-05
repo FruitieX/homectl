@@ -32,7 +32,8 @@ pub enum TriggerMode {
     Level,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct SensorRule {
     pub state: SensorDevice,
 
@@ -41,10 +42,12 @@ pub struct SensorRule {
     pub trigger_mode: TriggerMode,
 
     #[serde(flatten)]
+    #[ts(skip)]
     pub device_ref: DeviceRef,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct DeviceRule {
     pub power: Option<bool>,
     pub scene: Option<SceneId>,
@@ -54,6 +57,7 @@ pub struct DeviceRule {
     pub trigger_mode: TriggerMode,
 
     #[serde(flatten)]
+    #[ts(skip)]
     pub device_ref: DeviceRef,
 }
 
@@ -61,7 +65,8 @@ fn default_level_trigger_mode() -> TriggerMode {
     TriggerMode::Level
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct GroupRule {
     pub group_id: GroupId,
     pub power: Option<bool>,
@@ -72,21 +77,25 @@ pub struct GroupRule {
     pub trigger_mode: TriggerMode,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Debug)]
+#[ts(export)]
 pub struct AnyRule {
+    #[ts(skip)]
     pub any: Rules,
 }
 
 /// A JavaScript-based rule that evaluates a script returning boolean
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct ScriptRule {
     /// JavaScript code that should return a boolean value.
     /// Has access to `devices` and `groups` global objects.
     pub script: String,
 }
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Debug)]
 #[serde(untagged)]
+#[ts(export)]
 pub enum Rule {
     /// Match fields on individual sensors.
     Sensor(SensorRule),
@@ -103,6 +112,7 @@ pub enum Rule {
     Any(AnyRule),
 
     /// Evaluates given expression (legacy evalexpr).
+    #[ts(skip)]
     EvalExpr(evalexpr::Node),
 
     /// Evaluates JavaScript script that returns boolean.
@@ -112,9 +122,11 @@ pub enum Rule {
 
 pub type Rules = Vec<Rule>;
 
-#[derive(Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Debug)]
+#[ts(export)]
 pub struct Routine {
     pub name: String,
+    #[ts(skip)]
     pub rules: Rules,
     pub actions: Actions,
 }

@@ -21,10 +21,10 @@
         buildInputs = [
           rustToolchain
           pkgs.pkg-config
-          pkgs.postgresql
           pkgs.openssl
           pkgs.nodejs
-          pkgs.docker-compose
+          pkgs.pnpm
+          pkgs.moon
           pkgs.hurl
         ];
         shellHook = ''

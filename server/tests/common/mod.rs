@@ -33,6 +33,8 @@ pub struct TestServer {
 pub struct TestServerConfig {
     /// Additional configuration options to append to Settings.toml
     pub extra_config: Option<String>,
+    /// If set, start in simulation mode using this TOML config file path
+    pub simulate_config: Option<PathBuf>,
 }
 
 impl TestServer {
@@ -72,22 +74,38 @@ impl TestServer {
             // Reserve a port
             let (listener, port) = reserve_port()?;
 
-            // Generate config file with this port
-            let config_content = generate_config(port, config.extra_config.as_deref());
-            if let Err(e) = std::fs::write(&config_path, &config_content) {
-                return Err(TestServerError::Io(e));
+            // Generate config file with this port (not needed for simulation mode)
+            if config.simulate_config.is_none() {
+                let config_content = generate_config(port, config.extra_config.as_deref());
+                if let Err(e) = std::fs::write(&config_path, &config_content) {
+                    return Err(TestServerError::Io(e));
+                }
             }
 
             // Drop the listener just before starting the server to minimize race window
             drop(listener);
 
-            let mut child = match Command::new(&binary)
-                .env("RUST_LOG", "warn,homectl_server=info")
-                .current_dir(&temp_dir)
+            let mut cmd = Command::new(&binary);
+            cmd.env("RUST_LOG", "warn,homectl_server=info")
                 .stdout(Stdio::piped())
-                .stderr(Stdio::piped())
-                .spawn()
-            {
+                .stderr(Stdio::piped());
+
+            if let Some(ref sim_config) = config.simulate_config {
+                // Simulation mode: run from workspace root (where prod-config.toml lives)
+                let workspace_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .parent()
+                    .unwrap_or(Path::new(env!("CARGO_MANIFEST_DIR")));
+                cmd.current_dir(workspace_root)
+                    .arg("simulate")
+                    .arg("--config")
+                    .arg(sim_config)
+                    .arg("--port")
+                    .arg(port.to_string());
+            } else {
+                cmd.current_dir(&temp_dir);
+            }
+
+            let mut child = match cmd.spawn() {
                 Ok(child) => child,
                 Err(e) => {
                     eprintln!("[test] Failed to spawn process: {}", e);
@@ -96,7 +114,11 @@ impl TestServer {
             };
 
             let base_url = format!("http://127.0.0.1:{}", port);
-            let timeout = Duration::from_secs(15);
+            let timeout = if config.simulate_config.is_some() {
+                Duration::from_secs(30)
+            } else {
+                Duration::from_secs(15)
+            };
 
             match wait_for_ready(&mut child, &base_url, timeout) {
                 Ok(()) => {

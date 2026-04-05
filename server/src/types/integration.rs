@@ -50,7 +50,7 @@ pub trait Integration: Send {
     // rustc --explain E0038
     fn new(
         id: &IntegrationId,
-        config: &config::Value,
+        config: &serde_json::Value,
         cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self>
@@ -61,6 +61,9 @@ pub trait Integration: Send {
         Ok(())
     }
     async fn start(&mut self) -> Result<()> {
+        Ok(())
+    }
+    async fn stop(&mut self) -> Result<()> {
         Ok(())
     }
     async fn set_integration_device_state(&mut self, _device: &Device) -> Result<()> {

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use crate::core::state::AppState;
 
 mod actions;
-mod config;
+pub mod config;
 mod devices;
 mod health;
 mod ws;
@@ -28,6 +28,11 @@ pub fn with_state(
 
 // Example of warp usage: https://github.com/seanmonstar/warp/blob/master/examples/todos.rs
 pub fn init_api(app_state: &Arc<RwLock<AppState>>, port: u16) -> Result<()> {
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
+        .allow_headers(vec!["Content-Type"]);
+
     let api = warp::path("api").and(warp::path("v1")).and(
         devices(app_state)
             .or(actions(app_state))
@@ -39,7 +44,7 @@ pub fn init_api(app_state: &Arc<RwLock<AppState>>, port: u16) -> Result<()> {
 
     info!("Starting API server on port {}", port);
     tokio::spawn(async move {
-        warp::serve(ws.or(api).or(health))
+        warp::serve(ws.or(api).or(health).with(cors))
             .run(([0, 0, 0, 0], port))
             .await;
     });

@@ -87,14 +87,25 @@ impl AppState {
         self.ws.send(user_id, &message).await;
     }
 
-    /// Hot-reload integrations from the database
-    /// Note: This reloads the integration configs but currently loaded integrations
-    /// will need to be re-initialized to pick up changes.
+    /// Hot-reload integrations from the database with full lifecycle support.
+    /// Adds new integrations, removes deleted ones (cleaning up their devices),
+    /// and restarts modified ones.
     pub async fn reload_integrations(&mut self) -> Result<()> {
-        // TODO: Implement full integration reload from DB
-        // For now this is a placeholder - integrations will be loaded from DB
-        // once the full migration is complete
         info!("Hot-reloading integrations from database...");
+        match self.integrations.reload_integrations().await {
+            Ok(removed_ids) => {
+                // Clean up devices belonging to removed integrations
+                for id in &removed_ids {
+                    self.devices.remove_devices_by_integration(id);
+                }
+                if !removed_ids.is_empty() {
+                    self.schedule_ws_broadcast();
+                }
+            }
+            Err(e) => {
+                warn!("Failed to reload integrations: {e}");
+            }
+        }
         Ok(())
     }
 

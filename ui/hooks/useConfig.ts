@@ -24,6 +24,41 @@ export interface Scene {
   name: string;
   hidden: boolean;
   script?: string;
+  device_states: Record<string, SceneDeviceConfig>;
+  group_states: Record<string, SceneDeviceConfig>;
+}
+
+// Scene device configuration - can be a device link, scene link, or direct state
+export type SceneDeviceConfig =
+  | SceneDeviceLink
+  | ActivateSceneDescriptor
+  | SceneDeviceState;
+
+export interface SceneDeviceLink {
+  brightness?: number;
+  integration_id: string;
+  name?: string;
+  id?: string;
+}
+
+export interface ActivateSceneDescriptor {
+  scene_id: string;
+  device_keys?: string[];
+  group_keys?: string[];
+}
+
+export interface SceneDeviceState {
+  power?: boolean;
+  color?: DeviceColor;
+  brightness?: number;
+  transition?: number;
+}
+
+export interface DeviceColor {
+  Hs?: { h: number; s: number };
+  Xy?: { x: number; y: number };
+  Rgb?: { r: number; g: number; b: number };
+  Ct?: { ct: number };
 }
 
 export interface Routine {

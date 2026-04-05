@@ -30,7 +30,6 @@ use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Default, Debug)]
 pub struct Scenes {
-    config: ScenesConfig,
     db_scenes: ScenesConfig,
     db_scene_overrides: SceneOverridesConfig,
     flattened_scenes: FlattenedScenesConfig,
@@ -291,7 +290,7 @@ pub fn get_next_cycled_scene(
 impl Scenes {
     pub fn new(config: ScenesConfig) -> Self {
         Scenes {
-            config,
+            db_scenes: config,
             ..Default::default()
         }
     }
@@ -346,9 +345,7 @@ impl Scenes {
     }
 
     pub fn get_scenes(&self) -> ScenesConfig {
-        let mut scenes = self.config.clone();
-        scenes.extend(self.db_scenes.clone());
-        scenes
+        self.db_scenes.clone()
     }
 
     pub fn get_scene_ids(&self) -> Vec<SceneId> {

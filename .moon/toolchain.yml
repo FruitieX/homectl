@@ -1,0 +1,3 @@
+$schema: 'https://moonrepo.dev/schemas/toolchain.json'
+
+# Moon manages task orchestration; actual toolchains come from the Nix devShell.
