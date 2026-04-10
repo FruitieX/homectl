@@ -75,12 +75,39 @@ pub struct FloorplanGridRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FloorplanMetadataRow {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FloorplanExportRow {
+    pub id: String,
+    pub name: String,
+    pub image_data: Option<Vec<u8>>,
+    pub image_mime_type: Option<String>,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub grid_data: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevicePositionRow {
     pub device_key: String,
     pub x: f32,
     pub y: f32,
     pub scale: f32,
     pub rotation: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GroupPositionRow {
+    pub group_id: String,
+    pub x: f32,
+    pub y: f32,
+    pub width: f32,
+    pub height: f32,
+    pub z_index: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,6 +135,20 @@ pub struct CoreConfigRow {
     pub warmup_time_seconds: i32,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceDisplayNameRow {
+    pub device_key: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DeviceSensorConfigRow {
+    pub device_ref: String,
+    pub interaction_kind: String,
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
 /// Full config export structure
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigExport {
@@ -118,7 +159,13 @@ pub struct ConfigExport {
     pub scenes: Vec<SceneRow>,
     pub routines: Vec<RoutineRow>,
     pub floorplan: Option<FloorplanRow>,
+    #[serde(default)]
+    pub floorplans: Vec<FloorplanExportRow>,
     pub device_positions: Vec<DevicePositionRow>,
+    #[serde(default)]
+    pub device_display_overrides: Vec<DeviceDisplayNameRow>,
+    #[serde(default)]
+    pub device_sensor_configs: Vec<DeviceSensorConfigRow>,
     pub dashboard_layouts: Vec<DashboardLayoutRow>,
     pub dashboard_widgets: Vec<DashboardWidgetRow>,
 }
@@ -149,6 +196,106 @@ pub async fn db_update_core_config(config: &CoreConfigRow) -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+pub async fn db_get_device_display_overrides() -> Result<Vec<DeviceDisplayNameRow>> {
+    let db = get_db_connection()?;
+
+    let rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT device_key, display_name FROM device_display_overrides ORDER BY device_key",
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(device_key, display_name)| DeviceDisplayNameRow {
+            device_key,
+            display_name,
+        })
+        .collect())
+}
+
+pub async fn db_upsert_device_display_override(row: &DeviceDisplayNameRow) -> Result<()> {
+    let db = get_db_connection()?;
+
+    sqlx::query(
+        "INSERT INTO device_display_overrides (device_key, display_name, updated_at) \
+         VALUES (?, ?, CURRENT_TIMESTAMP) \
+         ON CONFLICT (device_key) DO UPDATE SET \
+             display_name = excluded.display_name, \
+             updated_at = CURRENT_TIMESTAMP",
+    )
+    .bind(&row.device_key)
+    .bind(&row.display_name)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_device_display_override(device_key: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+
+    let result = sqlx::query("DELETE FROM device_display_overrides WHERE device_key = ?")
+        .bind(device_key)
+        .execute(db)
+        .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+pub async fn db_get_device_sensor_configs() -> Result<Vec<DeviceSensorConfigRow>> {
+    let db = get_db_connection()?;
+
+    let rows: Vec<(String, String, String)> = sqlx::query_as(
+        "SELECT device_ref, interaction_kind, config_json FROM device_sensor_configs ORDER BY device_ref",
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(device_ref, interaction_kind, config_json)| DeviceSensorConfigRow {
+                device_ref,
+                interaction_kind,
+                config: serde_json::from_str(&config_json).unwrap_or_default(),
+            },
+        )
+        .collect())
+}
+
+pub async fn db_upsert_device_sensor_config(row: &DeviceSensorConfigRow) -> Result<()> {
+    let db = get_db_connection()?;
+    let config_json = serde_json::to_string(&row.config)?;
+
+    sqlx::query(
+        "INSERT INTO device_sensor_configs (device_ref, interaction_kind, config_json, updated_at) \
+         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+         ON CONFLICT (device_ref) DO UPDATE SET \
+             interaction_kind = excluded.interaction_kind, \
+             config_json = excluded.config_json, \
+             updated_at = CURRENT_TIMESTAMP",
+    )
+    .bind(&row.device_ref)
+    .bind(&row.interaction_kind)
+    .bind(config_json)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_device_sensor_config(device_ref: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+
+    let result = sqlx::query("DELETE FROM device_sensor_configs WHERE device_ref = ?")
+        .bind(device_ref)
+        .execute(db)
+        .await?;
+
+    Ok(result.rows_affected() > 0)
 }
 
 // ============================================================================
@@ -404,19 +551,17 @@ pub async fn db_get_config_scenes() -> Result<Vec<SceneRow>> {
 
     let mut result = Vec::new();
     for (id, name, hidden, script) in scenes {
-        let device_states: Vec<(String, String)> = sqlx::query_as(
-            "SELECT device_key, config FROM scene_device_states WHERE scene_id = ?",
-        )
-        .bind(&id)
-        .fetch_all(db)
-        .await?;
+        let device_states: Vec<(String, String)> =
+            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = ?")
+                .bind(&id)
+                .fetch_all(db)
+                .await?;
 
-        let group_states: Vec<(String, String)> = sqlx::query_as(
-            "SELECT group_id, config FROM scene_group_states WHERE scene_id = ?",
-        )
-        .bind(&id)
-        .fetch_all(db)
-        .await?;
+        let group_states: Vec<(String, String)> =
+            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = ?")
+                .bind(&id)
+                .fetch_all(db)
+                .await?;
 
         result.push(SceneRow {
             id,
@@ -524,14 +669,12 @@ pub async fn db_upsert_config_scene(scene: &SceneRow) -> Result<()> {
     // Insert group states
     for (group_id, config) in &scene.group_states {
         let config_str = serde_json::to_string(config)?;
-        sqlx::query(
-            "INSERT INTO scene_group_states (scene_id, group_id, config) VALUES (?, ?, ?)",
-        )
-        .bind(&scene.id)
-        .bind(group_id)
-        .bind(&config_str)
-        .execute(db)
-        .await?;
+        sqlx::query("INSERT INTO scene_group_states (scene_id, group_id, config) VALUES (?, ?, ?)")
+            .bind(&scene.id)
+            .bind(group_id)
+            .bind(&config_str)
+            .execute(db)
+            .await?;
     }
 
     Ok(())
@@ -633,28 +776,53 @@ pub async fn db_delete_routine(id: &str) -> Result<bool> {
 // ============================================================================
 
 pub async fn db_get_floorplan() -> Result<Option<FloorplanRow>> {
+    db_get_floorplan_by_id("default").await
+}
+
+pub async fn db_get_floorplan_by_id(id: &str) -> Result<Option<FloorplanRow>> {
     let db = get_db_connection()?;
 
-    let row: Option<(Option<Vec<u8>>, Option<String>, Option<i32>, Option<i32>)> =
-        sqlx::query_as("SELECT image_data, image_mime_type, width, height FROM floorplan WHERE id = 1")
-            .fetch_optional(db)
-            .await?;
+    let row: Option<(Option<Vec<u8>>, Option<String>, Option<i32>, Option<i32>)> = sqlx::query_as(
+        "SELECT image_data, image_mime_type, width, height FROM floorplans WHERE id = ?",
+    )
+    .bind(id)
+    .fetch_optional(db)
+    .await?;
 
-    Ok(row.map(|(image_data, image_mime_type, width, height)| FloorplanRow {
-        image_data,
-        image_mime_type,
-        width,
-        height,
-    }))
+    Ok(row.map(
+        |(image_data, image_mime_type, width, height)| FloorplanRow {
+            image_data,
+            image_mime_type,
+            width,
+            height,
+        },
+    ))
 }
 
 pub async fn db_upsert_floorplan(floorplan: &FloorplanRow) -> Result<()> {
+    db_upsert_floorplan_by_id("default", floorplan).await
+}
+
+pub async fn db_upsert_floorplan_by_id(id: &str, floorplan: &FloorplanRow) -> Result<()> {
     let db = get_db_connection()?;
+    let default_name = if id == "default" {
+        "Main floorplan"
+    } else {
+        id
+    };
 
     sqlx::query(
-        "UPDATE floorplan SET image_data = ?, image_mime_type = ?, width = ?, height = ?, \
-         updated_at = CURRENT_TIMESTAMP WHERE id = 1",
+        "INSERT INTO floorplans (id, name, image_data, image_mime_type, width, height, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         ON CONFLICT (id) DO UPDATE SET \
+             image_data = excluded.image_data, \
+             image_mime_type = excluded.image_mime_type, \
+             width = excluded.width, \
+             height = excluded.height, \
+             updated_at = CURRENT_TIMESTAMP",
     )
+    .bind(id)
+    .bind(default_name)
     .bind(&floorplan.image_data)
     .bind(&floorplan.image_mime_type)
     .bind(floorplan.width)
@@ -666,10 +834,15 @@ pub async fn db_upsert_floorplan(floorplan: &FloorplanRow) -> Result<()> {
 }
 
 pub async fn db_get_floorplan_grid() -> Result<Option<FloorplanGridRow>> {
+    db_get_floorplan_grid_by_id("default").await
+}
+
+pub async fn db_get_floorplan_grid_by_id(id: &str) -> Result<Option<FloorplanGridRow>> {
     let db = get_db_connection()?;
 
     let row: Option<(Option<String>,)> =
-        sqlx::query_as("SELECT grid_data FROM floorplan WHERE id = 1")
+        sqlx::query_as("SELECT grid_data FROM floorplans WHERE id = ?")
+            .bind(id)
             .fetch_optional(db)
             .await?;
 
@@ -677,14 +850,153 @@ pub async fn db_get_floorplan_grid() -> Result<Option<FloorplanGridRow>> {
 }
 
 pub async fn db_upsert_floorplan_grid(grid: &str) -> Result<()> {
+    db_upsert_floorplan_grid_by_id("default", grid).await
+}
+
+pub async fn db_upsert_floorplan_grid_by_id(id: &str, grid: &str) -> Result<()> {
+    let db = get_db_connection()?;
+    let default_name = if id == "default" {
+        "Main floorplan"
+    } else {
+        id
+    };
+
+    sqlx::query(
+        "INSERT INTO floorplans (id, name, grid_data, updated_at) \
+         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+         ON CONFLICT (id) DO UPDATE SET \
+             grid_data = excluded.grid_data, \
+             updated_at = CURRENT_TIMESTAMP",
+    )
+    .bind(id)
+    .bind(default_name)
+    .bind(grid)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_get_floorplans() -> Result<Vec<FloorplanMetadataRow>> {
     let db = get_db_connection()?;
 
-    sqlx::query("UPDATE floorplan SET grid_data = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1")
-        .bind(grid)
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT id, name FROM floorplans ORDER BY sort_order, name")
+            .fetch_all(db)
+            .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(id, name)| FloorplanMetadataRow { id, name })
+        .collect())
+}
+
+pub async fn db_get_floorplan_exports() -> Result<Vec<FloorplanExportRow>> {
+    let db = get_db_connection()?;
+
+    let rows: Vec<(
+        String,
+        String,
+        Option<Vec<u8>>,
+        Option<String>,
+        Option<i32>,
+        Option<i32>,
+        Option<String>,
+    )> = sqlx::query_as(
+        "SELECT id, name, image_data, image_mime_type, width, height, grid_data \
+         FROM floorplans ORDER BY sort_order, name",
+    )
+    .fetch_all(db)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(id, name, image_data, image_mime_type, width, height, grid_data)| {
+                FloorplanExportRow {
+                    id,
+                    name,
+                    image_data,
+                    image_mime_type,
+                    width,
+                    height,
+                    grid_data,
+                }
+            },
+        )
+        .collect())
+}
+
+pub async fn db_upsert_floorplan_export(
+    floorplan: &FloorplanExportRow,
+    sort_order: i32,
+) -> Result<()> {
+    let db = get_db_connection()?;
+
+    sqlx::query(
+        "INSERT INTO floorplans \
+         (id, name, image_data, image_mime_type, width, height, grid_data, sort_order, updated_at) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         ON CONFLICT (id) DO UPDATE SET \
+             name = excluded.name, \
+             image_data = excluded.image_data, \
+             image_mime_type = excluded.image_mime_type, \
+             width = excluded.width, \
+             height = excluded.height, \
+             grid_data = excluded.grid_data, \
+             sort_order = excluded.sort_order, \
+             updated_at = CURRENT_TIMESTAMP",
+    )
+    .bind(&floorplan.id)
+    .bind(&floorplan.name)
+    .bind(&floorplan.image_data)
+    .bind(&floorplan.image_mime_type)
+    .bind(floorplan.width)
+    .bind(floorplan.height)
+    .bind(&floorplan.grid_data)
+    .bind(sort_order)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_create_floorplan(floorplan: &FloorplanMetadataRow) -> Result<()> {
+    let db = get_db_connection()?;
+
+    sqlx::query(
+        "INSERT INTO floorplans (id, name, sort_order, updated_at) \
+         VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM floorplans), CURRENT_TIMESTAMP)",
+    )
+    .bind(&floorplan.id)
+    .bind(&floorplan.name)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_update_floorplan_metadata(floorplan: &FloorplanMetadataRow) -> Result<()> {
+    let db = get_db_connection()?;
+
+    sqlx::query("UPDATE floorplans SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(&floorplan.name)
+        .bind(&floorplan.id)
         .execute(db)
         .await?;
 
     Ok(())
+}
+
+pub async fn db_delete_floorplan(id: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+
+    let result = sqlx::query("DELETE FROM floorplans WHERE id = ?")
+        .bind(id)
+        .execute(db)
+        .await?;
+
+    Ok(result.rows_affected() > 0)
 }
 
 // ============================================================================
@@ -737,6 +1049,67 @@ pub async fn db_delete_device_position(device_key: &str) -> Result<bool> {
 
     let result = sqlx::query("DELETE FROM device_positions WHERE device_key = ?")
         .bind(device_key)
+        .execute(db)
+        .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
+// ============================================================================
+// Group Positions
+// ============================================================================
+
+pub async fn db_get_group_positions() -> Result<Vec<GroupPositionRow>> {
+    let db = get_db_connection()?;
+
+    let rows: Vec<(String, f32, f32, f32, f32, i32)> =
+        sqlx::query_as("SELECT group_id, x, y, width, height, z_index FROM group_positions")
+            .fetch_all(db)
+            .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(
+            |(group_id, x, y, width, height, z_index)| GroupPositionRow {
+                group_id,
+                x,
+                y,
+                width,
+                height,
+                z_index,
+            },
+        )
+        .collect())
+}
+
+pub async fn db_upsert_group_position(pos: &GroupPositionRow) -> Result<()> {
+    let db = get_db_connection()?;
+
+    sqlx::query(
+        "INSERT INTO group_positions (group_id, x, y, width, height, z_index) \
+         VALUES (?, ?, ?, ?, ?, ?) \
+         ON CONFLICT (group_id) DO UPDATE SET \
+             x = excluded.x, y = excluded.y, \
+             width = excluded.width, height = excluded.height, \
+             z_index = excluded.z_index",
+    )
+    .bind(&pos.group_id)
+    .bind(pos.x)
+    .bind(pos.y)
+    .bind(pos.width)
+    .bind(pos.height)
+    .bind(pos.z_index)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_group_position(group_id: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+
+    let result = sqlx::query("DELETE FROM group_positions WHERE group_id = ?")
+        .bind(group_id)
         .execute(db)
         .await?;
 
@@ -911,7 +1284,10 @@ pub async fn db_export_config() -> Result<ConfigExport> {
     let scenes = db_get_config_scenes().await?;
     let routines = db_get_routines().await?;
     let floorplan = db_get_floorplan().await?;
+    let floorplans = db_get_floorplan_exports().await?;
     let device_positions = db_get_device_positions().await?;
+    let device_display_overrides = db_get_device_display_overrides().await?;
+    let device_sensor_configs = db_get_device_sensor_configs().await?;
     let dashboard_layouts = db_get_dashboard_layouts().await?;
 
     let mut dashboard_widgets = Vec::new();
@@ -928,7 +1304,10 @@ pub async fn db_export_config() -> Result<ConfigExport> {
         scenes,
         routines,
         floorplan,
+        floorplans,
         device_positions,
+        device_display_overrides,
+        device_sensor_configs,
         dashboard_layouts,
         dashboard_widgets,
     })
@@ -990,11 +1369,21 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     for routine in &config.routines {
         db_upsert_routine(routine).await?;
     }
-    if let Some(floorplan) = &config.floorplan {
+    if !config.floorplans.is_empty() {
+        for (sort_order, floorplan) in config.floorplans.iter().enumerate() {
+            db_upsert_floorplan_export(floorplan, sort_order as i32).await?;
+        }
+    } else if let Some(floorplan) = &config.floorplan {
         db_upsert_floorplan(floorplan).await?;
     }
     for pos in &config.device_positions {
         db_upsert_device_position(pos).await?;
+    }
+    for device_display_override in &config.device_display_overrides {
+        db_upsert_device_display_override(device_display_override).await?;
+    }
+    for device_sensor_config in &config.device_sensor_configs {
+        db_upsert_device_sensor_config(device_sensor_config).await?;
     }
     for layout in &config.dashboard_layouts {
         db_upsert_dashboard_layout(layout).await?;
@@ -1012,10 +1401,9 @@ pub async fn db_save_config_version(
 ) -> Result<i32> {
     let db = get_db_connection()?;
 
-    let last_version: (Option<i32>,) =
-        sqlx::query_as("SELECT MAX(version) FROM config_versions")
-            .fetch_one(db)
-            .await?;
+    let last_version: (Option<i32>,) = sqlx::query_as("SELECT MAX(version) FROM config_versions")
+        .fetch_one(db)
+        .await?;
 
     let new_version = last_version.0.unwrap_or(0) + 1;
     let config_str = serde_json::to_string(config)?;

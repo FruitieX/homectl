@@ -39,8 +39,8 @@ This document tracks progress on migrating homectl configuration from TOML files
 - [x] Scripting engine tests in `tests/scripting.rs`
 - [x] Unit tests in `core/scripting.rs`
 - [x] Production config simulation tests in `tests/prod_config.rs`
-- [ ] Config import/export roundtrip tests (deferred - needs DB)
-- [ ] Hot-reload tests
+- [x] Config import/export roundtrip tests
+- [x] Hot-reload tests
 
 ## ✅ Phase 5: UI - Configuration Editors (COMPLETE)
 
@@ -57,7 +57,7 @@ This document tracks progress on migrating homectl configuration from TOML files
 - [x] `app/config/floorplan/page.tsx` - Floorplan config page
 - [x] Image upload component
 - [x] Device position editor (x/y coordinates table)
-- [ ] Drag-and-drop positioning (future enhancement)
+- [x] Drag-and-drop positioning
 
 ## ✅ Phase 7: UI - Dashboard Customization (COMPLETE)
 

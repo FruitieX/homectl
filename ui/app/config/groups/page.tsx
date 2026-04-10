@@ -1,16 +1,29 @@
 'use client';
 
-import { useGroups, Group } from '@/hooks/useConfig';
-import { useWebsocketState } from '@/hooks/websocket';
 import { Device } from '@/bindings/Device';
+import { useDeviceDisplayNames, useGroups, Group } from '@/hooks/useConfig';
+import { getDeviceKey } from '@/lib/device';
+import { getDeviceDisplayLabel, getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
+import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useMemo, useState } from 'react';
 
 type GroupDevice = Group['devices'][number];
 
+const getGroupDeviceKey = (device: GroupDevice) =>
+  `${device.integration_id}/${device.device_id ?? device.device_name}`;
+
 export default function GroupsPage() {
   const { data: groups, loading, error, create, update, remove } = useGroups();
+  const { devices: allDevices } = useDevicesApi();
+  const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const deviceDisplayNameMap = Object.fromEntries(
+    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+  );
+  const devicesByKey = Object.fromEntries(
+    allDevices.map((device) => [getDeviceKey(device), device]),
+  ) as Record<string, Device>;
 
   if (loading) {
     return (
@@ -43,6 +56,8 @@ export default function GroupsPage() {
             key={group.id}
             group={group}
             allGroups={groups}
+            deviceDisplayNameMap={deviceDisplayNameMap}
+            devicesByKey={devicesByKey}
             isEditing={editingId === group.id}
             onEdit={() => setEditingId(group.id)}
             onSave={async (updated) => {
@@ -80,42 +95,53 @@ function DevicePicker({
   selected: GroupDevice[];
   onChange: (devices: GroupDevice[]) => void;
 }) {
-  const state = useWebsocketState();
+  const { devices: allDevices } = useDevicesApi();
+  const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [search, setSearch] = useState('');
+  const deviceDisplayNameMap = Object.fromEntries(
+    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+  );
+  const devicesByKey = Object.fromEntries(
+    allDevices.map((device) => [getDeviceKey(device), device]),
+  ) as Record<string, Device>;
 
   const availableDevices = useMemo(() => {
-    if (!state?.devices) return [];
-    return Object.entries(state.devices)
-      .map(([key, device]) => ({ key, device: device as Device }))
-      .sort((a, b) => a.device.name.localeCompare(b.device.name));
-  }, [state?.devices]);
+    return allDevices
+      .map((device) => ({
+        key: getDeviceKey(device),
+        label: getDeviceDisplayLabel(device, deviceDisplayNameMap),
+        device,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
+  }, [allDevices, deviceDisplayNameMap]);
 
-  const isSelected = (integrationId: string, deviceName: string) =>
-    selected.some(
-      (d) => d.integration_id === integrationId && d.device_name === deviceName,
-    );
+  const isSelected = (deviceKey: string) =>
+    selected.some((device) => getGroupDeviceKey(device) === deviceKey);
 
-  const toggle = (integrationId: string, deviceName: string) => {
-    if (isSelected(integrationId, deviceName)) {
+  const toggle = (deviceKey: string) => {
+    if (isSelected(deviceKey)) {
       onChange(
-        selected.filter(
-          (d) =>
-            !(
-              d.integration_id === integrationId &&
-              d.device_name === deviceName
-            ),
-        ),
+        selected.filter((device) => getGroupDeviceKey(device) !== deviceKey),
       );
     } else {
+      const nextDevice = devicesByKey[deviceKey];
+      if (!nextDevice) {
+        return;
+      }
+
       onChange([
         ...selected,
-        { integration_id: integrationId, device_name: deviceName },
+        {
+          integration_id: nextDevice.integration_id,
+          device_name: nextDevice.name,
+          device_id: nextDevice.id,
+        },
       ]);
     }
   };
 
-  const filtered = availableDevices.filter(({ device }) =>
-    device.name.toLowerCase().includes(search.toLowerCase()),
+  const filtered = availableDevices.filter(({ key, label, device }) =>
+    `${label} ${device.name} ${key}`.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -128,20 +154,29 @@ function DevicePicker({
 
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
-          {selected.map((d) => (
-            <span
-              key={`${d.integration_id}/${d.device_name}`}
-              className="badge badge-sm gap-1"
-            >
-              {d.device_name}
-              <button
-                className="text-xs opacity-60 hover:opacity-100"
-                onClick={() => toggle(d.integration_id, d.device_name)}
-              >
-                ✕
-              </button>
-            </span>
-          ))}
+          {selected.map((device) => {
+            const deviceKey = getGroupDeviceKey(device);
+            const matchingDevice = devicesByKey[deviceKey];
+            const label = matchingDevice
+              ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
+              : getDeviceDisplayLabelFromKey(
+                  deviceKey,
+                  device.device_id ?? device.device_name,
+                  deviceDisplayNameMap,
+                );
+
+            return (
+              <span key={deviceKey} className="badge badge-sm gap-1">
+                {label}
+                <button
+                  className="text-xs opacity-60 hover:opacity-100"
+                  onClick={() => toggle(deviceKey)}
+                >
+                  ✕
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -161,20 +196,20 @@ function DevicePicker({
               : 'No matching devices'}
           </div>
         ) : (
-          filtered.map(({ device }) => (
+          filtered.map(({ key, label, device }) => (
             <label
-              key={`${device.integration_id}/${device.name}`}
+              key={key}
               className="flex items-center gap-2 p-1.5 hover:bg-base-200 rounded cursor-pointer"
             >
               <input
                 type="checkbox"
                 className="checkbox checkbox-xs"
-                checked={isSelected(device.integration_id, device.name)}
-                onChange={() => toggle(device.integration_id, device.name)}
+                checked={isSelected(key)}
+                onChange={() => toggle(key)}
               />
-              <span className="text-sm truncate">{device.name}</span>
+              <span className="text-sm truncate">{label}</span>
               <span className="text-xs opacity-50 truncate ml-auto">
-                {device.integration_id}
+                {device.integration_id}/{device.id}
               </span>
             </label>
           ))
@@ -260,6 +295,8 @@ function GroupLinker({
 function GroupCard({
   group,
   allGroups,
+  deviceDisplayNameMap,
+  devicesByKey,
   isEditing,
   onEdit,
   onSave,
@@ -268,6 +305,8 @@ function GroupCard({
 }: {
   group: Group;
   allGroups: Group[];
+  deviceDisplayNameMap: Record<string, string>;
+  devicesByKey: Record<string, Device>;
   isEditing: boolean;
   onEdit: () => void;
   onSave: (group: Partial<Group>) => Promise<void>;
@@ -349,14 +388,23 @@ function GroupCard({
 
         {group.devices.length > 0 && (
           <div className="flex flex-wrap gap-1 mt-2">
-            {group.devices.map((d) => (
-              <span
-                key={`${d.integration_id}/${d.device_name}`}
-                className="badge badge-sm badge-ghost"
-              >
-                {d.device_name}
-              </span>
-            ))}
+            {group.devices.map((device) => {
+              const deviceKey = getGroupDeviceKey(device);
+              const matchingDevice = devicesByKey[deviceKey];
+              const label = matchingDevice
+                ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
+                : getDeviceDisplayLabelFromKey(
+                    deviceKey,
+                    device.device_id ?? device.device_name,
+                    deviceDisplayNameMap,
+                  );
+
+              return (
+                <span key={deviceKey} className="badge badge-sm badge-ghost">
+                  {label}
+                </span>
+              );
+            })}
           </div>
         )}
 

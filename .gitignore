@@ -42,5 +42,10 @@ ui/bindings/generated/
 
 # Misc
 .idea/
-.toml
-.toml.bak
+
+# Database / configs
+*.db
+*.db-shm
+*.db-wal
+*.toml
+*.toml.bak

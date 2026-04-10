@@ -113,6 +113,15 @@ impl AppState {
     pub async fn reload_groups(&mut self) -> Result<()> {
         info!("Hot-reloading groups from database...");
         self.groups.reload_from_db().await?;
+
+        self.groups.force_invalidate(&self.devices);
+        self.expr
+            .invalidate(self.devices.get_state(), &self.groups, &self.scenes);
+        self.scenes
+            .force_invalidate(&self.devices, &self.groups, self.expr.get_context());
+        self.expr
+            .invalidate(self.devices.get_state(), &self.groups, &self.scenes);
+
         self.schedule_ws_broadcast();
         Ok(())
     }
@@ -121,6 +130,12 @@ impl AppState {
     pub async fn reload_scenes(&mut self) -> Result<()> {
         info!("Hot-reloading scenes from database...");
         self.scenes.refresh_db_scenes().await;
+
+        self.scenes
+            .force_invalidate(&self.devices, &self.groups, self.expr.get_context());
+        self.expr
+            .invalidate(self.devices.get_state(), &self.groups, &self.scenes);
+
         self.schedule_ws_broadcast();
         Ok(())
     }

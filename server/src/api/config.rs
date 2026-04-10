@@ -8,15 +8,24 @@
 //! - Import/Export: GET/POST /api/v1/config/export, /api/v1/config/import
 //! - Migration: POST /api/v1/config/migrate/preview, /api/v1/config/migrate/apply
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 
+use crate::core::logs::recent_logs;
 use crate::core::state::AppState;
+use crate::db::actions::db_update_device;
 use crate::db::config_queries::{
-    self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow, DevicePositionRow,
-    FloorplanRow, GroupDeviceRow, GroupRow, IntegrationRow, RoutineRow, SceneRow,
+    self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
+    DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanMetadataRow,
+    FloorplanRow, GroupDeviceRow, GroupPositionRow, GroupRow, IntegrationRow, RoutineRow, SceneRow,
+};
+use crate::types::{
+    device::{ControllableState, Device, DeviceData, DeviceId, DeviceRef, SensorDevice},
+    integration::IntegrationId,
+    rule::Rules,
 };
 use bytes::Buf;
+use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter, Reply};
@@ -77,6 +86,12 @@ fn internal_error(e: impl std::fmt::Display) -> warp::reply::WithStatus<warp::re
     error_response(&e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
 }
 
+fn decode_path_key(raw: String) -> String {
+    percent_decode_str(raw.as_str())
+        .decode_utf8_lossy()
+        .into_owned()
+}
+
 // ============================================================================
 // Main Config Routes
 // ============================================================================
@@ -86,10 +101,14 @@ pub fn config(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("config").and(
         core_routes(app_state)
+            .or(logs_routes(app_state))
+            .or(device_display_name_routes(app_state))
+            .or(device_sensor_config_routes(app_state))
             .or(integrations_routes(app_state))
             .or(groups_routes(app_state))
             .or(scenes_routes(app_state))
             .or(routines_routes(app_state))
+            .or(floorplans_routes(app_state))
             .or(floorplan_routes(app_state))
             .or(dashboard_routes(app_state))
             .or(export_import_routes(app_state))
@@ -100,6 +119,20 @@ pub fn config(
 // ============================================================================
 // Core Config
 // ============================================================================
+
+fn logs_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("logs")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(list_logs)
+}
+
+async fn list_logs(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    Ok(ApiResponse::success(recent_logs()))
+}
 
 fn core_routes(
     app_state: &Arc<RwLock<AppState>>,
@@ -137,6 +170,118 @@ async fn update_core_config(
 ) -> Result<impl Reply, warp::Rejection> {
     match config_queries::db_update_core_config(&config).await {
         Ok(()) => Ok(ApiResponse::success(config)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+fn device_display_name_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let list = warp::path("device-display-names")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(list_device_display_names);
+
+    let upsert = warp::path!("device-display-names" / String)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(upsert_device_display_name);
+
+    let delete = warp::path!("device-display-names" / String)
+        .and(warp::delete())
+        .and(with_state(app_state))
+        .and_then(delete_device_display_name);
+
+    list.or(upsert).or(delete)
+}
+
+async fn list_device_display_names(
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_device_display_overrides().await {
+        Ok(rows) => Ok(ApiResponse::success(rows)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn upsert_device_display_name(
+    device_key: String,
+    mut row: DeviceDisplayNameRow,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    row.device_key = decode_path_key(device_key);
+
+    match config_queries::db_upsert_device_display_override(&row).await {
+        Ok(()) => Ok(ApiResponse::success(row)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn delete_device_display_name(
+    device_key: String,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_delete_device_display_override(&decode_path_key(device_key)).await {
+        Ok(true) => Ok(ApiResponse::success(())),
+        Ok(false) => Ok(not_found("Device display name")),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+fn device_sensor_config_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let list = warp::path("device-sensor-configs")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(list_device_sensor_configs);
+
+    let upsert = warp::path!("device-sensor-configs" / String)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(upsert_device_sensor_config);
+
+    let delete = warp::path!("device-sensor-configs" / String)
+        .and(warp::delete())
+        .and(with_state(app_state))
+        .and_then(delete_device_sensor_config);
+
+    list.or(upsert).or(delete)
+}
+
+async fn list_device_sensor_configs(
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_device_sensor_configs().await {
+        Ok(rows) => Ok(ApiResponse::success(rows)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn upsert_device_sensor_config(
+    device_ref: String,
+    mut row: DeviceSensorConfigRow,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    row.device_ref = decode_path_key(device_ref);
+
+    match config_queries::db_upsert_device_sensor_config(&row).await {
+        Ok(()) => Ok(ApiResponse::success(row)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn delete_device_sensor_config(
+    device_ref: String,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_delete_device_sensor_config(&decode_path_key(device_ref)).await {
+        Ok(true) => Ok(ApiResponse::success(())),
+        Ok(false) => Ok(not_found("Device sensor config")),
         Err(e) => Ok(internal_error(e)),
     }
 }
@@ -582,12 +727,104 @@ async fn delete_routine(
 // Floorplan
 // ============================================================================
 
+fn floorplans_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let list = warp::path("floorplans")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(list_floorplans);
+
+    let create = warp::path("floorplans")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(create_floorplan);
+
+    let update = warp::path!("floorplans" / String)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(update_floorplan);
+
+    let delete = warp::path!("floorplans" / String)
+        .and(warp::delete())
+        .and(with_state(app_state))
+        .and_then(delete_floorplan);
+
+    list.or(create).or(update).or(delete)
+}
+
+async fn list_floorplans(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_floorplans().await {
+        Ok(floorplans) => Ok(ApiResponse::success(floorplans)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn create_floorplan(
+    floorplan: FloorplanMetadataRow,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_create_floorplan(&floorplan).await {
+        Ok(()) => Ok(ApiResponse::created(floorplan)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn update_floorplan(
+    id: String,
+    mut floorplan: FloorplanMetadataRow,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    floorplan.id = id;
+
+    match config_queries::db_update_floorplan_metadata(&floorplan).await {
+        Ok(()) => Ok(ApiResponse::success(floorplan)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn delete_floorplan(
+    id: String,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_delete_floorplan(&id).await {
+        Ok(true) => Ok(ApiResponse::success(())),
+        Ok(false) => Ok(not_found("Floorplan")),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+fn floorplan_id_query() -> impl Filter<Extract = (String,), Error = std::convert::Infallible> + Clone
+{
+    warp::query::raw()
+        .or(warp::any().map(String::new))
+        .unify()
+        .map(|raw: String| {
+            raw.split('&')
+                .find_map(|entry| {
+                    entry
+                        .split_once('=')
+                        .filter(|(key, _)| *key == "id")
+                        .map(|(_, value)| {
+                            percent_decode_str(value).decode_utf8_lossy().into_owned()
+                        })
+                })
+                .filter(|id| !id.is_empty())
+                .unwrap_or_else(|| "default".to_string())
+        })
+}
+
 fn floorplan_routes(
     app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let get_floorplan = warp::path("floorplan")
         .and(warp::path::end())
         .and(warp::get())
+        .and(floorplan_id_query())
         .and(with_state(app_state))
         .and_then(get_floorplan);
 
@@ -596,30 +833,35 @@ fn floorplan_routes(
         .and(warp::post())
         .and(warp::body::bytes())
         .and(warp::header::optional::<String>("content-type"))
+        .and(floorplan_id_query())
         .and(with_state(app_state))
         .and_then(upload_floorplan);
 
     // Grid endpoints (JSON data for the floor grid)
     let get_grid = warp::path!("floorplan" / "grid")
         .and(warp::get())
+        .and(floorplan_id_query())
         .and(with_state(app_state))
         .and_then(get_floorplan_grid);
 
     let save_grid = warp::path!("floorplan" / "grid")
         .and(warp::post())
         .and(warp::body::json())
+        .and(floorplan_id_query())
         .and(with_state(app_state))
         .and_then(save_floorplan_grid);
 
     // Separate image endpoints
     let get_image = warp::path!("floorplan" / "image")
         .and(warp::get())
+        .and(floorplan_id_query())
         .and(with_state(app_state))
         .and_then(get_floorplan_image);
 
     let upload_image = warp::path!("floorplan" / "image")
         .and(warp::post())
         .and(warp::multipart::form().max_length(10 * 1024 * 1024))
+        .and(floorplan_id_query())
         .and(with_state(app_state))
         .and_then(upload_floorplan_image);
 
@@ -639,6 +881,22 @@ fn floorplan_routes(
         .and(with_state(app_state))
         .and_then(delete_device_position);
 
+    let get_group_positions = warp::path!("floorplan" / "groups")
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(get_group_positions);
+
+    let upsert_group_position = warp::path!("floorplan" / "groups" / String)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(upsert_group_position);
+
+    let delete_group_position = warp::path!("floorplan" / "groups" / String)
+        .and(warp::delete())
+        .and(with_state(app_state))
+        .and_then(delete_group_position);
+
     get_floorplan
         .or(upload_floorplan)
         .or(get_grid)
@@ -648,10 +906,16 @@ fn floorplan_routes(
         .or(get_positions)
         .or(upsert_position)
         .or(delete_position)
+        .or(get_group_positions)
+        .or(upsert_group_position)
+        .or(delete_group_position)
 }
 
-async fn get_floorplan(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_floorplan().await {
+async fn get_floorplan(
+    floorplan_id: String,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_floorplan_by_id(&floorplan_id).await {
         Ok(Some(floorplan)) => Ok(ApiResponse::success(floorplan)),
         Ok(None) => Ok(not_found("Floorplan")),
         Err(e) => Ok(internal_error(e)),
@@ -661,6 +925,7 @@ async fn get_floorplan(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, 
 async fn upload_floorplan(
     body: bytes::Bytes,
     content_type: Option<String>,
+    floorplan_id: String,
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     // TODO: Get width/height from image metadata
@@ -671,7 +936,7 @@ async fn upload_floorplan(
         height: None,
     };
 
-    match config_queries::db_upsert_floorplan(&floorplan).await {
+    match config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
         Ok(()) => Ok(ApiResponse::success(())),
         Err(e) => Ok(internal_error(e)),
     }
@@ -691,7 +956,7 @@ async fn upsert_device_position(
     mut pos: DevicePositionRow,
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    pos.device_key = device_key;
+    pos.device_key = decode_path_key(device_key);
     match config_queries::db_upsert_device_position(&pos).await {
         Ok(()) => Ok(ApiResponse::success(pos)),
         Err(e) => Ok(internal_error(e)),
@@ -702,17 +967,50 @@ async fn delete_device_position(
     device_key: String,
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_device_position(&device_key).await {
+    match config_queries::db_delete_device_position(&decode_path_key(device_key)).await {
         Ok(true) => Ok(ApiResponse::success(())),
         Ok(false) => Ok(not_found("Device position")),
         Err(e) => Ok(internal_error(e)),
     }
 }
 
-async fn get_floorplan_grid(
+async fn get_group_positions(
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_floorplan_grid().await {
+    match config_queries::db_get_group_positions().await {
+        Ok(positions) => Ok(ApiResponse::success(positions)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn upsert_group_position(
+    group_id: String,
+    mut pos: GroupPositionRow,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    pos.group_id = group_id;
+    match config_queries::db_upsert_group_position(&pos).await {
+        Ok(()) => Ok(ApiResponse::success(pos)),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn delete_group_position(
+    group_id: String,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_delete_group_position(&group_id).await {
+        Ok(true) => Ok(ApiResponse::success(())),
+        Ok(false) => Ok(not_found("Group position")),
+        Err(e) => Ok(internal_error(e)),
+    }
+}
+
+async fn get_floorplan_grid(
+    floorplan_id: String,
+    _app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    match config_queries::db_get_floorplan_grid_by_id(&floorplan_id).await {
         Ok(Some(grid)) => Ok(ApiResponse::success(grid.grid)),
         Ok(None) => Ok(ApiResponse::success(Option::<String>::None)),
         Err(e) => Ok(internal_error(e)),
@@ -726,18 +1024,20 @@ struct SaveGridRequest {
 
 async fn save_floorplan_grid(
     request: SaveGridRequest,
+    floorplan_id: String,
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_upsert_floorplan_grid(&request.grid).await {
+    match config_queries::db_upsert_floorplan_grid_by_id(&floorplan_id, &request.grid).await {
         Ok(()) => Ok(ApiResponse::success(())),
         Err(e) => Ok(internal_error(e)),
     }
 }
 
 async fn get_floorplan_image(
+    floorplan_id: String,
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<Box<dyn Reply>, warp::Rejection> {
-    match config_queries::db_get_floorplan().await {
+    match config_queries::db_get_floorplan_by_id(&floorplan_id).await {
         Ok(Some(floorplan)) => {
             if let Some(image_data) = floorplan.image_data {
                 let mime_type = floorplan
@@ -759,6 +1059,7 @@ async fn get_floorplan_image(
 
 async fn upload_floorplan_image(
     mut form: warp::multipart::FormData,
+    floorplan_id: String,
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     use futures::TryStreamExt;
@@ -788,7 +1089,7 @@ async fn upload_floorplan_image(
             height: None,
         };
 
-        match config_queries::db_upsert_floorplan(&floorplan).await {
+        match config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
             Ok(()) => Ok(ApiResponse::success(())),
             Err(e) => Ok(internal_error(e)),
         }
@@ -1076,18 +1377,13 @@ fn migrate_routes(
     preview.or(apply)
 }
 
-pub fn parse_toml_config(
-    toml_str: &str,
-) -> Result<MigratePreviewResult, String> {
+pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String> {
     let config: TomlConfig =
         toml::from_str(toml_str).map_err(|e| format!("Failed to parse TOML: {e}"))?;
 
     // Convert core config
     let core = CoreConfigRow {
-        warmup_time_seconds: config
-            .core
-            .and_then(|c| c.warmup_time_seconds)
-            .unwrap_or(1) as i32,
+        warmup_time_seconds: config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1) as i32,
     };
 
     // Convert integrations
@@ -1098,13 +1394,10 @@ pub fn parse_toml_config(
         .filter_map(|(id, value)| {
             let plugin = value.get("plugin")?.as_str()?.to_string();
             // Convert the remaining config (exclude "plugin") to JSON
-            let mut config_map = value
-                .as_table()
-                .cloned()
-                .unwrap_or_default();
+            let mut config_map = value.as_table().cloned().unwrap_or_default();
             config_map.remove("plugin");
-            let config_json =
-                serde_json::to_value(&config_map).unwrap_or(serde_json::Value::Object(Default::default()));
+            let config_json = serde_json::to_value(&config_map)
+                .unwrap_or(serde_json::Value::Object(Default::default()));
             Some(IntegrationRow {
                 id,
                 plugin,
@@ -1169,9 +1462,7 @@ pub fn parse_toml_config(
                 .collect();
 
             // Convert group states: { group_id: config }
-            let group_states: HashMap<String, serde_json::Value> = scene
-                .groups
-                .unwrap_or_default();
+            let group_states: HashMap<String, serde_json::Value> = scene.groups.unwrap_or_default();
 
             SceneRow {
                 id,
@@ -1267,7 +1558,116 @@ pub async fn apply_migration(preview: &MigratePreviewResult) -> color_eyre::Resu
         config_queries::db_upsert_routine(routine).await?;
     }
 
+    for device in derive_migrated_mqtt_sensor_devices(preview) {
+        db_update_device(&device).await?;
+    }
+
     Ok(())
+}
+
+fn derive_migrated_mqtt_sensor_devices(preview: &MigratePreviewResult) -> Vec<Device> {
+    let mqtt_integration_ids = preview
+        .integrations
+        .iter()
+        .filter(|integration| integration.plugin == "mqtt")
+        .map(|integration| IntegrationId::from(integration.id.clone()))
+        .collect::<HashSet<_>>();
+
+    if mqtt_integration_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let mut discovered_devices = BTreeMap::new();
+
+    for routine in &preview.routines {
+        let Ok(rules) = serde_json::from_value::<Rules>(routine.rules.clone()) else {
+            warn!(
+                "Failed to deserialize routine '{}' rules while deriving migrated MQTT sensors",
+                routine.name,
+            );
+            continue;
+        };
+
+        collect_migrated_sensor_devices(&rules, &mqtt_integration_ids, &mut discovered_devices);
+    }
+
+    discovered_devices.into_values().collect()
+}
+
+fn collect_migrated_sensor_devices(
+    rules: &Rules,
+    mqtt_integration_ids: &HashSet<IntegrationId>,
+    discovered_devices: &mut BTreeMap<String, Device>,
+) {
+    for rule in rules {
+        match rule {
+            crate::types::rule::Rule::Sensor(sensor_rule) => {
+                let (integration_id, device_id, device_name) = match &sensor_rule.device_ref {
+                    DeviceRef::Id(id_ref)
+                        if mqtt_integration_ids.contains(&id_ref.integration_id) =>
+                    {
+                        (
+                            id_ref.integration_id.clone(),
+                            id_ref.device_id.clone(),
+                            id_ref.device_id.to_string(),
+                        )
+                    }
+                    DeviceRef::Name(name_ref)
+                        if mqtt_integration_ids.contains(&name_ref.integration_id) =>
+                    {
+                        (
+                            name_ref.integration_id.clone(),
+                            DeviceId::new(&name_ref.name),
+                            name_ref.name.clone(),
+                        )
+                    }
+                    _ => continue,
+                };
+
+                let device = Device {
+                    id: device_id,
+                    name: device_name,
+                    integration_id,
+                    data: DeviceData::Sensor(non_matching_sensor_state(&sensor_rule.state)),
+                    raw: None,
+                };
+
+                discovered_devices
+                    .entry(device.get_device_key().to_string())
+                    .or_insert(device);
+            }
+            crate::types::rule::Rule::Any(any_rule) => {
+                collect_migrated_sensor_devices(
+                    &any_rule.any,
+                    mqtt_integration_ids,
+                    discovered_devices,
+                );
+            }
+            _ => {}
+        }
+    }
+}
+
+fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
+    match expected {
+        SensorDevice::Boolean { value } => SensorDevice::Boolean { value: !value },
+        SensorDevice::Text { value } => SensorDevice::Text {
+            value: if value.is_empty() {
+                "__unknown__".to_string()
+            } else {
+                String::new()
+            },
+        },
+        SensorDevice::Number { value } => SensorDevice::Number {
+            value: if *value == 0.0 { 1.0 } else { 0.0 },
+        },
+        SensorDevice::Color(state) => SensorDevice::Color(ControllableState {
+            power: !state.power,
+            brightness: None,
+            color: None,
+            transition: None,
+        }),
+    }
 }
 
 async fn migrate_preview(
@@ -1305,4 +1705,83 @@ async fn migrate_apply(
     let _ = state.reload_routines().await;
 
     Ok(ApiResponse::success(counts))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ordered_float::OrderedFloat;
+
+    #[test]
+    fn derive_migrated_mqtt_sensor_devices_seeds_named_sensor_rules() {
+        let preview = MigratePreviewResult {
+            integrations: vec![IntegrationRow {
+                id: "zigbee2mqtt".to_string(),
+                plugin: "mqtt".to_string(),
+                config: serde_json::json!({}),
+                enabled: true,
+            }],
+            groups: Vec::new(),
+            scenes: Vec::new(),
+            routines: vec![RoutineRow {
+                id: "entryway_motion".to_string(),
+                name: "Entryway motion".to_string(),
+                enabled: true,
+                rules: serde_json::json!([
+                    {
+                        "state": { "value": true },
+                        "trigger_mode": "pulse",
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Entryway motion sensor"
+                    }
+                ]),
+                actions: serde_json::json!([]),
+            }],
+            core: CoreConfigRow {
+                warmup_time_seconds: 1,
+            },
+        };
+
+        let devices = derive_migrated_mqtt_sensor_devices(&preview);
+
+        assert_eq!(devices.len(), 1);
+        assert_eq!(devices[0].id, DeviceId::new("Entryway motion sensor"));
+        assert_eq!(devices[0].name, "Entryway motion sensor");
+        assert_eq!(
+            devices[0].data,
+            DeviceData::Sensor(SensorDevice::Boolean { value: false })
+        );
+    }
+
+    #[test]
+    fn non_matching_sensor_state_avoids_matching_number_text_and_color_rules() {
+        assert_eq!(
+            non_matching_sensor_state(&SensorDevice::Text {
+                value: "on_press".to_string(),
+            }),
+            SensorDevice::Text {
+                value: String::new(),
+            }
+        );
+
+        assert_eq!(
+            non_matching_sensor_state(&SensorDevice::Number { value: 0.0 }),
+            SensorDevice::Number { value: 1.0 }
+        );
+
+        assert_eq!(
+            non_matching_sensor_state(&SensorDevice::Color(ControllableState {
+                power: true,
+                brightness: Some(OrderedFloat(0.5)),
+                color: None,
+                transition: None,
+            })),
+            SensorDevice::Color(ControllableState {
+                power: false,
+                brightness: None,
+                color: None,
+                transition: None,
+            })
+        );
+    }
 }

@@ -7,8 +7,8 @@ tasks:
   dev:
     command: 'pnpm dev'
     env:
-      API_ENDPOINT: 'http://localhost:45290'
-      WS_ENDPOINT: 'ws://localhost:45290/ws'
+      API_ENDPOINT: 'http://localhost:45289'
+      WS_ENDPOINT: 'ws://localhost:45289/ws'
     local: true
     options:
       persistent: true

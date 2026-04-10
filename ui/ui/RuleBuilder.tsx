@@ -1,5 +1,7 @@
 'use client';
 
+import { useDeviceDisplayNames } from '@/hooks/useConfig';
+import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { useState, useCallback } from 'react';
 import { TriggerMode } from '@/bindings/TriggerMode';
 import { SceneId } from '@/bindings/SceneId';
@@ -116,15 +118,32 @@ function DeviceSelector({
   deviceId,
   onChange,
 }: DeviceSelectorProps) {
-  const deviceList = Object.entries(devices).map(([key, device]) => ({
-    key,
-    device: device as Device,
-  }));
+  const { data: deviceDisplayNames } = useDeviceDisplayNames();
+  const deviceDisplayNameMap = Object.fromEntries(
+    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+  );
+  const deviceList = Object.entries(devices)
+    .map(([key, device]) => ({
+      key,
+      device: device as Device,
+      label: getDeviceDisplayLabel(device as Device, deviceDisplayNameMap),
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label) || left.key.localeCompare(right.key));
 
-  const currentValue =
-    integrationId && (deviceName ?? deviceId)
-      ? `${integrationId}/${deviceName ?? deviceId}`
-      : '';
+  const currentValue = (() => {
+    if (integrationId && deviceId) {
+      return `${integrationId}/${deviceId}`;
+    }
+
+    if (!integrationId || !deviceName) {
+      return '';
+    }
+
+    const match = deviceList.find(
+      ({ device }) => device.integration_id === integrationId && device.name === deviceName,
+    );
+    return match?.key ?? '';
+  })();
 
   return (
     <div className="form-control">
@@ -135,15 +154,20 @@ function DeviceSelector({
         className="select select-bordered select-sm"
         value={currentValue}
         onChange={(e) => {
-          const [intId, ...nameParts] = e.target.value.split('/');
-          const name = nameParts.join('/');
-          onChange({ integration_id: intId, name });
+          if (!e.target.value) {
+            onChange({});
+            return;
+          }
+
+          const [intId, ...idParts] = e.target.value.split('/');
+          const id = idParts.join('/');
+          onChange({ integration_id: intId, id, name: undefined });
         }}
       >
         <option value="">Select device...</option>
-        {deviceList.map(({ key, device }) => (
+        {deviceList.map(({ key, device, label }) => (
           <option key={key} value={key}>
-            {device.name} ({key})
+            {label} ({key})
           </option>
         ))}
       </select>

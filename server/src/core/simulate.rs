@@ -24,7 +24,11 @@ pub async fn prepare_simulation_db(source_db_path: &str, config_path: Option<&st
             info!("Source DB is empty, checking for TOML fallback...");
             match config_path {
                 Some(toml_path) => export_from_toml(toml_path).await?,
-                None => return Err(eyre!("Source DB is empty and no --config TOML file provided")),
+                None => {
+                    return Err(eyre!(
+                        "Source DB is empty and no --config TOML file provided"
+                    ))
+                }
             }
         } else {
             export
@@ -166,26 +170,85 @@ async fn export_from_source_db(db_path: &str) -> Result<ConfigExport> {
         })
         .collect();
 
-    // Read floorplan (optional)
-    let fp: Option<(Option<Vec<u8>>, Option<String>, Option<i32>, Option<i32>)> =
-        sqlx::query_as("SELECT image_data, image_mime_type, width, height FROM floorplan LIMIT 1")
-            .fetch_optional(&pool)
-            .await?;
-    let floorplan = fp.map(|(image_data, image_mime_type, width, height)| {
-        config_queries::FloorplanRow {
-            image_data,
-            image_mime_type,
-            width,
-            height,
-        }
-    });
-
-    // Read device positions
-    let pos_rows: Vec<(String, f32, f32, f32, f32)> = sqlx::query_as(
-        "SELECT device_key, x, y, scale, rotation FROM device_positions",
+    // Read floorplans. Prefer the new multi-floorplan table, but fall back to the
+    // legacy single-row table so simulation still works against older DBs.
+    let floorplans: Vec<config_queries::FloorplanExportRow> = match sqlx::query_as::<
+        _,
+        (
+            String,
+            String,
+            Option<Vec<u8>>,
+            Option<String>,
+            Option<i32>,
+            Option<i32>,
+            Option<String>,
+        ),
+    >(
+        "SELECT id, name, image_data, image_mime_type, width, height, grid_data \
+         FROM floorplans ORDER BY sort_order, name",
     )
     .fetch_all(&pool)
-    .await?;
+    .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .map(
+                |(id, name, image_data, image_mime_type, width, height, grid_data)| {
+                    config_queries::FloorplanExportRow {
+                        id,
+                        name,
+                        image_data,
+                        image_mime_type,
+                        width,
+                        height,
+                        grid_data,
+                    }
+                },
+            )
+            .collect(),
+        Err(_) => {
+            let legacy_floorplan: Option<(
+                Option<Vec<u8>>,
+                Option<String>,
+                Option<i32>,
+                Option<i32>,
+                Option<String>,
+            )> = sqlx::query_as(
+                "SELECT image_data, image_mime_type, width, height, grid_data FROM floorplan LIMIT 1",
+            )
+            .fetch_optional(&pool)
+            .await?;
+
+            legacy_floorplan
+                .map(|(image_data, image_mime_type, width, height, grid_data)| {
+                    vec![config_queries::FloorplanExportRow {
+                        id: "default".to_string(),
+                        name: "Main floorplan".to_string(),
+                        image_data,
+                        image_mime_type,
+                        width,
+                        height,
+                        grid_data,
+                    }]
+                })
+                .unwrap_or_default()
+        }
+    };
+    let floorplan = floorplans
+        .iter()
+        .find(|floorplan| floorplan.id == "default")
+        .map(|floorplan| config_queries::FloorplanRow {
+            image_data: floorplan.image_data.clone(),
+            image_mime_type: floorplan.image_mime_type.clone(),
+            width: floorplan.width,
+            height: floorplan.height,
+        });
+
+    // Read device positions
+    let pos_rows: Vec<(String, f32, f32, f32, f32)> =
+        sqlx::query_as("SELECT device_key, x, y, scale, rotation FROM device_positions")
+            .fetch_all(&pool)
+            .await?;
     let device_positions = pos_rows
         .into_iter()
         .map(
@@ -195,6 +258,21 @@ async fn export_from_source_db(db_path: &str) -> Result<ConfigExport> {
                 y,
                 scale,
                 rotation,
+            },
+        )
+        .collect();
+
+    let display_override_rows: Vec<(String, String)> = sqlx::query_as(
+        "SELECT device_key, display_name FROM device_display_overrides ORDER BY device_key",
+    )
+    .fetch_all(&pool)
+    .await?;
+    let device_display_overrides = display_override_rows
+        .into_iter()
+        .map(
+            |(device_key, display_name)| config_queries::DeviceDisplayNameRow {
+                device_key,
+                display_name,
             },
         )
         .collect();
@@ -244,7 +322,10 @@ async fn export_from_source_db(db_path: &str) -> Result<ConfigExport> {
         scenes,
         routines,
         floorplan,
+        floorplans,
         device_positions,
+        device_display_overrides,
+        device_sensor_configs: Vec::new(),
         dashboard_layouts,
         dashboard_widgets,
     })
@@ -306,9 +387,9 @@ pub async fn convert_mqtt_to_dummy(
                         .unwrap_or_else(|| gd.device_name.clone());
                     let key = format!("{mqtt_id}/{device_id}");
                     let is_sensor = sensor_keys.contains(&key);
-                    devices.entry(device_id).or_insert_with(|| {
-                        build_dummy_device_config(&gd.device_name, is_sensor)
-                    });
+                    devices
+                        .entry(device_id)
+                        .or_insert_with(|| build_dummy_device_config(&gd.device_name, is_sensor));
                 }
             }
         }
@@ -319,9 +400,9 @@ pub async fn convert_mqtt_to_dummy(
                 if let Some((iid, did)) = device_key_str.split_once('/') {
                     if iid == *mqtt_id {
                         let is_sensor = sensor_keys.contains(device_key_str);
-                        devices.entry(did.to_string()).or_insert_with(|| {
-                            build_dummy_device_config(did, is_sensor)
-                        });
+                        devices
+                            .entry(did.to_string())
+                            .or_insert_with(|| build_dummy_device_config(did, is_sensor));
                     }
                 }
             }

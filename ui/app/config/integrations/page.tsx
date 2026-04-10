@@ -1,7 +1,7 @@
 'use client';
 
 import { useIntegrations, Integration } from '@/hooks/useConfig';
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 
 export default function IntegrationsPage() {
   const { data: integrations, loading, error, create, update, remove } = useIntegrations();
@@ -87,10 +87,58 @@ function IntegrationCard({
   onCancel: () => void;
   onDelete: () => void;
 }) {
-  const [config, setConfig] = useState(JSON.stringify(integration.config, null, 2));
+  const [config, setConfig] = useState(integration.config);
   const [enabled, setEnabled] = useState(integration.enabled);
+  const [useJsonMode, setUseJsonMode] = useState(false);
+  const [jsonText, setJsonText] = useState(
+    JSON.stringify(integration.config, null, 2),
+  );
+
+  const updateKey = useCallback(
+    (key: string, value: string) => {
+      setConfig((prev) => {
+        const updated = { ...prev };
+        // Try to parse as JSON value (numbers, booleans, arrays, objects)
+        try {
+          updated[key] = JSON.parse(value);
+        } catch {
+          updated[key] = value;
+        }
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const removeKey = useCallback((key: string) => {
+    setConfig((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+  }, []);
+
+  const addKey = useCallback(() => {
+    setConfig((prev) => ({ ...prev, '': '' }));
+  }, []);
+
+  const renameKey = useCallback((oldKey: string, newKey: string) => {
+    if (oldKey === newKey) return;
+    setConfig((prev) => {
+      const entries = Object.entries(prev);
+      const updated: Record<string, unknown> = {};
+      for (const [k, v] of entries) {
+        updated[k === oldKey ? newKey : k] = v;
+      }
+      return updated;
+    });
+  }, []);
 
   if (isEditing) {
+    const effectiveConfig = useJsonMode ? (() => {
+      try { return JSON.parse(jsonText); } catch { return config; }
+    })() : config;
+
     return (
       <div className="card bg-base-200 shadow-xl">
         <div className="card-body">
@@ -109,16 +157,75 @@ function IntegrationCard({
             </label>
           </div>
 
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Configuration (JSON)</span>
-            </label>
+          <div className="flex items-center justify-between">
+            <span className="label-text font-medium">Configuration</span>
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={() => {
+                if (!useJsonMode) {
+                  setJsonText(JSON.stringify(config, null, 2));
+                } else {
+                  try {
+                    setConfig(JSON.parse(jsonText));
+                  } catch {
+                    // Keep current config if JSON is invalid
+                  }
+                }
+                setUseJsonMode(!useJsonMode);
+              }}
+            >
+              {useJsonMode ? 'Key-Value' : 'JSON'}
+            </button>
+          </div>
+
+          {useJsonMode ? (
             <textarea
               className="textarea textarea-bordered h-48 font-mono text-sm"
-              value={config}
-              onChange={(e) => setConfig(e.target.value)}
+              value={jsonText}
+              onChange={(e) => setJsonText(e.target.value)}
             />
-          </div>
+          ) : (
+            <div className="space-y-2">
+              {Object.entries(config).map(([key, value]) => {
+                const isComplex =
+                  typeof value === 'object' && value !== null;
+                const displayValue = isComplex
+                  ? JSON.stringify(value)
+                  : String(value ?? '');
+
+                return (
+                  <div key={key} className="flex gap-2 items-start">
+                    <input
+                      type="text"
+                      className="input input-bordered input-sm flex-1 font-mono text-xs"
+                      value={key}
+                      onChange={(e) => renameKey(key, e.target.value)}
+                      placeholder="key"
+                    />
+                    <input
+                      type="text"
+                      className="input input-bordered input-sm flex-[2] font-mono text-xs"
+                      value={displayValue}
+                      onChange={(e) => updateKey(key, e.target.value)}
+                      placeholder="value"
+                    />
+                    <button
+                      className="btn btn-ghost btn-xs btn-error"
+                      onClick={() => removeKey(key)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                className="btn btn-xs btn-outline w-full"
+                onClick={addKey}
+              >
+                + Add Field
+              </button>
+            </div>
+          )}
 
           <div className="card-actions justify-end">
             <button className="btn btn-ghost" onClick={onCancel}>
@@ -127,14 +234,7 @@ function IntegrationCard({
             <button
               className="btn btn-primary"
               onClick={() => {
-                try {
-                  onSave({
-                    config: JSON.parse(config),
-                    enabled,
-                  });
-                } catch {
-                  alert('Invalid JSON');
-                }
+                onSave({ config: effectiveConfig, enabled });
               }}
             >
               Save
@@ -192,10 +292,61 @@ function CreateIntegrationModal({
 }) {
   const [id, setId] = useState('');
   const [plugin, setPlugin] = useState('');
-  const [config, setConfig] = useState('{}');
+  const [config, setConfig] = useState<Record<string, unknown>>({});
   const [enabled, setEnabled] = useState(true);
+  const [useJsonMode, setUseJsonMode] = useState(false);
+  const [jsonText, setJsonText] = useState('{}');
 
   const plugins = ['mqtt', 'circadian', 'cron', 'timer', 'dummy'];
+
+  const updateKey = useCallback(
+    (key: string, value: string) => {
+      setConfig((prev) => {
+        const updated = { ...prev };
+        try {
+          updated[key] = JSON.parse(value);
+        } catch {
+          updated[key] = value;
+        }
+        return updated;
+      });
+    },
+    [],
+  );
+
+  const removeKey = useCallback((key: string) => {
+    setConfig((prev) => {
+      const updated = { ...prev };
+      delete updated[key];
+      return updated;
+    });
+  }, []);
+
+  const addKey = useCallback(() => {
+    setConfig((prev) => ({ ...prev, '': '' }));
+  }, []);
+
+  const renameKey = useCallback((oldKey: string, newKey: string) => {
+    if (oldKey === newKey) return;
+    setConfig((prev) => {
+      const entries = Object.entries(prev);
+      const updated: Record<string, unknown> = {};
+      for (const [k, v] of entries) {
+        updated[k === oldKey ? newKey : k] = v;
+      }
+      return updated;
+    });
+  }, []);
+
+  const effectiveConfig = useJsonMode
+    ? (() => {
+        try {
+          return JSON.parse(jsonText);
+        } catch {
+          return config;
+        }
+      })()
+    : config;
 
   return (
     <dialog className="modal modal-open">
@@ -245,15 +396,76 @@ function CreateIntegrationModal({
           </label>
         </div>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Configuration (JSON)</span>
-          </label>
-          <textarea
-            className="textarea textarea-bordered h-32 font-mono text-sm"
-            value={config}
-            onChange={(e) => setConfig(e.target.value)}
-          />
+        <div className="mt-4">
+          <div className="flex items-center justify-between">
+            <span className="label-text font-medium">Configuration</span>
+            <button
+              className="btn btn-xs btn-ghost"
+              onClick={() => {
+                if (!useJsonMode) {
+                  setJsonText(JSON.stringify(config, null, 2));
+                } else {
+                  try {
+                    setConfig(JSON.parse(jsonText));
+                  } catch {
+                    // Keep current config if JSON is invalid
+                  }
+                }
+                setUseJsonMode(!useJsonMode);
+              }}
+            >
+              {useJsonMode ? 'Key-Value' : 'JSON'}
+            </button>
+          </div>
+
+          {useJsonMode ? (
+            <textarea
+              className="textarea textarea-bordered h-32 font-mono text-sm w-full mt-2"
+              value={jsonText}
+              onChange={(e) => setJsonText(e.target.value)}
+            />
+          ) : (
+            <div className="space-y-2 mt-2">
+              {Object.entries(config).map(([key, value]) => {
+                const isComplex =
+                  typeof value === 'object' && value !== null;
+                const displayValue = isComplex
+                  ? JSON.stringify(value)
+                  : String(value ?? '');
+
+                return (
+                  <div key={key} className="flex gap-2 items-start">
+                    <input
+                      type="text"
+                      className="input input-bordered input-sm flex-1 font-mono text-xs"
+                      value={key}
+                      onChange={(e) => renameKey(key, e.target.value)}
+                      placeholder="key"
+                    />
+                    <input
+                      type="text"
+                      className="input input-bordered input-sm flex-[2] font-mono text-xs"
+                      value={displayValue}
+                      onChange={(e) => updateKey(key, e.target.value)}
+                      placeholder="value"
+                    />
+                    <button
+                      className="btn btn-ghost btn-xs btn-error"
+                      onClick={() => removeKey(key)}
+                    >
+                      ✕
+                    </button>
+                  </div>
+                );
+              })}
+              <button
+                className="btn btn-xs btn-outline w-full"
+                onClick={addKey}
+              >
+                + Add Field
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="modal-action">
@@ -264,16 +476,12 @@ function CreateIntegrationModal({
             className="btn btn-primary"
             disabled={!id || !plugin}
             onClick={() => {
-              try {
-                onCreate({
-                  id,
-                  plugin,
-                  config: JSON.parse(config),
-                  enabled,
-                });
-              } catch {
-                alert('Invalid JSON');
-              }
+              onCreate({
+                id,
+                plugin,
+                config: effectiveConfig,
+                enabled,
+              });
             }}
           >
             Create

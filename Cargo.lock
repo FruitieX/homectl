@@ -1185,6 +1185,7 @@ dependencies = [
  "color-eyre",
  "croner",
  "datatest-stable",
+ "env_logger",
  "evalexpr",
  "eyre",
  "futures",

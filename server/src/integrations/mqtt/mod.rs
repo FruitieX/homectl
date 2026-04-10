@@ -162,7 +162,6 @@ impl Integration for Mqtt {
 
         Ok(())
     }
-
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let client = self
             .client

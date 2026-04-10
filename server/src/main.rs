@@ -1,13 +1,13 @@
 #[macro_use]
 extern crate log;
 
-use homectl_server::api::init_api;
 use homectl_server::api::config::{apply_migration, parse_toml_config};
+use homectl_server::api::init_api;
 use homectl_server::core::expr::Expr;
 use homectl_server::core::simulate;
 use homectl_server::core::{
     devices::Devices, event::handle_event, groups::Groups, integrations::Integrations,
-    routines::Routines, scenes::Scenes, state::AppState, ui::Ui,
+    logs::init_logging, routines::Routines, scenes::Scenes, state::AppState, ui::Ui,
 };
 use homectl_server::db::{config_queries, init_db};
 use homectl_server::types::event::{mk_event_channel, Event};
@@ -25,7 +25,7 @@ use tokio::sync::RwLock;
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     color_eyre::install()?;
-    pretty_env_logger::init();
+    init_logging()?;
 
     match &cli.command {
         Some(Command::Simulate(args)) => run_simulation(&cli, args).await,
@@ -42,7 +42,10 @@ async fn run_server(cli: &Cli) -> Result<(), Box<dyn Error>> {
 }
 
 /// Simulation mode: in-memory SQLite, mirror source config, MQTT→dummy translation.
-async fn run_simulation(cli: &Cli, args: &homectl_server::utils::cli::SimulateArgs) -> Result<(), Box<dyn Error>> {
+async fn run_simulation(
+    cli: &Cli,
+    args: &homectl_server::utils::cli::SimulateArgs,
+) -> Result<(), Box<dyn Error>> {
     info!("Starting simulation mode on port {}", args.port);
 
     // Initialize in-memory SQLite
@@ -146,7 +149,10 @@ async fn seed_from_toml_if_empty(cli: &Cli) -> Result<()> {
             .unwrap_or_else(|| Path::new("Settings.toml"));
 
         if config_path.exists() {
-            info!("Empty database detected, seeding from {}", config_path.display());
+            info!(
+                "Empty database detected, seeding from {}",
+                config_path.display()
+            );
             let toml_str = std::fs::read_to_string(config_path)?;
             match parse_toml_config(&toml_str) {
                 Ok(preview) => {
@@ -158,7 +164,10 @@ async fn seed_from_toml_if_empty(cli: &Cli) -> Result<()> {
                 }
             }
         } else {
-            info!("No config file found at {}, starting with empty database", config_path.display());
+            info!(
+                "No config file found at {}, starting with empty database",
+                config_path.display()
+            );
         }
     }
 

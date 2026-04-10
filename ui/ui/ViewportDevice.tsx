@@ -13,62 +13,9 @@ import {
 import Color from 'color';
 import { KonvaEventObject } from 'konva/lib/Node';
 
-const devicePositions: Record<string, Vector2d> = {
-  'Kitchen lightstrip upper': { x: 537, y: 700 },
-  'Kitchen lightstrip lower': { x: 537, y: 800 },
-  'Living room downlight 3': { x: 450, y: 400 },
-  'Living room downlight 2': { x: 175, y: 400 },
-  'Living room downlight 1': { x: 175, y: 525 },
-  'Living room downlight 4': { x: 450, y: 525 },
-  'Kitchen table lamp': { x: 250, y: 462 },
-  'Living room lamp': { x: 375, y: 462 },
-  'Bedroom lamp': { x: 1100, y: 500 },
-  'Iittala Lantern 1': { x: 960, y: 575 },
-  'Iittala Lantern 2': { x: 960, y: 400 },
-  'Lower bathroom lightstrip': { x: 125, y: 1015 },
-  'Lower bathroom downlight 1': { x: 115, y: 960 },
-  'Lower bathroom downlight 2': { x: 115, y: 885 },
-  'Flowerbed lightstrip': { x: 575, y: -40 },
-  'Hue play L': { x: 520, y: 1015 },
-  'Hue play C': { x: 520, y: 1075 },
-  'Hue play R': { x: 520, y: 1135 },
-  'Upper bathroom downlight 1': { x: 1350, y: 525 },
-  'Upper bathroom downlight 2': { x: 1350, y: 650 },
-  'Upper bathroom downlight 3': { x: 1350, y: 775 },
-  'Upper bathroom lightstrip': { x: 1405, y: 680 },
-  'Block lamp': { x: 100, y: 462 },
-  'Kitchen spot 1': { x: 390, y: 650 },
-  'Kitchen spot 2': { x: 320, y: 650 },
-  'Kitchen spot 3': { x: 355, y: 700 },
-  'Upstairs office lamp': { x: 1300, y: 1050 },
-  'Kids room lamp': { x: 1030, y: 1050 },
-  'Kids room bed lamp': { x: 960, y: 1050 },
-  'Innolux lamp': { x: 1080, y: 1130 },
-  'Kitchen downlight 1': { x: 460, y: 650 },
-  'Kitchen downlight 2': { x: 460, y: 725 },
-  'Kitchen downlight 3': { x: 460, y: 800 },
-  'Kitchen downlight 4': { x: 390, y: 800 },
-  'Entryway table lamp': { x: 100, y: 730 },
-  'Entryway downlight 1': { x: 130, y: 1125 },
-  'Entryway downlight 2': { x: 240, y: 1125 },
-  'Entryway downlight 3': { x: 240, y: 950 },
-  'Hue outdoor spot 1': { x: 575, y: 50 },
-  'Hue outdoor spot 2': { x: 625, y: 100 },
-  'Hue outdoor spot 3': { x: 575, y: 150 },
-  'Hue outdoor spot 4': { x: 625, y: 200 },
-  'Hue outdoor spot 5': { x: 575, y: 250 },
-  'Patio spot 1': { x: 500, y: 250 },
-  'Patio spot 2': { x: 100, y: 250 },
-  'Patio lightstrip': { x: 300, y: 100 },
-  'Balcony lightstrip': { x: 1200, y: 200 },
-  'Office lamp': { x: 450, y: 1075 },
-  'Office desk': { x: 450, y: 1135 },
-  'Staircase lamp': { x: 1000, y: 750 },
-  'Baby changing table lamp': { x: 1405, y: 800 },
-};
-
 type Props = {
   device: Device;
+  position: Vector2d;
   touchRegistersAsTap?: MutableRefObject<boolean>;
   deviceTouchTimer?: MutableRefObject<NodeJS.Timeout | null>;
   selected: boolean;
@@ -80,7 +27,7 @@ export const ViewportDevice = (props: Props) => {
   const interactive = props.interactive;
 
   const device = props.device;
-  const position = devicePositions[device.name];
+  const position = props.position;
 
   const brightness = props.overrideColor ? 1 : getBrightness(device.data);
   const power = props.overrideColor ? true : getPower(device.data);
@@ -159,10 +106,6 @@ export const ViewportDevice = (props: Props) => {
       }
     };
   }, []);
-
-  if (!position) {
-    return null;
-  }
 
   const radialGradientRadius = 100 + 200 * brightness;
   return (

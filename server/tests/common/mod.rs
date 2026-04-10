@@ -102,7 +102,11 @@ impl TestServer {
                     .arg("--port")
                     .arg(port.to_string());
             } else {
-                cmd.current_dir(&temp_dir);
+                cmd.current_dir(&temp_dir)
+                    .arg("--config")
+                    .arg(&config_path)
+                    .arg("--port")
+                    .arg(port.to_string());
             }
 
             let mut child = match cmd.spawn() {

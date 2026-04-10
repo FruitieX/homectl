@@ -2,7 +2,7 @@
 
 import { useRoutines, useScenes, Routine } from '@/hooks/useConfig';
 import { useState } from 'react';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action } from '@/ui/ActionBuilder';
 
@@ -18,9 +18,8 @@ export default function RoutinesPage() {
   const { data: scenes, loading: scenesLoading } = useScenes();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const wsState = useWebsocketState();
-  const devices = wsState?.devices ?? {};
-  const groups = wsState?.groups ?? {};
+  const { devicesState: devices } = useDevicesApi();
+  const groups = useGroupsState();
 
   const sceneList = scenes.map((s) => ({ id: s.id, name: s.name }));
   const routineList = routines.map((r) => ({ id: r.id, name: r.name }));

@@ -1,5 +1,6 @@
 'use client';
 
+import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { useCallback, useEffect, useState } from 'react';
 import { useAppConfig } from './appConfig';
 
@@ -15,7 +16,7 @@ export interface Group {
   id: string;
   name: string;
   hidden: boolean;
-  devices: { integration_id: string; device_name: string }[];
+  devices: { integration_id: string; device_name: string; device_id?: string }[];
   linked_groups: string[];
 }
 
@@ -69,11 +70,39 @@ export interface Routine {
   actions: unknown[];
 }
 
+export interface DeviceDisplayNameOverride {
+  device_key: string;
+  display_name: string;
+}
+
+export interface FloorplanMetadata {
+  id: string;
+  name: string;
+}
+
+export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE';
+
+export interface UiLogEntry {
+  timestamp: string;
+  level: LogLevel;
+  target: string;
+  message: string;
+}
+
 export interface ConfigExport {
-  integrations: Integration[];
-  groups: Group[];
-  scenes: Scene[];
-  routines: Routine[];
+  version?: number;
+  core?: Record<string, unknown>;
+  integrations?: Integration[];
+  groups?: Group[];
+  scenes?: Scene[];
+  routines?: Routine[];
+  floorplan?: Record<string, unknown> | null;
+  floorplans?: Record<string, unknown>[];
+  device_positions?: Record<string, unknown>[];
+  device_display_overrides?: DeviceDisplayNameOverride[];
+  device_sensor_configs?: DeviceSensorConfig[];
+  dashboard_layouts?: Record<string, unknown>[];
+  dashboard_widgets?: Record<string, unknown>[];
 }
 
 // Generic fetch hook for config API
@@ -125,7 +154,7 @@ function useConfigApi<T>(endpoint: string) {
 
   const update = useCallback(
     async (id: string, item: Partial<T>) => {
-      const response = await fetch(`${baseUrl}/${endpoint}/${id}`, {
+      const response = await fetch(`${baseUrl}/${endpoint}/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item),
@@ -142,7 +171,7 @@ function useConfigApi<T>(endpoint: string) {
 
   const remove = useCallback(
     async (id: string) => {
-      const response = await fetch(`${baseUrl}/${endpoint}/${id}`, {
+      const response = await fetch(`${baseUrl}/${endpoint}/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
       const result = await response.json();
@@ -173,6 +202,70 @@ export function useScenes() {
 
 export function useRoutines() {
   return useConfigApi<Routine>('routines');
+}
+
+export function useDeviceDisplayNames() {
+  return useConfigApi<DeviceDisplayNameOverride>('device-display-names');
+}
+
+export function useDeviceSensorConfigs() {
+  return useConfigApi<DeviceSensorConfig>('device-sensor-configs');
+}
+
+export function useFloorplans() {
+  return useConfigApi<FloorplanMetadata>('floorplans');
+}
+
+export function useLogs(pollIntervalMs = 5000) {
+  const { apiEndpoint } = useAppConfig();
+  const [data, setData] = useState<UiLogEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
+  const baseUrl = `${apiEndpoint}/api/v1/config`;
+
+  const fetchLogs = useCallback(
+    async (background = false) => {
+      if (!background) {
+        setLoading(true);
+      }
+
+      try {
+        const response = await fetch(`${baseUrl}/logs`);
+        const result = await response.json();
+        if (result.success) {
+          setData(result.data);
+          setError(null);
+          setLastUpdated(new Date().toISOString());
+          return;
+        }
+
+        setError(result.error || 'Failed to fetch logs');
+      } catch (nextError) {
+        setError(nextError instanceof Error ? nextError.message : 'Unknown error');
+      } finally {
+        if (!background) {
+          setLoading(false);
+        }
+      }
+    },
+    [baseUrl],
+  );
+
+  useEffect(() => {
+    void fetchLogs();
+
+    const intervalId = window.setInterval(() => {
+      void fetchLogs(true);
+    }, pollIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchLogs, pollIntervalMs]);
+
+  return { data, loading, error, refetch: fetchLogs, lastUpdated };
 }
 
 // Export/Import hooks

@@ -2,7 +2,8 @@ use crate::{
     db::actions::{db_get_scene_overrides, db_store_scene_overrides},
     types::{
         device::{
-            ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
+            ControllableState, Device, DeviceData, DeviceId, DeviceKey, DeviceRef, DevicesState,
+            SensorDevice,
         },
         group::GroupId,
         scene::{
@@ -436,15 +437,22 @@ impl Scenes {
         let scene_devices_search_config =
             scene.devices.map(|devices| devices.0).unwrap_or_default();
         for (integration_id, scene_device_configs) in scene_devices_search_config {
-            for (device_name, scene_device_config) in scene_device_configs {
-                let device = devices.get_device_by_ref(&DeviceRef::new_with_name(
-                    integration_id.clone(),
-                    device_name.clone(),
-                ));
+            for (device_name_or_id, scene_device_config) in scene_device_configs {
+                let device = devices
+                    .get_device_by_ref(&DeviceRef::new_with_name(
+                        integration_id.clone(),
+                        device_name_or_id.clone(),
+                    ))
+                    .or_else(|| {
+                        devices.get_device_by_ref(&DeviceRef::new_with_id(
+                            integration_id.clone(),
+                            DeviceId::from(device_name_or_id.clone()),
+                        ))
+                    });
 
                 let Some(device) = device else {
                     warn!(
-                        "Could not find device with name {device_name} in integration {integration_id}",
+                        "Could not find device with name or id {device_name_or_id} in integration {integration_id}",
                     );
 
                     continue;

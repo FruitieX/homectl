@@ -2,7 +2,7 @@
 
 import { useScenes, Scene, SceneDeviceConfig } from '@/hooks/useConfig';
 import { useState } from 'react';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useDevicesApi } from '@/hooks/useDevicesApi';
 import SceneDeviceStateEditor from '@/ui/SceneDeviceStateEditor';
 
 export default function ScenesPage() {
@@ -12,8 +12,7 @@ export default function ScenesPage() {
     null,
   );
   const [showCreate, setShowCreate] = useState(false);
-  const wsState = useWebsocketState();
-  const devices = wsState?.devices ?? {};
+  const { devicesState: devices } = useDevicesApi();
 
   if (loading) {
     return (

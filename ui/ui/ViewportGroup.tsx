@@ -1,5 +1,6 @@
-import { Rect } from 'react-konva';
-import { MutableRefObject, useCallback, useEffect, useRef } from 'react';
+import { Group as KonvaGroup, Image as KonvaImage } from 'react-konva';
+import { getFloorplanGroupFill, getFloorplanGroupStroke } from '@/lib/floorplanGroupColor';
+import { MutableRefObject, useCallback, useEffect, useRef, useState } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import {
   useSelectedDevices,
@@ -9,35 +10,118 @@ import { GroupId } from '@/bindings/GroupId';
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { KonvaEventObject } from 'konva/lib/Node';
 
-export const groupRects: Record<
-  string,
-  { x: number; y: number; width: number; height: number; zIndex?: number }
-> = {
-  'Downstairs lights': {
-    x: 0,
-    y: -120,
-    width: 720,
-    height: 1400,
-    zIndex: -100,
-  },
-  'Upstairs lights': { x: 850, y: 250, width: 640, height: 1030, zIndex: -100 },
-  Entryway: { x: 63, y: 852, width: 224, height: 335, zIndex: -50 },
-  Kitchen: { x: 260, y: 596, width: 293, height: 250 },
-  'Living room': { x: 63, y: 327, width: 490, height: 260 },
-  'Downstairs bathroom': { x: 63, y: 852, width: 104, height: 187 },
-  Office: { x: 317, y: 937, width: 235, height: 250 },
-  'Outdoor lights': { x: 540, y: -100, width: 140, height: 402 },
-  'Patio lights': { x: 60, y: 30, width: 470, height: 272 },
-  'Kids room': { x: 930, y: 914, width: 220, height: 268 },
-  'Upstairs office': { x: 1180, y: 882, width: 240, height: 300 },
-  'Upstairs bathroom': { x: 1287, y: 337, width: 135, height: 480 },
-  Bedroom: { x: 930, y: 337, width: 329, height: 308 },
-  Staircase: { x: 930, y: 673, width: 329, height: 154 },
+export interface GroupMaskCell {
+  x: number;
+  y: number;
+}
+
+type GroupSurface = {
+  image: HTMLCanvasElement;
+  x: number;
+  y: number;
+};
+
+const getGroupCellKey = (x: number, y: number) => `${x},${y}`;
+
+const renderGroupSurface = (
+  cells: GroupMaskCell[],
+  tileWidth: number,
+  tileHeight: number,
+  fill: string,
+  stroke: string,
+  strokeWidth: number,
+): GroupSurface | null => {
+  if (cells.length === 0 || tileWidth <= 0 || tileHeight <= 0) {
+    return null;
+  }
+
+  const minX = Math.min(...cells.map((cell) => cell.x));
+  const minY = Math.min(...cells.map((cell) => cell.y));
+  const maxX = Math.max(...cells.map((cell) => cell.x));
+  const maxY = Math.max(...cells.map((cell) => cell.y));
+
+  const offsetX = Math.round(minX * tileWidth);
+  const offsetY = Math.round(minY * tileHeight);
+  const surfaceWidth = Math.max(1, Math.round((maxX + 1) * tileWidth) - offsetX);
+  const surfaceHeight = Math.max(1, Math.round((maxY + 1) * tileHeight) - offsetY);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = surfaceWidth;
+  canvas.height = surfaceHeight;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.clearRect(0, 0, surfaceWidth, surfaceHeight);
+
+  const cellKeys = new Set(cells.map((cell) => getGroupCellKey(cell.x, cell.y)));
+  context.fillStyle = fill;
+
+  for (const cell of cells) {
+    const startX = Math.round(cell.x * tileWidth) - offsetX;
+    const startY = Math.round(cell.y * tileHeight) - offsetY;
+    const endX = Math.round((cell.x + 1) * tileWidth) - offsetX;
+    const endY = Math.round((cell.y + 1) * tileHeight) - offsetY;
+
+    context.fillRect(startX, startY, Math.max(1, endX - startX), Math.max(1, endY - startY));
+  }
+
+  if (strokeWidth > 0) {
+    context.strokeStyle = stroke;
+    context.lineWidth = strokeWidth;
+    context.lineCap = 'square';
+
+    for (const cell of cells) {
+      const startX = Math.round(cell.x * tileWidth) - offsetX;
+      const startY = Math.round(cell.y * tileHeight) - offsetY;
+      const endX = Math.round((cell.x + 1) * tileWidth) - offsetX;
+      const endY = Math.round((cell.y + 1) * tileHeight) - offsetY;
+
+      if (!cellKeys.has(getGroupCellKey(cell.x, cell.y - 1))) {
+        context.beginPath();
+        context.moveTo(startX, startY);
+        context.lineTo(endX, startY);
+        context.stroke();
+      }
+
+      if (!cellKeys.has(getGroupCellKey(cell.x + 1, cell.y))) {
+        context.beginPath();
+        context.moveTo(endX, startY);
+        context.lineTo(endX, endY);
+        context.stroke();
+      }
+
+      if (!cellKeys.has(getGroupCellKey(cell.x, cell.y + 1))) {
+        context.beginPath();
+        context.moveTo(startX, endY);
+        context.lineTo(endX, endY);
+        context.stroke();
+      }
+
+      if (!cellKeys.has(getGroupCellKey(cell.x - 1, cell.y))) {
+        context.beginPath();
+        context.moveTo(startX, startY);
+        context.lineTo(startX, endY);
+        context.stroke();
+      }
+    }
+  }
+
+  return {
+    image: canvas,
+    x: offsetX,
+    y: offsetY,
+  };
 };
 
 type Props = {
   groupId: GroupId;
   group: FlattenedGroupConfig;
+  cells: GroupMaskCell[];
+  tileWidth: number;
+  tileHeight: number;
   touchRegistersAsTap?: MutableRefObject<boolean>;
   deviceTouchTimer?: MutableRefObject<NodeJS.Timeout | null>;
 };
@@ -47,7 +131,9 @@ export const ViewportGroup = (props: Props) => {
 
   const group = props.group;
   const groupDeviceKeys = group.device_keys;
-  const rect = groupRects[group.name];
+  const cells = props.cells;
+  const tileWidth = props.tileWidth;
+  const tileHeight = props.tileHeight;
 
   const [selectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
@@ -128,25 +214,24 @@ export const ViewportGroup = (props: Props) => {
     };
   }, []);
 
-  if (!rect) {
-    return null;
-  }
+  const fill = getFloorplanGroupFill(groupId, isSelected ? 0.4 : 0.18);
+  const stroke = getFloorplanGroupStroke(groupId, isSelected ? 1 : 0.45);
+  const strokeWidth = isSelected ? 1.6 : 0.8;
+  const [surface, setSurface] = useState<GroupSurface | null>(null);
+
+  useEffect(() => {
+    setSurface(renderGroupSurface(cells, tileWidth, tileHeight, fill, stroke, strokeWidth));
+  }, [cells, fill, stroke, strokeWidth, tileHeight, tileWidth]);
 
   return (
-    <Rect
+    <KonvaGroup
       key={groupId}
-      width={rect.width}
-      height={rect.height}
-      x={rect.x}
-      y={rect.y}
-      fill={isSelected ? '#aaa' : undefined}
-      opacity={isSelected ? 0.5 : 0.5}
-      stroke={isSelected ? '#fff' : '#000'}
-      strokeWidth={4}
       onMouseDown={onDeviceTouchStart}
       onTouchStart={onDeviceTouchStart}
       onMouseUp={onDeviceTouchEnd}
       onTouchEnd={onDeviceTouchEnd}
-    />
+    >
+      {surface && <KonvaImage image={surface.image} x={surface.x} y={surface.y} />}
+    </KonvaGroup>
   );
 };
