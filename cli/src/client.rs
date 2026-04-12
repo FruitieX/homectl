@@ -35,7 +35,11 @@ impl Client {
         Ok(body)
     }
 
-    pub async fn put(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    pub async fn put(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let url = format!("{}{path}", self.base_url);
         let resp = self
             .http
@@ -58,7 +62,11 @@ impl Client {
         Ok(body)
     }
 
-    pub async fn post(&self, path: &str, body: &serde_json::Value) -> Result<serde_json::Value, String> {
+    pub async fn post(
+        &self,
+        path: &str,
+        body: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
         let url = format!("{}{path}", self.base_url);
         let resp = self
             .http

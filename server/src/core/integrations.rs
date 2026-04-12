@@ -147,10 +147,7 @@ impl Integrations {
 
             // Skip if already loaded
             if self.custom_integrations.contains_key(&integration_id) {
-                debug!(
-                    "Integration {} already loaded, skipping",
-                    integration_id
-                );
+                debug!("Integration {} already loaded, skipping", integration_id);
                 continue;
             }
 
@@ -158,11 +155,19 @@ impl Integrations {
             let config_json = row.config.clone();
 
             match self
-                .load_integration(&row.plugin, &integration_id, &config_json, &self.cli.clone())
+                .load_integration(
+                    &row.plugin,
+                    &integration_id,
+                    &config_json,
+                    &self.cli.clone(),
+                )
                 .await
             {
                 Ok(()) => {
-                    info!("Loaded integration {} (plugin: {}) from database", integration_id, row.plugin);
+                    info!(
+                        "Loaded integration {} (plugin: {}) from database",
+                        integration_id, row.plugin
+                    );
                 }
                 Err(e) => {
                     error!(
@@ -190,8 +195,7 @@ impl Integrations {
             .collect();
 
         // Find removed integrations (in current map but not desired)
-        let current_ids: Vec<IntegrationId> =
-            self.custom_integrations.keys().cloned().collect();
+        let current_ids: Vec<IntegrationId> = self.custom_integrations.keys().cloned().collect();
         for id in &current_ids {
             if !desired.contains_key(id) {
                 if let Some(li) = self.custom_integrations.remove(id) {

@@ -118,14 +118,8 @@ pub fn print_config_table(kind: &str, items: &[serde_json::Value]) {
                     .map(|p| format!("plugin={p}"))
                     .unwrap_or_default(),
                 "groups" => {
-                    let device_count = item["devices"]
-                        .as_array()
-                        .map(|a| a.len())
-                        .unwrap_or(0);
-                    let link_count = item["links"]
-                        .as_array()
-                        .map(|a| a.len())
-                        .unwrap_or(0);
+                    let device_count = item["devices"].as_array().map(|a| a.len()).unwrap_or(0);
+                    let link_count = item["links"].as_array().map(|a| a.len()).unwrap_or(0);
                     format!("{device_count} devices, {link_count} links")
                 }
                 "scenes" => {
@@ -137,14 +131,8 @@ pub fn print_config_table(kind: &str, items: &[serde_json::Value]) {
                     format!("{device_count} device configs")
                 }
                 "routines" => {
-                    let rule_count = item["rules"]
-                        .as_array()
-                        .map(|a| a.len())
-                        .unwrap_or(0);
-                    let action_count = item["actions"]
-                        .as_array()
-                        .map(|a| a.len())
-                        .unwrap_or(0);
+                    let rule_count = item["rules"].as_array().map(|a| a.len()).unwrap_or(0);
+                    let action_count = item["actions"].as_array().map(|a| a.len()).unwrap_or(0);
                     format!("{rule_count} rules, {action_count} actions")
                 }
                 _ => String::new(),
@@ -164,15 +152,9 @@ pub fn print_config_table(kind: &str, items: &[serde_json::Value]) {
 
 fn format_sensor(sensor: &serde_json::Value) -> String {
     if let Some(obj) = sensor.get("Boolean") {
-        format!(
-            "{}",
-            obj["value"].as_bool().unwrap_or(false)
-        )
+        format!("{}", obj["value"].as_bool().unwrap_or(false))
     } else if let Some(obj) = sensor.get("Number") {
-        format!(
-            "{}",
-            obj["value"].as_f64().unwrap_or(0.0)
-        )
+        format!("{}", obj["value"].as_f64().unwrap_or(0.0))
     } else if let Some(obj) = sensor.get("Text") {
         obj["value"].as_str().unwrap_or("-").to_string()
     } else if sensor.get("Color").is_some() {

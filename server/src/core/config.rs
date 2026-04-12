@@ -1,8 +1,5 @@
 use crate::types::{
-    group::GroupsConfig,
-    integration::IntegrationsConfig,
-    rule::RoutinesConfig,
-    scene::ScenesConfig,
+    group::GroupsConfig, integration::IntegrationsConfig, rule::RoutinesConfig, scene::ScenesConfig,
 };
 use color_eyre::Result;
 use serde::Deserialize;
@@ -27,8 +24,7 @@ pub struct TomlConfig {
 /// Opaque integration configs: maps integration ID strings to their full
 /// TOML values, which we convert to serde_json::Value for the integration
 /// constructors.
-pub type OpaqueIntegrationsConfigs =
-    std::collections::HashMap<String, toml::Value>;
+pub type OpaqueIntegrationsConfigs = std::collections::HashMap<String, toml::Value>;
 
 /// Full raw TOML config including opaque integrations.
 #[derive(Deserialize, Debug)]

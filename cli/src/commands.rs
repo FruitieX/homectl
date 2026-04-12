@@ -7,10 +7,7 @@ pub async fn devices(client: &Client, action: DeviceAction, format: &Format) -> 
     match action {
         DeviceAction::List => {
             let resp = client.get("/api/v1/devices").await?;
-            let devices = resp["devices"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
+            let devices = resp["devices"].as_array().cloned().unwrap_or_default();
 
             match format {
                 Format::Json => output::print_json(&serde_json::Value::Array(devices)),
@@ -49,7 +46,11 @@ pub async fn devices(client: &Client, action: DeviceAction, format: &Format) -> 
                         "Text": { "value": value }
                     })
                 }
-                other => return Err(format!("Unknown sensor type: {other} (use boolean, number, or text)")),
+                other => {
+                    return Err(format!(
+                        "Unknown sensor type: {other} (use boolean, number, or text)"
+                    ))
+                }
             };
 
             let device = serde_json::json!({
@@ -59,7 +60,9 @@ pub async fn devices(client: &Client, action: DeviceAction, format: &Format) -> 
                 "data": { "Sensor": sensor_state },
             });
 
-            client.put(&format!("/api/v1/devices/{id}"), &device).await?;
+            client
+                .put(&format!("/api/v1/devices/{id}"), &device)
+                .await?;
             println!("Sensor {} set to {}", id.green(), value.cyan());
         }
     }
@@ -122,10 +125,7 @@ pub async fn config_resource(
     match action {
         ListOrGet::List => {
             let resp = client.get(&format!("/api/v1/config/{kind}")).await?;
-            let items = resp["data"]
-                .as_array()
-                .cloned()
-                .unwrap_or_default();
+            let items = resp["data"].as_array().cloned().unwrap_or_default();
 
             match format {
                 Format::Json => output::print_json(&serde_json::Value::Array(items)),
@@ -151,11 +151,7 @@ pub async fn config_resource(
 pub async fn health(client: &Client) -> Result<(), String> {
     let (live, ready) = client.health().await?;
 
-    let live_str = if live {
-        "LIVE".green()
-    } else {
-        "DOWN".red()
-    };
+    let live_str = if live { "LIVE".green() } else { "DOWN".red() };
     let ready_str = if ready {
         "READY".green()
     } else {

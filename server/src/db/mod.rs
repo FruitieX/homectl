@@ -35,9 +35,7 @@ pub async fn init_db(db_path: &str) -> Result<()> {
         .await?;
 
     // Enable foreign key enforcement (off by default in SQLite)
-    sqlx::query("PRAGMA foreign_keys=ON")
-        .execute(&pool)
-        .await?;
+    sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
 
     // Run migrations
     sqlx::migrate!("./migrations").run(&pool).await?;

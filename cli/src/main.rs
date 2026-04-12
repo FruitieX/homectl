@@ -8,10 +8,19 @@ mod commands;
 mod output;
 
 #[derive(Parser)]
-#[command(name = "homectl", version, about = "CLI for the homectl home automation server")]
+#[command(
+    name = "homectl",
+    version,
+    about = "CLI for the homectl home automation server"
+)]
 struct Cli {
     /// Base URL of the homectl server
-    #[arg(long, short, env = "HOMECTL_URL", default_value = "http://localhost:45290")]
+    #[arg(
+        long,
+        short,
+        env = "HOMECTL_URL",
+        default_value = "http://localhost:45290"
+    )]
     url: String,
 
     /// Output format
@@ -142,9 +151,15 @@ async fn main() {
     let result = match cli.command {
         Commands::Devices { action } => commands::devices(&client, action, &cli.format).await,
         Commands::Action { action } => commands::action(&client, action).await,
-        Commands::Groups { action } => commands::config_resource(&client, "groups", action, &cli.format).await,
-        Commands::Scenes { action } => commands::config_resource(&client, "scenes", action, &cli.format).await,
-        Commands::Routines { action } => commands::config_resource(&client, "routines", action, &cli.format).await,
+        Commands::Groups { action } => {
+            commands::config_resource(&client, "groups", action, &cli.format).await
+        }
+        Commands::Scenes { action } => {
+            commands::config_resource(&client, "scenes", action, &cli.format).await
+        }
+        Commands::Routines { action } => {
+            commands::config_resource(&client, "routines", action, &cli.format).await
+        }
         Commands::Integrations { action } => {
             commands::config_resource(&client, "integrations", action, &cli.format).await
         }
