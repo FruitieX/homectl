@@ -524,10 +524,15 @@ export default function DevicesPage() {
           const interactionKind = normalizeSensorInteractionKind(sensorDraft.interaction_kind);
           const interactionConfig = normalizeSensorInteractionConfig(interactionKind, sensorDraft.config);
           const isSaving = savingKey === deviceKey;
+          const interactionLabel =
+            'Sensor' in device.data
+              ? getSensorInteractionLabel(resolvedInteraction.kind)
+              : 'Label only';
 
           return (
-            <div key={deviceKey} className="card bg-base-200 shadow-xl">
-              <div className="card-body space-y-4">
+            <div key={deviceKey} className="collapse collapse-arrow bg-base-200 shadow-xl">
+              <input type="checkbox" />
+              <div className="collapse-title space-y-3 pr-14">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="space-y-2 min-w-0 flex-1">
                     <div>
@@ -538,6 +543,10 @@ export default function DevicesPage() {
                     <div className="flex flex-wrap gap-2 text-xs">
                       <span className="badge badge-outline">{type}</span>
                       <span className="badge badge-outline">Default label: {entry.defaultLabel}</span>
+                      <span className="badge badge-outline">{interactionLabel}</span>
+                      {hasDisplayOverride && (
+                        <span className="badge badge-primary">Custom label override</span>
+                      )}
                       {groupNames.map((groupName) => (
                         <span key={`${deviceKey}-${groupName}`} className="badge badge-ghost">
                           {groupName}
@@ -545,7 +554,11 @@ export default function DevicesPage() {
                       ))}
                     </div>
                   </div>
+                </div>
+              </div>
 
+              <div className="collapse-content px-6 pb-6">
+                <div className="space-y-4">
                   <label className="form-control w-full max-w-md">
                     <span className="label-text text-sm">Custom label</span>
                     <input
@@ -561,87 +574,87 @@ export default function DevicesPage() {
                       }
                     />
                   </label>
-                </div>
 
-                {'Sensor' in device.data ? (
-                  <div className="space-y-4 rounded-xl border border-base-300 bg-base-100/50 p-4">
-                    <div className="flex flex-wrap items-start gap-4">
-                      <label className="form-control w-full max-w-sm">
-                        <span className="label-text text-sm">Map interaction</span>
-                        <select
-                          className="select select-bordered"
-                          value={interactionKind}
-                          onChange={(e) =>
-                            updateSensorDraftKind(
-                              deviceRef,
-                              e.target.value as SensorInteractionKind,
-                            )
-                          }
-                        >
-                          {SENSOR_INTERACTION_OPTIONS.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                  {'Sensor' in device.data ? (
+                    <div className="space-y-4 rounded-xl border border-base-300 bg-base-100/50 p-4">
+                      <div className="flex flex-wrap items-start gap-4">
+                        <label className="form-control w-full max-w-sm">
+                          <span className="label-text text-sm">Map interaction</span>
+                          <select
+                            className="select select-bordered"
+                            value={interactionKind}
+                            onChange={(e) =>
+                              updateSensorDraftKind(
+                                deviceRef,
+                                e.target.value as SensorInteractionKind,
+                              )
+                            }
+                          >
+                            {SENSOR_INTERACTION_OPTIONS.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
 
-                      <div className="space-y-2 text-sm opacity-70">
-                        <div>Sensor reference: {deviceRef}</div>
-                        <div>
-                          Current payload mode: {getSensorInteractionLabel(resolvedInteraction.kind)}
+                        <div className="space-y-2 text-sm opacity-70">
+                          <div>Sensor reference: {deviceRef}</div>
+                          <div>
+                            Current payload mode: {getSensorInteractionLabel(resolvedInteraction.kind)}
+                          </div>
+                          <div>Last seen sensor shape: {sensorDetails.kind}</div>
                         </div>
-                        <div>Last seen sensor shape: {sensorDetails.kind}</div>
                       </div>
+
+                      <SensorConfigFields
+                        kind={interactionKind}
+                        config={interactionConfig}
+                        resolvedLabel={getSensorInteractionLabel(resolvedInteraction.kind)}
+                        onChange={(field, value) => updateSensorDraftField(deviceRef, field, value)}
+                      />
                     </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-80">
+                      This device is not a sensor, so only the user-facing label applies here.
+                    </div>
+                  )}
 
-                    <SensorConfigFields
-                      kind={interactionKind}
-                      config={interactionConfig}
-                      resolvedLabel={getSensorInteractionLabel(resolvedInteraction.kind)}
-                      onChange={(field, value) => updateSensorDraftField(deviceRef, field, value)}
-                    />
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-80">
-                    This device is not a sensor, so only the user-facing label applies here.
-                  </div>
-                )}
-
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button
-                    className="btn btn-sm btn-ghost"
-                    onClick={() =>
-                      setDisplayNameDrafts((previous) => ({
-                        ...previous,
-                        [deviceKey]: '',
-                      }))
-                    }
-                  >
-                    Use Integration Label
-                  </button>
-                  {'Sensor' in device.data && (
+                  <div className="flex flex-wrap justify-end gap-2">
                     <button
                       className="btn btn-sm btn-ghost"
-                      onClick={() => updateSensorDraftKind(deviceRef, 'auto')}
+                      onClick={() =>
+                        setDisplayNameDrafts((previous) => ({
+                          ...previous,
+                          [deviceKey]: '',
+                        }))
+                      }
                     >
-                      Use Auto Sensor UI
+                      Use Integration Label
                     </button>
-                  )}
-                  <button
-                    className={`btn btn-sm btn-primary ${isSaving ? 'loading' : ''}`}
-                    disabled={isSaving}
-                    onClick={() => void saveDeviceSettings(device)}
-                  >
-                    Save Changes
-                  </button>
-                </div>
-
-                {hasDisplayOverride && (
-                  <div className="text-xs opacity-60">
-                    A display name override is active for this device.
+                    {'Sensor' in device.data && (
+                      <button
+                        className="btn btn-sm btn-ghost"
+                        onClick={() => updateSensorDraftKind(deviceRef, 'auto')}
+                      >
+                        Use Auto Sensor UI
+                      </button>
+                    )}
+                    <button
+                      className={`btn btn-sm btn-primary ${isSaving ? 'loading' : ''}`}
+                      disabled={isSaving}
+                      onClick={() => void saveDeviceSettings(device)}
+                    >
+                      Save Changes
+                    </button>
                   </div>
-                )}
+
+                  {hasDisplayOverride && (
+                    <div className="text-xs opacity-60">
+                      A display name override is active for this device.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           );

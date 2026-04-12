@@ -306,9 +306,10 @@ function RoutineCard({
   }
 
   return (
-    <div className="card bg-base-200 shadow-xl">
-      <div className="card-body">
-        <div className="flex justify-between items-start">
+    <div className="collapse collapse-arrow bg-base-200 shadow-xl">
+      <input type="checkbox" />
+      <div className="collapse-title space-y-3 pr-14">
+        <div className="flex justify-between items-start gap-4">
           <div>
             <h2 className="card-title">{routine.name}</h2>
             <div className="text-sm opacity-70">{routine.id}</div>
@@ -325,7 +326,7 @@ function RoutineCard({
           </div>
         </div>
 
-        <div className="text-sm mt-2">
+        <div className="text-sm">
           <span className="font-medium">{routine.rules.length}</span> rules ·{' '}
           <span className="font-medium">{routine.actions.length}</span> actions
           {routine.enabled && matchingRuleCount !== undefined ? (
@@ -335,8 +336,10 @@ function RoutineCard({
             </>
           ) : null}
         </div>
+      </div>
 
-        <div className="mt-4 grid gap-4 xl:grid-cols-2">
+      <div className="collapse-content px-6 pb-6">
+        <div className="grid gap-4 xl:grid-cols-2">
           <RoutineRuleList
             rules={routine.rules as Rule[]}
             status={runtimeStatus}
@@ -355,7 +358,7 @@ function RoutineCard({
           />
         </div>
 
-        <div className="card-actions justify-end mt-2">
+        <div className="card-actions justify-end mt-4">
           <button className="btn btn-sm btn-ghost" onClick={onEdit}>
             Edit
           </button>
