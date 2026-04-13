@@ -20,6 +20,8 @@
         name = "homectl";
         buildInputs = [
           rustToolchain
+          pkgs.docker-client
+          pkgs.postgresql
           pkgs.pkg-config
           pkgs.openssl
           pkgs.nodejs
@@ -28,7 +30,7 @@
           pkgs.hurl
         ];
         shellHook = ''
-          echo "Loaded homectl dev shell"
+          echo "Loaded homectl dev shell (Docker client + psql available for Postgres workflows)"
         '';
       };
     }

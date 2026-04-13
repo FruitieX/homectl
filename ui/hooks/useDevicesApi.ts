@@ -47,7 +47,7 @@ export function useDevicesApi() {
 
 /**
  * Converts groups from the config API to FlattenedGroupsConfig format.
- * Use this in config editors as a replacement for wsState.groups.
+ * Prefer the server-provided flattened device_keys when available.
  */
 export function useGroupsState(): FlattenedGroupsConfig {
   const { data: groups } = useGroups();
@@ -55,11 +55,13 @@ export function useGroupsState(): FlattenedGroupsConfig {
   return useMemo(() => {
     const state: FlattenedGroupsConfig = {};
     for (const group of groups) {
+      const deviceKeys =
+        group.device_keys ??
+        group.devices.map((device) => `${device.integration_id}/${device.device_id}`);
+
       state[group.id] = {
         name: group.name,
-        device_keys: group.devices.map(
-          (d) => `${d.integration_id}/${d.device_id ?? d.device_name}`,
-        ),
+        device_keys: deviceKeys,
         hidden: group.hidden,
       };
     }

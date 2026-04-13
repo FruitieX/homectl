@@ -134,44 +134,35 @@ impl Integrations {
         integration.run_integration_action(payload).await
     }
 
-    /// Load integrations from the database.
-    pub async fn load_db_integrations(&mut self) -> Result<()> {
-        let db_integrations = config_queries::db_get_integrations().await?;
-
-        for row in db_integrations {
+    pub async fn load_config_rows(
+        &mut self,
+        integrations: &[config_queries::IntegrationRow],
+    ) -> Result<()> {
+        for row in integrations {
             if !row.enabled {
                 continue;
             }
 
             let integration_id = IntegrationId::from(row.id.clone());
 
-            // Skip if already loaded
             if self.custom_integrations.contains_key(&integration_id) {
                 debug!("Integration {} already loaded, skipping", integration_id);
                 continue;
             }
 
-            // Pass serde_json::Value directly - no conversion needed
-            let config_json = row.config.clone();
-
             match self
-                .load_integration(
-                    &row.plugin,
-                    &integration_id,
-                    &config_json,
-                    &self.cli.clone(),
-                )
+                .load_integration(&row.plugin, &integration_id, &row.config, &self.cli.clone())
                 .await
             {
                 Ok(()) => {
                     info!(
-                        "Loaded integration {} (plugin: {}) from database",
+                        "Loaded integration {} (plugin: {}) from config rows",
                         integration_id, row.plugin
                     );
                 }
                 Err(e) => {
                     error!(
-                        "Failed to load integration {} from database: {e}",
+                        "Failed to load integration {} from config rows: {e}",
                         integration_id
                     );
                 }
@@ -181,20 +172,27 @@ impl Integrations {
         Ok(())
     }
 
-    /// Full diff-based reload: add new, remove deleted, restart modified integrations.
-    /// Returns the IDs of integrations that were removed.
-    pub async fn reload_integrations(&mut self) -> Result<Vec<IntegrationId>> {
+    /// Load integrations from the database.
+    pub async fn load_db_integrations(&mut self) -> Result<()> {
         let db_integrations = config_queries::db_get_integrations().await?;
+        self.load_config_rows(&db_integrations).await
+    }
+
+    /// Full diff-based reload from config rows: add new, remove deleted, restart modified.
+    /// Returns the IDs of integrations that were removed.
+    pub async fn reload_config_rows(
+        &mut self,
+        integrations: &[config_queries::IntegrationRow],
+    ) -> Result<Vec<IntegrationId>> {
         let mut removed_ids = Vec::new();
 
-        // Build map of desired state from DB
-        let desired: HashMap<IntegrationId, _> = db_integrations
-            .into_iter()
+        let desired: HashMap<IntegrationId, _> = integrations
+            .iter()
             .filter(|row| row.enabled)
+            .cloned()
             .map(|row| (IntegrationId::from(row.id.clone()), row))
             .collect();
 
-        // Find removed integrations (in current map but not desired)
         let current_ids: Vec<IntegrationId> = self.custom_integrations.keys().cloned().collect();
         for id in &current_ids {
             if !desired.contains_key(id) {
@@ -209,13 +207,10 @@ impl Integrations {
             }
         }
 
-        // Find added and modified integrations
         for (id, row) in &desired {
             if let Some(existing) = self.custom_integrations.get(id) {
-                // Check if config or plugin changed
                 if existing.module_name != row.plugin || existing.config != row.config {
                     info!("Restarting modified integration {}", id);
-                    // Stop old
                     {
                         let mut integration = existing.integration.lock().await;
                         if let Err(e) = integration.stop().await {
@@ -224,7 +219,6 @@ impl Integrations {
                     }
                     self.custom_integrations.remove(id);
 
-                    // Start new
                     match self
                         .load_integration(&row.plugin, id, &row.config, &self.cli.clone())
                         .await
@@ -243,7 +237,6 @@ impl Integrations {
                     }
                 }
             } else {
-                // New integration
                 match self
                     .load_integration(&row.plugin, id, &row.config, &self.cli.clone())
                     .await
@@ -264,6 +257,13 @@ impl Integrations {
         }
 
         Ok(removed_ids)
+    }
+
+    /// Full diff-based reload: add new, remove deleted, restart modified integrations.
+    /// Returns the IDs of integrations that were removed.
+    pub async fn reload_integrations(&mut self) -> Result<Vec<IntegrationId>> {
+        let db_integrations = config_queries::db_get_integrations().await?;
+        self.reload_config_rows(&db_integrations).await
     }
 }
 

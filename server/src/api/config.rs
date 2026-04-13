@@ -13,14 +13,18 @@ use std::sync::Arc;
 
 use crate::core::logs::recent_logs;
 use crate::core::state::AppState;
-use crate::db::actions::db_update_device;
-use crate::db::config_queries::{
-    self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
-    DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanMetadataRow,
-    FloorplanRow, GroupDeviceRow, GroupPositionRow, GroupRow, IntegrationRow, RoutineRow, SceneRow,
+use crate::db::{
+    self,
+    actions::db_update_device,
+    config_queries::{
+        self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
+        DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanExportRow,
+        FloorplanMetadataRow, FloorplanRow, GroupDeviceRow, GroupPositionRow, GroupRow,
+        IntegrationRow, RoutineRow, SceneRow,
+    },
 };
 use crate::types::{
-    device::{ControllableState, Device, DeviceData, DeviceId, DeviceRef, SensorDevice},
+    device::{ControllableState, Device, DeviceData, DeviceRef, DevicesState, SensorDevice},
     integration::IntegrationId,
     rule::Rules,
 };
@@ -41,6 +45,19 @@ struct ApiResponse<T> {
     success: bool,
     data: Option<T>,
     error: Option<String>,
+}
+
+#[derive(Serialize)]
+struct RuntimeStatusResponse {
+    persistence_available: bool,
+    memory_only_mode: bool,
+}
+
+#[derive(Serialize)]
+struct GroupResponseRow {
+    #[serde(flatten)]
+    group: GroupRow,
+    device_keys: Vec<String>,
 }
 
 impl<T: Serialize> ApiResponse<T> {
@@ -82,14 +99,89 @@ fn not_found(entity: &str) -> warp::reply::WithStatus<warp::reply::Json> {
     error_response(&format!("{entity} not found"), StatusCode::NOT_FOUND)
 }
 
-fn internal_error(e: impl std::fmt::Display) -> warp::reply::WithStatus<warp::reply::Json> {
-    error_response(&e.to_string(), StatusCode::INTERNAL_SERVER_ERROR)
+fn push_unique_error(errors: &mut Vec<String>, error: String) {
+    if !errors.contains(&error) {
+        errors.push(error);
+    }
 }
 
 fn decode_path_key(raw: String) -> String {
     percent_decode_str(raw.as_str())
         .decode_utf8_lossy()
         .into_owned()
+}
+
+fn group_response_row(state: &AppState, group: GroupRow) -> GroupResponseRow {
+    let device_keys = state
+        .groups
+        .get_flattened_groups()
+        .0
+        .iter()
+        .find_map(|(group_id, flattened_group)| {
+            (group_id.0 == group.id).then(|| {
+                flattened_group
+                    .device_keys
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+            })
+        })
+        .unwrap_or_default();
+
+    GroupResponseRow { group, device_keys }
+}
+
+fn legacy_default_floorplan(config: &config_queries::ConfigExport) -> Option<FloorplanExportRow> {
+    let floorplan = config.floorplan.as_ref();
+
+    Some(FloorplanExportRow {
+        id: "default".to_string(),
+        name: "Default".to_string(),
+        image_data: floorplan.and_then(|floorplan| floorplan.image_data.clone()),
+        image_mime_type: floorplan.and_then(|floorplan| floorplan.image_mime_type.clone()),
+        width: floorplan.and_then(|floorplan| floorplan.width),
+        height: floorplan.and_then(|floorplan| floorplan.height),
+        grid_data: None,
+    })
+}
+
+fn list_runtime_floorplans(config: &config_queries::ConfigExport) -> Vec<FloorplanMetadataRow> {
+    if !config.floorplans.is_empty() {
+        return config
+            .floorplans
+            .iter()
+            .map(|floorplan| FloorplanMetadataRow {
+                id: floorplan.id.clone(),
+                name: floorplan.name.clone(),
+            })
+            .collect();
+    }
+
+    legacy_default_floorplan(config)
+        .into_iter()
+        .map(|floorplan| FloorplanMetadataRow {
+            id: floorplan.id,
+            name: floorplan.name,
+        })
+        .collect()
+}
+
+fn get_runtime_floorplan(
+    config: &config_queries::ConfigExport,
+    floorplan_id: &str,
+) -> Option<FloorplanExportRow> {
+    config
+        .floorplans
+        .iter()
+        .find(|floorplan| floorplan.id == floorplan_id)
+        .cloned()
+        .or_else(|| {
+            if floorplan_id == "default" {
+                legacy_default_floorplan(config)
+            } else {
+                None
+            }
+        })
 }
 
 // ============================================================================
@@ -101,6 +193,7 @@ pub fn config(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("config").and(
         core_routes(app_state)
+            .or(runtime_status_routes(app_state))
             .or(logs_routes(app_state))
             .or(device_display_name_routes(app_state))
             .or(device_sensor_config_routes(app_state))
@@ -153,25 +246,47 @@ fn core_routes(
     get.or(update)
 }
 
-async fn get_core_config(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_core_config().await {
-        Ok(Some(config)) => Ok(ApiResponse::success(config)),
-        Ok(None) => Ok(error_response(
-            "Database not available",
-            StatusCode::SERVICE_UNAVAILABLE,
-        )),
-        Err(e) => Ok(internal_error(e)),
-    }
+async fn get_core_config(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().core.clone(),
+    ))
 }
 
 async fn update_core_config(
     config: config_queries::CoreConfigRow,
+    app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    {
+        let mut state = app_state.write().await;
+        state.update_core_config(config.clone());
+    }
+
+    if let Err(e) = config_queries::db_update_core_config(&config).await {
+        warn!("Failed to persist core config: {e}");
+    }
+
+    Ok(ApiResponse::success(config))
+}
+
+fn runtime_status_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("runtime-status")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_state(app_state))
+        .and_then(get_runtime_status)
+}
+
+async fn get_runtime_status(
     _app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_update_core_config(&config).await {
-        Ok(()) => Ok(ApiResponse::success(config)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let persistence_available = db::get_db_connection().is_ok();
+    Ok(ApiResponse::success(RuntimeStatusResponse {
+        persistence_available,
+        memory_only_mode: !persistence_available,
+    }))
 }
 
 fn device_display_name_routes(
@@ -198,36 +313,52 @@ fn device_display_name_routes(
 }
 
 async fn list_device_display_names(
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_device_display_overrides().await {
-        Ok(rows) => Ok(ApiResponse::success(rows)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().device_display_overrides.clone(),
+    ))
 }
 
 async fn upsert_device_display_name(
     device_key: String,
     mut row: DeviceDisplayNameRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     row.device_key = decode_path_key(device_key);
 
-    match config_queries::db_upsert_device_display_override(&row).await {
-        Ok(()) => Ok(ApiResponse::success(row)),
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.upsert_device_display_override(row.clone());
     }
+
+    if let Err(e) = config_queries::db_upsert_device_display_override(&row).await {
+        warn!("Failed to persist device display name override: {e}");
+    }
+
+    Ok(ApiResponse::success(row))
 }
 
 async fn delete_device_display_name(
     device_key: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_device_display_override(&decode_path_key(device_key)).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Device display name")),
-        Err(e) => Ok(internal_error(e)),
+    let device_key = decode_path_key(device_key);
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_device_display_override(&device_key)
+    };
+
+    if !deleted {
+        return Ok(not_found("Device display name"));
     }
+
+    if let Err(e) = config_queries::db_delete_device_display_override(&device_key).await {
+        warn!("Failed to persist device display name deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 fn device_sensor_config_routes(
@@ -254,36 +385,66 @@ fn device_sensor_config_routes(
 }
 
 async fn list_device_sensor_configs(
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_device_sensor_configs().await {
-        Ok(rows) => Ok(ApiResponse::success(rows)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().device_sensor_configs.clone(),
+    ))
 }
 
 async fn upsert_device_sensor_config(
     device_ref: String,
     mut row: DeviceSensorConfigRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     row.device_ref = decode_path_key(device_ref);
 
-    match config_queries::db_upsert_device_sensor_config(&row).await {
-        Ok(()) => Ok(ApiResponse::success(row)),
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        let device_exists = state
+            .devices
+            .get_state()
+            .0
+            .keys()
+            .any(|device_key| device_key.to_string() == row.device_ref);
+
+        if !device_exists {
+            return Ok(error_response(
+                "Unknown device key",
+                StatusCode::BAD_REQUEST,
+            ));
+        }
+
+        state.upsert_device_sensor_config(row.clone());
     }
+
+    if let Err(e) = config_queries::db_upsert_device_sensor_config(&row).await {
+        warn!("Failed to persist device sensor config: {e}");
+    }
+
+    Ok(ApiResponse::success(row))
 }
 
 async fn delete_device_sensor_config(
     device_ref: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_device_sensor_config(&decode_path_key(device_ref)).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Device sensor config")),
-        Err(e) => Ok(internal_error(e)),
+    let device_ref = decode_path_key(device_ref);
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_device_sensor_config(&device_ref)
+    };
+
+    if !deleted {
+        return Ok(not_found("Device sensor config"));
     }
+
+    if let Err(e) = config_queries::db_delete_device_sensor_config(&device_ref).await {
+        warn!("Failed to persist device sensor config deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -326,22 +487,28 @@ fn integrations_routes(
 }
 
 async fn list_integrations(
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_integrations().await {
-        Ok(integrations) => Ok(ApiResponse::success(integrations)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().integrations.clone(),
+    ))
 }
 
 async fn get_integration(
     id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_integration(&id).await {
-        Ok(Some(integration)) => Ok(ApiResponse::success(integration)),
-        Ok(None) => Ok(not_found("Integration")),
-        Err(e) => Ok(internal_error(e)),
+    let state = app_state.read().await;
+    match state
+        .get_runtime_config()
+        .integrations
+        .iter()
+        .find(|integration| integration.id == id)
+        .cloned()
+    {
+        Some(integration) => Ok(ApiResponse::success(integration)),
+        None => Ok(not_found("Integration")),
     }
 }
 
@@ -349,17 +516,19 @@ async fn create_integration(
     integration: IntegrationRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_upsert_integration(&integration).await {
-        Ok(()) => {
-            // Trigger hot-reload
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_integrations().await {
-                warn!("Failed to hot-reload integrations: {e}");
-            }
-            Ok(ApiResponse::created(integration))
+    {
+        let mut state = app_state.write().await;
+        state.upsert_integration(integration.clone());
+        if let Err(e) = state.apply_runtime_integrations().await {
+            warn!("Failed to apply runtime integrations: {e}");
         }
-        Err(e) => Ok(internal_error(e)),
     }
+
+    if let Err(e) = config_queries::db_upsert_integration(&integration).await {
+        warn!("Failed to persist integration config: {e}");
+    }
+
+    Ok(ApiResponse::created(integration))
 }
 
 async fn update_integration(
@@ -368,35 +537,46 @@ async fn update_integration(
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     integration.id = id;
-    match config_queries::db_upsert_integration(&integration).await {
-        Ok(()) => {
-            // Trigger hot-reload
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_integrations().await {
-                warn!("Failed to hot-reload integrations: {e}");
-            }
-            Ok(ApiResponse::success(integration))
+
+    {
+        let mut state = app_state.write().await;
+        state.upsert_integration(integration.clone());
+        if let Err(e) = state.apply_runtime_integrations().await {
+            warn!("Failed to apply runtime integrations: {e}");
         }
-        Err(e) => Ok(internal_error(e)),
     }
+
+    if let Err(e) = config_queries::db_upsert_integration(&integration).await {
+        warn!("Failed to persist integration config update: {e}");
+    }
+
+    Ok(ApiResponse::success(integration))
 }
 
 async fn delete_integration(
     id: String,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_integration(&id).await {
-        Ok(true) => {
-            // Trigger hot-reload
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_integrations().await {
-                warn!("Failed to hot-reload integrations: {e}");
+    let deleted = {
+        let mut state = app_state.write().await;
+        let deleted = state.delete_integration(&id);
+        if deleted {
+            if let Err(e) = state.apply_runtime_integrations().await {
+                warn!("Failed to apply runtime integrations: {e}");
             }
-            Ok(ApiResponse::success(()))
         }
-        Ok(false) => Ok(not_found("Integration")),
-        Err(e) => Ok(internal_error(e)),
+        deleted
+    };
+
+    if !deleted {
+        return Ok(not_found("Integration"));
     }
+
+    if let Err(e) = config_queries::db_delete_integration(&id).await {
+        warn!("Failed to persist integration deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -438,21 +618,33 @@ fn groups_routes(
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_groups(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_groups().await {
-        Ok(groups) => Ok(ApiResponse::success(groups)),
-        Err(e) => Ok(internal_error(e)),
-    }
+async fn list_groups(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state
+            .get_runtime_config()
+            .groups
+            .iter()
+            .cloned()
+            .map(|group| group_response_row(&state, group))
+            .collect::<Vec<_>>(),
+    ))
 }
 
 async fn get_group(
     id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_group(&id).await {
-        Ok(Some(group)) => Ok(ApiResponse::success(group)),
-        Ok(None) => Ok(not_found("Group")),
-        Err(e) => Ok(internal_error(e)),
+    let state = app_state.read().await;
+    match state
+        .get_runtime_config()
+        .groups
+        .iter()
+        .find(|group| group.id == id)
+        .cloned()
+    {
+        Some(group) => Ok(ApiResponse::success(group_response_row(&state, group))),
+        None => Ok(not_found("Group")),
     }
 }
 
@@ -460,16 +652,17 @@ async fn create_group(
     group: GroupRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_upsert_group(&group).await {
-        Ok(()) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_groups().await {
-                warn!("Failed to hot-reload groups: {e}");
-            }
-            Ok(ApiResponse::created(group))
-        }
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.upsert_group(group.clone());
+        state.apply_runtime_groups();
     }
+
+    if let Err(e) = config_queries::db_upsert_group(&group).await {
+        warn!("Failed to persist group config: {e}");
+    }
+
+    Ok(ApiResponse::created(group))
 }
 
 async fn update_group(
@@ -478,33 +671,42 @@ async fn update_group(
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     group.id = id;
-    match config_queries::db_upsert_group(&group).await {
-        Ok(()) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_groups().await {
-                warn!("Failed to hot-reload groups: {e}");
-            }
-            Ok(ApiResponse::success(group))
-        }
-        Err(e) => Ok(internal_error(e)),
+
+    {
+        let mut state = app_state.write().await;
+        state.upsert_group(group.clone());
+        state.apply_runtime_groups();
     }
+
+    if let Err(e) = config_queries::db_upsert_group(&group).await {
+        warn!("Failed to persist group config update: {e}");
+    }
+
+    Ok(ApiResponse::success(group))
 }
 
 async fn delete_group(
     id: String,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_group(&id).await {
-        Ok(true) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_groups().await {
-                warn!("Failed to hot-reload groups: {e}");
-            }
-            Ok(ApiResponse::success(()))
+    let deleted = {
+        let mut state = app_state.write().await;
+        let deleted = state.delete_group(&id);
+        if deleted {
+            state.apply_runtime_groups();
         }
-        Ok(false) => Ok(not_found("Group")),
-        Err(e) => Ok(internal_error(e)),
+        deleted
+    };
+
+    if !deleted {
+        return Ok(not_found("Group"));
     }
+
+    if let Err(e) = config_queries::db_delete_group(&id).await {
+        warn!("Failed to persist group deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -546,21 +748,27 @@ fn scenes_routes(
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_scenes(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_config_scenes().await {
-        Ok(scenes) => Ok(ApiResponse::success(scenes)),
-        Err(e) => Ok(internal_error(e)),
-    }
+async fn list_scenes(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().scenes.clone(),
+    ))
 }
 
 async fn get_scene(
     id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_config_scene(&id).await {
-        Ok(Some(scene)) => Ok(ApiResponse::success(scene)),
-        Ok(None) => Ok(not_found("Scene")),
-        Err(e) => Ok(internal_error(e)),
+    let state = app_state.read().await;
+    match state
+        .get_runtime_config()
+        .scenes
+        .iter()
+        .find(|scene| scene.id == id)
+        .cloned()
+    {
+        Some(scene) => Ok(ApiResponse::success(scene)),
+        None => Ok(not_found("Scene")),
     }
 }
 
@@ -568,16 +776,17 @@ async fn create_scene(
     scene: SceneRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_upsert_config_scene(&scene).await {
-        Ok(()) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_scenes().await {
-                warn!("Failed to hot-reload scenes: {e}");
-            }
-            Ok(ApiResponse::created(scene))
-        }
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.upsert_scene(scene.clone());
+        state.apply_runtime_scenes();
     }
+
+    if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
+        warn!("Failed to persist scene config: {e}");
+    }
+
+    Ok(ApiResponse::created(scene))
 }
 
 async fn update_scene(
@@ -586,33 +795,42 @@ async fn update_scene(
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     scene.id = id;
-    match config_queries::db_upsert_config_scene(&scene).await {
-        Ok(()) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_scenes().await {
-                warn!("Failed to hot-reload scenes: {e}");
-            }
-            Ok(ApiResponse::success(scene))
-        }
-        Err(e) => Ok(internal_error(e)),
+
+    {
+        let mut state = app_state.write().await;
+        state.upsert_scene(scene.clone());
+        state.apply_runtime_scenes();
     }
+
+    if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
+        warn!("Failed to persist scene config update: {e}");
+    }
+
+    Ok(ApiResponse::success(scene))
 }
 
 async fn delete_scene(
     id: String,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_config_scene(&id).await {
-        Ok(true) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_scenes().await {
-                warn!("Failed to hot-reload scenes: {e}");
-            }
-            Ok(ApiResponse::success(()))
+    let deleted = {
+        let mut state = app_state.write().await;
+        let deleted = state.delete_scene(&id);
+        if deleted {
+            state.apply_runtime_scenes();
         }
-        Ok(false) => Ok(not_found("Scene")),
-        Err(e) => Ok(internal_error(e)),
+        deleted
+    };
+
+    if !deleted {
+        return Ok(not_found("Scene"));
     }
+
+    if let Err(e) = config_queries::db_delete_config_scene(&id).await {
+        warn!("Failed to persist scene deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -654,21 +872,27 @@ fn routines_routes(
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_routines(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_routines().await {
-        Ok(routines) => Ok(ApiResponse::success(routines)),
-        Err(e) => Ok(internal_error(e)),
-    }
+async fn list_routines(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().routines.clone(),
+    ))
 }
 
 async fn get_routine(
     id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_routine(&id).await {
-        Ok(Some(routine)) => Ok(ApiResponse::success(routine)),
-        Ok(None) => Ok(not_found("Routine")),
-        Err(e) => Ok(internal_error(e)),
+    let state = app_state.read().await;
+    match state
+        .get_runtime_config()
+        .routines
+        .iter()
+        .find(|routine| routine.id == id)
+        .cloned()
+    {
+        Some(routine) => Ok(ApiResponse::success(routine)),
+        None => Ok(not_found("Routine")),
     }
 }
 
@@ -676,16 +900,17 @@ async fn create_routine(
     routine: RoutineRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_upsert_routine(&routine).await {
-        Ok(()) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_routines().await {
-                warn!("Failed to hot-reload routines: {e}");
-            }
-            Ok(ApiResponse::created(routine))
-        }
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.upsert_routine(routine.clone());
+        state.apply_runtime_routines();
     }
+
+    if let Err(e) = config_queries::db_upsert_routine(&routine).await {
+        warn!("Failed to persist routine config: {e}");
+    }
+
+    Ok(ApiResponse::created(routine))
 }
 
 async fn update_routine(
@@ -694,33 +919,42 @@ async fn update_routine(
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     routine.id = id;
-    match config_queries::db_upsert_routine(&routine).await {
-        Ok(()) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_routines().await {
-                warn!("Failed to hot-reload routines: {e}");
-            }
-            Ok(ApiResponse::success(routine))
-        }
-        Err(e) => Ok(internal_error(e)),
+
+    {
+        let mut state = app_state.write().await;
+        state.upsert_routine(routine.clone());
+        state.apply_runtime_routines();
     }
+
+    if let Err(e) = config_queries::db_upsert_routine(&routine).await {
+        warn!("Failed to persist routine config update: {e}");
+    }
+
+    Ok(ApiResponse::success(routine))
 }
 
 async fn delete_routine(
     id: String,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_routine(&id).await {
-        Ok(true) => {
-            let mut state = app_state.write().await;
-            if let Err(e) = state.reload_routines().await {
-                warn!("Failed to hot-reload routines: {e}");
-            }
-            Ok(ApiResponse::success(()))
+    let deleted = {
+        let mut state = app_state.write().await;
+        let deleted = state.delete_routine(&id);
+        if deleted {
+            state.apply_runtime_routines();
         }
-        Ok(false) => Ok(not_found("Routine")),
-        Err(e) => Ok(internal_error(e)),
+        deleted
+    };
+
+    if !deleted {
+        return Ok(not_found("Routine"));
     }
+
+    if let Err(e) = config_queries::db_delete_routine(&id).await {
+        warn!("Failed to persist routine deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -757,45 +991,73 @@ fn floorplans_routes(
     list.or(create).or(update).or(delete)
 }
 
-async fn list_floorplans(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_floorplans().await {
-        Ok(floorplans) => Ok(ApiResponse::success(floorplans)),
-        Err(e) => Ok(internal_error(e)),
-    }
+async fn list_floorplans(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(list_runtime_floorplans(
+        state.get_runtime_config(),
+    )))
 }
 
 async fn create_floorplan(
     floorplan: FloorplanMetadataRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_create_floorplan(&floorplan).await {
-        Ok(()) => Ok(ApiResponse::created(floorplan)),
-        Err(e) => Ok(internal_error(e)),
+    let created = {
+        let mut state = app_state.write().await;
+        state.create_floorplan_metadata(floorplan.clone())
+    };
+
+    if !created {
+        return Ok(error_response(
+            "Floorplan already exists",
+            StatusCode::CONFLICT,
+        ));
     }
+
+    if let Err(e) = config_queries::db_create_floorplan(&floorplan).await {
+        warn!("Failed to persist floorplan creation: {e}");
+    }
+
+    Ok(ApiResponse::created(floorplan))
 }
 
 async fn update_floorplan(
     id: String,
     mut floorplan: FloorplanMetadataRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     floorplan.id = id;
 
-    match config_queries::db_update_floorplan_metadata(&floorplan).await {
-        Ok(()) => Ok(ApiResponse::success(floorplan)),
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.update_floorplan_metadata(floorplan.clone());
     }
+
+    if let Err(e) = config_queries::db_update_floorplan_metadata(&floorplan).await {
+        warn!("Failed to persist floorplan metadata update: {e}");
+    }
+
+    Ok(ApiResponse::success(floorplan))
 }
 
 async fn delete_floorplan(
     id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_floorplan(&id).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Floorplan")),
-        Err(e) => Ok(internal_error(e)),
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_floorplan(&id)
+    };
+
+    if !deleted {
+        return Ok(not_found("Floorplan"));
     }
+
+    if let Err(e) = config_queries::db_delete_floorplan(&id).await {
+        warn!("Failed to persist floorplan deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 fn floorplan_id_query() -> impl Filter<Extract = (String,), Error = std::convert::Infallible> + Clone
@@ -927,12 +1189,17 @@ fn floorplan_routes(
 
 async fn get_floorplan(
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_floorplan_by_id(&floorplan_id).await {
-        Ok(Some(floorplan)) => Ok(ApiResponse::success(floorplan)),
-        Ok(None) => Ok(not_found("Floorplan")),
-        Err(e) => Ok(internal_error(e)),
+    let state = app_state.read().await;
+    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+        Some(floorplan) => Ok(ApiResponse::success(FloorplanRow {
+            image_data: floorplan.image_data,
+            image_mime_type: floorplan.image_mime_type,
+            width: floorplan.width,
+            height: floorplan.height,
+        })),
+        None => Ok(not_found("Floorplan")),
     }
 }
 
@@ -940,7 +1207,7 @@ async fn upload_floorplan(
     body: bytes::Bytes,
     content_type: Option<String>,
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     // TODO: Get width/height from image metadata
     let floorplan = FloorplanRow {
@@ -950,84 +1217,123 @@ async fn upload_floorplan(
         height: None,
     };
 
-    match config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
-        Ok(()) => Ok(ApiResponse::success(())),
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.upsert_floorplan_content(&floorplan_id, floorplan.clone());
     }
+
+    if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
+        warn!("Failed to persist floorplan upload: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 async fn get_device_positions(
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_device_positions().await {
-        Ok(positions) => Ok(ApiResponse::success(positions)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().device_positions.clone(),
+    ))
 }
 
 async fn upsert_device_position(
     device_key: String,
     mut pos: DevicePositionRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     pos.device_key = decode_path_key(device_key);
-    match config_queries::db_upsert_device_position(&pos).await {
-        Ok(()) => Ok(ApiResponse::success(pos)),
-        Err(e) => Ok(internal_error(e)),
+
+    {
+        let mut state = app_state.write().await;
+        state.upsert_device_position(pos.clone());
     }
+
+    if let Err(e) = config_queries::db_upsert_device_position(&pos).await {
+        warn!("Failed to persist device position: {e}");
+    }
+
+    Ok(ApiResponse::success(pos))
 }
 
 async fn delete_device_position(
     device_key: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_device_position(&decode_path_key(device_key)).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Device position")),
-        Err(e) => Ok(internal_error(e)),
+    let device_key = decode_path_key(device_key);
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_device_position(&device_key)
+    };
+
+    if !deleted {
+        return Ok(not_found("Device position"));
     }
+
+    if let Err(e) = config_queries::db_delete_device_position(&device_key).await {
+        warn!("Failed to persist device position deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 async fn get_group_positions(
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_group_positions().await {
-        Ok(positions) => Ok(ApiResponse::success(positions)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().group_positions.clone(),
+    ))
 }
 
 async fn upsert_group_position(
     group_id: String,
     mut pos: GroupPositionRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     pos.group_id = group_id;
-    match config_queries::db_upsert_group_position(&pos).await {
-        Ok(()) => Ok(ApiResponse::success(pos)),
-        Err(e) => Ok(internal_error(e)),
+
+    {
+        let mut state = app_state.write().await;
+        state.upsert_group_position(pos.clone());
     }
+
+    if let Err(e) = config_queries::db_upsert_group_position(&pos).await {
+        warn!("Failed to persist group position: {e}");
+    }
+
+    Ok(ApiResponse::success(pos))
 }
 
 async fn delete_group_position(
     group_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_group_position(&group_id).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Group position")),
-        Err(e) => Ok(internal_error(e)),
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_group_position(&group_id)
+    };
+
+    if !deleted {
+        return Ok(not_found("Group position"));
     }
+
+    if let Err(e) = config_queries::db_delete_group_position(&group_id).await {
+        warn!("Failed to persist group position deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 async fn get_floorplan_grid(
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_floorplan_grid_by_id(&floorplan_id).await {
-        Ok(Some(grid)) => Ok(ApiResponse::success(grid.grid)),
-        Ok(None) => Ok(ApiResponse::success(Option::<String>::None)),
-        Err(e) => Ok(internal_error(e)),
+    let state = app_state.read().await;
+    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+        Some(floorplan) => Ok(ApiResponse::success(floorplan.grid_data)),
+        None => Ok(ApiResponse::success(Option::<String>::None)),
     }
 }
 
@@ -1039,20 +1345,29 @@ struct SaveGridRequest {
 async fn save_floorplan_grid(
     request: SaveGridRequest,
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_upsert_floorplan_grid_by_id(&floorplan_id, &request.grid).await {
-        Ok(()) => Ok(ApiResponse::success(())),
-        Err(e) => Ok(internal_error(e)),
+    {
+        let mut state = app_state.write().await;
+        state.set_floorplan_grid(&floorplan_id, request.grid.clone());
     }
+
+    if let Err(e) =
+        config_queries::db_upsert_floorplan_grid_by_id(&floorplan_id, &request.grid).await
+    {
+        warn!("Failed to persist floorplan grid: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 async fn get_floorplan_image(
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<Box<dyn Reply>, warp::Rejection> {
-    match config_queries::db_get_floorplan_by_id(&floorplan_id).await {
-        Ok(Some(floorplan)) => {
+    let state = app_state.read().await;
+    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+        Some(floorplan) => {
             if let Some(image_data) = floorplan.image_data {
                 let mime_type = floorplan
                     .image_mime_type
@@ -1066,15 +1381,14 @@ async fn get_floorplan_image(
                 Ok(Box::new(not_found("Floorplan image")))
             }
         }
-        Ok(None) => Ok(Box::new(not_found("Floorplan image"))),
-        Err(e) => Ok(Box::new(internal_error(e))),
+        None => Ok(Box::new(not_found("Floorplan image"))),
     }
 }
 
 async fn upload_floorplan_image(
     mut form: warp::multipart::FormData,
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
     use futures::TryStreamExt;
 
@@ -1103,10 +1417,16 @@ async fn upload_floorplan_image(
             height: None,
         };
 
-        match config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
-            Ok(()) => Ok(ApiResponse::success(())),
-            Err(e) => Ok(internal_error(e)),
+        {
+            let mut state = app_state.write().await;
+            state.upsert_floorplan_content(&floorplan_id, floorplan.clone());
         }
+
+        if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
+            warn!("Failed to persist floorplan image upload: {e}");
+        }
+
+        Ok(ApiResponse::success(()))
     } else {
         Ok(error_response(
             "No image data found",
@@ -1117,10 +1437,11 @@ async fn upload_floorplan_image(
 
 async fn head_floorplan_image(
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<Box<dyn Reply>, warp::Rejection> {
-    match config_queries::db_get_floorplan_by_id(&floorplan_id).await {
-        Ok(Some(floorplan)) => {
+    let state = app_state.read().await;
+    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+        Some(floorplan) => {
             if floorplan.image_data.is_some() {
                 let mime_type = floorplan
                     .image_mime_type
@@ -1134,20 +1455,28 @@ async fn head_floorplan_image(
                 Ok(Box::new(not_found("Floorplan image")))
             }
         }
-        Ok(None) => Ok(Box::new(not_found("Floorplan image"))),
-        Err(e) => Ok(Box::new(internal_error(e))),
+        None => Ok(Box::new(not_found("Floorplan image"))),
     }
 }
 
 async fn delete_floorplan_image(
     floorplan_id: String,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_clear_floorplan_image(&floorplan_id).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Floorplan image")),
-        Err(e) => Ok(internal_error(e)),
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.clear_floorplan_image(&floorplan_id)
+    };
+
+    if !deleted {
+        return Ok(not_found("Floorplan image"));
     }
+
+    if let Err(e) = config_queries::db_clear_floorplan_image(&floorplan_id).await {
+        warn!("Failed to persist floorplan image deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -1198,68 +1527,111 @@ fn dashboard_routes(
 }
 
 async fn get_dashboard_layouts(
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_dashboard_layouts().await {
-        Ok(layouts) => Ok(ApiResponse::success(layouts)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state.get_runtime_config().dashboard_layouts.clone(),
+    ))
 }
 
 async fn upsert_dashboard_layout(
     layout: DashboardLayoutRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    let local_layout = {
+        let mut state = app_state.write().await;
+        state.upsert_dashboard_layout(layout.clone())
+    };
+
     match config_queries::db_upsert_dashboard_layout(&layout).await {
         Ok(id) => Ok(ApiResponse::success(DashboardLayoutRow {
             id,
-            name: layout.name,
-            is_default: layout.is_default,
+            name: local_layout.name,
+            is_default: local_layout.is_default,
         })),
-        Err(e) => Ok(internal_error(e)),
+        Err(e) => {
+            warn!("Failed to persist dashboard layout: {e}");
+            Ok(ApiResponse::success(local_layout))
+        }
     }
 }
 
 async fn delete_dashboard_layout(
     id: i32,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_dashboard_layout(id).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Dashboard layout")),
-        Err(e) => Ok(internal_error(e)),
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_dashboard_layout(id)
+    };
+
+    if !deleted {
+        return Ok(not_found("Dashboard layout"));
     }
+
+    if let Err(e) = config_queries::db_delete_dashboard_layout(id).await {
+        warn!("Failed to persist dashboard layout deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 async fn get_dashboard_widgets(
     layout_id: i32,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_get_dashboard_widgets(layout_id).await {
-        Ok(widgets) => Ok(ApiResponse::success(widgets)),
-        Err(e) => Ok(internal_error(e)),
-    }
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(
+        state
+            .get_runtime_config()
+            .dashboard_widgets
+            .iter()
+            .filter(|widget| widget.layout_id == layout_id)
+            .cloned()
+            .collect::<Vec<_>>(),
+    ))
 }
 
 async fn upsert_dashboard_widget(
     widget: DashboardWidgetRow,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    let local_widget = {
+        let mut state = app_state.write().await;
+        state.upsert_dashboard_widget(widget.clone())
+    };
+
     match config_queries::db_upsert_dashboard_widget(&widget).await {
-        Ok(id) => Ok(ApiResponse::success(DashboardWidgetRow { id, ..widget })),
-        Err(e) => Ok(internal_error(e)),
+        Ok(id) => Ok(ApiResponse::success(DashboardWidgetRow {
+            id,
+            ..local_widget
+        })),
+        Err(e) => {
+            warn!("Failed to persist dashboard widget: {e}");
+            Ok(ApiResponse::success(local_widget))
+        }
     }
 }
 
 async fn delete_dashboard_widget(
     id: i32,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_delete_dashboard_widget(id).await {
-        Ok(true) => Ok(ApiResponse::success(())),
-        Ok(false) => Ok(not_found("Dashboard widget")),
-        Err(e) => Ok(internal_error(e)),
+    let deleted = {
+        let mut state = app_state.write().await;
+        state.delete_dashboard_widget(id)
+    };
+
+    if !deleted {
+        return Ok(not_found("Dashboard widget"));
     }
+
+    if let Err(e) = config_queries::db_delete_dashboard_widget(id).await {
+        warn!("Failed to persist dashboard widget deletion: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -1292,11 +1664,9 @@ fn export_import_routes(
     export.or(import)
 }
 
-async fn export_config(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    match config_queries::db_export_config().await {
-        Ok(config) => Ok(ApiResponse::success(config)),
-        Err(e) => Ok(internal_error(e)),
-    }
+async fn export_config(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+    let state = app_state.read().await;
+    Ok(ApiResponse::success(state.get_runtime_config().clone()))
 }
 
 async fn import_config(
@@ -1312,18 +1682,19 @@ async fn import_config(
         }
     }
 
-    match config_queries::db_import_config(&config).await {
-        Ok(()) => {
-            // Hot-reload all config
-            let mut state = app_state.write().await;
-            let _ = state.reload_integrations().await;
-            let _ = state.reload_groups().await;
-            let _ = state.reload_scenes().await;
-            let _ = state.reload_routines().await;
-            Ok(ApiResponse::success(()))
+    {
+        let mut state = app_state.write().await;
+        state.runtime_config = config.clone();
+        if let Err(e) = state.apply_runtime_config().await {
+            warn!("Failed to apply imported config to runtime state: {e}");
         }
-        Err(e) => Ok(internal_error(e)),
     }
+
+    if let Err(e) = config_queries::db_import_config(&config).await {
+        warn!("Failed to persist imported config: {e}");
+    }
+
+    Ok(ApiResponse::success(()))
 }
 
 // ============================================================================
@@ -1379,6 +1750,8 @@ struct TomlSceneConfig {
     #[serde(default)]
     groups: Option<HashMap<String, serde_json::Value>>,
     #[serde(default)]
+    script: Option<String>,
+    #[serde(default)]
     expr: Option<String>,
 }
 
@@ -1391,7 +1764,7 @@ struct TomlRoutineConfig {
     actions: Option<serde_json::Value>,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 pub struct MigratePreviewResult {
     integrations: Vec<IntegrationRow>,
     groups: Vec<GroupRow>,
@@ -1400,12 +1773,112 @@ pub struct MigratePreviewResult {
     core: CoreConfigRow,
 }
 
+impl MigratePreviewResult {
+    pub fn to_config_export(&self) -> ConfigExport {
+        ConfigExport {
+            version: 1,
+            core: self.core.clone(),
+            integrations: self.integrations.clone(),
+            groups: self.groups.clone(),
+            scenes: self.scenes.clone(),
+            routines: self.routines.clone(),
+            floorplan: None,
+            floorplans: Vec::new(),
+            device_positions: Vec::new(),
+            group_positions: Vec::new(),
+            device_display_overrides: Vec::new(),
+            device_sensor_configs: Vec::new(),
+            dashboard_layouts: Vec::new(),
+            dashboard_widgets: Vec::new(),
+        }
+    }
+}
+
+#[derive(Serialize)]
+struct MigratePreviewData {
+    preview: MigratePreviewResult,
+    validation_errors: Vec<String>,
+}
+
+struct CanonicalizedMigrationPreview {
+    preview: MigratePreviewResult,
+    validation_errors: Vec<String>,
+}
+
+pub enum ParsedConfigBackup {
+    JsonExport(ConfigExport),
+}
+
+impl ParsedConfigBackup {
+    pub fn format_name(&self) -> &'static str {
+        "json"
+    }
+
+    pub fn to_config_export(&self) -> ConfigExport {
+        match self {
+            Self::JsonExport(config) => config.clone(),
+        }
+    }
+}
+
 #[derive(Serialize)]
 struct MigrateApplyResult {
+    core: bool,
     integrations: usize,
     groups: usize,
     scenes: usize,
     routines: usize,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(default)]
+struct MigrationSelection {
+    core: bool,
+    integrations: bool,
+    groups: bool,
+    scenes: bool,
+    routines: bool,
+}
+
+impl Default for MigrationSelection {
+    fn default() -> Self {
+        Self {
+            core: true,
+            integrations: true,
+            groups: true,
+            scenes: true,
+            routines: true,
+        }
+    }
+}
+
+impl MigrationSelection {
+    fn has_any(&self) -> bool {
+        self.core || self.integrations || self.groups || self.scenes || self.routines
+    }
+}
+
+#[derive(Deserialize)]
+struct MigrateApplyRequestBody {
+    preview: MigratePreviewResult,
+    #[serde(default)]
+    selection: MigrationSelection,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum MigrateApplyRequest {
+    Legacy(MigratePreviewResult),
+    Selected(MigrateApplyRequestBody),
+}
+
+impl MigrateApplyRequest {
+    fn into_parts(self) -> (MigratePreviewResult, MigrationSelection) {
+        match self {
+            Self::Legacy(preview) => (preview, MigrationSelection::default()),
+            Self::Selected(body) => (body.preview, body.selection),
+        }
+    }
 }
 
 fn migrate_routes(
@@ -1413,6 +1886,7 @@ fn migrate_routes(
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let preview = warp::path!("migrate" / "preview")
         .and(warp::post())
+        .and(warp::query::<MigrationSelection>())
         .and(warp::body::bytes())
         .and(with_state(app_state))
         .and_then(migrate_preview);
@@ -1424,6 +1898,69 @@ fn migrate_routes(
         .and_then(migrate_apply);
 
     preview.or(apply)
+}
+
+fn select_migration_preview(
+    mut preview: MigratePreviewResult,
+    selection: &MigrationSelection,
+) -> MigratePreviewResult {
+    if !selection.integrations {
+        preview.integrations.clear();
+    }
+    if !selection.groups {
+        preview.groups.clear();
+    }
+    if !selection.scenes {
+        preview.scenes.clear();
+    }
+    if !selection.routines {
+        preview.routines.clear();
+    }
+
+    preview
+}
+
+fn merge_config_rows<T>(existing: &mut Vec<T>, incoming: &[T], key: impl Fn(&T) -> &str)
+where
+    T: Clone,
+{
+    let mut merged = BTreeMap::new();
+
+    for row in existing.iter().cloned() {
+        merged.insert(key(&row).to_string(), row);
+    }
+
+    for row in incoming {
+        merged.insert(key(row).to_string(), row.clone());
+    }
+
+    *existing = merged.into_values().collect();
+}
+
+fn merge_selected_migration_config(
+    mut config: ConfigExport,
+    preview: &MigratePreviewResult,
+    selection: &MigrationSelection,
+) -> ConfigExport {
+    if selection.core {
+        config.core = preview.core.clone();
+    }
+    if selection.integrations {
+        merge_config_rows(&mut config.integrations, &preview.integrations, |row| {
+            &row.id
+        });
+    }
+    if selection.groups {
+        merge_config_rows(&mut config.groups, &preview.groups, |row| &row.id);
+    }
+    if selection.scenes {
+        merge_config_rows(&mut config.scenes, &preview.scenes, |row| &row.id);
+    }
+    if selection.routines {
+        merge_config_rows(&mut config.routines, &preview.routines, |row| &row.id);
+    }
+
+    config
 }
 
 pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String> {
@@ -1468,8 +2005,7 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
                 .into_iter()
                 .map(|d| GroupDeviceRow {
                     integration_id: d.integration_id,
-                    device_name: d.name.unwrap_or_default(),
-                    device_id: d.device_id,
+                    device_id: d.device_id.or(d.name).unwrap_or_default(),
                 })
                 .collect();
 
@@ -1512,12 +2048,26 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
 
             // Convert group states: { group_id: config }
             let group_states: HashMap<String, serde_json::Value> = scene.groups.unwrap_or_default();
+            let example_device_key = device_states
+                .keys()
+                .next()
+                .cloned()
+                .unwrap_or_else(|| "integration/device".to_string());
+            let example_device_key_json = serde_json::to_string(&example_device_key)
+                .unwrap_or_else(|_| "\"integration/device\"".to_string());
 
             SceneRow {
                 id,
                 name: scene.name,
                 hidden: scene.hidden.unwrap_or(false),
-                script: scene.expr, // Store evalexpr as script (for reference/migration)
+                script: scene.script.or_else(|| {
+                    scene.expr.map(|expr| {
+                        let expr = expr.replace('\n', "\n// ");
+                        format!(
+                            "// Legacy evalexpr scene expression copied from TOML and disabled.\n// Rewrite this as a JavaScript expression that evaluates to a scene override object.\n// Access live device bindings like devices[\"integration/device\"].data.Controllable.state.power.\n// Original expr:\n// {expr}\n\ndefineSceneScript(() => {{\n  const currentBrightness =\n    devices[{example_device_key_json}]?.data?.Controllable?.state?.brightness ?? 0.4;\n\n  /** @type {{SceneScriptResult}} */\n  const overrides = {{\n    {example_device_key_json}: deviceState({{\n      power: true,\n      brightness: Math.min(1, Math.max(0.1, currentBrightness)),\n    }}),\n  }};\n\n  return overrides;\n}})",
+                        )
+                    })
+                }),
                 device_states,
                 group_states,
             }
@@ -1547,75 +2097,308 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
     })
 }
 
-/// Apply a parsed TOML migration result to the database.
-pub async fn apply_migration(preview: &MigratePreviewResult) -> color_eyre::Result<()> {
-    config_queries::db_update_core_config(&preview.core).await?;
+pub fn parse_config_backup(config_str: &str) -> Result<ParsedConfigBackup, String> {
+    serde_json::from_str::<ConfigExport>(config_str)
+        .map(ParsedConfigBackup::JsonExport)
+        .map_err(|json_error| format!("Failed to parse backup config as JSON export: {json_error}"))
+}
 
-    for integration in &preview.integrations {
-        config_queries::db_upsert_integration(integration).await?;
+struct CanonicalDeviceLookup {
+    device_keys: HashSet<String>,
+    device_ids_by_name: HashMap<(String, String), Vec<String>>,
+}
+
+impl CanonicalDeviceLookup {
+    fn from_devices(devices: &DevicesState) -> Self {
+        let mut device_keys = HashSet::new();
+        let mut device_ids_by_name: HashMap<(String, String), Vec<String>> = HashMap::new();
+
+        for device in devices.0.values() {
+            let device_key = device.get_device_key().to_string();
+            device_keys.insert(device_key);
+
+            device_ids_by_name
+                .entry((device.integration_id.to_string(), device.name.clone()))
+                .or_default()
+                .push(device.id.to_string());
+        }
+
+        for device_ids in device_ids_by_name.values_mut() {
+            device_ids.sort();
+            device_ids.dedup();
+        }
+
+        Self {
+            device_keys,
+            device_ids_by_name,
+        }
     }
 
-    // Collect valid group IDs so we can skip invalid group links
-    let valid_group_ids: std::collections::HashSet<&str> =
-        preview.groups.iter().map(|g| g.id.as_str()).collect();
+    fn resolve_device_key_component(
+        &self,
+        integration_id: &str,
+        device_name_or_id: &str,
+    ) -> Result<String, String> {
+        let direct_key = format!("{integration_id}/{device_name_or_id}");
+        if self.device_keys.contains(&direct_key) {
+            return Ok(device_name_or_id.to_string());
+        }
 
-    // Two-pass group import: insert all group rows first (without links),
-    // then insert links in a second pass. This avoids FK violations when
-    // a group links to another group that hasn't been inserted yet.
-    for group in &preview.groups {
-        let group_without_links = config_queries::GroupRow {
-            linked_groups: Vec::new(),
-            ..group.clone()
+        self.resolve_device_name(integration_id, device_name_or_id)
+    }
+
+    fn resolve_device_name(
+        &self,
+        integration_id: &str,
+        device_name: &str,
+    ) -> Result<String, String> {
+        let Some(matches) = self
+            .device_ids_by_name
+            .get(&(integration_id.to_string(), device_name.to_string()))
+        else {
+            return Err(format!(
+                "could not resolve device name {integration_id}/{device_name} to a discovered device id"
+            ));
         };
-        config_queries::db_upsert_group(&group_without_links).await?;
-    }
-    for group in &preview.groups {
-        if group.linked_groups.is_empty() {
-            continue;
+
+        if matches.len() != 1 {
+            return Err(format!(
+                "device name {integration_id}/{device_name} is ambiguous across ids: {}",
+                matches.join(", "),
+            ));
         }
-        // Filter out links to non-existent groups
-        let valid_links: Vec<String> = group
-            .linked_groups
-            .iter()
-            .filter(|id| {
-                if valid_group_ids.contains(id.as_str()) {
-                    true
-                } else {
-                    log::warn!(
-                        "Group '{}' links to non-existent group '{}', skipping",
-                        group.id,
-                        id
-                    );
-                    false
+
+        Ok(matches[0].clone())
+    }
+}
+
+fn canonicalize_named_device_refs(
+    value: &mut serde_json::Value,
+    devices: &CanonicalDeviceLookup,
+    path: &str,
+    errors: &mut Vec<String>,
+) -> bool {
+    match value {
+        serde_json::Value::Object(map) => {
+            let integration_id = map
+                .get("integration_id")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let device_name = map
+                .get("name")
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string);
+            let has_device_id = map.contains_key("device_id");
+
+            if let (Some(integration_id), Some(device_name)) = (integration_id, device_name) {
+                if !has_device_id {
+                    match devices.resolve_device_name(&integration_id, &device_name) {
+                        Ok(device_id) => {
+                            map.remove("name");
+                            map.insert(
+                                "device_id".to_string(),
+                                serde_json::Value::String(device_id),
+                            );
+                        }
+                        Err(error) => {
+                            push_unique_error(errors, format!("{path}: {error}"));
+                            return false;
+                        }
+                    }
                 }
-            })
-            .cloned()
-            .collect();
-        if !valid_links.is_empty() {
-            let filtered_group = config_queries::GroupRow {
-                linked_groups: valid_links,
-                ..group.clone()
+            }
+
+            let mut keys_to_remove = Vec::new();
+            for (key, nested_value) in map.iter_mut() {
+                if !canonicalize_named_device_refs(
+                    nested_value,
+                    devices,
+                    &format!("{path}.{key}"),
+                    errors,
+                ) {
+                    keys_to_remove.push(key.clone());
+                }
+            }
+
+            for key in keys_to_remove {
+                map.remove(&key);
+            }
+
+            true
+        }
+        serde_json::Value::Array(values) => {
+            let mut retained_values = Vec::with_capacity(values.len());
+
+            for (index, mut nested_value) in std::mem::take(values).into_iter().enumerate() {
+                if canonicalize_named_device_refs(
+                    &mut nested_value,
+                    devices,
+                    &format!("{path}[{index}]"),
+                    errors,
+                ) {
+                    retained_values.push(nested_value);
+                }
+            }
+
+            *values = retained_values;
+            true
+        }
+        _ => true,
+    }
+}
+
+fn canonicalize_migration_preview(
+    mut preview: MigratePreviewResult,
+    devices: &DevicesState,
+) -> CanonicalizedMigrationPreview {
+    let lookup = CanonicalDeviceLookup::from_devices(devices);
+    let mut errors = Vec::new();
+
+    for group in &mut preview.groups {
+        let mut canonical_devices = Vec::with_capacity(group.devices.len());
+
+        for mut device in std::mem::take(&mut group.devices) {
+            if device.device_id.is_empty() {
+                push_unique_error(
+                    &mut errors,
+                    format!(
+                        "group '{}' contains a device reference without a device id",
+                        group.id,
+                    ),
+                );
+                continue;
+            }
+
+            match lookup.resolve_device_key_component(&device.integration_id, &device.device_id) {
+                Ok(device_id) => {
+                    device.device_id = device_id;
+                    canonical_devices.push(device);
+                }
+                Err(error) => {
+                    push_unique_error(
+                        &mut errors,
+                        format!(
+                            "group '{}' device '{}': {error}",
+                            group.id, device.device_id
+                        ),
+                    );
+                }
+            }
+        }
+
+        group.devices = canonical_devices;
+    }
+
+    for scene in &mut preview.scenes {
+        let mut canonical_device_states = HashMap::new();
+
+        for (device_key, mut config_value) in std::mem::take(&mut scene.device_states) {
+            if !canonicalize_named_device_refs(
+                &mut config_value,
+                &lookup,
+                &format!("scene '{}' device '{}'", scene.id, device_key),
+                &mut errors,
+            ) {
+                continue;
+            }
+
+            let Some((integration_id, device_name_or_id)) = device_key.split_once('/') else {
+                push_unique_error(
+                    &mut errors,
+                    format!(
+                        "scene '{}' contains an invalid device key '{}'",
+                        scene.id, device_key,
+                    ),
+                );
+                continue;
             };
-            config_queries::db_upsert_group(&filtered_group).await?;
+
+            let Some(device_id) = lookup
+                .resolve_device_key_component(integration_id, device_name_or_id)
+                .map_err(|error| {
+                    push_unique_error(
+                        &mut errors,
+                        format!("scene '{}' device '{}': {error}", scene.id, device_key),
+                    );
+                    error
+                })
+                .ok()
+            else {
+                continue;
+            };
+
+            let canonical_key = format!("{integration_id}/{device_id}");
+            if canonical_device_states
+                .insert(canonical_key.clone(), config_value)
+                .is_some()
+            {
+                push_unique_error(
+                    &mut errors,
+                    format!(
+                        "scene '{}' resolves multiple device entries to '{}'",
+                        scene.id, canonical_key,
+                    ),
+                );
+            }
+        }
+
+        scene.device_states = canonical_device_states;
+
+        let mut canonical_group_states = HashMap::new();
+
+        for (group_id, mut config_value) in std::mem::take(&mut scene.group_states) {
+            if canonicalize_named_device_refs(
+                &mut config_value,
+                &lookup,
+                &format!("scene '{}' group '{}'", scene.id, group_id),
+                &mut errors,
+            ) {
+                canonical_group_states.insert(group_id, config_value);
+            }
+        }
+
+        scene.group_states = canonical_group_states;
+    }
+
+    for routine in &mut preview.routines {
+        if !canonicalize_named_device_refs(
+            &mut routine.rules,
+            &lookup,
+            &format!("routine '{}' rules", routine.id),
+            &mut errors,
+        ) {
+            routine.rules = serde_json::Value::Array(vec![]);
+        }
+
+        if !canonicalize_named_device_refs(
+            &mut routine.actions,
+            &lookup,
+            &format!("routine '{}' actions", routine.id),
+            &mut errors,
+        ) {
+            routine.actions = serde_json::Value::Array(vec![]);
         }
     }
 
-    for scene in &preview.scenes {
-        config_queries::db_upsert_config_scene(scene).await?;
+    CanonicalizedMigrationPreview {
+        preview,
+        validation_errors: errors,
     }
-    for routine in &preview.routines {
-        config_queries::db_upsert_routine(routine).await?;
-    }
+}
 
-    for device in derive_migrated_mqtt_sensor_devices(preview) {
+/// Apply a merged TOML migration config to the database.
+pub async fn apply_migration(config: &ConfigExport) -> color_eyre::Result<()> {
+    config_queries::db_import_config(config).await?;
+
+    for device in derive_migrated_mqtt_sensor_devices(config) {
         db_update_device(&device).await?;
     }
 
     Ok(())
 }
 
-fn derive_migrated_mqtt_sensor_devices(preview: &MigratePreviewResult) -> Vec<Device> {
-    let mqtt_integration_ids = preview
+fn derive_migrated_mqtt_sensor_devices(config: &ConfigExport) -> Vec<Device> {
+    let mqtt_integration_ids = config
         .integrations
         .iter()
         .filter(|integration| integration.plugin == "mqtt")
@@ -1628,7 +2411,7 @@ fn derive_migrated_mqtt_sensor_devices(preview: &MigratePreviewResult) -> Vec<De
 
     let mut discovered_devices = BTreeMap::new();
 
-    for routine in &preview.routines {
+    for routine in &config.routines {
         let Ok(rules) = serde_json::from_value::<Rules>(routine.rules.clone()) else {
             warn!(
                 "Failed to deserialize routine '{}' rules while deriving migrated MQTT sensors",
@@ -1659,15 +2442,6 @@ fn collect_migrated_sensor_devices(
                             id_ref.integration_id.clone(),
                             id_ref.device_id.clone(),
                             id_ref.device_id.to_string(),
-                        )
-                    }
-                    DeviceRef::Name(name_ref)
-                        if mqtt_integration_ids.contains(&name_ref.integration_id) =>
-                    {
-                        (
-                            name_ref.integration_id.clone(),
-                            DeviceId::new(&name_ref.name),
-                            name_ref.name.clone(),
                         )
                     }
                     _ => continue,
@@ -1720,38 +2494,81 @@ fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
 }
 
 async fn migrate_preview(
+    selection: MigrationSelection,
     body: bytes::Bytes,
-    _app_state: Arc<RwLock<AppState>>,
+    app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    if !selection.has_any() {
+        return Ok(error_response(
+            "Select at least one section to import.",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
     let toml_str = String::from_utf8_lossy(&body);
 
     match parse_toml_config(&toml_str) {
-        Ok(result) => Ok(ApiResponse::success(result)),
+        Ok(result) => {
+            let result = select_migration_preview(result, &selection);
+            let state = app_state.read().await;
+            let preview = canonicalize_migration_preview(result, state.devices.get_state());
+
+            Ok(ApiResponse::success(MigratePreviewData {
+                preview: preview.preview,
+                validation_errors: preview.validation_errors,
+            }))
+        }
         Err(e) => Ok(error_response(&e, StatusCode::BAD_REQUEST)),
     }
 }
 
 async fn migrate_apply(
-    preview: MigratePreviewResult,
+    request: MigrateApplyRequest,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    let (preview, selection) = request.into_parts();
+    if !selection.has_any() {
+        return Ok(error_response(
+            "Select at least one section to import.",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let (preview, merged_config) = {
+        let state = app_state.read().await;
+        let preview = select_migration_preview(preview, &selection);
+
+        let preview = canonicalize_migration_preview(preview, state.devices.get_state()).preview;
+
+        (
+            preview.clone(),
+            merge_selected_migration_config(
+                state.get_runtime_config().clone(),
+                &preview,
+                &selection,
+            ),
+        )
+    };
+
     let counts = MigrateApplyResult {
+        core: selection.core,
         integrations: preview.integrations.len(),
         groups: preview.groups.len(),
         scenes: preview.scenes.len(),
         routines: preview.routines.len(),
     };
 
-    if let Err(e) = apply_migration(&preview).await {
-        return Ok(internal_error(e));
+    {
+        let mut state = app_state.write().await;
+        state.runtime_config = merged_config.clone();
+        if let Err(e) = state.apply_runtime_config().await {
+            warn!("Failed to apply migrated config to runtime state: {e}");
+        }
     }
 
-    // Hot-reload all config
-    let mut state = app_state.write().await;
-    let _ = state.reload_integrations().await;
-    let _ = state.reload_groups().await;
-    let _ = state.reload_scenes().await;
-    let _ = state.reload_routines().await;
+    if let Err(e) = apply_migration(&merged_config).await {
+        warn!("Failed to persist migrated config: {e}");
+    }
 
     Ok(ApiResponse::success(counts))
 }
@@ -1759,10 +2576,380 @@ async fn migrate_apply(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
 
     #[test]
-    fn derive_migrated_mqtt_sensor_devices_seeds_named_sensor_rules() {
+    fn parse_config_backup_accepts_json_export() {
+        let json = serde_json::json!({
+            "version": 1,
+            "core": { "warmup_time_seconds": 42 },
+            "integrations": [
+                {
+                    "id": "dummy",
+                    "plugin": "dummy",
+                    "config": { "devices": {} },
+                    "enabled": true
+                }
+            ],
+            "groups": [],
+            "scenes": [],
+            "routines": [],
+            "floorplan": null,
+            "floorplans": [],
+            "device_positions": [],
+            "device_display_overrides": [],
+            "device_sensor_configs": [],
+            "dashboard_layouts": [],
+            "dashboard_widgets": []
+        })
+        .to_string();
+
+        let parsed = parse_config_backup(&json).expect("json export should parse");
+
+        assert!(matches!(parsed, ParsedConfigBackup::JsonExport(_)));
+
+        let config = parsed.to_config_export();
+        assert_eq!(config.core.warmup_time_seconds, 42);
+        assert_eq!(config.integrations.len(), 1);
+        assert_eq!(config.integrations[0].id, "dummy");
+    }
+
+    #[test]
+    fn parse_config_backup_rejects_legacy_toml() {
+        let toml = r#"
+[core]
+warmup_time_seconds = 7
+
+[integrations.zigbee2mqtt]
+plugin = "mqtt"
+host = "mqtt.example.org"
+
+[groups.kitchen]
+name = "Kitchen"
+devices = [
+  { integration_id = "zigbee2mqtt", name = "Kitchen light" }
+]
+"#;
+
+        let error = parse_config_backup(toml)
+            .err()
+            .expect("legacy toml should be rejected");
+
+        assert!(error.contains("JSON export"));
+    }
+
+    fn migration_test_device(integration_id: &str, device_id: &str, name: &str) -> Device {
+        Device {
+            id: DeviceId::new(device_id),
+            name: name.to_string(),
+            integration_id: IntegrationId::from(integration_id.to_string()),
+            data: DeviceData::Sensor(SensorDevice::Boolean { value: false }),
+            raw: None,
+        }
+    }
+
+    fn migration_test_devices(devices: Vec<Device>) -> DevicesState {
+        let mut state = DevicesState(Default::default());
+
+        for device in devices {
+            state.0.insert(device.get_device_key(), device);
+        }
+
+        state
+    }
+
+    #[test]
+    fn canonicalize_migration_preview_resolves_legacy_name_refs() {
+        let preview = MigratePreviewResult {
+            integrations: vec![IntegrationRow {
+                id: "zigbee2mqtt".to_string(),
+                plugin: "mqtt".to_string(),
+                config: serde_json::json!({}),
+                enabled: true,
+            }],
+            groups: vec![GroupRow {
+                id: "kitchen".to_string(),
+                name: "Kitchen".to_string(),
+                hidden: false,
+                devices: vec![GroupDeviceRow {
+                    integration_id: "zigbee2mqtt".to_string(),
+                    device_id: "Kitchen light".to_string(),
+                }],
+                linked_groups: Vec::new(),
+            }],
+            scenes: vec![SceneRow {
+                id: "evening".to_string(),
+                name: "Evening".to_string(),
+                hidden: false,
+                script: None,
+                device_states: HashMap::from([(
+                    "zigbee2mqtt/Kitchen light".to_string(),
+                    serde_json::json!({
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Hall switch",
+                        "brightness": 0.5
+                    }),
+                )]),
+                group_states: HashMap::new(),
+            }],
+            routines: vec![RoutineRow {
+                id: "motion".to_string(),
+                name: "Motion".to_string(),
+                enabled: true,
+                rules: serde_json::json!([
+                    {
+                        "state": { "value": true },
+                        "trigger_mode": "pulse",
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Hall switch"
+                    }
+                ]),
+                actions: serde_json::json!([]),
+            }],
+            core: CoreConfigRow {
+                warmup_time_seconds: 1,
+            },
+        };
+
+        let devices = migration_test_devices(vec![
+            migration_test_device("zigbee2mqtt", "kitchen-light", "Kitchen light"),
+            migration_test_device("zigbee2mqtt", "hall-switch", "Hall switch"),
+        ]);
+
+        let preview = canonicalize_migration_preview(preview, &devices);
+
+        assert!(preview.validation_errors.is_empty());
+        let preview = preview.preview;
+
+        assert_eq!(preview.groups[0].devices[0].device_id, "kitchen-light");
+        assert!(preview.scenes[0]
+            .device_states
+            .contains_key("zigbee2mqtt/kitchen-light"));
+        assert_eq!(
+            preview.scenes[0].device_states["zigbee2mqtt/kitchen-light"]["device_id"],
+            serde_json::Value::String("hall-switch".to_string())
+        );
+        assert!(preview.scenes[0].device_states["zigbee2mqtt/kitchen-light"]
+            .get("name")
+            .is_none());
+        assert_eq!(
+            preview.routines[0].rules[0]["device_id"],
+            serde_json::Value::String("hall-switch".to_string())
+        );
+        assert!(preview.routines[0].rules[0].get("name").is_none());
+    }
+
+    #[test]
+    fn canonicalize_migration_preview_reports_all_name_resolution_errors() {
+        let preview = MigratePreviewResult {
+            integrations: vec![IntegrationRow {
+                id: "zigbee2mqtt".to_string(),
+                plugin: "mqtt".to_string(),
+                config: serde_json::json!({}),
+                enabled: true,
+            }],
+            groups: vec![GroupRow {
+                id: "kitchen".to_string(),
+                name: "Kitchen".to_string(),
+                hidden: false,
+                devices: vec![GroupDeviceRow {
+                    integration_id: "zigbee2mqtt".to_string(),
+                    device_id: "Missing group light".to_string(),
+                }],
+                linked_groups: Vec::new(),
+            }],
+            scenes: vec![SceneRow {
+                id: "evening".to_string(),
+                name: "Evening".to_string(),
+                hidden: false,
+                script: None,
+                device_states: HashMap::from([(
+                    "zigbee2mqtt/Missing scene light".to_string(),
+                    serde_json::json!({
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Missing linked light",
+                        "brightness": 0.5
+                    }),
+                )]),
+                group_states: HashMap::new(),
+            }],
+            routines: vec![RoutineRow {
+                id: "motion".to_string(),
+                name: "Motion".to_string(),
+                enabled: true,
+                rules: serde_json::json!([
+                    {
+                        "state": { "value": true },
+                        "trigger_mode": "pulse",
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Missing routine sensor"
+                    }
+                ]),
+                actions: serde_json::json!([]),
+            }],
+            core: CoreConfigRow {
+                warmup_time_seconds: 1,
+            },
+        };
+
+        let preview = canonicalize_migration_preview(preview, &migration_test_devices(Vec::new()));
+
+        assert_eq!(preview.validation_errors.len(), 3);
+        assert!(preview
+            .validation_errors
+            .iter()
+            .any(|error| error.contains("group 'kitchen' device 'Missing group light'")));
+        assert!(preview.validation_errors.iter().any(|error| error.contains("scene 'evening' device 'zigbee2mqtt/Missing scene light': could not resolve device name zigbee2mqtt/Missing linked light")));
+        assert!(preview.validation_errors.iter().any(|error| error.contains("routine 'motion' rules[0]: could not resolve device name zigbee2mqtt/Missing routine sensor")));
+
+        let preview = preview.preview;
+        assert!(preview.groups[0].devices.is_empty());
+        assert!(preview.scenes[0].device_states.is_empty());
+        assert_eq!(preview.routines[0].rules, serde_json::Value::Array(vec![]));
+    }
+
+    #[test]
+    fn integrations_only_preview_skips_unresolved_later_sections() {
+        let preview = MigratePreviewResult {
+            integrations: vec![IntegrationRow {
+                id: "zigbee2mqtt".to_string(),
+                plugin: "mqtt".to_string(),
+                config: serde_json::json!({}),
+                enabled: true,
+            }],
+            groups: vec![GroupRow {
+                id: "kitchen".to_string(),
+                name: "Kitchen".to_string(),
+                hidden: false,
+                devices: vec![GroupDeviceRow {
+                    integration_id: "zigbee2mqtt".to_string(),
+                    device_id: "Missing group light".to_string(),
+                }],
+                linked_groups: Vec::new(),
+            }],
+            scenes: vec![SceneRow {
+                id: "evening".to_string(),
+                name: "Evening".to_string(),
+                hidden: false,
+                script: None,
+                device_states: HashMap::from([(
+                    "zigbee2mqtt/Missing scene light".to_string(),
+                    serde_json::json!({
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Missing linked light",
+                        "brightness": 0.5
+                    }),
+                )]),
+                group_states: HashMap::new(),
+            }],
+            routines: vec![RoutineRow {
+                id: "motion".to_string(),
+                name: "Motion".to_string(),
+                enabled: true,
+                rules: serde_json::json!([
+                    {
+                        "state": { "value": true },
+                        "trigger_mode": "pulse",
+                        "integration_id": "zigbee2mqtt",
+                        "name": "Missing routine sensor"
+                    }
+                ]),
+                actions: serde_json::json!([]),
+            }],
+            core: CoreConfigRow {
+                warmup_time_seconds: 1,
+            },
+        };
+
+        let selection = MigrationSelection {
+            core: false,
+            integrations: true,
+            groups: false,
+            scenes: false,
+            routines: false,
+        };
+
+        let preview = canonicalize_migration_preview(
+            select_migration_preview(preview, &selection),
+            &migration_test_devices(Vec::new()),
+        );
+
+        assert!(preview.validation_errors.is_empty());
+        let preview = preview.preview;
+
+        assert_eq!(preview.integrations.len(), 1);
+        assert!(preview.groups.is_empty());
+        assert!(preview.scenes.is_empty());
+        assert!(preview.routines.is_empty());
+    }
+
+    #[test]
+    fn merge_selected_migration_config_preserves_unselected_sections() {
+        let existing = ConfigExport {
+            version: 1,
+            core: CoreConfigRow {
+                warmup_time_seconds: 5,
+            },
+            integrations: vec![IntegrationRow {
+                id: "zigbee2mqtt".to_string(),
+                plugin: "mqtt".to_string(),
+                config: serde_json::json!({ "host": "broker" }),
+                enabled: true,
+            }],
+            groups: Vec::new(),
+            scenes: Vec::new(),
+            routines: Vec::new(),
+            floorplan: None,
+            floorplans: Vec::new(),
+            device_positions: Vec::new(),
+            group_positions: Vec::new(),
+            device_display_overrides: Vec::new(),
+            device_sensor_configs: Vec::new(),
+            dashboard_layouts: Vec::new(),
+            dashboard_widgets: Vec::new(),
+        };
+
+        let preview = MigratePreviewResult {
+            integrations: Vec::new(),
+            groups: vec![GroupRow {
+                id: "kitchen".to_string(),
+                name: "Kitchen".to_string(),
+                hidden: false,
+                devices: vec![GroupDeviceRow {
+                    integration_id: "zigbee2mqtt".to_string(),
+                    device_id: "kitchen-light".to_string(),
+                }],
+                linked_groups: Vec::new(),
+            }],
+            scenes: Vec::new(),
+            routines: Vec::new(),
+            core: CoreConfigRow {
+                warmup_time_seconds: 9,
+            },
+        };
+
+        let merged = merge_selected_migration_config(
+            existing,
+            &preview,
+            &MigrationSelection {
+                core: false,
+                integrations: false,
+                groups: true,
+                scenes: false,
+                routines: false,
+            },
+        );
+
+        assert_eq!(merged.core.warmup_time_seconds, 5);
+        assert_eq!(merged.integrations.len(), 1);
+        assert_eq!(merged.integrations[0].id, "zigbee2mqtt");
+        assert_eq!(merged.groups.len(), 1);
+        assert_eq!(merged.groups[0].id, "kitchen");
+    }
+
+    #[test]
+    fn derive_migrated_mqtt_sensor_devices_skips_non_canonical_sensor_rules() {
         let preview = MigratePreviewResult {
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
@@ -1791,11 +2978,46 @@ mod tests {
             },
         };
 
-        let devices = derive_migrated_mqtt_sensor_devices(&preview);
+        let devices = derive_migrated_mqtt_sensor_devices(&preview.to_config_export());
+
+        assert!(devices.is_empty());
+    }
+
+    #[test]
+    fn derive_migrated_mqtt_sensor_devices_seeds_id_based_sensor_rules() {
+        let preview = MigratePreviewResult {
+            integrations: vec![IntegrationRow {
+                id: "zigbee2mqtt".to_string(),
+                plugin: "mqtt".to_string(),
+                config: serde_json::json!({}),
+                enabled: true,
+            }],
+            groups: Vec::new(),
+            scenes: Vec::new(),
+            routines: vec![RoutineRow {
+                id: "entryway_motion".to_string(),
+                name: "Entryway motion".to_string(),
+                enabled: true,
+                rules: serde_json::json!([
+                    {
+                        "state": { "value": true },
+                        "trigger_mode": "pulse",
+                        "integration_id": "zigbee2mqtt",
+                        "device_id": "0x0017880109159dc5"
+                    }
+                ]),
+                actions: serde_json::json!([]),
+            }],
+            core: CoreConfigRow {
+                warmup_time_seconds: 1,
+            },
+        };
+
+        let devices = derive_migrated_mqtt_sensor_devices(&preview.to_config_export());
 
         assert_eq!(devices.len(), 1);
-        assert_eq!(devices[0].id, DeviceId::new("Entryway motion sensor"));
-        assert_eq!(devices[0].name, "Entryway motion sensor");
+        assert_eq!(devices[0].id, DeviceId::new("0x0017880109159dc5"));
+        assert_eq!(devices[0].name, "0x0017880109159dc5");
         assert_eq!(
             devices[0].data,
             DeviceData::Sensor(SensorDevice::Boolean { value: false })

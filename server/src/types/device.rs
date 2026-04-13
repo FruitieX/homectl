@@ -5,10 +5,11 @@ use std::{
     fmt::{self, Display},
 };
 
-use crate::core::scenes::Scenes;
+use crate::core::{devices::Devices, scenes::Scenes};
 
 use super::{
     color::{Capabilities, ColorMode, DeviceColor},
+    group::GroupId,
     integration::IntegrationId,
     scene::SceneId,
 };
@@ -156,11 +157,42 @@ pub enum ManageKind {
     UnmanagedReadOnly,
 }
 
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DeviceStateSourceScope {
+    Device,
+    Group,
+    Script,
+    Override,
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum DeviceStateSourceKind {
+    DeviceState,
+    DeviceLink,
+    SceneLink,
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[ts(export)]
+pub struct DeviceStateSource {
+    pub scope: DeviceStateSourceScope,
+    pub kind: DeviceStateSourceKind,
+    pub group_id: Option<GroupId>,
+    pub linked_scene_id: Option<SceneId>,
+    pub linked_device_key: Option<DeviceKey>,
+}
+
 /// lights with adjustable brightness and/or color
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableDevice {
     pub scene_id: Option<SceneId>,
+    #[serde(default)]
+    pub state_source: Option<DeviceStateSource>,
     #[serde(default)]
     pub capabilities: Capabilities,
     pub state: ControllableState,
@@ -180,6 +212,7 @@ impl ControllableDevice {
     ) -> ControllableDevice {
         ControllableDevice {
             scene_id: scene,
+            state_source: None,
             state: ControllableState {
                 power,
                 brightness: brightness.map(OrderedFloat),
@@ -218,6 +251,23 @@ pub enum SensorDevice {
     Text { value: String },
     Number { value: f64 },
     Color(ControllableState),
+}
+
+pub const UNKNOWN_SENSOR_PLACEHOLDER_VALUE: &str = "__homectl_unknown_sensor__";
+
+impl SensorDevice {
+    pub fn unknown_placeholder() -> Self {
+        SensorDevice::Text {
+            value: UNKNOWN_SENSOR_PLACEHOLDER_VALUE.to_string(),
+        }
+    }
+
+    pub fn is_unknown_placeholder(&self) -> bool {
+        matches!(
+            self,
+            SensorDevice::Text { value } if value == UNKNOWN_SENSOR_PLACEHOLDER_VALUE
+        )
+    }
 }
 
 impl Display for SensorDevice {
@@ -260,7 +310,9 @@ impl DeviceData {
             (DeviceData::Controllable(a), DeviceData::Controllable(b)) => {
                 // Also compare scene_id - if scene changes, state should be considered
                 // different even if visual state (power, color, brightness) is identical
-                a.scene_id == b.scene_id && cmp_device_states(a, &b.state)
+                a.scene_id == b.scene_id
+                    && a.state_source == b.state_source
+                    && cmp_device_states(a, &b.state)
             }
             (DeviceData::Sensor(a), DeviceData::Sensor(b)) => cmp_sensor_states(a, b),
             _ => false,
@@ -414,7 +466,12 @@ impl Device {
     ///
     /// If scene_id is set, the returned device's state will be computed from
     /// that scene.
-    pub fn set_scene(&self, scene_id: Option<&SceneId>, scenes: &Scenes) -> Self {
+    pub fn set_scene(
+        &self,
+        scene_id: Option<&SceneId>,
+        scenes: &Scenes,
+        devices: &Devices,
+    ) -> Self {
         let mut device = self.clone();
 
         if !device.is_managed() {
@@ -423,12 +480,14 @@ impl Device {
 
         if let DeviceData::Controllable(ref mut data) = device.data {
             data.scene_id = scene_id.cloned();
+            data.state_source = None;
 
             if let Some(scene_id) = scene_id {
-                let state = scenes.get_device_scene_state(scene_id, &self.get_device_key());
+                let state = scenes.get_device_scene_state_details(scene_id, self, devices);
 
-                if let Some(state) = state {
-                    data.state = state.clone();
+                if let Some((state, state_source)) = state {
+                    data.state = state;
+                    data.state_source = Some(state_source);
                 } else {
                     warn!(
                         "Could not find device scene state for device: {integration_id}/{name}, scene_id: {scene_id}",
@@ -525,6 +584,12 @@ impl Device {
         }
     }
 
+    pub fn is_unknown_placeholder_sensor(&self) -> bool {
+        self.get_sensor_state()
+            .map(SensorDevice::is_unknown_placeholder)
+            .unwrap_or(false)
+    }
+
     pub fn set_controllable_state(&self, state: ControllableState) -> Device {
         let mut device = self.clone();
 
@@ -614,20 +679,12 @@ impl DeviceIdRef {
     }
 }
 
-#[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, PartialOrd, Ord)]
-#[ts(export)]
-pub struct DeviceNameRef {
-    pub integration_id: IntegrationId,
-    pub name: String,
-}
-
-/// A reference to a device, either by name or by id
+/// A reference to a device by canonical id.
 #[derive(TS, Hash, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, PartialOrd, Ord)]
 #[serde(untagged)]
 #[ts(export)]
 pub enum DeviceRef {
     Id(DeviceIdRef),
-    Name(DeviceNameRef),
 }
 
 impl DeviceRef {
@@ -636,13 +693,6 @@ impl DeviceRef {
         DeviceRef::Id(DeviceIdRef {
             integration_id,
             device_id,
-        })
-    }
-
-    pub fn new_with_name(integration_id: IntegrationId, name: String) -> DeviceRef {
-        DeviceRef::Name(DeviceNameRef {
-            integration_id,
-            name,
         })
     }
 }

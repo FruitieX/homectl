@@ -16,8 +16,9 @@ export interface Group {
   id: string;
   name: string;
   hidden: boolean;
-  devices: { integration_id: string; device_name: string; device_id?: string }[];
+  devices: { integration_id: string; device_id: string }[];
   linked_groups: string[];
+  device_keys?: string[];
 }
 
 export interface Scene {
@@ -38,8 +39,17 @@ export type SceneDeviceConfig =
 export interface SceneDeviceLink {
   brightness?: number;
   integration_id: string;
-  name?: string;
-  id?: string;
+  device_id?: string;
+}
+
+export function getSceneDeviceLinkTargetKey(config: SceneDeviceLink) {
+  const targetId = config.device_id;
+
+  if (!config.integration_id || !targetId) {
+    return '';
+  }
+
+  return `${config.integration_id}/${targetId}`;
 }
 
 export interface ActivateSceneDescriptor {
@@ -89,6 +99,11 @@ export interface UiLogEntry {
   message: string;
 }
 
+export interface RuntimeStatus {
+  persistence_available: boolean;
+  memory_only_mode: boolean;
+}
+
 export interface ConfigExport {
   version?: number;
   core?: Record<string, unknown>;
@@ -105,6 +120,29 @@ export interface ConfigExport {
   dashboard_widgets?: Record<string, unknown>[];
 }
 
+type ApiResponse<T> = {
+  success: boolean;
+  data?: T;
+  error?: string | null;
+};
+
+async function readApiResponse<T>(response: Response, fallbackMessage: string) {
+  const contentType = response.headers.get('content-type') ?? '';
+
+  if (contentType.includes('application/json')) {
+    const result = (await response.json()) as ApiResponse<T>;
+
+    if (response.ok && result.success) {
+      return result;
+    }
+
+    throw new Error(result.error || fallbackMessage);
+  }
+
+  const responseBody = await response.text();
+  throw new Error(responseBody || fallbackMessage);
+}
+
 // Generic fetch hook for config API
 function useConfigApi<T>(endpoint: string) {
   const { apiEndpoint } = useAppConfig();
@@ -118,8 +156,8 @@ function useConfigApi<T>(endpoint: string) {
     try {
       setLoading(true);
       const response = await fetch(`${baseUrl}/${endpoint}`);
-      const result = await response.json();
-      if (result.success) {
+      const result = await readApiResponse<T[]>(response, 'Failed to fetch');
+      if (result.success && result.data) {
         setData(result.data);
       } else {
         setError(result.error || 'Failed to fetch');
@@ -142,12 +180,9 @@ function useConfigApi<T>(endpoint: string) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item),
       });
-      const result = await response.json();
-      if (result.success) {
-        await fetchData();
-        return result.data;
-      }
-      throw new Error(result.error || 'Failed to create');
+      const result = await readApiResponse<T>(response, 'Failed to create');
+      await fetchData();
+      return result.data;
     },
     [baseUrl, endpoint, fetchData],
   );
@@ -157,14 +192,11 @@ function useConfigApi<T>(endpoint: string) {
       const response = await fetch(`${baseUrl}/${endpoint}/${encodeURIComponent(id)}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item),
+        body: JSON.stringify({ id, ...item }),
       });
-      const result = await response.json();
-      if (result.success) {
-        await fetchData();
-        return result.data;
-      }
-      throw new Error(result.error || 'Failed to update');
+      const result = await readApiResponse<T>(response, 'Failed to update');
+      await fetchData();
+      return result.data;
     },
     [baseUrl, endpoint, fetchData],
   );
@@ -174,7 +206,7 @@ function useConfigApi<T>(endpoint: string) {
       const response = await fetch(`${baseUrl}/${endpoint}/${encodeURIComponent(id)}`, {
         method: 'DELETE',
       });
-      const result = await response.json();
+      const result = await readApiResponse<unknown>(response, 'Failed to delete');
       if (result.success) {
         await fetchData();
       } else {
@@ -266,6 +298,57 @@ export function useLogs(pollIntervalMs = 5000) {
   }, [fetchLogs, pollIntervalMs]);
 
   return { data, loading, error, refetch: fetchLogs, lastUpdated };
+}
+
+export function useRuntimeStatus(pollIntervalMs = 5000) {
+  const { apiEndpoint } = useAppConfig();
+  const [data, setData] = useState<RuntimeStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const fetchStatus = async (background = false) => {
+      if (!background && !cancelled) {
+        setLoading(true);
+      }
+
+      try {
+        const response = await fetch(`${apiEndpoint}/api/v1/config/runtime-status`);
+        const result = await readApiResponse<RuntimeStatus>(
+          response,
+          'Failed to fetch runtime status',
+        );
+
+        if (!cancelled) {
+          setData(result.data ?? null);
+          setError(null);
+        }
+      } catch (nextError) {
+        if (!cancelled) {
+          setError(nextError instanceof Error ? nextError.message : 'Unknown error');
+        }
+      } finally {
+        if (!background && !cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void fetchStatus();
+
+    const intervalId = window.setInterval(() => {
+      void fetchStatus(true);
+    }, pollIntervalMs);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [apiEndpoint, pollIntervalMs]);
+
+  return { data, loading, error };
 }
 
 // Export/Import hooks

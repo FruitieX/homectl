@@ -1,54 +1,107 @@
 use color_eyre::Result;
 use eyre::eyre;
 use once_cell::sync::OnceCell;
-use sqlx::sqlite::SqlitePoolOptions;
-use sqlx::SqlitePool;
+use sqlx::migrate::MigrateDatabase;
+use sqlx::postgres::PgPoolOptions;
+use sqlx::{PgPool, Postgres};
+use std::time::Duration;
 
 pub mod actions;
 pub mod config_queries;
 
-static DB_CONNECTION: OnceCell<SqlitePool> = OnceCell::new();
+static DB_CONNECTION: OnceCell<PgPool> = OnceCell::new();
+static DATABASE_URL: OnceCell<String> = OnceCell::new();
 
-pub async fn init_db(db_path: &str) -> Result<()> {
-    let is_memory = db_path == ":memory:";
-    let url = if is_memory {
-        "sqlite::memory:".to_string()
-    } else {
-        format!("sqlite:{}?mode=rwc", db_path)
+pub async fn init_db(database_url: Option<&str>) -> Result<bool> {
+    let Some(database_url) = database_url else {
+        info!("No DATABASE_URL configured, starting without persistent storage");
+        return Ok(false);
     };
 
-    info!("Connecting to SQLite at {url}...");
-    // In-memory SQLite: each connection gets its own database, so we must
-    // limit the pool to a single connection to keep tables visible across queries.
-    let pool = if is_memory {
-        SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(&url)
-            .await?
-    } else {
-        SqlitePool::connect(&url).await?
-    };
-
-    // Enable WAL mode for better concurrent read performance
-    sqlx::query("PRAGMA journal_mode=WAL")
-        .execute(&pool)
-        .await?;
-
-    // Enable foreign key enforcement (off by default in SQLite)
-    sqlx::query("PRAGMA foreign_keys=ON").execute(&pool).await?;
-
-    // Run migrations
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
-    if let Err(e) = DB_CONNECTION.set(pool) {
-        warn!("DB connection was already set: {e:?}");
-    }
-
-    Ok(())
+    remember_database_url(database_url);
+    connect_database(database_url).await
 }
 
-pub fn get_db_connection() -> Result<&'static SqlitePool> {
+pub async fn connect_configured_database() -> Result<bool> {
+    let Some(database_url) = database_url() else {
+        return Ok(false);
+    };
+
+    connect_database(database_url).await
+}
+
+pub fn get_db_connection() -> Result<&'static PgPool> {
     DB_CONNECTION
         .get()
         .ok_or_else(|| eyre!("Not connected to database"))
+}
+
+pub fn database_url() -> Option<&'static str> {
+    DATABASE_URL.get().map(|value| value.as_str())
+}
+
+pub fn is_db_configured() -> bool {
+    database_url().is_some()
+}
+
+pub fn is_db_connected() -> bool {
+    DB_CONNECTION.get().is_some()
+}
+
+fn remember_database_url(database_url: &str) {
+    match DATABASE_URL.get() {
+        Some(existing) if existing != database_url => {
+            warn!("Ignoring attempt to replace configured DATABASE_URL at runtime");
+        }
+        Some(_) => {}
+        None => {
+            if let Err(error) = DATABASE_URL.set(database_url.to_string()) {
+                warn!("Database URL was already set: {error:?}");
+            }
+        }
+    }
+}
+
+async fn connect_database(database_url: &str) -> Result<bool> {
+    if DB_CONNECTION.get().is_some() {
+        return Ok(true);
+    }
+
+    ensure_database_exists(database_url).await?;
+
+    info!("Connecting to PostgreSQL at {database_url}...");
+    let pool = PgPoolOptions::new()
+        .acquire_timeout(Duration::from_secs(2))
+        .connect(database_url)
+        .await?;
+
+    sqlx::migrate!("./migrations").run(&pool).await?;
+
+    if let Err(error) = DB_CONNECTION.set(pool) {
+        warn!("DB connection was already set: {error:?}");
+    }
+
+    Ok(true)
+}
+
+async fn ensure_database_exists(database_url: &str) -> Result<()> {
+    if Postgres::database_exists(database_url).await? {
+        return Ok(());
+    }
+
+    info!("Creating PostgreSQL database referenced by DATABASE_URL...");
+
+    match Postgres::create_database(database_url).await {
+        Ok(()) => Ok(()),
+        Err(error) if is_duplicate_database_error(&error) => Ok(()),
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn is_duplicate_database_error(error: &sqlx::Error) -> bool {
+    error
+        .as_database_error()
+        .and_then(|db_error| db_error.code())
+        .as_deref()
+        == Some("42P04")
 }

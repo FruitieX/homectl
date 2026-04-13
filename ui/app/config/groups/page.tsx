@@ -2,21 +2,51 @@
 
 import { Device } from '@/bindings/Device';
 import { useDeviceDisplayNames, useGroups, Group } from '@/hooks/useConfig';
+import { matchesConfigSearch } from '@/lib/configSearch';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel, getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
+import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { useMemo, useState } from 'react';
 
 type GroupDevice = Group['devices'][number];
 
-const getGroupDeviceKey = (device: GroupDevice) =>
-  `${device.integration_id}/${device.device_id ?? device.device_name}`;
+const getGroupDeviceKey = (device: GroupDevice) => `${device.integration_id}/${device.device_id}`;
+
+const getGroupSearchValues = (
+  group: Group,
+  deviceDisplayNameMap: Record<string, string>,
+  devicesByKey: Record<string, Device>,
+) => {
+  const deviceLabels = group.devices.map((device) => {
+    const deviceKey = getGroupDeviceKey(device);
+    const matchingDevice = devicesByKey[deviceKey];
+
+    return matchingDevice
+      ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
+      : getDeviceDisplayLabelFromKey(
+          deviceKey,
+          device.device_id,
+          deviceDisplayNameMap,
+        );
+  });
+
+  return [
+    group.id,
+    group.name,
+    group.hidden ? 'hidden' : 'visible',
+    group.linked_groups,
+    group.devices.map((device) => getGroupDeviceKey(device)),
+    deviceLabels,
+  ];
+};
 
 export default function GroupsPage() {
   const { data: groups, loading, error, create, update, remove } = useGroups();
   const { devices: allDevices } = useDevicesApi();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const deviceDisplayNameMap = Object.fromEntries(
     deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
@@ -24,6 +54,9 @@ export default function GroupsPage() {
   const devicesByKey = Object.fromEntries(
     allDevices.map((device) => [getDeviceKey(device), device]),
   ) as Record<string, Device>;
+  const visibleGroups = groups.filter((group) =>
+    matchesConfigSearch(search, ...getGroupSearchValues(group, deviceDisplayNameMap, devicesByKey)),
+  );
 
   if (loading) {
     return (
@@ -50,29 +83,43 @@ export default function GroupsPage() {
         </button>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {groups.map((group) => (
-          <GroupCard
-            key={group.id}
-            group={group}
-            allGroups={groups}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-            devicesByKey={devicesByKey}
-            isEditing={editingId === group.id}
-            onEdit={() => setEditingId(group.id)}
-            onSave={async (updated) => {
-              await update(group.id, updated);
-              setEditingId(null);
-            }}
-            onCancel={() => setEditingId(null)}
-            onDelete={async () => {
-              if (confirm(`Delete group "${group.name}"?`)) {
-                await remove(group.id);
-              }
-            }}
-          />
-        ))}
-      </div>
+      <ConfigListSearchBar
+        filteredCount={visibleGroups.length}
+        onChange={setSearch}
+        placeholder="Search by name, id, or devices"
+        totalCount={groups.length}
+        value={search}
+      />
+
+      {visibleGroups.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
+          No groups match the current search.
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {visibleGroups.map((group) => (
+            <GroupCard
+              key={group.id}
+              group={group}
+              allGroups={groups}
+              deviceDisplayNameMap={deviceDisplayNameMap}
+              devicesByKey={devicesByKey}
+              isEditing={editingId === group.id}
+              onEdit={() => setEditingId(group.id)}
+              onSave={async (updated) => {
+                await update(group.id, updated);
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+              onDelete={async () => {
+                if (confirm(`Delete group "${group.name}"?`)) {
+                  await remove(group.id);
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {showCreate && (
         <CreateGroupModal
@@ -133,7 +180,6 @@ function DevicePicker({
         ...selected,
         {
           integration_id: nextDevice.integration_id,
-          device_name: nextDevice.name,
           device_id: nextDevice.id,
         },
       ]);
@@ -161,7 +207,7 @@ function DevicePicker({
               ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
               : getDeviceDisplayLabelFromKey(
                   deviceKey,
-                  device.device_id ?? device.device_name,
+                  device.device_id,
                   deviceDisplayNameMap,
                 );
 
@@ -395,7 +441,7 @@ function GroupCard({
                 ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
                 : getDeviceDisplayLabelFromKey(
                     deviceKey,
-                    device.device_id ?? device.device_name,
+                    device.device_id,
                     deviceDisplayNameMap,
                   );
 

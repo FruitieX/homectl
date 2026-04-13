@@ -1,5 +1,4 @@
 use color_eyre::Result;
-use evalexpr::HashMapContext;
 use eyre::ContextCompat;
 
 use crate::db::config_queries;
@@ -15,7 +14,7 @@ use crate::types::{
 };
 use std::collections::{HashMap, HashSet};
 
-use super::{devices::Devices, expr::Expr, groups::Groups, scripting::ScriptEngine};
+use super::{devices::Devices, groups::Groups, scripting::ScriptEngine};
 
 #[derive(Clone)]
 pub struct Routines {
@@ -76,26 +75,21 @@ impl Routines {
         }
     }
 
-    /// Hot-reload routines configuration from the database
-    pub async fn reload_from_db(&mut self) -> Result<()> {
-        let db_routines = config_queries::db_get_routines().await?;
-
-        // Convert DB rows to RoutinesConfig
+    pub fn load_config_rows(&mut self, routines: &[config_queries::RoutineRow]) {
         let mut new_config = RoutinesConfig::new();
-        for routine in db_routines {
-            // Skip disabled routines
+        for routine in routines {
             if !routine.enabled {
                 continue;
             }
 
-            // Parse rules and actions from JSON
-            let rules: Vec<Rule> = serde_json::from_value(routine.rules).unwrap_or_default();
-            let actions: Actions = serde_json::from_value(routine.actions).unwrap_or_default();
+            let rules: Vec<Rule> = serde_json::from_value(routine.rules.clone()).unwrap_or_default();
+            let actions: Actions =
+                serde_json::from_value(routine.actions.clone()).unwrap_or_default();
 
             new_config.insert(
-                RoutineId::from(routine.id),
+                RoutineId::from(routine.id.clone()),
                 Routine {
-                    name: routine.name,
+                    name: routine.name.clone(),
                     rules,
                     actions,
                 },
@@ -104,23 +98,22 @@ impl Routines {
 
         self.config = new_config;
         self.runtime_statuses = Default::default();
-        // Reset triggered state on reload
         self.prev_edge_triggered.clear();
+    }
+
+    /// Hot-reload routines configuration from the database
+    pub async fn reload_from_db(&mut self) -> Result<()> {
+        let db_routines = config_queries::db_get_routines().await?;
+
+        self.load_config_rows(&db_routines);
 
         Ok(())
     }
 
-    pub fn refresh_runtime_statuses(&mut self, devices: &Devices, groups: &Groups, expr: &Expr) {
+    pub fn refresh_runtime_statuses(&mut self, devices: &Devices, groups: &Groups) {
         let current_state = devices.get_state().clone();
-        let evaluation = self.evaluate_routines(
-            &current_state,
-            &current_state,
-            None,
-            devices,
-            groups,
-            expr,
-            false,
-        );
+        let evaluation =
+            self.evaluate_routines(&current_state, &current_state, None, devices, groups, false);
         self.runtime_statuses = evaluation.statuses;
     }
 
@@ -139,7 +132,6 @@ impl Routines {
         event_source: &Device,
         devices: &Devices,
         groups: &Groups,
-        expr: &Expr,
     ) {
         // For sensors in pulse mode, we need to process even when the device
         // already exists and state hasn't changed. Skip only for truly new devices.
@@ -151,7 +143,6 @@ impl Routines {
                 Some(&event_source_key),
                 devices,
                 groups,
-                expr,
                 true,
             );
             self.runtime_statuses = evaluation.statuses;
@@ -160,7 +151,7 @@ impl Routines {
                 self.event_tx.send(Event::Action(action.clone()));
             }
         } else {
-            self.refresh_runtime_statuses(devices, groups, expr);
+            self.refresh_runtime_statuses(devices, groups);
         }
     }
 
@@ -186,10 +177,8 @@ impl Routines {
         event_source: Option<&DeviceKey>,
         devices: &Devices,
         groups: &Groups,
-        expr: &Expr,
         update_edge_state: bool,
     ) -> EvaluationResult {
-        let eval_context = expr.get_context();
         let mut triggered_actions = Vec::new();
         let mut routine_statuses = HashMap::new();
 
@@ -205,7 +194,6 @@ impl Routines {
                 event_source,
                 devices,
                 groups,
-                eval_context,
                 update_edge_state,
             );
 
@@ -232,7 +220,6 @@ impl Routines {
         event_source: Option<&DeviceKey>,
         devices: &Devices,
         groups: &Groups,
-        eval_context: &HashMapContext,
         update_edge_state: bool,
     ) -> RoutineRuntimeStatus {
         let rule_statuses = routine
@@ -247,7 +234,6 @@ impl Routines {
                     event_source,
                     devices,
                     groups,
-                    eval_context,
                     update_edge_state,
                 )
             })
@@ -275,7 +261,6 @@ impl Routines {
         event_source: Option<&DeviceKey>,
         devices: &Devices,
         groups: &Groups,
-        eval_context: &HashMapContext,
         update_edge_state: bool,
     ) -> RuleRuntimeStatus {
         match self.try_evaluate_rule_status(
@@ -286,7 +271,6 @@ impl Routines {
             event_source,
             devices,
             groups,
-            eval_context,
             update_edge_state,
         ) {
             Ok(status) => status,
@@ -308,7 +292,6 @@ impl Routines {
         event_source: Option<&DeviceKey>,
         devices: &Devices,
         groups: &Groups,
-        eval_context: &HashMapContext,
         update_edge_state: bool,
     ) -> Result<RuleRuntimeStatus> {
         match rule {
@@ -324,7 +307,6 @@ impl Routines {
                             event_source,
                             devices,
                             groups,
-                            eval_context,
                             update_edge_state,
                         )
                     })
@@ -361,10 +343,9 @@ impl Routines {
                 groups,
                 update_edge_state,
             ),
-            Rule::EvalExpr(expr) => {
-                let result = expr.eval_boolean_with_context(eval_context)?;
-                Ok(RuleRuntimeStatus::from_match(result, result))
-            }
+            Rule::EvalExpr(expr) => Err(eyre!(
+                "Legacy evalexpr rules are no longer supported: {expr}"
+            )),
             Rule::Script(ScriptRule { script }) => {
                 let mut engine = ScriptEngine::new();
                 let device_state = devices.get_state();

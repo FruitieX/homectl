@@ -1,15 +1,17 @@
 'use client';
 
-import { useConfigExport, ConfigExport } from '@/hooks/useConfig';
+import { useConfigExport, ConfigExport, useRuntimeStatus } from '@/hooks/useConfig';
 import { useState, useRef } from 'react';
 
 export default function ImportExportPage() {
   const { exportConfig, importConfig } = useConfigExport();
+  const { data: runtimeStatus } = useRuntimeStatus(5000);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMemoryOnly = runtimeStatus?.memory_only_mode ?? false;
 
   const handleExport = async () => {
     try {
@@ -64,6 +66,17 @@ export default function ImportExportPage() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Import / Export Configuration</h1>
 
+      <div className={`alert ${isMemoryOnly ? 'alert-warning' : 'alert-info'} shadow-sm`}>
+        <div>
+          <h2 className="font-semibold">Durability</h2>
+          <p className="text-sm leading-6">
+            {isMemoryOnly
+              ? 'The server is currently running without active database persistence. Export a JSON backup after important changes, because imports and editor updates only live in memory until you persist them again.'
+              : 'JSON exports are still the fastest rollback point before large imports or risky edits, even while PostgreSQL persistence is available.'}
+          </p>
+        </div>
+      </div>
+
       {error && (
         <div className="alert alert-error">
           <span>{error}</span>
@@ -89,6 +102,9 @@ export default function ImportExportPage() {
             <h2 className="card-title">Export Configuration</h2>
             <p className="text-sm opacity-70">
               Download a JSON backup of all integrations, groups, scenes, and routines.
+              {isMemoryOnly
+                ? ' This file is the durable copy of your current runtime state while the server stays memory-only.'
+                : ' Keep one before major changes so you can roll the config back quickly.'}
             </p>
             <div className="card-actions mt-4">
               <button
@@ -116,6 +132,9 @@ export default function ImportExportPage() {
             <p className="text-sm opacity-70">
               Upload a JSON configuration file. Existing items with matching IDs will
               be updated.
+              {isMemoryOnly
+                ? ' Importing updates the live runtime immediately, so export again afterward if you need the result to survive a restart before persistence is back.'
+                : ' Imports still apply immediately and then persist to PostgreSQL.'}
             </p>
             <div className="card-actions mt-4">
               <input

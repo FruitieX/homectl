@@ -1,11 +1,10 @@
 use crate::db::{
     actions::{db_get_devices, db_update_device},
-    config_queries::{db_get_device_positions, DevicePositionRow},
+    config_queries::DevicePositionRow,
 };
 use crate::types::integration::IntegrationId;
 use crate::utils::cli::Cli;
 
-use super::expr::EvalContext;
 use super::groups::Groups;
 use super::scenes::{get_next_cycled_scene, Scenes};
 use crate::types::device::{cmp_device_states, ControllableDevice, DeviceRef, ManageKind};
@@ -18,7 +17,13 @@ use crate::types::{
 use color_eyre::Result;
 use ordered_float::OrderedFloat;
 use std::collections::{BTreeMap, HashSet};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::time::Duration;
+
+const DEVICE_DB_WRITE_DEBOUNCE_MS: u64 = 100;
 
 #[derive(Debug, PartialEq, Eq)]
 struct SpatialRolloutPlan {
@@ -100,8 +105,9 @@ fn build_spatial_rollout_plan(
 pub struct Devices {
     event_tx: TxEventChannel,
     state: DevicesState,
-    keys_by_name: BTreeMap<(IntegrationId, String), DeviceKey>,
     cli: Cli,
+    pending_db_updates: Arc<Mutex<BTreeMap<DeviceKey, Device>>>,
+    db_write_flush_pending: Arc<AtomicBool>,
 }
 
 impl Devices {
@@ -109,9 +115,70 @@ impl Devices {
         Devices {
             event_tx,
             state: Default::default(),
-            keys_by_name: Default::default(),
             cli: cli.clone(),
+            pending_db_updates: Default::default(),
+            db_write_flush_pending: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    fn schedule_db_update(&self, device: Device) {
+        if self.cli.dry_run {
+            debug!("(dry run) would store device: {device}");
+            return;
+        }
+
+        {
+            let mut pending = self
+                .pending_db_updates
+                .lock()
+                .expect("pending_db_updates lock poisoned");
+            pending.insert(device.get_device_key(), device);
+        }
+
+        if self.db_write_flush_pending.swap(true, Ordering::SeqCst) {
+            return;
+        }
+
+        let pending_db_updates = Arc::clone(&self.pending_db_updates);
+        let db_write_flush_pending = Arc::clone(&self.db_write_flush_pending);
+
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(Duration::from_millis(DEVICE_DB_WRITE_DEBOUNCE_MS)).await;
+
+                let pending_devices = {
+                    let mut pending = pending_db_updates
+                        .lock()
+                        .expect("pending_db_updates lock poisoned");
+                    std::mem::take(&mut *pending)
+                };
+
+                for (_, device) in pending_devices {
+                    if let Err(error) = db_update_device(&device).await {
+                        warn!(
+                            "Failed to persist device {}: {error}",
+                            device.get_device_key()
+                        );
+                    }
+                }
+
+                let should_stop = {
+                    let pending = pending_db_updates
+                        .lock()
+                        .expect("pending_db_updates lock poisoned");
+                    if pending.is_empty() {
+                        db_write_flush_pending.store(false, Ordering::SeqCst);
+                        true
+                    } else {
+                        false
+                    }
+                };
+
+                if should_stop {
+                    break;
+                }
+            }
+        });
     }
 
     pub fn get_state(&self) -> &DevicesState {
@@ -131,19 +198,6 @@ impl Devices {
         for key in &keys_to_remove {
             self.state.0.remove(key);
         }
-
-        self.keys_by_name
-            .retain(|(iid, _), _| iid != integration_id);
-    }
-
-    /// Registers a device in the name lookup map, allowing it to be found by
-    /// DeviceRef::Name references in routine rules.
-    pub fn register_device_name(&mut self, device: &Device) {
-        let device_key = device.get_device_key();
-        self.keys_by_name.insert(
-            (device.integration_id.clone(), device.name.clone()),
-            device_key,
-        );
     }
 
     pub async fn refresh_db_devices(&mut self, _scenes: &Scenes) {
@@ -151,15 +205,11 @@ impl Devices {
 
         match db_devices {
             Ok(db_devices) => {
-                for (device_key, db_device) in db_devices {
+                for (_, db_device) in db_devices {
                     debug!(
                         "Restoring device from DB: {integration_id}/{name}",
                         integration_id = db_device.integration_id,
                         name = db_device.name,
-                    );
-                    self.keys_by_name.insert(
-                        (db_device.integration_id.clone(), db_device.name.clone()),
-                        device_key,
                     );
 
                     // Don't restore scene state at this point, because we might
@@ -189,7 +239,7 @@ impl Devices {
                 .0
                 .values()
                 .filter(|d| d.get_scene_id().as_ref() == Some(scene_id))
-                .map(|d| d.set_scene(Some(scene_id), scenes))
+                .map(|d| d.set_scene(Some(scene_id), scenes, self))
                 .collect();
 
             for device in invalidated_devices {
@@ -200,7 +250,7 @@ impl Devices {
 
     pub async fn discover_device(&mut self, device: &Device, scenes: &Scenes) {
         info!("Discovered device: {device}");
-        let device = device.set_scene(device.get_scene_id().as_ref(), scenes);
+        let device = device.set_scene(device.get_scene_id().as_ref(), scenes, self);
 
         self.set_state(&device, !device.is_managed(), false);
     }
@@ -286,16 +336,26 @@ impl Devices {
 
         let device_key = incoming.get_device_key();
 
-        self.keys_by_name.insert(
-            (incoming.integration_id.clone(), incoming.name.clone()),
-            device_key.clone(),
-        );
-
         let current = self.get_device(&device_key);
 
         match (&incoming.data, current) {
             // Device was seen for the first time
             (_, None) => {
+                self.discover_device(incoming, scenes).await;
+            }
+
+            // Metadata-only placeholder updates should never replace an
+            // already-known device. Keep existing state and refresh raw data
+            // only when the incoming message actually carries it.
+            (_, Some(_)) if incoming.is_unknown_placeholder_sensor() => {
+                if incoming.raw.is_some() {
+                    self.set_raw(incoming).await?;
+                }
+            }
+
+            // Once we receive a real device state for a placeholder entry,
+            // treat it as a first-class discovery and replace the placeholder.
+            (_, Some(current)) if current.is_unknown_placeholder_sensor() => {
                 self.discover_device(incoming, scenes).await;
             }
 
@@ -319,9 +379,6 @@ impl Devices {
     /// Sets internal (and possibly external) state for given device
     pub fn set_state(&mut self, device: &Device, skip_external_update: bool, skip_db_update: bool) {
         let device_key = device.get_device_key();
-
-        // Register device in name lookup map for DeviceRef::Name resolution
-        self.register_device_name(device);
 
         let old = self.get_device(&device_key);
 
@@ -364,13 +421,7 @@ impl Devices {
         }
 
         if !skip_db_update {
-            if !self.cli.dry_run {
-                tokio::spawn(async move {
-                    db_update_device(&device).await.ok();
-                });
-            } else {
-                debug!("(dry run) would store device: {device}");
-            }
+            self.schedule_db_update(device.clone());
         }
     }
 
@@ -411,7 +462,6 @@ impl Devices {
         group_keys: &Option<Vec<GroupId>>,
         groups: &Groups,
         scenes: &Scenes,
-        eval_context: &EvalContext,
     ) -> Option<Vec<Device>> {
         let scene_devices_config = scenes.find_scene_devices_config(
             self,
@@ -421,7 +471,6 @@ impl Devices {
                 device_keys: device_keys.clone(),
                 group_keys: group_keys.clone(),
             },
-            eval_context,
         )?;
 
         let resolved_devices = scene_devices_config
@@ -429,7 +478,7 @@ impl Devices {
             .filter_map(|device_key| self.get_device(device_key))
             .map(|device| {
                 device
-                    .set_scene(Some(scene_id), scenes)
+                    .set_scene(Some(scene_id), scenes, self)
                     .set_transition(None)
             })
             .collect();
@@ -449,6 +498,7 @@ impl Devices {
         rollout: &Option<RolloutStyle>,
         rollout_source_device_key: &Option<DeviceKey>,
         rollout_duration_ms: &Option<u64>,
+        device_positions: &[DevicePositionRow],
     ) {
         if devices.is_empty() {
             return;
@@ -478,17 +528,11 @@ impl Devices {
             .map(|device| (device.get_device_key(), device))
             .collect::<BTreeMap<DeviceKey, Device>>();
 
-        let positions = match db_get_device_positions().await {
-            Ok(rows) => rows
-                .into_iter()
-                .map(|row| (row.device_key.clone(), row))
-                .collect::<BTreeMap<String, DevicePositionRow>>(),
-            Err(error) => {
-                warn!("Failed to load device positions for spatial rollout: {error}");
-                self.apply_devices_immediately(devices_by_key.into_values().collect());
-                return;
-            }
-        };
+        let positions = device_positions
+            .iter()
+            .cloned()
+            .map(|row| (row.device_key.clone(), row))
+            .collect::<BTreeMap<String, DevicePositionRow>>();
 
         let target_device_keys = devices_by_key.keys().cloned().collect::<Vec<_>>();
         let Some(rollout_plan) = build_spatial_rollout_plan(
@@ -542,9 +586,9 @@ impl Devices {
         rollout: &Option<RolloutStyle>,
         rollout_source_device_key: &Option<DeviceKey>,
         rollout_duration_ms: &Option<u64>,
+        device_positions: &[DevicePositionRow],
         groups: &Groups,
         scenes: &Scenes,
-        eval_context: &EvalContext,
     ) -> Option<bool> {
         let group_keys_description = if let Some(group_keys) = group_keys {
             format!(
@@ -578,20 +622,15 @@ impl Devices {
             "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}"
         );
 
-        let resolved_devices = self.resolve_scene_devices(
-            scene_id,
-            device_keys,
-            group_keys,
-            groups,
-            scenes,
-            eval_context,
-        )?;
+        let resolved_devices =
+            self.resolve_scene_devices(scene_id, device_keys, group_keys, groups, scenes)?;
 
         self.apply_devices_with_rollout(
             resolved_devices,
             rollout,
             rollout_source_device_key,
             rollout_duration_ms,
+            device_positions,
         )
         .await;
 
@@ -611,7 +650,7 @@ impl Devices {
         for device in devices.0 {
             let mut d = device.1.clone();
             d = d.dim_device(step.unwrap_or(0.1));
-            d = d.set_scene(None, scenes);
+            d = d.set_scene(None, scenes, self);
             self.set_state(&d, false, false);
         }
 
@@ -629,8 +668,8 @@ impl Devices {
         rollout: &Option<RolloutStyle>,
         rollout_source_device_key: &Option<DeviceKey>,
         rollout_duration_ms: &Option<u64>,
+        device_positions: &[DevicePositionRow],
         scenes: &Scenes,
-        eval_context: &EvalContext,
     ) -> Option<()> {
         let next_scene = {
             get_next_cycled_scene(
@@ -641,7 +680,6 @@ impl Devices {
                 detection_device_keys,
                 detection_group_keys,
                 scenes,
-                eval_context,
             )
         }?;
 
@@ -652,9 +690,9 @@ impl Devices {
             rollout,
             rollout_source_device_key,
             rollout_duration_ms,
+            device_positions,
             groups,
             scenes,
-            eval_context,
         )
         .await;
 
@@ -663,12 +701,8 @@ impl Devices {
 
     pub fn get_device_by_ref<'a>(&'a self, device_ref: &DeviceRef) -> Option<&'a Device> {
         let device_key = match device_ref {
-            DeviceRef::Id(id_ref) => Some(id_ref.clone().into_device_key()),
-            DeviceRef::Name(name_ref) => self
-                .keys_by_name
-                .get(&(name_ref.integration_id.clone(), name_ref.name.clone()))
-                .cloned(),
-        }?;
+            DeviceRef::Id(id_ref) => id_ref.clone().into_device_key(),
+        };
 
         self.state.0.get(&device_key)
     }
@@ -676,14 +710,76 @@ impl Devices {
 
 #[cfg(test)]
 mod tests {
+    use super::Devices;
     use super::{build_spatial_rollout_plan, SpatialRolloutPlan};
+    use crate::core::scenes::Scenes;
     use crate::db::config_queries::DevicePositionRow;
-    use crate::types::device::{DeviceId, DeviceKey};
+    use crate::types::color::Capabilities;
+    use crate::types::device::{
+        ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, ManageKind, SensorDevice,
+    };
+    use crate::types::event::{mk_event_channel, RxEventChannel};
     use crate::types::integration::IntegrationId;
+    use crate::utils::cli::Cli;
+    use serde_json::json;
     use std::collections::BTreeMap;
 
     fn device_key(id: &str) -> DeviceKey {
         DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
+    }
+
+    fn test_cli() -> Cli {
+        Cli {
+            dry_run: true,
+            port: 45289,
+            database_url: None,
+            config: None,
+            warmup_time: None,
+            command: None,
+        }
+    }
+
+    fn test_devices() -> (Devices, RxEventChannel) {
+        let (event_tx, event_rx) = mk_event_channel();
+        (Devices::new(event_tx, &test_cli()), event_rx)
+    }
+
+    fn placeholder_sensor(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
+        Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new(id),
+            name.to_string(),
+            DeviceData::Sensor(SensorDevice::unknown_placeholder()),
+            raw,
+        )
+    }
+
+    fn boolean_sensor(id: &str, name: &str, value: bool, raw: Option<serde_json::Value>) -> Device {
+        Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new(id),
+            name.to_string(),
+            DeviceData::Sensor(SensorDevice::Boolean { value }),
+            raw,
+        )
+    }
+
+    fn controllable_device(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
+        Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new(id),
+            name.to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                Some(0.5),
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Unmanaged,
+            )),
+            raw,
+        )
     }
 
     fn position(device_key: &DeviceKey, x: f32, y: f32) -> (String, DevicePositionRow) {
@@ -754,5 +850,49 @@ mod tests {
                 delayed_device_keys: Vec::new(),
             })
         );
+    }
+
+    #[tokio::test]
+    async fn placeholder_sensor_does_not_overwrite_known_device() {
+        let (mut devices, _event_rx) = test_devices();
+        let scenes = Scenes::default();
+        let current = boolean_sensor("device1", "Kitchen button", true, None);
+        let incoming = placeholder_sensor(
+            "device1",
+            "device1",
+            Some(json!({ "manufacturer": "Vendor" })),
+        );
+
+        devices.set_state(&current, true, true);
+        devices
+            .handle_external_state_update(&incoming, &scenes)
+            .await
+            .unwrap();
+
+        let stored = devices.get_device(&current.get_device_key()).unwrap();
+        assert_eq!(stored.data, current.data);
+        assert_eq!(stored.name, current.name);
+        assert_eq!(stored.raw, incoming.raw);
+    }
+
+    #[tokio::test]
+    async fn controllable_update_replaces_placeholder_sensor() {
+        let (mut devices, _event_rx) = test_devices();
+        let scenes = Scenes::default();
+        let placeholder = placeholder_sensor("device1", "device1", Some(json!({ "seen": 1 })));
+        let incoming = controllable_device(
+            "device1",
+            "Kitchen light",
+            Some(json!({ "power": true, "brightness": 127 })),
+        );
+
+        devices.set_state(&placeholder, true, true);
+        devices
+            .handle_external_state_update(&incoming, &scenes)
+            .await
+            .unwrap();
+
+        let stored = devices.get_device(&incoming.get_device_key()).unwrap();
+        assert_eq!(stored, &incoming);
     }
 }

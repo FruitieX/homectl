@@ -1,5 +1,7 @@
 import { Device } from '@/bindings/Device';
 
+const UNKNOWN_SENSOR_PLACEHOLDER_VALUE = '__homectl_unknown_sensor__';
+
 export type SensorInteractionKind =
   | 'auto'
   | 'boolean'
@@ -57,8 +59,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export const getSensorConfigRef = (
-  device: Pick<Device, 'integration_id' | 'name' | 'id'>,
-) => `${device.integration_id}/${device.name.trim() || device.id}`;
+  device: Pick<Device, 'integration_id' | 'id'>,
+) => `${device.integration_id}/${device.id}`;
 
 export const stringifySensorPayload = (payload: unknown) => {
   if (payload === undefined) {
@@ -76,6 +78,9 @@ export const getSensorDetails = (device: Device | null): SensorDetails => {
   const sensorPayload = device.data.Sensor;
   if (isRecord(sensorPayload) && 'value' in sensorPayload) {
     const value = sensorPayload.value;
+    if (value === UNKNOWN_SENSOR_PLACEHOLDER_VALUE) {
+      return { kind: 'unknown', value: null, payload: sensorPayload };
+    }
     if (typeof value === 'boolean') {
       return { kind: 'boolean', value, payload: { value } };
     }

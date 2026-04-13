@@ -111,9 +111,9 @@ pub enum Rule {
     /// one of the contained rules need to match.
     Any(AnyRule),
 
-    /// Evaluates given expression (legacy evalexpr).
+    /// Legacy evalexpr rule payload. No longer executed.
     #[ts(skip)]
-    EvalExpr(evalexpr::Node),
+    EvalExpr(String),
 
     /// Evaluates JavaScript script that returns boolean.
     /// The script has access to `devices` and `groups` globals.

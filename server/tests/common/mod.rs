@@ -33,6 +33,12 @@ pub struct TestServer {
 pub struct TestServerConfig {
     /// Additional configuration options to append to Settings.toml
     pub extra_config: Option<String>,
+    /// Raw backup config file contents passed via --config instead of generating TOML
+    pub config_content: Option<String>,
+    /// Backup config file name used when writing config_content
+    pub config_file_name: Option<String>,
+    /// Optional PostgreSQL connection string to pass via --database-url
+    pub database_url: Option<String>,
     /// If set, start in simulation mode using this TOML config file path
     pub simulate_config: Option<PathBuf>,
 }
@@ -47,6 +53,7 @@ impl TestServer {
     pub fn with_config(config: TestServerConfig) -> Result<Self, TestServerError> {
         let instance_id = TEST_INSTANCE_COUNTER.fetch_add(1, Ordering::SeqCst);
         let pid = std::process::id();
+        let use_config_file = config.config_content.is_some() || config.extra_config.is_some();
 
         // Create temporary directory
         let temp_dir = std::env::temp_dir().join(format!("homectl_test_{}_{}", pid, instance_id));
@@ -57,7 +64,12 @@ impl TestServer {
         }
         std::fs::create_dir_all(&temp_dir)?;
 
-        let config_path = temp_dir.join("Settings.toml");
+        let config_path = temp_dir.join(
+            config
+                .config_file_name
+                .as_deref()
+                .unwrap_or("Settings.json"),
+        );
         let binary = find_binary()?;
         let mut process: Option<Child> = None;
         let mut final_port = 0;
@@ -75,8 +87,11 @@ impl TestServer {
             let (listener, port) = reserve_port()?;
 
             // Generate config file with this port (not needed for simulation mode)
-            if config.simulate_config.is_none() {
-                let config_content = generate_config(port, config.extra_config.as_deref());
+            if config.simulate_config.is_none() && use_config_file {
+                let config_content = config
+                    .config_content
+                    .clone()
+                    .unwrap_or_else(|| generate_config(port, config.extra_config.as_deref()));
                 if let Err(e) = std::fs::write(&config_path, &config_content) {
                     return Err(TestServerError::Io(e));
                 }
@@ -87,6 +102,8 @@ impl TestServer {
 
             let mut cmd = Command::new(&binary);
             cmd.env("RUST_LOG", "warn,homectl_server=info")
+                .env_remove("DATABASE_URL")
+                .env_remove("CONFIG_FILE")
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
 
@@ -102,11 +119,15 @@ impl TestServer {
                     .arg("--port")
                     .arg(port.to_string());
             } else {
-                cmd.current_dir(&temp_dir)
-                    .arg("--config")
-                    .arg(&config_path)
-                    .arg("--port")
-                    .arg(port.to_string());
+                cmd.current_dir(&temp_dir).arg("--port").arg(port.to_string());
+
+                if use_config_file {
+                    cmd.arg("--config").arg(&config_path);
+                }
+
+                if let Some(database_url) = config.database_url.as_deref() {
+                    cmd.arg("--database-url").arg(database_url);
+                }
             }
 
             let mut child = match cmd.spawn() {

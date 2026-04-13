@@ -15,8 +15,7 @@ export interface SensorRule {
   state: SensorState;
   trigger_mode: TriggerMode;
   integration_id?: string;
-  name?: string;
-  id?: string;
+  device_id?: string;
 }
 
 export interface DeviceRule {
@@ -24,8 +23,7 @@ export interface DeviceRule {
   scene?: SceneId;
   trigger_mode: TriggerMode;
   integration_id?: string;
-  name?: string;
-  id?: string;
+  device_id?: string;
 }
 
 export interface GroupRule {
@@ -102,19 +100,16 @@ function TriggerModeSelector({ value, onChange }: TriggerModeSelectorProps) {
 interface DeviceSelectorProps {
   devices: DevicesState;
   integrationId?: string;
-  deviceName?: string;
   deviceId?: string;
   onChange: (ref: {
     integration_id?: string;
-    name?: string;
-    id?: string;
+    device_id?: string;
   }) => void;
 }
 
 function DeviceSelector({
   devices,
   integrationId,
-  deviceName,
   deviceId,
   onChange,
 }: DeviceSelectorProps) {
@@ -135,14 +130,7 @@ function DeviceSelector({
       return `${integrationId}/${deviceId}`;
     }
 
-    if (!integrationId || !deviceName) {
-      return '';
-    }
-
-    const match = deviceList.find(
-      ({ device }) => device.integration_id === integrationId && device.name === deviceName,
-    );
-    return match?.key ?? '';
+    return '';
   })();
 
   return (
@@ -160,8 +148,8 @@ function DeviceSelector({
           }
 
           const [intId, ...idParts] = e.target.value.split('/');
-          const id = idParts.join('/');
-          onChange({ integration_id: intId, id, name: undefined });
+          const device_id = idParts.join('/');
+          onChange({ integration_id: intId, device_id });
         }}
       >
         <option value="">Select device...</option>
@@ -230,8 +218,7 @@ function SensorRuleEditor({
       <DeviceSelector
         devices={devices}
         integrationId={rule.integration_id}
-        deviceName={rule.name}
-        deviceId={rule.id}
+        deviceId={rule.device_id}
         onChange={(ref) => onChange({ ...rule, ...ref })}
       />
 
@@ -338,8 +325,7 @@ function DeviceRuleEditor({
       <DeviceSelector
         devices={devices}
         integrationId={rule.integration_id}
-        deviceName={rule.name}
-        deviceId={rule.id}
+        deviceId={rule.device_id}
         onChange={(ref) => onChange({ ...rule, ...ref })}
       />
 

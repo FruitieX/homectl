@@ -41,10 +41,10 @@ pub enum Action {
     /// Special category of actions that are only used by UI.
     Ui(UiActionDescriptor),
 
-    /// Evaluates given expression.
+    /// Legacy evalexpr action payload. No longer executed.
     #[serde(untagged, skip_serializing)]
     #[ts(skip)]
-    EvalExpr(evalexpr::Node),
+    EvalExpr(String),
 }
 
 pub type Actions = Vec<Action>;

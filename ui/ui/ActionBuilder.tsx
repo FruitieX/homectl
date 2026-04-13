@@ -4,6 +4,9 @@ import { useState, useCallback } from 'react';
 import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { Device } from '@/bindings/Device';
+import type { RolloutStyle } from '@/bindings/RolloutStyle';
+
+const rolloutStyleOptions: RolloutStyle[] = ['spatial'];
 
 // Action types matching server types
 export interface ActivateSceneAction {
@@ -231,6 +234,14 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
     key,
     device: device as Device,
   }));
+  deviceList.sort((left, right) => {
+    const nameComparison = left.device.name.localeCompare(right.device.name);
+    if (nameComparison !== 0) {
+      return nameComparison;
+    }
+
+    return left.key.localeCompare(right.key);
+  });
 
   const rollout = value.rollout?.trim() ?? '';
   const hasRollout = rollout.length > 0;
@@ -241,12 +252,9 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
         <label className="label">
           <span className="label-text">Rollout Style</span>
         </label>
-        <input
-          type="text"
-          className="input input-bordered input-sm"
+        <select
+          className="select select-bordered select-sm"
           value={rollout}
-          list="rollout-style-options"
-          placeholder="spatial"
           onChange={(e) => {
             const nextRollout = e.target.value.trim();
             onChange({
@@ -259,12 +267,16 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
                 : undefined,
             });
           }}
-        />
-        <datalist id="rollout-style-options">
-          <option value="spatial" />
-        </datalist>
+        >
+          <option value="">No rollout</option>
+          {rolloutStyleOptions.map((style) => (
+            <option key={style} value={style}>
+              {style}
+            </option>
+          ))}
+        </select>
         <span className="label-text-alt mt-1 opacity-60">
-          Current supported value: spatial
+          Select how scene activation should roll out across positioned devices.
         </span>
       </div>
 

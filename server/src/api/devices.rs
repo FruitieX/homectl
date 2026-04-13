@@ -85,9 +85,6 @@ async fn put_device_impl(
 
     let mut app_state = app_state.write().await;
 
-    // Register device in name lookup map (needed for routine rules that reference devices by name)
-    app_state.devices.register_device_name(&device);
-
     app_state.devices.set_state(&device, false, false);
 
     let devices = app_state.devices.get_state();

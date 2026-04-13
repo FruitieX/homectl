@@ -10,6 +10,13 @@ use std::collections::HashMap;
 
 use crate::types::{device::DevicesState, group::FlattenedGroupsConfig};
 
+const SCENE_SCRIPT_HELPERS: &str = r#"
+var defineSceneScript = function (factory) { return factory(); };
+var deviceState = function (config) { return config; };
+var deviceLink = function (config) { return config; };
+var sceneLink = function (config) { return config; };
+"#;
+
 /// JavaScript scripting context for evaluating dynamic expressions
 pub struct ScriptEngine {
     context: Context,
@@ -24,7 +31,8 @@ impl Default for ScriptEngine {
 impl ScriptEngine {
     /// Create a new script engine instance
     pub fn new() -> Self {
-        let context = Context::default();
+        let mut context = Context::default();
+        let _ = context.eval(Source::from_bytes(SCENE_SCRIPT_HELPERS));
         ScriptEngine { context }
     }
 
@@ -186,6 +194,20 @@ mod tests {
         let result = engine.eval_json("({ foo: 'bar', num: 42 })").unwrap();
         assert_eq!(result["foo"], "bar");
         assert_eq!(result["num"], 42);
+    }
+
+    #[test]
+    fn test_scene_script_helpers() {
+        let mut engine = ScriptEngine::new();
+
+        let result = engine
+            .eval_json(
+                "defineSceneScript(() => ({ 'demo/device': deviceState({ power: true, brightness: 0.5 }) }))",
+            )
+            .unwrap();
+
+        assert_eq!(result["demo/device"]["power"], true);
+        assert_eq!(result["demo/device"]["brightness"], serde_json::json!(0.5));
     }
 
     #[test]

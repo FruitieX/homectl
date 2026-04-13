@@ -74,6 +74,9 @@ const maxFloorplanDeviceScale = 3;
 
 const getCellKey = (x: number, y: number) => `${x},${y}`;
 
+const areGridPointsEqual = (left: GridPoint | null, right: GridPoint | null) =>
+  left?.x === right?.x && left?.y === right?.y;
+
 const normalizeFloorplanDeviceScale = (value: number) => {
   if (!Number.isFinite(value)) {
     return defaultFloorplanDeviceScale;
@@ -502,8 +505,6 @@ type ActiveOperation =
       lastCell: GridPoint;
       tile: TileType;
       straightLine: boolean;
-      startedWithShift: boolean;
-      mouseMoved: boolean;
       historyRecorded: boolean;
       lastCellKey: string;
     }
@@ -515,8 +516,6 @@ type ActiveOperation =
       groupId: string;
       paintMode: GroupPaintMode;
       straightLine: boolean;
-      startedWithShift: boolean;
-      mouseMoved: boolean;
       historyRecorded: boolean;
       lastCellKey: string;
     }
@@ -556,6 +555,8 @@ export function FloorplanGridEditor({
   const [showGrid, setShowGrid] = useState(true);
   const [gridOpacity, setGridOpacity] = useState(0.5);
   const [lineAnchor, setLineAnchor] = useState<PaintLineAnchor | null>(null);
+  const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
+  const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [deviceSearch, setDeviceSearch] = useState('');
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<'all' | FloorplanDeviceType>('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
@@ -574,6 +575,34 @@ export function FloorplanGridEditor({
   useEffect(() => {
     undoStackRef.current = undoStack;
   }, [undoStack]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setIsShiftHeld(true);
+      }
+    };
+
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key === 'Shift') {
+        setIsShiftHeld(false);
+      }
+    };
+
+    const handleBlur = () => {
+      setIsShiftHeld(false);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, []);
 
   const updateLineAnchor = useCallback((nextAnchor: PaintLineAnchor | null) => {
     lineAnchorRef.current = nextAnchor;
@@ -622,6 +651,28 @@ export function FloorplanGridEditor({
     () => getFloorplanDevicePositions(grid, renderMetrics),
     [grid, renderMetrics],
   );
+  const previewLinePoints = useMemo(() => {
+    if (
+      isPainting ||
+      mode === 'devices' ||
+      !isShiftHeld ||
+      !hoveredCell ||
+      !lineAnchor ||
+      lineAnchor.mode !== mode
+    ) {
+      return [];
+    }
+
+    if (mode === 'groups' && !selectedGroup) {
+      return [];
+    }
+
+    if (areGridPointsEqual(lineAnchor.cell, hoveredCell)) {
+      return [];
+    }
+
+    return getLinePoints(lineAnchor.cell, hoveredCell);
+  }, [hoveredCell, isPainting, isShiftHeld, lineAnchor, mode, selectedGroup]);
   const sortedGroups = [...availableGroups].sort((left, right) => {
     const hiddenDelta = Number(Boolean(left.hidden)) - Number(Boolean(right.hidden));
     if (hiddenDelta !== 0) {
@@ -789,6 +840,50 @@ export function FloorplanGridEditor({
       }
     }
 
+    if (previewLinePoints.length > 0) {
+      const previewFill =
+        mode === 'tiles'
+          ? tileColors[selectedTool]
+          : selectedGroup
+            ? getFloorplanGroupFill(selectedGroup, 0.4)
+            : null;
+      const previewStroke =
+        mode === 'tiles'
+          ? '#111827'
+          : selectedGroup
+            ? getFloorplanGroupStroke(selectedGroup, 0.95)
+            : null;
+
+      if (previewFill && previewStroke) {
+        ctx.save();
+        ctx.setLineDash([4, 2]);
+        ctx.lineWidth = 1.5;
+
+        for (const point of previewLinePoints) {
+          const column = columnBounds[point.x];
+          const row = rowBounds[point.y];
+          if (!column || !row) {
+            continue;
+          }
+
+          ctx.globalAlpha = 0.6;
+          ctx.fillStyle = previewFill;
+          ctx.fillRect(column.start, row.start, column.size, row.size);
+
+          ctx.globalAlpha = 1;
+          ctx.strokeStyle = previewStroke;
+          ctx.strokeRect(
+            column.start + 0.75,
+            row.start + 0.75,
+            Math.max(column.size - 1.5, 0),
+            Math.max(row.size - 1.5, 0),
+          );
+        }
+
+        ctx.restore();
+      }
+    }
+
     // Draw devices
     devices.forEach((device) => {
       const isSelected = selectedDevice === device.deviceKey || draggingDevice === device.deviceKey;
@@ -844,9 +939,11 @@ export function FloorplanGridEditor({
     selectedDevice,
     draggingDevice,
     selectedGroup,
+    previewLinePoints,
     mode,
     showGrid,
     gridOpacity,
+    selectedTool,
     deviceScale,
   ]);
 
@@ -888,17 +985,26 @@ export function FloorplanGridEditor({
     const coords = getTileCoords(e);
     if (!coords) return;
 
+    setHoveredCell((previousCell) =>
+      areGridPointsEqual(previousCell, coords) ? previousCell : coords,
+    );
+
     const currentGrid = cloneGrid(gridRef.current);
-    const straightLine = straightLineMode || e.shiftKey;
+    const straightLine = straightLineMode;
     const currentLineAnchor = lineAnchorRef.current;
 
     if (mode === 'tiles') {
       const tile = e.button === 2 ? 'floor' : selectedTool;
-      const nextGrid = applyTilePoints(currentGrid, [coords], tile);
-      const anchorMatchesMode = currentLineAnchor?.mode === 'tiles';
-      if (!nextGrid && !(e.shiftKey && anchorMatchesMode)) {
+      if (e.shiftKey && currentLineAnchor?.mode === 'tiles') {
+        applyDiscreteChange(
+          applyTilePoints(currentGrid, getLinePoints(currentLineAnchor.cell, coords), tile),
+          currentGrid,
+        );
+        updateLineAnchor({ mode: 'tiles', cell: coords });
         return;
       }
+
+      const nextGrid = applyTilePoints(currentGrid, [coords], tile);
 
       activeOperationRef.current = {
         kind: 'tiles',
@@ -907,8 +1013,6 @@ export function FloorplanGridEditor({
         lastCell: coords,
         tile,
         straightLine,
-        startedWithShift: e.shiftKey,
-        mouseMoved: false,
         historyRecorded: nextGrid !== null,
         lastCellKey: getCellKey(coords.x, coords.y),
       };
@@ -923,11 +1027,21 @@ export function FloorplanGridEditor({
       }
 
       const paintMode = e.button === 2 ? 'erase' : groupPaintMode;
-      const nextGrid = applyGroupPoints(currentGrid, selectedGroup, [coords], paintMode);
-      const anchorMatchesMode = currentLineAnchor?.mode === 'groups';
-      if (!nextGrid && !(e.shiftKey && anchorMatchesMode)) {
+      if (e.shiftKey && currentLineAnchor?.mode === 'groups') {
+        applyDiscreteChange(
+          applyGroupPoints(
+            currentGrid,
+            selectedGroup,
+            getLinePoints(currentLineAnchor.cell, coords),
+            paintMode,
+          ),
+          currentGrid,
+        );
+        updateLineAnchor({ mode: 'groups', cell: coords });
         return;
       }
+
+      const nextGrid = applyGroupPoints(currentGrid, selectedGroup, [coords], paintMode);
 
       activeOperationRef.current = {
         kind: 'groups',
@@ -937,8 +1051,6 @@ export function FloorplanGridEditor({
         groupId: selectedGroup,
         paintMode,
         straightLine,
-        startedWithShift: e.shiftKey,
-        mouseMoved: false,
         historyRecorded: nextGrid !== null,
         lastCellKey: getCellKey(coords.x, coords.y),
       };
@@ -991,6 +1103,10 @@ export function FloorplanGridEditor({
     const coords = getTileCoords(e);
     if (!coords) return;
 
+    setHoveredCell((previousCell) =>
+      areGridPointsEqual(previousCell, coords) ? previousCell : coords,
+    );
+
     const pointKey = getCellKey(coords.x, coords.y);
     const activeOperation = activeOperationRef.current;
     if (!activeOperation || activeOperation.lastCellKey === pointKey) {
@@ -1009,7 +1125,6 @@ export function FloorplanGridEditor({
         ...activeOperation,
         lastCell: coords,
         lastCellKey: pointKey,
-        mouseMoved: true,
       };
       if (!nextGrid) {
         activeOperationRef.current = nextOperation;
@@ -1042,7 +1157,6 @@ export function FloorplanGridEditor({
         ...activeOperation,
         lastCell: coords,
         lastCellKey: pointKey,
-        mouseMoved: true,
       };
       if (!nextGrid) {
         activeOperationRef.current = nextOperation;
@@ -1090,49 +1204,8 @@ export function FloorplanGridEditor({
     const activeOperation = activeOperationRef.current;
 
     if (activeOperation?.kind === 'tiles') {
-      const currentLineAnchor = lineAnchorRef.current;
-      if (
-        activeOperation.startedWithShift &&
-        !activeOperation.mouseMoved &&
-        currentLineAnchor?.mode === 'tiles'
-      ) {
-        const nextGrid = applyTilePoints(
-          activeOperation.baseGrid,
-          getLinePoints(currentLineAnchor.cell, activeOperation.startCell),
-          activeOperation.tile,
-        );
-
-        if (nextGrid) {
-          if (!activeOperation.historyRecorded) {
-            pushUndoSnapshot(activeOperation.baseGrid);
-          }
-          updateGrid(nextGrid);
-        }
-      }
-
       updateLineAnchor({ mode: 'tiles', cell: activeOperation.lastCell });
     } else if (activeOperation?.kind === 'groups') {
-      const currentLineAnchor = lineAnchorRef.current;
-      if (
-        activeOperation.startedWithShift &&
-        !activeOperation.mouseMoved &&
-        currentLineAnchor?.mode === 'groups'
-      ) {
-        const nextGrid = applyGroupPoints(
-          activeOperation.baseGrid,
-          activeOperation.groupId,
-          getLinePoints(currentLineAnchor.cell, activeOperation.startCell),
-          activeOperation.paintMode,
-        );
-
-        if (nextGrid) {
-          if (!activeOperation.historyRecorded) {
-            pushUndoSnapshot(activeOperation.baseGrid);
-          }
-          updateGrid(nextGrid);
-        }
-      }
-
       updateLineAnchor({ mode: 'groups', cell: activeOperation.lastCell });
     }
 
@@ -1140,6 +1213,7 @@ export function FloorplanGridEditor({
   };
 
   const handleMouseLeave = () => {
+    setHoveredCell(null);
     resetInteractionState();
   };
 
@@ -1368,7 +1442,7 @@ export function FloorplanGridEditor({
             </div>
 
             <label className="label cursor-pointer gap-2">
-              <span className="label-text text-sm">Straight lines (Shift)</span>
+              <span className="label-text text-sm">Straight drag mode</span>
               <input
                 type="checkbox"
                 className="toggle toggle-sm"
@@ -1395,10 +1469,10 @@ export function FloorplanGridEditor({
           </div>
 
           <div className="text-sm opacity-70">
-            Left click paints, right click temporarily erases back to floor, and straight-line mode also works by holding Shift while dragging.
+            Left click paints, right click temporarily erases back to floor, and Shift now previews a line from the last clicked cell to the cursor.
             {lineAnchor?.mode === 'tiles'
-              ? ` Shift-click another cell to connect from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}.`
-              : ' Click a cell, then hold Shift and click another cell to connect them.'}
+              ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
+              : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
           </div>
         </div>
       )}
@@ -1406,10 +1480,10 @@ export function FloorplanGridEditor({
       {mode === 'groups' && (
         <div className="space-y-3">
           <div className="text-sm opacity-70">
-            Select a group, then click and drag to paint its area. Right click temporarily erases, and straight lines also work by holding Shift while dragging.
+            Select a group, then click and drag to paint its area. Right click temporarily erases, and holding Shift previews a line from the last clicked cell.
             {lineAnchor?.mode === 'groups'
-              ? ` Shift-click another cell to connect from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}.`
-              : ' Click a cell, then hold Shift and click another cell to connect them.'}
+              ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
+              : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
           </div>
 
           <div className="flex flex-wrap gap-3 items-center">
@@ -1446,7 +1520,7 @@ export function FloorplanGridEditor({
             </div>
 
             <label className="label cursor-pointer gap-2">
-              <span className="label-text text-sm">Straight lines (Shift)</span>
+              <span className="label-text text-sm">Straight drag mode</span>
               <input
                 type="checkbox"
                 className="toggle toggle-sm"

@@ -24,6 +24,16 @@ tasks:
     options:
       runInCI: true
 
+  test-postgres:
+    command: 'cargo test -p homectl-server --test postgres_runtime -- --test-threads=1'
+    inputs:
+      - 'src/**/*'
+      - 'tests/**/*'
+      - 'migrations/**/*'
+      - 'Cargo.toml'
+    options:
+      runInCI: true
+
   run:
     command: 'cargo run -p homectl-server'
     local: true

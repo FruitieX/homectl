@@ -162,10 +162,8 @@ pub struct SceneConfig {
     pub groups: Option<SceneGroupsConfig>,
     pub hidden: Option<bool>,
 
-    /// Evaluates given expression to compute scene config.
-    #[ts(skip)]
-    #[serde(skip_serializing)]
-    pub expr: Option<evalexpr::Node>,
+    /// Optional JavaScript that returns per-device overrides.
+    pub script: Option<String>,
 }
 
 pub type ScenesConfig = BTreeMap<SceneId, SceneConfig>;

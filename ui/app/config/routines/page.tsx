@@ -7,12 +7,22 @@ import {
   Routine,
 } from '@/hooks/useConfig';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
+import { matchesConfigSearch } from '@/lib/configSearch';
 import { useState } from 'react';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import { useRoutineStatuses } from '@/hooks/websocket';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action } from '@/ui/ActionBuilder';
+import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
+
+const getRoutineSearchValues = (routine: Routine) => [
+  routine.id,
+  routine.name,
+  routine.enabled ? 'enabled' : 'disabled',
+  routine.rules,
+  routine.actions,
+];
 
 export default function RoutinesPage() {
   const {
@@ -26,6 +36,7 @@ export default function RoutinesPage() {
   const { data: scenes, loading: scenesLoading } = useScenes();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const { devicesState: devices } = useDevicesApi();
   const routineStatuses = useRoutineStatuses();
@@ -40,6 +51,9 @@ export default function RoutinesPage() {
 
   const sceneList = scenes.map((s) => ({ id: s.id, name: s.name }));
   const routineList = routines.map((r) => ({ id: r.id, name: r.name }));
+  const visibleRoutines = routines.filter((routine) =>
+    matchesConfigSearch(search, ...getRoutineSearchValues(routine)),
+  );
 
   if (loading || scenesLoading) {
     return (
@@ -66,32 +80,46 @@ export default function RoutinesPage() {
         </button>
       </div>
 
-      <div className="grid gap-4">
-        {routines.map((routine) => (
-          <RoutineCard
-            key={routine.id}
-            routine={routine}
-            isEditing={editingId === routine.id}
-            devices={devices}
-            groups={groups}
-            scenes={sceneList}
-            routines={routineList}
-            runtimeStatus={routineStatuses?.[routine.id]}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-            onEdit={() => setEditingId(routine.id)}
-            onSave={async (updated) => {
-              await update(routine.id, updated);
-              setEditingId(null);
-            }}
-            onCancel={() => setEditingId(null)}
-            onDelete={async () => {
-              if (confirm(`Delete routine "${routine.name}"?`)) {
-                await remove(routine.id);
-              }
-            }}
-          />
-        ))}
-      </div>
+      <ConfigListSearchBar
+        filteredCount={visibleRoutines.length}
+        onChange={setSearch}
+        placeholder="Search by name, id, rules, or actions"
+        totalCount={routines.length}
+        value={search}
+      />
+
+      {visibleRoutines.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
+          No routines match the current search.
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {visibleRoutines.map((routine) => (
+            <RoutineCard
+              key={routine.id}
+              routine={routine}
+              isEditing={editingId === routine.id}
+              devices={devices}
+              groups={groups}
+              scenes={sceneList}
+              routines={routineList}
+              runtimeStatus={routineStatuses?.[routine.id]}
+              deviceDisplayNameMap={deviceDisplayNameMap}
+              onEdit={() => setEditingId(routine.id)}
+              onSave={async (updated) => {
+                await update(routine.id, updated);
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+              onDelete={async () => {
+                if (confirm(`Delete routine "${routine.name}"?`)) {
+                  await remove(routine.id);
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {showCreate && (
         <CreateRoutineModal

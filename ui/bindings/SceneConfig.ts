@@ -2,4 +2,8 @@
 import type { SceneDevicesSearchConfig } from "./SceneDevicesSearchConfig";
 import type { SceneGroupsConfig } from "./SceneGroupsConfig";
 
-export type SceneConfig = { name: string, devices: SceneDevicesSearchConfig | null, groups: SceneGroupsConfig | null, hidden: boolean | null, };
+export type SceneConfig = { name: string, devices: SceneDevicesSearchConfig | null, groups: SceneGroupsConfig | null, hidden: boolean | null, 
+/**
+ * Optional JavaScript that returns per-device overrides.
+ */
+script: string | null, };

@@ -16,6 +16,10 @@ impl Ui {
         }
     }
 
+    pub fn with_state(ui_state: HashMap<String, serde_json::Value>) -> Self {
+        Self { ui_state }
+    }
+
     pub fn get_state(&self) -> &HashMap<String, serde_json::Value> {
         &self.ui_state
     }

@@ -49,6 +49,11 @@ pub fn mqtt_to_homectl(
         .as_ref()
         .map(|v| v.iter().map(|p| p.as_ref()).collect())
         .unwrap_or(vec![Pointer::from_static("/sensor_value")]);
+    let has_explicit_sensor_value_fields = config
+        .sensor_value_fields
+        .as_ref()
+        .map(|fields| !fields.is_empty())
+        .unwrap_or(false);
     let transition_field = config
         .transition_field
         .as_deref()
@@ -73,12 +78,10 @@ pub fn mqtt_to_homectl(
         .resolve(&value)
         .ok()
         .and_then(serde_json::Value::as_str)
-        .map(|name| name.to_string());
-
-    let Some(name) = name else {
-        error!("Missing '{name_field}' field in MQTT message");
-        return None;
-    };
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| id.clone());
 
     let color = color_field
         .resolve(&value)
@@ -133,6 +136,8 @@ pub fn mqtt_to_homectl(
         .iter()
         .find_map(|field| Some((field, field.resolve(&value).ok()?)))
         .filter(|(_, v)| !v.is_null());
+    let has_controllable_state = power.is_some() || brightness.is_some() || color.is_some();
+
     let device_state = if let Some((field, value)) = resolved_sensor_value_field {
         DeviceData::Sensor(match value {
             serde_json::Value::Number(value) => SensorDevice::Number {
@@ -157,7 +162,9 @@ pub fn mqtt_to_homectl(
                 return None;
             }
         })
-    } else if power.is_none() && brightness.is_none() && color.is_none() {
+    } else if !has_controllable_state && has_explicit_sensor_value_fields {
+        DeviceData::Sensor(SensorDevice::unknown_placeholder())
+    } else if !has_controllable_state {
         warn!("Unable to determine device type for {topic}, discarding MQTT message");
         return None;
     } else {
@@ -289,6 +296,7 @@ mod tests {
     };
 
     use super::*;
+    use jsonptr::PointerBuf;
     use ordered_float::OrderedFloat;
     use serde_json::json;
     use std::str::FromStr;
@@ -387,6 +395,66 @@ mod tests {
         };
 
         assert_eq!(device, expected);
+    }
+
+    #[test]
+    fn test_mqtt_to_homectl_name_falls_back_to_id() {
+        let mqtt_json = json!({
+            "id": "device1",
+            "sensor_value": true,
+        });
+
+        let config = MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "homectl/devices/{id}".to_string(),
+            topic_set: "homectl/set/{id}".to_string(),
+            name_field: Some(PointerBuf::from_tokens(["missing_name"])),
+            ..Default::default()
+        };
+
+        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "homectl/devices/device1",
+            integration_id,
+            &config,
+        )
+        .unwrap();
+
+        assert_eq!(device.name, "device1");
+    }
+
+    #[test]
+    fn test_mqtt_to_homectl_metadata_only_message_creates_placeholder_sensor() {
+        let mqtt_json = json!({
+            "id": "remote_1",
+            "manufacturer": "Test vendor",
+        });
+
+        let config = MqttConfig {
+            host: "localhost".to_string(),
+            port: 1883,
+            topic: "zigbee2mqtt/{id}".to_string(),
+            topic_set: "zigbee2mqtt/{id}/set".to_string(),
+            sensor_value_fields: Some(vec![PointerBuf::from_tokens(["action"])]),
+            ..Default::default()
+        };
+
+        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let device = mqtt_to_homectl(
+            mqtt_json.to_string().as_bytes(),
+            "zigbee2mqtt/remote_1",
+            integration_id,
+            &config,
+        )
+        .unwrap();
+
+        assert_eq!(device.name, "remote_1");
+        assert_eq!(
+            device.data,
+            DeviceData::Sensor(SensorDevice::unknown_placeholder())
+        );
     }
 
     #[tokio::test]

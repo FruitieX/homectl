@@ -164,50 +164,47 @@ impl Groups {
         }
     }
 
-    /// Hot-reload groups configuration from the database
-    pub async fn reload_from_db(&mut self) -> Result<()> {
-        let db_groups = config_queries::db_get_groups().await?;
-
-        // Convert DB rows to GroupsConfig
+    pub fn load_config_rows(&mut self, groups: &[config_queries::GroupRow]) {
         let mut new_config = GroupsConfig::new();
-        for group in db_groups {
-            let devices: Option<Vec<DeviceRef>> = if group.devices.is_empty() {
+        for group in groups {
+            let device_refs = group
+                .devices
+                .iter()
+                .map(|device| {
+                    DeviceRef::new_with_id(
+                        IntegrationId::from(device.integration_id.clone()),
+                        device.device_id.clone().into(),
+                    )
+                })
+                .collect::<Vec<_>>();
+
+            let devices: Option<Vec<DeviceRef>> = if device_refs.is_empty() {
                 None
             } else {
-                Some(
-                    group
-                        .devices
-                        .into_iter()
-                        .map(|d| {
-                            DeviceRef::new_with_name(
-                                IntegrationId::from(d.integration_id),
-                                d.device_name,
-                            )
-                        })
-                        .collect(),
-                )
+                Some(device_refs)
             };
 
-            let groups: Option<Vec<GroupLink>> = if group.linked_groups.is_empty() {
+            let linked_groups: Option<Vec<GroupLink>> = if group.linked_groups.is_empty() {
                 None
             } else {
                 Some(
                     group
                         .linked_groups
-                        .into_iter()
-                        .map(|g| GroupLink {
-                            group_id: GroupId(g),
+                        .iter()
+                        .cloned()
+                        .map(|group_id| GroupLink {
+                            group_id: GroupId(group_id),
                         })
                         .collect(),
                 )
             };
 
             new_config.insert(
-                GroupId(group.id),
+                GroupId(group.id.clone()),
                 GroupConfig {
-                    name: group.name,
+                    name: group.name.clone(),
                     devices,
-                    groups,
+                    groups: linked_groups,
                     hidden: Some(group.hidden),
                 },
             );
@@ -215,6 +212,13 @@ impl Groups {
 
         self.config = new_config;
         self.device_refs_by_groups = mk_device_refs_by_groups(&self.config);
+    }
+
+    /// Hot-reload groups configuration from the database
+    pub async fn reload_from_db(&mut self) -> Result<()> {
+        let db_groups = config_queries::db_get_groups().await?;
+
+        self.load_config_rows(&db_groups);
 
         Ok(())
     }

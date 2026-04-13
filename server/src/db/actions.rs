@@ -17,7 +17,7 @@ pub async fn db_update_device(device: &Device) -> Result<Device> {
 
     sqlx::query(
         "INSERT INTO devices (integration_id, device_id, name, state) \
-         VALUES (?, ?, ?, ?) \
+         VALUES ($1, $2, $3, $4) \
          ON CONFLICT (integration_id, device_id) DO UPDATE SET \
              name = excluded.name, state = excluded.state",
     )
@@ -28,29 +28,7 @@ pub async fn db_update_device(device: &Device) -> Result<Device> {
     .execute(db)
     .await?;
 
-    // Re-fetch to get the full row
-    let row: Option<(String, String, String, String)> = sqlx::query_as(
-        "SELECT integration_id, device_id, name, state FROM devices \
-         WHERE integration_id = ? AND device_id = ?",
-    )
-    .bind(&device.integration_id.to_string())
-    .bind(&device.id.to_string())
-    .fetch_optional(db)
-    .await?;
-
-    match row {
-        Some((integration_id, device_id, name, state)) => {
-            let data: DeviceData = serde_json::from_str(&state)?;
-            Ok(Device {
-                id: device_id.into(),
-                integration_id: integration_id.into(),
-                name,
-                data,
-                raw: None,
-            })
-        }
-        None => Ok(device.clone()),
-    }
+    Ok(device.clone())
 }
 
 #[allow(dead_code)]
@@ -59,7 +37,7 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Option<Device>> {
 
     let row: Option<(String, String, String, String)> = sqlx::query_as(
         "SELECT integration_id, device_id, name, state FROM devices \
-         WHERE integration_id = ? AND device_id = ?",
+         WHERE integration_id = $1 AND device_id = $2",
     )
     .bind(&key.integration_id.to_string())
     .bind(&key.device_id.to_string())
@@ -125,16 +103,16 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
 
     let mut scenes = ScenesConfig::new();
 
-    for (id, name, hidden, _script) in scene_rows {
+    for (id, name, hidden, script) in scene_rows {
         let device_states: Vec<(String, String)> =
-            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = ?")
+            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = $1")
                 .bind(&id)
                 .fetch_all(db)
                 .await
                 .unwrap_or_default();
 
         let group_states: Vec<(String, String)> =
-            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = ?")
+            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = $1")
                 .bind(&id)
                 .fetch_all(db)
                 .await
@@ -190,7 +168,7 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
             hidden,
             devices,
             groups,
-            expr: None,
+            script,
         };
 
         scenes.insert(SceneId::new(id), config);
@@ -203,15 +181,16 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
     let db = get_db_connection()?;
 
     sqlx::query(
-        "INSERT INTO scenes (id, name, hidden, updated_at) \
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+        "INSERT INTO scenes (id, name, hidden, script, updated_at) \
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
-             name = excluded.name, hidden = excluded.hidden, \
+             name = excluded.name, hidden = excluded.hidden, script = excluded.script, \
              updated_at = CURRENT_TIMESTAMP",
     )
     .bind(&scene_id.to_string())
     .bind(&config.name)
     .bind(config.hidden)
+    .bind(&config.script)
     .execute(db)
     .await?;
 
@@ -227,7 +206,7 @@ pub async fn db_store_scene_overrides(
     let overrides_str = serde_json::to_string(overrides)?;
 
     sqlx::query(
-        "INSERT INTO scene_overrides (scene_id, overrides) VALUES (?, ?) \
+        "INSERT INTO scene_overrides (scene_id, overrides) VALUES ($1, $2) \
          ON CONFLICT (scene_id) DO UPDATE SET overrides = excluded.overrides",
     )
     .bind(&scene_id.to_string())
@@ -258,7 +237,7 @@ pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
 pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
     let db = get_db_connection()?;
 
-    sqlx::query("DELETE FROM scenes WHERE id = ?")
+    sqlx::query("DELETE FROM scenes WHERE id = $1")
         .bind(&scene_id.to_string())
         .execute(db)
         .await?;
@@ -269,7 +248,7 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
 pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
     let db = get_db_connection()?;
 
-    sqlx::query("UPDATE scenes SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    sqlx::query("UPDATE scenes SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2")
         .bind(name)
         .bind(&scene_id.to_string())
         .execute(db)
@@ -284,7 +263,7 @@ pub async fn db_store_ui_state(key: &str, value: &serde_json::Value) -> Result<(
     let value_str = serde_json::to_string(value)?;
 
     sqlx::query(
-        "INSERT INTO ui_state (key, value) VALUES (?, ?) \
+        "INSERT INTO ui_state (key, value) VALUES ($1, $2) \
          ON CONFLICT (key) DO UPDATE SET value = excluded.value",
     )
     .bind(key)

@@ -37,6 +37,7 @@ tokio-stream = "=0.1.17"
 itertools = "=0.14.0"
 sqlx = { version = "=0.8.6", features = [
   "runtime-tokio-rustls",
+  "postgres",
   "sqlite",
   "migrate",
 ] }
@@ -56,13 +57,8 @@ pretty_env_logger = "=0.5.0"
 eyre = "=0.6.12"
 color-eyre = "=0.6.5"
 croner = "=2.2.0"
-evalexpr = { git = "https://github.com/FruitieX/evalexpr", branch = "rasmus/type-unsafe-context", features = [
-  "serde_support",
-  "rand",
-] }
 ordered-float = { version = "=5.0.0", features = ["serde"] }
 jsonptr = "=0.7.1"
-serde_json_path = "=0.7.2"
 serde-this-or-that = "=0.5.0"
 clap = { version = "=4.5.48", features = ["derive", "env"] }
 boa_engine = "=0.20.0"
@@ -71,6 +67,8 @@ percent-encoding = "=2.3.2"
 [dev-dependencies]
 datatest-stable = "0.2"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
+testcontainers = { version = "0.23", features = ["blocking"] }
+testcontainers-modules = { version = "0.11", features = ["postgres"] }
 which = "7.0"
 
 [[test]]

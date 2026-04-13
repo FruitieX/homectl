@@ -1,7 +1,12 @@
 'use client';
 
 import { useAppConfig } from '@/hooks/appConfig';
-import { useDeviceDisplayNames, useFloorplans, useGroups } from '@/hooks/useConfig';
+import {
+  useDeviceDisplayNames,
+  useFloorplans,
+  useGroups,
+  type Group,
+} from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useCallback, useState, useRef, useEffect } from 'react';
 import { getDeviceKey } from '@/lib/device';
@@ -31,17 +36,13 @@ const getFloorplanDeviceType = (device: Device) => {
   return 'other' as const;
 };
 
-const resolveGroupDeviceKey = (
-  groupDevice: { integration_id: string; device_name: string; device_id?: string },
-  deviceKeysByName: Record<string, string>,
-) => {
-  if (groupDevice.device_id) {
-    return `${groupDevice.integration_id}/${groupDevice.device_id}`;
+const getGroupDeviceKeys = (group: Group) => {
+  if (group.device_keys) {
+    return group.device_keys;
   }
 
-  return (
-    deviceKeysByName[`${groupDevice.integration_id}/${groupDevice.device_name}`] ??
-    `${groupDevice.integration_id}/${groupDevice.device_name}`
+  return group.devices.map(
+    (groupDevice) => `${groupDevice.integration_id}/${groupDevice.device_id}`,
   );
 };
 
@@ -71,17 +72,13 @@ export default function FloorplanPage() {
   const deviceDisplayNameMap = Object.fromEntries(
     deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
   );
-  const deviceKeysByName = Object.fromEntries(
-    devices.map((device) => [`${device.integration_id}/${device.name}`, getDeviceKey(device)]),
-  );
   const availableGroups = groups.map((group) => ({
     id: group.id,
     name: group.name,
     hidden: group.hidden,
   }));
   const groupIdsByDeviceKey = groups.reduce<Record<string, string[]>>((result, group) => {
-      for (const groupDevice of group.devices) {
-        const deviceKey = resolveGroupDeviceKey(groupDevice, deviceKeysByName);
+      for (const deviceKey of getGroupDeviceKeys(group)) {
         if (!result[deviceKey]) {
           result[deviceKey] = [];
         }

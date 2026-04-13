@@ -1,12 +1,25 @@
 'use client';
 
 import { useIntegrations, Integration } from '@/hooks/useConfig';
+import { matchesConfigSearch } from '@/lib/configSearch';
+import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { useState, useCallback } from 'react';
+
+const getIntegrationSearchValues = (integration: Integration) => [
+  integration.id,
+  integration.plugin,
+  integration.enabled ? 'enabled' : 'disabled',
+  integration.config,
+];
 
 export default function IntegrationsPage() {
   const { data: integrations, loading, error, create, update, remove } = useIntegrations();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const visibleIntegrations = integrations.filter((integration) =>
+    matchesConfigSearch(search, ...getIntegrationSearchValues(integration)),
+  );
 
   if (loading) {
     return (
@@ -36,27 +49,41 @@ export default function IntegrationsPage() {
         </button>
       </div>
 
+      <ConfigListSearchBar
+        filteredCount={visibleIntegrations.length}
+        onChange={setSearch}
+        placeholder="Search by id, plugin, or config"
+        totalCount={integrations.length}
+        value={search}
+      />
+
       {/* Integrations list */}
-      <div className="grid gap-4">
-        {integrations.map((integration) => (
-          <IntegrationCard
-            key={integration.id}
-            integration={integration}
-            isEditing={editingId === integration.id}
-            onEdit={() => setEditingId(integration.id)}
-            onSave={async (updated) => {
-              await update(integration.id, updated);
-              setEditingId(null);
-            }}
-            onCancel={() => setEditingId(null)}
-            onDelete={async () => {
-              if (confirm(`Delete integration "${integration.id}"?`)) {
-                await remove(integration.id);
-              }
-            }}
-          />
-        ))}
-      </div>
+      {visibleIntegrations.length === 0 ? (
+        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
+          No integrations match the current search.
+        </div>
+      ) : (
+        <div className="grid gap-4">
+          {visibleIntegrations.map((integration) => (
+            <IntegrationCard
+              key={integration.id}
+              integration={integration}
+              isEditing={editingId === integration.id}
+              onEdit={() => setEditingId(integration.id)}
+              onSave={async (updated) => {
+                await update(integration.id, updated);
+                setEditingId(null);
+              }}
+              onCancel={() => setEditingId(null)}
+              onDelete={async () => {
+                if (confirm(`Delete integration "${integration.id}"?`)) {
+                  await remove(integration.id);
+                }
+              }}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Create modal */}
       {showCreate && (

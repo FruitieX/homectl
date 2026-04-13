@@ -1,77 +1,309 @@
 'use client';
 
 import { useAppConfig } from '@/hooks/appConfig';
-import { useState, useRef } from 'react';
+import { Modal } from 'react-daisyui';
+import { useRef, useState } from 'react';
+
+type MigrationSelection = {
+  core: boolean;
+  integrations: boolean;
+  groups: boolean;
+  scenes: boolean;
+  routines: boolean;
+};
+
+type MigrationSectionKey = keyof MigrationSelection;
+
+type MigrationPreview = {
+  core: {
+    warmup_time_seconds: number;
+  };
+  integrations: unknown[];
+  groups: unknown[];
+  scenes: unknown[];
+  routines: unknown[];
+};
+
+type MigrationPreviewData = {
+  preview: MigrationPreview;
+  validation_errors: string[];
+};
+
+type MigrationApplyResult = {
+  core: boolean;
+  integrations: number;
+  groups: number;
+  scenes: number;
+  routines: number;
+};
+
+type ApiResult<T> = {
+  success: boolean;
+  data?: T;
+  error?: string;
+};
+
+const defaultMigrationSelection: MigrationSelection = {
+  core: false,
+  integrations: true,
+  groups: false,
+  scenes: false,
+  routines: false,
+};
+
+const migrationSectionOptions: Array<{
+  key: MigrationSectionKey;
+  label: string;
+  description: string;
+}> = [
+  {
+    key: 'integrations',
+    label: 'Integrations',
+    description: 'Load integrations first so they can discover devices.',
+  },
+  {
+    key: 'core',
+    label: 'Core Settings',
+    description: 'Warmup and other shared runtime settings.',
+  },
+  {
+    key: 'groups',
+    label: 'Groups',
+    description: 'Import group definitions after devices are available.',
+  },
+  {
+    key: 'scenes',
+    label: 'Scenes',
+    description: 'Import scene device links after discovery finishes.',
+  },
+  {
+    key: 'routines',
+    label: 'Routines',
+    description: 'Import rules and actions once device refs can resolve.',
+  },
+];
+
+function hasSelectedSections(selection: MigrationSelection) {
+  return Object.values(selection).some(Boolean);
+}
+
+function buildMigrationQuery(selection: MigrationSelection) {
+  const query = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(selection)) {
+    query.set(key, String(value));
+  }
+
+  return query.toString();
+}
+
+function getSelectedSectionLabels(selection: MigrationSelection) {
+  return migrationSectionOptions
+    .filter((option) => selection[option.key])
+    .map((option) => option.label);
+}
+
+function formatPreviewSuccess(selection: MigrationSelection) {
+  const selected = getSelectedSectionLabels(selection);
+
+  if (selected.length === 0) {
+    return 'Select at least one section to import.';
+  }
+
+  return `${selected.join(', ')} parsed and validated successfully. Review the preview below.`;
+}
+
+function formatPreviewWarning(selection: MigrationSelection, validationErrors: string[]) {
+  const selected = getSelectedSectionLabels(selection);
+  const label = selected.join(', ');
+  const issueLabel = validationErrors.length === 1 ? 'warning' : 'warnings';
+
+  return `${label} parsed successfully with ${validationErrors.length} ${issueLabel}. The affected entries will be dropped if you continue with the import.`;
+}
+
+function formatMigrationSuccess(
+  result: MigrationApplyResult,
+  selection: MigrationSelection,
+) {
+  const parts: string[] = [];
+
+  if (result.core) {
+    parts.push('updated core settings');
+  }
+  if (selection.integrations) {
+    parts.push(`imported ${result.integrations} integrations`);
+  }
+  if (selection.groups) {
+    parts.push(`imported ${result.groups} groups`);
+  }
+  if (selection.scenes) {
+    parts.push(`imported ${result.scenes} scenes`);
+  }
+  if (selection.routines) {
+    parts.push(`imported ${result.routines} routines`);
+  }
+
+  const summary = parts.length > 0 ? `${parts.join(', ')}.` : 'made no changes.';
+  const integrationsOnly =
+    selection.integrations &&
+    !selection.core &&
+    !selection.groups &&
+    !selection.scenes &&
+    !selection.routines;
+
+  if (integrationsOnly) {
+    return `Migration complete! ${summary} Wait for device discovery and the warmup period to finish, then rerun the migration for the remaining sections.`;
+  }
+
+  return `Migration complete! ${summary}`;
+}
 
 export default function MigrationPage() {
   const { apiEndpoint } = useAppConfig();
   const [loading, setLoading] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [preview, setPreview] = useState<Record<string, unknown> | null>(null);
+  const [preview, setPreview] = useState<MigrationPreview | null>(null);
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
+  const [selection, setSelection] = useState<MigrationSelection>(defaultMigrationSelection);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const selectedSectionLabels = getSelectedSectionLabels(selection);
+
+  const handleSelectionChange = (
+    section: MigrationSectionKey,
+    checked: boolean,
+  ) => {
+    setSelection((current) => ({
+      ...current,
+      [section]: checked,
+    }));
+    setError(null);
+    setSuccess(null);
+    setConfirmOpen(false);
+    setValidationErrors([]);
+    setPreview(null);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const toggleSelection = (section: MigrationSectionKey) => {
+    handleSelectionChange(section, !selection[section]);
+  };
+
   const handleTomlUpload = async (file: File) => {
+    if (!hasSelectedSections(selection)) {
+      setError('Select at least one section to import.');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
+      setSuccess(null);
+      setConfirmOpen(false);
+      setValidationErrors([]);
       setPreview(null);
 
       const text = await file.text();
 
-      // Send to migration preview endpoint
-      const response = await fetch(`${apiEndpoint}/api/v1/config/migrate/preview`, {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/migrate/preview?${buildMigrationQuery(selection)}`,
+        {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain' },
         body: text,
-      });
+        },
+      );
 
-      const result = await response.json();
-      if (result.success) {
-        setPreview(result.data);
-        setSuccess('TOML parsed successfully. Review the preview below.');
+      const result: ApiResult<MigrationPreviewData> = await response.json();
+      if (result.success && result.data) {
+        setPreview(result.data.preview);
+        setValidationErrors(result.data.validation_errors);
+        setSuccess(
+          result.data.validation_errors.length > 0
+            ? formatPreviewWarning(selection, result.data.validation_errors)
+            : formatPreviewSuccess(selection),
+        );
       } else {
+        setValidationErrors([]);
         setError(result.error || 'Failed to parse TOML');
       }
     } catch (e) {
+      setValidationErrors([]);
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleMigrate = async () => {
+  const applyMigration = async () => {
     if (!preview) return;
 
-    try {
-      setLoading(true);
-      setError(null);
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
 
+    let result: ApiResult<MigrationApplyResult>;
+
+    try {
       const response = await fetch(`${apiEndpoint}/api/v1/config/migrate/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(preview),
+        body: JSON.stringify({ preview, selection }),
       });
 
-      const result = await response.json();
-      if (result.success) {
-        setSuccess(
-          `Migration complete! Imported ${result.data.integrations || 0} integrations, ` +
-            `${result.data.groups || 0} groups, ${result.data.scenes || 0} scenes, ` +
-            `${result.data.routines || 0} routines.`,
-        );
-        setPreview(null);
-      } else {
-        setError(result.error || 'Migration failed');
-      }
+      result = await response.json();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Migration failed');
-    } finally {
       setLoading(false);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
+      return;
     }
+
+    if (result.success && result.data) {
+      setSuccess(formatMigrationSuccess(result.data, selection));
+      setValidationErrors([]);
+      setPreview(null);
+      setConfirmOpen(false);
+    } else {
+      setError(result.error || 'Migration failed');
+    }
+
+    setLoading(false);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleMigrate = async () => {
+    if (!hasSelectedSections(selection)) {
+      setError('Select at least one section to import.');
+      return;
+    }
+
+    if (!preview) {
+      return;
+    }
+
+    if (validationErrors.length > 0) {
+      setConfirmOpen(true);
+      return;
+    }
+
+    await applyMigration();
+  };
+
+  const handleConfirmMigrate = async () => {
+    await applyMigration();
   };
 
   return (
@@ -97,38 +329,69 @@ export default function MigrationPage() {
         <div>
           <h3 className="font-bold">One-time Migration</h3>
           <div className="text-sm">
-            This tool imports your existing Settings.toml configuration into the database.
-            Existing entries with matching IDs will be updated. This is intended for
-            initial migration from file-based config to database config.
+            This tool imports your existing Settings.toml configuration into the
+            database. Use it in two passes: import integrations first, wait for device
+            discovery and the warmup period, then rerun the migration for groups,
+            scenes, and routines.
           </div>
         </div>
       </div>
 
-      {error && (
-        <div className="alert alert-error">
-          <span>{error}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
-      )}
+      <div className="card bg-base-200 shadow-xl">
+        <div className="card-body">
+          <h2 className="card-title">Import Scope</h2>
+          <p className="text-sm opacity-70">
+            Preview and apply only use the sections checked below.
+          </p>
 
-      {success && (
-        <div className="alert alert-success">
-          <span>{success}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setSuccess(null)}>
-            ✕
-          </button>
+          <div className="alert alert-info mt-4">
+            <span className="text-sm leading-6">
+              Recommended flow: first import integrations only, then wait for
+              the integrations to discover devices. This is needed to be able to
+              translate device names as possibly used in the config into device
+              ID:s correctly. After that, upload the same TOML again and import
+              the remaining sections.
+            </span>
+          </div>
+
+          <div className="mt-4 grid max-w-3xl gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {migrationSectionOptions.map((option) => (
+              <button
+                type="button"
+                key={option.key}
+                aria-pressed={selection[option.key]}
+                className={`flex w-full items-start justify-between gap-3 rounded-xl border p-4 text-left transition-none ${
+                  selection[option.key]
+                    ? 'border-primary bg-base-100'
+                    : 'border-base-300 bg-base-100/60'
+                }`}
+                disabled={loading}
+                onClick={() => toggleSelection(option.key)}
+              >
+                <div>
+                  <div className="font-medium">{option.label}</div>
+                  <div className="text-xs opacity-70">{option.description}</div>
+                </div>
+                <span
+                  className={`badge badge-sm shrink-0 ${
+                    selection[option.key] ? 'badge-primary' : 'badge-ghost'
+                  }`}
+                >
+                  {selection[option.key] ? 'Include' : 'Skip'}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
-      )}
+      </div>
 
       {/* Upload section */}
       <div className="card bg-base-200 shadow-xl">
         <div className="card-body">
           <h2 className="card-title">Upload Settings.toml</h2>
           <p className="text-sm opacity-70">
-            Upload your existing TOML configuration file to preview and migrate to the
-            database.
+            Upload your existing TOML configuration file. Preview and apply will only
+            use the sections selected above.
           </p>
 
           <div className="form-control mt-4">
@@ -154,23 +417,67 @@ export default function MigrationPage() {
         </div>
       </div>
 
+
+      {error && (
+        <div className="alert alert-error">
+          <span className="whitespace-pre-wrap text-sm">{error}</span>
+          <button className="btn btn-sm btn-ghost" onClick={() => setError(null)}>
+            ✕
+          </button>
+        </div>
+      )}
+
+      {preview && validationErrors.length > 0 && (
+        <div className="alert alert-warning">
+          <div>
+            <h3 className="font-bold">Entries Will Be Dropped On Import</h3>
+            <div className="mt-1 text-sm opacity-80">
+              Some entries in the uploaded TOML could not be matched to existing
+              devices. You can proceed with the import, but the affected entries
+              below will be skipped.
+            </div>
+            <ul className="mt-3 list-disc list-inside space-y-1 text-sm whitespace-pre-wrap">
+              {validationErrors.map((issue) => (
+                <li key={issue}>{issue}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {success && (
+        <div className="alert alert-success">
+          <span>{success}</span>
+          <button className="btn btn-sm btn-ghost" onClick={() => setSuccess(null)}>
+            ✕
+          </button>
+        </div>
+      )}
+
       {/* Preview section */}
       {preview && (
         <div className="card bg-base-200 shadow-xl">
           <div className="card-body">
             <h2 className="card-title">Migration Preview</h2>
             <p className="text-sm opacity-70">
-              Review the parsed configuration before applying the migration.
+              Review the selected sections before applying this migration run.
             </p>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-              <PreviewSection
-                title="Integrations"
-                items={preview.integrations as unknown[]}
-              />
-              <PreviewSection title="Groups" items={preview.groups as unknown[]} />
-              <PreviewSection title="Scenes" items={preview.scenes as unknown[]} />
-              <PreviewSection title="Routines" items={preview.routines as unknown[]} />
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+              <span className="opacity-70">Previewing:</span>
+              {selectedSectionLabels.map((label) => (
+                <span key={label} className="badge badge-outline">
+                  {label}
+                </span>
+              ))}
+            </div>
+
+            <div className="grid gap-4 mt-4 md:grid-cols-2 xl:grid-cols-5">
+              <PreviewSection title="Core Settings" count={selection.core ? 1 : 0} />
+              <PreviewSection title="Integrations" count={preview.integrations.length} />
+              <PreviewSection title="Groups" count={preview.groups.length} />
+              <PreviewSection title="Scenes" count={preview.scenes.length} />
+              <PreviewSection title="Routines" count={preview.routines.length} />
             </div>
 
             <details className="collapse bg-base-300 mt-4">
@@ -188,6 +495,7 @@ export default function MigrationPage() {
               <button
                 className="btn btn-ghost"
                 onClick={() => {
+                  setValidationErrors([]);
                   setPreview(null);
                   if (fileInputRef.current) {
                     fileInputRef.current.value = '';
@@ -201,43 +509,88 @@ export default function MigrationPage() {
                 onClick={handleMigrate}
                 disabled={loading}
               >
-                Apply Migration
+                Apply Selected Sections
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Instructions */}
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Migration Steps</h2>
-          <ol className="list-decimal list-inside space-y-2 mt-2">
-            <li>Backup your current Settings.toml file</li>
-            <li>Upload the TOML file using the form above</li>
-            <li>Review the parsed configuration in the preview</li>
-            <li>Click &quot;Apply Migration&quot; to import into the database</li>
-            <li>Verify the imported configuration in the config editors</li>
-            <li>
-              Once verified, you can remove the TOML sections from your Settings.toml
-              (keep only server settings like port, database URL, etc.)
-            </li>
-          </ol>
-        </div>
-      </div>
+      <Modal.Legacy
+        responsive
+        open={confirmOpen}
+        onClickBackdrop={() => {
+          if (!loading) {
+            setConfirmOpen(false);
+          }
+        }}
+      >
+        <button
+          type="button"
+          className="btn btn-sm btn-circle absolute right-2 top-2"
+          onClick={() => setConfirmOpen(false)}
+          disabled={loading}
+          aria-label="Close warning confirmation"
+        >
+          ✕
+        </button>
+
+        <Modal.Header className="font-bold">
+          Apply migration with warnings?
+        </Modal.Header>
+
+        <Modal.Body>
+          <p className="text-sm leading-6 opacity-80">
+            This migration preview contains {validationErrors.length} name-resolution{' '}
+            {validationErrors.length === 1 ? 'issue' : 'issues'}.
+          </p>
+          <p className="mt-3 text-sm leading-6 opacity-80">
+            If you continue, the affected entries will be dropped from the
+            imported groups, scenes, routines, or other migrated config.
+          </p>
+
+          <div className="alert alert-warning mt-4">
+            <div>
+              <h3 className="font-bold">Affected entries</h3>
+              <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 text-sm whitespace-pre-wrap">
+                {validationErrors.map((issue) => (
+                  <li key={issue}>{issue}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </Modal.Body>
+
+        <Modal.Actions>
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setConfirmOpen(false)}
+            disabled={loading}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-warning"
+            onClick={handleConfirmMigrate}
+            disabled={loading}
+          >
+            Apply anyway
+          </button>
+        </Modal.Actions>
+      </Modal.Legacy>
     </div>
   );
 }
 
 function PreviewSection({
   title,
-  items,
+  count,
 }: {
   title: string;
-  items: unknown[] | undefined;
+  count: number;
 }) {
-  const count = items?.length || 0;
-
   return (
     <div className="p-4 bg-base-300 rounded">
       <div className="text-3xl font-bold">{count}</div>

@@ -1,6 +1,6 @@
 //! Database queries for configuration entities
 //!
-//! This module provides CRUD operations for all configuration stored in SQLite:
+//! This module provides CRUD operations for all configuration stored in PostgreSQL:
 //! - Integrations
 //! - Groups (with devices and links)
 //! - Scenes (with device and group states)
@@ -38,8 +38,7 @@ pub struct GroupRow {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GroupDeviceRow {
     pub integration_id: String,
-    pub device_name: String,
-    pub device_id: Option<String>,
+    pub device_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -163,6 +162,8 @@ pub struct ConfigExport {
     pub floorplans: Vec<FloorplanExportRow>,
     pub device_positions: Vec<DevicePositionRow>,
     #[serde(default)]
+    pub group_positions: Vec<GroupPositionRow>,
+    #[serde(default)]
     pub device_display_overrides: Vec<DeviceDisplayNameRow>,
     #[serde(default)]
     pub device_sensor_configs: Vec<DeviceSensorConfigRow>,
@@ -190,7 +191,7 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
 pub async fn db_update_core_config(config: &CoreConfigRow) -> Result<()> {
     let db = get_db_connection()?;
 
-    sqlx::query("UPDATE core_config SET warmup_time_seconds = ?, updated_at = CURRENT_TIMESTAMP WHERE id = 1")
+    sqlx::query("UPDATE core_config SET warmup_time_seconds = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 1")
         .bind(config.warmup_time_seconds)
         .execute(db)
         .await?;
@@ -221,7 +222,7 @@ pub async fn db_upsert_device_display_override(row: &DeviceDisplayNameRow) -> Re
 
     sqlx::query(
         "INSERT INTO device_display_overrides (device_key, display_name, updated_at) \
-         VALUES (?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, CURRENT_TIMESTAMP) \
          ON CONFLICT (device_key) DO UPDATE SET \
              display_name = excluded.display_name, \
              updated_at = CURRENT_TIMESTAMP",
@@ -237,7 +238,7 @@ pub async fn db_upsert_device_display_override(row: &DeviceDisplayNameRow) -> Re
 pub async fn db_delete_device_display_override(device_key: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM device_display_overrides WHERE device_key = ?")
+    let result = sqlx::query("DELETE FROM device_display_overrides WHERE device_key = $1")
         .bind(device_key)
         .execute(db)
         .await?;
@@ -272,7 +273,7 @@ pub async fn db_upsert_device_sensor_config(row: &DeviceSensorConfigRow) -> Resu
 
     sqlx::query(
         "INSERT INTO device_sensor_configs (device_ref, interaction_kind, config_json, updated_at) \
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) \
          ON CONFLICT (device_ref) DO UPDATE SET \
              interaction_kind = excluded.interaction_kind, \
              config_json = excluded.config_json, \
@@ -290,7 +291,7 @@ pub async fn db_upsert_device_sensor_config(row: &DeviceSensorConfigRow) -> Resu
 pub async fn db_delete_device_sensor_config(device_ref: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM device_sensor_configs WHERE device_ref = ?")
+    let result = sqlx::query("DELETE FROM device_sensor_configs WHERE device_ref = $1")
         .bind(device_ref)
         .execute(db)
         .await?;
@@ -325,7 +326,7 @@ pub async fn db_get_integration(id: &str) -> Result<Option<IntegrationRow>> {
     let db = get_db_connection()?;
 
     let row: Option<(String, String, String, bool)> =
-        sqlx::query_as("SELECT id, plugin, config, enabled FROM integrations WHERE id = ?")
+        sqlx::query_as("SELECT id, plugin, config, enabled FROM integrations WHERE id = $1")
             .bind(id)
             .fetch_optional(db)
             .await?;
@@ -345,7 +346,7 @@ pub async fn db_upsert_integration(integration: &IntegrationRow) -> Result<()> {
 
     sqlx::query(
         "INSERT INTO integrations (id, plugin, config, enabled, updated_at) \
-         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              plugin = excluded.plugin, \
              config = excluded.config, \
@@ -365,7 +366,7 @@ pub async fn db_upsert_integration(integration: &IntegrationRow) -> Result<()> {
 pub async fn db_delete_integration(id: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM integrations WHERE id = ?")
+    let result = sqlx::query("DELETE FROM integrations WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -387,9 +388,9 @@ pub async fn db_get_groups() -> Result<Vec<GroupRow>> {
 
     let mut result = Vec::new();
     for (id, name, hidden) in groups {
-        let devices: Vec<(String, String, Option<String>)> = sqlx::query_as(
-            "SELECT integration_id, device_name, device_id \
-             FROM group_devices WHERE group_id = ? ORDER BY sort_order",
+        let devices: Vec<(String, String)> = sqlx::query_as(
+            "SELECT integration_id, device_id \
+             FROM group_devices WHERE group_id = $1 ORDER BY sort_order",
         )
         .bind(&id)
         .fetch_all(db)
@@ -397,7 +398,7 @@ pub async fn db_get_groups() -> Result<Vec<GroupRow>> {
 
         let links: Vec<(String,)> = sqlx::query_as(
             "SELECT child_group_id FROM group_links \
-             WHERE parent_group_id = ? ORDER BY sort_order",
+             WHERE parent_group_id = $1 ORDER BY sort_order",
         )
         .bind(&id)
         .fetch_all(db)
@@ -409,9 +410,8 @@ pub async fn db_get_groups() -> Result<Vec<GroupRow>> {
             hidden,
             devices: devices
                 .into_iter()
-                .map(|(integration_id, device_name, device_id)| GroupDeviceRow {
+                .map(|(integration_id, device_id)| GroupDeviceRow {
                     integration_id,
-                    device_name,
                     device_id,
                 })
                 .collect(),
@@ -426,7 +426,7 @@ pub async fn db_get_group(id: &str) -> Result<Option<GroupRow>> {
     let db = get_db_connection()?;
 
     let group: Option<(String, String, bool)> =
-        sqlx::query_as("SELECT id, name, hidden FROM groups WHERE id = ?")
+        sqlx::query_as("SELECT id, name, hidden FROM groups WHERE id = $1")
             .bind(id)
             .fetch_optional(db)
             .await?;
@@ -435,9 +435,9 @@ pub async fn db_get_group(id: &str) -> Result<Option<GroupRow>> {
         return Ok(None);
     };
 
-    let devices: Vec<(String, String, Option<String>)> = sqlx::query_as(
-        "SELECT integration_id, device_name, device_id \
-         FROM group_devices WHERE group_id = ? ORDER BY sort_order",
+    let devices: Vec<(String, String)> = sqlx::query_as(
+        "SELECT integration_id, device_id \
+         FROM group_devices WHERE group_id = $1 ORDER BY sort_order",
     )
     .bind(id)
     .fetch_all(db)
@@ -445,7 +445,7 @@ pub async fn db_get_group(id: &str) -> Result<Option<GroupRow>> {
 
     let links: Vec<(String,)> = sqlx::query_as(
         "SELECT child_group_id FROM group_links \
-         WHERE parent_group_id = ? ORDER BY sort_order",
+         WHERE parent_group_id = $1 ORDER BY sort_order",
     )
     .bind(id)
     .fetch_all(db)
@@ -457,9 +457,8 @@ pub async fn db_get_group(id: &str) -> Result<Option<GroupRow>> {
         hidden,
         devices: devices
             .into_iter()
-            .map(|(integration_id, device_name, device_id)| GroupDeviceRow {
+            .map(|(integration_id, device_id)| GroupDeviceRow {
                 integration_id,
-                device_name,
                 device_id,
             })
             .collect(),
@@ -472,7 +471,7 @@ pub async fn db_upsert_group(group: &GroupRow) -> Result<()> {
 
     sqlx::query(
         "INSERT INTO groups (id, name, hidden, updated_at) \
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              name = excluded.name, \
              hidden = excluded.hidden, \
@@ -485,12 +484,12 @@ pub async fn db_upsert_group(group: &GroupRow) -> Result<()> {
     .await?;
 
     // Delete existing devices and links
-    sqlx::query("DELETE FROM group_devices WHERE group_id = ?")
+    sqlx::query("DELETE FROM group_devices WHERE group_id = $1")
         .bind(&group.id)
         .execute(db)
         .await?;
 
-    sqlx::query("DELETE FROM group_links WHERE parent_group_id = ?")
+    sqlx::query("DELETE FROM group_links WHERE parent_group_id = $1")
         .bind(&group.id)
         .execute(db)
         .await?;
@@ -498,12 +497,11 @@ pub async fn db_upsert_group(group: &GroupRow) -> Result<()> {
     // Insert devices
     for (i, device) in group.devices.iter().enumerate() {
         sqlx::query(
-            "INSERT INTO group_devices (group_id, integration_id, device_name, device_id, sort_order) \
-             VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO group_devices (group_id, integration_id, device_id, sort_order) \
+             VALUES ($1, $2, $3, $4)",
         )
         .bind(&group.id)
         .bind(&device.integration_id)
-        .bind(&device.device_name)
         .bind(&device.device_id)
         .bind(i as i32)
         .execute(db)
@@ -514,7 +512,7 @@ pub async fn db_upsert_group(group: &GroupRow) -> Result<()> {
     for (i, linked_group) in group.linked_groups.iter().enumerate() {
         sqlx::query(
             "INSERT INTO group_links (parent_group_id, child_group_id, sort_order) \
-             VALUES (?, ?, ?)",
+             VALUES ($1, $2, $3)",
         )
         .bind(&group.id)
         .bind(linked_group)
@@ -529,7 +527,7 @@ pub async fn db_upsert_group(group: &GroupRow) -> Result<()> {
 pub async fn db_delete_group(id: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM groups WHERE id = ?")
+    let result = sqlx::query("DELETE FROM groups WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -551,14 +549,15 @@ pub async fn db_get_config_scenes() -> Result<Vec<SceneRow>> {
 
     let mut result = Vec::new();
     for (id, name, hidden, script) in scenes {
-        let device_states: Vec<(String, String)> =
-            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = ?")
-                .bind(&id)
-                .fetch_all(db)
-                .await?;
+        let device_states: Vec<(String, String)> = sqlx::query_as(
+            "SELECT device_key, config FROM scene_device_states WHERE scene_id = $1",
+        )
+        .bind(&id)
+        .fetch_all(db)
+        .await?;
 
         let group_states: Vec<(String, String)> =
-            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = ?")
+            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = $1")
                 .bind(&id)
                 .fetch_all(db)
                 .await?;
@@ -586,7 +585,7 @@ pub async fn db_get_config_scene(id: &str) -> Result<Option<SceneRow>> {
     let db = get_db_connection()?;
 
     let scene: Option<(String, String, bool, Option<String>)> =
-        sqlx::query_as("SELECT id, name, hidden, script FROM scenes WHERE id = ?")
+        sqlx::query_as("SELECT id, name, hidden, script FROM scenes WHERE id = $1")
             .bind(id)
             .fetch_optional(db)
             .await?;
@@ -596,13 +595,13 @@ pub async fn db_get_config_scene(id: &str) -> Result<Option<SceneRow>> {
     };
 
     let device_states: Vec<(String, String)> =
-        sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = ?")
+        sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = $1")
             .bind(id)
             .fetch_all(db)
             .await?;
 
     let group_states: Vec<(String, String)> =
-        sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = ?")
+        sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = $1")
             .bind(id)
             .fetch_all(db)
             .await?;
@@ -628,7 +627,7 @@ pub async fn db_upsert_config_scene(scene: &SceneRow) -> Result<()> {
 
     sqlx::query(
         "INSERT INTO scenes (id, name, hidden, script, updated_at) \
-         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              name = excluded.name, \
              hidden = excluded.hidden, \
@@ -643,12 +642,12 @@ pub async fn db_upsert_config_scene(scene: &SceneRow) -> Result<()> {
     .await?;
 
     // Delete existing states
-    sqlx::query("DELETE FROM scene_device_states WHERE scene_id = ?")
+    sqlx::query("DELETE FROM scene_device_states WHERE scene_id = $1")
         .bind(&scene.id)
         .execute(db)
         .await?;
 
-    sqlx::query("DELETE FROM scene_group_states WHERE scene_id = ?")
+    sqlx::query("DELETE FROM scene_group_states WHERE scene_id = $1")
         .bind(&scene.id)
         .execute(db)
         .await?;
@@ -657,7 +656,7 @@ pub async fn db_upsert_config_scene(scene: &SceneRow) -> Result<()> {
     for (device_key, config) in &scene.device_states {
         let config_str = serde_json::to_string(config)?;
         sqlx::query(
-            "INSERT INTO scene_device_states (scene_id, device_key, config) VALUES (?, ?, ?)",
+            "INSERT INTO scene_device_states (scene_id, device_key, config) VALUES ($1, $2, $3)",
         )
         .bind(&scene.id)
         .bind(device_key)
@@ -669,12 +668,14 @@ pub async fn db_upsert_config_scene(scene: &SceneRow) -> Result<()> {
     // Insert group states
     for (group_id, config) in &scene.group_states {
         let config_str = serde_json::to_string(config)?;
-        sqlx::query("INSERT INTO scene_group_states (scene_id, group_id, config) VALUES (?, ?, ?)")
-            .bind(&scene.id)
-            .bind(group_id)
-            .bind(&config_str)
-            .execute(db)
-            .await?;
+        sqlx::query(
+            "INSERT INTO scene_group_states (scene_id, group_id, config) VALUES ($1, $2, $3)",
+        )
+        .bind(&scene.id)
+        .bind(group_id)
+        .bind(&config_str)
+        .execute(db)
+        .await?;
     }
 
     Ok(())
@@ -683,7 +684,7 @@ pub async fn db_upsert_config_scene(scene: &SceneRow) -> Result<()> {
 pub async fn db_delete_config_scene(id: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM scenes WHERE id = ?")
+    let result = sqlx::query("DELETE FROM scenes WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -719,7 +720,7 @@ pub async fn db_get_routine(id: &str) -> Result<Option<RoutineRow>> {
     let db = get_db_connection()?;
 
     let row: Option<(String, String, bool, String, String)> =
-        sqlx::query_as("SELECT id, name, enabled, rules, actions FROM routines WHERE id = ?")
+        sqlx::query_as("SELECT id, name, enabled, rules, actions FROM routines WHERE id = $1")
             .bind(id)
             .fetch_optional(db)
             .await?;
@@ -741,7 +742,7 @@ pub async fn db_upsert_routine(routine: &RoutineRow) -> Result<()> {
 
     sqlx::query(
         "INSERT INTO routines (id, name, enabled, rules, actions, updated_at) \
-         VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              name = excluded.name, \
              enabled = excluded.enabled, \
@@ -763,7 +764,7 @@ pub async fn db_upsert_routine(routine: &RoutineRow) -> Result<()> {
 pub async fn db_delete_routine(id: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM routines WHERE id = ?")
+    let result = sqlx::query("DELETE FROM routines WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -783,7 +784,7 @@ pub async fn db_get_floorplan_by_id(id: &str) -> Result<Option<FloorplanRow>> {
     let db = get_db_connection()?;
 
     let row: Option<(Option<Vec<u8>>, Option<String>, Option<i32>, Option<i32>)> = sqlx::query_as(
-        "SELECT image_data, image_mime_type, width, height FROM floorplans WHERE id = ?",
+        "SELECT image_data, image_mime_type, width, height FROM floorplans WHERE id = $1",
     )
     .bind(id)
     .fetch_optional(db)
@@ -813,7 +814,7 @@ pub async fn db_upsert_floorplan_by_id(id: &str, floorplan: &FloorplanRow) -> Re
 
     sqlx::query(
         "INSERT INTO floorplans (id, name, image_data, image_mime_type, width, height, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              image_data = excluded.image_data, \
              image_mime_type = excluded.image_mime_type, \
@@ -843,7 +844,7 @@ pub async fn db_clear_floorplan_image(id: &str) -> Result<bool> {
              width = NULL, \
              height = NULL, \
              updated_at = CURRENT_TIMESTAMP \
-         WHERE id = ?",
+         WHERE id = $1",
     )
     .bind(id)
     .execute(db)
@@ -860,7 +861,7 @@ pub async fn db_get_floorplan_grid_by_id(id: &str) -> Result<Option<FloorplanGri
     let db = get_db_connection()?;
 
     let row: Option<(Option<String>,)> =
-        sqlx::query_as("SELECT grid_data FROM floorplans WHERE id = ?")
+        sqlx::query_as("SELECT grid_data FROM floorplans WHERE id = $1")
             .bind(id)
             .fetch_optional(db)
             .await?;
@@ -882,7 +883,7 @@ pub async fn db_upsert_floorplan_grid_by_id(id: &str, grid: &str) -> Result<()> 
 
     sqlx::query(
         "INSERT INTO floorplans (id, name, grid_data, updated_at) \
-         VALUES (?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              grid_data = excluded.grid_data, \
              updated_at = CURRENT_TIMESTAMP",
@@ -955,7 +956,7 @@ pub async fn db_upsert_floorplan_export(
     sqlx::query(
         "INSERT INTO floorplans \
          (id, name, image_data, image_mime_type, width, height, grid_data, sort_order, updated_at) \
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP) \
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP) \
          ON CONFLICT (id) DO UPDATE SET \
              name = excluded.name, \
              image_data = excluded.image_data, \
@@ -985,7 +986,7 @@ pub async fn db_create_floorplan(floorplan: &FloorplanMetadataRow) -> Result<()>
 
     sqlx::query(
         "INSERT INTO floorplans (id, name, sort_order, updated_at) \
-         VALUES (?, ?, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM floorplans), CURRENT_TIMESTAMP)",
+         VALUES ($1, $2, (SELECT COALESCE(MAX(sort_order), -1) + 1 FROM floorplans), CURRENT_TIMESTAMP)",
     )
     .bind(&floorplan.id)
     .bind(&floorplan.name)
@@ -998,7 +999,7 @@ pub async fn db_create_floorplan(floorplan: &FloorplanMetadataRow) -> Result<()>
 pub async fn db_update_floorplan_metadata(floorplan: &FloorplanMetadataRow) -> Result<()> {
     let db = get_db_connection()?;
 
-    sqlx::query("UPDATE floorplans SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    sqlx::query("UPDATE floorplans SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2")
         .bind(&floorplan.name)
         .bind(&floorplan.id)
         .execute(db)
@@ -1010,7 +1011,7 @@ pub async fn db_update_floorplan_metadata(floorplan: &FloorplanMetadataRow) -> R
 pub async fn db_delete_floorplan(id: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM floorplans WHERE id = ?")
+    let result = sqlx::query("DELETE FROM floorplans WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -1047,7 +1048,7 @@ pub async fn db_upsert_device_position(pos: &DevicePositionRow) -> Result<()> {
 
     sqlx::query(
         "INSERT INTO device_positions (device_key, x, y, scale, rotation) \
-         VALUES (?, ?, ?, ?, ?) \
+         VALUES ($1, $2, $3, $4, $5) \
          ON CONFLICT (device_key) DO UPDATE SET \
              x = excluded.x, y = excluded.y, \
              scale = excluded.scale, rotation = excluded.rotation",
@@ -1066,7 +1067,7 @@ pub async fn db_upsert_device_position(pos: &DevicePositionRow) -> Result<()> {
 pub async fn db_delete_device_position(device_key: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM device_positions WHERE device_key = ?")
+    let result = sqlx::query("DELETE FROM device_positions WHERE device_key = $1")
         .bind(device_key)
         .execute(db)
         .await?;
@@ -1106,7 +1107,7 @@ pub async fn db_upsert_group_position(pos: &GroupPositionRow) -> Result<()> {
 
     sqlx::query(
         "INSERT INTO group_positions (group_id, x, y, width, height, z_index) \
-         VALUES (?, ?, ?, ?, ?, ?) \
+         VALUES ($1, $2, $3, $4, $5, $6) \
          ON CONFLICT (group_id) DO UPDATE SET \
              x = excluded.x, y = excluded.y, \
              width = excluded.width, height = excluded.height, \
@@ -1127,7 +1128,7 @@ pub async fn db_upsert_group_position(pos: &GroupPositionRow) -> Result<()> {
 pub async fn db_delete_group_position(group_id: &str) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM group_positions WHERE group_id = ?")
+    let result = sqlx::query("DELETE FROM group_positions WHERE group_id = $1")
         .bind(group_id)
         .execute(db)
         .await?;
@@ -1162,15 +1163,15 @@ pub async fn db_upsert_dashboard_layout(layout: &DashboardLayoutRow) -> Result<i
 
     // If making this default, unset other defaults
     if layout.is_default {
-        sqlx::query("UPDATE dashboard_layouts SET is_default = 0 WHERE is_default = 1")
+        sqlx::query("UPDATE dashboard_layouts SET is_default = FALSE WHERE is_default = TRUE")
             .execute(db)
             .await?;
     }
 
     if layout.id > 0 {
         sqlx::query(
-            "UPDATE dashboard_layouts SET name = ?, is_default = ?, \
-             updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+            "UPDATE dashboard_layouts SET name = $1, is_default = $2, \
+             updated_at = CURRENT_TIMESTAMP WHERE id = $3",
         )
         .bind(&layout.name)
         .bind(layout.is_default)
@@ -1181,7 +1182,7 @@ pub async fn db_upsert_dashboard_layout(layout: &DashboardLayoutRow) -> Result<i
     } else {
         let row: (i64,) = sqlx::query_as(
             "INSERT INTO dashboard_layouts (name, is_default, updated_at) \
-             VALUES (?, ?, CURRENT_TIMESTAMP) RETURNING id",
+             VALUES ($1, $2, CURRENT_TIMESTAMP) RETURNING id",
         )
         .bind(&layout.name)
         .bind(layout.is_default)
@@ -1194,7 +1195,7 @@ pub async fn db_upsert_dashboard_layout(layout: &DashboardLayoutRow) -> Result<i
 pub async fn db_delete_dashboard_layout(id: i32) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM dashboard_layouts WHERE id = ?")
+    let result = sqlx::query("DELETE FROM dashboard_layouts WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -1211,7 +1212,7 @@ pub async fn db_get_dashboard_widgets(layout_id: i32) -> Result<Vec<DashboardWid
 
     let rows: Vec<(i32, i32, String, String, i32, i32, i32, i32, i32)> = sqlx::query_as(
         "SELECT id, layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order \
-         FROM dashboard_widgets WHERE layout_id = ? ORDER BY sort_order",
+         FROM dashboard_widgets WHERE layout_id = $1 ORDER BY sort_order",
     )
     .bind(layout_id)
     .fetch_all(db)
@@ -1244,8 +1245,8 @@ pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i
 
     if widget.id > 0 {
         sqlx::query(
-            "UPDATE dashboard_widgets SET layout_id = ?, widget_type = ?, config = ?, \
-             grid_x = ?, grid_y = ?, grid_w = ?, grid_h = ?, sort_order = ? WHERE id = ?",
+            "UPDATE dashboard_widgets SET layout_id = $1, widget_type = $2, config = $3, \
+             grid_x = $4, grid_y = $5, grid_w = $6, grid_h = $7, sort_order = $8 WHERE id = $9",
         )
         .bind(widget.layout_id)
         .bind(&widget.widget_type)
@@ -1263,7 +1264,7 @@ pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i
         let row: (i64,) = sqlx::query_as(
             "INSERT INTO dashboard_widgets \
              (layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order) \
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id",
         )
         .bind(widget.layout_id)
         .bind(&widget.widget_type)
@@ -1282,7 +1283,7 @@ pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i
 pub async fn db_delete_dashboard_widget(id: i32) -> Result<bool> {
     let db = get_db_connection()?;
 
-    let result = sqlx::query("DELETE FROM dashboard_widgets WHERE id = ?")
+    let result = sqlx::query("DELETE FROM dashboard_widgets WHERE id = $1")
         .bind(id)
         .execute(db)
         .await?;
@@ -1305,6 +1306,7 @@ pub async fn db_export_config() -> Result<ConfigExport> {
     let floorplan = db_get_floorplan().await?;
     let floorplans = db_get_floorplan_exports().await?;
     let device_positions = db_get_device_positions().await?;
+    let group_positions = db_get_group_positions().await?;
     let device_display_overrides = db_get_device_display_overrides().await?;
     let device_sensor_configs = db_get_device_sensor_configs().await?;
     let dashboard_layouts = db_get_dashboard_layouts().await?;
@@ -1325,6 +1327,7 @@ pub async fn db_export_config() -> Result<ConfigExport> {
         floorplan,
         floorplans,
         device_positions,
+        group_positions,
         device_display_overrides,
         device_sensor_configs,
         dashboard_layouts,
@@ -1398,6 +1401,9 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     for pos in &config.device_positions {
         db_upsert_device_position(pos).await?;
     }
+    for pos in &config.group_positions {
+        db_upsert_group_position(pos).await?;
+    }
     for device_display_override in &config.device_display_overrides {
         db_upsert_device_display_override(device_display_override).await?;
     }
@@ -1427,23 +1433,60 @@ pub async fn db_save_config_version(
     let new_version = last_version.0.unwrap_or(0) + 1;
     let config_str = serde_json::to_string(config)?;
 
-    sqlx::query("INSERT INTO config_versions (version, description, config_json) VALUES (?, ?, ?)")
-        .bind(new_version)
-        .bind(description)
-        .bind(&config_str)
-        .execute(db)
-        .await?;
+    sqlx::query(
+        "INSERT INTO config_versions (version, description, config_json) VALUES ($1, $2, $3)",
+    )
+    .bind(new_version)
+    .bind(description)
+    .bind(&config_str)
+    .execute(db)
+    .await?;
 
     Ok(new_version)
 }
 
-/// Check if the database has any integrations configured
+/// Check whether the database contains any user-managed configuration.
 pub async fn db_has_config() -> Result<bool> {
     let db = get_db_connection()?;
 
-    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM integrations")
-        .fetch_one(db)
-        .await?;
+    let has_config: (bool,) = sqlx::query_as(
+        "SELECT (
+            EXISTS (SELECT 1 FROM integrations)
+            OR EXISTS (SELECT 1 FROM groups)
+            OR EXISTS (SELECT 1 FROM group_devices)
+            OR EXISTS (SELECT 1 FROM group_links)
+            OR EXISTS (SELECT 1 FROM scenes)
+            OR EXISTS (SELECT 1 FROM scene_device_states)
+            OR EXISTS (SELECT 1 FROM scene_group_states)
+            OR EXISTS (SELECT 1 FROM scene_overrides)
+            OR EXISTS (SELECT 1 FROM routines)
+            OR EXISTS (
+                SELECT 1
+                FROM floorplans
+                WHERE NOT (
+                    id = 'default'
+                    AND name = 'Main floorplan'
+                    AND image_data IS NULL
+                    AND image_mime_type IS NULL
+                    AND width IS NULL
+                    AND height IS NULL
+                    AND grid_data IS NULL
+                )
+            )
+            OR EXISTS (SELECT 1 FROM device_positions)
+            OR EXISTS (SELECT 1 FROM group_positions)
+            OR EXISTS (SELECT 1 FROM device_display_overrides)
+            OR EXISTS (SELECT 1 FROM device_sensor_configs)
+            OR EXISTS (
+                SELECT 1
+                FROM dashboard_layouts
+                WHERE id <> 1 OR name <> 'Default' OR is_default = FALSE
+            )
+            OR EXISTS (SELECT 1 FROM dashboard_widgets)
+        )",
+    )
+    .fetch_one(db)
+    .await?;
 
-    Ok(count.0 > 0)
+    Ok(has_config.0)
 }

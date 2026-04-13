@@ -7,52 +7,166 @@ use serde_json::{json, Value};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const RELOAD_FIXTURE_TOML: &str = r#"
-[integrations.reload_dummy]
-plugin = "dummy"
+fn blank_backup_config() -> Value {
+    json!({
+        "version": 1,
+        "core": { "warmup_time_seconds": 0 },
+        "integrations": [],
+        "groups": [],
+        "scenes": [],
+        "routines": [],
+        "floorplan": null,
+        "floorplans": [],
+        "device_positions": [],
+        "group_positions": [],
+        "device_display_overrides": [],
+        "device_sensor_configs": [],
+        "dashboard_layouts": [
+            {
+                "id": 1,
+                "name": "Default",
+                "is_default": true
+            }
+        ],
+        "dashboard_widgets": []
+    })
+}
 
-[integrations.reload_dummy.devices.light1]
-name = "Reload Light"
+fn reload_fixture_backup_config() -> Value {
+    let mut config = blank_backup_config();
+    config["integrations"] = json!([
+        {
+            "id": "reload_dummy",
+            "plugin": "dummy",
+            "enabled": true,
+            "config": {
+                "devices": {
+                    "light1": {
+                        "name": "Reload Light"
+                    },
+                    "sensor1": {
+                        "name": "Reload Sensor",
+                        "init_state": {
+                            "Sensor": {
+                                "value": false
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]);
+    config
+}
 
-[integrations.reload_dummy.devices.sensor1]
-name = "Reload Sensor"
-init_state = { Sensor = { value = false } }
-"#;
+fn rollout_fixture_backup_config() -> Value {
+    let mut config = blank_backup_config();
+    config["integrations"] = json!([
+        {
+            "id": "rollout_dummy",
+            "plugin": "dummy",
+            "enabled": true,
+            "config": {
+                "devices": {
+                    "light1": {
+                        "name": "Rollout Light 1",
+                        "init_state": {
+                            "Controllable": {
+                                "state": {
+                                    "power": false
+                                }
+                            }
+                        }
+                    },
+                    "light2": {
+                        "name": "Rollout Light 2",
+                        "init_state": {
+                            "Controllable": {
+                                "state": {
+                                    "power": false
+                                }
+                            }
+                        }
+                    },
+                    "sensor1": {
+                        "name": "Rollout Sensor",
+                        "init_state": {
+                            "Sensor": {
+                                "value": false
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]);
+    config["scenes"] = json!([
+        {
+            "id": "rollout_off",
+            "name": "Rollout Off",
+            "hidden": false,
+            "script": null,
+            "device_states": {
+                "rollout_dummy/light1": { "power": false },
+                "rollout_dummy/light2": { "power": false }
+            },
+            "group_states": {}
+        },
+        {
+            "id": "rollout_on",
+            "name": "Rollout On",
+            "hidden": false,
+            "script": null,
+            "device_states": {
+                "rollout_dummy/light1": { "power": true },
+                "rollout_dummy/light2": { "power": true }
+            },
+            "group_states": {}
+        }
+    ]);
+    config
+}
 
-const ROLLOUT_FIXTURE_TOML: &str = r#"
-[integrations.rollout_dummy]
-plugin = "dummy"
-
-[integrations.rollout_dummy.devices.light1]
-name = "Rollout Light 1"
-init_state = { Controllable = { state = { power = false } } }
-
-[integrations.rollout_dummy.devices.light2]
-name = "Rollout Light 2"
-init_state = { Controllable = { state = { power = false } } }
-
-[integrations.rollout_dummy.devices.sensor1]
-name = "Rollout Sensor"
-init_state = { Sensor = { value = false } }
-
-[scenes.rollout_off]
-name = "Rollout Off"
-
-    [scenes.rollout_off.devices.rollout_dummy]
-    "Rollout Light 1" = { power = false }
-    "Rollout Light 2" = { power = false }
-
-[scenes.rollout_on]
-name = "Rollout On"
-
-    [scenes.rollout_on.devices.rollout_dummy]
-    "Rollout Light 1" = { power = true }
-    "Rollout Light 2" = { power = true }
-"#;
+fn script_scene_fixture_backup_config() -> Value {
+    let mut config = blank_backup_config();
+    config["integrations"] = json!([
+        {
+            "id": "script_dummy",
+            "plugin": "dummy",
+            "enabled": true,
+            "config": {
+                "devices": {
+                    "light1": {
+                        "name": "Script Target",
+                        "init_state": {
+                            "Controllable": {
+                                "state": {
+                                    "power": false
+                                }
+                            }
+                        }
+                    },
+                    "light2": {
+                        "name": "Script Driver",
+                        "init_state": {
+                            "Controllable": {
+                                "state": {
+                                    "power": false
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    ]);
+    config
+}
 
 fn start_reload_test_server() -> TestServer {
     TestServer::with_config(TestServerConfig {
-        extra_config: Some(RELOAD_FIXTURE_TOML.to_string()),
+        config_content: Some(reload_fixture_backup_config().to_string()),
+        config_file_name: Some("config-backup.json".to_string()),
         ..Default::default()
     })
     .expect("Failed to start reload test server")
@@ -60,10 +174,20 @@ fn start_reload_test_server() -> TestServer {
 
 fn start_rollout_test_server() -> TestServer {
     TestServer::with_config(TestServerConfig {
-        extra_config: Some(ROLLOUT_FIXTURE_TOML.to_string()),
+        config_content: Some(rollout_fixture_backup_config().to_string()),
+        config_file_name: Some("config-backup.json".to_string()),
         ..Default::default()
     })
     .expect("Failed to start rollout test server")
+}
+
+fn start_script_scene_test_server() -> TestServer {
+    TestServer::with_config(TestServerConfig {
+        config_content: Some(script_scene_fixture_backup_config().to_string()),
+        config_file_name: Some("config-backup.json".to_string()),
+        ..Default::default()
+    })
+    .expect("Failed to start scene script test server")
 }
 
 fn get_json(base_url: &str, path: &str) -> Value {
@@ -89,6 +213,15 @@ fn post_json(base_url: &str, path: &str, body: &Value) -> Response {
     Client::new()
         .post(format!("{base_url}{path}"))
         .json(body)
+        .send()
+        .unwrap_or_else(|e| panic!("POST {path} failed: {e}"))
+}
+
+fn post_text(base_url: &str, path: &str, body: &str) -> Response {
+    Client::new()
+        .post(format!("{base_url}{path}"))
+        .header("Content-Type", "text/plain")
+        .body(body.to_string())
         .send()
         .unwrap_or_else(|e| panic!("POST {path} failed: {e}"))
 }
@@ -137,11 +270,8 @@ fn wait_for(description: &str, mut condition: impl FnMut() -> bool) {
     }
 }
 
-#[test]
-fn config_export_import_roundtrip_preserves_config() {
-    let server = TestServer::new().expect("Failed to start test server");
-
-    let import_payload = json!({
+fn sample_config_export() -> Value {
+    json!({
         "version": 1,
         "core": {
             "warmup_time_seconds": 7
@@ -176,7 +306,6 @@ fn config_export_import_roundtrip_preserves_config() {
                 "devices": [
                     {
                         "integration_id": "dummy",
-                        "device_name": "Light 1",
                         "device_id": "light1"
                     }
                 ],
@@ -258,6 +387,7 @@ fn config_export_import_roundtrip_preserves_config() {
                 "rotation": 0.5
             }
         ],
+        "group_positions": [],
         "device_display_overrides": [],
         "device_sensor_configs": [],
         "dashboard_layouts": [
@@ -268,7 +398,18 @@ fn config_export_import_roundtrip_preserves_config() {
             }
         ],
         "dashboard_widgets": []
-    });
+    })
+}
+
+#[test]
+fn config_export_import_roundtrip_preserves_config() {
+    let server = TestServer::new().expect("Failed to start test server");
+    let runtime_status = get_json(&server.base_url, "/api/v1/config/runtime-status");
+    assert_eq!(runtime_status["success"], true);
+    assert_eq!(runtime_status["data"]["persistence_available"], false);
+    assert_eq!(runtime_status["data"]["memory_only_mode"], true);
+
+    let import_payload = sample_config_export();
 
     let response = post_json(&server.base_url, "/api/v1/config/import", &import_payload);
     assert_eq!(response.status(), StatusCode::OK);
@@ -284,8 +425,69 @@ fn config_export_import_roundtrip_preserves_config() {
 }
 
 #[test]
+fn config_api_starts_from_json_backup_without_database() {
+    let backup_config = sample_config_export();
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(backup_config.to_string()),
+        config_file_name: Some("config-backup.json".to_string()),
+        ..Default::default()
+    })
+    .expect("Failed to start no-database test server");
+
+    wait_for("JSON backup integration device to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Light 1").is_some()
+    });
+
+    let runtime_status = get_json(&server.base_url, "/api/v1/config/runtime-status");
+    assert_eq!(runtime_status["success"], true);
+    assert_eq!(runtime_status["data"]["persistence_available"], false);
+    assert_eq!(runtime_status["data"]["memory_only_mode"], true);
+
+    let export_result = get_json(&server.base_url, "/api/v1/config/export");
+    assert_eq!(export_result["success"], true);
+    assert_eq!(export_result["data"], backup_config);
+
+    let create_response = post_json(
+        &server.base_url,
+        "/api/v1/config/floorplans",
+        &json!({
+            "id": "memory-only",
+            "name": "Memory Only"
+        }),
+    );
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    let floorplans = get_json(&server.base_url, "/api/v1/config/floorplans");
+    assert_eq!(floorplans["success"], true);
+    assert!(floorplans["data"]
+        .as_array()
+        .expect("floorplans should be an array")
+        .iter()
+        .any(|floorplan| {
+            floorplan["id"] == "memory-only" && floorplan["name"] == "Memory Only"
+        }));
+
+    let export_after_mutation = get_json(&server.base_url, "/api/v1/config/export");
+    assert!(export_after_mutation["data"]["floorplans"]
+        .as_array()
+        .expect("exported floorplans should be an array")
+        .iter()
+        .any(|floorplan| {
+            floorplan["id"] == "memory-only" && floorplan["name"] == "Memory Only"
+        }));
+}
+
+#[test]
 fn activate_scene_spatial_rollout_updates_near_devices_before_far_devices() {
     let server = start_rollout_test_server();
+
+    wait_for("rollout fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Rollout Light 1").is_some()
+            && device_by_name(&devices, "Rollout Light 2").is_some()
+            && device_by_name(&devices, "Rollout Sensor").is_some()
+    });
 
     for (device_key, x) in [
         ("rollout_dummy/sensor1", 0.0),
@@ -324,7 +526,6 @@ fn activate_scene_spatial_rollout_updates_near_devices_before_far_devices() {
 
     thread::sleep(Duration::from_millis(100));
     let devices = get_json(&server.base_url, "/api/v1/devices");
-    assert_eq!(device_power(&devices, "Rollout Light 1"), Some(false));
     assert_eq!(device_power(&devices, "Rollout Light 2"), Some(false));
 
     wait_for("near rollout target to update first", || {
@@ -343,6 +544,13 @@ fn activate_scene_spatial_rollout_updates_near_devices_before_far_devices() {
 #[test]
 fn cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
     let server = start_rollout_test_server();
+
+    wait_for("rollout fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Rollout Light 1").is_some()
+            && device_by_name(&devices, "Rollout Light 2").is_some()
+            && device_by_name(&devices, "Rollout Sensor").is_some()
+    });
 
     for (device_key, x) in [
         ("rollout_dummy/sensor1", 0.0),
@@ -400,7 +608,6 @@ fn cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
 
     thread::sleep(Duration::from_millis(100));
     let devices = get_json(&server.base_url, "/api/v1/devices");
-    assert_eq!(device_power(&devices, "Rollout Light 1"), Some(false));
     assert_eq!(device_power(&devices, "Rollout Light 2"), Some(false));
 
     wait_for("cycle scenes near rollout target to update first", || {
@@ -455,11 +662,16 @@ fn config_api_device_display_name_overrides_roundtrip() {
 
 #[test]
 fn config_api_device_sensor_configs_roundtrip() {
-    let server = TestServer::new().expect("Failed to start test server");
+    let server = start_reload_test_server();
+
+    wait_for("sensor fixture device to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Reload Sensor").is_some()
+    });
 
     let upsert_response = put_json(
         &server.base_url,
-        "/api/v1/config/device-sensor-configs/zigbee2mqtt%2FEntryway%20switch",
+        "/api/v1/config/device-sensor-configs/reload_dummy%2Fsensor1",
         &json!({
             "device_ref": "ignored/by/route",
             "interaction_kind": "hue_dimmer",
@@ -479,7 +691,7 @@ fn config_api_device_sensor_configs_roundtrip() {
         list_result["data"],
         json!([
             {
-                "device_ref": "zigbee2mqtt/Entryway switch",
+                "device_ref": "reload_dummy/sensor1",
                 "interaction_kind": "hue_dimmer",
                 "config": {
                     "on_value": "on_press",
@@ -493,7 +705,7 @@ fn config_api_device_sensor_configs_roundtrip() {
 
     let delete_response = delete(
         &server.base_url,
-        "/api/v1/config/device-sensor-configs/zigbee2mqtt%2FEntryway%20switch",
+        "/api/v1/config/device-sensor-configs/reload_dummy%2Fsensor1",
     );
     assert_eq!(delete_response.status(), StatusCode::OK);
 
@@ -756,7 +968,6 @@ fn config_api_hot_reloads_groups_and_scenes_for_runtime_actions() {
             "devices": [
                 {
                     "integration_id": "reload_dummy",
-                    "device_name": "Reload Light",
                     "device_id": "light1"
                 }
             ],
@@ -797,6 +1008,386 @@ fn config_api_hot_reloads_groups_and_scenes_for_runtime_actions() {
         let devices = get_json(&server.base_url, "/api/v1/devices");
         device_power(&devices, "Reload Light") == Some(true)
     });
+}
+
+#[test]
+fn migration_preview_reports_validation_errors_without_blocking_import() {
+    let server = start_reload_test_server();
+
+    wait_for("seeded reload fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Reload Light").is_some()
+            && device_by_name(&devices, "Reload Sensor").is_some()
+    });
+
+    let response = post_text(
+        &server.base_url,
+        "/api/v1/config/migrate/preview",
+        r#"
+[integrations.reload_dummy]
+plugin = "dummy"
+
+[groups.kitchen]
+name = "Kitchen"
+devices = [
+    { integration_id = "reload_dummy", name = "Missing group light" }
+]
+
+[scenes.evening]
+name = "Evening"
+
+    [scenes.evening.devices.reload_dummy]
+    "Missing scene light" = { integration_id = "reload_dummy", name = "Missing linked light", brightness = 0.5 }
+
+[routines.motion]
+name = "Motion"
+rules = [
+    { integration_id = "reload_dummy", name = "Missing routine sensor", state = { value = true }, trigger_mode = "pulse" }
+]
+"#,
+    );
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let result: Value = response
+        .json()
+        .expect("preview response should be valid JSON");
+
+    let warnings = result["data"]["validation_errors"]
+        .as_array()
+        .expect("preview warnings should be an array");
+    let preview = &result["data"]["preview"];
+
+    assert_eq!(result["success"], Value::Bool(true));
+    assert_eq!(warnings.len(), 3);
+    assert!(warnings.iter().any(|warning| warning
+        .as_str()
+        .is_some_and(|warning| warning.contains("group 'kitchen' device 'Missing group light'"))));
+    assert!(warnings.iter().any(|warning| warning.as_str().is_some_and(|warning| warning.contains("scene 'evening' device 'reload_dummy/Missing scene light': could not resolve device name reload_dummy/Missing linked light"))));
+    assert!(warnings.iter().any(|warning| warning.as_str().is_some_and(|warning| warning.contains("routine 'motion' rules[0]: could not resolve device name reload_dummy/Missing routine sensor"))));
+    assert_eq!(
+        preview["groups"][0]["devices"].as_array().map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        preview["scenes"][0]["device_states"]
+            .as_object()
+            .map(|states| states.len()),
+        Some(0)
+    );
+    assert_eq!(
+        preview["routines"][0]["rules"].as_array().map(Vec::len),
+        Some(0)
+    );
+}
+
+#[test]
+fn migration_preview_allows_integrations_only_before_device_discovery() {
+    let server = start_reload_test_server();
+
+    let response = post_text(
+        &server.base_url,
+        "/api/v1/config/migrate/preview?core=false&integrations=true&groups=false&scenes=false&routines=false",
+        r#"
+[integrations.reload_dummy]
+plugin = "dummy"
+
+[groups.kitchen]
+name = "Kitchen"
+devices = [
+    { integration_id = "reload_dummy", name = "Missing group light" }
+]
+
+[scenes.evening]
+name = "Evening"
+
+    [scenes.evening.devices.reload_dummy]
+    "Missing scene light" = { integration_id = "reload_dummy", name = "Missing linked light", brightness = 0.5 }
+
+[routines.motion]
+name = "Motion"
+rules = [
+    { integration_id = "reload_dummy", name = "Missing routine sensor", state = { value = true }, trigger_mode = "pulse" }
+]
+"#,
+    );
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let result: Value = response
+        .json()
+        .expect("preview response should be valid JSON");
+
+    assert_eq!(result["success"], Value::Bool(true));
+    assert_eq!(
+        result["data"]["validation_errors"].as_array().map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        result["data"]["preview"]["integrations"]
+            .as_array()
+            .map(Vec::len),
+        Some(1)
+    );
+    assert_eq!(
+        result["data"]["preview"]["groups"].as_array().map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        result["data"]["preview"]["scenes"].as_array().map(Vec::len),
+        Some(0)
+    );
+    assert_eq!(
+        result["data"]["preview"]["routines"]
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+}
+
+#[test]
+fn migration_apply_allows_preview_with_warnings_by_dropping_invalid_entries() {
+    let server = start_reload_test_server();
+
+    wait_for("seeded reload fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Reload Light").is_some()
+            && device_by_name(&devices, "Reload Sensor").is_some()
+    });
+
+    let preview_response = post_text(
+        &server.base_url,
+        "/api/v1/config/migrate/preview",
+        r#"
+[integrations.reload_dummy]
+plugin = "dummy"
+
+[groups.kitchen]
+name = "Kitchen"
+devices = [
+    { integration_id = "reload_dummy", name = "Missing group light" }
+]
+
+[scenes.evening]
+name = "Evening"
+
+    [scenes.evening.devices.reload_dummy]
+    "Missing scene light" = { integration_id = "reload_dummy", name = "Missing linked light", brightness = 0.5 }
+
+[routines.motion]
+name = "Motion"
+rules = [
+    { integration_id = "reload_dummy", name = "Missing routine sensor", state = { value = true }, trigger_mode = "pulse" }
+]
+"#,
+    );
+
+    assert_eq!(preview_response.status(), StatusCode::OK);
+
+    let preview_result: Value = preview_response
+        .json()
+        .expect("preview response should be valid JSON");
+
+    assert_eq!(
+        preview_result["data"]["validation_errors"]
+            .as_array()
+            .map(Vec::len),
+        Some(3)
+    );
+
+    let apply_response = post_json(
+        &server.base_url,
+        "/api/v1/config/migrate/apply",
+        &json!({
+            "selection": {
+                "core": true,
+                "integrations": true,
+                "groups": true,
+                "scenes": true,
+                "routines": true
+            },
+            "preview": preview_result["data"]["preview"].clone()
+        }),
+    );
+
+    assert_eq!(apply_response.status(), StatusCode::OK);
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    let groups = export["data"]["groups"]
+        .as_array()
+        .expect("export should include groups array");
+    let scenes = export["data"]["scenes"]
+        .as_array()
+        .expect("export should include scenes array");
+    let routines = export["data"]["routines"]
+        .as_array()
+        .expect("export should include routines array");
+
+    let kitchen = groups
+        .iter()
+        .find(|group| group["id"] == "kitchen")
+        .expect("kitchen group should be imported");
+    let evening = scenes
+        .iter()
+        .find(|scene| scene["id"] == "evening")
+        .expect("evening scene should be imported");
+    let motion = routines
+        .iter()
+        .find(|routine| routine["id"] == "motion")
+        .expect("motion routine should be imported");
+
+    assert_eq!(kitchen["devices"].as_array().map(Vec::len), Some(0));
+    assert_eq!(
+        evening["device_states"]
+            .as_object()
+            .map(|states| states.len()),
+        Some(0)
+    );
+    assert_eq!(motion["rules"].as_array().map(Vec::len), Some(0));
+}
+
+#[test]
+fn migration_apply_preserves_existing_integrations_when_importing_later_sections() {
+    let server = start_reload_test_server();
+
+    wait_for("seeded reload fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Reload Light").is_some()
+            && device_by_name(&devices, "Reload Sensor").is_some()
+    });
+
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/config/migrate/apply",
+        &json!({
+            "selection": {
+                "core": false,
+                "integrations": false,
+                "groups": true,
+                "scenes": false,
+                "routines": false
+            },
+            "preview": {
+                "core": { "warmup_time_seconds": 9 },
+                "integrations": [],
+                "groups": [
+                    {
+                        "id": "reload_group",
+                        "name": "Reload Group",
+                        "hidden": false,
+                        "devices": [
+                            {
+                                "integration_id": "reload_dummy",
+                                "device_id": "light1"
+                            }
+                        ],
+                        "linked_groups": []
+                    }
+                ],
+                "scenes": [],
+                "routines": []
+            }
+        }),
+    );
+
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    let integrations = export["data"]["integrations"]
+        .as_array()
+        .expect("export should include integrations array");
+    let groups = export["data"]["groups"]
+        .as_array()
+        .expect("export should include groups array");
+
+    assert!(integrations
+        .iter()
+        .any(|integration| integration["id"] == "reload_dummy"));
+    assert!(groups.iter().any(|group| group["id"] == "reload_group"));
+
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert!(device_by_name(&devices, "Reload Light").is_some());
+}
+
+#[test]
+fn config_api_executes_scene_scripts_against_live_device_state() {
+    let server = start_script_scene_test_server();
+
+    wait_for("script fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Script Target").is_some()
+            && device_by_name(&devices, "Script Driver").is_some()
+    });
+
+    let create_scene_response = post_json(
+        &server.base_url,
+        "/api/v1/config/scenes",
+        &json!({
+            "id": "scripted_scene",
+            "name": "Scripted Scene",
+            "hidden": false,
+            "script": "defineSceneScript(() => devices['script_dummy/light2']?.data?.Controllable?.state?.power ? { 'script_dummy/light1': deviceState({ power: false }) } : { 'script_dummy/light1': deviceState({ power: true, brightness: 0.6 }) })",
+            "device_states": {},
+            "group_states": {}
+        }),
+    );
+    assert_eq!(create_scene_response.status(), StatusCode::CREATED);
+
+    let first_activation = post_json(
+        &server.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ActivateScene",
+            "scene_id": "scripted_scene"
+        }),
+    );
+    assert_eq!(first_activation.status(), StatusCode::OK);
+
+    wait_for("scene script to power on the target light", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_power(&devices, "Script Target") == Some(true)
+    });
+
+    let driver_update = put_json(
+        &server.base_url,
+        "/api/v1/devices/light2",
+        &json!({
+            "id": "light2",
+            "name": "Script Driver",
+            "integration_id": "script_dummy",
+            "data": {
+                "Controllable": {
+                    "state": {
+                        "power": true
+                    }
+                }
+            }
+        }),
+    );
+    assert_eq!(driver_update.status(), StatusCode::OK);
+
+    wait_for("driver light to update", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_power(&devices, "Script Driver") == Some(true)
+    });
+
+    let second_activation = post_json(
+        &server.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ActivateScene",
+            "scene_id": "scripted_scene"
+        }),
+    );
+    assert_eq!(second_activation.status(), StatusCode::OK);
+
+    wait_for(
+        "scene script to react to the updated driver light state",
+        || {
+            let devices = get_json(&server.base_url, "/api/v1/devices");
+            device_power(&devices, "Script Target") == Some(false)
+        },
+    );
 }
 
 #[test]

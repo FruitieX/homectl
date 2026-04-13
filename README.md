@@ -13,13 +13,23 @@ See [server/README.md](server/README.md) for detailed usage, configuration, and 
 Key technologies:
 - Rust (edition 2021)
 - warp, tokio, sqlx, mqtt, etc.
-- PostgreSQL (optional) for persistence
+- Optional PostgreSQL persistence with DB-optional startup from JSON backup, legacy TOML, or an empty in-memory runtime
 
 Build & run (development):
 ```
 cd server
 cargo run
+
+# optional: use PostgreSQL persistence
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo run
+
+# optional: bootstrap from a JSON export or legacy TOML backup
+cargo run -- --config ./config-backup.json
 ```
+
+If the database named in `DATABASE_URL` does not exist yet, the server creates
+it automatically before running migrations when the configured PostgreSQL role
+has permission to create databases.
 
 ### UI (Next.js)
 See [ui/README.md](ui/README.md) for UI specific documentation.
@@ -57,8 +67,9 @@ ui/       Next.js frontend, generated TypeScript bindings
 ## Contributing
 1. Create a feature branch.
 2. Ensure server tests pass: `cargo test`.
-3. Ensure UI builds: `pnpm build` (or `npm run build`).
-4. Commit using conventional commit messages for automated release PRs.
+3. If you changed Postgres persistence or reconnect behavior, also run `cargo test -p homectl-server --test postgres_runtime -- --test-threads=1` from `server/`.
+4. Ensure UI builds: `pnpm build` (or `npm run build`).
+5. Commit using conventional commit messages for automated release PRs.
 
 ## License
 MIT – see [LICENSE](LICENSE).

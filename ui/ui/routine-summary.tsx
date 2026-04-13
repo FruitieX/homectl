@@ -454,8 +454,7 @@ function RuleSummaryItem({
     const sensorRule = rule as SensorRule;
     const device = getDeviceRefLabel({
       integrationId: sensorRule.integration_id,
-      deviceId: sensorRule.id,
-      deviceName: sensorRule.name,
+      deviceId: sensorRule.device_id,
       devices,
       deviceDisplayNameMap,
     });
@@ -489,8 +488,7 @@ function RuleSummaryItem({
     const deviceRule = rule as DeviceRule;
     const device = getDeviceRefLabel({
       integrationId: deviceRule.integration_id,
-      deviceId: deviceRule.id,
-      deviceName: deviceRule.name,
+      deviceId: deviceRule.device_id,
       devices,
       deviceDisplayNameMap,
     });

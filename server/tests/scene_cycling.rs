@@ -13,7 +13,8 @@ use ordered_float::OrderedFloat;
 
 use homectl_server::types::color::{Capabilities, DeviceColor, Hs};
 use homectl_server::types::device::{
-    ControllableDevice, ControllableState, Device, DeviceData, DeviceId, ManageKind,
+    ControllableDevice, ControllableState, Device, DeviceData, DeviceId, DeviceKey,
+    DeviceStateSource, DeviceStateSourceKind, DeviceStateSourceScope, ManageKind,
 };
 use homectl_server::types::integration::IntegrationId;
 use homectl_server::types::scene::SceneId;
@@ -35,6 +36,7 @@ fn create_device(
         name.to_string(),
         DeviceData::Controllable(ControllableDevice {
             scene_id: scene_id.map(|s| SceneId::from_str(s).unwrap()),
+            state_source: None,
             capabilities: Capabilities {
                 xy: false,
                 hs: true,
@@ -238,5 +240,50 @@ fn test_power_state_change_detected() {
     assert!(
         !device_on.is_state_eq(&device_off),
         "Devices with different power state should not be equal"
+    );
+}
+
+#[test]
+fn test_state_source_change_detected() {
+    let mut direct_device = create_device(
+        "test",
+        "lamp1",
+        "Test Lamp",
+        Some("dark"),
+        true,
+        0.25,
+        25,
+        0.95,
+    );
+    let mut linked_device = direct_device.clone();
+
+    let linked_state_source = DeviceStateSource {
+        scope: DeviceStateSourceScope::Device,
+        kind: DeviceStateSourceKind::DeviceLink,
+        group_id: None,
+        linked_scene_id: None,
+        linked_device_key: Some(DeviceKey::new(
+            IntegrationId::from("circadian".to_string()),
+            DeviceId::new("color"),
+        )),
+    };
+
+    if let DeviceData::Controllable(data) = &mut direct_device.data {
+        data.state_source = Some(DeviceStateSource {
+            scope: DeviceStateSourceScope::Device,
+            kind: DeviceStateSourceKind::DeviceState,
+            group_id: None,
+            linked_scene_id: None,
+            linked_device_key: None,
+        });
+    }
+
+    if let DeviceData::Controllable(data) = &mut linked_device.data {
+        data.state_source = Some(linked_state_source);
+    }
+
+    assert!(
+        !direct_device.is_state_eq(&linked_device),
+        "Devices with different state sources should not be equal"
     );
 }

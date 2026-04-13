@@ -1,25 +1,93 @@
 #[macro_use]
 extern crate log;
 
-use homectl_server::api::config::{apply_migration, parse_toml_config};
+use homectl_server::api::config::{parse_config_backup, ParsedConfigBackup};
 use homectl_server::api::init_api;
-use homectl_server::core::expr::Expr;
 use homectl_server::core::simulate;
 use homectl_server::core::{
     devices::Devices, event::handle_event, groups::Groups, integrations::Integrations,
     logs::init_logging, routines::Routines, scenes::Scenes, state::AppState, ui::Ui,
 };
-use homectl_server::db::{config_queries, init_db};
+use homectl_server::db::{
+    actions, config_queries, connect_configured_database, init_db, is_db_configured,
+    is_db_connected,
+};
 use homectl_server::types::event::{mk_event_channel, Event};
+use homectl_server::types::scene::SceneOverridesConfig;
 use homectl_server::utils::cli::{Cli, Command};
 
 use clap::Parser;
 use color_eyre::Result;
+use eyre::eyre;
+use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::Duration;
 use tokio::sync::RwLock;
+
+const DATABASE_RECONNECT_INTERVAL_SECS: u64 = 2;
+
+fn default_backup_config_path() -> &'static Path {
+    Path::new("Settings.json")
+}
+
+fn backup_config_path<'a>(cli: &'a Cli) -> &'a Path {
+    if let Some(config_path) = cli.config.as_deref() {
+        Path::new(config_path)
+    } else {
+        default_backup_config_path()
+    }
+}
+
+struct RuntimeConfigSnapshot {
+    config: config_queries::ConfigExport,
+    scene_overrides: SceneOverridesConfig,
+    ui_state: HashMap<String, serde_json::Value>,
+}
+
+impl RuntimeConfigSnapshot {
+    fn empty() -> Self {
+        Self {
+            config: config_queries::ConfigExport {
+                version: 1,
+                core: config_queries::CoreConfigRow {
+                    warmup_time_seconds: 1,
+                },
+                integrations: Vec::new(),
+                groups: Vec::new(),
+                scenes: Vec::new(),
+                routines: Vec::new(),
+                floorplan: None,
+                floorplans: Vec::new(),
+                device_positions: Vec::new(),
+                group_positions: Vec::new(),
+                device_display_overrides: Vec::new(),
+                device_sensor_configs: Vec::new(),
+                dashboard_layouts: Vec::new(),
+                dashboard_widgets: Vec::new(),
+            },
+            scene_overrides: Default::default(),
+            ui_state: Default::default(),
+        }
+    }
+
+    fn from_parsed_backup(parsed: ParsedConfigBackup) -> Self {
+        Self {
+            config: parsed.to_config_export(),
+            scene_overrides: Default::default(),
+            ui_state: Default::default(),
+        }
+    }
+
+    fn from_config_export(config: config_queries::ConfigExport) -> Self {
+        Self {
+            config,
+            scene_overrides: Default::default(),
+            ui_state: Default::default(),
+        }
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
@@ -33,76 +101,103 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-/// Normal server startup: file-based SQLite, TOML seeding, production config.
+/// Normal server startup: optional Postgres persistence plus backup-config fallback.
 async fn run_server(cli: &Cli) -> Result<(), Box<dyn Error>> {
-    init_db(&cli.db_path).await?;
-    seed_from_toml_if_empty(cli).await?;
+    let runtime_config = match init_db(cli.database_url.as_deref()).await {
+        Ok(true) => {
+            seed_from_config_if_empty(cli).await?;
 
-    run_event_loop(cli, cli.port, resolve_warmup_time(cli).await).await
+            match load_runtime_config_snapshot().await {
+                Ok(snapshot) => snapshot,
+                Err(error) => {
+                    warn!(
+                        "Failed to load runtime config snapshot from database, falling back to config file: {error}"
+                    );
+                    load_runtime_config_from_backup(cli)?
+                }
+            }
+        }
+        Ok(false) => load_runtime_config_from_backup(cli)?,
+        Err(error) => {
+            warn!(
+                "Failed to initialize database, starting from backup config if available: {error}"
+            );
+            load_runtime_config_from_backup(cli)?
+        }
+    };
+
+    let warmup_time =
+        resolve_warmup_time(cli, runtime_config.config.core.warmup_time_seconds as u64);
+
+    run_event_loop(cli, cli.port, warmup_time, runtime_config).await
 }
 
-/// Simulation mode: in-memory SQLite, mirror source config, MQTT→dummy translation.
+/// Simulation mode: in-memory runtime snapshot, mirroring source config when provided.
 async fn run_simulation(
     cli: &Cli,
     args: &homectl_server::utils::cli::SimulateArgs,
 ) -> Result<(), Box<dyn Error>> {
     info!("Starting simulation mode on port {}", args.port);
 
-    // Initialize in-memory SQLite
-    init_db(":memory:").await?;
+    let mut config =
+        simulate::prepare_simulation_config(args.source_db.as_deref(), args.config.as_deref())
+            .await?;
+    simulate::convert_mqtt_to_dummy(&mut config)?;
 
-    // Prepare simulation DB from source
-    simulate::prepare_simulation_db(&args.source_db, args.config.as_deref()).await?;
+    info!("Simulation runtime snapshot ready, starting server...");
+    let runtime_config = RuntimeConfigSnapshot::from_config_export(config);
+    let mut simulation_cli = cli.clone();
+    simulation_cli.port = args.port;
+    simulation_cli.database_url = None;
+    simulation_cli.warmup_time = Some(args.warmup_time);
+    simulation_cli.command = None;
 
-    // Read the imported config to perform MQTT→dummy conversion
-    let integrations = config_queries::db_get_integrations().await?;
-    let groups = config_queries::db_get_groups().await?;
-    let scenes = config_queries::db_get_config_scenes().await?;
-    let routines = config_queries::db_get_routines().await?;
-
-    simulate::convert_mqtt_to_dummy(&integrations, &groups, &scenes, &routines).await?;
-
-    info!("Simulation DB ready, starting server...");
-    run_event_loop(cli, args.port, args.warmup_time).await
+    run_event_loop(&simulation_cli, args.port, args.warmup_time, runtime_config).await
 }
 
 /// Shared server startup: loads everything from DB, starts integrations, API, and event loop.
-async fn run_event_loop(cli: &Cli, port: u16, warmup_time: u64) -> Result<(), Box<dyn Error>> {
+async fn run_event_loop(
+    cli: &Cli,
+    port: u16,
+    warmup_time: u64,
+    runtime_config: RuntimeConfigSnapshot,
+) -> Result<(), Box<dyn Error>> {
     let (event_tx, mut event_rx) = mk_event_channel();
 
-    // Load everything from the database
     let mut integrations = Integrations::new(event_tx.clone(), cli);
-    integrations.load_db_integrations().await?;
+    integrations
+        .load_config_rows(&runtime_config.config.integrations)
+        .await?;
 
     let mut groups = Groups::new(Default::default());
-    groups.reload_from_db().await?;
+    groups.load_config_rows(&runtime_config.config.groups);
 
     let mut scenes = Scenes::new(Default::default());
-    scenes.refresh_db_scenes().await;
+    scenes.load_config_rows(
+        &runtime_config.config.scenes,
+        runtime_config.scene_overrides,
+    );
 
     let mut devices = Devices::new(event_tx.clone(), cli);
     devices.refresh_db_devices(&scenes).await;
 
-    let expr = Expr::new();
-
     let mut rules = Routines::new(Default::default(), event_tx.clone());
-    rules.reload_from_db().await?;
+    rules.load_config_rows(&runtime_config.config.routines);
 
-    let mut ui = Ui::new();
-    ui.refresh_db_state().await;
+    let ui = Ui::with_state(runtime_config.ui_state);
 
     integrations.run_register_pass().await?;
     integrations.run_start_pass().await?;
 
     let state = AppState {
         warming_up: true,
+        runtime_config: runtime_config.config.clone(),
         integrations,
         groups,
         scenes,
         devices,
         rules,
         event_tx,
-        expr,
         ui,
         ws: Default::default(),
         ws_broadcast_pending: Arc::new(AtomicBool::new(false)),
@@ -111,6 +206,10 @@ async fn run_event_loop(cli: &Cli, port: u16, warmup_time: u64) -> Result<(), Bo
     let state = Arc::new(RwLock::new(state));
 
     init_api(&state, port)?;
+
+    if cli.database_url.is_some() {
+        start_database_reconnect_loop(state.clone());
+    }
 
     {
         let state = state.clone();
@@ -139,28 +238,118 @@ async fn run_event_loop(cli: &Cli, port: u16, warmup_time: u64) -> Result<(), Bo
     }
 }
 
-/// Seed the database from a TOML config file if the DB has no integrations.
-async fn seed_from_toml_if_empty(cli: &Cli) -> Result<()> {
+fn start_database_reconnect_loop(state: Arc<RwLock<AppState>>) {
+    tokio::spawn(async move {
+        if !is_db_configured() || is_db_connected() {
+            return;
+        }
+
+        let mut interval =
+            tokio::time::interval(Duration::from_secs(DATABASE_RECONNECT_INTERVAL_SECS));
+        let mut last_connection_error: Option<String> = None;
+
+        loop {
+            interval.tick().await;
+
+            if !is_db_configured() {
+                break;
+            }
+
+            if is_db_connected() {
+                break;
+            }
+
+            match connect_configured_database().await {
+                Ok(true) => {
+                    info!(
+                        "Connected to configured PostgreSQL database in background reconnect loop"
+                    );
+
+                    if let Err(error) = synchronize_reconnected_database(&state).await {
+                        warn!("Failed to synchronize runtime snapshot after database reconnect: {error}");
+                    }
+
+                    break;
+                }
+                Ok(false) => break,
+                Err(error) => {
+                    let error_message = error.to_string();
+                    if last_connection_error.as_deref() != Some(error_message.as_str()) {
+                        warn!(
+                            "Configured PostgreSQL database is still unavailable: {error_message}"
+                        );
+                        last_connection_error = Some(error_message);
+                    }
+                }
+            }
+        }
+    });
+}
+
+async fn synchronize_reconnected_database(state: &Arc<RwLock<AppState>>) -> Result<()> {
+    if config_queries::db_has_config().await? {
+        info!(
+            "Configured PostgreSQL database became available with existing config; keeping the current runtime snapshot until restart"
+        );
+    } else {
+        persist_runtime_snapshot(state).await?;
+    }
+
+    Ok(())
+}
+
+async fn persist_runtime_snapshot(state: &Arc<RwLock<AppState>>) -> Result<()> {
+    let (config, devices, scene_overrides, ui_state) = {
+        let state = state.read().await;
+        (
+            state.runtime_config.clone(),
+            state
+                .devices
+                .get_state()
+                .0
+                .values()
+                .cloned()
+                .collect::<Vec<_>>(),
+            state.scenes.get_scene_overrides(),
+            state.ui.get_state().clone(),
+        )
+    };
+
+    config_queries::db_import_config(&config).await?;
+
+    for device in devices {
+        actions::db_update_device(&device).await?;
+    }
+
+    for (scene_id, overrides) in scene_overrides {
+        actions::db_store_scene_overrides(&scene_id, &overrides).await?;
+    }
+
+    for (key, value) in ui_state {
+        actions::db_store_ui_state(&key, &value).await?;
+    }
+
+    Ok(())
+}
+
+/// Seed the database from a JSON export backup file if the DB has no integrations.
+async fn seed_from_config_if_empty(cli: &Cli) -> Result<()> {
     if !config_queries::db_has_config().await? {
-        let config_path = cli
-            .config
-            .as_deref()
-            .map(Path::new)
-            .unwrap_or_else(|| Path::new("Settings.toml"));
+        let config_path = backup_config_path(cli);
 
         if config_path.exists() {
             info!(
                 "Empty database detected, seeding from {}",
                 config_path.display()
             );
-            let toml_str = std::fs::read_to_string(config_path)?;
-            match parse_toml_config(&toml_str) {
-                Ok(preview) => {
-                    apply_migration(&preview).await?;
-                    info!("Database seeded successfully from TOML config");
+            let config_str = std::fs::read_to_string(config_path)?;
+            match parse_config_backup(&config_str) {
+                Ok(ParsedConfigBackup::JsonExport(config)) => {
+                    config_queries::db_import_config(&config).await?;
+                    info!("Database seeded successfully from JSON backup config");
                 }
                 Err(e) => {
-                    warn!("Failed to parse TOML config for seeding: {e}");
+                    warn!("Failed to parse backup config for seeding: {e}");
                 }
             }
         } else {
@@ -174,16 +363,47 @@ async fn seed_from_toml_if_empty(cli: &Cli) -> Result<()> {
     Ok(())
 }
 
-/// Resolve warmup time: CLI arg takes precedence, then DB, then default.
-async fn resolve_warmup_time(cli: &Cli) -> u64 {
-    if let Some(warmup) = cli.warmup_time {
-        return warmup;
+async fn load_runtime_config_snapshot() -> Result<RuntimeConfigSnapshot> {
+    let config = config_queries::db_export_config().await?;
+    let scene_overrides = actions::db_get_scene_overrides().await.unwrap_or_default();
+    let ui_state = actions::db_get_ui_state().await.unwrap_or_default();
+
+    Ok(RuntimeConfigSnapshot {
+        config,
+        scene_overrides,
+        ui_state,
+    })
+}
+
+fn load_runtime_config_from_backup(cli: &Cli) -> Result<RuntimeConfigSnapshot> {
+    let config_path = backup_config_path(cli);
+
+    if !config_path.exists() {
+        info!(
+            "No backup config file found at {}, starting with empty in-memory config",
+            config_path.display()
+        );
+        return Ok(RuntimeConfigSnapshot::empty());
     }
 
-    config_queries::db_get_core_config()
-        .await
-        .ok()
-        .flatten()
-        .map(|c| c.warmup_time_seconds as u64)
-        .unwrap_or(1)
+    let config_str = std::fs::read_to_string(config_path)?;
+    let parsed = parse_config_backup(&config_str).map_err(|error| {
+        eyre!(
+            "Failed to parse backup config {}: {error}",
+            config_path.display()
+        )
+    })?;
+
+    info!(
+        "Loaded runtime config from {} backup at {}",
+        parsed.format_name(),
+        config_path.display()
+    );
+
+    Ok(RuntimeConfigSnapshot::from_parsed_backup(parsed))
+}
+
+/// Resolve warmup time: CLI arg takes precedence, then DB, then default.
+fn resolve_warmup_time(cli: &Cli, configured_warmup_time: u64) -> u64 {
+    cli.warmup_time.unwrap_or(configured_warmup_time)
 }

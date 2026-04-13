@@ -53,16 +53,16 @@ pub enum Event {
     /// Wait for a bit for devices to come online before starting up.
     StartupCompleted,
 
-    /// Store new scene in DB.
+    /// Store a scene in the runtime snapshot and persist it best-effort.
     DbStoreScene {
         scene_id: SceneId,
         config: SceneConfig,
     },
 
-    /// Edit scene in DB.
+    /// Edit a scene in the runtime snapshot and persist it best-effort.
     DbEditScene { scene_id: SceneId, name: String },
 
-    /// Delete scene from DB.
+    /// Delete a scene from the runtime snapshot and persist it best-effort.
     DbDeleteScene { scene_id: SceneId },
 
     /// Various actions that can be triggered by rules.

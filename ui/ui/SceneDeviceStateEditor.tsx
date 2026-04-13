@@ -8,9 +8,14 @@ import {
   ActivateSceneDescriptor,
   DeviceColor,
   Scene,
+  getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
 import { Device } from '@/bindings/Device';
 import { DevicesState } from '@/bindings/DevicesState';
+import {
+  SceneResolvedColorPreview,
+  type SceneTargetKind,
+} from '@/ui/SceneResolvedColorPreview';
 
 // Helper to determine the config type
 function getConfigType(
@@ -398,11 +403,16 @@ function DeviceLinkEditor({
         </label>
         <select
           className="select select-bordered select-sm"
-          value={`${config.integration_id}/${config.name ?? config.id ?? ''}`}
+          value={getSceneDeviceLinkTargetKey(config)}
           onChange={(e) => {
-            const [integration_id, ...nameParts] = e.target.value.split('/');
-            const name = nameParts.join('/');
-            onChange({ ...config, integration_id, name });
+            const [integration_id, ...deviceIdParts] = e.target.value.split('/');
+            const device_id = deviceIdParts.join('/');
+
+            onChange({
+              ...config,
+              integration_id,
+              device_id: device_id || undefined,
+            });
           }}
         >
           <option value="">Select a device...</option>
@@ -489,30 +499,36 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
   );
 }
 
-interface SceneDeviceConfigEditorProps {
-  deviceKey: string;
+interface SceneTargetConfigEditorProps {
+  targetKey: string;
+  targetLabel?: string;
   config: SceneDeviceConfig;
   devices: DevicesState;
+  allScenes: Scene[];
+  targetKind: SceneTargetKind;
   scenes: Scene[];
   onChange: (config: SceneDeviceConfig) => void;
   onRemove: () => void;
 }
 
-function SceneDeviceConfigEditor({
-  deviceKey,
+function SceneTargetConfigEditor({
+  targetKey,
+  targetLabel,
   config,
   devices,
+  allScenes,
+  targetKind,
   scenes,
   onChange,
   onRemove,
-}: SceneDeviceConfigEditorProps) {
+}: SceneTargetConfigEditorProps) {
   const configType = getConfigType(config);
 
   const handleTypeChange = (newType: 'device_state' | 'device_link' | 'scene_link') => {
     if (newType === 'device_state') {
       onChange({ power: true, brightness: 1 });
     } else if (newType === 'device_link') {
-      onChange({ integration_id: '', name: '' });
+      onChange({ integration_id: '', device_id: '' });
     } else {
       onChange({ scene_id: '' });
     }
@@ -523,8 +539,8 @@ function SceneDeviceConfigEditor({
       <div className="card-body p-4">
         <div className="flex justify-between items-start">
           <div>
-            <h4 className="font-semibold">{deviceKey}</h4>
-            <p className="text-xs opacity-60">{devices[deviceKey]?.name}</p>
+            <h4 className="font-semibold">{targetLabel ?? targetKey}</h4>
+            <p className="text-xs opacity-60">{targetKey}</p>
           </div>
           <button
             className="btn btn-ghost btn-xs btn-error"
@@ -551,6 +567,14 @@ function SceneDeviceConfigEditor({
 
         <div className="divider my-2"></div>
 
+        <SceneResolvedColorPreview
+          config={config}
+          devices={devices}
+          scenes={allScenes}
+          targetKey={targetKey}
+          targetKind={targetKind}
+        />
+
         {isDeviceState(config) && (
           <DeviceStateEditor
             config={config}
@@ -576,48 +600,53 @@ function SceneDeviceConfigEditor({
   );
 }
 
-interface AddDeviceModalProps {
-  devices: DevicesState;
+export interface SceneTargetOption {
+  key: string;
+  label: string;
+}
+
+interface AddSceneTargetModalProps {
+  options: SceneTargetOption[];
   existingKeys: string[];
-  onAdd: (deviceKey: string) => void;
+  onAdd: (targetKey: string) => void;
   onClose: () => void;
 }
 
-function AddDeviceModal({
-  devices,
+function AddSceneTargetModal({
+  options,
   existingKeys,
   onAdd,
   onClose,
-}: AddDeviceModalProps) {
+}: AddSceneTargetModalProps) {
   const [search, setSearch] = useState('');
 
-  const availableDevices = Object.entries(devices)
-    .filter(([key]) => !existingKeys.includes(key))
+  const availableTargets = options
+    .filter(({ key }) => !existingKeys.includes(key))
     .filter(
-      ([key, device]) =>
+      ({ key, label }) =>
         key.toLowerCase().includes(search.toLowerCase()) ||
-        (device as Device).name.toLowerCase().includes(search.toLowerCase()),
+        label.toLowerCase().includes(search.toLowerCase()),
     );
 
   return (
     <dialog className="modal modal-open">
       <div className="modal-box">
-        <h3 className="font-bold text-lg">Add Device State</h3>
+        <h3 className="font-bold text-lg">Add Target</h3>
 
         <input
           type="text"
           className="input input-bordered w-full mt-4"
-          placeholder="Search devices..."
+          placeholder="Search targets..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
 
         <div className="mt-4 max-h-60 overflow-y-auto">
-          {availableDevices.length === 0 ? (
-            <p className="text-center opacity-60 py-4">No devices found</p>
+          {availableTargets.length === 0 ? (
+            <p className="text-center opacity-60 py-4">No targets found</p>
           ) : (
             <div className="space-y-1">
-              {availableDevices.map(([key, device]) => (
+              {availableTargets.map(({ key, label }) => (
                 <button
                   key={key}
                   className="btn btn-ghost btn-sm w-full justify-start"
@@ -627,7 +656,7 @@ function AddDeviceModal({
                   }}
                 >
                   <span className="truncate">
-                    {(device as Device).name}{' '}
+                    {label}{' '}
                     <span className="opacity-60">({key})</span>
                   </span>
                 </button>
@@ -657,6 +686,113 @@ interface SceneDeviceStateEditorProps {
   onCancel: () => void;
 }
 
+interface SceneTargetSectionEditorProps {
+  addLabel: string;
+  allScenes: Scene[];
+  emptyDescription: string;
+  emptyTitle: string;
+  items: Record<string, SceneDeviceConfig>;
+  options: SceneTargetOption[];
+  scenes: Scene[];
+  sectionTitle: string;
+  targetKind: SceneTargetKind;
+  devices: DevicesState;
+  onChange: (items: Record<string, SceneDeviceConfig>) => void;
+}
+
+export function SceneTargetSectionEditor({
+  addLabel,
+  allScenes,
+  emptyDescription,
+  emptyTitle,
+  items,
+  options,
+  scenes,
+  sectionTitle,
+  targetKind,
+  devices,
+  onChange,
+}: SceneTargetSectionEditorProps) {
+  const [showAddTarget, setShowAddTarget] = useState(false);
+
+  const handleChange = useCallback(
+    (targetKey: string, config: SceneDeviceConfig) => {
+      onChange({ ...items, [targetKey]: config });
+    },
+    [items, onChange],
+  );
+
+  const handleRemove = useCallback(
+    (targetKey: string) => {
+      const updated = { ...items };
+      delete updated[targetKey];
+      onChange(updated);
+    },
+    [items, onChange],
+  );
+
+  const handleAddTarget = useCallback(
+    (targetKey: string) => {
+      onChange({
+        ...items,
+        [targetKey]: { power: true, brightness: 1 },
+      });
+    },
+    [items, onChange],
+  );
+
+  const optionLabelByKey = Object.fromEntries(
+    options.map((option) => [option.key, option.label]),
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">{sectionTitle}</h3>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => setShowAddTarget(true)}
+        >
+          {addLabel}
+        </button>
+      </div>
+
+      {Object.keys(items).length === 0 ? (
+        <div className="text-center py-8 opacity-60">
+          <p>{emptyTitle}</p>
+          <p className="text-sm mt-1">{emptyDescription}</p>
+        </div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {Object.entries(items).map(([targetKey, config]) => (
+            <SceneTargetConfigEditor
+              key={targetKey}
+              targetKey={targetKey}
+              targetLabel={optionLabelByKey[targetKey]}
+              config={config}
+              devices={devices}
+              allScenes={allScenes}
+              targetKind={targetKind}
+              scenes={scenes}
+              onChange={(newConfig) => handleChange(targetKey, newConfig)}
+              onRemove={() => handleRemove(targetKey)}
+            />
+          ))}
+        </div>
+      )}
+
+      {showAddTarget && (
+        <AddSceneTargetModal
+          options={options}
+          existingKeys={Object.keys(items)}
+          onAdd={handleAddTarget}
+          onClose={() => setShowAddTarget(false)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function SceneDeviceStateEditor({
   scene,
   devices,
@@ -667,63 +803,32 @@ export function SceneDeviceStateEditor({
   const [deviceStates, setDeviceStates] = useState<
     Record<string, SceneDeviceConfig>
   >(scene.device_states || {});
-  const [showAddDevice, setShowAddDevice] = useState(false);
-
-  const handleChange = useCallback((deviceKey: string, config: SceneDeviceConfig) => {
-    setDeviceStates((prev) => ({ ...prev, [deviceKey]: config }));
-  }, []);
-
-  const handleRemove = useCallback((deviceKey: string) => {
-    setDeviceStates((prev) => {
-      const updated = { ...prev };
-      delete updated[deviceKey];
-      return updated;
-    });
-  }, []);
-
-  const handleAddDevice = useCallback((deviceKey: string) => {
-    setDeviceStates((prev) => ({
-      ...prev,
-      [deviceKey]: { power: true, brightness: 1 },
-    }));
-  }, []);
 
   const otherScenes = scenes.filter((s) => s.id !== scene.id);
+  const deviceOptions = Object.entries(devices)
+    .map(([key, device]) => ({
+      key,
+      label: (device as Device).name,
+    }))
+    .sort((left, right) =>
+      left.label.localeCompare(right.label) || left.key.localeCompare(right.key),
+    );
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Device States for "{scene.name}"</h3>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => setShowAddDevice(true)}
-        >
-          Add Device
-        </button>
-      </div>
-
-      {Object.keys(deviceStates).length === 0 ? (
-        <div className="text-center py-8 opacity-60">
-          <p>No device states configured</p>
-          <p className="text-sm mt-1">
-            Add devices to configure their states for this scene
-          </p>
-        </div>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          {Object.entries(deviceStates).map(([deviceKey, config]) => (
-            <SceneDeviceConfigEditor
-              key={deviceKey}
-              deviceKey={deviceKey}
-              config={config}
-              devices={devices}
-              scenes={otherScenes}
-              onChange={(newConfig) => handleChange(deviceKey, newConfig)}
-              onRemove={() => handleRemove(deviceKey)}
-            />
-          ))}
-        </div>
-      )}
+      <SceneTargetSectionEditor
+        addLabel="Add Device"
+        allScenes={scenes}
+        emptyDescription="Add devices to configure their states for this scene"
+        emptyTitle="No device states configured"
+        items={deviceStates}
+        options={deviceOptions}
+        scenes={otherScenes}
+        sectionTitle={`Device States for "${scene.name}"`}
+        targetKind="device"
+        devices={devices}
+        onChange={setDeviceStates}
+      />
 
       <div className="flex justify-end gap-2 pt-4 border-t border-base-300">
         <button className="btn btn-ghost" onClick={onCancel}>
@@ -733,15 +838,6 @@ export function SceneDeviceStateEditor({
           Save Device States
         </button>
       </div>
-
-      {showAddDevice && (
-        <AddDeviceModal
-          devices={devices}
-          existingKeys={Object.keys(deviceStates)}
-          onAdd={handleAddDevice}
-          onClose={() => setShowAddDevice(false)}
-        />
-      )}
     </div>
   );
 }
