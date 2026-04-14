@@ -104,12 +104,13 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
     let mut scenes = ScenesConfig::new();
 
     for (id, name, hidden, script) in scene_rows {
-        let device_states: Vec<(String, String)> =
-            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = $1")
-                .bind(&id)
-                .fetch_all(db)
-                .await
-                .unwrap_or_default();
+        let device_states: Vec<(String, String)> = sqlx::query_as(
+            "SELECT device_key, config FROM scene_device_states WHERE scene_id = $1",
+        )
+        .bind(&id)
+        .fetch_all(db)
+        .await
+        .unwrap_or_default();
 
         let group_states: Vec<(String, String)> =
             sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = $1")

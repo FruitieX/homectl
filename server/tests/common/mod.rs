@@ -119,7 +119,9 @@ impl TestServer {
                     .arg("--port")
                     .arg(port.to_string());
             } else {
-                cmd.current_dir(&temp_dir).arg("--port").arg(port.to_string());
+                cmd.current_dir(&temp_dir)
+                    .arg("--port")
+                    .arg(port.to_string());
 
                 if use_config_file {
                     cmd.arg("--config").arg(&config_path);

@@ -748,9 +748,7 @@ impl Scenes {
                 let Some(device) = device else {
                     // Scene configs are re-evaluated on invalidations, so missing devices
                     // would otherwise spam logs when an integration is offline.
-                    debug!(
-                        "Could not find device id {device_id} in integration {integration_id}",
-                    );
+                    debug!("Could not find device id {device_id} in integration {integration_id}",);
 
                     continue;
                 };

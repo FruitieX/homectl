@@ -82,7 +82,8 @@ impl Routines {
                 continue;
             }
 
-            let rules: Vec<Rule> = serde_json::from_value(routine.rules.clone()).unwrap_or_default();
+            let rules: Vec<Rule> =
+                serde_json::from_value(routine.rules.clone()).unwrap_or_default();
             let actions: Actions =
                 serde_json::from_value(routine.actions.clone()).unwrap_or_default();
 

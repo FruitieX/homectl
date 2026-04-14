@@ -1,14 +1,14 @@
-use crate::types::{
-    color::ColorMode,
-    device::DevicesState,
-    event::TxEventChannel,
-    websockets::{StateUpdate, WebSocketResponse},
-};
 use crate::db::config_queries::{
     self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
     DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanExportRow,
     FloorplanMetadataRow, FloorplanRow, GroupPositionRow, GroupRow, IntegrationRow, RoutineRow,
     SceneRow,
+};
+use crate::types::{
+    color::ColorMode,
+    device::DevicesState,
+    event::TxEventChannel,
+    websockets::{StateUpdate, WebSocketResponse},
 };
 
 use super::{
@@ -268,7 +268,10 @@ impl AppState {
         self.runtime_config.group_positions.len() != len_before
     }
 
-    pub fn upsert_dashboard_layout(&mut self, mut layout: DashboardLayoutRow) -> DashboardLayoutRow {
+    pub fn upsert_dashboard_layout(
+        &mut self,
+        mut layout: DashboardLayoutRow,
+    ) -> DashboardLayoutRow {
         if layout.id <= 0 {
             layout.id = self
                 .runtime_config
@@ -318,7 +321,10 @@ impl AppState {
         deleted
     }
 
-    pub fn upsert_dashboard_widget(&mut self, mut widget: DashboardWidgetRow) -> DashboardWidgetRow {
+    pub fn upsert_dashboard_widget(
+        &mut self,
+        mut widget: DashboardWidgetRow,
+    ) -> DashboardWidgetRow {
         if widget.id <= 0 {
             widget.id = self
                 .runtime_config
@@ -341,12 +347,14 @@ impl AppState {
             self.runtime_config.dashboard_widgets.push(widget.clone());
         }
 
-        self.runtime_config.dashboard_widgets.sort_by(|left, right| {
-            left.layout_id
-                .cmp(&right.layout_id)
-                .then(left.sort_order.cmp(&right.sort_order))
-                .then(left.id.cmp(&right.id))
-        });
+        self.runtime_config
+            .dashboard_widgets
+            .sort_by(|left, right| {
+                left.layout_id
+                    .cmp(&right.layout_id)
+                    .then(left.sort_order.cmp(&right.sort_order))
+                    .then(left.id.cmp(&right.id))
+            });
 
         widget
     }
@@ -377,7 +385,9 @@ impl AppState {
 
     pub fn delete_group(&mut self, group_id: &str) -> bool {
         let len_before = self.runtime_config.groups.len();
-        self.runtime_config.groups.retain(|group| group.id != group_id);
+        self.runtime_config
+            .groups
+            .retain(|group| group.id != group_id);
         self.runtime_config.groups.len() != len_before
     }
 
@@ -457,13 +467,16 @@ impl AppState {
 
     pub fn delete_scene(&mut self, scene_id: &str) -> bool {
         let len_before = self.runtime_config.scenes.len();
-        self.runtime_config.scenes.retain(|scene| scene.id != scene_id);
+        self.runtime_config
+            .scenes
+            .retain(|scene| scene.id != scene_id);
         self.runtime_config.scenes.len() != len_before
     }
 
     pub fn apply_runtime_scenes(&mut self) {
         let overrides = self.scenes.get_scene_overrides();
-        self.scenes.load_config_rows(&self.runtime_config.scenes, overrides);
+        self.scenes
+            .load_config_rows(&self.runtime_config.scenes, overrides);
         self.scenes.force_invalidate(&self.devices, &self.groups);
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast();
