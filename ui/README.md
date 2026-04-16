@@ -1,4 +1,4 @@
-# homectl-next
+# homectl-ui
 
 <div>
 <img title="Dashboard" style="height: 420px" src="https://github.com/user-attachments/assets/5281e8bd-bf23-4b0d-9a02-e4dee423d2f5" />
@@ -11,18 +11,22 @@
 
 ## Setup
 
-1. Install dependencies: `npm install`
-2. Make sure both `API_ENDPOINT` and `WS_ENDPOINT` in `.env` point to your homectl server (default local port: `45289`)
-3. Build the project with `npm run build`
+1. Install dependencies: `pnpm install`
+2. Start the homectl server on port `45289`
+3. Run `pnpm dev` for the Vite dev server, or `pnpm build` to produce a production bundle
 
 ### Running in development mode (immediately see your changes)
 
 ```
-npm run dev
+pnpm dev
 ```
+
+The Vite dev server proxies `/api`, `/health`, and `/ws` to the Rust backend on `localhost:45289`.
 
 ### Running in production mode (app works much faster this way)
 
 ```
-npm start
+pnpm build
 ```
+
+The production bundle is written to `ui/dist`. The new unified root Docker image copies that bundle into the same container as `homectl-server`, which then serves both the SPA and the backend API from port `45289`.

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es2015",
+    "target": "es2022",
     "lib": [
       "dom",
       "dom.iterable",
@@ -12,12 +12,16 @@
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "node",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
+    "types": [
+      "node",
+      "vite/client"
+    ],
     "baseUrl": ".",
     "paths": {
       "@/ui/*": [
@@ -40,19 +44,24 @@
       ],
       "@/types/*": [
         "types/*"
+      ],
+      "next/dynamic": [
+        "src/shims/next-dynamic"
+      ],
+      "next/link": [
+        "src/shims/next-link"
+      ],
+      "next/navigation": [
+        "src/shims/next-navigation"
+      ],
+      "next/server": [
+        "src/shims/next-server"
       ]
-    },
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+    }
   },
   "include": [
-    "next-env.d.ts",
     "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
+    "**/*.tsx"
   ],
   "exclude": [
     "node_modules"

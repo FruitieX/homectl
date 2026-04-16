@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport"
+		content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover" />
+	<link rel="icon" type="image/png" href="/homectl-icon.png" />
+	<link rel="manifest" href="/manifest.json" />
+	<title>homectl</title>
+	<script>
+		(function () {
+			try {
+				const stored = localStorage.getItem('homectl-theme');
+				const theme = stored ? JSON.parse(stored) : 'auto';
+				let effectiveTheme = theme;
+				if (theme === 'auto') {
+					effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+						? 'dark'
+						: 'light';
+				}
+				const daisyuiTheme = effectiveTheme === 'dark' ? 'business' : 'corporate';
+				document.documentElement.setAttribute('data-theme', daisyuiTheme);
+			} catch (error) {
+				document.documentElement.setAttribute('data-theme', 'business');
+			}
+		})();
+	</script>
+</head>
+
+<body class="flex flex-col overflow-hidden" style="touch-action: none;">
+	<div id="root" class="flex min-h-dvh flex-1 flex-col overflow-hidden"></div>
+	<script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
