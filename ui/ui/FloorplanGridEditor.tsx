@@ -24,6 +24,15 @@ export interface GridPoint {
   y: number;
 }
 
+type HorizontalResizeDirection = 'left' | 'right';
+
+type VerticalResizeDirection = 'top' | 'bottom';
+
+type ResizeOffsets = {
+  x: number;
+  y: number;
+};
+
 type FloorplanDeviceType = 'controllable' | 'sensor' | 'other';
 
 interface AvailableFloorplanDevice {
@@ -154,6 +163,33 @@ const buildEmptyTiles = (width: number, height: number): TileType[][] => {
     tiles.push(row);
   }
   return tiles;
+};
+
+const getResizeOffsets = (
+  sourceGrid: FloorplanGrid,
+  newWidth: number,
+  newHeight: number,
+  horizontalDirection: HorizontalResizeDirection,
+  verticalDirection: VerticalResizeDirection,
+): ResizeOffsets => ({
+  x: horizontalDirection === 'left' ? newWidth - sourceGrid.width : 0,
+  y: verticalDirection === 'top' ? newHeight - sourceGrid.height : 0,
+});
+
+const translateGridPoint = (
+  point: GridPoint,
+  offsets: ResizeOffsets,
+  width: number,
+  height: number,
+): GridPoint | null => {
+  const x = point.x + offsets.x;
+  const y = point.y + offsets.y;
+
+  if (x < 0 || y < 0 || x >= width || y >= height) {
+    return null;
+  }
+
+  return { x, y };
 };
 
 const cloneGrid = (grid: FloorplanGrid): FloorplanGrid => ({
@@ -349,28 +385,54 @@ const resizeGridState = (
   sourceGrid: FloorplanGrid,
   newWidth: number,
   newHeight: number,
+  horizontalDirection: HorizontalResizeDirection,
+  verticalDirection: VerticalResizeDirection,
 ): FloorplanGrid | null => {
   if (newWidth === sourceGrid.width && newHeight === sourceGrid.height) {
     return null;
   }
 
-  const newTiles: TileType[][] = [];
-  for (let y = 0; y < newHeight; y++) {
-    const row: TileType[] = [];
-    for (let x = 0; x < newWidth; x++) {
-      row.push(sourceGrid.tiles[y]?.[x] || 'floor');
+  const offsets = getResizeOffsets(
+    sourceGrid,
+    newWidth,
+    newHeight,
+    horizontalDirection,
+    verticalDirection,
+  );
+
+  const newTiles = buildEmptyTiles(newWidth, newHeight);
+  for (let y = 0; y < sourceGrid.height; y += 1) {
+    for (let x = 0; x < sourceGrid.width; x += 1) {
+      const translatedPoint = translateGridPoint({ x, y }, offsets, newWidth, newHeight);
+      if (!translatedPoint) {
+        continue;
+      }
+
+      newTiles[translatedPoint.y][translatedPoint.x] = sourceGrid.tiles[y]?.[x] ?? 'floor';
     }
-    newTiles.push(row);
   }
 
-  const newDevices = sourceGrid.devices.filter(
-    (device) => device.x < newWidth && device.y < newHeight,
-  );
+  const newDevices = sourceGrid.devices.flatMap((device) => {
+    const x = device.x + offsets.x;
+    const y = device.y + offsets.y;
+    if (x < 0 || y < 0 || x >= newWidth || y >= newHeight) {
+      return [];
+    }
+
+    return [{ ...device, x, y }];
+  });
   const newGroups = Object.fromEntries(
     Object.entries(sourceGrid.groups)
       .map(([groupId, points]) => [
         groupId,
-        normalizeGroupPoints(points, newWidth, newHeight),
+        normalizeGroupPoints(
+          points.flatMap((point) => {
+            const translatedPoint = translateGridPoint(point, offsets, newWidth, newHeight);
+            return translatedPoint ? [translatedPoint] : [];
+          }),
+          newWidth,
+          newHeight,
+        ),
       ] as const)
       .filter(([, points]) => points.length > 0),
   );
@@ -545,6 +607,10 @@ export function FloorplanGridEditor({
 }: FloorplanGridEditorProps) {
   const [selectedTool, setSelectedTool] = useState<TileType>('wall');
   const [mode, setMode] = useState<EditorMode>('tiles');
+  const [horizontalResizeDirection, setHorizontalResizeDirection] =
+    useState<HorizontalResizeDirection>('right');
+  const [verticalResizeDirection, setVerticalResizeDirection] =
+    useState<VerticalResizeDirection>('bottom');
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
   const [groupPaintMode, setGroupPaintMode] = useState<GroupPaintMode>('paint');
@@ -1229,7 +1295,43 @@ export function FloorplanGridEditor({
   // Resize grid
   const resizeGrid = (newWidth: number, newHeight: number) => {
     const currentGrid = cloneGrid(gridRef.current);
-    applyDiscreteChange(resizeGridState(currentGrid, newWidth, newHeight), currentGrid);
+    const offsets = getResizeOffsets(
+      currentGrid,
+      newWidth,
+      newHeight,
+      horizontalResizeDirection,
+      verticalResizeDirection,
+    );
+
+    if (
+      !applyDiscreteChange(
+        resizeGridState(
+          currentGrid,
+          newWidth,
+          newHeight,
+          horizontalResizeDirection,
+          verticalResizeDirection,
+        ),
+        currentGrid,
+      )
+    ) {
+      return;
+    }
+
+    setHoveredCell(null);
+
+    const currentLineAnchor = lineAnchorRef.current;
+    if (!currentLineAnchor) {
+      return;
+    }
+
+    const nextAnchorCell = translateGridPoint(
+      currentLineAnchor.cell,
+      offsets,
+      newWidth,
+      newHeight,
+    );
+    updateLineAnchor(nextAnchorCell ? { ...currentLineAnchor, cell: nextAnchorCell } : null);
   };
 
   const updateDeviceScale = (nextScale: number) => {
@@ -1439,6 +1541,42 @@ export function FloorplanGridEditor({
                 min={5}
                 max={100}
               />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm">Expand:</span>
+              <div className="join">
+                <button
+                  className={`btn btn-xs join-item ${horizontalResizeDirection === 'left' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setHorizontalResizeDirection('left')}
+                  type="button"
+                >
+                  Left
+                </button>
+                <button
+                  className={`btn btn-xs join-item ${horizontalResizeDirection === 'right' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setHorizontalResizeDirection('right')}
+                  type="button"
+                >
+                  Right
+                </button>
+              </div>
+              <div className="join">
+                <button
+                  className={`btn btn-xs join-item ${verticalResizeDirection === 'top' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setVerticalResizeDirection('top')}
+                  type="button"
+                >
+                  Top
+                </button>
+                <button
+                  className={`btn btn-xs join-item ${verticalResizeDirection === 'bottom' ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setVerticalResizeDirection('bottom')}
+                  type="button"
+                >
+                  Bottom
+                </button>
+              </div>
             </div>
 
             <label className="label cursor-pointer gap-2">
