@@ -1,5 +1,3 @@
-'use client';
-
 import { atom, useAtom } from 'jotai';
 
 const baseAtom = atom<string[]>([]);

@@ -1,5 +1,3 @@
-'use client';
-
 import { Device } from '@/bindings/Device';
 import { DevicesState } from '@/bindings/DevicesState';
 import {

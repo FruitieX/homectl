@@ -1,12 +1,10 @@
-'use client';
-
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
 import { produce } from 'immer';
 import { Car, Edit, LampCeiling, X } from 'lucide-react';
 import { Button, Card, Modal } from 'react-daisyui';
 import { useTimeout, useToggle } from 'usehooks-ts';
-import dynamicImport from 'next/dynamic';
+import Viewport from '../map/Viewport';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { useCallback, useEffect } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
@@ -138,16 +136,23 @@ export const ControlsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-1 bg-base-300">
+      <Card compact className="col-span-1 h-full bg-base-300">
+        <Card.Body className="h-full p-0">
           <Button
             color="ghost"
-            className={clsx(carHeater ? '' : 'opacity-30', 'h-full')}
+            className={clsx(
+              carHeater ? '' : 'opacity-30',
+              'h-full w-full justify-center rounded-box',
+            )}
             size="lg"
             startIcon={<Car size="3rem" />}
             onClick={() => toggleCarHeater()}
             onContextMenu={() => carHeaterModalOpenState.setOpen(true)}
             loading={carHeaterLoading}
-            >
+          >
+            <span className="sr-only">Toggle car heater</span>
+          </Button>
+        </Card.Body>
         {/* <Card.Body className="flex-row items-center justify-around overflow-x-auto"> */}
           {/* <Button
             color="ghost"
@@ -164,7 +169,6 @@ export const ControlsCard = () => {
           onClick={cleanHouse}
         /> */}
         {/* </Card.Body> */}
-</Button>
       </Card>
       <Modal.Legacy
         responsive
@@ -186,12 +190,10 @@ export const ControlsCard = () => {
             <X />
           </Button>
         </Modal.Header>
-        {mapVisible && <NoSSRViewport />}
+        {mapVisible && <Viewport />}
       </Modal.Legacy>
     </>
   );
 };
 
-const NoSSRViewport = dynamicImport(() => import('../map/Viewport'), {
-  ssr: false,
-});
+

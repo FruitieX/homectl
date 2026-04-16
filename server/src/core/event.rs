@@ -432,6 +432,7 @@ mod tests {
             version: 1,
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                ..CoreConfigRow::default()
             },
             integrations: Vec::new(),
             groups: Vec::new(),
@@ -442,6 +443,7 @@ mod tests {
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_sensor_configs: Vec::new(),
+            widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),
             dashboard_widgets: Vec::new(),
         }

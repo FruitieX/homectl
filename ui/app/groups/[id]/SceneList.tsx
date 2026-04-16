@@ -1,8 +1,5 @@
-'use client';
-
 import { Menu } from 'react-daisyui';
 import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
-import dynamicImport from 'next/dynamic';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { SceneId } from '@/bindings/SceneId';
@@ -10,7 +7,7 @@ import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useSceneModalState } from '@/hooks/sceneModalState';
 import { excludeUndefined } from 'utils/excludeUndefined';
 import clsx from 'clsx';
-const NoSSRPreview = dynamicImport(() => import('../Preview'), { ssr: false });
+import Preview from '../Preview';
 
 type Props = { deviceKeys: string[]; showAll?: boolean };
 export const SceneList = (props: Props) => {
@@ -121,7 +118,7 @@ export const SceneList = (props: Props) => {
               >
                 <div className="flex-1 truncate">{scene.name}</div>
                 <div className="h-[96px] w-[112px]">
-                  <NoSSRPreview devices={previewDevices} />
+                  <Preview devices={previewDevices} />
                 </div>
               </div>
             </Menu.Item>

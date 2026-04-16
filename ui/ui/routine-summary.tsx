@@ -1,5 +1,3 @@
-'use client';
-
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { RuleRuntimeStatus } from '@/bindings/RuleRuntimeStatus';
 import type { TriggerMode } from '@/bindings/TriggerMode';

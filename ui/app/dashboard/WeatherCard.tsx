@@ -5,6 +5,12 @@ import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
 import useIdle from '@/hooks/useIdle';
+import { useAppConfig } from '@/hooks/appConfig';
+import {
+  type DashboardWidget,
+  getDashboardWidgetOptionString,
+  resolveDashboardWidgetUrl,
+} from '@/hooks/useDashboard';
 import { getUvIndexColor } from '@/lib/uvIndex';
 import { WeatherChart } from '@/ui/charts/WeatherChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
@@ -86,8 +92,8 @@ type WeatherResponse = {
   };
 };
 
-const fetchWeather = async (): Promise<WeatherResponse> => {
-  const res = await fetch('/api/weather');
+const fetchWeather = async (weatherUrl: string): Promise<WeatherResponse> => {
+  const res = await fetch(weatherUrl);
   if (!res.ok) {
     throw new Error(`Failed to fetch weather: ${res.status}`);
   }
@@ -95,8 +101,18 @@ const fetchWeather = async (): Promise<WeatherResponse> => {
   return json;
 };
 
-export const WeatherCard = () => {
+export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const { apiEndpoint } = useAppConfig();
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
+  const weatherUrl = resolveDashboardWidgetUrl(
+    apiEndpoint,
+    getDashboardWidgetOptionString(widget, 'weatherPath', '/api/weather'),
+  );
+  const sensorPath = getDashboardWidgetOptionString(
+    widget,
+    'sensorPath',
+    '/api/influxdb/temp-sensors',
+  );
 
   const isIdle = useIdle();
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
@@ -104,7 +120,7 @@ export const WeatherCard = () => {
   const [activeTab, setActiveTab] = useState(0);
   const modalBodyRef = useRef<HTMLDivElement>(null);
 
-  const tempSensors = useTempSensorsQuery();
+  const tempSensors = useTempSensorsQuery(sensorPath);
 
   const latestFrontyardTemp = tempSensors?.findLast(
     (row) => row.device_id === 'D83534387029',
@@ -114,7 +130,7 @@ export const WeatherCard = () => {
     let isSubscribed = true;
 
     const fetchData = async () => {
-      const weather = await fetchWeather();
+      const weather = await fetchWeather(weatherUrl);
       if (isSubscribed === true) {
         setWeather(weather);
       }
@@ -124,10 +140,10 @@ export const WeatherCard = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [weatherUrl]);
 
   useInterval(async () => {
-    const weather = await fetchWeather();
+    const weather = await fetchWeather(weatherUrl);
     setWeather(weather);
   }, 60 * 1000);
 

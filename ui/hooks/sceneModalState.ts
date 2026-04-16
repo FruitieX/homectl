@@ -1,5 +1,3 @@
-'use client';
-
 import { SceneId } from '@/bindings/SceneId';
 import { atom, useAtom } from 'jotai';
 

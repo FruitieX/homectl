@@ -58,7 +58,7 @@ export const Preview = (props: Props) => {
         }
       }}
     >
-      <Layer name="bottom-layer" />
+      <Layer name="bottom-layer" x={contentX} y={contentY} />
       <Layer x={contentX} y={contentY}>
         <FloorplanBackground grid={floorplanGrid} image={floorplanImage} />
 

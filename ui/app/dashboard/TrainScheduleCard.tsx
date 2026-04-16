@@ -2,6 +2,12 @@ import clsx from 'clsx';
 import { useEffect, useState } from 'react';
 import { Card, Table } from 'react-daisyui';
 import { useInterval } from 'usehooks-ts';
+import { useAppConfig } from '@/hooks/appConfig';
+import {
+  type DashboardWidget,
+  getDashboardWidgetOptionString,
+  resolveDashboardWidgetUrl,
+} from '@/hooks/useDashboard';
 
 type Trip = {
   routeShortName: string;
@@ -50,8 +56,8 @@ type HslResponse = {
   };
 };
 
-const fetchTrainSchedule = async (): Promise<Train[]> => {
-  const res = await fetch('/api/train-schedule');
+const fetchTrainSchedule = async (trainScheduleUrl: string): Promise<Train[]> => {
+  const res = await fetch(trainScheduleUrl);
   if (!res.ok) {
     throw new Error(`Failed to fetch train schedule: ${res.status}`);
   }
@@ -72,14 +78,23 @@ function getSecSinceMidnight(d: Date) {
   return (d.valueOf() - e.setHours(0, 0, 0, 0)) / 1000;
 }
 
-export const TrainScheduleCard = () => {
+export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const { apiEndpoint } = useAppConfig();
   const [trains, setTrains] = useState<Train[]>([]);
+  const trainScheduleUrl = resolveDashboardWidgetUrl(
+    apiEndpoint,
+    getDashboardWidgetOptionString(
+      widget,
+      'trainSchedulePath',
+      '/api/train-schedule',
+    ),
+  );
 
   useEffect(() => {
     let isSubscribed = true;
 
     const fetchData = async () => {
-      const trains = await fetchTrainSchedule();
+      const trains = await fetchTrainSchedule(trainScheduleUrl);
       if (isSubscribed === true) {
         setTrains(trains);
       }
@@ -89,10 +104,10 @@ export const TrainScheduleCard = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [trainScheduleUrl]);
 
   useInterval(async () => {
-    const trains = await fetchTrainSchedule();
+    const trains = await fetchTrainSchedule(trainScheduleUrl);
     setTrains(trains);
   }, 60 * 1000);
 

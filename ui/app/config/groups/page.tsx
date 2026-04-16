@@ -1,5 +1,3 @@
-'use client';
-
 import { Device } from '@/bindings/Device';
 import { useDeviceDisplayNames, useGroups, Group } from '@/hooks/useConfig';
 import { matchesConfigSearch } from '@/lib/configSearch';

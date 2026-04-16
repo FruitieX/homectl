@@ -1,5 +1,3 @@
-'use client';
-
 import { useAppConfig } from '@/hooks/appConfig';
 import { Modal } from 'react-daisyui';
 import { useRef, useState } from 'react';

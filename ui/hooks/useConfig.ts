@@ -1,5 +1,3 @@
-'use client';
-
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { useCallback, useEffect, useState } from 'react';
 import { useAppConfig } from './appConfig';

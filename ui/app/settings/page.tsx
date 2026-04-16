@@ -1,5 +1,3 @@
-'use client';
-
 import { useTheme, ThemeMode } from '@/hooks/theme';
 import { Sun, Moon, Monitor } from 'lucide-react';
 

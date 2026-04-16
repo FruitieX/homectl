@@ -2,7 +2,7 @@ use crate::db::config_queries::{
     self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
     DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanExportRow,
     FloorplanMetadataRow, FloorplanRow, GroupPositionRow, GroupRow, IntegrationRow, RoutineRow,
-    SceneRow,
+    SceneRow, WidgetSettingRow,
 };
 use crate::types::{
     color::ColorMode,
@@ -347,6 +347,23 @@ impl AppState {
             .dashboard_widgets
             .retain(|widget| widget.id != widget_id);
         self.runtime_config.dashboard_widgets.len() != len_before
+    }
+
+    pub fn upsert_widget_setting(&mut self, setting: WidgetSettingRow) {
+        if let Some(existing) = self
+            .runtime_config
+            .widget_settings
+            .iter_mut()
+            .find(|existing| existing.key == setting.key)
+        {
+            *existing = setting;
+        } else {
+            self.runtime_config.widget_settings.push(setting);
+        }
+
+        self.runtime_config
+            .widget_settings
+            .sort_by(|left, right| left.key.cmp(&right.key));
     }
 
     pub fn upsert_group(&mut self, group: GroupRow) {

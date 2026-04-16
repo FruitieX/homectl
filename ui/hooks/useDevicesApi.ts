@@ -1,5 +1,3 @@
-'use client';
-
 import { useAppConfig } from '@/hooks/appConfig';
 import { Device } from '@/bindings/Device';
 import { DevicesState } from '@/bindings/DevicesState';

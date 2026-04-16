@@ -1,5 +1,3 @@
-'use client';
-
 import { useIntegrations, Integration } from '@/hooks/useConfig';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';

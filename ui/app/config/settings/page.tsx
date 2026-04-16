@@ -1,15 +1,28 @@
-'use client';
-
 import { useCallback, useEffect, useState } from 'react';
 import { useAppConfig } from '@/hooks/appConfig';
 
 interface CoreConfig {
   warmupTimeSeconds: number;
+  weatherApiUrl: string;
+  trainApiUrl: string;
+  influxUrl: string;
+  influxToken: string;
+  calendarIcsUrl: string;
 }
 
 interface CoreConfigApiResponse {
   warmupTimeSeconds?: number;
   warmup_time_seconds?: number;
+  weatherApiUrl?: string;
+  weather_api_url?: string;
+  trainApiUrl?: string;
+  train_api_url?: string;
+  influxUrl?: string;
+  influx_url?: string;
+  influxToken?: string;
+  influx_token?: string;
+  calendarIcsUrl?: string;
+  calendar_ics_url?: string;
 }
 
 export default function SettingsPage() {
@@ -22,7 +35,14 @@ export default function SettingsPage() {
 
   const normalizeCoreConfig = useCallback((value: CoreConfigApiResponse | null | undefined) => {
     const warmupTimeSeconds = value?.warmupTimeSeconds ?? value?.warmup_time_seconds ?? 1;
-    return { warmupTimeSeconds };
+    return {
+      warmupTimeSeconds,
+      weatherApiUrl: value?.weatherApiUrl ?? value?.weather_api_url ?? '',
+      trainApiUrl: value?.trainApiUrl ?? value?.train_api_url ?? '',
+      influxUrl: value?.influxUrl ?? value?.influx_url ?? '',
+      influxToken: value?.influxToken ?? value?.influx_token ?? '',
+      calendarIcsUrl: value?.calendarIcsUrl ?? value?.calendar_ics_url ?? '',
+    };
   }, []);
 
   const fetchConfig = useCallback(async () => {
@@ -54,7 +74,14 @@ export default function SettingsPage() {
       const res = await fetch(`${apiEndpoint}/api/v1/config/core`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ warmup_time_seconds: config.warmupTimeSeconds }),
+        body: JSON.stringify({
+          warmup_time_seconds: config.warmupTimeSeconds,
+          weather_api_url: config.weatherApiUrl,
+          train_api_url: config.trainApiUrl,
+          influx_url: config.influxUrl,
+          influx_token: config.influxToken,
+          calendar_ics_url: config.calendarIcsUrl,
+        }),
       });
       const data = await res.json();
       if (data.success) {
@@ -141,6 +168,76 @@ export default function SettingsPage() {
                 routines. Increase this if devices are not ready when routines first run.
               </span>
             </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="card bg-base-200 shadow-xl">
+        <div className="card-body">
+          <h2 className="card-title">Dashboard Data Sources</h2>
+          <p className="text-sm opacity-70">
+            These server-side sources back the weather, calendar, train, and InfluxDB dashboard
+            widgets.
+          </p>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">Weather API URL</span>
+            </label>
+            <input
+              type="url"
+              className="input input-bordered w-full"
+              value={config?.weatherApiUrl ?? ''}
+              onChange={(e) => updateConfig({ weatherApiUrl: e.target.value })}
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">Train API URL</span>
+            </label>
+            <input
+              type="url"
+              className="input input-bordered w-full"
+              value={config?.trainApiUrl ?? ''}
+              onChange={(e) => updateConfig({ trainApiUrl: e.target.value })}
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">InfluxDB URL</span>
+            </label>
+            <input
+              type="url"
+              className="input input-bordered w-full"
+              value={config?.influxUrl ?? ''}
+              onChange={(e) => updateConfig({ influxUrl: e.target.value })}
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">InfluxDB Token</span>
+            </label>
+            <input
+              type="password"
+              className="input input-bordered w-full"
+              value={config?.influxToken ?? ''}
+              onChange={(e) => updateConfig({ influxToken: e.target.value })}
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text font-medium">Calendar ICS URL</span>
+            </label>
+            <input
+              type="url"
+              className="input input-bordered w-full"
+              value={config?.calendarIcsUrl ?? ''}
+              onChange={(e) => updateConfig({ calendarIcsUrl: e.target.value })}
+            />
           </div>
         </div>
       </div>

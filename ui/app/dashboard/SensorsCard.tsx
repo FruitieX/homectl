@@ -28,6 +28,10 @@ import {
   getOfflineStatus,
 } from '@/lib/sensorStats';
 import Tooltip from '@/ui/Tooltip';
+import {
+  type DashboardWidget,
+  getDashboardWidgetOptionString,
+} from '@/hooks/useDashboard';
 
 interface SensorReading {
   time: Date;
@@ -166,7 +170,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
   );
 };
 
-export const SensorsCard = () => {
+export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
   const [activeSensorId, setActiveSensorId] = useState<string | null>(null);
@@ -180,7 +184,13 @@ export const SensorsCard = () => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isIdle = useIdle();
-  const sensorData = useSensorData();
+  const sensorData = useSensorData(
+    getDashboardWidgetOptionString(
+      widget,
+      'sensorPath',
+      '/api/influxdb/temp-sensors',
+    ),
+  );
 
   // Reset scroll position to x=0 when user becomes idle
   useEffect(() => {

@@ -51,9 +51,7 @@ impl RuntimeConfigSnapshot {
         Self {
             config: config_queries::ConfigExport {
                 version: 1,
-                core: config_queries::CoreConfigRow {
-                    warmup_time_seconds: 1,
-                },
+                core: config_queries::CoreConfigRow::default(),
                 integrations: Vec::new(),
                 groups: Vec::new(),
                 scenes: Vec::new(),
@@ -63,6 +61,7 @@ impl RuntimeConfigSnapshot {
                 group_positions: Vec::new(),
                 device_display_overrides: Vec::new(),
                 device_sensor_configs: Vec::new(),
+                widget_settings: Vec::new(),
                 dashboard_layouts: Vec::new(),
                 dashboard_widgets: Vec::new(),
             },

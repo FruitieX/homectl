@@ -1,5 +1,3 @@
-'use client';
-
 import {
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,

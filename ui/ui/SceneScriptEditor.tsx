@@ -1,5 +1,3 @@
-'use client';
-
 import Editor from '@monaco-editor/react';
 import type * as MonacoEditor from 'monaco-editor';
 import { useEffect, useId, useState } from 'react';

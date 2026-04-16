@@ -5,16 +5,14 @@ on:
     branches: ["main"]
     paths:
       - 'ui/**'
+      - 'Dockerfile'
       - '.github/workflows/ui-ci.yml'
   pull_request:
     paths:
       - 'ui/**'
+      - 'Dockerfile'
       - '.github/workflows/ui-ci.yml'
   workflow_dispatch: {}
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-ui
 
 jobs:
   conventional-commit:
@@ -23,47 +21,32 @@ jobs:
     steps:
       - uses: webiny/action-conventional-commits@8bc41ff4e7d423d56fa4905f6ff79209a78776c7 # v1.3.0
 
-  build-image:
-    name: Build & (optionally) push image
+  build-ui:
+    name: Typecheck & build UI
     runs-on: ubuntu-latest
-    permissions:
-      packages: write
-      contents: read
+    defaults:
+      run:
+        working-directory: ui
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
 
-      - name: Login to GHCR
-        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          version: 10
 
-      - name: Set up Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=schedule
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=semver,pattern={{major}}
-            type=sha
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ui/pnpm-lock.yaml
 
-      - name: Build (and push)
-        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
-        with:
-          context: ui
-          file: ui/Dockerfile
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm tsc --pretty false
+
+      - name: Build
+        run: pnpm build

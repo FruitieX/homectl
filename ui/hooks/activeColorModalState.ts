@@ -1,5 +1,3 @@
-'use client';
-
 import { atom, useAtom } from 'jotai';
 
 const activeColorModalAtom = atom<string | null>(null);

@@ -1,5 +1,3 @@
-'use client';
-
 import { atom, useAtom } from 'jotai';
 
 const pastedImageAtom = atom<HTMLImageElement | null>(null);

@@ -1,5 +1,3 @@
-'use client';
-
 import { Image as KonvaImage } from 'react-konva';
 import { useMemo } from 'react';
 import type { FloorplanGrid, TileType } from '@/ui/FloorplanGridEditor';

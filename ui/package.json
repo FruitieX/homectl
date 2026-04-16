@@ -1,10 +1,10 @@
 {
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "dev": "vite --host 0.0.0.0 --port 3000",
+    "build": "vite build",
+    "start": "vite preview --host 0.0.0.0 --port 3000",
+    "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,ts,tsx}\"",
     "tsc": "tsc --noEmit"
   },
@@ -56,11 +56,11 @@
     "lodash": "4.18.1",
     "lucide-react": "0.545.0",
     "monaco-editor": "0.55.1",
-    "next": "15.5.15",
     "react": "19.2.3",
     "react-color": "2.19.3",
     "react-daisyui": "5.0.5",
     "react-dom": "19.2.3",
+    "react-router-dom": "7.14.1",
     "react-konva": "19.0.10",
     "react-konva-utils": "2.0.0",
     "use-image": "1.1.4",
@@ -80,15 +80,15 @@
     "@typescript-eslint/eslint-plugin": "8.46.1",
     "@typescript-eslint/parser": "8.46.1",
     "eslint": "9.37.0",
-    "eslint-config-next": "15.5.9",
     "eslint-plugin-react": "7.37.5",
     "eslint-plugin-react-hooks": "6.1.1",
     "postcss": "8.5.6",
     "prettier": "3.6.2",
     "prettier-plugin-tailwindcss": "0.6.14",
-    "raw-loader": "4.0.2",
     "tailwindcss": "4.1.18",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite": "8.0.8",
+    "@vitejs/plugin-react": "6.0.1"
   },
   "version": "1.0.0",
   "pnpm": {

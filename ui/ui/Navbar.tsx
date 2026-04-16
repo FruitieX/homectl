@@ -3,16 +3,16 @@ import { Button } from 'react-daisyui';
 import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { usePathname, useRouter } from 'next/navigation';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useWebsocketState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
 
 export const Navbar = () => {
-  const router = useRouter();
+  const navigate = useNavigate();
 
-  const pathname = usePathname();
+  const pathname = useLocation().pathname;
   const state = useWebsocketState();
 
   let title = 'homectl';
@@ -56,9 +56,9 @@ export const Navbar = () => {
 
   const navigateBack = useCallback(() => {
     if (back) {
-      router.replace(back);
+      navigate(back, { replace: true });
     }
-  }, [back, router]);
+  }, [back, navigate]);
 
   const [isFullscreen, setIsFullscreen] = useIsFullscreen();
 

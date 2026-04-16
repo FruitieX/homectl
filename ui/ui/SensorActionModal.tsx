@@ -1,5 +1,3 @@
-'use client';
-
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';

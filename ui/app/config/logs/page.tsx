@@ -1,5 +1,3 @@
-'use client';
-
 import { LogLevel, UiLogEntry, useLogs } from '@/hooks/useConfig';
 import { useState } from 'react';
 

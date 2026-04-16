@@ -314,6 +314,25 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
         }
     }
 
+    let widget_settings = match sqlx::query_as::<_, (String, String)>(
+        "SELECT key, config FROM widget_settings ORDER BY key",
+    )
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|(key, config)| config_queries::WidgetSettingRow {
+                key,
+                config: serde_json::from_str(&config).unwrap_or_default(),
+            })
+            .collect(),
+        Err(error) => {
+            warn!("Failed to read widget settings from sqlite source database: {error}");
+            Vec::new()
+        }
+    };
+
     pool.close().await;
 
     Ok(ConfigExport {
@@ -328,6 +347,7 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
         group_positions: Vec::new(),
         device_display_overrides,
         device_sensor_configs: Vec::new(),
+        widget_settings,
         dashboard_layouts,
         dashboard_widgets,
     })
@@ -566,6 +586,25 @@ async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExpo
         }
     }
 
+    let widget_settings = match sqlx::query_as::<_, (String, String)>(
+        "SELECT key, config FROM widget_settings ORDER BY key",
+    )
+    .fetch_all(&pool)
+    .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|(key, config)| config_queries::WidgetSettingRow {
+                key,
+                config: serde_json::from_str(&config).unwrap_or_default(),
+            })
+            .collect(),
+        Err(error) => {
+            warn!("Failed to read widget settings from postgres source database: {error}");
+            Vec::new()
+        }
+    };
+
     pool.close().await;
 
     Ok(ConfigExport {
@@ -580,6 +619,7 @@ async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExpo
         group_positions,
         device_display_overrides,
         device_sensor_configs,
+        widget_settings,
         dashboard_layouts,
         dashboard_widgets,
     })

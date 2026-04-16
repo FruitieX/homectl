@@ -1,5 +1,3 @@
-'use client';
-
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { extractJsonPointers, resolveJsonPointer } from '../utils/jsonPointers';

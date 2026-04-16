@@ -1,13 +1,21 @@
-'use client';
-
 import { Card } from 'react-daisyui';
 import { useSpotPriceQuery } from '@/hooks/influxdb';
+import {
+  type DashboardWidget,
+  getDashboardWidgetOptionString,
+} from '@/hooks/useDashboard';
 import { SpotPriceChart, spotPriceToColor } from '@/ui/charts/SpotPriceChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { useMemo } from 'react';
 
-export const SpotPriceCard = () => {
-  const spotPrice = useSpotPriceQuery();
+export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const spotPrice = useSpotPriceQuery(
+    getDashboardWidgetOptionString(
+      widget,
+      'spotPricePath',
+      '/api/influxdb/spot-prices',
+    ),
+  );
 
   // Memoize the data transformation to prevent unnecessary re-renders
   const data = useMemo(() => {

@@ -1,6 +1,5 @@
-import Link from 'next/link';
+import { Link, useLocation } from 'react-router-dom';
 import { LayoutDashboard, List, Map, Settings, Cog } from 'lucide-react';
-import { usePathname } from 'next/navigation';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { Button } from 'react-daisyui';
 
@@ -25,7 +24,7 @@ const getRoute = (pathname: string | null): Route => {
 };
 
 export const HomectlBottomNavigation = () => {
-  const pathname = usePathname();
+  const pathname = useLocation().pathname;
   const route = getRoute(pathname);
 
   const [isFullscreen] = useIsFullscreen();
@@ -40,7 +39,7 @@ export const HomectlBottomNavigation = () => {
         aria-label="Primary navigation"
         className="flex min-h-0 h-12 min-w-full w-max items-stretch"
       >
-        <Link href="/" passHref className="h-full min-w-36 shrink-0 flex-1">
+        <Link to="/" className="h-full min-w-36 shrink-0 flex-1">
           <Button
             active={route === 'Dashboard'}
             className="flex h-full w-full items-center gap-3 whitespace-nowrap"
@@ -50,7 +49,7 @@ export const HomectlBottomNavigation = () => {
             <span className="text-xs">Dashboard</span>
           </Button>
         </Link>
-        <Link href="/map" passHref className="h-full min-w-36 shrink-0 flex-1">
+        <Link to="/map" className="h-full min-w-36 shrink-0 flex-1">
           <Button
             active={route === 'Floorplan'}
             className="flex h-full w-full items-center gap-3 whitespace-nowrap"
@@ -60,7 +59,7 @@ export const HomectlBottomNavigation = () => {
             <span className="text-xs">Floorplan</span>
           </Button>
         </Link>
-        <Link href="/groups" passHref className="h-full min-w-36 shrink-0 flex-1">
+        <Link to="/groups" className="h-full min-w-36 shrink-0 flex-1">
           <Button
             active={route === 'Groups'}
             className="flex h-full w-full items-center gap-3 whitespace-nowrap"
@@ -70,7 +69,7 @@ export const HomectlBottomNavigation = () => {
             <span className="text-xs">Groups</span>
           </Button>
         </Link>
-        <Link href="/config" passHref className="h-full min-w-36 shrink-0 flex-1">
+        <Link to="/config" className="h-full min-w-36 shrink-0 flex-1">
           <Button
             active={route === 'Config'}
             className="flex h-full w-full items-center gap-3 whitespace-nowrap"
@@ -80,7 +79,7 @@ export const HomectlBottomNavigation = () => {
             <span className="text-xs">Config</span>
           </Button>
         </Link>
-        <Link href="/settings" passHref className="h-full min-w-36 shrink-0 flex-1">
+        <Link to="/settings" className="h-full min-w-36 shrink-0 flex-1">
           <Button
             active={route === 'Settings'}
             className="flex h-full w-full items-center gap-3 whitespace-nowrap"

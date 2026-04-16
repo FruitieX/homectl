@@ -1,6 +1,4 @@
-'use client';
-
-import dynamicImport from 'next/dynamic';
+import { Suspense, lazy } from 'react';
 import {
   useGroups,
   useScenes,
@@ -25,16 +23,20 @@ import {
   type SceneTargetKind,
 } from '@/ui/SceneResolvedColorPreview';
 
-const NoSSRSceneScriptEditor = dynamicImport(
-  () => import('@/ui/SceneScriptEditor'),
-  {
-    loading: () => (
+const LazySceneScriptEditor = lazy(() => import('@/ui/SceneScriptEditor'));
+
+const NoSSRSceneScriptEditor = (
+  props: React.ComponentProps<typeof LazySceneScriptEditor>,
+) => (
+  <Suspense
+    fallback={
       <div className="flex h-96 items-center justify-center rounded-xl border border-base-300 bg-base-100/50 text-sm opacity-70">
         Loading script editor...
       </div>
-    ),
-    ssr: false,
-  },
+    }
+  >
+    <LazySceneScriptEditor {...props} />
+  </Suspense>
 );
 
 const getSceneSearchValues = (scene: Scene) => [

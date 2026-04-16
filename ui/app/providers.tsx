@@ -1,5 +1,3 @@
-'use client';
-
 import { Provider as JotaiProvider } from 'jotai';
 import { useProvideWebsocketState } from '@/hooks/websocket';
 import '@/styles/globals.css';

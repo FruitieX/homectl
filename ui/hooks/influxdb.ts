@@ -1,14 +1,24 @@
-'use client';
-
 import { useEffect, useState, useMemo } from 'react';
 import { useInterval } from 'usehooks-ts';
+import { useAppConfig } from './appConfig';
+import { resolveDashboardWidgetUrl } from './useDashboard';
 
 interface SensorRow {
   device_id: string;
   integration_id: string;
   _time: Date;
   _value: number;
-  _field: string; // 'tempc' or 'hum'
+  _field: SensorField;
+}
+
+type SensorField = 'tempc' | 'hum';
+
+interface RawSensorRow {
+  device_id: string;
+  integration_id: string;
+  _time: string;
+  _value: number | string;
+  _field: SensorField;
 }
 
 interface SensorData {
@@ -67,19 +77,87 @@ const PRIORITY_SENSORS = [
   'D63534385106', // Office
 ];
 
-export const useTempSensorsQuery = () => {
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null;
+};
+
+const parseInfluxNumber = (value: unknown): number | null => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+};
+
+const parseInfluxTime = (value: unknown): Date | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const normalizeSensorRows = (value: unknown): SensorRow[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((row) => {
+    if (!isRecord(row)) {
+      return [];
+    }
+
+    const deviceId = typeof row.device_id === 'string' ? row.device_id : null;
+    const integrationId =
+      typeof row.integration_id === 'string' ? row.integration_id : null;
+    const field = row._field === 'tempc' || row._field === 'hum' ? row._field : null;
+    const time = parseInfluxTime(row._time);
+    const numericValue = parseInfluxNumber(row._value);
+
+    if (!deviceId || !integrationId || !field || !time || numericValue === null) {
+      return [];
+    }
+
+    return [
+      {
+        device_id: deviceId,
+        integration_id: integrationId,
+        _time: time,
+        _value: numericValue,
+        _field: field,
+      },
+    ];
+  });
+};
+
+const fetchSensorRows = async (sensorUrl: string): Promise<SensorRow[]> => {
+  const res = await fetch(sensorUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch temp sensors: ${res.status}`);
+  }
+
+  return normalizeSensorRows(await res.json());
+};
+
+export const useTempSensorsQuery = (
+  endpointPath = '/api/influxdb/temp-sensors',
+) => {
+  const { apiEndpoint } = useAppConfig();
   const [tempSensors, setTempSensors] = useState<SensorRow[]>([]);
+  const sensorUrl = resolveDashboardWidgetUrl(apiEndpoint, endpointPath);
 
   useEffect(() => {
     let isSubscribed = true;
 
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/influxdb/temp-sensors');
-        if (!res.ok) {
-          throw new Error(`Failed to fetch temp sensors: ${res.status}`);
-        }
-        const data: SensorRow[] = await res.json();
+        const data = await fetchSensorRows(sensorUrl);
         if (isSubscribed) {
           setTempSensors(data);
         }
@@ -93,15 +171,11 @@ export const useTempSensorsQuery = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [sensorUrl]);
 
   useInterval(async () => {
     try {
-      const res = await fetch('/api/influxdb/temp-sensors');
-      if (!res.ok) {
-        throw new Error(`Failed to fetch temp sensors: ${res.status}`);
-      }
-      const data: SensorRow[] = await res.json();
+      const data = await fetchSensorRows(sensorUrl);
       setTempSensors(data);
     } catch (error) {
       console.error('Error fetching temp sensors:', error);
@@ -111,8 +185,8 @@ export const useTempSensorsQuery = () => {
   return tempSensors;
 };
 
-export const useSensorData = () => {
-  const rawSensorData = useTempSensorsQuery();
+export const useSensorData = (endpointPath = '/api/influxdb/temp-sensors') => {
+  const rawSensorData = useTempSensorsQuery(endpointPath);
 
   const sensorData = useMemo(() => {
     const deviceMap = new Map<string, SensorData>();
@@ -153,7 +227,7 @@ export const useSensorData = () => {
       const sensor = deviceMap.get(row.device_id);
       if (!sensor) return;
 
-      const time = new Date(row._time);
+      const time = row._time;
       const value = row._value;
 
       if (row._field === 'tempc') {
@@ -198,19 +272,61 @@ interface SpotPriceRow {
   _value: number;
 }
 
-export const useSpotPriceQuery = () => {
+interface RawSpotPriceRow {
+  _time: string;
+  _value: number | string;
+}
+
+const normalizeSpotPriceRows = (value: unknown): SpotPriceRow[] => {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value.flatMap((row) => {
+    if (!isRecord(row)) {
+      return [];
+    }
+
+    const time = parseInfluxTime(row._time);
+    const numericValue = parseInfluxNumber(row._value);
+
+    if (!time || numericValue === null) {
+      return [];
+    }
+
+    return [
+      {
+        _time: time,
+        _value: numericValue,
+      },
+    ];
+  });
+};
+
+const fetchSpotPriceRows = async (
+  spotPriceUrl: string,
+): Promise<SpotPriceRow[]> => {
+  const res = await fetch(spotPriceUrl);
+  if (!res.ok) {
+    throw new Error(`Failed to fetch spot prices: ${res.status}`);
+  }
+
+  return normalizeSpotPriceRows(await res.json());
+};
+
+export const useSpotPriceQuery = (
+  endpointPath = '/api/influxdb/spot-prices',
+) => {
+  const { apiEndpoint } = useAppConfig();
   const [spotPrices, setSpotPrices] = useState<SpotPriceRow[]>([]);
+  const spotPriceUrl = resolveDashboardWidgetUrl(apiEndpoint, endpointPath);
 
   useEffect(() => {
     let isSubscribed = true;
 
     const fetchData = async () => {
       try {
-        const res = await fetch('/api/influxdb/spot-prices');
-        if (!res.ok) {
-          throw new Error(`Failed to fetch spot prices: ${res.status}`);
-        }
-        const data: SpotPriceRow[] = await res.json();
+        const data = await fetchSpotPriceRows(spotPriceUrl);
         if (isSubscribed) {
           setSpotPrices(data);
         }
@@ -224,15 +340,11 @@ export const useSpotPriceQuery = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [spotPriceUrl]);
 
   useInterval(async () => {
     try {
-      const res = await fetch('/api/influxdb/spot-prices');
-      if (!res.ok) {
-        throw new Error(`Failed to fetch spot prices: ${res.status}`);
-      }
-      const data: SpotPriceRow[] = await res.json();
+      const data = await fetchSpotPriceRows(spotPriceUrl);
       setSpotPrices(data);
     } catch (error) {
       console.error('Error fetching spot prices:', error);

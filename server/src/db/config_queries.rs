@@ -130,8 +130,28 @@ pub struct DashboardWidgetRow {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WidgetSettingRow {
+    pub key: String,
+    #[serde(default)]
+    pub config: serde_json::Value,
+}
+
+fn default_warmup_time_seconds() -> i32 {
+    1
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CoreConfigRow {
+    #[serde(default = "default_warmup_time_seconds")]
     pub warmup_time_seconds: i32,
+}
+
+impl Default for CoreConfigRow {
+    fn default() -> Self {
+        Self {
+            warmup_time_seconds: default_warmup_time_seconds(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -166,6 +186,8 @@ pub struct ConfigExport {
     pub device_display_overrides: Vec<DeviceDisplayNameRow>,
     #[serde(default)]
     pub device_sensor_configs: Vec<DeviceSensorConfigRow>,
+    #[serde(default)]
+    pub widget_settings: Vec<WidgetSettingRow>,
     pub dashboard_layouts: Vec<DashboardLayoutRow>,
     pub dashboard_widgets: Vec<DashboardWidgetRow>,
 }
@@ -198,7 +220,10 @@ pub fn extract_floorplan_device_positions(
             .filter(|value| *value > 0.0)
             .unwrap_or(1.0) as f32;
 
-        let Some(devices) = grid_data.get("devices").and_then(serde_json::Value::as_array) else {
+        let Some(devices) = grid_data
+            .get("devices")
+            .and_then(serde_json::Value::as_array)
+        else {
             continue;
         };
 
@@ -349,7 +374,9 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
 pub async fn db_update_core_config(config: &CoreConfigRow) -> Result<()> {
     let db = get_db_connection()?;
 
-    sqlx::query("UPDATE core_config SET warmup_time_seconds = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 1")
+    sqlx::query(
+        "UPDATE core_config SET warmup_time_seconds = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
+    )
         .bind(config.warmup_time_seconds)
         .execute(db)
         .await?;
@@ -1393,14 +1420,68 @@ pub async fn db_delete_dashboard_widget(id: i32) -> Result<bool> {
     Ok(result.rows_affected() > 0)
 }
 
+pub async fn db_get_widget_settings() -> Result<Vec<WidgetSettingRow>> {
+    let db = get_db_connection()?;
+
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT key, config FROM widget_settings ORDER BY key")
+            .fetch_all(db)
+            .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|(key, config)| WidgetSettingRow {
+            key,
+            config: serde_json::from_str(&config).unwrap_or_default(),
+        })
+        .collect())
+}
+
+pub async fn db_upsert_widget_setting(setting: &WidgetSettingRow) -> Result<()> {
+    let db = get_db_connection()?;
+    let config_str = serde_json::to_string(&setting.config)?;
+
+    sqlx::query(
+        "INSERT INTO widget_settings (key, config, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP) \
+         ON CONFLICT (key) DO UPDATE SET config = excluded.config, updated_at = CURRENT_TIMESTAMP",
+    )
+    .bind(&setting.key)
+    .bind(&config_str)
+    .execute(db)
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_replace_widget_settings(settings: &[WidgetSettingRow]) -> Result<()> {
+    let db = get_db_connection()?;
+    let mut tx = db.begin().await?;
+
+    sqlx::query("DELETE FROM widget_settings")
+        .execute(&mut *tx)
+        .await?;
+
+    for setting in settings {
+        let config_str = serde_json::to_string(&setting.config)?;
+        sqlx::query(
+            "INSERT INTO widget_settings (key, config, updated_at) VALUES ($1, $2, CURRENT_TIMESTAMP)",
+        )
+        .bind(&setting.key)
+        .bind(&config_str)
+        .execute(&mut *tx)
+        .await?;
+    }
+
+    tx.commit().await?;
+    Ok(())
+}
+
 // ============================================================================
 // Config Import/Export
 // ============================================================================
 
 pub async fn db_export_config() -> Result<ConfigExport> {
-    let core = db_get_core_config().await?.unwrap_or(CoreConfigRow {
-        warmup_time_seconds: 1,
-    });
+    let core = db_get_core_config().await?.unwrap_or_default();
     let integrations = db_get_integrations().await?;
     let groups = db_get_groups().await?;
     let scenes = db_get_config_scenes().await?;
@@ -1410,6 +1491,7 @@ pub async fn db_export_config() -> Result<ConfigExport> {
     let group_positions = db_get_group_positions().await?;
     let device_display_overrides = db_get_device_display_overrides().await?;
     let device_sensor_configs = db_get_device_sensor_configs().await?;
+    let widget_settings = db_get_widget_settings().await?;
     let dashboard_layouts = db_get_dashboard_layouts().await?;
 
     let mut dashboard_widgets = Vec::new();
@@ -1430,6 +1512,7 @@ pub async fn db_export_config() -> Result<ConfigExport> {
         group_positions,
         device_display_overrides,
         device_sensor_configs,
+        widget_settings,
         dashboard_layouts,
         dashboard_widgets,
     })
@@ -1437,6 +1520,7 @@ pub async fn db_export_config() -> Result<ConfigExport> {
 
 pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     db_update_core_config(&config.core).await?;
+    db_replace_widget_settings(&config.widget_settings).await?;
 
     for integration in &config.integrations {
         db_upsert_integration(integration).await?;

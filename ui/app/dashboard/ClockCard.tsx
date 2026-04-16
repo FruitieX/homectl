@@ -4,6 +4,12 @@ import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import { X, Calendar, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import useIdle from '@/hooks/useIdle';
+import { useAppConfig } from '@/hooks/appConfig';
+import {
+  type DashboardWidget,
+  getDashboardWidgetOptionString,
+  resolveDashboardWidgetUrl,
+} from '@/hooks/useDashboard';
 
 type CalendarEvent = {
   id: string;
@@ -19,8 +25,8 @@ type CalendarResponse = {
   events: CalendarEvent[];
 };
 
-const fetchCalendar = async (): Promise<CalendarResponse> => {
-  const res = await fetch('/api/calendar');
+const fetchCalendar = async (calendarUrl: string): Promise<CalendarResponse> => {
+  const res = await fetch(calendarUrl);
   if (!res.ok) {
     throw new Error(`Failed to fetch calendar: ${res.status}`);
   }
@@ -28,10 +34,15 @@ const fetchCalendar = async (): Promise<CalendarResponse> => {
   return json;
 };
 
-export const ClockCard = () => {
+export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const { apiEndpoint } = useAppConfig();
   const [time, setTime] = useState<Date | null>(null);
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const calendarUrl = resolveDashboardWidgetUrl(
+    apiEndpoint,
+    getDashboardWidgetOptionString(widget, 'calendarPath', '/api/calendar'),
+  );
 
   const isIdle = useIdle();
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
@@ -50,7 +61,7 @@ export const ClockCard = () => {
 
     const fetchData = async () => {
       try {
-        const calendar = await fetchCalendar();
+        const calendar = await fetchCalendar(calendarUrl);
         if (isSubscribed === true) {
           setCalendar(calendar);
           setError(null);
@@ -68,12 +79,12 @@ export const ClockCard = () => {
     return () => {
       isSubscribed = false;
     };
-  }, []);
+  }, [calendarUrl]);
 
   useInterval(
     async () => {
       try {
-        const calendar = await fetchCalendar();
+        const calendar = await fetchCalendar(calendarUrl);
         setCalendar(calendar);
         setError(null);
       } catch (err) {

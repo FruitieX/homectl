@@ -1,5 +1,3 @@
-'use client';
-
 import { atom, useAtom } from 'jotai';
 import { useUiState, useWebsocket } from './websocket';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';

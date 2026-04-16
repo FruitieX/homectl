@@ -1,5 +1,3 @@
-'use client';
-
 import { getFloorplanGroupFill, getFloorplanGroupStroke } from '@/lib/floorplanGroupColor';
 import {
   getFloorplanCellBounds,

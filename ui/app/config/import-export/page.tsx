@@ -1,5 +1,3 @@
-'use client';
-
 import { useConfigExport, ConfigExport, useRuntimeStatus } from '@/hooks/useConfig';
 import { useState, useRef } from 'react';
 

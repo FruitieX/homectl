@@ -1,17 +1,14 @@
-'use client';
-
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { GroupId } from '@/bindings/GroupId';
 import { useWebsocketState } from '@/hooks/websocket';
 import { Menu } from 'react-daisyui';
 
-import dynamicImport from 'next/dynamic';
-import Link from 'next/link';
+import { Link } from 'react-router-dom';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import Color from 'color';
 import { excludeUndefined } from 'utils/excludeUndefined';
-const NoSSRPreview = dynamicImport(() => import('./Preview'), { ssr: false });
+import Preview from './Preview';
 
 export default function Page() {
   const state = useWebsocketState();
@@ -34,12 +31,12 @@ export default function Page() {
           );
 
           return (
-            <Link key={groupId} href={`/groups/${groupId}`}>
+            <Link key={groupId} to={`/groups/${groupId}`}>
               <Menu.Item>
                 <div className="flex py-0">
                   <div className="flex-1 truncate">{group.name}</div>
                   <div className="h-[96px] w-[112px]">
-                    <NoSSRPreview
+                    <Preview
                       devices={filteredDevices}
                       overrideColor={Color({ h: 35, s: 50, v: 100 })}
                     />

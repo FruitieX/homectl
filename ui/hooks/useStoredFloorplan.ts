@@ -1,5 +1,3 @@
-'use client';
-
 import { useAppConfig } from '@/hooks/appConfig';
 import { deserializeGrid, type FloorplanGrid } from '@/ui/FloorplanGridEditor';
 import { useEffect, useMemo, useState } from 'react';

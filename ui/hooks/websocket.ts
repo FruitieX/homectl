@@ -1,5 +1,3 @@
-'use client';
-
 import { RoutineStatuses } from '@/bindings/RoutineStatuses';
 import { StateUpdate } from '@/bindings/StateUpdate';
 import { WebSocketResponse } from '@/bindings/WebSocketResponse';
@@ -24,10 +22,6 @@ export const useProvideWebsocketState = () => {
 
     const connect = () => {
       console.log('Opening ws connection...');
-
-      if (wsEndpoint === undefined) {
-        throw new Error("WS_ENDPOINT isn't defined");
-      }
 
       ws = new WebSocket(wsEndpoint);
 

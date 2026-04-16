@@ -26,7 +26,8 @@ tasks:
       - 'styles/**/*'
       - 'package.json'
       - 'tsconfig.json'
-      - 'next.config.mjs'
+      - 'vite.config.ts'
+      - 'index.html'
     options:
       runInCI: true
 

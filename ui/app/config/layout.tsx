@@ -1,9 +1,6 @@
-'use client';
-
 import { useRuntimeStatus } from '@/hooks/useConfig';
 import { Navbar } from '@/ui/Navbar';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { Link, useLocation } from 'react-router-dom';
 
 const configTabs = [
   { href: '/config/integrations', label: 'Integrations' },
@@ -24,7 +21,7 @@ export default function ConfigLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
+  const pathname = useLocation().pathname;
   const { data: runtimeStatus } = useRuntimeStatus(5000);
 
   return (
@@ -36,7 +33,7 @@ export default function ConfigLayout({
         {configTabs.map((tab) => (
           <Link
             key={tab.href}
-            href={tab.href}
+            to={tab.href}
             className={`tab ${pathname?.startsWith(tab.href) ? 'tab-active' : ''}`}
           >
             {tab.label}
@@ -55,7 +52,7 @@ export default function ConfigLayout({
                 Config changes are live, but a restart will drop them unless you export a JSON backup.
               </p>
             </div>
-            <Link className="btn btn-sm border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200" href="/config/import-export">
+            <Link className="btn btn-sm border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200" to="/config/import-export">
               Export backup
             </Link>
           </div>

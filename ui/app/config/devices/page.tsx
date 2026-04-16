@@ -1,5 +1,3 @@
-'use client';
-
 import { Device } from '@/bindings/Device';
 import { DeviceColor } from '@/bindings/DeviceColor';
 import { DeviceStateSource } from '@/bindings/DeviceStateSource';

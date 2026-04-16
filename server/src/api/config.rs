@@ -41,7 +41,14 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter, Reply};
 
-use super::with_state;
+use super::{
+    widgets::{
+        widget_setting_string_or_env, API_URL_FIELD, CALENDAR_SETTING_KEY, ICS_URL_FIELD,
+        INFLUXDB_SETTING_KEY, TOKEN_FIELD, TRAIN_SCHEDULE_SETTING_KEY, URL_FIELD,
+        WEATHER_SETTING_KEY,
+    },
+    with_state,
+};
 
 // ============================================================================
 // Response Types
@@ -58,6 +65,96 @@ struct ApiResponse<T> {
 struct RuntimeStatusResponse {
     persistence_available: bool,
     memory_only_mode: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+struct CoreConfigPayload {
+    warmup_time_seconds: i32,
+    #[serde(default)]
+    weather_api_url: String,
+    #[serde(default)]
+    train_api_url: String,
+    #[serde(default)]
+    influx_url: String,
+    #[serde(default)]
+    influx_token: String,
+    #[serde(default)]
+    calendar_ics_url: String,
+}
+
+impl CoreConfigPayload {
+    fn from_runtime(config: &ConfigExport) -> Self {
+        let settings = &config.widget_settings;
+
+        Self {
+            warmup_time_seconds: config.core.warmup_time_seconds,
+            weather_api_url: widget_setting_string_or_env(
+                settings,
+                WEATHER_SETTING_KEY,
+                API_URL_FIELD,
+                "WEATHER_API_URL",
+            )
+            .unwrap_or_default(),
+            train_api_url: widget_setting_string_or_env(
+                settings,
+                TRAIN_SCHEDULE_SETTING_KEY,
+                API_URL_FIELD,
+                "TRAIN_API_URL",
+            )
+            .unwrap_or_default(),
+            influx_url: widget_setting_string_or_env(
+                settings,
+                INFLUXDB_SETTING_KEY,
+                URL_FIELD,
+                "INFLUX_URL",
+            )
+            .unwrap_or_default(),
+            influx_token: widget_setting_string_or_env(
+                settings,
+                INFLUXDB_SETTING_KEY,
+                TOKEN_FIELD,
+                "INFLUX_TOKEN",
+            )
+            .unwrap_or_default(),
+            calendar_ics_url: widget_setting_string_or_env(
+                settings,
+                CALENDAR_SETTING_KEY,
+                ICS_URL_FIELD,
+                "GOOGLE_CALENDAR_ICS_URL",
+            )
+            .unwrap_or_default(),
+        }
+    }
+
+    fn core_config(&self) -> CoreConfigRow {
+        CoreConfigRow {
+            warmup_time_seconds: self.warmup_time_seconds,
+        }
+    }
+
+    fn widget_settings(&self) -> Vec<config_queries::WidgetSettingRow> {
+        vec![
+            config_queries::WidgetSettingRow {
+                key: WEATHER_SETTING_KEY.to_string(),
+                config: serde_json::json!({ API_URL_FIELD: self.weather_api_url }),
+            },
+            config_queries::WidgetSettingRow {
+                key: TRAIN_SCHEDULE_SETTING_KEY.to_string(),
+                config: serde_json::json!({ API_URL_FIELD: self.train_api_url }),
+            },
+            config_queries::WidgetSettingRow {
+                key: INFLUXDB_SETTING_KEY.to_string(),
+                config: serde_json::json!({
+                    URL_FIELD: self.influx_url,
+                    TOKEN_FIELD: self.influx_token,
+                }),
+            },
+            config_queries::WidgetSettingRow {
+                key: CALENDAR_SETTING_KEY.to_string(),
+                config: serde_json::json!({ ICS_URL_FIELD: self.calendar_ics_url }),
+            },
+        ]
+    }
 }
 
 #[derive(Serialize)]
@@ -850,12 +947,11 @@ async fn persist_device_config_rewrite(
     }
 
     for changed_floorplan in &rewrite.changed_floorplans {
-        if let Err(error) =
-            config_queries::db_upsert_floorplan_export(
-                &changed_floorplan.floorplan,
-                changed_floorplan.sort_order,
-            )
-            .await
+        if let Err(error) = config_queries::db_upsert_floorplan_export(
+            &changed_floorplan.floorplan,
+            changed_floorplan.sort_order,
+        )
+        .await
         {
             warn!(
                 "Failed to persist updated floorplan '{}': {error}",
@@ -1059,22 +1155,37 @@ fn core_routes(
 
 async fn get_core_config(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
     let state = app_state.read().await;
-    Ok(ApiResponse::success(
-        state.get_runtime_config().core.clone(),
-    ))
+    Ok(ApiResponse::success(CoreConfigPayload::from_runtime(
+        state.get_runtime_config(),
+    )))
 }
 
 async fn update_core_config(
-    config: config_queries::CoreConfigRow,
+    config: CoreConfigPayload,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    let core_config = config.core_config();
+    let widget_settings = config.widget_settings();
+
     {
         let mut state = app_state.write().await;
-        state.update_core_config(config.clone());
+        state.update_core_config(core_config.clone());
+        for setting in &widget_settings {
+            state.upsert_widget_setting(setting.clone());
+        }
     }
 
-    if let Err(e) = config_queries::db_update_core_config(&config).await {
+    if let Err(e) = config_queries::db_update_core_config(&core_config).await {
         warn!("Failed to persist core config: {e}");
+    }
+
+    for setting in &widget_settings {
+        if let Err(error) = config_queries::db_upsert_widget_setting(setting).await {
+            warn!(
+                "Failed to persist widget setting '{}': {error}",
+                setting.key
+            );
+        }
     }
 
     Ok(ApiResponse::success(config))
@@ -2768,6 +2879,7 @@ impl MigratePreviewResult {
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_sensor_configs: Vec::new(),
+            widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),
             dashboard_widgets: Vec::new(),
         }
@@ -2950,6 +3062,7 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
     // Convert core config
     let core = CoreConfigRow {
         warmup_time_seconds: config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1) as i32,
+        ..CoreConfigRow::default()
     };
 
     // Convert integrations
@@ -3689,6 +3802,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                ..CoreConfigRow::default()
             },
         };
 
@@ -3770,6 +3884,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                ..CoreConfigRow::default()
             },
         };
 
@@ -3839,6 +3954,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                ..CoreConfigRow::default()
             },
         };
 
@@ -3870,6 +3986,7 @@ devices = [
             version: 1,
             core: CoreConfigRow {
                 warmup_time_seconds: 5,
+                ..CoreConfigRow::default()
             },
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
@@ -3885,6 +4002,7 @@ devices = [
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_sensor_configs: Vec::new(),
+            widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),
             dashboard_widgets: Vec::new(),
         };
@@ -3905,6 +4023,7 @@ devices = [
             routines: Vec::new(),
             core: CoreConfigRow {
                 warmup_time_seconds: 9,
+                ..CoreConfigRow::default()
             },
         };
 
@@ -3954,6 +4073,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                ..CoreConfigRow::default()
             },
         };
 
@@ -3989,6 +4109,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                ..CoreConfigRow::default()
             },
         };
 
