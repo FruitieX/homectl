@@ -15,7 +15,7 @@ use crate::core::logs::recent_logs;
 use crate::core::state::AppState;
 use crate::db::{
     self,
-    actions::db_update_device,
+    actions::{db_delete_device, db_update_device},
     config_queries::{
         self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
         DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanExportRow,
@@ -24,9 +24,16 @@ use crate::db::{
     },
 };
 use crate::types::{
-    device::{ControllableState, Device, DeviceData, DeviceRef, DevicesState, SensorDevice},
+    action::{Action, Actions},
+    device::{
+        ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
+    },
     integration::IntegrationId,
-    rule::Rules,
+    rule::{AnyRule, Rule, Rules},
+    scene::{
+        ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor,
+        SceneDeviceConfig,
+    },
 };
 use bytes::Buf;
 use percent_encoding::percent_decode_str;
@@ -109,6 +116,734 @@ fn decode_path_key(raw: String) -> String {
     percent_decode_str(raw.as_str())
         .decode_utf8_lossy()
         .into_owned()
+}
+
+#[derive(Clone, Debug)]
+struct DeviceConfigTarget {
+    device_key: String,
+    integration_id: String,
+    device_id: String,
+}
+
+#[derive(Default)]
+struct DeviceConfigRewriteResult {
+    changed_groups: Vec<GroupRow>,
+    changed_scenes: Vec<SceneRow>,
+    changed_routines: Vec<RoutineRow>,
+    display_override_changed: bool,
+    sensor_config_changed: bool,
+    position_changed: bool,
+}
+
+#[derive(Deserialize)]
+struct ReplaceDeviceRequest {
+    replacement_device_key: String,
+}
+
+#[derive(Serialize)]
+struct DeviceConfigMutationResponse {
+    deleted_device_key: String,
+    replacement_device_key: Option<String>,
+    updated_groups: usize,
+    updated_scenes: usize,
+    updated_routines: usize,
+    display_override_changed: bool,
+    sensor_config_changed: bool,
+    position_changed: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RewriteStatus {
+    Unchanged,
+    Changed,
+    Remove,
+}
+
+impl DeviceConfigTarget {
+    fn parse(device_key: &str) -> Option<Self> {
+        let (integration_id, device_id) = device_key.split_once('/')?;
+
+        Some(Self {
+            device_key: device_key.to_string(),
+            integration_id: integration_id.to_string(),
+            device_id: device_id.to_string(),
+        })
+    }
+
+    fn matches_device_ref(&self, device_ref: &DeviceRef) -> bool {
+        match device_ref {
+            DeviceRef::Id(id_ref) => {
+                id_ref.integration_id.to_string() == self.integration_id
+                    && id_ref.device_id.to_string() == self.device_id
+            }
+        }
+    }
+
+    fn matches_device(&self, device: &Device) -> bool {
+        device.integration_id.to_string() == self.integration_id
+            && device.id.to_string() == self.device_id
+    }
+
+    fn to_device_ref(&self) -> DeviceRef {
+        DeviceRef::new_with_id(
+            self.integration_id.clone().into(),
+            self.device_id.clone().into(),
+        )
+    }
+
+    fn to_device_key(&self) -> DeviceKey {
+        DeviceKey::new(
+            self.integration_id.clone().into(),
+            self.device_id.clone().into(),
+        )
+    }
+}
+
+fn rewrite_device_ref(
+    device_ref: &mut DeviceRef,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    if !source.matches_device_ref(device_ref) {
+        return RewriteStatus::Unchanged;
+    }
+
+    let Some(replacement) = replacement else {
+        return RewriteStatus::Remove;
+    };
+
+    *device_ref = replacement.to_device_ref();
+    RewriteStatus::Changed
+}
+
+fn rewrite_device_key_option(
+    device_key: &mut Option<DeviceKey>,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let Some(existing) = device_key.as_ref() else {
+        return RewriteStatus::Unchanged;
+    };
+
+    if existing.to_string() != source.device_key {
+        return RewriteStatus::Unchanged;
+    }
+
+    *device_key = replacement.map(DeviceConfigTarget::to_device_key);
+    RewriteStatus::Changed
+}
+
+fn rewrite_optional_device_keys(
+    device_keys: &mut Option<Vec<DeviceKey>>,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let Some(existing_keys) = device_keys.as_ref() else {
+        return RewriteStatus::Unchanged;
+    };
+
+    let mut changed = false;
+    let mut seen = HashSet::new();
+    let mut next_keys = Vec::with_capacity(existing_keys.len());
+
+    for device_key in existing_keys {
+        if device_key.to_string() == source.device_key {
+            changed = true;
+            if let Some(replacement) = replacement {
+                let replacement_key = replacement.to_device_key();
+                if seen.insert(replacement_key.to_string()) {
+                    next_keys.push(replacement_key);
+                }
+            }
+            continue;
+        }
+
+        if seen.insert(device_key.to_string()) {
+            next_keys.push(device_key.clone());
+        }
+    }
+
+    if changed {
+        *device_keys = Some(next_keys);
+        RewriteStatus::Changed
+    } else {
+        RewriteStatus::Unchanged
+    }
+}
+
+fn rewrite_required_device_keys(
+    device_keys: &mut Vec<DeviceKey>,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let mut changed = false;
+    let mut seen = HashSet::new();
+    let mut next_keys = Vec::with_capacity(device_keys.len());
+
+    for device_key in device_keys.iter() {
+        if device_key.to_string() == source.device_key {
+            changed = true;
+            if let Some(replacement) = replacement {
+                let replacement_key = replacement.to_device_key();
+                if seen.insert(replacement_key.to_string()) {
+                    next_keys.push(replacement_key);
+                }
+            }
+            continue;
+        }
+
+        if seen.insert(device_key.to_string()) {
+            next_keys.push(device_key.clone());
+        }
+    }
+
+    if changed {
+        *device_keys = next_keys;
+        RewriteStatus::Changed
+    } else {
+        RewriteStatus::Unchanged
+    }
+}
+
+fn rewrite_scene_descriptor(
+    descriptor: &mut ActivateSceneDescriptor,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    rewrite_optional_device_keys(&mut descriptor.device_keys, source, replacement)
+}
+
+fn rewrite_scene_action_descriptor(
+    descriptor: &mut ActivateSceneActionDescriptor,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let mut changed = matches!(
+        rewrite_optional_device_keys(&mut descriptor.device_keys, source, replacement),
+        RewriteStatus::Changed
+    );
+
+    changed |= matches!(
+        rewrite_device_key_option(
+            &mut descriptor.rollout_source_device_key,
+            source,
+            replacement
+        ),
+        RewriteStatus::Changed
+    );
+
+    if changed {
+        RewriteStatus::Changed
+    } else {
+        RewriteStatus::Unchanged
+    }
+}
+
+fn rewrite_cycle_scenes_descriptor(
+    descriptor: &mut CycleScenesDescriptor,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let mut changed = false;
+
+    for scene in &mut descriptor.scenes {
+        changed |= matches!(
+            rewrite_scene_descriptor(scene, source, replacement),
+            RewriteStatus::Changed
+        );
+    }
+
+    changed |= matches!(
+        rewrite_optional_device_keys(&mut descriptor.device_keys, source, replacement),
+        RewriteStatus::Changed
+    );
+    changed |= matches!(
+        rewrite_device_key_option(
+            &mut descriptor.rollout_source_device_key,
+            source,
+            replacement
+        ),
+        RewriteStatus::Changed
+    );
+
+    if changed {
+        RewriteStatus::Changed
+    } else {
+        RewriteStatus::Unchanged
+    }
+}
+
+fn rewrite_scene_device_config(
+    config: &mut SceneDeviceConfig,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    match config {
+        SceneDeviceConfig::DeviceLink(link) => {
+            rewrite_device_ref(&mut link.device_ref, source, replacement)
+        }
+        SceneDeviceConfig::SceneLink(link) => rewrite_scene_descriptor(link, source, replacement),
+        SceneDeviceConfig::DeviceState(_) => RewriteStatus::Unchanged,
+    }
+}
+
+fn rewrite_scene_config_value(
+    value: &mut serde_json::Value,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let Ok(mut config) = serde_json::from_value::<SceneDeviceConfig>(value.clone()) else {
+        return RewriteStatus::Unchanged;
+    };
+
+    match rewrite_scene_device_config(&mut config, source, replacement) {
+        RewriteStatus::Changed => match serde_json::to_value(&config) {
+            Ok(next_value) => {
+                *value = next_value;
+                RewriteStatus::Changed
+            }
+            Err(error) => {
+                warn!("Failed to serialize rewritten scene config: {error}");
+                RewriteStatus::Unchanged
+            }
+        },
+        RewriteStatus::Remove => RewriteStatus::Remove,
+        RewriteStatus::Unchanged => RewriteStatus::Unchanged,
+    }
+}
+
+fn rewrite_rule(
+    rule: &mut Rule,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    match rule {
+        Rule::Sensor(sensor_rule) => {
+            rewrite_device_ref(&mut sensor_rule.device_ref, source, replacement)
+        }
+        Rule::Device(device_rule) => {
+            rewrite_device_ref(&mut device_rule.device_ref, source, replacement)
+        }
+        Rule::Any(AnyRule { any }) => {
+            let mut changed = false;
+            let mut next_rules = Vec::with_capacity(any.len());
+
+            for mut child_rule in std::mem::take(any) {
+                match rewrite_rule(&mut child_rule, source, replacement) {
+                    RewriteStatus::Remove => {
+                        changed = true;
+                    }
+                    RewriteStatus::Changed => {
+                        changed = true;
+                        next_rules.push(child_rule);
+                    }
+                    RewriteStatus::Unchanged => next_rules.push(child_rule),
+                }
+            }
+
+            *any = next_rules;
+
+            if any.is_empty() {
+                RewriteStatus::Remove
+            } else if changed {
+                RewriteStatus::Changed
+            } else {
+                RewriteStatus::Unchanged
+            }
+        }
+        Rule::Script(script_rule) => {
+            let Some(replacement) = replacement else {
+                return RewriteStatus::Unchanged;
+            };
+
+            let next_script = script_rule
+                .script
+                .replace(&source.device_key, &replacement.device_key);
+            if next_script == script_rule.script {
+                RewriteStatus::Unchanged
+            } else {
+                script_rule.script = next_script;
+                RewriteStatus::Changed
+            }
+        }
+        Rule::Group(_) | Rule::EvalExpr(_) => RewriteStatus::Unchanged,
+    }
+}
+
+fn rewrite_action(
+    action: &mut Action,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+    replacement_device: Option<&Device>,
+) -> RewriteStatus {
+    match action {
+        Action::ActivateScene(descriptor) => {
+            rewrite_scene_action_descriptor(descriptor, source, replacement)
+        }
+        Action::CycleScenes(descriptor) => {
+            rewrite_cycle_scenes_descriptor(descriptor, source, replacement)
+        }
+        Action::Dim(descriptor) => {
+            rewrite_optional_device_keys(&mut descriptor.device_keys, source, replacement)
+        }
+        Action::SetDeviceState(device) => {
+            if !source.matches_device(device) {
+                return RewriteStatus::Unchanged;
+            }
+
+            let Some(replacement_device) = replacement_device else {
+                return RewriteStatus::Remove;
+            };
+
+            device.integration_id = replacement_device.integration_id.clone();
+            device.id = replacement_device.id.clone();
+            device.name = replacement_device.name.clone();
+            RewriteStatus::Changed
+        }
+        Action::ToggleDeviceOverride { device_keys, .. } => {
+            rewrite_required_device_keys(device_keys, source, replacement)
+        }
+        Action::Custom(_)
+        | Action::ForceTriggerRoutine(_)
+        | Action::Ui(_)
+        | Action::EvalExpr(_) => RewriteStatus::Unchanged,
+    }
+}
+
+fn rewrite_group_device_refs(
+    group: &mut GroupRow,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> bool {
+    let mut changed = false;
+    let mut seen = HashSet::new();
+    let mut next_devices = Vec::with_capacity(group.devices.len());
+
+    for device in std::mem::take(&mut group.devices) {
+        if device.integration_id == source.integration_id && device.device_id == source.device_id {
+            changed = true;
+
+            if let Some(replacement) = replacement {
+                let dedupe_key =
+                    format!("{}/{}", replacement.integration_id, replacement.device_id);
+                if seen.insert(dedupe_key) {
+                    next_devices.push(GroupDeviceRow {
+                        integration_id: replacement.integration_id.clone(),
+                        device_id: replacement.device_id.clone(),
+                    });
+                }
+            }
+
+            continue;
+        }
+
+        let dedupe_key = format!("{}/{}", device.integration_id, device.device_id);
+        if seen.insert(dedupe_key) {
+            next_devices.push(device);
+        }
+    }
+
+    group.devices = next_devices;
+    changed
+}
+
+fn rewrite_scene_device_refs(
+    scene: &mut SceneRow,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> bool {
+    let mut changed = false;
+    let mut next_device_states = HashMap::with_capacity(scene.device_states.len());
+
+    for (device_key, mut config_value) in std::mem::take(&mut scene.device_states) {
+        let next_device_key = if device_key == source.device_key {
+            changed = true;
+            replacement.map(|replacement| replacement.device_key.clone())
+        } else {
+            Some(device_key)
+        };
+
+        match rewrite_scene_config_value(&mut config_value, source, replacement) {
+            RewriteStatus::Changed => changed = true,
+            RewriteStatus::Remove => {
+                changed = true;
+                continue;
+            }
+            RewriteStatus::Unchanged => {}
+        }
+
+        let Some(next_device_key) = next_device_key else {
+            continue;
+        };
+
+        next_device_states
+            .entry(next_device_key)
+            .or_insert(config_value);
+    }
+
+    scene.device_states = next_device_states;
+
+    let mut next_group_states = HashMap::with_capacity(scene.group_states.len());
+    for (group_id, mut config_value) in std::mem::take(&mut scene.group_states) {
+        match rewrite_scene_config_value(&mut config_value, source, replacement) {
+            RewriteStatus::Changed => changed = true,
+            RewriteStatus::Remove => {
+                changed = true;
+                continue;
+            }
+            RewriteStatus::Unchanged => {}
+        }
+
+        next_group_states.insert(group_id, config_value);
+    }
+
+    scene.group_states = next_group_states;
+
+    if let (Some(script), Some(replacement)) = (&scene.script, replacement) {
+        let next_script = script.replace(&source.device_key, &replacement.device_key);
+        if next_script != *script {
+            scene.script = Some(next_script);
+            changed = true;
+        }
+    }
+
+    changed
+}
+
+fn rewrite_routine_device_refs(
+    routine: &mut RoutineRow,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+    replacement_device: Option<&Device>,
+) -> bool {
+    let mut changed = false;
+
+    let Ok(mut rules) = serde_json::from_value::<Rules>(routine.rules.clone()) else {
+        return false;
+    };
+
+    let mut next_rules = Vec::with_capacity(rules.len());
+    for mut rule in rules.drain(..) {
+        match rewrite_rule(&mut rule, source, replacement) {
+            RewriteStatus::Remove => changed = true,
+            RewriteStatus::Changed => {
+                changed = true;
+                next_rules.push(rule);
+            }
+            RewriteStatus::Unchanged => next_rules.push(rule),
+        }
+    }
+
+    if changed {
+        match serde_json::to_value(&next_rules) {
+            Ok(value) => routine.rules = value,
+            Err(error) => warn!("Failed to serialize rewritten routine rules: {error}"),
+        }
+    }
+
+    let Ok(mut actions) = serde_json::from_value::<Actions>(routine.actions.clone()) else {
+        return changed;
+    };
+
+    let mut actions_changed = false;
+    let mut next_actions = Vec::with_capacity(actions.len());
+    for mut action in actions.drain(..) {
+        match rewrite_action(&mut action, source, replacement, replacement_device) {
+            RewriteStatus::Remove => actions_changed = true,
+            RewriteStatus::Changed => {
+                actions_changed = true;
+                next_actions.push(action);
+            }
+            RewriteStatus::Unchanged => next_actions.push(action),
+        }
+    }
+
+    if actions_changed {
+        match serde_json::to_value(&next_actions) {
+            Ok(value) => routine.actions = value,
+            Err(error) => warn!("Failed to serialize rewritten routine actions: {error}"),
+        }
+    }
+
+    changed || actions_changed
+}
+
+fn rewrite_device_config_references(
+    config: &mut ConfigExport,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+    replacement_device: Option<&Device>,
+) -> DeviceConfigRewriteResult {
+    let mut result = DeviceConfigRewriteResult::default();
+
+    for group in &mut config.groups {
+        if rewrite_group_device_refs(group, source, replacement) {
+            result.changed_groups.push(group.clone());
+        }
+    }
+
+    for scene in &mut config.scenes {
+        if rewrite_scene_device_refs(scene, source, replacement) {
+            result.changed_scenes.push(scene.clone());
+        }
+    }
+
+    for routine in &mut config.routines {
+        if rewrite_routine_device_refs(routine, source, replacement, replacement_device) {
+            result.changed_routines.push(routine.clone());
+        }
+    }
+
+    if let Some(existing) = config
+        .device_display_overrides
+        .iter_mut()
+        .find(|row| row.device_key == source.device_key)
+    {
+        result.display_override_changed = true;
+        if let Some(replacement) = replacement {
+            existing.device_key = replacement.device_key.clone();
+        }
+    }
+    if replacement.is_none() {
+        config
+            .device_display_overrides
+            .retain(|row| row.device_key != source.device_key);
+    }
+
+    if let Some(existing) = config
+        .device_sensor_configs
+        .iter_mut()
+        .find(|row| row.device_ref == source.device_key)
+    {
+        result.sensor_config_changed = true;
+        if let Some(replacement) = replacement {
+            existing.device_ref = replacement.device_key.clone();
+        }
+    }
+    if replacement.is_none() {
+        config
+            .device_sensor_configs
+            .retain(|row| row.device_ref != source.device_key);
+    }
+
+    if let Some(existing) = config
+        .device_positions
+        .iter_mut()
+        .find(|row| row.device_key == source.device_key)
+    {
+        result.position_changed = true;
+        if let Some(replacement) = replacement {
+            existing.device_key = replacement.device_key.clone();
+        }
+    }
+    if replacement.is_none() {
+        config
+            .device_positions
+            .retain(|row| row.device_key != source.device_key);
+    }
+
+    config
+        .device_display_overrides
+        .sort_by(|left, right| left.device_key.cmp(&right.device_key));
+    config
+        .device_sensor_configs
+        .sort_by(|left, right| left.device_ref.cmp(&right.device_ref));
+    config
+        .device_positions
+        .sort_by(|left, right| left.device_key.cmp(&right.device_key));
+
+    result
+}
+
+async fn persist_device_config_rewrite(
+    rewrite: &DeviceConfigRewriteResult,
+    source: &DeviceConfigTarget,
+) {
+    for group in &rewrite.changed_groups {
+        if let Err(error) = config_queries::db_upsert_group(group).await {
+            warn!("Failed to persist updated group '{}': {error}", group.id);
+        }
+    }
+
+    for scene in &rewrite.changed_scenes {
+        if let Err(error) = config_queries::db_upsert_config_scene(scene).await {
+            warn!("Failed to persist updated scene '{}': {error}", scene.id);
+        }
+    }
+
+    for routine in &rewrite.changed_routines {
+        if let Err(error) = config_queries::db_upsert_routine(routine).await {
+            warn!(
+                "Failed to persist updated routine '{}': {error}",
+                routine.id
+            );
+        }
+    }
+
+    if rewrite.display_override_changed {
+        if let Err(error) =
+            config_queries::db_delete_device_display_override(&source.device_key).await
+        {
+            warn!(
+                "Failed to delete source display override for '{}': {error}",
+                source.device_key
+            );
+        }
+    }
+
+    if rewrite.sensor_config_changed {
+        if let Err(error) = config_queries::db_delete_device_sensor_config(&source.device_key).await
+        {
+            warn!(
+                "Failed to delete source sensor config for '{}': {error}",
+                source.device_key
+            );
+        }
+    }
+
+    if rewrite.position_changed {
+        if let Err(error) = config_queries::db_delete_device_position(&source.device_key).await {
+            warn!(
+                "Failed to delete source device position for '{}': {error}",
+                source.device_key
+            );
+        }
+    }
+}
+
+fn rewrite_force_trigger_routine_references(
+    actions_value: &mut serde_json::Value,
+    source_id: &str,
+    replacement_id: &str,
+) -> bool {
+    let Ok(mut actions) = serde_json::from_value::<Actions>(actions_value.clone()) else {
+        return false;
+    };
+
+    let mut changed = false;
+    for action in &mut actions {
+        if let Action::ForceTriggerRoutine(descriptor) = action {
+            if descriptor.routine_id.to_string() == source_id {
+                descriptor.routine_id = replacement_id.to_string().into();
+                changed = true;
+            }
+        }
+    }
+
+    if !changed {
+        return false;
+    }
+
+    match serde_json::to_value(&actions) {
+        Ok(value) => {
+            *actions_value = value;
+            true
+        }
+        Err(error) => {
+            warn!("Failed to serialize rewritten routine action references: {error}");
+            false
+        }
+    }
 }
 
 fn group_response_row(state: &AppState, group: GroupRow) -> GroupResponseRow {
@@ -197,6 +932,7 @@ pub fn config(
             .or(logs_routes(app_state))
             .or(device_display_name_routes(app_state))
             .or(device_sensor_config_routes(app_state))
+            .or(device_config_routes(app_state))
             .or(integrations_routes(app_state))
             .or(groups_routes(app_state))
             .or(scenes_routes(app_state))
@@ -382,6 +1118,175 @@ fn device_sensor_config_routes(
         .and_then(delete_device_sensor_config);
 
     list.or(upsert).or(delete)
+}
+
+fn device_config_routes(
+    app_state: &Arc<RwLock<AppState>>,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let replace = warp::path!("devices" / String / "replace")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_state(app_state))
+        .and_then(replace_device_config);
+
+    let delete = warp::path!("devices" / String)
+        .and(warp::delete())
+        .and(with_state(app_state))
+        .and_then(delete_config_device);
+
+    replace.or(delete)
+}
+
+async fn replace_device_config(
+    device_key: String,
+    request: ReplaceDeviceRequest,
+    app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    let source_key = decode_path_key(device_key);
+    let replacement_key = request.replacement_device_key.trim().to_string();
+
+    if source_key == replacement_key {
+        return Ok(error_response(
+            "Replacement device must differ from the source device.",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let Some(source) = DeviceConfigTarget::parse(&source_key) else {
+        return Ok(error_response(
+            "Invalid source device key.",
+            StatusCode::BAD_REQUEST,
+        ));
+    };
+    let Some(replacement) = DeviceConfigTarget::parse(&replacement_key) else {
+        return Ok(error_response(
+            "Invalid replacement device key.",
+            StatusCode::BAD_REQUEST,
+        ));
+    };
+
+    let (rewrite, response) = {
+        let mut state = app_state.write().await;
+        let Some(replacement_device) = state
+            .devices
+            .get_state()
+            .0
+            .values()
+            .find(|device| replacement.matches_device(device))
+            .cloned()
+        else {
+            return Ok(error_response(
+                "Replacement device not found in runtime state.",
+                StatusCode::BAD_REQUEST,
+            ));
+        };
+
+        if state
+            .devices
+            .get_state()
+            .0
+            .values()
+            .all(|device| !source.matches_device(device))
+        {
+            return Ok(not_found("Device"));
+        }
+
+        let mut runtime_config = state.get_runtime_config().clone();
+        let rewrite = rewrite_device_config_references(
+            &mut runtime_config,
+            &source,
+            Some(&replacement),
+            Some(&replacement_device),
+        );
+
+        state.runtime_config = runtime_config;
+        state.devices.remove_device(&source.to_device_key());
+        state.apply_runtime_groups();
+        state.apply_runtime_scenes();
+        state.apply_runtime_routines();
+
+        let response = DeviceConfigMutationResponse {
+            deleted_device_key: source.device_key.clone(),
+            replacement_device_key: Some(replacement.device_key.clone()),
+            updated_groups: rewrite.changed_groups.len(),
+            updated_scenes: rewrite.changed_scenes.len(),
+            updated_routines: rewrite.changed_routines.len(),
+            display_override_changed: rewrite.display_override_changed,
+            sensor_config_changed: rewrite.sensor_config_changed,
+            position_changed: rewrite.position_changed,
+        };
+
+        (rewrite, response)
+    };
+
+    persist_device_config_rewrite(&rewrite, &source).await;
+    if let Err(error) = db_delete_device(&source.to_device_key()).await {
+        warn!(
+            "Failed to delete source device '{}' from database: {error}",
+            source.device_key
+        );
+    }
+
+    Ok(ApiResponse::success(response))
+}
+
+async fn delete_config_device(
+    device_key: String,
+    app_state: Arc<RwLock<AppState>>,
+) -> Result<impl Reply, warp::Rejection> {
+    let source_key = decode_path_key(device_key);
+    let Some(source) = DeviceConfigTarget::parse(&source_key) else {
+        return Ok(error_response(
+            "Invalid device key.",
+            StatusCode::BAD_REQUEST,
+        ));
+    };
+
+    let (rewrite, response) = {
+        let mut state = app_state.write().await;
+
+        if state
+            .devices
+            .get_state()
+            .0
+            .values()
+            .all(|device| !source.matches_device(device))
+        {
+            return Ok(not_found("Device"));
+        }
+
+        let mut runtime_config = state.get_runtime_config().clone();
+        let rewrite = rewrite_device_config_references(&mut runtime_config, &source, None, None);
+
+        state.runtime_config = runtime_config;
+        state.devices.remove_device(&source.to_device_key());
+        state.apply_runtime_groups();
+        state.apply_runtime_scenes();
+        state.apply_runtime_routines();
+
+        let response = DeviceConfigMutationResponse {
+            deleted_device_key: source.device_key.clone(),
+            replacement_device_key: None,
+            updated_groups: rewrite.changed_groups.len(),
+            updated_scenes: rewrite.changed_scenes.len(),
+            updated_routines: rewrite.changed_routines.len(),
+            display_override_changed: rewrite.display_override_changed,
+            sensor_config_changed: rewrite.sensor_config_changed,
+            position_changed: rewrite.position_changed,
+        };
+
+        (rewrite, response)
+    };
+
+    persist_device_config_rewrite(&rewrite, &source).await;
+    if let Err(error) = db_delete_device(&source.to_device_key()).await {
+        warn!(
+            "Failed to delete device '{}' from database: {error}",
+            source.device_key
+        );
+    }
+
+    Ok(ApiResponse::success(response))
 }
 
 async fn list_device_sensor_configs(
@@ -918,16 +1823,77 @@ async fn update_routine(
     mut routine: RoutineRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
-    routine.id = id;
+    let requested_id = routine.id.trim().to_string();
+    let next_id = if requested_id.is_empty() {
+        id.clone()
+    } else {
+        requested_id
+    };
+    let renamed = next_id != id;
 
-    {
+    let changed_routines = {
         let mut state = app_state.write().await;
-        state.upsert_routine(routine.clone());
+        let Some(existing_index) = state
+            .runtime_config
+            .routines
+            .iter()
+            .position(|existing| existing.id == id)
+        else {
+            return Ok(not_found("Routine"));
+        };
+
+        if renamed
+            && state
+                .runtime_config
+                .routines
+                .iter()
+                .any(|existing| existing.id == next_id)
+        {
+            return Ok(error_response(
+                "Routine ID already exists.",
+                StatusCode::BAD_REQUEST,
+            ));
+        }
+
+        routine.id = next_id.clone();
+        state.runtime_config.routines[existing_index] = routine.clone();
+
+        let mut changed_routines = vec![routine.clone()];
+
+        if renamed {
+            for existing in &mut state.runtime_config.routines {
+                if existing.id == next_id {
+                    continue;
+                }
+
+                if rewrite_force_trigger_routine_references(&mut existing.actions, &id, &next_id) {
+                    changed_routines.push(existing.clone());
+                }
+            }
+        }
+
+        state
+            .runtime_config
+            .routines
+            .sort_by(|left, right| left.id.cmp(&right.id));
         state.apply_runtime_routines();
+
+        changed_routines
+    };
+
+    for changed_routine in &changed_routines {
+        if let Err(error) = config_queries::db_upsert_routine(changed_routine).await {
+            warn!(
+                "Failed to persist routine config update for '{}': {error}",
+                changed_routine.id
+            );
+        }
     }
 
-    if let Err(e) = config_queries::db_upsert_routine(&routine).await {
-        warn!("Failed to persist routine config update: {e}");
+    if renamed {
+        if let Err(error) = config_queries::db_delete_routine(&id).await {
+            warn!("Failed to delete old routine config '{}': {error}", id);
+        }
     }
 
     Ok(ApiResponse::success(routine))

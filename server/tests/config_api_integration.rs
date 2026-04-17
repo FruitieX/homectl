@@ -715,6 +715,309 @@ fn config_api_device_sensor_configs_roundtrip() {
 }
 
 #[test]
+fn config_api_replaces_device_references_and_removes_source_device() {
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(
+            json!({
+                "version": 1,
+                "core": { "warmup_time_seconds": 0 },
+                "integrations": [
+                    {
+                        "id": "dummy",
+                        "plugin": "dummy",
+                        "enabled": true,
+                        "config": {
+                            "devices": {
+                                "light1": { "name": "Source Light" },
+                                "light2": { "name": "Replacement Light" }
+                            }
+                        }
+                    }
+                ],
+                "groups": [
+                    {
+                        "id": "main",
+                        "name": "Main",
+                        "hidden": false,
+                        "devices": [
+                            { "integration_id": "dummy", "device_id": "light1" }
+                        ],
+                        "linked_groups": []
+                    }
+                ],
+                "scenes": [
+                    {
+                        "id": "main_on",
+                        "name": "Main On",
+                        "hidden": false,
+                        "script": null,
+                        "device_states": {
+                            "dummy/light1": { "power": true }
+                        },
+                        "group_states": {}
+                    }
+                ],
+                "routines": [
+                    {
+                        "id": "watch_source_light",
+                        "name": "Watch Source Light",
+                        "enabled": true,
+                        "rules": [
+                            {
+                                "integration_id": "dummy",
+                                "device_id": "light1",
+                                "power": true,
+                                "trigger_mode": "level"
+                            }
+                        ],
+                        "actions": [
+                            {
+                                "action": "ActivateScene",
+                                "scene_id": "main_on",
+                                "device_keys": ["dummy/light1"],
+                                "rollout": "spatial",
+                                "rollout_source_device_key": "dummy/light1",
+                                "rollout_duration_ms": 1000
+                            },
+                            {
+                                "action": "ToggleDeviceOverride",
+                                "device_keys": ["dummy/light1"],
+                                "override_state": true
+                            },
+                            {
+                                "action": "SetDeviceState",
+                                "id": "light1",
+                                "name": "Source Light",
+                                "integration_id": "dummy",
+                                "data": {
+                                    "Controllable": {
+                                        "state": {
+                                            "power": true
+                                        }
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                ],
+                "floorplan": null,
+                "floorplans": [],
+                "device_positions": [
+                    {
+                        "device_key": "dummy/light1",
+                        "x": 1,
+                        "y": 2,
+                        "scale": 1,
+                        "rotation": 0
+                    }
+                ],
+                "group_positions": [],
+                "device_display_overrides": [
+                    {
+                        "device_key": "dummy/light1",
+                        "display_name": "Renamed Source"
+                    }
+                ],
+                "device_sensor_configs": [],
+                "dashboard_layouts": [
+                    {
+                        "id": 1,
+                        "name": "Default",
+                        "is_default": true
+                    }
+                ],
+                "dashboard_widgets": []
+            })
+            .to_string(),
+        ),
+        config_file_name: Some("config-backup.json".to_string()),
+        ..Default::default()
+    })
+    .expect("Failed to start replace-device test server");
+
+    wait_for("source and replacement devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Source Light").is_some()
+            && device_by_name(&devices, "Replacement Light").is_some()
+    });
+
+    let replace_response = post_json(
+        &server.base_url,
+        "/api/v1/config/devices/dummy%2Flight1/replace",
+        &json!({
+            "replacement_device_key": "dummy/light2"
+        }),
+    );
+    assert_eq!(replace_response.status(), StatusCode::OK);
+
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert!(device_by_name(&devices, "Source Light").is_none());
+    assert!(device_by_name(&devices, "Replacement Light").is_some());
+
+    let groups = get_json(&server.base_url, "/api/v1/config/groups");
+    assert_eq!(
+        groups["data"][0]["devices"],
+        json!([
+            {
+                "integration_id": "dummy",
+                "device_id": "light2"
+            }
+        ]),
+    );
+
+    let scenes = get_json(&server.base_url, "/api/v1/config/scenes");
+    assert!(scenes["data"][0]["device_states"]
+        .get("dummy/light1")
+        .is_none());
+    assert_eq!(
+        scenes["data"][0]["device_states"]["dummy/light2"],
+        json!({ "power": true }),
+    );
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    assert_eq!(
+        routines["data"][0]["rules"][0]["device_id"],
+        json!("light2")
+    );
+    assert_eq!(
+        routines["data"][0]["actions"][0]["device_keys"],
+        json!(["dummy/light2"]),
+    );
+    assert_eq!(
+        routines["data"][0]["actions"][0]["rollout_source_device_key"],
+        json!("dummy/light2"),
+    );
+    assert_eq!(routines["data"][0]["actions"][2]["id"], json!("light2"));
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    assert_eq!(
+        export["data"]["device_display_overrides"],
+        json!([
+            {
+                "device_key": "dummy/light2",
+                "display_name": "Renamed Source"
+            }
+        ]),
+    );
+    assert_eq!(
+        export["data"]["device_positions"],
+        json!([
+            {
+                "device_key": "dummy/light2",
+                "x": 1.0,
+                "y": 2.0,
+                "scale": 1.0,
+                "rotation": 0.0
+            }
+        ]),
+    );
+}
+
+#[test]
+fn config_api_deletes_device_references_and_removes_source_device() {
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(
+            json!({
+                "version": 1,
+                "core": { "warmup_time_seconds": 0 },
+                "integrations": [
+                    {
+                        "id": "dummy",
+                        "plugin": "dummy",
+                        "enabled": true,
+                        "config": {
+                            "devices": {
+                                "sensor1": {
+                                    "name": "Delete Sensor",
+                                    "init_state": {
+                                        "Sensor": {
+                                            "value": false
+                                        }
+                                    }
+                                },
+                                "light1": {
+                                    "name": "Target Light"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "groups": [],
+                "scenes": [],
+                "routines": [
+                    {
+                        "id": "watch_sensor",
+                        "name": "Watch Sensor",
+                        "enabled": true,
+                        "rules": [
+                            {
+                                "integration_id": "dummy",
+                                "device_id": "sensor1",
+                                "state": {
+                                    "value": true
+                                },
+                                "trigger_mode": "pulse"
+                            }
+                        ],
+                        "actions": [
+                            {
+                                "action": "ToggleDeviceOverride",
+                                "device_keys": ["dummy/sensor1"],
+                                "override_state": true
+                            }
+                        ]
+                    }
+                ],
+                "floorplan": null,
+                "floorplans": [],
+                "device_positions": [],
+                "group_positions": [],
+                "device_display_overrides": [],
+                "device_sensor_configs": [
+                    {
+                        "device_ref": "dummy/sensor1",
+                        "interaction_kind": "hue_dimmer",
+                        "config": {
+                            "on_value": "on"
+                        }
+                    }
+                ],
+                "dashboard_layouts": [
+                    {
+                        "id": 1,
+                        "name": "Default",
+                        "is_default": true
+                    }
+                ],
+                "dashboard_widgets": []
+            })
+            .to_string(),
+        ),
+        config_file_name: Some("config-backup.json".to_string()),
+        ..Default::default()
+    })
+    .expect("Failed to start delete-device test server");
+
+    wait_for("sensor device to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Delete Sensor").is_some()
+    });
+
+    let delete_response = delete(&server.base_url, "/api/v1/config/devices/dummy%2Fsensor1");
+    assert_eq!(delete_response.status(), StatusCode::OK);
+
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert!(device_by_name(&devices, "Delete Sensor").is_none());
+
+    let sensor_configs = get_json(&server.base_url, "/api/v1/config/device-sensor-configs");
+    assert_eq!(sensor_configs["data"], json!([]));
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    assert_eq!(routines["data"][0]["rules"], json!([]));
+    assert_eq!(routines["data"][0]["actions"][0]["device_keys"], json!([]));
+}
+
+#[test]
 fn config_api_logs_returns_buffered_server_logs() {
     let server = TestServer::new().expect("Failed to start test server");
 
@@ -1465,4 +1768,74 @@ fn config_api_hot_reloads_routines_for_sensor_triggers() {
         let devices = get_json(&server.base_url, "/api/v1/devices");
         device_power(&devices, "Reload Light") == Some(true)
     });
+}
+
+#[test]
+fn config_api_updates_routine_id_and_force_trigger_references() {
+    let server = TestServer::new().expect("Failed to start test server");
+
+    let create_primary = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "routine_a",
+            "name": "Routine A",
+            "enabled": true,
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(create_primary.status(), StatusCode::CREATED);
+
+    let create_secondary = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "routine_b",
+            "name": "Routine B",
+            "enabled": true,
+            "rules": [],
+            "actions": [
+                {
+                    "action": "ForceTriggerRoutine",
+                    "routine_id": "routine_a"
+                }
+            ]
+        }),
+    );
+    assert_eq!(create_secondary.status(), StatusCode::CREATED);
+
+    let update_response = put_json(
+        &server.base_url,
+        "/api/v1/config/routines/routine_a",
+        &json!({
+            "id": "routine_a_renamed",
+            "name": "Routine A Renamed",
+            "enabled": true,
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(update_response.status(), StatusCode::OK);
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    let routines_data = routines["data"]
+        .as_array()
+        .expect("routines data should be an array");
+
+    assert!(routines_data
+        .iter()
+        .any(|routine| routine["id"] == "routine_a_renamed"));
+    assert!(!routines_data
+        .iter()
+        .any(|routine| routine["id"] == "routine_a"));
+
+    let dependent_routine = routines_data
+        .iter()
+        .find(|routine| routine["id"] == "routine_b")
+        .expect("dependent routine should exist");
+    assert_eq!(
+        dependent_routine["actions"][0]["routine_id"],
+        json!("routine_a_renamed"),
+    );
 }

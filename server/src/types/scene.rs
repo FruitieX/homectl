@@ -49,6 +49,10 @@ pub struct ActivateSceneDescriptor {
 
     /// Optionally only apply scene to these groups
     pub group_keys: Option<Vec<GroupId>>,
+
+    /// Optionally override the transition applied when activating this scene.
+    #[ts(type = "number | null")]
+    pub transition: Option<OrderedFloat<f32>>,
 }
 
 #[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
@@ -69,6 +73,10 @@ pub struct ActivateSceneActionDescriptor {
 
     /// Optionally only apply scene to these groups
     pub group_keys: Option<Vec<GroupId>>,
+
+    /// Optionally override the transition applied when activating this scene.
+    #[ts(type = "number | null")]
+    pub transition: Option<OrderedFloat<f32>>,
 
     /// Optional rollout style for the activation.
     pub rollout: Option<RolloutStyle>,

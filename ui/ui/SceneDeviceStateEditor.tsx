@@ -495,6 +495,30 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
           Scene will inherit all device states from the linked scene
         </span>
       </div>
+
+      <div className="form-control">
+        <label className="label">
+          <span className="label-text">Transition Override (s)</span>
+        </label>
+        <input
+          type="number"
+          min="0"
+          step="0.1"
+          className="input input-bordered input-sm"
+          value={config.transition ?? ''}
+          placeholder="Use linked scene transition"
+          onChange={(e) => {
+            const nextValue = e.target.value.trim();
+            onChange({
+              ...config,
+              transition: nextValue ? Math.max(0, Number(nextValue)) : undefined,
+            });
+          }}
+        />
+        <span className="label-text-alt mt-1 opacity-60">
+          Leave empty to inherit the linked scene's transition values.
+        </span>
+      </div>
     </div>
   );
 }
@@ -530,7 +554,7 @@ function SceneTargetConfigEditor({
     } else if (newType === 'device_link') {
       onChange({ integration_id: '', device_id: '' });
     } else {
-      onChange({ scene_id: '' });
+      onChange({ scene_id: '', transition: undefined });
     }
   };
 

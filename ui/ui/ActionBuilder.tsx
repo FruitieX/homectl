@@ -14,6 +14,7 @@ export interface ActivateSceneAction {
   scene_id: string;
   device_keys?: string[];
   group_keys?: string[];
+  transition?: number;
   rollout?: string;
   rollout_source_device_key?: string;
   rollout_duration_ms?: number;
@@ -21,7 +22,7 @@ export interface ActivateSceneAction {
 
 export interface CycleScenesAction {
   action: 'CycleScenes';
-  scenes: { scene_id: string; device_keys?: string[]; group_keys?: string[] }[];
+  scenes: { scene_id: string; device_keys?: string[]; group_keys?: string[]; transition?: number }[];
   nowrap?: boolean;
   device_keys?: string[];
   group_keys?: string[];
@@ -336,6 +337,41 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
   );
 }
 
+interface TransitionOverrideFieldProps {
+  value?: number;
+  label: string;
+  helpText?: string;
+  onChange: (transition?: number) => void;
+}
+
+function TransitionOverrideField({
+  value,
+  label,
+  helpText,
+  onChange,
+}: TransitionOverrideFieldProps) {
+  return (
+    <div className="form-control">
+      <label className="label">
+        <span className="label-text">{label}</span>
+      </label>
+      <input
+        type="number"
+        min="0"
+        step="0.1"
+        className="input input-bordered input-sm"
+        value={value ?? ''}
+        placeholder="Use scene default"
+        onChange={(e) => {
+          const nextValue = e.target.value.trim();
+          onChange(nextValue ? Math.max(0, Number(nextValue)) : undefined);
+        }}
+      />
+      {helpText ? <span className="label-text-alt mt-1 opacity-60">{helpText}</span> : null}
+    </div>
+  );
+}
+
 interface ActivateSceneEditorProps {
   action: ActivateSceneAction;
   scenes: { id: string; name: string }[];
@@ -429,6 +465,13 @@ function ActivateSceneEditor({
         )}
       </div>
 
+      <TransitionOverrideField
+        value={action.transition}
+        label="Transition Override (s)"
+        helpText="Leave empty to use the scene's own transition values."
+        onChange={(transition) => onChange({ ...action, transition })}
+      />
+
       <RolloutEditor
         value={action}
         devices={devices}
@@ -479,12 +522,29 @@ function CycleScenesEditor({
         </label>
         <div className="space-y-2">
           {action.scenes.map((s, index) => (
-            <div key={index} className="flex gap-2 items-center">
+            <div key={index} className="flex flex-wrap gap-2 items-center">
               <span className="text-sm opacity-60 w-6">{index + 1}.</span>
               <SceneSelector
                 scenes={scenes}
                 value={s.scene_id}
                 onChange={(id) => handleSceneChange(index, id)}
+              />
+              <input
+                type="number"
+                min="0"
+                step="0.1"
+                className="input input-bordered input-sm w-36"
+                value={s.transition ?? ''}
+                placeholder="Transition (s)"
+                onChange={(event) => {
+                  const updated = [...action.scenes];
+                  const nextValue = event.target.value.trim();
+                  updated[index] = {
+                    ...updated[index],
+                    transition: nextValue ? Math.max(0, Number(nextValue)) : undefined,
+                  };
+                  onChange({ ...action, scenes: updated });
+                }}
               />
               <button
                 className="btn btn-ghost btn-xs btn-error"

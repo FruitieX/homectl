@@ -13,6 +13,7 @@ import { useMemo, useState } from 'react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
   SceneTargetOption,
   SceneTargetSectionEditor,
@@ -93,6 +94,7 @@ export default function ScenesPage() {
   const [activationNotice, setActivationNotice] = useState<string | null>(null);
   const [activatingSceneId, setActivatingSceneId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const { devicesState: devices } = useDevicesApi();
@@ -216,6 +218,12 @@ export default function ScenesPage() {
                 groupOptions={groupOptions}
                 isActivating={activatingSceneId === scene.id}
                 isEditing={editingId === scene.id}
+                isOpen={openId === scene.id}
+                onOpen={() => setOpenId(scene.id)}
+                onClose={() => {
+                  setOpenId((current) => (current === scene.id ? null : current));
+                  setEditingId((current) => (current === scene.id ? null : current));
+                }}
                 onActivate={() => {
                   void activateScene(scene);
                 }}
@@ -228,6 +236,7 @@ export default function ScenesPage() {
                 onDelete={async () => {
                   if (confirm(`Delete scene "${scene.name}"?`)) {
                     await remove(scene.id);
+                    setOpenId((current) => (current === scene.id ? null : current));
                   }
                 }}
               />
@@ -592,7 +601,10 @@ function SceneCard({
   groupOptions,
   isActivating,
   isEditing,
+  isOpen,
   onActivate,
+  onOpen,
+  onClose,
   onEdit,
   onSave,
   onCancel,
@@ -605,7 +617,10 @@ function SceneCard({
   groupOptions: SceneTargetOption[];
   isActivating: boolean;
   isEditing: boolean;
+  isOpen: boolean;
   onActivate: () => void;
+  onOpen: () => void;
+  onClose: () => void;
   onEdit: () => void;
   onSave: (scene: Partial<Scene>) => Promise<void>;
   onCancel: () => void;
@@ -614,125 +629,136 @@ function SceneCard({
   const deviceStateCount = Object.keys(scene.device_states || {}).length;
   const groupStateCount = Object.keys(scene.group_states || {}).length;
 
-  return (
-    <div className="collapse collapse-arrow bg-base-200 shadow-xl">
-      <input type="checkbox" defaultChecked={isEditing} />
-      <div className="collapse-title space-y-3 pr-14">
-        <div className="flex justify-between items-start gap-4">
-          <div>
-            <h2 className="card-title">{scene.name}</h2>
-            <div className="text-sm opacity-70">{scene.id}</div>
-          </div>
-          <div className="flex flex-wrap gap-2 items-center justify-end">
-            {scene.hidden && <div className="badge badge-ghost">Hidden</div>}
-            {scene.script && <div className="badge badge-info">Script</div>}
-            {deviceStateCount > 0 && (
-              <div className="badge badge-secondary">
-                {deviceStateCount} device{deviceStateCount !== 1 ? 's' : ''}
-              </div>
-            )}
-            {groupStateCount > 0 && (
-              <div className="badge badge-accent">
-                {groupStateCount} group{groupStateCount !== 1 ? 's' : ''}
-              </div>
-            )}
-          </div>
+  const summary = (
+    <div className="space-y-3 pr-4">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h2 className="card-title">{scene.name}</h2>
+          <div className="text-sm opacity-70">{scene.id}</div>
         </div>
-
-        <div className="text-sm opacity-80">
-          <span className="font-medium">{deviceStateCount}</span> device targets ·{' '}
-          <span className="font-medium">{groupStateCount}</span> group targets
-          {scene.script ? ' · scripted overrides enabled' : ''}
+        <div className="flex flex-wrap gap-2 items-center justify-end">
+          {scene.hidden && <div className="badge badge-ghost">Hidden</div>}
+          {scene.script && <div className="badge badge-info">Script</div>}
+          {deviceStateCount > 0 && (
+            <div className="badge badge-secondary">
+              {deviceStateCount} device{deviceStateCount !== 1 ? 's' : ''}
+            </div>
+          )}
+          {groupStateCount > 0 && (
+            <div className="badge badge-accent">
+              {groupStateCount} group{groupStateCount !== 1 ? 's' : ''}
+            </div>
+          )}
         </div>
-
-        <SceneResolvedColorCardSummary
-          deviceItems={scene.device_states || {}}
-          deviceOptions={deviceOptions}
-          devices={devices}
-          groupItems={scene.group_states || {}}
-          groupOptions={groupOptions}
-          scenes={scenes}
-        />
       </div>
 
-      <div className="collapse-content px-6 pb-6">
-        {isEditing ? (
-          <SceneEditorForm
-            scene={scene}
-            scenes={scenes}
-            devices={devices}
-            deviceOptions={deviceOptions}
-            groupOptions={groupOptions}
-            onSave={onSave}
-            onCancel={onCancel}
-          />
+      <div className="text-sm opacity-80">
+        <span className="font-medium">{deviceStateCount}</span> device targets ·{' '}
+        <span className="font-medium">{groupStateCount}</span> group targets
+        {scene.script ? ' · scripted overrides enabled' : ''}
+      </div>
+
+      <SceneResolvedColorCardSummary
+        deviceItems={scene.device_states || {}}
+        deviceOptions={deviceOptions}
+        devices={devices}
+        groupItems={scene.group_states || {}}
+        groupOptions={groupOptions}
+        scenes={scenes}
+      />
+    </div>
+  );
+
+  const viewContent = (
+    <div className="space-y-6">
+      <section className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold">Script</h3>
+          <span className="text-sm opacity-60">
+            {scene.script ? 'Enabled' : 'Not configured'}
+          </span>
+        </div>
+        {scene.script ? (
+          <pre className="overflow-x-auto rounded-lg border border-base-300 bg-base-100/70 p-4 text-sm leading-6">
+            <code>{scene.script}</code>
+          </pre>
         ) : (
-          <div className="space-y-6">
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-base font-semibold">Script</h3>
-                <span className="text-sm opacity-60">
-                  {scene.script ? 'Enabled' : 'Not configured'}
-                </span>
-              </div>
-              {scene.script ? (
-                <pre className="overflow-x-auto rounded-lg border border-base-300 bg-base-100/70 p-4 text-sm leading-6">
-                  <code>{scene.script}</code>
-                </pre>
-              ) : (
-                <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-70">
-                  No scene script configured.
-                </div>
-              )}
-            </section>
-
-            <SceneTargetsSummary
-              emptyMessage="No device targets configured."
-              items={scene.device_states || {}}
-              scenes={scenes}
-              devices={devices}
-              options={deviceOptions}
-              targetKind="device"
-              title="Device Targets"
-            />
-
-            <SceneTargetsSummary
-              emptyMessage="No group targets configured."
-              items={scene.group_states || {}}
-              scenes={scenes}
-              devices={devices}
-              options={groupOptions}
-              targetKind="group"
-              title="Group Targets"
-            />
-
-            <div className="card-actions justify-end mt-2 gap-2">
-              <button
-                className="btn btn-sm btn-secondary"
-                disabled={isActivating}
-                onClick={onActivate}
-                type="button"
-              >
-                {isActivating ? (
-                  <>
-                    <span className="loading loading-spinner loading-xs"></span>
-                    Activating
-                  </>
-                ) : (
-                  'Activate'
-                )}
-              </button>
-              <button className="btn btn-sm btn-ghost" onClick={onEdit}>
-                Edit
-              </button>
-              <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
-                Delete
-              </button>
-            </div>
+          <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-70">
+            No scene script configured.
           </div>
         )}
+      </section>
+
+      <SceneTargetsSummary
+        emptyMessage="No device targets configured."
+        items={scene.device_states || {}}
+        scenes={scenes}
+        devices={devices}
+        options={deviceOptions}
+        targetKind="device"
+        title="Device Targets"
+      />
+
+      <SceneTargetsSummary
+        emptyMessage="No group targets configured."
+        items={scene.group_states || {}}
+        scenes={scenes}
+        devices={devices}
+        options={groupOptions}
+        targetKind="group"
+        title="Group Targets"
+      />
+
+      <div className="card-actions justify-end mt-2 gap-2">
+        <button
+          className="btn btn-sm btn-secondary"
+          disabled={isActivating}
+          onClick={onActivate}
+          type="button"
+        >
+          {isActivating ? (
+            <>
+              <span className="loading loading-spinner loading-xs"></span>
+              Activating
+            </>
+          ) : (
+            'Activate'
+          )}
+        </button>
+        <button className="btn btn-sm btn-ghost" onClick={onEdit}>
+          Edit
+        </button>
+        <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
+          Delete
+        </button>
       </div>
     </div>
+  );
+
+  return (
+    <ExpandableConfigCard
+      open={isOpen}
+      onOpen={onOpen}
+      onClose={onClose}
+      summary={summary}
+      dialogTitle={scene.name}
+      dialogSubtitle={scene.id}
+      dialogBoxClassName="max-w-6xl"
+    >
+      {isEditing ? (
+        <SceneEditorForm
+          scene={scene}
+          scenes={scenes}
+          devices={devices}
+          deviceOptions={deviceOptions}
+          groupOptions={groupOptions}
+          onSave={onSave}
+          onCancel={onCancel}
+        />
+      ) : (
+        viewContent
+      )}
+    </ExpandableConfigCard>
   );
 }
 

@@ -14,6 +14,7 @@ import { useRoutineStatuses } from '@/hooks/websocket';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action } from '@/ui/ActionBuilder';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
 
 const getRoutineSearchValues = (routine: Routine) => [
@@ -36,6 +37,7 @@ export default function RoutinesPage() {
   const { data: scenes, loading: scenesLoading } = useScenes();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const { devicesState: devices } = useDevicesApi();
@@ -99,12 +101,18 @@ export default function RoutinesPage() {
               key={routine.id}
               routine={routine}
               isEditing={editingId === routine.id}
+              isOpen={openId === routine.id}
               devices={devices}
               groups={groups}
               scenes={sceneList}
               routines={routineList}
               runtimeStatus={routineStatuses?.[routine.id]}
               deviceDisplayNameMap={deviceDisplayNameMap}
+              onOpen={() => setOpenId(routine.id)}
+              onClose={() => {
+                setOpenId((current) => (current === routine.id ? null : current));
+                setEditingId((current) => (current === routine.id ? null : current));
+              }}
               onEdit={() => setEditingId(routine.id)}
               onSave={async (updated) => {
                 await update(routine.id, updated);
@@ -114,6 +122,7 @@ export default function RoutinesPage() {
               onDelete={async () => {
                 if (confirm(`Delete routine "${routine.name}"?`)) {
                   await remove(routine.id);
+                  setOpenId((current) => (current === routine.id ? null : current));
                 }
               }}
             />
@@ -140,12 +149,15 @@ import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 function RoutineCard({
   routine,
   isEditing,
+  isOpen,
   devices,
   groups,
   scenes,
   routines,
   runtimeStatus,
   deviceDisplayNameMap,
+  onOpen,
+  onClose,
   onEdit,
   onSave,
   onCancel,
@@ -153,17 +165,21 @@ function RoutineCard({
 }: {
   routine: Routine;
   isEditing: boolean;
+  isOpen: boolean;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   scenes: { id: string; name: string }[];
   routines: { id: string; name: string }[];
   runtimeStatus?: RoutineRuntimeStatus;
   deviceDisplayNameMap: Record<string, string>;
+  onOpen: () => void;
+  onClose: () => void;
   onEdit: () => void;
   onSave: (routine: Partial<Routine>) => Promise<void>;
   onCancel: () => void;
   onDelete: () => void;
 }) {
+  const [id, setId] = useState(routine.id);
   const [name, setName] = useState(routine.name);
   const [enabled, setEnabled] = useState(routine.enabled);
   const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
@@ -197,205 +213,225 @@ function RoutineCard({
   })();
   const matchingRuleCount = runtimeStatus?.rules.filter((status) => status.condition_match).length;
 
-  if (isEditing) {
-    return (
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <input
-            type="text"
-            className="input input-bordered font-bold text-lg"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-
-          <div className="flex justify-between items-center">
-            <div className="form-control">
-              <label className="label cursor-pointer gap-3">
-                <span className="label-text">Enabled</span>
-                <input
-                  type="checkbox"
-                  className="toggle toggle-primary"
-                  checked={enabled}
-                  onChange={(e) => setEnabled(e.target.checked)}
-                />
-              </label>
-            </div>
-
-            <div className="btn-group">
-              <button
-                className={`btn btn-sm ${editMode === 'visual' ? 'btn-active' : ''}`}
-                onClick={() => {
-                  if (editMode === 'json') {
-                    try {
-                      setRules(JSON.parse(rulesJson));
-                      setActions(JSON.parse(actionsJson));
-                    } catch {
-                      alert('Invalid JSON - fix before switching to visual');
-                      return;
-                    }
-                  }
-                  setEditMode('visual');
-                }}
-              >
-                Visual
-              </button>
-              <button
-                className={`btn btn-sm ${editMode === 'json' ? 'btn-active' : ''}`}
-                onClick={() => {
-                  setRulesJson(JSON.stringify(rules, null, 2));
-                  setActionsJson(JSON.stringify(actions, null, 2));
-                  setEditMode('json');
-                }}
-              >
-                JSON
-              </button>
-            </div>
-          </div>
-
-          {editMode === 'visual' ? (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="border border-base-300 rounded-lg p-4">
-                <RuleBuilder
-                  rules={rules}
-                  devices={devices}
-                  groups={groups}
-                  scenes={scenes}
-                  onChange={setRules}
-                />
-              </div>
-              <div className="border border-base-300 rounded-lg p-4">
-                <ActionBuilder
-                  actions={actions}
-                  devices={devices}
-                  groups={groups}
-                  scenes={scenes}
-                  routines={routines}
-                  onChange={setActions}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid md:grid-cols-2 gap-4">
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Rules (JSON)</span>
-                </label>
-                <textarea
-                  className="textarea textarea-bordered h-48 font-mono text-xs"
-                  value={rulesJson}
-                  onChange={(e) => setRulesJson(e.target.value)}
-                  placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
-                />
-              </div>
-
-              <div className="form-control">
-                <label className="label">
-                  <span className="label-text">Actions (JSON)</span>
-                </label>
-                <textarea
-                  className="textarea textarea-bordered h-48 font-mono text-xs"
-                  value={actionsJson}
-                  onChange={(e) => setActionsJson(e.target.value)}
-                  placeholder='[{"ActivateScene": {"scene_id": "..."}]'
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="card-actions justify-end mt-2">
-            <button className="btn btn-sm btn-ghost" onClick={onCancel}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() => {
-                try {
-                  const finalRules =
-                    editMode === 'json' ? JSON.parse(rulesJson) : rules;
-                  const finalActions =
-                    editMode === 'json' ? JSON.parse(actionsJson) : actions;
-                  onSave({
-                    name,
-                    enabled,
-                    rules: finalRules,
-                    actions: finalActions,
-                  });
-                } catch {
-                  alert('Invalid JSON in rules or actions');
-                }
-              }}
-            >
-              Save
-            </button>
-          </div>
+  const summary = (
+    <div className="space-y-3 pr-4">
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h2 className="card-title">{routine.name}</h2>
+          <div className="text-sm opacity-70">{routine.id}</div>
         </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="collapse collapse-arrow bg-base-200 shadow-xl">
-      <input type="checkbox" />
-      <div className="collapse-title space-y-3 pr-14">
-        <div className="flex justify-between items-start gap-4">
-          <div>
-            <h2 className="card-title">{routine.name}</h2>
-            <div className="text-sm opacity-70">{routine.id}</div>
+        <div className="flex flex-wrap gap-2 items-center justify-end">
+          <div className={`badge ${routine.enabled ? 'badge-success' : 'badge-error'}`}>
+            {routine.enabled ? 'Enabled' : 'Disabled'}
           </div>
-          <div className="flex flex-wrap gap-2 items-center justify-end">
-            <div className={`badge ${routine.enabled ? 'badge-success' : 'badge-error'}`}>
-              {routine.enabled ? 'Enabled' : 'Disabled'}
+          {routineStatusBadge ? (
+            <div className={`badge ${routineStatusBadge.className}`}>
+              {routineStatusBadge.label}
             </div>
-            {routineStatusBadge ? (
-              <div className={`badge ${routineStatusBadge.className}`}>
-                {routineStatusBadge.label}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        <div className="text-sm">
-          <span className="font-medium">{routine.rules.length}</span> rules ·{' '}
-          <span className="font-medium">{routine.actions.length}</span> actions
-          {routine.enabled && matchingRuleCount !== undefined ? (
-            <>
-              {' '}
-              · <span className="font-medium">{matchingRuleCount}</span> matching now
-            </>
           ) : null}
         </div>
       </div>
 
-      <div className="collapse-content px-6 pb-6">
-        <div className="grid gap-4 xl:grid-cols-2">
-          <RoutineRuleList
-            rules={routine.rules as Rule[]}
-            status={runtimeStatus}
-            devices={devices}
-            groups={groups}
-            scenes={scenes}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-          />
-          <RoutineActionList
-            actions={routine.actions as Action[]}
-            devices={devices}
-            groups={groups}
-            scenes={scenes}
-            routines={routines}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-          />
+      <div className="text-sm">
+        <span className="font-medium">{routine.rules.length}</span> rules ·{' '}
+        <span className="font-medium">{routine.actions.length}</span> actions
+        {routine.enabled && matchingRuleCount !== undefined ? (
+          <>
+            {' '}
+            · <span className="font-medium">{matchingRuleCount}</span> matching now
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+
+  const editContent = (
+    <div className="space-y-4">
+      <label className="form-control w-full max-w-md">
+        <span className="label-text text-sm">Routine ID</span>
+        <input
+          type="text"
+          className="input input-bordered font-mono"
+          value={id}
+          onChange={(e) => setId(e.target.value)}
+        />
+      </label>
+
+      <input
+        type="text"
+        className="input input-bordered font-bold text-lg w-full"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+
+      <div className="flex justify-between items-center">
+        <div className="form-control">
+          <label className="label cursor-pointer gap-3">
+            <span className="label-text">Enabled</span>
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+          </label>
         </div>
 
-        <div className="card-actions justify-end mt-4">
-          <button className="btn btn-sm btn-ghost" onClick={onEdit}>
-            Edit
+        <div className="btn-group">
+          <button
+            className={`btn btn-sm ${editMode === 'visual' ? 'btn-active' : ''}`}
+            onClick={() => {
+              if (editMode === 'json') {
+                try {
+                  setRules(JSON.parse(rulesJson));
+                  setActions(JSON.parse(actionsJson));
+                } catch {
+                  alert('Invalid JSON - fix before switching to visual');
+                  return;
+                }
+              }
+              setEditMode('visual');
+            }}
+          >
+            Visual
           </button>
-          <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
-            Delete
+          <button
+            className={`btn btn-sm ${editMode === 'json' ? 'btn-active' : ''}`}
+            onClick={() => {
+              setRulesJson(JSON.stringify(rules, null, 2));
+              setActionsJson(JSON.stringify(actions, null, 2));
+              setEditMode('json');
+            }}
+          >
+            JSON
           </button>
         </div>
       </div>
+
+      {editMode === 'visual' ? (
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="border border-base-300 rounded-lg p-4">
+            <RuleBuilder
+              rules={rules}
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              onChange={setRules}
+            />
+          </div>
+          <div className="border border-base-300 rounded-lg p-4">
+            <ActionBuilder
+              actions={actions}
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              routines={routines}
+              onChange={setActions}
+            />
+          </div>
+        </div>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Rules (JSON)</span>
+            </label>
+            <textarea
+              className="textarea textarea-bordered h-48 font-mono text-xs"
+              value={rulesJson}
+              onChange={(e) => setRulesJson(e.target.value)}
+              placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+            />
+          </div>
+
+          <div className="form-control">
+            <label className="label">
+              <span className="label-text">Actions (JSON)</span>
+            </label>
+            <textarea
+              className="textarea textarea-bordered h-48 font-mono text-xs"
+              value={actionsJson}
+              onChange={(e) => setActionsJson(e.target.value)}
+              placeholder='[{"ActivateScene": {"scene_id": "..."}]'
+            />
+          </div>
+        </div>
+      )}
+
+      <div className="card-actions justify-end mt-2">
+        <button className="btn btn-sm btn-ghost" onClick={onCancel}>
+          Cancel
+        </button>
+        <button
+          className="btn btn-sm btn-primary"
+          disabled={!id.trim() || !name.trim()}
+          onClick={() => {
+            try {
+              const finalRules =
+                editMode === 'json' ? JSON.parse(rulesJson) : rules;
+              const finalActions =
+                editMode === 'json' ? JSON.parse(actionsJson) : actions;
+              onSave({
+                id,
+                name,
+                enabled,
+                rules: finalRules,
+                actions: finalActions,
+              });
+            } catch {
+              alert('Invalid JSON in rules or actions');
+            }
+          }}
+        >
+          Save
+        </button>
+      </div>
     </div>
+  );
+
+  const viewContent = (
+    <div className="space-y-4">
+      <div className="grid gap-4 xl:grid-cols-2">
+        <RoutineRuleList
+          rules={routine.rules as Rule[]}
+          status={runtimeStatus}
+          devices={devices}
+          groups={groups}
+          scenes={scenes}
+          deviceDisplayNameMap={deviceDisplayNameMap}
+        />
+        <RoutineActionList
+          actions={routine.actions as Action[]}
+          devices={devices}
+          groups={groups}
+          scenes={scenes}
+          routines={routines}
+          deviceDisplayNameMap={deviceDisplayNameMap}
+        />
+      </div>
+
+      <div className="card-actions justify-end">
+        <button className="btn btn-sm btn-ghost" onClick={onEdit}>
+          Edit
+        </button>
+        <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
+          Delete
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <ExpandableConfigCard
+      open={isOpen}
+      onOpen={onOpen}
+      onClose={onClose}
+      summary={summary}
+      dialogTitle={routine.name}
+      dialogSubtitle={routine.id}
+    >
+      {isEditing ? editContent : viewContent}
+    </ExpandableConfigCard>
   );
 }
 

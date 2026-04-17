@@ -77,7 +77,7 @@ pub struct GroupRule {
     pub trigger_mode: TriggerMode,
 }
 
-#[derive(TS, Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
 #[ts(export)]
 pub struct AnyRule {
     #[ts(skip)]
@@ -93,7 +93,7 @@ pub struct ScriptRule {
     pub script: String,
 }
 
-#[derive(TS, Clone, Deserialize, Debug)]
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
 #[serde(untagged)]
 #[ts(export)]
 pub enum Rule {

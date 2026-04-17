@@ -93,6 +93,18 @@ pub async fn db_get_devices() -> Result<HashMap<DeviceKey, Device>> {
         .collect())
 }
 
+pub async fn db_delete_device(device_key: &DeviceKey) -> Result<bool> {
+    let db = get_db_connection()?;
+
+    let result = sqlx::query("DELETE FROM devices WHERE integration_id = $1 AND device_id = $2")
+        .bind(&device_key.integration_id.to_string())
+        .bind(&device_key.device_id.to_string())
+        .execute(db)
+        .await?;
+
+    Ok(result.rows_affected() > 0)
+}
+
 pub async fn db_get_scenes() -> Result<ScenesConfig> {
     let db = get_db_connection()?;
 

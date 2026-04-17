@@ -200,6 +200,20 @@ impl Devices {
         }
     }
 
+    pub fn remove_device(&mut self, device_key: &DeviceKey) -> bool {
+        let removed = self.state.0.remove(device_key).is_some();
+
+        if removed {
+            let mut pending = self
+                .pending_db_updates
+                .lock()
+                .expect("pending_db_updates lock poisoned");
+            pending.remove(device_key);
+        }
+
+        removed
+    }
+
     pub async fn refresh_db_devices(&mut self, _scenes: &Scenes) {
         let db_devices = db_get_devices().await;
 
@@ -460,6 +474,7 @@ impl Devices {
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        transition: &Option<OrderedFloat<f32>>,
         groups: &Groups,
         scenes: &Scenes,
     ) -> Option<Vec<Device>> {
@@ -470,6 +485,7 @@ impl Devices {
                 scene_id: scene_id.clone(),
                 device_keys: device_keys.clone(),
                 group_keys: group_keys.clone(),
+                transition: None,
             },
         )?;
 
@@ -477,9 +493,13 @@ impl Devices {
             .keys()
             .filter_map(|device_key| self.get_device(device_key))
             .map(|device| {
-                device
-                    .set_scene(Some(scene_id), scenes, self)
-                    .set_transition(None)
+                let scene_device = device.set_scene(Some(scene_id), scenes, self);
+
+                if let Some(transition) = transition {
+                    scene_device.set_transition(Some(transition.0))
+                } else {
+                    scene_device
+                }
             })
             .collect();
 
@@ -583,6 +603,7 @@ impl Devices {
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        transition: &Option<OrderedFloat<f32>>,
         rollout: &Option<RolloutStyle>,
         rollout_source_device_key: &Option<DeviceKey>,
         rollout_duration_ms: &Option<u64>,
@@ -618,12 +639,21 @@ impl Devices {
             .as_ref()
             .map(|style| format!(" with {style:?} rollout"))
             .unwrap_or_default();
+        let transition_description = transition
+            .map(|value| format!(" with {:.1}s transition override", value.0))
+            .unwrap_or_default();
         info!(
-            "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}"
+            "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}{transition_description}"
         );
 
-        let resolved_devices =
-            self.resolve_scene_devices(scene_id, device_keys, group_keys, groups, scenes)?;
+        let resolved_devices = self.resolve_scene_devices(
+            scene_id,
+            device_keys,
+            group_keys,
+            transition,
+            groups,
+            scenes,
+        )?;
 
         self.apply_devices_with_rollout(
             resolved_devices,
@@ -687,6 +717,7 @@ impl Devices {
             &next_scene.scene_id,
             &next_scene.device_keys,
             &next_scene.group_keys,
+            &next_scene.transition,
             rollout,
             rollout_source_device_key,
             rollout_duration_ms,
@@ -712,17 +743,22 @@ impl Devices {
 mod tests {
     use super::Devices;
     use super::{build_spatial_rollout_plan, SpatialRolloutPlan};
-    use crate::core::scenes::Scenes;
+    use crate::core::{groups::Groups, scenes::Scenes};
     use crate::db::config_queries::DevicePositionRow;
     use crate::types::color::Capabilities;
     use crate::types::device::{
         ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, ManageKind, SensorDevice,
     };
     use crate::types::event::{mk_event_channel, RxEventChannel};
+    use crate::types::group::GroupsConfig;
     use crate::types::integration::IntegrationId;
+    use crate::types::scene::{
+        SceneConfig, SceneDeviceConfig, SceneDeviceState, SceneDevicesSearchConfig, ScenesConfig,
+    };
     use crate::utils::cli::Cli;
+    use ordered_float::OrderedFloat;
     use serde_json::json;
-    use std::collections::BTreeMap;
+    use std::{collections::BTreeMap, str::FromStr};
 
     fn device_key(id: &str) -> DeviceKey {
         DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
@@ -742,6 +778,20 @@ mod tests {
     fn test_devices() -> (Devices, RxEventChannel) {
         let (event_tx, event_rx) = mk_event_channel();
         (Devices::new(event_tx, &test_cli()), event_rx)
+    }
+
+    fn create_scene_device_config(
+        key: &str,
+        config: SceneDeviceConfig,
+    ) -> SceneDevicesSearchConfig {
+        let (integration_id, device_id) = key.split_once('/').unwrap();
+        let mut devices = BTreeMap::new();
+        devices.insert(device_id.to_string(), config);
+
+        let mut integrations = BTreeMap::new();
+        integrations.insert(IntegrationId::from_str(integration_id).unwrap(), devices);
+
+        SceneDevicesSearchConfig(integrations)
     }
 
     fn placeholder_sensor(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
@@ -894,5 +944,77 @@ mod tests {
 
         let stored = devices.get_device(&incoming.get_device_key()).unwrap();
         assert_eq!(stored, &incoming);
+    }
+
+    #[tokio::test]
+    async fn activate_scene_applies_transition_override() {
+        let (mut devices, _event_rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
+        let target = Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("lamp1"),
+            "Lamp 1".to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                Some(0.5),
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Full,
+            )),
+            None,
+        );
+        let target_key = target.get_device_key();
+
+        devices.set_state(&target, true, true);
+
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Focus".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        color: None,
+                        brightness: Some(OrderedFloat(0.7)),
+                        transition: Some(OrderedFloat(0.2)),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        let result = devices
+            .activate_scene(
+                &scene_id,
+                &None,
+                &None,
+                &Some(OrderedFloat(1.5)),
+                &None,
+                &None,
+                &None,
+                &[],
+                &groups,
+                &scenes,
+            )
+            .await;
+
+        assert_eq!(result, Some(true));
+
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+
+        assert_eq!(data.state.transition, Some(OrderedFloat(1.5)));
+        assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
     }
 }

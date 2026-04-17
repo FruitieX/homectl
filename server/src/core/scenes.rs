@@ -196,13 +196,17 @@ fn compute_scene_device_state(
 
         SceneDeviceConfig::SceneLink(link) => {
             // Use state from another scene
-            let (state, _nested_source) = compute_scene_device_state(
+            let (mut state, _nested_source) = compute_scene_device_state(
                 &link.scene_id,
                 device,
                 devices,
                 scene_devices_configs,
                 ignore_transition,
             )?;
+
+            if let Some(transition) = link.transition {
+                state.transition = Some(transition);
+            }
 
             Some((
                 state,
@@ -856,6 +860,7 @@ impl Scenes {
                             scene_id: scene_id.clone(),
                             device_keys: None,
                             group_keys: None,
+                            transition: None,
                         },
                     )?;
 
@@ -1338,6 +1343,7 @@ mod tests {
                         scene_id: base_scene_id.clone(),
                         device_keys: None,
                         group_keys: None,
+                        transition: None,
                     }),
                 )),
                 groups: None,
@@ -1366,5 +1372,66 @@ mod tests {
                 linked_device_key: None,
             })
         );
+    }
+
+    #[test]
+    fn scene_link_transition_override_replaces_nested_scene_transition() {
+        let (mut devices, _event_rx) = test_devices();
+        let mut groups = Groups::new(GroupsConfig::new());
+        let target = create_test_device("test", "target");
+        let target_key = target.get_device_key();
+
+        devices.set_state(&target, true, true);
+        groups.force_invalidate(&devices);
+
+        let base_scene_id = SceneId::from_str("base").unwrap();
+        let linked_scene_id = SceneId::from_str("linked").unwrap();
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            base_scene_id.clone(),
+            SceneConfig {
+                name: "Base".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        color: None,
+                        brightness: Some(OrderedFloat(0.55)),
+                        transition: Some(OrderedFloat(0.4)),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        scenes_config.insert(
+            linked_scene_id.clone(),
+            SceneConfig {
+                name: "Linked".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::SceneLink(ActivateSceneDescriptor {
+                        scene_id: base_scene_id,
+                        device_keys: None,
+                        group_keys: None,
+                        transition: Some(OrderedFloat(1.2)),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        let resolved = target.set_scene(Some(&linked_scene_id), &scenes, &devices);
+        let DeviceData::Controllable(data) = resolved.data else {
+            panic!("expected controllable device");
+        };
+
+        assert_eq!(data.state.transition, Some(OrderedFloat(1.2)));
     }
 }

@@ -56,6 +56,7 @@ export interface ActivateSceneDescriptor {
   scene_id: string;
   device_keys?: string[];
   group_keys?: string[];
+  transition?: number;
 }
 
 export interface SceneDeviceState {
@@ -102,6 +103,17 @@ export interface UiLogEntry {
 export interface RuntimeStatus {
   persistence_available: boolean;
   memory_only_mode: boolean;
+}
+
+export interface DeviceConfigMutationResult {
+  deleted_device_key: string;
+  replacement_device_key?: string | null;
+  updated_groups: number;
+  updated_scenes: number;
+  updated_routines: number;
+  display_override_changed: boolean;
+  sensor_config_changed: boolean;
+  position_changed: boolean;
 }
 
 export interface ConfigExport {
@@ -242,6 +254,43 @@ export function useDeviceDisplayNames() {
 
 export function useDeviceSensorConfigs() {
   return useConfigApi<DeviceSensorConfig>('device-sensor-configs');
+}
+
+export function useConfigDevices() {
+  const { apiEndpoint } = useAppConfig();
+  const baseUrl = `${apiEndpoint}/api/v1/config/devices`;
+
+  const replace = useCallback(
+    async (deviceKey: string, replacementDeviceKey: string) => {
+      const response = await fetch(`${baseUrl}/${encodeURIComponent(deviceKey)}/replace`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ replacement_device_key: replacementDeviceKey }),
+      });
+      const result = await readApiResponse<DeviceConfigMutationResult>(
+        response,
+        'Failed to replace device references',
+      );
+      return result.data;
+    },
+    [baseUrl],
+  );
+
+  const remove = useCallback(
+    async (deviceKey: string) => {
+      const response = await fetch(`${baseUrl}/${encodeURIComponent(deviceKey)}`, {
+        method: 'DELETE',
+      });
+      const result = await readApiResponse<DeviceConfigMutationResult>(
+        response,
+        'Failed to delete device',
+      );
+      return result.data;
+    },
+    [baseUrl],
+  );
+
+  return { replace, remove };
 }
 
 export function useFloorplans() {

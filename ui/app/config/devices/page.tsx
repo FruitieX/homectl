@@ -5,15 +5,18 @@ import { DeviceColor } from '@/bindings/DeviceColor';
 import { DeviceStateSource } from '@/bindings/DeviceStateSource';
 import { ManageKind } from '@/bindings/ManageKind';
 import {
+  useConfigDevices,
   useDeviceDisplayNames,
+  useGroups,
   useDeviceSensorConfigs,
   useScenes,
 } from '@/hooks/useConfig';
-import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
+import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useWebsocketState } from '@/hooks/websocket';
 import { getDeviceKey } from '@/lib/device';
 import { getDefaultDeviceLabel, getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { black, getResolvedDeviceColorState } from '@/lib/colors';
+import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import {
   type DeviceSensorConfig,
   type SensorInteractionKind,
@@ -27,6 +30,7 @@ import {
 } from '@/lib/sensorInteraction';
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
+import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import { useEffect, useMemo, useState } from 'react';
 
 type DeviceTypeFilter = 'all' | 'controllable' | 'sensor' | 'other';
@@ -481,20 +485,23 @@ function DeviceFactRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function DevicesPage() {
-  const { devices, loading: devicesLoading } = useDevicesApi();
+  const { devices, loading: devicesLoading, refetch: refetchDevices } = useDevicesApi();
   const wsState = useWebsocketState();
-  const groups = useGroupsState();
-  const { data: scenes } = useScenes();
+  const { data: groupRows, refetch: refetchGroups } = useGroups();
+  const { data: scenes, refetch: refetchScenes } = useScenes();
   const {
     data: deviceDisplayNames,
+    refetch: refetchDeviceDisplayNames,
     update: updateDeviceDisplayName,
     remove: removeDeviceDisplayName,
   } = useDeviceDisplayNames();
   const {
     data: deviceSensorConfigs,
+    refetch: refetchDeviceSensorConfigs,
     update: updateDeviceSensorConfig,
     remove: removeDeviceSensorConfig,
   } = useDeviceSensorConfigs();
+  const { replace: replaceConfigDevice, remove: removeConfigDevice } = useConfigDevices();
   const [deviceSearch, setDeviceSearch] = useState('');
   const [deviceTypeFilter, setDeviceTypeFilter] = useState<DeviceTypeFilter>('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
@@ -503,8 +510,11 @@ export default function DevicesPage() {
     {},
   );
   const [savingKey, setSavingKey] = useState<string | null>(null);
+  const [mutatingKey, setMutatingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [openDeviceKey, setOpenDeviceKey] = useState<string | null>(null);
+  const [replacementDrafts, setReplacementDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setDisplayNameDrafts(
@@ -540,6 +550,21 @@ export default function DevicesPage() {
     () => Object.fromEntries(deviceSensorConfigs.map((row) => [row.device_ref, row])),
     [deviceSensorConfigs],
   );
+  const groups = useMemo(() => {
+    const nextGroups: FlattenedGroupsConfig = {};
+
+    for (const group of groupRows) {
+      nextGroups[group.id] = {
+        name: group.name,
+        device_keys:
+          group.device_keys ??
+          group.devices.map((device) => `${device.integration_id}/${device.device_id}`),
+        hidden: group.hidden,
+      };
+    }
+
+    return nextGroups;
+  }, [groupRows]);
   const sceneNameById = useMemo(
     () => Object.fromEntries(scenes.map((scene) => [scene.id, scene.name])),
     [scenes],
@@ -579,6 +604,20 @@ export default function DevicesPage() {
 
     return Array.from(mergedDevices.values());
   }, [devices, wsState]);
+
+  const replacementOptions = useMemo(
+    () =>
+      liveDevices
+        .map((device) => ({
+          key: getDeviceKey(device),
+          label: getDeviceDisplayLabel(device, deviceDisplayNameMap),
+        }))
+        .sort(
+          (left, right) =>
+            left.label.localeCompare(right.label) || left.key.localeCompare(right.key),
+        ),
+    [deviceDisplayNameMap, liveDevices],
+  );
 
   const groupIdsByDeviceKey = useMemo(
     () =>
@@ -791,6 +830,93 @@ export default function DevicesPage() {
     }
   };
 
+  const refreshConfigData = async () => {
+    await Promise.all([
+      refetchDevices(),
+      refetchGroups(),
+      refetchScenes(),
+      refetchDeviceDisplayNames(),
+      refetchDeviceSensorConfigs(),
+    ]);
+  };
+
+  const replaceDeviceReferences = async (device: Device) => {
+    const deviceKey = getDeviceKey(device);
+    const replacementDeviceKey = replacementDrafts[deviceKey]?.trim() ?? '';
+
+    if (!replacementDeviceKey) {
+      setError('Select a replacement device first.');
+      return;
+    }
+
+    const replacementOption = replacementOptions.find(
+      (option) => option.key === replacementDeviceKey,
+    );
+
+    if (!replacementOption) {
+      setError('Selected replacement device is no longer available.');
+      return;
+    }
+
+    if (
+      !confirm(
+        `Replace all references to "${getDefaultDeviceLabel(device)}" with "${replacementOption.label}" and delete the current device from memory and the database?`,
+      )
+    ) {
+      return;
+    }
+
+    setMutatingKey(deviceKey);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await replaceConfigDevice(deviceKey, replacementDeviceKey);
+      await refreshConfigData();
+      setOpenDeviceKey(null);
+      setReplacementDrafts((previous) => ({
+        ...previous,
+        [deviceKey]: '',
+      }));
+      setNotice(
+        `Replaced ${result?.updated_groups ?? 0} group, ${result?.updated_scenes ?? 0} scene, and ${result?.updated_routines ?? 0} routine references for ${getDefaultDeviceLabel(device)}.`,
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to replace device');
+    } finally {
+      setMutatingKey(null);
+    }
+  };
+
+  const deleteDeviceConfig = async (device: Device) => {
+    const deviceKey = getDeviceKey(device);
+
+    if (
+      !confirm(
+        `Delete "${getDefaultDeviceLabel(device)}" from runtime memory and the database, and remove its config references?`,
+      )
+    ) {
+      return;
+    }
+
+    setMutatingKey(deviceKey);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const result = await removeConfigDevice(deviceKey);
+      await refreshConfigData();
+      setOpenDeviceKey(null);
+      setNotice(
+        `Deleted ${getDefaultDeviceLabel(device)} and removed ${result?.updated_groups ?? 0} group, ${result?.updated_scenes ?? 0} scene, and ${result?.updated_routines ?? 0} routine references.`,
+      );
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Failed to delete device');
+    } finally {
+      setMutatingKey(null);
+    }
+  };
+
   if (devicesLoading) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -920,6 +1046,12 @@ export default function DevicesPage() {
             sensorDraft.config,
           );
           const isSaving = savingKey === deviceKey;
+          const isMutating = mutatingKey === deviceKey;
+          const isOpen = openDeviceKey === deviceKey;
+          const replacementDraft = replacementDrafts[deviceKey] ?? '';
+          const availableReplacementOptions = replacementOptions.filter(
+            (option) => option.key !== deviceKey,
+          );
           const interactionLabel =
             'Sensor' in device.data
               ? getSensorInteractionLabel(resolvedInteraction.kind)
@@ -932,61 +1064,70 @@ export default function DevicesPage() {
           );
 
           return (
-            <div key={deviceKey} className="collapse collapse-arrow h-fit bg-base-200 shadow-xl">
-              <input type="checkbox" />
+            <ExpandableConfigCard
+              key={deviceKey}
+              open={isOpen}
+              onOpen={() => setOpenDeviceKey(deviceKey)}
+              onClose={() =>
+                setOpenDeviceKey((current) => (current === deviceKey ? null : current))
+              }
+              cardClassName="h-fit"
+              dialogTitle={label}
+              dialogSubtitle={deviceKey}
+              summary={
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <h2 className="truncate text-base font-semibold">{label}</h2>
+                      <div className="text-xs opacity-60">{deviceKey}</div>
+                    </div>
 
-              <div className="collapse-title space-y-2 px-4 pb-4 pt-4 pr-12">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <h2 className="truncate text-base font-semibold">{label}</h2>
-                    <div className="text-xs opacity-60">{deviceKey}</div>
-                  </div>
-
-                  {hasDisplayOverride && (
-                    <span className="badge badge-primary badge-sm">Custom label</span>
-                  )}
-                </div>
-
-                <div className="text-sm opacity-80">{runtimeSummary}</div>
-
-                {resolvedColorPreview && (
-                  <div className="flex items-center gap-2 text-xs opacity-75">
-                    <ResolvedColorDot
-                      color={resolvedColorPreview.color}
-                      isPowered={resolvedColorPreview.isPowered}
-                    />
-                    <span>
-                      {stateSource && stateSource.kind !== 'device_state'
-                        ? 'Resolved color'
-                        : 'Current color'}
-                    </span>
-                    {!resolvedColorPreview.isPowered && (
-                      <span className="opacity-60">device off</span>
+                    {hasDisplayOverride && (
+                      <span className="badge badge-primary badge-sm">Custom label</span>
                     )}
                   </div>
-                )}
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="badge badge-outline badge-sm">{type}</span>
-                  {'Controllable' in device.data && (
-                    <span className="badge badge-outline badge-sm">
-                      {getSceneLabel(activeSceneId, sceneNameById)}
-                    </span>
+                  <div className="text-sm opacity-80">{runtimeSummary}</div>
+
+                  {resolvedColorPreview && (
+                    <div className="flex items-center gap-2 text-xs opacity-75">
+                      <ResolvedColorDot
+                        color={resolvedColorPreview.color}
+                        isPowered={resolvedColorPreview.isPowered}
+                      />
+                      <span>
+                        {stateSource && stateSource.kind !== 'device_state'
+                          ? 'Resolved color'
+                          : 'Current color'}
+                      </span>
+                      {!resolvedColorPreview.isPowered && (
+                        <span className="opacity-60">device off</span>
+                      )}
+                    </div>
                   )}
-                  {'Controllable' in device.data ? (
-                    <span className="badge badge-outline badge-sm">{sourceSummary.badge}</span>
-                  ) : (
-                    <span className="badge badge-outline badge-sm">{interactionLabel}</span>
-                  )}
-                  {groupNames.length > 0 && (
-                    <span className="badge badge-ghost badge-sm">
-                      {getGroupCountLabel(groupNames)}
-                    </span>
-                  )}
+
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    <span className="badge badge-outline badge-sm">{type}</span>
+                    {'Controllable' in device.data && (
+                      <span className="badge badge-outline badge-sm">
+                        {getSceneLabel(activeSceneId, sceneNameById)}
+                      </span>
+                    )}
+                    {'Controllable' in device.data ? (
+                      <span className="badge badge-outline badge-sm">{sourceSummary.badge}</span>
+                    ) : (
+                      <span className="badge badge-outline badge-sm">{interactionLabel}</span>
+                    )}
+                    {groupNames.length > 0 && (
+                      <span className="badge badge-ghost badge-sm">
+                        {getGroupCountLabel(groupNames)}
+                      </span>
+                    )}
+                  </div>
                 </div>
-              </div>
-
-              <div className="collapse-content px-4 pb-4">
+              }
+            >
+              {isOpen ? (
                 <div className="space-y-4">
                   <div className="grid gap-4 xl:grid-cols-2">
                     <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
@@ -1171,6 +1312,7 @@ export default function DevicesPage() {
                     <div className="flex flex-wrap justify-end gap-2">
                       <button
                         className="btn btn-sm btn-ghost"
+                        disabled={isMutating}
                         onClick={() =>
                           setDisplayNameDrafts((previous) => ({
                             ...previous,
@@ -1183,6 +1325,7 @@ export default function DevicesPage() {
                       {'Sensor' in device.data && (
                         <button
                           className="btn btn-sm btn-ghost"
+                          disabled={isMutating}
                           onClick={() => updateSensorDraftKind(deviceRef, 'auto')}
                         >
                           Use Auto Sensor UI
@@ -1190,7 +1333,7 @@ export default function DevicesPage() {
                       )}
                       <button
                         className={`btn btn-sm btn-primary ${isSaving ? 'loading' : ''}`}
-                        disabled={isSaving}
+                        disabled={isSaving || isMutating}
                         onClick={() => void saveDeviceSettings(device)}
                       >
                         Save Changes
@@ -1203,9 +1346,60 @@ export default function DevicesPage() {
                       </div>
                     )}
                   </section>
+
+                  <section className="rounded-xl border border-error/30 bg-error/5 p-4 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-wide text-error">
+                        Device Replacement / Deletion
+                      </div>
+                      <p className="mt-2 text-sm opacity-80">
+                        Replace config references with another device, or delete this device from
+                        runtime memory and the database while removing its saved references.
+                      </p>
+                    </div>
+
+                    <label className="form-control w-full max-w-md">
+                      <span className="label-text text-sm">Replacement device</span>
+                      <select
+                        className="select select-bordered"
+                        disabled={isSaving || isMutating}
+                        value={replacementDraft}
+                        onChange={(event) =>
+                          setReplacementDrafts((previous) => ({
+                            ...previous,
+                            [deviceKey]: event.target.value,
+                          }))
+                        }
+                      >
+                        <option value="">Select replacement device...</option>
+                        {availableReplacementOptions.map((option) => (
+                          <option key={option.key} value={option.key}>
+                            {option.label} ({option.key})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <div className="flex flex-wrap justify-end gap-2">
+                      <button
+                        className={`btn btn-sm btn-warning ${isMutating ? 'loading' : ''}`}
+                        disabled={isSaving || isMutating || !replacementDraft}
+                        onClick={() => void replaceDeviceReferences(device)}
+                      >
+                        Replace References
+                      </button>
+                      <button
+                        className={`btn btn-sm btn-error ${isMutating ? 'loading' : ''}`}
+                        disabled={isSaving || isMutating}
+                        onClick={() => void deleteDeviceConfig(device)}
+                      >
+                        Delete Device
+                      </button>
+                    </div>
+                  </section>
                 </div>
-              </div>
-            </div>
+              ) : null}
+            </ExpandableConfigCard>
           );
         })}
       </div>
