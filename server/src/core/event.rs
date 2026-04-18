@@ -232,6 +232,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             rollout_source_device_key,
             rollout_duration_ms,
         })) => {
+            let device_positions = state.effective_device_positions();
             state
                 .devices
                 .activate_scene(
@@ -243,7 +244,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     rollout,
                     rollout_source_device_key,
                     rollout_duration_ms,
-                    &state.runtime_config.device_positions,
+                    &device_positions,
                     &state.groups,
                     &state.scenes,
                 )
@@ -258,6 +259,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             rollout_source_device_key,
             rollout_duration_ms,
         })) => {
+            let device_positions = state.effective_device_positions();
             state
                 .devices
                 .cycle_scenes(
@@ -269,7 +271,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                     rollout,
                     rollout_source_device_key,
                     rollout_duration_ms,
-                    &state.runtime_config.device_positions,
+                    &device_positions,
                     &state.scenes,
                 )
                 .await;
@@ -378,7 +380,6 @@ mod tests {
             routines: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
-            device_positions: Vec::new(),
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_sensor_configs: Vec::new(),

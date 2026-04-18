@@ -220,28 +220,10 @@ impl AppState {
         }
     }
 
-    pub fn upsert_device_position(&mut self, position: DevicePositionRow) {
-        if let Some(existing) = self
-            .runtime_config
-            .device_positions
-            .iter_mut()
-            .find(|existing| existing.device_key == position.device_key)
-        {
-            *existing = position;
-        } else {
-            self.runtime_config.device_positions.push(position);
-            self.runtime_config
-                .device_positions
-                .sort_by(|left, right| left.device_key.cmp(&right.device_key));
-        }
-    }
-
-    pub fn delete_device_position(&mut self, device_key: &str) -> bool {
-        let len_before = self.runtime_config.device_positions.len();
-        self.runtime_config
-            .device_positions
-            .retain(|position| position.device_key != device_key);
-        self.runtime_config.device_positions.len() != len_before
+    /// Returns all device positions reconstructed from persisted floorplan
+    /// grid data for spatial rollout dispatch.
+    pub fn effective_device_positions(&self) -> Vec<DevicePositionRow> {
+        config_queries::extract_floorplan_device_positions(&self.runtime_config.floorplans)
     }
 
     pub fn upsert_group_position(&mut self, position: GroupPositionRow) {

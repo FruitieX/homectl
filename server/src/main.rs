@@ -60,7 +60,6 @@ impl RuntimeConfigSnapshot {
                 routines: Vec::new(),
                 floorplan: None,
                 floorplans: Vec::new(),
-                device_positions: Vec::new(),
                 group_positions: Vec::new(),
                 device_display_overrides: Vec::new(),
                 device_sensor_configs: Vec::new(),

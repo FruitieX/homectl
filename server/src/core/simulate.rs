@@ -264,24 +264,6 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
             height: floorplan.height,
         });
 
-    // Read device positions
-    let pos_rows: Vec<(String, f32, f32, f32, f32)> =
-        sqlx::query_as("SELECT device_key, x, y, scale, rotation FROM device_positions")
-            .fetch_all(&pool)
-            .await?;
-    let device_positions = pos_rows
-        .into_iter()
-        .map(
-            |(device_key, x, y, scale, rotation)| config_queries::DevicePositionRow {
-                device_key,
-                x,
-                y,
-                scale,
-                rotation,
-            },
-        )
-        .collect();
-
     let display_override_rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT device_key, display_name FROM device_display_overrides ORDER BY device_key",
     )
@@ -343,7 +325,6 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
         routines,
         floorplan,
         floorplans,
-        device_positions,
         group_positions: Vec::new(),
         device_display_overrides,
         device_sensor_configs: Vec::new(),
@@ -501,23 +482,6 @@ async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExpo
             height: floorplan.height,
         });
 
-    let pos_rows: Vec<(String, f32, f32, f32, f32)> =
-        sqlx::query_as("SELECT device_key, x, y, scale, rotation FROM device_positions")
-            .fetch_all(&pool)
-            .await?;
-    let device_positions = pos_rows
-        .into_iter()
-        .map(
-            |(device_key, x, y, scale, rotation)| config_queries::DevicePositionRow {
-                device_key,
-                x,
-                y,
-                scale,
-                rotation,
-            },
-        )
-        .collect();
-
     let group_position_rows: Vec<(String, f32, f32, f32, f32, i32)> = sqlx::query_as(
         "SELECT group_id, x, y, width, height, z_index FROM group_positions ORDER BY group_id",
     )
@@ -613,7 +577,6 @@ async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExpo
         routines,
         floorplan,
         floorplans,
-        device_positions,
         group_positions,
         device_display_overrides,
         device_sensor_configs,
@@ -673,7 +636,6 @@ fn config_export_has_data(config: &ConfigExport) -> bool {
         || !config.routines.is_empty()
         || config.floorplan.is_some()
         || !config.floorplans.is_empty()
-        || !config.device_positions.is_empty()
         || !config.group_positions.is_empty()
         || !config.device_display_overrides.is_empty()
         || !config.device_sensor_configs.is_empty()

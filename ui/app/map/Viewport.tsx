@@ -16,7 +16,6 @@ import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { ViewportGroup } from '@/ui/ViewportGroup';
 import { SensorActionModal } from '@/ui/SensorActionModal';
-import { useDevicePositions } from '@/hooks/useFloorplanPositions';
 import { useStoredFloorplan } from '@/hooks/useStoredFloorplan';
 import {
   FloorplanBackground,
@@ -39,7 +38,6 @@ export const Viewport = () => {
   const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(null);
   const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(selectedFloorplanId ?? undefined);
   const [floorplanImage] = useImage(imageUrl);
-  const { positions: devicePositions } = useDevicePositions();
 
   const allDevices: Device[] = Object.values(excludeUndefined(state?.devices));
   const controllableDevices = useMemo(
@@ -121,24 +119,16 @@ export const Viewport = () => {
   const getViewportDevicePlacement = useCallback(
     (deviceKey: string) => {
       const floorplanPosition = floorplanDevicePositions[deviceKey];
-      if (floorplanPosition) {
-        return {
-          position: floorplanPosition,
-          scale: floorplanDeviceScale,
-        };
-      }
-
-      const legacyPosition = devicePositions[deviceKey];
-      if (!legacyPosition) {
+      if (!floorplanPosition) {
         return null;
       }
 
       return {
-        position: { x: legacyPosition.x, y: legacyPosition.y },
-        scale: 1,
+        position: floorplanPosition,
+        scale: floorplanDeviceScale,
       };
     },
-    [devicePositions, floorplanDevicePositions, floorplanDeviceScale],
+    [floorplanDevicePositions, floorplanDeviceScale],
   );
 
   const sortedGroups = Object.entries(groups)

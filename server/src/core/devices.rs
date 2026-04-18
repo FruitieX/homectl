@@ -31,12 +31,19 @@ struct SpatialRolloutPlan {
     delayed_device_keys: Vec<(DeviceKey, u64)>,
 }
 
-fn compute_rollout_delay_ms(distance: f32, max_distance: f32, duration_ms: u64) -> u64 {
-    if duration_ms == 0 || max_distance <= f32::EPSILON {
+fn compute_rollout_delay_ms(
+    distance: f32,
+    min_distance: f32,
+    max_distance: f32,
+    duration_ms: u64,
+) -> u64 {
+    let span = max_distance - min_distance;
+    if duration_ms == 0 || span <= f32::EPSILON {
         return 0;
     }
 
-    ((duration_ms as f64) * (distance as f64) / (max_distance as f64)).round() as u64
+    let normalized = ((distance - min_distance) as f64) / (span as f64);
+    ((duration_ms as f64) * normalized.clamp(0.0, 1.0)).round() as u64
 }
 
 fn compute_distance(source: &DevicePositionRow, target: &DevicePositionRow) -> f32 {
@@ -54,6 +61,7 @@ fn build_spatial_rollout_plan(
     let mut immediate_device_keys = Vec::new();
     let mut positioned_targets = Vec::new();
     let mut max_distance = 0.0_f32;
+    let mut min_distance = f32::INFINITY;
 
     for device_key in target_device_keys {
         let Some(target_position) = positions.get(&device_key.to_string()) else {
@@ -63,10 +71,11 @@ fn build_spatial_rollout_plan(
 
         let distance = compute_distance(source_position, target_position);
         max_distance = max_distance.max(distance);
+        min_distance = min_distance.min(distance);
         positioned_targets.push((device_key.clone(), distance));
     }
 
-    if max_distance <= f32::EPSILON {
+    if positioned_targets.is_empty() || (max_distance - min_distance) <= f32::EPSILON {
         immediate_device_keys.extend(
             positioned_targets
                 .into_iter()
@@ -80,7 +89,7 @@ fn build_spatial_rollout_plan(
 
     let mut delayed_device_keys = Vec::new();
     for (device_key, distance) in positioned_targets {
-        let delay_ms = compute_rollout_delay_ms(distance, max_distance, duration_ms);
+        let delay_ms = compute_rollout_delay_ms(distance, min_distance, max_distance, duration_ms);
 
         if delay_ms == 0 {
             immediate_device_keys.push(device_key);
@@ -905,8 +914,28 @@ mod tests {
         assert_eq!(
             plan,
             Some(SpatialRolloutPlan {
-                immediate_device_keys: vec![missing],
-                delayed_device_keys: vec![(near, 300), (far, 900)],
+                immediate_device_keys: vec![missing, near],
+                delayed_device_keys: vec![(far, 900)],
+            })
+        );
+    }
+
+    #[test]
+    fn spatial_rollout_plan_treats_source_as_affected_device_when_targeted() {
+        // When the source itself is one of the affected devices, the nearest
+        // distance is 0, so timing matches a 0..=max_distance ramp.
+        let source = device_key("source");
+        let far = device_key("far");
+        let positions = BTreeMap::from([position(&source, 0.0, 0.0), position(&far, 3.0, 0.0)]);
+
+        let plan =
+            build_spatial_rollout_plan(&source, &[source.clone(), far.clone()], &positions, 900);
+
+        assert_eq!(
+            plan,
+            Some(SpatialRolloutPlan {
+                immediate_device_keys: vec![source],
+                delayed_device_keys: vec![(far, 900)],
             })
         );
     }

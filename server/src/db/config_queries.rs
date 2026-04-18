@@ -5,14 +5,14 @@
 //! - Groups (with devices and links)
 //! - Scenes (with device and group states)
 //! - Routines
-//! - Floorplan and device positions
+//! - Floorplans and group positions
 //! - Dashboard layouts and widgets
 //! - Config import/export
 
 use super::get_db_connection;
 use color_eyre::Result;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 // ============================================================================
 // Types for config entities
@@ -160,7 +160,6 @@ pub struct ConfigExport {
     pub floorplan: Option<FloorplanRow>,
     #[serde(default)]
     pub floorplans: Vec<FloorplanExportRow>,
-    pub device_positions: Vec<DevicePositionRow>,
     #[serde(default)]
     pub group_positions: Vec<GroupPositionRow>,
     #[serde(default)]
@@ -169,6 +168,165 @@ pub struct ConfigExport {
     pub device_sensor_configs: Vec<DeviceSensorConfigRow>,
     pub dashboard_layouts: Vec<DashboardLayoutRow>,
     pub dashboard_widgets: Vec<DashboardWidgetRow>,
+}
+
+pub fn extract_floorplan_device_positions(
+    floorplans: &[FloorplanExportRow],
+) -> Vec<DevicePositionRow> {
+    let mut seen_keys = HashSet::new();
+    let mut positions = Vec::new();
+
+    for floorplan in floorplans {
+        let Some(grid_json) = floorplan.grid_data.as_deref() else {
+            continue;
+        };
+
+        let grid_data: serde_json::Value = match serde_json::from_str(grid_json) {
+            Ok(grid_data) => grid_data,
+            Err(error) => {
+                warn!(
+                    "Failed to parse grid_data for floorplan '{}': {error}",
+                    floorplan.id
+                );
+                continue;
+            }
+        };
+
+        let tile_size = grid_data
+            .get("tileSize")
+            .and_then(serde_json::Value::as_f64)
+            .filter(|value| *value > 0.0)
+            .unwrap_or(1.0) as f32;
+
+        let Some(devices) = grid_data.get("devices").and_then(serde_json::Value::as_array) else {
+            continue;
+        };
+
+        for device in devices {
+            let Some(device_key) = device.get("deviceKey").and_then(serde_json::Value::as_str)
+            else {
+                continue;
+            };
+            let Some(x) = device.get("x").and_then(serde_json::Value::as_f64) else {
+                continue;
+            };
+            let Some(y) = device.get("y").and_then(serde_json::Value::as_f64) else {
+                continue;
+            };
+
+            if !seen_keys.insert(device_key.to_string()) {
+                continue;
+            }
+
+            positions.push(DevicePositionRow {
+                device_key: device_key.to_string(),
+                x: (x as f32 + 0.5) * tile_size,
+                y: (y as f32 + 0.5) * tile_size,
+                scale: 1.0,
+                rotation: 0.0,
+            });
+        }
+    }
+
+    positions
+}
+
+pub fn rewrite_floorplan_device_references_in_grid(
+    floorplan: &mut FloorplanExportRow,
+    source_device_key: &str,
+    replacement_device_key: Option<&str>,
+    replacement_device_name: Option<&str>,
+) -> bool {
+    let Some(grid_json) = floorplan.grid_data.as_deref() else {
+        return false;
+    };
+
+    let mut grid_data: serde_json::Value = match serde_json::from_str(grid_json) {
+        Ok(grid_data) => grid_data,
+        Err(error) => {
+            warn!(
+                "Failed to parse grid_data for floorplan '{}': {error}",
+                floorplan.id
+            );
+            return false;
+        }
+    };
+
+    let Some(devices) = grid_data
+        .get_mut("devices")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return false;
+    };
+
+    let mut replacement_inserted = replacement_device_key.is_some_and(|replacement_device_key| {
+        devices.iter().any(|device| {
+            device
+                .get("deviceKey")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|device_key| {
+                    device_key == replacement_device_key && device_key != source_device_key
+                })
+        })
+    });
+
+    let mut changed = false;
+    devices.retain_mut(|device| {
+        let is_source_device = device
+            .get("deviceKey")
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|device_key| device_key == source_device_key);
+
+        if !is_source_device {
+            return true;
+        }
+
+        changed = true;
+
+        let Some(replacement_device_key) = replacement_device_key else {
+            return false;
+        };
+
+        if replacement_inserted {
+            return false;
+        }
+
+        replacement_inserted = true;
+
+        if let Some(device_object) = device.as_object_mut() {
+            device_object.insert(
+                "deviceKey".to_string(),
+                serde_json::Value::String(replacement_device_key.to_string()),
+            );
+
+            if let Some(replacement_device_name) = replacement_device_name {
+                device_object.insert(
+                    "deviceName".to_string(),
+                    serde_json::Value::String(replacement_device_name.to_string()),
+                );
+            }
+        }
+
+        true
+    });
+
+    if !changed {
+        return false;
+    }
+
+    match serde_json::to_string(&grid_data) {
+        Ok(serialized) => {
+            floorplan.grid_data = Some(serialized);
+            true
+        }
+        Err(error) => {
+            warn!(
+                "Failed to serialize rewritten grid_data for floorplan '{}': {error}",
+                floorplan.id
+            );
+            false
+        }
+    }
 }
 
 // ============================================================================
@@ -1020,62 +1178,6 @@ pub async fn db_delete_floorplan(id: &str) -> Result<bool> {
 }
 
 // ============================================================================
-// Device Positions
-// ============================================================================
-
-pub async fn db_get_device_positions() -> Result<Vec<DevicePositionRow>> {
-    let db = get_db_connection()?;
-
-    let rows: Vec<(String, f32, f32, Option<f32>, Option<f32>)> =
-        sqlx::query_as("SELECT device_key, x, y, scale, rotation FROM device_positions")
-            .fetch_all(db)
-            .await?;
-
-    Ok(rows
-        .into_iter()
-        .map(|(device_key, x, y, scale, rotation)| DevicePositionRow {
-            device_key,
-            x,
-            y,
-            scale: scale.unwrap_or(1.0),
-            rotation: rotation.unwrap_or(0.0),
-        })
-        .collect())
-}
-
-pub async fn db_upsert_device_position(pos: &DevicePositionRow) -> Result<()> {
-    let db = get_db_connection()?;
-
-    sqlx::query(
-        "INSERT INTO device_positions (device_key, x, y, scale, rotation) \
-         VALUES ($1, $2, $3, $4, $5) \
-         ON CONFLICT (device_key) DO UPDATE SET \
-             x = excluded.x, y = excluded.y, \
-             scale = excluded.scale, rotation = excluded.rotation",
-    )
-    .bind(&pos.device_key)
-    .bind(pos.x)
-    .bind(pos.y)
-    .bind(pos.scale)
-    .bind(pos.rotation)
-    .execute(db)
-    .await?;
-
-    Ok(())
-}
-
-pub async fn db_delete_device_position(device_key: &str) -> Result<bool> {
-    let db = get_db_connection()?;
-
-    let result = sqlx::query("DELETE FROM device_positions WHERE device_key = $1")
-        .bind(device_key)
-        .execute(db)
-        .await?;
-
-    Ok(result.rows_affected() > 0)
-}
-
-// ============================================================================
 // Group Positions
 // ============================================================================
 
@@ -1305,7 +1407,6 @@ pub async fn db_export_config() -> Result<ConfigExport> {
     let routines = db_get_routines().await?;
     let floorplan = db_get_floorplan().await?;
     let floorplans = db_get_floorplan_exports().await?;
-    let device_positions = db_get_device_positions().await?;
     let group_positions = db_get_group_positions().await?;
     let device_display_overrides = db_get_device_display_overrides().await?;
     let device_sensor_configs = db_get_device_sensor_configs().await?;
@@ -1326,7 +1427,6 @@ pub async fn db_export_config() -> Result<ConfigExport> {
         routines,
         floorplan,
         floorplans,
-        device_positions,
         group_positions,
         device_display_overrides,
         device_sensor_configs,
@@ -1397,9 +1497,6 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
         }
     } else if let Some(floorplan) = &config.floorplan {
         db_upsert_floorplan(floorplan).await?;
-    }
-    for pos in &config.device_positions {
-        db_upsert_device_position(pos).await?;
     }
     for pos in &config.group_positions {
         db_upsert_group_position(pos).await?;
@@ -1473,7 +1570,6 @@ pub async fn db_has_config() -> Result<bool> {
                     AND grid_data IS NULL
                 )
             )
-            OR EXISTS (SELECT 1 FROM device_positions)
             OR EXISTS (SELECT 1 FROM group_positions)
             OR EXISTS (SELECT 1 FROM device_display_overrides)
             OR EXISTS (SELECT 1 FROM device_sensor_configs)

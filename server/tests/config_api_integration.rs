@@ -17,7 +17,6 @@ fn blank_backup_config() -> Value {
         "routines": [],
         "floorplan": null,
         "floorplans": [],
-        "device_positions": [],
         "group_positions": [],
         "device_display_overrides": [],
         "device_sensor_configs": [],
@@ -30,6 +29,61 @@ fn blank_backup_config() -> Value {
         ],
         "dashboard_widgets": []
     })
+}
+
+fn floorplan_grid_with_devices(devices: &[(&str, &str, i32, i32)]) -> String {
+    let width = devices
+        .iter()
+        .map(|(_, _, x, _)| *x)
+        .max()
+        .unwrap_or(0)
+        .max(0)
+        + 1;
+    let height = devices
+        .iter()
+        .map(|(_, _, _, y)| *y)
+        .max()
+        .unwrap_or(0)
+        .max(0)
+        + 1;
+    let tiles = vec![vec!["floor"; width as usize]; height as usize];
+
+    json!({
+        "width": width,
+        "height": height,
+        "tileSize": 1,
+        "deviceScale": 1,
+        "tiles": tiles,
+        "devices": devices
+            .iter()
+            .map(|(device_key, device_name, x, y)| {
+                json!({
+                    "deviceKey": device_key,
+                    "deviceName": device_name,
+                    "x": x,
+                    "y": y
+                })
+            })
+            .collect::<Vec<_>>(),
+        "groups": {}
+    })
+    .to_string()
+}
+
+fn exported_floorplan_grid(export: &Value, floorplan_id: &str) -> Value {
+    let floorplan = export["data"]["floorplans"]
+        .as_array()
+        .expect("exported floorplans should be an array")
+        .iter()
+        .find(|floorplan| floorplan["id"] == floorplan_id)
+        .unwrap_or_else(|| panic!("missing floorplan '{floorplan_id}'"));
+
+    serde_json::from_str(
+        floorplan["grid_data"]
+            .as_str()
+            .expect("floorplan grid should be a JSON string"),
+    )
+    .expect("floorplan grid should be valid JSON")
 }
 
 fn reload_fixture_backup_config() -> Value {
@@ -122,6 +176,21 @@ fn rollout_fixture_backup_config() -> Value {
                 "rollout_dummy/light2": { "power": true }
             },
             "group_states": {}
+        }
+    ]);
+    config["floorplans"] = json!([
+        {
+            "id": "default",
+            "name": "Main floorplan",
+            "image_data": null,
+            "image_mime_type": null,
+            "width": null,
+            "height": null,
+            "grid_data": floorplan_grid_with_devices(&[
+                ("rollout_dummy/sensor1", "Rollout Sensor", 0, 0),
+                ("rollout_dummy/light1", "Rollout Light 1", 1, 0),
+                ("rollout_dummy/light2", "Rollout Light 2", 3, 0),
+            ])
         }
     ]);
     config
@@ -366,7 +435,9 @@ fn sample_config_export() -> Value {
                 "image_mime_type": null,
                 "width": null,
                 "height": null,
-                "grid_data": null
+                "grid_data": floorplan_grid_with_devices(&[
+                    ("dummy/light1", "Light 1", 12, 8)
+                ])
             },
             {
                 "id": "upstairs",
@@ -376,15 +447,6 @@ fn sample_config_export() -> Value {
                 "width": null,
                 "height": null,
                 "grid_data": "{\"width\":10,\"height\":6,\"tileSize\":24,\"tiles\":[[\"floor\"]],\"devices\":[],\"groups\":{}}"
-            }
-        ],
-        "device_positions": [
-            {
-                "device_key": "dummy/light1",
-                "x": 12.5,
-                "y": 8.0,
-                "scale": 1.25,
-                "rotation": 0.5
             }
         ],
         "group_positions": [],
@@ -489,28 +551,6 @@ fn activate_scene_spatial_rollout_updates_near_devices_before_far_devices() {
             && device_by_name(&devices, "Rollout Sensor").is_some()
     });
 
-    for (device_key, x) in [
-        ("rollout_dummy/sensor1", 0.0),
-        ("rollout_dummy/light1", 1.0),
-        ("rollout_dummy/light2", 3.0),
-    ] {
-        let response = put_json(
-            &server.base_url,
-            &format!(
-                "/api/v1/config/floorplan/devices/{}",
-                device_key.replace('/', "%2F")
-            ),
-            &json!({
-                "device_key": device_key,
-                "x": x,
-                "y": 0.0,
-                "scale": 1.0,
-                "rotation": 0.0
-            }),
-        );
-        assert_eq!(response.status(), StatusCode::OK);
-    }
-
     let trigger_response = post_json(
         &server.base_url,
         "/api/v1/actions/trigger",
@@ -551,28 +591,6 @@ fn cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
             && device_by_name(&devices, "Rollout Light 2").is_some()
             && device_by_name(&devices, "Rollout Sensor").is_some()
     });
-
-    for (device_key, x) in [
-        ("rollout_dummy/sensor1", 0.0),
-        ("rollout_dummy/light1", 1.0),
-        ("rollout_dummy/light2", 3.0),
-    ] {
-        let response = put_json(
-            &server.base_url,
-            &format!(
-                "/api/v1/config/floorplan/devices/{}",
-                device_key.replace('/', "%2F")
-            ),
-            &json!({
-                "device_key": device_key,
-                "x": x,
-                "y": 0.0,
-                "scale": 1.0,
-                "rotation": 0.0
-            }),
-        );
-        assert_eq!(response.status(), StatusCode::OK);
-    }
 
     let off_response = post_json(
         &server.base_url,
@@ -633,28 +651,6 @@ fn persisted_cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
             && device_by_name(&devices, "Rollout Light 2").is_some()
             && device_by_name(&devices, "Rollout Sensor").is_some()
     });
-
-    for (device_key, x) in [
-        ("rollout_dummy/sensor1", 0.0),
-        ("rollout_dummy/light1", 1.0),
-        ("rollout_dummy/light2", 3.0),
-    ] {
-        let response = put_json(
-            &server.base_url,
-            &format!(
-                "/api/v1/config/floorplan/devices/{}",
-                device_key.replace('/', "%2F")
-            ),
-            &json!({
-                "device_key": device_key,
-                "x": x,
-                "y": 0.0,
-                "scale": 1.0,
-                "rotation": 0.0
-            }),
-        );
-        assert_eq!(response.status(), StatusCode::OK);
-    }
 
     let create_routine_response = post_json(
         &server.base_url,
@@ -1005,14 +1001,17 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                     }
                 ],
                 "floorplan": null,
-                "floorplans": [],
-                "device_positions": [
+                "floorplans": [
                     {
-                        "device_key": "dummy/light1",
-                        "x": 1,
-                        "y": 2,
-                        "scale": 1,
-                        "rotation": 0
+                        "id": "default",
+                        "name": "Main floorplan",
+                        "image_data": null,
+                        "image_mime_type": null,
+                        "width": null,
+                        "height": null,
+                        "grid_data": floorplan_grid_with_devices(&[
+                            ("dummy/light1", "Source Light", 1, 2)
+                        ])
                     }
                 ],
                 "group_positions": [],
@@ -1103,15 +1102,15 @@ fn config_api_replaces_device_references_and_removes_source_device() {
             }
         ]),
     );
+    let exported_grid = exported_floorplan_grid(&export, "default");
     assert_eq!(
-        export["data"]["device_positions"],
+        exported_grid["devices"],
         json!([
             {
-                "device_key": "dummy/light2",
-                "x": 1.0,
-                "y": 2.0,
-                "scale": 1.0,
-                "rotation": 0.0
+                "deviceKey": "dummy/light2",
+                "deviceName": "Replacement Light",
+                "x": 1,
+                "y": 2
             }
         ]),
     );
@@ -1173,8 +1172,19 @@ fn config_api_deletes_device_references_and_removes_source_device() {
                     }
                 ],
                 "floorplan": null,
-                "floorplans": [],
-                "device_positions": [],
+                "floorplans": [
+                    {
+                        "id": "default",
+                        "name": "Main floorplan",
+                        "image_data": null,
+                        "image_mime_type": null,
+                        "width": null,
+                        "height": null,
+                        "grid_data": floorplan_grid_with_devices(&[
+                            ("dummy/sensor1", "Delete Sensor", 2, 1)
+                        ])
+                    }
+                ],
                 "group_positions": [],
                 "device_display_overrides": [],
                 "device_sensor_configs": [
@@ -1219,6 +1229,10 @@ fn config_api_deletes_device_references_and_removes_source_device() {
     let routines = get_json(&server.base_url, "/api/v1/config/routines");
     assert_eq!(routines["data"][0]["rules"], json!([]));
     assert_eq!(routines["data"][0]["actions"][0]["device_keys"], json!([]));
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    let exported_grid = exported_floorplan_grid(&export, "default");
+    assert_eq!(exported_grid["devices"], json!([]));
 }
 
 #[test]

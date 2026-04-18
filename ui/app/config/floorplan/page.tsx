@@ -19,10 +19,6 @@ import {
   serializeGrid,
   deserializeGrid,
 } from '@/ui/FloorplanGridEditor';
-import {
-  useDevicePositions,
-  type DevicePosition,
-} from '@/hooks/useFloorplanPositions';
 
 const getFloorplanDeviceType = (device: Device) => {
   if ('Sensor' in device.data) {
@@ -583,9 +579,6 @@ export default function FloorplanPage() {
         </div>
       </div>
 
-      {/* Viewport Device Positions */}
-      <DevicePositionsEditor devices={devices} />
-
       {showCreateFloorplan && (
         <dialog className="modal modal-open">
           <div className="modal-box max-w-lg space-y-4">
@@ -624,130 +617,6 @@ export default function FloorplanPage() {
           </div>
         </dialog>
       )}
-    </div>
-  );
-}
-
-function DevicePositionsEditor({ devices }: { devices: Device[] }) {
-  const {
-    positions,
-    loading,
-    upsert,
-    remove,
-  } = useDevicePositions();
-  const [addKey, setAddKey] = useState('');
-
-  const positionedKeys = new Set(Object.keys(positions));
-  const unpositionedDevices = devices.filter(
-    (d) => !positionedKeys.has(getDeviceKey(d)),
-  );
-
-  const handleAdd = async () => {
-    if (!addKey) return;
-    await upsert({ device_key: addKey, x: 0, y: 0, scale: 1, rotation: 0 });
-    setAddKey('');
-  };
-
-  const handleFieldChange = async (
-    pos: DevicePosition,
-    field: keyof DevicePosition,
-    value: string,
-  ) => {
-    const num = parseFloat(value);
-    if (isNaN(num)) return;
-    await upsert({ ...pos, [field]: num });
-  };
-
-  return (
-    <div className="collapse collapse-arrow bg-base-200">
-      <input type="checkbox" />
-      <div className="collapse-title font-medium">
-        Device Positions ({Object.keys(positions).length} positioned)
-      </div>
-      <div className="collapse-content">
-        <p className="text-sm opacity-70 mb-4">
-          Set pixel coordinates for devices on the map viewport. Only devices
-          with positions will appear on the map.
-        </p>
-
-        {loading ? (
-          <span className="loading loading-spinner loading-sm" />
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-              <table className="table table-xs">
-                <thead>
-                  <tr>
-                    <th>Device</th>
-                    <th>X</th>
-                    <th>Y</th>
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.values(positions).map((pos) => (
-                    <tr key={pos.device_key}>
-                      <td className="font-mono text-xs">{pos.device_key}</td>
-                      <td>
-                        <input
-                          type="number"
-                          className="input input-bordered input-xs w-20"
-                          defaultValue={pos.x}
-                          onBlur={(e) =>
-                            handleFieldChange(pos, 'x', e.target.value)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <input
-                          type="number"
-                          className="input input-bordered input-xs w-20"
-                          defaultValue={pos.y}
-                          onBlur={(e) =>
-                            handleFieldChange(pos, 'y', e.target.value)
-                          }
-                        />
-                      </td>
-                      <td>
-                        <button
-                          className="btn btn-ghost btn-xs btn-error"
-                          onClick={() => remove(pos.device_key)}
-                        >
-                          ✕
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {unpositionedDevices.length > 0 && (
-              <div className="flex gap-2 mt-4 items-center">
-                <select
-                  className="select select-bordered select-sm flex-1"
-                  value={addKey}
-                  onChange={(e) => setAddKey(e.target.value)}
-                >
-                  <option value="">Add device...</option>
-                  {unpositionedDevices.map((d) => (
-                    <option key={getDeviceKey(d)} value={getDeviceKey(d)}>
-                      {d.name} ({getDeviceKey(d)})
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="btn btn-sm btn-primary"
-                  disabled={!addKey}
-                  onClick={handleAdd}
-                >
-                  Add
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
     </div>
   );
 }

@@ -18,9 +18,9 @@ use crate::db::{
     actions::{db_delete_device, db_update_device},
     config_queries::{
         self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
-        DeviceDisplayNameRow, DevicePositionRow, DeviceSensorConfigRow, FloorplanExportRow,
-        FloorplanMetadataRow, FloorplanRow, GroupDeviceRow, GroupPositionRow, GroupRow,
-        IntegrationRow, RoutineRow, SceneRow,
+        DeviceDisplayNameRow, DeviceSensorConfigRow, FloorplanExportRow, FloorplanMetadataRow,
+        FloorplanRow, GroupDeviceRow, GroupPositionRow, GroupRow, IntegrationRow, RoutineRow,
+        SceneRow,
     },
 };
 use crate::types::{
@@ -130,9 +130,16 @@ struct DeviceConfigRewriteResult {
     changed_groups: Vec<GroupRow>,
     changed_scenes: Vec<SceneRow>,
     changed_routines: Vec<RoutineRow>,
+    changed_floorplans: Vec<ChangedFloorplan>,
     display_override_changed: bool,
     sensor_config_changed: bool,
     position_changed: bool,
+}
+
+#[derive(Clone, Debug)]
+struct ChangedFloorplan {
+    sort_order: i32,
+    floorplan: FloorplanExportRow,
 }
 
 #[derive(Deserialize)]
@@ -760,6 +767,21 @@ fn rewrite_device_config_references(
         }
     }
 
+    for (sort_order, floorplan) in config.floorplans.iter_mut().enumerate() {
+        if config_queries::rewrite_floorplan_device_references_in_grid(
+            floorplan,
+            &source.device_key,
+            replacement.map(|replacement| replacement.device_key.as_str()),
+            replacement_device.map(|device| device.name.as_str()),
+        ) {
+            result.position_changed = true;
+            result.changed_floorplans.push(ChangedFloorplan {
+                sort_order: sort_order as i32,
+                floorplan: floorplan.clone(),
+            });
+        }
+    }
+
     if let Some(existing) = config
         .device_display_overrides
         .iter_mut()
@@ -792,31 +814,12 @@ fn rewrite_device_config_references(
             .retain(|row| row.device_ref != source.device_key);
     }
 
-    if let Some(existing) = config
-        .device_positions
-        .iter_mut()
-        .find(|row| row.device_key == source.device_key)
-    {
-        result.position_changed = true;
-        if let Some(replacement) = replacement {
-            existing.device_key = replacement.device_key.clone();
-        }
-    }
-    if replacement.is_none() {
-        config
-            .device_positions
-            .retain(|row| row.device_key != source.device_key);
-    }
-
     config
         .device_display_overrides
         .sort_by(|left, right| left.device_key.cmp(&right.device_key));
     config
         .device_sensor_configs
         .sort_by(|left, right| left.device_ref.cmp(&right.device_ref));
-    config
-        .device_positions
-        .sort_by(|left, right| left.device_key.cmp(&right.device_key));
 
     result
 }
@@ -846,6 +849,21 @@ async fn persist_device_config_rewrite(
         }
     }
 
+    for changed_floorplan in &rewrite.changed_floorplans {
+        if let Err(error) =
+            config_queries::db_upsert_floorplan_export(
+                &changed_floorplan.floorplan,
+                changed_floorplan.sort_order,
+            )
+            .await
+        {
+            warn!(
+                "Failed to persist updated floorplan '{}': {error}",
+                changed_floorplan.floorplan.id
+            );
+        }
+    }
+
     if rewrite.display_override_changed {
         if let Err(error) =
             config_queries::db_delete_device_display_override(&source.device_key).await
@@ -862,15 +880,6 @@ async fn persist_device_config_rewrite(
         {
             warn!(
                 "Failed to delete source sensor config for '{}': {error}",
-                source.device_key
-            );
-        }
-    }
-
-    if rewrite.position_changed {
-        if let Err(error) = config_queries::db_delete_device_position(&source.device_key).await {
-            warn!(
-                "Failed to delete source device position for '{}': {error}",
                 source.device_key
             );
         }
@@ -2179,22 +2188,6 @@ fn floorplan_routes(
         .and(with_state(app_state))
         .and_then(delete_floorplan_image);
 
-    let get_positions = warp::path!("floorplan" / "devices")
-        .and(warp::get())
-        .and(with_state(app_state))
-        .and_then(get_device_positions);
-
-    let upsert_position = warp::path!("floorplan" / "devices" / String)
-        .and(warp::put())
-        .and(warp::body::json())
-        .and(with_state(app_state))
-        .and_then(upsert_device_position);
-
-    let delete_position = warp::path!("floorplan" / "devices" / String)
-        .and(warp::delete())
-        .and(with_state(app_state))
-        .and_then(delete_device_position);
-
     let get_group_positions = warp::path!("floorplan" / "groups")
         .and(warp::get())
         .and(with_state(app_state))
@@ -2219,9 +2212,6 @@ fn floorplan_routes(
         .or(head_image)
         .or(upload_image)
         .or(delete_image)
-        .or(get_positions)
-        .or(upsert_position)
-        .or(delete_position)
         .or(get_group_positions)
         .or(upsert_group_position)
         .or(delete_group_position)
@@ -2264,55 +2254,6 @@ async fn upload_floorplan(
 
     if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
         warn!("Failed to persist floorplan upload: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
-}
-
-async fn get_device_positions(
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    Ok(ApiResponse::success(
-        state.get_runtime_config().device_positions.clone(),
-    ))
-}
-
-async fn upsert_device_position(
-    device_key: String,
-    mut pos: DevicePositionRow,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    pos.device_key = decode_path_key(device_key);
-
-    {
-        let mut state = app_state.write().await;
-        state.upsert_device_position(pos.clone());
-    }
-
-    if let Err(e) = config_queries::db_upsert_device_position(&pos).await {
-        warn!("Failed to persist device position: {e}");
-    }
-
-    Ok(ApiResponse::success(pos))
-}
-
-async fn delete_device_position(
-    device_key: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let device_key = decode_path_key(device_key);
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_device_position(&device_key)
-    };
-
-    if !deleted {
-        return Ok(not_found("Device position"));
-    }
-
-    if let Err(e) = config_queries::db_delete_device_position(&device_key).await {
-        warn!("Failed to persist device position deletion: {e}");
     }
 
     Ok(ApiResponse::success(()))
@@ -2416,12 +2357,12 @@ async fn get_floorplan_image(
                     image_data,
                     "Content-Type",
                     mime_type,
-                )))
+                )) as Box<dyn Reply>)
             } else {
-                Ok(Box::new(not_found("Floorplan image")))
+                Ok(Box::new(not_found("Floorplan image")) as Box<dyn Reply>)
             }
         }
-        None => Ok(Box::new(not_found("Floorplan image"))),
+        None => Ok(Box::new(not_found("Floorplan image")) as Box<dyn Reply>),
     }
 }
 
@@ -2490,12 +2431,12 @@ async fn head_floorplan_image(
                     warp::reply(),
                     "Content-Type",
                     mime_type,
-                )))
+                )) as Box<dyn Reply>)
             } else {
-                Ok(Box::new(not_found("Floorplan image")))
+                Ok(Box::new(not_found("Floorplan image")) as Box<dyn Reply>)
             }
         }
-        None => Ok(Box::new(not_found("Floorplan image"))),
+        None => Ok(Box::new(not_found("Floorplan image")) as Box<dyn Reply>),
     }
 }
 
@@ -2824,7 +2765,6 @@ impl MigratePreviewResult {
             routines: self.routines.clone(),
             floorplan: None,
             floorplans: Vec::new(),
-            device_positions: Vec::new(),
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_sensor_configs: Vec::new(),
@@ -3942,7 +3882,6 @@ devices = [
             routines: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
-            device_positions: Vec::new(),
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_sensor_configs: Vec::new(),

@@ -109,15 +109,6 @@ CREATE TABLE IF NOT EXISTS floorplans (
     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
--- Device positions
-CREATE TABLE IF NOT EXISTS device_positions (
-    device_key TEXT PRIMARY KEY,
-    x REAL NOT NULL,
-    y REAL NOT NULL,
-    scale REAL DEFAULT 1.0,
-    rotation REAL DEFAULT 0
-);
-
 -- Group positions for the floorplan viewport
 CREATE TABLE IF NOT EXISTS group_positions (
     group_id TEXT PRIMARY KEY,

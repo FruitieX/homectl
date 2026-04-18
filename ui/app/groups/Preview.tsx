@@ -3,7 +3,6 @@ import useImage from 'use-image';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from '@/ui/ViewportDevice';
-import { useDevicePositions } from '@/hooks/useFloorplanPositions';
 import { useStoredFloorplan } from '@/hooks/useStoredFloorplan';
 import {
   FloorplanBackground,
@@ -25,7 +24,6 @@ type Props = {
 };
 
 export const Preview = (props: Props) => {
-  const { positions } = useDevicePositions();
   const { grid: floorplanGrid, imageUrl } = useStoredFloorplan();
   const [floorplanImage] = useImage(imageUrl);
 
@@ -66,14 +64,13 @@ export const Preview = (props: Props) => {
 
         {props.devices.map((device) => {
           const floorplanPosition = floorplanDevicePositions[getDeviceKey(device)];
-          const pos = floorplanPosition ?? positions[getDeviceKey(device)];
-          if (!pos) return null;
+          if (!floorplanPosition) return null;
           return (
             <ViewportDevice
               key={getDeviceKey(device)}
               device={device}
-              position={{ x: pos.x, y: pos.y }}
-              scale={floorplanPosition ? floorplanDeviceScale : 1}
+              position={floorplanPosition}
+              scale={floorplanDeviceScale}
               selected={false}
               interactive={false}
               overrideColor={props.overrideColor}

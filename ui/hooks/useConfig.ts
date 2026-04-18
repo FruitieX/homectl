@@ -126,7 +126,6 @@ export interface ConfigExport {
   routines?: Routine[];
   floorplan?: Record<string, unknown> | null;
   floorplans?: Record<string, unknown>[];
-  device_positions?: Record<string, unknown>[];
   device_display_overrides?: DeviceDisplayNameOverride[];
   device_sensor_configs?: DeviceSensorConfig[];
   dashboard_layouts?: Record<string, unknown>[];
