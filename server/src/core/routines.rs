@@ -1,5 +1,7 @@
 use color_eyre::Result;
 use eyre::ContextCompat;
+use regex::Regex;
+use serde_json::Value;
 
 use crate::db::config_queries;
 use crate::types::{
@@ -8,8 +10,8 @@ use crate::types::{
     event::{Event, TxEventChannel},
     routine_status::{RoutineRuntimeStatus, RoutineStatuses, RuleRuntimeStatus},
     rule::{
-        AnyRule, DeviceRule, GroupRule, Routine, RoutineId, RoutinesConfig, Rule, ScriptRule,
-        SensorRule, TriggerMode,
+        AnyRule, DeviceRule, GroupRule, RawRule, RawRuleOperator, Routine, RoutineId,
+        RoutinesConfig, Rule, ScriptRule, SensorRule, TriggerMode,
     },
 };
 use std::collections::{HashMap, HashSet};
@@ -327,6 +329,14 @@ impl Routines {
                 devices,
                 update_edge_state,
             ),
+            Rule::Raw(raw_rule) => self.evaluate_raw_rule_status(
+                routine_id,
+                raw_rule,
+                old_state,
+                event_source,
+                devices,
+                update_edge_state,
+            ),
             Rule::Device(device_rule) => self.evaluate_device_rule_status(
                 routine_id,
                 device_rule,
@@ -430,6 +440,62 @@ impl Routines {
                                 _ => false,
                             })
                             .unwrap_or(false);
+
+                        let trigger_match = !old_matched;
+                        if trigger_match && update_edge_state {
+                            self.prev_edge_triggered.insert(edge_key);
+                        }
+                        trigger_match
+                    }
+                }
+            }
+            TriggerMode::Level => true,
+        };
+
+        Ok(RuleRuntimeStatus::from_match(true, trigger_match))
+    }
+
+    fn evaluate_raw_rule_status(
+        &mut self,
+        routine_id: &RoutineId,
+        rule: &RawRule,
+        old_state: &DevicesState,
+        event_source: Option<&DeviceKey>,
+        devices: &Devices,
+        update_edge_state: bool,
+    ) -> Result<RuleRuntimeStatus> {
+        let device = devices
+            .get_device_by_ref(&rule.device_ref)
+            .ok_or_else(|| eyre!("Could not find matching device for raw rule: {:?}", rule))?;
+
+        let device_key = device.get_device_key();
+        let state_matches = evaluate_raw_rule_match(device.get_raw_value().as_ref(), rule)?;
+
+        if !state_matches {
+            if update_edge_state && rule.trigger_mode == TriggerMode::Edge {
+                self.prev_edge_triggered
+                    .remove(&(routine_id.clone(), device_key));
+            }
+            return Ok(RuleRuntimeStatus::from_match(false, false));
+        }
+
+        let trigger_match = match rule.trigger_mode {
+            TriggerMode::Pulse => event_source.map(|es| es == &device_key).unwrap_or(false),
+            TriggerMode::Edge => {
+                let edge_key = (routine_id.clone(), device_key.clone());
+
+                if self.prev_edge_triggered.contains(&edge_key) {
+                    false
+                } else {
+                    let is_event_source = event_source.map(|es| es == &device_key).unwrap_or(false);
+                    if !is_event_source {
+                        false
+                    } else {
+                        let old_device = old_state.0.get(&device_key);
+                        let old_matched = match old_device {
+                            Some(device) => evaluate_raw_rule_match(device.get_raw_value().as_ref(), rule)?,
+                            None => false,
+                        };
 
                         let trigger_match = !old_matched;
                         if trigger_match && update_edge_state {
@@ -581,4 +647,287 @@ fn check_device_state_matches(
         return false;
     }
     true
+}
+
+fn evaluate_raw_rule_match(raw: Option<&Value>, rule: &RawRule) -> Result<bool> {
+    let Some(raw) = raw else {
+        return Ok(false);
+    };
+
+    let resolved = rule.path.resolve(raw);
+
+    match rule.operator {
+        RawRuleOperator::Exists => Ok(resolved.is_ok()),
+        RawRuleOperator::Truthy => Ok(resolved.map(is_json_truthy).unwrap_or(false)),
+        _ => {
+            let Ok(resolved) = resolved else {
+                return Ok(false);
+            };
+            let expected = rule.value.as_ref().ok_or_else(|| {
+                eyre!(
+                    "Raw rule operator {:?} requires a comparison value",
+                    rule.operator
+                )
+            })?;
+
+            match rule.operator {
+                RawRuleOperator::Eq => Ok(json_values_equal(resolved, expected)),
+                RawRuleOperator::Ne => Ok(!json_values_equal(resolved, expected)),
+                RawRuleOperator::Gt => compare_json_numbers(resolved, expected, |left, right| left > right),
+                RawRuleOperator::Gte => compare_json_numbers(resolved, expected, |left, right| left >= right),
+                RawRuleOperator::Lt => compare_json_numbers(resolved, expected, |left, right| left < right),
+                RawRuleOperator::Lte => compare_json_numbers(resolved, expected, |left, right| left <= right),
+                RawRuleOperator::Contains => json_contains(resolved, expected),
+                RawRuleOperator::StartsWith => json_starts_with(resolved, expected),
+                RawRuleOperator::Regex => json_regex_match(resolved, expected),
+                RawRuleOperator::Exists | RawRuleOperator::Truthy => unreachable!(),
+            }
+        }
+    }
+}
+
+fn json_values_equal(left: &Value, right: &Value) -> bool {
+    match (left.as_f64(), right.as_f64()) {
+        (Some(left), Some(right)) => left == right,
+        _ => left == right,
+    }
+}
+
+fn compare_json_numbers(
+    left: &Value,
+    right: &Value,
+    comparator: impl FnOnce(f64, f64) -> bool,
+) -> Result<bool> {
+    let Some(left) = left.as_f64() else {
+        return Ok(false);
+    };
+    let Some(right) = right.as_f64() else {
+        return Ok(false);
+    };
+
+    Ok(comparator(left, right))
+}
+
+fn json_contains(left: &Value, right: &Value) -> Result<bool> {
+    match (left, right) {
+        (Value::String(left), Value::String(right)) => Ok(left.contains(right)),
+        (Value::Array(left), _) => Ok(left.iter().any(|item| json_values_equal(item, right))),
+        _ => Ok(false),
+    }
+}
+
+fn json_starts_with(left: &Value, right: &Value) -> Result<bool> {
+    match (left, right) {
+        (Value::String(left), Value::String(right)) => Ok(left.starts_with(right)),
+        _ => Ok(false),
+    }
+}
+
+fn json_regex_match(left: &Value, right: &Value) -> Result<bool> {
+    let Value::String(left) = left else {
+        return Ok(false);
+    };
+    let Value::String(pattern) = right else {
+        return Ok(false);
+    };
+
+    let regex = Regex::new(pattern)
+        .map_err(|error| eyre!("Invalid raw rule regex pattern {pattern:?}: {error}"))?;
+
+    Ok(regex.is_match(left))
+}
+
+fn is_json_truthy(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Bool(value) => *value,
+        Value::Number(value) => value.as_f64().map(|value| value != 0.0).unwrap_or(false),
+        Value::String(value) => !value.is_empty(),
+        Value::Array(value) => !value.is_empty(),
+        Value::Object(value) => !value.is_empty(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{evaluate_raw_rule_match, Routines};
+    use crate::core::{devices::Devices, groups::Groups};
+    use crate::types::action::Actions;
+    use crate::types::device::{Device, DeviceData, DeviceId, DeviceKey, DeviceRef, SensorDevice};
+    use crate::types::event::{mk_event_channel, RxEventChannel};
+    use crate::types::group::GroupsConfig;
+    use crate::types::integration::IntegrationId;
+    use crate::types::rule::{RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule, TriggerMode};
+    use crate::utils::cli::Cli;
+    use jsonptr::PointerBuf;
+    use serde_json::json;
+
+    fn test_cli() -> Cli {
+        Cli {
+            dry_run: true,
+            port: 45289,
+            database_url: None,
+            config: None,
+            warmup_time: None,
+            command: None,
+        }
+    }
+
+    fn sensor_device(raw: serde_json::Value) -> Device {
+        Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("sensor"),
+            "Sensor".to_string(),
+            DeviceData::Sensor(SensorDevice::Text {
+                value: "raw".to_string(),
+            }),
+            Some(raw),
+        )
+    }
+
+    fn raw_rule(operator: RawRuleOperator, value: Option<serde_json::Value>) -> RawRule {
+        RawRule {
+            path: PointerBuf::from_tokens(["payload", "temperature"]),
+            operator,
+            value,
+            trigger_mode: TriggerMode::Pulse,
+            device_ref: DeviceRef::new_with_id(
+                IntegrationId::from("mqtt".to_string()),
+                DeviceId::new("sensor"),
+            ),
+        }
+    }
+
+    fn test_devices() -> (Devices, RxEventChannel) {
+        let (event_tx, _event_rx) = mk_event_channel();
+        (Devices::new(event_tx, &test_cli()), _event_rx)
+    }
+
+    fn test_routines(rule: Rule) -> (Routines, RoutineId, RxEventChannel) {
+        let (event_tx, event_rx) = mk_event_channel();
+        let routine_id = RoutineId::from("raw-rule".to_string());
+        let mut config = RoutinesConfig::new();
+        config.insert(
+            routine_id.clone(),
+            Routine {
+                name: "Raw rule".to_string(),
+                rules: vec![rule],
+                actions: Actions::default(),
+            },
+        );
+        (Routines::new(config, event_tx), routine_id, event_rx)
+    }
+
+    fn sensor_key() -> DeviceKey {
+        DeviceKey::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("sensor"),
+        )
+    }
+
+    #[test]
+    fn raw_rule_matches_numeric_thresholds() {
+        let rule = raw_rule(RawRuleOperator::Gt, Some(json!(20)));
+        let raw = json!({ "payload": { "temperature": 21.5 } });
+
+        assert!(evaluate_raw_rule_match(Some(&raw), &rule).expect("match should evaluate"));
+    }
+
+    #[test]
+    fn raw_rule_supports_string_regex() {
+        let rule = RawRule {
+            path: PointerBuf::from_tokens(["payload", "action"]),
+            operator: RawRuleOperator::Regex,
+            value: Some(json!("^button_(press|hold)$")),
+            trigger_mode: TriggerMode::Pulse,
+            device_ref: DeviceRef::new_with_id(
+                IntegrationId::from("mqtt".to_string()),
+                DeviceId::new("sensor"),
+            ),
+        };
+        let raw = json!({ "payload": { "action": "button_press" } });
+
+        assert!(evaluate_raw_rule_match(Some(&raw), &rule).expect("regex should evaluate"));
+    }
+
+    #[test]
+    fn raw_edge_rules_rearm_after_state_leaves_match() {
+        let groups = Groups::new(GroupsConfig::default());
+        let rule = Rule::Raw(RawRule {
+            trigger_mode: TriggerMode::Edge,
+            ..raw_rule(RawRuleOperator::Gt, Some(json!(20)))
+        });
+        let (mut routines, routine_id, _routine_events) = test_routines(rule.clone());
+        let (mut devices, _device_events) = test_devices();
+        let device_key = sensor_key();
+
+        let old_device = sensor_device(json!({ "payload": { "temperature": 18 } }));
+        devices.set_state(&old_device, true, true);
+        let old_state = devices.get_state().clone();
+
+        let matching_device = sensor_device(json!({ "payload": { "temperature": 21 } }));
+        devices.set_state(&matching_device, true, true);
+        let new_state = devices.get_state().clone();
+
+        let first = routines.evaluate_rule_status(
+            &routine_id,
+            &rule,
+            &old_state,
+            &new_state,
+            Some(&device_key),
+            &devices,
+            &groups,
+            true,
+        );
+        assert!(first.condition_match);
+        assert!(first.trigger_match);
+
+        let second = routines.evaluate_rule_status(
+            &routine_id,
+            &rule,
+            &old_state,
+            &new_state,
+            Some(&device_key),
+            &devices,
+            &groups,
+            true,
+        );
+        assert!(second.condition_match);
+        assert!(!second.trigger_match);
+
+        let leaving_state = devices.get_state().clone();
+        let non_matching_device = sensor_device(json!({ "payload": { "temperature": 19 } }));
+        devices.set_state(&non_matching_device, true, true);
+        let rearm_state = devices.get_state().clone();
+
+        let cleared = routines.evaluate_rule_status(
+            &routine_id,
+            &rule,
+            &leaving_state,
+            &rearm_state,
+            Some(&device_key),
+            &devices,
+            &groups,
+            true,
+        );
+        assert!(!cleared.condition_match);
+        assert!(!cleared.trigger_match);
+
+        let old_non_matching = devices.get_state().clone();
+        devices.set_state(&matching_device, true, true);
+        let reentered_state = devices.get_state().clone();
+
+        let retriggered = routines.evaluate_rule_status(
+            &routine_id,
+            &rule,
+            &old_non_matching,
+            &reentered_state,
+            Some(&device_key),
+            &devices,
+            &groups,
+            true,
+        );
+        assert!(retriggered.condition_match);
+        assert!(retriggered.trigger_match);
+    }
 }

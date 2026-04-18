@@ -7,6 +7,7 @@ import { Device } from '@/bindings/Device';
 import type { RolloutStyle } from '@/bindings/RolloutStyle';
 
 const rolloutStyleOptions: RolloutStyle[] = ['spatial'];
+export const DEFAULT_ROLLOUT_DURATION_MS = 1500;
 
 // Action types matching server types
 export interface ActivateSceneAction {
@@ -14,19 +15,26 @@ export interface ActivateSceneAction {
   scene_id: string;
   device_keys?: string[];
   group_keys?: string[];
+  use_scene_transition?: boolean;
   transition?: number;
-  rollout?: string;
+  rollout?: RolloutStyle;
   rollout_source_device_key?: string;
   rollout_duration_ms?: number;
 }
 
 export interface CycleScenesAction {
   action: 'CycleScenes';
-  scenes: { scene_id: string; device_keys?: string[]; group_keys?: string[]; transition?: number }[];
+  scenes: {
+    scene_id: string;
+    device_keys?: string[];
+    group_keys?: string[];
+    use_scene_transition?: boolean;
+    transition?: number;
+  }[];
   nowrap?: boolean;
   device_keys?: string[];
   group_keys?: string[];
-  rollout?: string;
+  rollout?: RolloutStyle;
   rollout_source_device_key?: string;
   rollout_duration_ms?: number;
 }
@@ -82,6 +90,55 @@ export type Action =
 // Helper to detect action type
 export function getActionType(action: Action): string {
   return action.action;
+}
+
+interface RolloutFields {
+  rollout?: RolloutStyle;
+  rollout_source_device_key?: string;
+  rollout_duration_ms?: number;
+}
+
+export function getRolloutValidationError({
+  rollout,
+  rollout_source_device_key,
+  rollout_duration_ms,
+}: RolloutFields): string | null {
+  if (!rollout) {
+    return null;
+  }
+
+  if (!rollout_source_device_key && (!rollout_duration_ms || rollout_duration_ms <= 0)) {
+    return 'Spatial rollout requires a source device and a duration greater than 0.';
+  }
+
+  if (!rollout_source_device_key) {
+    return 'Spatial rollout requires a source device.';
+  }
+
+  if (!rollout_duration_ms || rollout_duration_ms <= 0) {
+    return 'Spatial rollout requires a duration greater than 0.';
+  }
+
+  return null;
+}
+
+function isRolloutAction(action: Action): action is ActivateSceneAction | CycleScenesAction {
+  return action.action === 'ActivateScene' || action.action === 'CycleScenes';
+}
+
+export function validateActions(actions: Action[]): string | null {
+  for (const action of actions) {
+    if (!isRolloutAction(action)) {
+      continue;
+    }
+
+    const error = getRolloutValidationError(action);
+    if (error) {
+      return `${action.action}: ${error}`;
+    }
+  }
+
+  return null;
 }
 
 interface SceneSelectorProps {
@@ -219,7 +276,7 @@ function GroupKeysSelector({
 }
 
 interface RolloutEditorFields {
-  rollout?: string;
+  rollout?: RolloutStyle;
   rollout_source_device_key?: string;
   rollout_duration_ms?: number;
 }
@@ -246,6 +303,7 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
 
   const rollout = value.rollout?.trim() ?? '';
   const hasRollout = rollout.length > 0;
+  const validationError = getRolloutValidationError(value);
 
   return (
     <div className="space-y-3 rounded-lg border border-base-300 p-3">
@@ -257,14 +315,14 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
           className="select select-bordered select-sm"
           value={rollout}
           onChange={(e) => {
-            const nextRollout = e.target.value.trim();
+            const nextRollout = e.target.value.trim() as RolloutStyle | '';
             onChange({
               rollout: nextRollout || undefined,
               rollout_source_device_key: nextRollout
                 ? value.rollout_source_device_key
                 : undefined,
               rollout_duration_ms: nextRollout
-                ? value.rollout_duration_ms
+                ? value.rollout_duration_ms ?? DEFAULT_ROLLOUT_DURATION_MS
                 : undefined,
             });
           }}
@@ -312,11 +370,11 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
             </label>
             <input
               type="number"
-              min="0"
+              min="1"
               step="100"
               className="input input-bordered input-sm"
               value={value.rollout_duration_ms ?? ''}
-              placeholder="1500"
+              placeholder={String(DEFAULT_ROLLOUT_DURATION_MS)}
               onChange={(e) => {
                 const nextValue = e.target.value.trim();
                 onChange({
@@ -331,43 +389,115 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
               Total time for the rollout to reach the farthest positioned target.
             </span>
           </div>
+
+          {validationError && (
+            <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+              {validationError}
+            </div>
+          )}
         </>
       )}
     </div>
   );
 }
 
-interface TransitionOverrideFieldProps {
-  value?: number;
-  label: string;
-  helpText?: string;
-  onChange: (transition?: number) => void;
+type TransitionBehaviorMode = 'none' | 'scene' | 'fixed';
+
+interface TransitionBehaviorFields {
+  use_scene_transition?: boolean;
+  transition?: number;
 }
 
-function TransitionOverrideField({
+function getTransitionBehaviorMode({
+  use_scene_transition,
+  transition,
+}: TransitionBehaviorFields): TransitionBehaviorMode {
+  if (transition !== undefined) {
+    return 'fixed';
+  }
+
+  if (use_scene_transition) {
+    return 'scene';
+  }
+
+  return 'none';
+}
+
+function getTransitionBehaviorUpdate(mode: TransitionBehaviorMode): TransitionBehaviorFields {
+  switch (mode) {
+    case 'scene':
+      return { use_scene_transition: true, transition: undefined };
+    case 'fixed':
+      return { use_scene_transition: false, transition: 0.4 };
+    case 'none':
+    default:
+      return { use_scene_transition: false, transition: undefined };
+  }
+}
+
+interface TransitionBehaviorEditorProps {
+  value: TransitionBehaviorFields;
+  label: string;
+  sceneHelpText?: string;
+  fixedHelpText?: string;
+  onChange: (fields: TransitionBehaviorFields) => void;
+}
+
+function TransitionBehaviorEditor({
   value,
   label,
-  helpText,
+  sceneHelpText,
+  fixedHelpText,
   onChange,
-}: TransitionOverrideFieldProps) {
+}: TransitionBehaviorEditorProps) {
+  const mode = getTransitionBehaviorMode(value);
+
   return (
-    <div className="form-control">
-      <label className="label">
-        <span className="label-text">{label}</span>
-      </label>
-      <input
-        type="number"
-        min="0"
-        step="0.1"
-        className="input input-bordered input-sm"
-        value={value ?? ''}
-        placeholder="Use scene default"
-        onChange={(e) => {
-          const nextValue = e.target.value.trim();
-          onChange(nextValue ? Math.max(0, Number(nextValue)) : undefined);
-        }}
-      />
-      {helpText ? <span className="label-text-alt mt-1 opacity-60">{helpText}</span> : null}
+    <div className="space-y-3 rounded-lg border border-base-300 p-3">
+      <div className="form-control">
+        <label className="label">
+          <span className="label-text">{label}</span>
+        </label>
+        <select
+          className="select select-bordered select-sm"
+          value={mode}
+          onChange={(e) =>
+            onChange(getTransitionBehaviorUpdate(e.target.value as TransitionBehaviorMode))
+          }
+        >
+          <option value="none">No transition</option>
+          <option value="scene">Use scene transitions</option>
+          <option value="fixed">Fixed transition</option>
+        </select>
+      </div>
+
+      {mode === 'scene' && sceneHelpText ? (
+        <div className="text-sm opacity-60">{sceneHelpText}</div>
+      ) : null}
+
+      {mode === 'fixed' ? (
+        <div className="form-control">
+          <label className="label">
+            <span className="label-text">Fixed Transition (s)</span>
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.1"
+            className="input input-bordered input-sm"
+            value={value.transition ?? ''}
+            placeholder="0.4"
+            onChange={(e) => {
+              const nextValue = e.target.value.trim();
+              onChange({
+                use_scene_transition: false,
+                transition: nextValue ? Math.max(0, Number(nextValue)) : 0,
+              });
+            }}
+          />
+          {fixedHelpText ? <span className="label-text-alt mt-1 opacity-60">{fixedHelpText}</span> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -465,11 +595,12 @@ function ActivateSceneEditor({
         )}
       </div>
 
-      <TransitionOverrideField
-        value={action.transition}
-        label="Transition Override (s)"
-        helpText="Leave empty to use the scene's own transition values."
-        onChange={(transition) => onChange({ ...action, transition })}
+      <TransitionBehaviorEditor
+        value={action}
+        label="Transition Behavior"
+        sceneHelpText="Preserve transition values resolved from the scene, including scene links and device links."
+        fixedHelpText="Force the same transition for every affected device."
+        onChange={(fields) => onChange({ ...action, ...fields })}
       />
 
       <RolloutEditor
@@ -529,23 +660,44 @@ function CycleScenesEditor({
                 value={s.scene_id}
                 onChange={(id) => handleSceneChange(index, id)}
               />
-              <input
-                type="number"
-                min="0"
-                step="0.1"
-                className="input input-bordered input-sm w-36"
-                value={s.transition ?? ''}
-                placeholder="Transition (s)"
+              <select
+                className="select select-bordered select-sm w-48"
+                value={getTransitionBehaviorMode(s)}
                 onChange={(event) => {
                   const updated = [...action.scenes];
-                  const nextValue = event.target.value.trim();
                   updated[index] = {
                     ...updated[index],
-                    transition: nextValue ? Math.max(0, Number(nextValue)) : undefined,
+                    ...getTransitionBehaviorUpdate(
+                      event.target.value as TransitionBehaviorMode,
+                    ),
                   };
                   onChange({ ...action, scenes: updated });
                 }}
-              />
+              >
+                <option value="none">No transition</option>
+                <option value="scene">Use scene transitions</option>
+                <option value="fixed">Fixed transition</option>
+              </select>
+              {getTransitionBehaviorMode(s) === 'fixed' ? (
+                <input
+                  type="number"
+                  min="0"
+                  step="0.1"
+                  className="input input-bordered input-sm w-36"
+                  value={s.transition ?? ''}
+                  placeholder="0.4s"
+                  onChange={(event) => {
+                    const updated = [...action.scenes];
+                    const nextValue = event.target.value.trim();
+                    updated[index] = {
+                      ...updated[index],
+                      use_scene_transition: false,
+                      transition: nextValue ? Math.max(0, Number(nextValue)) : 0,
+                    };
+                    onChange({ ...action, scenes: updated });
+                  }}
+                />
+              ) : null}
               <button
                 className="btn btn-ghost btn-xs btn-error"
                 onClick={() => handleRemoveScene(index)}

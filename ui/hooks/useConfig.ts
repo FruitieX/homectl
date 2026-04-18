@@ -56,6 +56,7 @@ export interface ActivateSceneDescriptor {
   scene_id: string;
   device_keys?: string[];
   group_keys?: string[];
+  use_scene_transition?: boolean;
   transition?: number;
 }
 

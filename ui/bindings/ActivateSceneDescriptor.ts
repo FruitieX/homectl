@@ -14,4 +14,12 @@ device_keys: Array<DeviceKey> | null,
 /**
  * Optionally only apply scene to these groups
  */
-group_keys: Array<GroupId> | null, };
+group_keys: Array<GroupId> | null, 
+/**
+ * Optionally opt-in to use scene transition.
+ */
+use_scene_transition: boolean, 
+/**
+ * Optionally override the transition applied when activating this scene.
+ */
+transition: number | null, };

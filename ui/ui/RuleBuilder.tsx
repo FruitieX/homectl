@@ -2,6 +2,7 @@
 
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import { extractJsonPointers, resolveJsonPointer } from '../utils/jsonPointers';
 import { useState, useCallback } from 'react';
 import { TriggerMode } from '@/bindings/TriggerMode';
 import { SceneId } from '@/bindings/SceneId';
@@ -21,6 +22,28 @@ export interface SensorRule {
 export interface DeviceRule {
   power?: boolean;
   scene?: SceneId;
+  trigger_mode: TriggerMode;
+  integration_id?: string;
+  device_id?: string;
+}
+
+export type RawRuleOperator =
+  | 'eq'
+  | 'ne'
+  | 'gt'
+  | 'gte'
+  | 'lt'
+  | 'lte'
+  | 'contains'
+  | 'starts_with'
+  | 'exists'
+  | 'truthy'
+  | 'regex';
+
+export interface RawRule {
+  path: string;
+  operator: RawRuleOperator;
+  value?: unknown;
   trigger_mode: TriggerMode;
   integration_id?: string;
   device_id?: string;
@@ -49,18 +72,156 @@ export type SensorState =
 
 export type Rule =
   | SensorRule
+  | RawRule
   | DeviceRule
   | GroupRule
   | AnyRule
   | ScriptRule;
 
+const rawRuleOperatorOptions: Array<{
+  value: RawRuleOperator;
+  label: string;
+}> = [
+  { value: 'eq', label: 'Equals' },
+  { value: 'ne', label: 'Not equal' },
+  { value: 'gt', label: 'Greater than' },
+  { value: 'gte', label: 'Greater than or equal' },
+  { value: 'lt', label: 'Less than' },
+  { value: 'lte', label: 'Less than or equal' },
+  { value: 'contains', label: 'Contains' },
+  { value: 'starts_with', label: 'Starts with' },
+  { value: 'exists', label: 'Exists' },
+  { value: 'truthy', label: 'Truthy' },
+  { value: 'regex', label: 'Regex match' },
+];
+
+const rawRuleOperatorsWithoutValue = new Set<RawRuleOperator>([
+  'exists',
+  'truthy',
+]);
+
+const rawStringOperators = new Set<RawRuleOperator>([
+  'contains',
+  'starts_with',
+  'regex',
+]);
+
+const rawNumericOperators = new Set<RawRuleOperator>(['gt', 'gte', 'lt', 'lte']);
+
+function getDeviceByRef(
+  devices: DevicesState,
+  integrationId?: string,
+  deviceId?: string,
+) {
+  if (!integrationId || !deviceId) {
+    return undefined;
+  }
+
+  return devices[`${integrationId}/${deviceId}`];
+}
+
+function formatRawPreviewValue(value: unknown) {
+  if (value === undefined) {
+    return 'No value found at this path.';
+  }
+
+  if (typeof value === 'string') {
+    return `"${value}"`;
+  }
+
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    value === null
+  ) {
+    return String(value);
+  }
+
+  return JSON.stringify(value, null, 2);
+}
+
+function getRawRuleValueEditorKind(rule: RawRule, previewValue: unknown) {
+  if (rawRuleOperatorsWithoutValue.has(rule.operator)) {
+    return 'hidden' as const;
+  }
+
+  if (rawNumericOperators.has(rule.operator)) {
+    return 'number' as const;
+  }
+
+  if (rawStringOperators.has(rule.operator)) {
+    return 'string' as const;
+  }
+
+  const candidate = rule.value ?? previewValue;
+
+  if (typeof candidate === 'boolean') {
+    return 'boolean' as const;
+  }
+
+  if (typeof candidate === 'number') {
+    return 'number' as const;
+  }
+
+  if (typeof candidate === 'string') {
+    return 'string' as const;
+  }
+
+  return 'unsupported' as const;
+}
+
+function getDefaultRawRuleValue(
+  operator: RawRuleOperator,
+  previewValue: unknown,
+  currentValue: unknown,
+) {
+  if (rawRuleOperatorsWithoutValue.has(operator)) {
+    return undefined;
+  }
+
+  if (rawNumericOperators.has(operator)) {
+    return typeof currentValue === 'number'
+      ? currentValue
+      : typeof previewValue === 'number'
+        ? previewValue
+        : 0;
+  }
+
+  if (rawStringOperators.has(operator)) {
+    return typeof currentValue === 'string'
+      ? currentValue
+      : typeof previewValue === 'string'
+        ? previewValue
+        : '';
+  }
+
+  if (
+    typeof currentValue === 'boolean' ||
+    typeof currentValue === 'number' ||
+    typeof currentValue === 'string'
+  ) {
+    return currentValue;
+  }
+
+  if (
+    typeof previewValue === 'boolean' ||
+    typeof previewValue === 'number' ||
+    typeof previewValue === 'string'
+  ) {
+    return previewValue;
+  }
+
+  return '';
+}
+
 // Helper to detect rule type
 export function getRuleType(
   rule: Rule,
-): 'sensor' | 'device' | 'group' | 'any' | 'script' | 'unknown' {
+): 'sensor' | 'raw' | 'device' | 'group' | 'any' | 'script' | 'unknown' {
   if ('script' in rule) return 'script';
   if ('any' in rule) return 'any';
   if ('group_id' in rule) return 'group';
+  if ('path' in rule && 'operator' in rule) return 'raw';
   if ('state' in rule) return 'sensor';
   if ('power' in rule || 'scene' in rule) return 'device';
   return 'unknown';
@@ -314,6 +475,12 @@ interface DeviceRuleEditorProps {
   onChange: (rule: DeviceRule) => void;
 }
 
+interface RawRuleEditorProps {
+  rule: RawRule;
+  devices: DevicesState;
+  onChange: (rule: RawRule) => void;
+}
+
 function DeviceRuleEditor({
   rule,
   devices,
@@ -397,6 +564,175 @@ function DeviceRuleEditor({
           </div>
         )}
       </div>
+
+      <TriggerModeSelector
+        value={rule.trigger_mode}
+        onChange={(mode) => onChange({ ...rule, trigger_mode: mode })}
+      />
+    </div>
+  );
+}
+
+function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
+  const selectedDevice = getDeviceByRef(
+    devices,
+    rule.integration_id,
+    rule.device_id,
+  );
+  const rawPayload = selectedDevice?.raw ?? null;
+  const availablePaths = rawPayload ? extractJsonPointers(rawPayload) : [];
+  const previewValue = rawPayload
+    ? resolveJsonPointer(rawPayload, rule.path)
+    : undefined;
+  const valueEditorKind = getRawRuleValueEditorKind(rule, previewValue);
+  const datalistId = `raw-rule-paths-${rule.integration_id ?? 'none'}-${
+    rule.device_id ?? 'none'
+  }`
+    .replaceAll('/', '-')
+    .replaceAll(' ', '-');
+
+  return (
+    <div className="space-y-3">
+      <DeviceSelector
+        devices={devices}
+        integrationId={rule.integration_id}
+        deviceId={rule.device_id}
+        onChange={(ref) => onChange({ ...rule, ...ref })}
+      />
+
+      <div className="form-control">
+        <label className="label">
+          <span className="label-text">JSON Path</span>
+          <span className="label-text-alt opacity-60">
+            {availablePaths.length > 0
+              ? `${availablePaths.length} discovered fields`
+              : 'Select a device to discover fields'}
+          </span>
+        </label>
+        <input
+          type="text"
+          list={availablePaths.length > 0 ? datalistId : undefined}
+          className="input input-bordered input-sm font-mono"
+          placeholder="/payload/temperature"
+          value={rule.path}
+          onChange={(e) => {
+            const nextPath = e.target.value;
+            const nextPreviewValue = rawPayload
+              ? resolveJsonPointer(rawPayload, nextPath)
+              : undefined;
+
+            onChange({
+              ...rule,
+              path: nextPath,
+              value: getDefaultRawRuleValue(
+                rule.operator,
+                nextPreviewValue,
+                rule.value,
+              ),
+            });
+          }}
+        />
+        {availablePaths.length > 0 && (
+          <datalist id={datalistId}>
+            {availablePaths.map((path) => (
+              <option key={path} value={path} />
+            ))}
+          </datalist>
+        )}
+        <span className="label-text-alt mt-1 opacity-60">
+          Uses JSON Pointer syntax. Pick a discovered path or enter one manually.
+        </span>
+      </div>
+
+      <div className="rounded-lg border border-base-300 bg-base-200 px-3 py-2">
+        <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+          Current value preview
+        </div>
+        <pre className="mt-2 overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all">
+          {formatRawPreviewValue(previewValue)}
+        </pre>
+      </div>
+
+      <div className="form-control">
+        <label className="label">
+          <span className="label-text">Operator</span>
+        </label>
+        <select
+          className="select select-bordered select-sm"
+          value={rule.operator}
+          onChange={(e) => {
+            const nextOperator = e.target.value as RawRuleOperator;
+            onChange({
+              ...rule,
+              operator: nextOperator,
+              value: getDefaultRawRuleValue(
+                nextOperator,
+                previewValue,
+                rule.value,
+              ),
+            });
+          }}
+        >
+          {rawRuleOperatorOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {valueEditorKind === 'boolean' && (
+        <div className="form-control">
+          <label className="label cursor-pointer justify-start gap-3">
+            <input
+              type="checkbox"
+              className="toggle toggle-primary"
+              checked={Boolean(rule.value)}
+              onChange={(e) => onChange({ ...rule, value: e.target.checked })}
+            />
+            <span className="label-text">
+              {Boolean(rule.value) ? 'True' : 'False'}
+            </span>
+          </label>
+        </div>
+      )}
+
+      {valueEditorKind === 'number' && (
+        <div className="form-control">
+          <label className="label">
+            <span className="label-text">Expected value</span>
+          </label>
+          <input
+            type="number"
+            className="input input-bordered input-sm"
+            value={typeof rule.value === 'number' ? rule.value : 0}
+            onChange={(e) =>
+              onChange({ ...rule, value: Number(e.target.value) })
+            }
+          />
+        </div>
+      )}
+
+      {valueEditorKind === 'string' && (
+        <div className="form-control">
+          <label className="label">
+            <span className="label-text">Expected value</span>
+          </label>
+          <input
+            type="text"
+            className="input input-bordered input-sm font-mono"
+            value={typeof rule.value === 'string' ? rule.value : ''}
+            onChange={(e) => onChange({ ...rule, value: e.target.value })}
+          />
+        </div>
+      )}
+
+      {valueEditorKind === 'unsupported' && (
+        <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
+          This visual editor currently supports scalar comparison values. Switch
+          to JSON edit mode for array or object comparisons.
+        </div>
+      )}
 
       <TriggerModeSelector
         value={rule.trigger_mode}
@@ -556,13 +892,19 @@ export function RuleEditor({
   const ruleType = getRuleType(rule);
 
   const handleTypeChange = (
-    newType: 'sensor' | 'device' | 'group' | 'any' | 'script',
+    newType: 'sensor' | 'raw' | 'device' | 'group' | 'any' | 'script',
   ) => {
     if (newType === 'sensor') {
       onChange({
         state: { value: true },
         trigger_mode: 'pulse',
       } as SensorRule);
+    } else if (newType === 'raw') {
+      onChange({
+        path: '',
+        operator: 'exists',
+        trigger_mode: 'pulse',
+      } as RawRule);
     } else if (newType === 'device') {
       onChange({
         power: true,
@@ -592,11 +934,12 @@ export function RuleEditor({
             value={ruleType}
             onChange={(e) =>
               handleTypeChange(
-                e.target.value as 'sensor' | 'device' | 'group' | 'any' | 'script',
+                e.target.value as 'sensor' | 'raw' | 'device' | 'group' | 'any' | 'script',
               )
             }
           >
             <option value="sensor">Sensor Rule</option>
+            <option value="raw">Raw JSON Rule</option>
             <option value="device">Device Rule</option>
             <option value="group">Group Rule</option>
             <option value="any">Any (OR)</option>
@@ -613,6 +956,13 @@ export function RuleEditor({
         {ruleType === 'sensor' && (
           <SensorRuleEditor
             rule={rule as SensorRule}
+            devices={devices}
+            onChange={onChange}
+          />
+        )}
+        {ruleType === 'raw' && (
+          <RawRuleEditor
+            rule={rule as RawRule}
             devices={devices}
             onChange={onChange}
           />

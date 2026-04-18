@@ -2,7 +2,9 @@ use super::device::{DeviceRef, SensorDevice};
 use super::{group::GroupId, scene::SceneId};
 
 use super::action::Actions;
+use jsonptr::PointerBuf;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use ts_rs::TS;
 
@@ -38,6 +40,42 @@ pub struct SensorRule {
     pub state: SensorDevice,
 
     /// How this rule should trigger. Defaults to `pulse` for sensors.
+    #[serde(default)]
+    pub trigger_mode: TriggerMode,
+
+    #[serde(flatten)]
+    #[ts(skip)]
+    pub device_ref: DeviceRef,
+}
+
+#[derive(TS, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum RawRuleOperator {
+    Eq,
+    Ne,
+    Gt,
+    Gte,
+    Lt,
+    Lte,
+    Contains,
+    StartsWith,
+    Exists,
+    Truthy,
+    Regex,
+}
+
+#[derive(TS, Clone, Deserialize, Serialize, Debug)]
+#[ts(export)]
+pub struct RawRule {
+    #[ts(type = "string")]
+    pub path: PointerBuf,
+
+    pub operator: RawRuleOperator,
+
+    pub value: Option<Value>,
+
+    /// How this rule should trigger. Defaults to `pulse`, matching sensor rules.
     #[serde(default)]
     pub trigger_mode: TriggerMode,
 
@@ -99,6 +137,9 @@ pub struct ScriptRule {
 pub enum Rule {
     /// Match fields on individual sensors.
     Sensor(SensorRule),
+
+    /// Match arbitrary fields on a device's raw JSON payload.
+    Raw(RawRule),
 
     /// Match fields on individual devices.
     Device(DeviceRule),

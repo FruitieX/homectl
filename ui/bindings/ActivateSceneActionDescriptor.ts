@@ -17,6 +17,14 @@ device_keys: Array<DeviceKey> | null,
  */
 group_keys: Array<GroupId> | null, 
 /**
+ * Optionally opt-in to use scene transition.
+ */
+use_scene_transition: boolean,
+/**
+ * Optionally override the transition applied when activating this scene.
+ */
+transition: number | null, 
+/**
  * Optional rollout style for the activation.
  */
 rollout: RolloutStyle | null, 

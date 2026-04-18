@@ -6,6 +6,7 @@ import type { TriggerMode } from '@/bindings/TriggerMode';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { getDeviceDisplayLabel, getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
+import { resolveJsonPointer } from '../utils/jsonPointers';
 import {
   type Action,
   type ActivateSceneAction,
@@ -22,6 +23,7 @@ import {
   type AnyRule,
   type DeviceRule,
   type GroupRule,
+  type RawRule,
   type Rule,
   type ScriptRule,
   type SensorRule,
@@ -365,6 +367,44 @@ function summarizeScript(script: string) {
   return firstLine ?? 'Evaluates a JavaScript expression';
 }
 
+function formatRawRuleValue(value: unknown) {
+  if (typeof value === 'string') {
+    return `"${value}"`;
+  }
+
+  if (
+    typeof value === 'number' ||
+    typeof value === 'boolean' ||
+    value === null
+  ) {
+    return String(value);
+  }
+
+  return JSON.stringify(value);
+}
+
+function formatRawRuleSummary(rule: RawRule) {
+  const operatorLabel = {
+    eq: 'equals',
+    ne: 'does not equal',
+    gt: 'is greater than',
+    gte: 'is greater than or equal to',
+    lt: 'is less than',
+    lte: 'is less than or equal to',
+    contains: 'contains',
+    starts_with: 'starts with',
+    exists: 'exists',
+    truthy: 'is truthy',
+    regex: 'matches regex',
+  }[rule.operator];
+
+  if (rule.operator === 'exists' || rule.operator === 'truthy') {
+    return `${rule.path || '(no path selected)'} ${operatorLabel}`;
+  }
+
+  return `${rule.path || '(no path selected)'} ${operatorLabel} ${formatRawRuleValue(rule.value)}`;
+}
+
 function summarizeFilters({
   deviceKeys,
   groupKeys,
@@ -476,6 +516,52 @@ function RuleSummaryItem({
               </span>
               <span className="badge badge-outline badge-sm">
                 {formatTriggerMode(sensorRule.trigger_mode)}
+              </span>
+            </div>
+          }
+        />
+      </div>
+    );
+  }
+
+  if (ruleType === 'raw') {
+    const rawRule = rule as RawRule;
+    const device = getDeviceRefLabel({
+      integrationId: rawRule.integration_id,
+      deviceId: rawRule.device_id,
+      devices,
+      deviceDisplayNameMap,
+    });
+    const liveDevice = rawRule.integration_id && rawRule.device_id
+      ? devices[`${rawRule.integration_id}/${rawRule.device_id}`]
+      : undefined;
+    const previewValue = liveDevice?.raw
+      ? resolveJsonPointer(liveDevice.raw, rawRule.path)
+      : undefined;
+
+    return (
+      <div className={nestedClassName}>
+        <SummaryCard
+          badge="Raw"
+          badgeClassName="badge-neutral"
+          title={device.label}
+          summary={formatRawRuleSummary(rawRule)}
+          meta={[
+            device.meta,
+            previewValue === undefined
+              ? undefined
+              : `current: ${formatRawRuleValue(previewValue)}`,
+            getRuleLiveNote(status, rawRule.trigger_mode),
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+          aside={
+            <div className="flex flex-col items-end gap-1">
+              <span className={`badge badge-sm ${liveBadge.className}`}>
+                {liveBadge.label}
+              </span>
+              <span className="badge badge-outline badge-sm">
+                {formatTriggerMode(rawRule.trigger_mode)}
               </span>
             </div>
           }
@@ -652,6 +738,13 @@ function ActionSummaryItem({
     const sequence = cycleAction.scenes.map(
       (scene) => sceneLabels[scene.scene_id] ?? scene.scene_id,
     );
+    const filters = summarizeFilters({
+      deviceKeys: cycleAction.device_keys,
+      groupKeys: cycleAction.group_keys,
+      devices,
+      groups,
+      deviceDisplayNameMap,
+    });
     const rollout = summarizeRollout({
       rollout: cycleAction.rollout,
       rollout_source_device_key: cycleAction.rollout_source_device_key,
@@ -661,6 +754,7 @@ function ActionSummaryItem({
     });
     const meta = [
       cycleAction.nowrap ? 'stops at the final scene' : 'wraps back to the start',
+      ...filters,
       rollout,
     ]
       .filter(Boolean)

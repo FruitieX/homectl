@@ -1326,6 +1326,7 @@ dependencies = [
  "percent-encoding",
  "pretty_env_logger",
  "rand",
+ "regex",
  "reqwest",
  "rumqttc",
  "serde",
@@ -2700,9 +2701,9 @@ dependencies = [
 
 [[package]]
 name = "regex"
-version = "1.11.3"
+version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b5288124840bee7b386bc413c487869b360b2b4ec421ea56425128692f2a82c"
+checksum = "b544ef1b4eac5dc2db33ea63606ae9ffcfac26c1416a2806ae0bf5f56b201191"
 dependencies = [
  "aho-corasick",
  "memchr",

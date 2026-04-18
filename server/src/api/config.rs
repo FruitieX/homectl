@@ -32,7 +32,7 @@ use crate::types::{
     rule::{AnyRule, Rule, Rules},
     scene::{
         ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor,
-        SceneDeviceConfig,
+        RolloutStyle, SceneDeviceConfig,
     },
 };
 use bytes::Buf;
@@ -313,6 +313,72 @@ fn rewrite_scene_descriptor(
     rewrite_optional_device_keys(&mut descriptor.device_keys, source, replacement)
 }
 
+fn validate_spatial_rollout(
+    action_name: &str,
+    rollout: &Option<RolloutStyle>,
+    rollout_source_device_key: &Option<DeviceKey>,
+    rollout_duration_ms: &Option<u64>,
+) -> Result<(), String> {
+    if !matches!(rollout, Some(RolloutStyle::Spatial)) {
+        return Ok(());
+    }
+
+    let missing_source_device = rollout_source_device_key.is_none();
+    let invalid_duration = rollout_duration_ms.unwrap_or_default() == 0;
+
+    match (missing_source_device, invalid_duration) {
+        (false, false) => Ok(()),
+        (true, true) => Err(format!(
+            "Spatial rollout on {action_name} requires rollout_source_device_key and rollout_duration_ms > 0.",
+        )),
+        (true, false) => Err(format!(
+            "Spatial rollout on {action_name} requires rollout_source_device_key.",
+        )),
+        (false, true) => Err(format!(
+            "Spatial rollout on {action_name} requires rollout_duration_ms > 0.",
+        )),
+    }
+}
+
+pub(crate) fn validate_action_rollout(action: &Action) -> Result<(), String> {
+    match action {
+        Action::ActivateScene(ActivateSceneActionDescriptor {
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
+            ..
+        }) => validate_spatial_rollout(
+            "ActivateScene",
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
+        ),
+        Action::CycleScenes(CycleScenesDescriptor {
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
+            ..
+        }) => validate_spatial_rollout(
+            "CycleScenes",
+            rollout,
+            rollout_source_device_key,
+            rollout_duration_ms,
+        ),
+        _ => Ok(()),
+    }
+}
+
+fn validate_routine_actions(actions: &serde_json::Value) -> Result<(), String> {
+    let parsed_actions: Actions = serde_json::from_value(actions.clone())
+        .map_err(|error| format!("Invalid routine actions payload: {error}"))?;
+
+    for action in &parsed_actions {
+        validate_action_rollout(action)?;
+    }
+
+    Ok(())
+}
+
 fn rewrite_scene_action_descriptor(
     descriptor: &mut ActivateSceneActionDescriptor,
     source: &DeviceConfigTarget,
@@ -466,7 +532,7 @@ fn rewrite_rule(
                 RewriteStatus::Changed
             }
         }
-        Rule::Group(_) | Rule::EvalExpr(_) => RewriteStatus::Unchanged,
+        Rule::Raw(_) | Rule::Group(_) | Rule::EvalExpr(_) => RewriteStatus::Unchanged,
     }
 }
 
@@ -1805,6 +1871,10 @@ async fn create_routine(
     routine: RoutineRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    if let Err(error) = validate_routine_actions(&routine.actions) {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    }
+
     {
         let mut state = app_state.write().await;
         state.upsert_routine(routine.clone());
@@ -1823,6 +1893,10 @@ async fn update_routine(
     mut routine: RoutineRow,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl Reply, warp::Rejection> {
+    if let Err(error) = validate_routine_actions(&routine.actions) {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    }
+
     let requested_id = routine.id.trim().to_string();
     let next_id = if requested_id.is_empty() {
         id.clone()

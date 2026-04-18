@@ -624,6 +624,210 @@ fn cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
 }
 
 #[test]
+fn persisted_cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
+    let server = start_rollout_test_server();
+
+    wait_for("rollout fixture devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Rollout Light 1").is_some()
+            && device_by_name(&devices, "Rollout Light 2").is_some()
+            && device_by_name(&devices, "Rollout Sensor").is_some()
+    });
+
+    for (device_key, x) in [
+        ("rollout_dummy/sensor1", 0.0),
+        ("rollout_dummy/light1", 1.0),
+        ("rollout_dummy/light2", 3.0),
+    ] {
+        let response = put_json(
+            &server.base_url,
+            &format!(
+                "/api/v1/config/floorplan/devices/{}",
+                device_key.replace('/', "%2F")
+            ),
+            &json!({
+                "device_key": device_key,
+                "x": x,
+                "y": 0.0,
+                "scale": 1.0,
+                "rotation": 0.0
+            }),
+        );
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    let create_routine_response = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "sensor_cycles_rollout_scene",
+            "name": "Sensor Cycles Rollout Scene",
+            "enabled": true,
+            "rules": [
+                {
+                    "integration_id": "rollout_dummy",
+                    "device_id": "sensor1",
+                    "state": {
+                        "value": true
+                    },
+                    "trigger_mode": "pulse"
+                }
+            ],
+            "actions": [
+                {
+                    "action": "CycleScenes",
+                    "scenes": [
+                        { "scene_id": "rollout_off" },
+                        { "scene_id": "rollout_on" }
+                    ],
+                    "rollout": "spatial",
+                    "rollout_source_device_key": "rollout_dummy/sensor1",
+                    "rollout_duration_ms": 900
+                }
+            ]
+        }),
+    );
+    assert_eq!(create_routine_response.status(), StatusCode::CREATED);
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    let stored_routine = routines["data"]
+        .as_array()
+        .expect("routines data should be an array")
+        .iter()
+        .find(|routine| routine["id"] == "sensor_cycles_rollout_scene")
+        .expect("stored rollout routine should exist");
+    let stored_action = &stored_routine["actions"][0];
+    assert_eq!(stored_action["action"], json!("CycleScenes"));
+    assert_eq!(stored_action["rollout"], json!("spatial"));
+    assert_eq!(
+        stored_action["rollout_source_device_key"],
+        json!("rollout_dummy/sensor1"),
+    );
+    assert_eq!(stored_action["rollout_duration_ms"], json!(900));
+
+    let off_response = post_json(
+        &server.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ActivateScene",
+            "scene_id": "rollout_off"
+        }),
+    );
+    assert_eq!(off_response.status(), StatusCode::OK);
+
+    wait_for("rollout fixture lights to be off", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_power(&devices, "Rollout Light 1") == Some(false)
+            && device_power(&devices, "Rollout Light 2") == Some(false)
+    });
+
+    let sensor_update_response = put_json(
+        &server.base_url,
+        "/api/v1/devices/sensor1",
+        &json!({
+            "id": "sensor1",
+            "name": "Rollout Sensor",
+            "integration_id": "rollout_dummy",
+            "data": {
+                "Sensor": {
+                    "value": true
+                }
+            }
+        }),
+    );
+    assert_eq!(sensor_update_response.status(), StatusCode::OK);
+
+    thread::sleep(Duration::from_millis(100));
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert_eq!(device_power(&devices, "Rollout Light 2"), Some(false));
+
+    wait_for("persisted cycle scenes near rollout target to update first", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_power(&devices, "Rollout Light 1") == Some(true)
+            && device_power(&devices, "Rollout Light 2") == Some(false)
+    });
+
+    wait_for("persisted cycle scenes far rollout target to update last", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_power(&devices, "Rollout Light 1") == Some(true)
+            && device_power(&devices, "Rollout Light 2") == Some(true)
+    });
+}
+
+#[test]
+fn config_api_rejects_invalid_spatial_rollout_routines() {
+    let server = start_rollout_test_server();
+
+    let create_routine_response = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "invalid_rollout_routine",
+            "name": "Invalid Rollout Routine",
+            "enabled": true,
+            "rules": [],
+            "actions": [
+                {
+                    "action": "CycleScenes",
+                    "scenes": [
+                        { "scene_id": "rollout_off" },
+                        { "scene_id": "rollout_on" }
+                    ],
+                    "rollout": "spatial"
+                }
+            ]
+        }),
+    );
+    assert_eq!(create_routine_response.status(), StatusCode::BAD_REQUEST);
+
+    let error_body: Value = create_routine_response
+        .json()
+        .expect("invalid rollout response should be JSON");
+    let error_message = error_body["error"]
+        .as_str()
+        .expect("invalid rollout response should include an error message");
+    assert!(error_message.contains("rollout_source_device_key"));
+    assert!(error_message.contains("rollout_duration_ms > 0"));
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    let routines_data = routines["data"]
+        .as_array()
+        .expect("routines data should be an array");
+    assert!(!routines_data
+        .iter()
+        .any(|routine| routine["id"] == "invalid_rollout_routine"));
+}
+
+#[test]
+fn actions_api_rejects_invalid_spatial_rollout_actions() {
+    let server = start_rollout_test_server();
+
+    let trigger_response = post_json(
+        &server.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ActivateScene",
+            "scene_id": "rollout_on",
+            "rollout": "spatial"
+        }),
+    );
+    assert_eq!(trigger_response.status(), StatusCode::BAD_REQUEST);
+
+    let error_body: Value = trigger_response
+        .json()
+        .expect("invalid trigger response should be JSON");
+    let error_message = error_body["error"]
+        .as_str()
+        .expect("invalid trigger response should include an error message");
+    assert!(error_message.contains("rollout_source_device_key"));
+
+    thread::sleep(Duration::from_millis(100));
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert_eq!(device_power(&devices, "Rollout Light 1"), Some(false));
+    assert_eq!(device_power(&devices, "Rollout Light 2"), Some(false));
+}
+
+#[test]
 fn config_api_device_display_name_overrides_roundtrip() {
     let server = TestServer::new().expect("Failed to start test server");
 

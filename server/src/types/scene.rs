@@ -50,6 +50,10 @@ pub struct ActivateSceneDescriptor {
     /// Optionally only apply scene to these groups
     pub group_keys: Option<Vec<GroupId>>,
 
+    /// Whether scene-derived transitions should be preserved during activation.
+    #[serde(default)]
+    pub use_scene_transition: bool,
+
     /// Optionally override the transition applied when activating this scene.
     #[ts(type = "number | null")]
     pub transition: Option<OrderedFloat<f32>>,
@@ -73,6 +77,10 @@ pub struct ActivateSceneActionDescriptor {
 
     /// Optionally only apply scene to these groups
     pub group_keys: Option<Vec<GroupId>>,
+
+    /// Whether scene-derived transitions should be preserved during activation.
+    #[serde(default)]
+    pub use_scene_transition: bool,
 
     /// Optionally override the transition applied when activating this scene.
     #[ts(type = "number | null")]

@@ -860,6 +860,7 @@ impl Scenes {
                             scene_id: scene_id.clone(),
                             device_keys: None,
                             group_keys: None,
+                            use_scene_transition: false,
                             transition: None,
                         },
                     )?;
@@ -1343,6 +1344,7 @@ mod tests {
                         scene_id: base_scene_id.clone(),
                         device_keys: None,
                         group_keys: None,
+                        use_scene_transition: false,
                         transition: None,
                     }),
                 )),
@@ -1415,6 +1417,7 @@ mod tests {
                         scene_id: base_scene_id,
                         device_keys: None,
                         group_keys: None,
+                        use_scene_transition: false,
                         transition: Some(OrderedFloat(1.2)),
                     }),
                 )),

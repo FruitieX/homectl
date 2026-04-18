@@ -474,6 +474,7 @@ impl Devices {
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        use_scene_transition: bool,
         transition: &Option<OrderedFloat<f32>>,
         groups: &Groups,
         scenes: &Scenes,
@@ -485,6 +486,7 @@ impl Devices {
                 scene_id: scene_id.clone(),
                 device_keys: device_keys.clone(),
                 group_keys: group_keys.clone(),
+                use_scene_transition: false,
                 transition: None,
             },
         )?;
@@ -497,8 +499,10 @@ impl Devices {
 
                 if let Some(transition) = transition {
                     scene_device.set_transition(Some(transition.0))
-                } else {
+                } else if use_scene_transition {
                     scene_device
+                } else {
+                    scene_device.set_transition(None)
                 }
             })
             .collect();
@@ -603,6 +607,7 @@ impl Devices {
         scene_id: &SceneId,
         device_keys: &Option<Vec<DeviceKey>>,
         group_keys: &Option<Vec<GroupId>>,
+        use_scene_transition: bool,
         transition: &Option<OrderedFloat<f32>>,
         rollout: &Option<RolloutStyle>,
         rollout_source_device_key: &Option<DeviceKey>,
@@ -639,9 +644,11 @@ impl Devices {
             .as_ref()
             .map(|style| format!(" with {style:?} rollout"))
             .unwrap_or_default();
-        let transition_description = transition
-            .map(|value| format!(" with {:.1}s transition override", value.0))
-            .unwrap_or_default();
+        let transition_description = match transition {
+            Some(value) => format!(" with {:.1}s transition override", value.0),
+            None if use_scene_transition => " using scene transitions".to_string(),
+            None => " with no transition".to_string(),
+        };
         info!(
             "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}{transition_description}"
         );
@@ -650,6 +657,7 @@ impl Devices {
             scene_id,
             device_keys,
             group_keys,
+            use_scene_transition,
             transition,
             groups,
             scenes,
@@ -717,6 +725,7 @@ impl Devices {
             &next_scene.scene_id,
             &next_scene.device_keys,
             &next_scene.group_keys,
+            next_scene.use_scene_transition,
             &next_scene.transition,
             rollout,
             rollout_source_device_key,
@@ -792,6 +801,24 @@ mod tests {
         integrations.insert(IntegrationId::from_str(integration_id).unwrap(), devices);
 
         SceneDevicesSearchConfig(integrations)
+    }
+
+    fn managed_controllable_device(id: &str, name: &str) -> Device {
+        Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new(id),
+            name.to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                Some(0.5),
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Full,
+            )),
+            None,
+        )
     }
 
     fn placeholder_sensor(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
@@ -951,21 +978,7 @@ mod tests {
         let (mut devices, _event_rx) = test_devices();
         let groups = Groups::new(GroupsConfig::new());
         let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
-        let target = Device::new(
-            IntegrationId::from("mqtt".to_string()),
-            DeviceId::new("lamp1"),
-            "Lamp 1".to_string(),
-            DeviceData::Controllable(ControllableDevice::new(
-                None,
-                true,
-                Some(0.5),
-                None,
-                None,
-                Capabilities::default(),
-                ManageKind::Full,
-            )),
-            None,
-        );
+        let target = managed_controllable_device("lamp1", "Lamp 1");
         let target_key = target.get_device_key();
 
         devices.set_state(&target, true, true);
@@ -997,6 +1010,7 @@ mod tests {
                 &scene_id,
                 &None,
                 &None,
+                false,
                 &Some(OrderedFloat(1.5)),
                 &None,
                 &None,
@@ -1015,6 +1029,136 @@ mod tests {
         };
 
         assert_eq!(data.state.transition, Some(OrderedFloat(1.5)));
+        assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
+    }
+
+    #[tokio::test]
+    async fn activate_scene_clears_linked_device_transition_by_default() {
+        let (mut devices, _event_rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("circadian").unwrap();
+        let mut source = controllable_device("circadian", "Circadian", None);
+        let target = managed_controllable_device("lamp1", "Lamp 1");
+        let target_key = target.get_device_key();
+        let source_key = source.get_device_key();
+
+        if let DeviceData::Controllable(data) = &mut source.data {
+            data.state.transition = Some(OrderedFloat(60.0));
+            data.state.brightness = Some(OrderedFloat(0.7));
+        }
+
+        devices.set_state(&source, true, true);
+        devices.set_state(&target, true, true);
+
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Circadian".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceLink(crate::types::scene::SceneDeviceLink {
+                        brightness: None,
+                        device_ref: (&source_key).into(),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        let result = devices
+            .activate_scene(
+                &scene_id,
+                &None,
+                &None,
+                false,
+                &None,
+                &None,
+                &None,
+                &None,
+                &[],
+                &groups,
+                &scenes,
+            )
+            .await;
+
+        assert_eq!(result, Some(true));
+
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+
+        assert_eq!(data.state.transition, None);
+        assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
+    }
+
+    #[tokio::test]
+    async fn activate_scene_can_preserve_linked_device_transition() {
+        let (mut devices, _event_rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("circadian").unwrap();
+        let mut source = controllable_device("circadian", "Circadian", None);
+        let target = managed_controllable_device("lamp1", "Lamp 1");
+        let target_key = target.get_device_key();
+        let source_key = source.get_device_key();
+
+        if let DeviceData::Controllable(data) = &mut source.data {
+            data.state.transition = Some(OrderedFloat(60.0));
+            data.state.brightness = Some(OrderedFloat(0.7));
+        }
+
+        devices.set_state(&source, true, true);
+        devices.set_state(&target, true, true);
+
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Circadian".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceLink(crate::types::scene::SceneDeviceLink {
+                        brightness: None,
+                        device_ref: (&source_key).into(),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        let result = devices
+            .activate_scene(
+                &scene_id,
+                &None,
+                &None,
+                true,
+                &None,
+                &None,
+                &None,
+                &None,
+                &[],
+                &groups,
+                &scenes,
+            )
+            .await;
+
+        assert_eq!(result, Some(true));
+
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+
+        assert_eq!(data.state.transition, Some(OrderedFloat(60.0)));
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
     }
 }

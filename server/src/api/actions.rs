@@ -2,10 +2,12 @@ use std::sync::Arc;
 
 use crate::core::state::AppState;
 use crate::types::{action::Action, event::Event};
+use serde_json::json;
 use tokio::sync::RwLock;
+use warp::http::StatusCode;
 use warp::Filter;
 
-use super::with_state;
+use super::{config::validate_action_rollout, with_state};
 
 pub fn actions(
     app_state: &Arc<RwLock<AppState>>,
@@ -27,9 +29,23 @@ async fn post_action_impl(
     action: Action,
     app_state: Arc<RwLock<AppState>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    if let Err(error) = validate_action_rollout(&action) {
+        return Ok(warp::reply::with_status(
+            warp::reply::json(&json!({
+                "success": false,
+                "data": null,
+                "error": error,
+            })),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
     let app_state = app_state.read().await;
     let sender = app_state.event_tx.clone();
     sender.send(Event::Action(action));
 
-    Ok(warp::reply::json(&()))
+    Ok(warp::reply::with_status(
+        warp::reply::json(&()),
+        StatusCode::OK,
+    ))
 }

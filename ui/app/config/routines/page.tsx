@@ -12,7 +12,7 @@ import { useState } from 'react';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import { useRoutineStatuses } from '@/hooks/websocket';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
-import { ActionBuilder, Action } from '@/ui/ActionBuilder';
+import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
@@ -365,21 +365,38 @@ function RoutineCard({
         <button
           className="btn btn-sm btn-primary"
           disabled={!id.trim() || !name.trim()}
-          onClick={() => {
+          onClick={async () => {
+            let finalRules: Rule[] | unknown[];
+            let finalActions: Action[] | unknown[];
+
             try {
-              const finalRules =
-                editMode === 'json' ? JSON.parse(rulesJson) : rules;
-              const finalActions =
-                editMode === 'json' ? JSON.parse(actionsJson) : actions;
-              onSave({
+              finalRules = editMode === 'json' ? JSON.parse(rulesJson) : rules;
+              finalActions = editMode === 'json' ? JSON.parse(actionsJson) : actions;
+            } catch {
+              alert('Invalid JSON in rules or actions');
+              return;
+            }
+
+            if (Array.isArray(finalActions)) {
+              const rolloutValidationError = validateActions(finalActions as Action[]);
+              if (rolloutValidationError) {
+                alert(rolloutValidationError);
+                return;
+              }
+            }
+
+            try {
+              await onSave({
                 id,
                 name,
                 enabled,
                 rules: finalRules,
                 actions: finalActions,
               });
-            } catch {
-              alert('Invalid JSON in rules or actions');
+            } catch (error) {
+              alert(
+                error instanceof Error ? error.message : 'Failed to save routine',
+              );
             }
           }}
         >

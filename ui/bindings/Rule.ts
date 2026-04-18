@@ -2,7 +2,8 @@
 import type { AnyRule } from "./AnyRule";
 import type { DeviceRule } from "./DeviceRule";
 import type { GroupRule } from "./GroupRule";
+import type { RawRule } from "./RawRule";
 import type { ScriptRule } from "./ScriptRule";
 import type { SensorRule } from "./SensorRule";
 
-export type Rule = SensorRule | DeviceRule | GroupRule | AnyRule | ScriptRule;
+export type Rule = SensorRule | RawRule | DeviceRule | GroupRule | AnyRule | ScriptRule;
