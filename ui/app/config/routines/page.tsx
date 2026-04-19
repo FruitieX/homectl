@@ -8,9 +8,11 @@ import {
 } from '@/hooks/useConfig';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import { matchesConfigSearch } from '@/lib/configSearch';
-import { useState } from 'react';
+import type { DevicesState } from '@/bindings/DevicesState';
+import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
+import { useMemo, useState } from 'react';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
-import { useRoutineStatuses } from '@/hooks/websocket';
+import { useRoutineStatuses, useWebsocketState } from '@/hooks/websocket';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
@@ -40,7 +42,20 @@ export default function RoutinesPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const { devicesState: devices } = useDevicesApi();
+  const { devicesState: apiDevices } = useDevicesApi();
+  const wsState = useWebsocketState();
+  // Merge live websocket device state over the REST snapshot so editors (for
+  // example the raw JSON rule preview) see up-to-date `device.raw` payloads as
+  // integrations push updates.
+  const devices = useMemo<DevicesState>(() => {
+    const merged: DevicesState = { ...apiDevices };
+    for (const [key, device] of Object.entries(wsState?.devices ?? {})) {
+      if (device) {
+        merged[key] = device;
+      }
+    }
+    return merged;
+  }, [apiDevices, wsState]);
   const routineStatuses = useRoutineStatuses();
   const groups = useGroupsState();
   const deviceDisplayNameMap = deviceDisplayNames.reduce<Record<string, string>>(
@@ -142,9 +157,6 @@ export default function RoutinesPage() {
     </div>
   );
 }
-
-import type { DevicesState } from '@/bindings/DevicesState';
-import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 
 function RoutineCard({
   routine,

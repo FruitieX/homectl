@@ -858,6 +858,7 @@ impl Scenes {
                         groups,
                         &ActivateSceneDescriptor {
                             scene_id: scene_id.clone(),
+                            mirror_from_group: None,
                             device_keys: None,
                             group_keys: None,
                             use_scene_transition: false,
@@ -1342,6 +1343,7 @@ mod tests {
                     &target_key.to_string(),
                     SceneDeviceConfig::SceneLink(ActivateSceneDescriptor {
                         scene_id: base_scene_id.clone(),
+                        mirror_from_group: None,
                         device_keys: None,
                         group_keys: None,
                         use_scene_transition: false,
@@ -1415,6 +1417,7 @@ mod tests {
                     &target_key.to_string(),
                     SceneDeviceConfig::SceneLink(ActivateSceneDescriptor {
                         scene_id: base_scene_id,
+                        mirror_from_group: None,
                         device_keys: None,
                         group_keys: None,
                         use_scene_transition: false,

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { Device } from '@/bindings/Device';
@@ -8,11 +8,16 @@ import type { RolloutStyle } from '@/bindings/RolloutStyle';
 
 const rolloutStyleOptions: RolloutStyle[] = ['spatial'];
 export const DEFAULT_ROLLOUT_DURATION_MS = 1500;
+export const TRIGGERING_DEVICE_ROLLOUT_SOURCE =
+  '__homectl_runtime__/triggering_device';
+export const TRIGGERING_DEVICE_ROLLOUT_SOURCE_LABEL = 'Triggering device';
 
 // Action types matching server types
 export interface ActivateSceneAction {
   action: 'ActivateScene';
   scene_id: string;
+  mirror_from_group?: string;
+  include_source_groups?: boolean;
   device_keys?: string[];
   group_keys?: string[];
   use_scene_transition?: boolean;
@@ -26,12 +31,14 @@ export interface CycleScenesAction {
   action: 'CycleScenes';
   scenes: {
     scene_id: string;
+    mirror_from_group?: string;
     device_keys?: string[];
     group_keys?: string[];
     use_scene_transition?: boolean;
     transition?: number;
   }[];
   nowrap?: boolean;
+  include_source_groups?: boolean;
   device_keys?: string[];
   group_keys?: string[];
   rollout?: RolloutStyle;
@@ -238,9 +245,7 @@ interface GroupKeysSelectorProps {
   groups: FlattenedGroupsConfig;
   value: string[];
   onChange: (keys: string[]) => void;
-}
-
-function GroupKeysSelector({
+}function GroupKeysSelector({
   groups,
   value,
   onChange,
@@ -271,6 +276,202 @@ function GroupKeysSelector({
           <span className="text-sm truncate">{group?.name ?? key}</span>
         </label>
       ))}
+    </div>
+  );
+}
+
+interface GroupSelectorProps {
+  groups: FlattenedGroupsConfig;
+  value: string;
+  onChange: (groupId: string) => void;
+}
+
+function GroupSelector({ groups, value, onChange }: GroupSelectorProps) {
+  const groupList = Object.entries(groups);
+  return (
+    <select
+      className="select select-bordered select-sm"
+      value={value || ''}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      <option value="">Select group...</option>
+      {groupList.map(([key, group]) => (
+        <option key={key} value={key}>
+          {group?.name ?? key}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+interface TargetFilterFields {
+  device_keys?: string[];
+  group_keys?: string[];
+}
+
+interface TargetFiltersEditorProps {
+  value: TargetFilterFields;
+  devices: DevicesState;
+  groups: FlattenedGroupsConfig;
+  resetKey?: number | string;
+  onChange: (fields: TargetFilterFields) => void;
+}
+
+function TargetFiltersEditor({
+  value,
+  devices,
+  groups,
+  resetKey,
+  onChange,
+}: TargetFiltersEditorProps) {
+  const [showDeviceFilter, setShowDeviceFilter] = useState(
+    !!value.device_keys?.length,
+  );
+  const [showGroupFilter, setShowGroupFilter] = useState(
+    !!value.group_keys?.length,
+  );
+
+  const deviceFilterEnabled = showDeviceFilter || !!value.device_keys?.length;
+  const groupFilterEnabled = showGroupFilter || !!value.group_keys?.length;
+
+  useEffect(() => {
+    if (resetKey === undefined) {
+      return;
+    }
+
+    setShowDeviceFilter(!!value.device_keys?.length);
+    setShowGroupFilter(!!value.group_keys?.length);
+  }, [resetKey, value.device_keys, value.group_keys]);
+
+  return (
+    <>
+      <div className="form-control">
+        <label className="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={deviceFilterEnabled}
+            onChange={(e) => {
+              setShowDeviceFilter(e.target.checked);
+              if (!e.target.checked) {
+                onChange({ device_keys: undefined });
+              }
+            }}
+          />
+          <span className="label-text">Filter by Devices</span>
+        </label>
+        {deviceFilterEnabled && (
+          <DeviceKeysSelector
+            devices={devices}
+            value={value.device_keys || []}
+            onChange={(keys) => {
+              setShowDeviceFilter(true);
+              onChange({
+                device_keys: keys.length ? keys : undefined,
+              });
+            }}
+          />
+        )}
+      </div>
+
+      <div className="form-control">
+        <label className="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={groupFilterEnabled}
+            onChange={(e) => {
+              setShowGroupFilter(e.target.checked);
+              if (!e.target.checked) {
+                onChange({ group_keys: undefined });
+              }
+            }}
+          />
+          <span className="label-text">Filter by Groups</span>
+        </label>
+        {groupFilterEnabled && (
+          <GroupKeysSelector
+            groups={groups}
+            value={value.group_keys || []}
+            onChange={(keys) => {
+              setShowGroupFilter(true);
+              onChange({
+                group_keys: keys.length ? keys : undefined,
+              });
+            }}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+interface MirrorFromGroupFieldProps {
+  scene_id: string;
+  mirror_from_group?: string;
+  groups: FlattenedGroupsConfig;
+  scenes: { id: string; name: string }[];
+  label?: string;
+  onChange: (update: { scene_id: string; mirror_from_group?: string }) => void;
+}
+
+/**
+ * Lets the user pick either a literal scene, or "mirror the currently active
+ * scene of some other group" with the literal scene acting as a fallback.
+ */
+function MirrorFromGroupField({
+  scene_id,
+  mirror_from_group,
+  groups,
+  scenes,
+  label,
+  onChange,
+}: MirrorFromGroupFieldProps) {
+  const mirrorEnabled = mirror_from_group !== undefined;
+
+  return (
+    <div className="space-y-2">
+      {label ? (
+        <label className="label py-0">
+          <span className="label-text">{label}</span>
+        </label>
+      ) : null}
+      <div className="flex flex-wrap gap-2 items-center">
+        <SceneSelector
+          scenes={scenes}
+          value={scene_id}
+          onChange={(id) => onChange({ scene_id: id, mirror_from_group })}
+        />
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-xs"
+            checked={mirrorEnabled}
+            onChange={(e) =>
+              onChange({
+                scene_id,
+                mirror_from_group: e.target.checked ? '' : undefined,
+              })
+            }
+          />
+          Mirror from group
+        </label>
+        {mirrorEnabled ? (
+          <GroupSelector
+            groups={groups}
+            value={mirror_from_group ?? ''}
+            onChange={(id) =>
+              onChange({ scene_id, mirror_from_group: id || '' })
+            }
+          />
+        ) : null}
+      </div>
+      {mirrorEnabled ? (
+        <div className="text-xs opacity-60">
+          Uses the scene currently active in the selected group. Falls back to
+          the scene above if that group has no single active scene.
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -356,12 +557,19 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
               }
             >
               <option value="">Select a device...</option>
+              <option value={TRIGGERING_DEVICE_ROLLOUT_SOURCE}>
+                {TRIGGERING_DEVICE_ROLLOUT_SOURCE_LABEL}
+              </option>
               {deviceList.map(({ key, device }) => (
                 <option key={key} value={key}>
                   {device.name} ({key})
                 </option>
               ))}
             </select>
+            <span className="label-text-alt mt-1 opacity-60">
+              Use a fixed origin device, or choose the triggering device to
+              center the rollout on whichever device fired the routine.
+            </span>
           </div>
 
           <div className="form-control">
@@ -517,82 +725,45 @@ function ActivateSceneEditor({
   groups,
   onChange,
 }: ActivateSceneEditorProps) {
-  const [showDeviceFilter, setShowDeviceFilter] = useState(
-    !!action.device_keys?.length,
-  );
-  const [showGroupFilter, setShowGroupFilter] = useState(
-    !!action.group_keys?.length,
-  );
-
   return (
     <div className="space-y-3">
       <div className="form-control">
         <label className="label">
           <span className="label-text">Scene</span>
         </label>
-        <SceneSelector
+        <MirrorFromGroupField
+          scene_id={action.scene_id}
+          mirror_from_group={action.mirror_from_group}
+          groups={groups}
           scenes={scenes}
-          value={action.scene_id}
-          onChange={(id) => onChange({ ...action, scene_id: id })}
+          onChange={(update) => onChange({ ...action, ...update })}
         />
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm"
-            checked={showDeviceFilter}
-            onChange={(e) => {
-              setShowDeviceFilter(e.target.checked);
-              if (!e.target.checked) {
-                onChange({ ...action, device_keys: undefined });
-              }
-            }}
-          />
-          <span className="label-text">Filter by Devices</span>
-        </label>
-        {showDeviceFilter && (
-          <DeviceKeysSelector
-            devices={devices}
-            value={action.device_keys || []}
-            onChange={(keys) =>
-              onChange({
-                ...action,
-                device_keys: keys.length ? keys : undefined,
-              })
-            }
-          />
-        )}
-      </div>
+      <TargetFiltersEditor
+        value={action}
+        devices={devices}
+        groups={groups}
+        onChange={(fields) => onChange({ ...action, ...fields })}
+      />
 
       <div className="form-control">
         <label className="label cursor-pointer justify-start gap-3">
           <input
             type="checkbox"
             className="checkbox checkbox-sm"
-            checked={showGroupFilter}
-            onChange={(e) => {
-              setShowGroupFilter(e.target.checked);
-              if (!e.target.checked) {
-                onChange({ ...action, group_keys: undefined });
-              }
-            }}
-          />
-          <span className="label-text">Filter by Groups</span>
-        </label>
-        {showGroupFilter && (
-          <GroupKeysSelector
-            groups={groups}
-            value={action.group_keys || []}
-            onChange={(keys) =>
+            checked={action.include_source_groups ?? false}
+            onChange={(e) =>
               onChange({
                 ...action,
-                group_keys: keys.length ? keys : undefined,
+                include_source_groups: e.target.checked || undefined,
               })
             }
           />
-        )}
+          <span className="label-text">
+            Also include groups that contain the triggering device
+          </span>
+        </label>
       </div>
 
       <TransitionBehaviorEditor
@@ -616,13 +787,17 @@ interface CycleScenesEditorProps {
   action: CycleScenesAction;
   scenes: { id: string; name: string }[];
   devices: DevicesState;
+  groups: FlattenedGroupsConfig;
   onChange: (action: CycleScenesAction) => void;
 }
+
+type CycleSceneConfig = CycleScenesAction['scenes'][number];
 
 function CycleScenesEditor({
   action,
   scenes,
   devices,
+  groups,
   onChange,
 }: CycleScenesEditorProps) {
   const handleAddScene = () => {
@@ -639,10 +814,16 @@ function CycleScenesEditor({
     });
   };
 
-  const handleSceneChange = (index: number, sceneId: string) => {
-    const updated = [...action.scenes];
-    updated[index] = { ...updated[index], scene_id: sceneId };
-    onChange({ ...action, scenes: updated });
+  const handleSceneFieldChange = (
+    index: number,
+    update: Partial<CycleSceneConfig>,
+  ) => {
+    onChange({
+      ...action,
+      scenes: action.scenes.map((scene, sceneIndex) =>
+        sceneIndex === index ? { ...scene, ...update } : scene,
+      ),
+    });
   };
 
   return (
@@ -651,59 +832,80 @@ function CycleScenesEditor({
         <label className="label">
           <span className="label-text">Scenes (in order)</span>
         </label>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {action.scenes.map((s, index) => (
-            <div key={index} className="flex flex-wrap gap-2 items-center">
-              <span className="text-sm opacity-60 w-6">{index + 1}.</span>
-              <SceneSelector
-                scenes={scenes}
-                value={s.scene_id}
-                onChange={(id) => handleSceneChange(index, id)}
-              />
-              <select
-                className="select select-bordered select-sm w-48"
-                value={getTransitionBehaviorMode(s)}
-                onChange={(event) => {
-                  const updated = [...action.scenes];
-                  updated[index] = {
-                    ...updated[index],
-                    ...getTransitionBehaviorUpdate(
-                      event.target.value as TransitionBehaviorMode,
-                    ),
-                  };
-                  onChange({ ...action, scenes: updated });
-                }}
-              >
-                <option value="none">No transition</option>
-                <option value="scene">Use scene transitions</option>
-                <option value="fixed">Fixed transition</option>
-              </select>
-              {getTransitionBehaviorMode(s) === 'fixed' ? (
-                <input
-                  type="number"
-                  min="0"
-                  step="0.1"
-                  className="input input-bordered input-sm w-36"
-                  value={s.transition ?? ''}
-                  placeholder="0.4s"
-                  onChange={(event) => {
-                    const updated = [...action.scenes];
-                    const nextValue = event.target.value.trim();
-                    updated[index] = {
-                      ...updated[index],
-                      use_scene_transition: false,
-                      transition: nextValue ? Math.max(0, Number(nextValue)) : 0,
-                    };
-                    onChange({ ...action, scenes: updated });
-                  }}
+            <div
+              key={index}
+              className="space-y-2 rounded-lg border border-base-300 p-2"
+            >
+              <div className="flex flex-wrap gap-2 items-center">
+                <span className="text-sm opacity-60 w-6">{index + 1}.</span>
+                <MirrorFromGroupField
+                  scene_id={s.scene_id}
+                  mirror_from_group={s.mirror_from_group}
+                  groups={groups}
+                  scenes={scenes}
+                  onChange={(update) => handleSceneFieldChange(index, update)}
                 />
-              ) : null}
-              <button
-                className="btn btn-ghost btn-xs btn-error"
-                onClick={() => handleRemoveScene(index)}
-              >
-                ✕
-              </button>
+                <button
+                  className="btn btn-ghost btn-xs btn-error ml-auto"
+                  onClick={() => handleRemoveScene(index)}
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 items-center">
+                <select
+                  className="select select-bordered select-sm w-48"
+                  value={getTransitionBehaviorMode(s)}
+                  onChange={(event) =>
+                    handleSceneFieldChange(
+                      index,
+                      getTransitionBehaviorUpdate(
+                        event.target.value as TransitionBehaviorMode,
+                      ),
+                    )
+                  }
+                >
+                  <option value="none">No transition</option>
+                  <option value="scene">Use scene transitions</option>
+                  <option value="fixed">Fixed transition</option>
+                </select>
+                {getTransitionBehaviorMode(s) === 'fixed' ? (
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.1"
+                    className="input input-bordered input-sm w-36"
+                    value={s.transition ?? ''}
+                    placeholder="0.4s"
+                    onChange={(event) => {
+                      const nextValue = event.target.value.trim();
+                      handleSceneFieldChange(index, {
+                        use_scene_transition: false,
+                        transition: nextValue
+                          ? Math.max(0, Number(nextValue))
+                          : 0,
+                      });
+                    }}
+                  />
+                ) : null}
+              </div>
+
+              <div className="rounded-lg border border-base-300 p-3">
+                <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+                  Scene Filters
+                </div>
+                <div className="mt-2 space-y-3">
+                  <TargetFiltersEditor
+                    resetKey={index}
+                    value={s}
+                    devices={devices}
+                    groups={groups}
+                    onChange={(fields) => handleSceneFieldChange(index, fields)}
+                  />
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -713,6 +915,19 @@ function CycleScenesEditor({
         >
           + Add Scene
         </button>
+      </div>
+
+      <div className="space-y-2 rounded-lg border border-base-300 p-3">
+        <div className="text-sm opacity-70">
+          Use these filters to choose which devices and groups are considered
+          when determining the current scene before cycling.
+        </div>
+        <TargetFiltersEditor
+          value={action}
+          devices={devices}
+          groups={groups}
+          onChange={(fields) => onChange({ ...action, ...fields })}
+        />
       </div>
 
       <div className="form-control">
@@ -730,6 +945,25 @@ function CycleScenesEditor({
           />
           <span className="label-text">
             Don't wrap (stop at last scene instead of cycling back)
+          </span>
+        </label>
+      </div>
+
+      <div className="form-control">
+        <label className="label cursor-pointer justify-start gap-3">
+          <input
+            type="checkbox"
+            className="checkbox checkbox-sm"
+            checked={action.include_source_groups ?? false}
+            onChange={(e) =>
+              onChange({
+                ...action,
+                include_source_groups: e.target.checked || undefined,
+              })
+            }
+          />
+          <span className="label-text">
+            Also include groups that contain the triggering device
           </span>
         </label>
       </div>
@@ -999,6 +1233,7 @@ export function ActionEditor({
             action={action as CycleScenesAction}
             scenes={scenes}
             devices={devices}
+            groups={groups}
             onChange={onChange}
           />
         )}

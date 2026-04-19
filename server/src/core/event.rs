@@ -4,18 +4,48 @@ use color_eyre::Result;
 
 use crate::types::{
     action::Action,
-    device::{Device, DeviceKey},
+    device::{Device, DeviceKey, DevicesState},
     dim::DimDescriptor,
     event::*,
+    group::GroupId,
     integration::CustomActionDescriptor,
     rule::ForceTriggerRoutineDescriptor,
-    scene::{ActivateSceneActionDescriptor, CycleScenesDescriptor, SceneConfig, SceneId},
+    scene::{
+        ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor, SceneConfig,
+        SceneId,
+    },
     ui::UiActionDescriptor,
 };
 
 use crate::db::config_queries;
 
+use super::groups::Groups;
 use super::state::AppState;
+
+/// Resolves the effective scene id for an action that may reference the
+/// currently active scene of another group. Falls back to `fallback_scene_id`
+/// when the referenced group has no unanimous active scene.
+fn resolve_mirrored_scene_id(
+    fallback_scene_id: &SceneId,
+    mirror_from_group: Option<&GroupId>,
+    groups: &Groups,
+    devices: &DevicesState,
+) -> SceneId {
+    let Some(group_id) = mirror_from_group else {
+        return fallback_scene_id.clone();
+    };
+
+    match groups.get_group_scene_id(devices, group_id) {
+        Some(scene_id) => scene_id,
+        None => {
+            debug!(
+                "mirror_from_group = {group_id} has no unanimous active scene; \
+                 falling back to {fallback_scene_id}"
+            );
+            fallback_scene_id.clone()
+        }
+    }
+}
 
 fn scene_row_from_config(scene_id: &SceneId, config: &SceneConfig) -> config_queries::SceneRow {
     let device_states = config
@@ -224,8 +254,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
         }
         Event::Action(Action::ActivateScene(ActivateSceneActionDescriptor {
             scene_id,
+            mirror_from_group,
             device_keys,
             group_keys,
+            include_source_groups: _,
             use_scene_transition,
             transition,
             rollout,
@@ -233,10 +265,16 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             rollout_duration_ms,
         })) => {
             let device_positions = state.effective_device_positions();
+            let resolved_scene_id = resolve_mirrored_scene_id(
+                scene_id,
+                mirror_from_group.as_ref(),
+                &state.groups,
+                state.devices.get_state(),
+            );
             state
                 .devices
                 .activate_scene(
-                    scene_id,
+                    &resolved_scene_id,
                     device_keys,
                     group_keys,
                     *use_scene_transition,
@@ -255,15 +293,35 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             nowrap,
             group_keys,
             device_keys,
+            include_source_groups: _,
             rollout,
             rollout_source_device_key,
             rollout_duration_ms,
         })) => {
             let device_positions = state.effective_device_positions();
+            let resolved_scenes: Vec<ActivateSceneDescriptor> = scenes
+                .iter()
+                .map(|sd| {
+                    let resolved_scene_id = resolve_mirrored_scene_id(
+                        &sd.scene_id,
+                        sd.mirror_from_group.as_ref(),
+                        &state.groups,
+                        state.devices.get_state(),
+                    );
+                    ActivateSceneDescriptor {
+                        scene_id: resolved_scene_id,
+                        mirror_from_group: None,
+                        device_keys: sd.device_keys.clone(),
+                        group_keys: sd.group_keys.clone(),
+                        use_scene_transition: sd.use_scene_transition,
+                        transition: sd.transition,
+                    }
+                })
+                .collect();
             state
                 .devices
                 .cycle_scenes(
-                    scenes,
+                    &resolved_scenes,
                     nowrap.unwrap_or(false),
                     &state.groups,
                     device_keys,
@@ -279,6 +337,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
         Event::Action(Action::Dim(DimDescriptor {
             device_keys,
             group_keys,
+            include_source_groups: _,
             step,
         })) => {
             state

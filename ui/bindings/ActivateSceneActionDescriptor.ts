@@ -7,7 +7,19 @@ import type { SceneId } from "./SceneId";
 /**
  * Contains the information needed to activate a scene as an action.
  */
-export type ActivateSceneActionDescriptor = { scene_id: SceneId, 
+export type ActivateSceneActionDescriptor = { 
+/**
+ * Scene to activate. When `mirror_from_group` is set, this acts as a
+ * fallback that is used only if the referenced group has no unanimous
+ * currently-active scene.
+ */
+scene_id: SceneId, 
+/**
+ * If set, resolve the scene to activate from the currently active scene
+ * of this group at dispatch time. Falls back to `scene_id` if that group
+ * has no unanimous active scene.
+ */
+mirror_from_group: GroupId | null, 
 /**
  * Optionally only apply scene to these devices
  */
@@ -17,9 +29,15 @@ device_keys: Array<DeviceKey> | null,
  */
 group_keys: Array<GroupId> | null, 
 /**
- * Optionally opt-in to use scene transition.
+ * If true, extend `group_keys` with every group that contains the
+ * triggering device at rule-evaluation time. No-op for actions that are
+ * not triggered by a device event (e.g. `ForceTriggerRoutine`).
  */
-use_scene_transition: boolean,
+include_source_groups: boolean, 
+/**
+ * Whether scene-derived transitions should be preserved during activation.
+ */
+use_scene_transition: boolean, 
 /**
  * Optionally override the transition applied when activating this scene.
  */

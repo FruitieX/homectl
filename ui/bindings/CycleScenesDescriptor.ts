@@ -14,6 +14,12 @@ device_keys: Array<DeviceKey> | null,
  */
 group_keys: Array<GroupId> | null, 
 /**
+ * If true, extend `group_keys` (both for detection and for each scene
+ * activation) with every group that contains the triggering device at
+ * rule-evaluation time.
+ */
+include_source_groups: boolean, 
+/**
  * Optional rollout style for the activation.
  */
 rollout: RolloutStyle | null, 

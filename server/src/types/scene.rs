@@ -42,7 +42,16 @@ pub struct SceneDeviceLink {
 #[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct ActivateSceneDescriptor {
+    /// Scene to activate. When `mirror_from_group` is set, this acts as a
+    /// fallback that is used only if the referenced group has no unanimous
+    /// currently-active scene.
     pub scene_id: SceneId,
+
+    /// If set, resolve the scene to activate from the currently active scene
+    /// of this group at dispatch time. Falls back to `scene_id` if that group
+    /// has no unanimous active scene.
+    #[serde(default)]
+    pub mirror_from_group: Option<GroupId>,
 
     /// Optionally only apply scene to these devices
     pub device_keys: Option<Vec<DeviceKey>>,
@@ -70,13 +79,28 @@ pub enum RolloutStyle {
 #[derive(TS, Clone, Deserialize, Serialize, Debug, Eq, PartialEq, Hash)]
 #[ts(export)]
 pub struct ActivateSceneActionDescriptor {
+    /// Scene to activate. When `mirror_from_group` is set, this acts as a
+    /// fallback that is used only if the referenced group has no unanimous
+    /// currently-active scene.
     pub scene_id: SceneId,
+
+    /// If set, resolve the scene to activate from the currently active scene
+    /// of this group at dispatch time. Falls back to `scene_id` if that group
+    /// has no unanimous active scene.
+    #[serde(default)]
+    pub mirror_from_group: Option<GroupId>,
 
     /// Optionally only apply scene to these devices
     pub device_keys: Option<Vec<DeviceKey>>,
 
     /// Optionally only apply scene to these groups
     pub group_keys: Option<Vec<GroupId>>,
+
+    /// If true, extend `group_keys` with every group that contains the
+    /// triggering device at rule-evaluation time. No-op for actions that are
+    /// not triggered by a device event (e.g. `ForceTriggerRoutine`).
+    #[serde(default)]
+    pub include_source_groups: bool,
 
     /// Whether scene-derived transitions should be preserved during activation.
     #[serde(default)]
@@ -108,6 +132,12 @@ pub struct CycleScenesDescriptor {
 
     /// Optionally only detect current scene from these groups
     pub group_keys: Option<Vec<GroupId>>,
+
+    /// If true, extend `group_keys` (both for detection and for each scene
+    /// activation) with every group that contains the triggering device at
+    /// rule-evaluation time.
+    #[serde(default)]
+    pub include_source_groups: bool,
 
     /// Optional rollout style for the activation.
     pub rollout: Option<RolloutStyle>,

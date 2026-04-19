@@ -50,6 +50,8 @@ export const SceneList = (props: Props) => {
           action: 'ActivateScene',
           device_keys: props.deviceKeys,
           group_keys: null,
+          mirror_from_group: null,
+          include_source_groups: false,
           use_scene_transition: false,
           transition: null,
           rollout: null,

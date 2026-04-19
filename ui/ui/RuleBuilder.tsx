@@ -140,6 +140,38 @@ function formatRawPreviewValue(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+type RawPreviewState =
+  | { kind: 'no-device' }
+  | { kind: 'no-raw' }
+  | { kind: 'empty-path'; value: unknown }
+  | { kind: 'missing-path' }
+  | { kind: 'resolved'; value: unknown };
+
+function describeRawPreview(
+  selectedDevice: Device | undefined,
+  rawPayload: unknown,
+  path: string,
+  resolved: unknown,
+): RawPreviewState {
+  if (!selectedDevice) {
+    return { kind: 'no-device' };
+  }
+
+  if (rawPayload === null || rawPayload === undefined) {
+    return { kind: 'no-raw' };
+  }
+
+  if (!path) {
+    return { kind: 'empty-path', value: rawPayload };
+  }
+
+  if (resolved === undefined) {
+    return { kind: 'missing-path' };
+  }
+
+  return { kind: 'resolved', value: resolved };
+}
+
 function getRawRuleValueEditorKind(rule: RawRule, previewValue: unknown) {
   if (rawRuleOperatorsWithoutValue.has(rule.operator)) {
     return 'hidden' as const;
@@ -584,12 +616,43 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
   const previewValue = rawPayload
     ? resolveJsonPointer(rawPayload, rule.path)
     : undefined;
+  const previewState = describeRawPreview(
+    selectedDevice,
+    rawPayload,
+    rule.path,
+    previewValue,
+  );
   const valueEditorKind = getRawRuleValueEditorKind(rule, previewValue);
   const datalistId = `raw-rule-paths-${rule.integration_id ?? 'none'}-${
     rule.device_id ?? 'none'
   }`
     .replaceAll('/', '-')
     .replaceAll(' ', '-');
+
+  const setPath = (nextPath: string) => {
+    const nextPreviewValue = rawPayload
+      ? resolveJsonPointer(rawPayload, nextPath)
+      : undefined;
+
+    onChange({
+      ...rule,
+      path: nextPath,
+      value: getDefaultRawRuleValue(
+        rule.operator,
+        nextPreviewValue,
+        rule.value,
+      ),
+    });
+  };
+
+  const previewBorderClass =
+    previewState.kind === 'resolved'
+      ? 'border-success/40'
+      : previewState.kind === 'empty-path'
+        ? 'border-info/40'
+        : previewState.kind === 'missing-path'
+          ? 'border-warning/40'
+          : 'border-base-300';
 
   return (
     <div className="space-y-3">
@@ -600,13 +663,26 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
         onChange={(ref) => onChange({ ...rule, ...ref })}
       />
 
+      {selectedDevice && rawPayload !== null && (
+        <details className="rounded-lg border border-base-300 bg-base-200/60">
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide opacity-70">
+            Live raw payload ({availablePaths.length} fields)
+          </summary>
+          <pre className="max-h-60 overflow-auto border-t border-base-300 bg-base-100 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all">
+            {JSON.stringify(rawPayload, null, 2)}
+          </pre>
+        </details>
+      )}
+
       <div className="form-control">
         <label className="label">
-          <span className="label-text">JSON Path</span>
+          <span className="label-text">JSON Pointer path</span>
           <span className="label-text-alt opacity-60">
-            {availablePaths.length > 0
-              ? `${availablePaths.length} discovered fields`
-              : 'Select a device to discover fields'}
+            {!selectedDevice
+              ? 'Select a device first'
+              : availablePaths.length > 0
+                ? `${availablePaths.length} discovered fields`
+                : 'No raw payload fields to discover'}
           </span>
         </label>
         <input
@@ -615,22 +691,7 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
           className="input input-bordered input-sm font-mono"
           placeholder="/payload/temperature"
           value={rule.path}
-          onChange={(e) => {
-            const nextPath = e.target.value;
-            const nextPreviewValue = rawPayload
-              ? resolveJsonPointer(rawPayload, nextPath)
-              : undefined;
-
-            onChange({
-              ...rule,
-              path: nextPath,
-              value: getDefaultRawRuleValue(
-                rule.operator,
-                nextPreviewValue,
-                rule.value,
-              ),
-            });
-          }}
+          onChange={(e) => setPath(e.target.value)}
         />
         {availablePaths.length > 0 && (
           <datalist id={datalistId}>
@@ -640,17 +701,92 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
           </datalist>
         )}
         <span className="label-text-alt mt-1 opacity-60">
-          Uses JSON Pointer syntax. Pick a discovered path or enter one manually.
+          Use{' '}
+          <a
+            href="https://datatracker.ietf.org/doc/html/rfc6901"
+            target="_blank"
+            rel="noreferrer"
+            className="link link-hover"
+          >
+            JSON Pointer
+          </a>{' '}
+          syntax (e.g. <code className="font-mono">/payload/on</code>). Leave
+          empty to match against the whole payload.
         </span>
       </div>
 
-      <div className="rounded-lg border border-base-300 bg-base-200 px-3 py-2">
-        <div className="text-xs font-medium uppercase tracking-wide opacity-60">
-          Current value preview
+      {availablePaths.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {availablePaths.slice(0, 40).map((path) => {
+            const tokens = path.split('/').slice(1);
+            const resolved = resolveJsonPointer(rawPayload, path);
+            const isActive = path === rule.path;
+            return (
+              <button
+                key={path}
+                type="button"
+                onClick={() => setPath(path)}
+                className={`badge badge-sm gap-1 font-mono text-xs normal-case ${
+                  isActive ? 'badge-primary' : 'badge-outline hover:badge-primary'
+                }`}
+                title={`${path} = ${formatRawPreviewValue(resolved)}`}
+              >
+                {tokens.join('/') || '/'}
+              </button>
+            );
+          })}
+          {availablePaths.length > 40 && (
+            <span className="text-xs opacity-60 self-center">
+              +{availablePaths.length - 40} more…
+            </span>
+          )}
         </div>
-        <pre className="mt-2 overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all">
-          {formatRawPreviewValue(previewValue)}
-        </pre>
+      )}
+
+      <div className={`rounded-lg border bg-base-200 px-3 py-2 ${previewBorderClass}`}>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+            Current value preview
+          </div>
+          <span className="text-[10px] uppercase tracking-wide opacity-50">
+            live
+          </span>
+        </div>
+        {previewState.kind === 'no-device' && (
+          <div className="mt-2 text-sm opacity-70">
+            Select a device to see its live raw payload.
+          </div>
+        )}
+        {previewState.kind === 'no-raw' && (
+          <div className="mt-2 text-sm opacity-70">
+            This device has not published a raw payload yet.
+          </div>
+        )}
+        {previewState.kind === 'missing-path' && (
+          <div className="mt-2 text-sm">
+            <span className="opacity-70">Path </span>
+            <code className="font-mono">{rule.path}</code>
+            <span className="opacity-70">
+              {' '}
+              did not resolve. Pick one of the discovered paths above.
+            </span>
+          </div>
+        )}
+        {previewState.kind === 'empty-path' && (
+          <>
+            <div className="mt-2 text-xs opacity-70">
+              Matching against the root payload (no path set):
+            </div>
+            <pre className="mt-1 max-h-40 overflow-auto text-sm font-mono whitespace-pre-wrap break-all">
+              {formatRawPreviewValue(previewState.value)}
+            </pre>
+          </>
+        )}
+        {previewState.kind === 'resolved' && (
+          <pre className="mt-2 overflow-x-auto text-sm font-mono whitespace-pre-wrap break-all">
+            {formatRawPreviewValue(previewState.value)}
+          </pre>
+        )}
       </div>
 
       <div className="form-control">

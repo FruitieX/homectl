@@ -12,6 +12,7 @@ import {
   type ActivateSceneAction,
   type CustomAction,
   type CycleScenesAction,
+  TRIGGERING_DEVICE_ROLLOUT_SOURCE,
   type DimAction,
   type ForceTriggerRoutineAction,
   type SetDeviceStateAction,
@@ -269,6 +270,10 @@ function getDeviceKeyLabel(
   devices: DevicesState,
   deviceDisplayNameMap: Record<string, string>,
 ) {
+  if (deviceKey === TRIGGERING_DEVICE_ROLLOUT_SOURCE) {
+    return 'triggering device';
+  }
+
   const liveDevice = devices[deviceKey];
   if (liveDevice) {
     return getDeviceDisplayLabel(liveDevice, deviceDisplayNameMap);
@@ -722,22 +727,45 @@ function ActionSummaryItem({
       deviceDisplayNameMap,
     });
 
+    const fallbackLabel =
+      sceneLabels[sceneAction.scene_id] ?? sceneAction.scene_id;
+    const mirrorGroupId = sceneAction.mirror_from_group;
+    const title =
+      mirrorGroupId !== undefined
+        ? `Mirror scene from ${groups[mirrorGroupId]?.name ?? mirrorGroupId}`
+        : fallbackLabel;
+    const summary =
+      mirrorGroupId !== undefined
+        ? `Uses the scene currently active in "${groups[mirrorGroupId]?.name ?? mirrorGroupId}" (fallback: ${fallbackLabel}).`
+        : 'Activate this scene when the routine triggers.';
+
+    const metaParts = [...filters, rollout];
+    if (sceneAction.include_source_groups) {
+      metaParts.push('+ source groups');
+    }
+
     return (
       <SummaryCard
         badge="Scene"
         badgeClassName="badge-primary"
-        title={sceneLabels[sceneAction.scene_id] ?? sceneAction.scene_id}
-        summary="Activate this scene when the routine triggers."
-        meta={[...filters, rollout].filter(Boolean).join(' · ')}
+        title={title}
+        summary={summary}
+        meta={metaParts.filter(Boolean).join(' · ')}
       />
     );
   }
 
   if (actionType === 'CycleScenes') {
     const cycleAction = action as CycleScenesAction;
-    const sequence = cycleAction.scenes.map(
-      (scene) => sceneLabels[scene.scene_id] ?? scene.scene_id,
-    );
+    const sequence = cycleAction.scenes.map((scene) => {
+      const fallbackLabel = sceneLabels[scene.scene_id] ?? scene.scene_id;
+      if (scene.mirror_from_group !== undefined) {
+        const groupLabel =
+          groups[scene.mirror_from_group]?.name ?? scene.mirror_from_group;
+        return `mirror(${groupLabel}→${fallbackLabel})`;
+      }
+      return fallbackLabel;
+    });
     const filters = summarizeFilters({
       deviceKeys: cycleAction.device_keys,
       groupKeys: cycleAction.group_keys,
@@ -756,6 +784,7 @@ function ActionSummaryItem({
       cycleAction.nowrap ? 'stops at the final scene' : 'wraps back to the start',
       ...filters,
       rollout,
+      cycleAction.include_source_groups ? '+ source groups' : '',
     ]
       .filter(Boolean)
       .join(' · ');

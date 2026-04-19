@@ -261,7 +261,11 @@ function IntegrationCard({
             <button
               className="btn btn-primary"
               onClick={() => {
-                onSave({ config: effectiveConfig, enabled });
+                onSave({
+                  plugin: integration.plugin,
+                  config: effectiveConfig,
+                  enabled,
+                });
               }}
             >
               Save

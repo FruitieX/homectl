@@ -5,18 +5,117 @@ use serde_json::Value;
 
 use crate::db::config_queries;
 use crate::types::{
-    action::Actions,
+    action::{Action, Actions},
     device::{Device, DeviceKey, DevicesState, SensorDevice},
+    dim::DimDescriptor,
     event::{Event, TxEventChannel},
+    group::GroupId,
     routine_status::{RoutineRuntimeStatus, RoutineStatuses, RuleRuntimeStatus},
     rule::{
         AnyRule, DeviceRule, GroupRule, RawRule, RawRuleOperator, Routine, RoutineId,
         RoutinesConfig, Rule, ScriptRule, SensorRule, TriggerMode,
     },
+    scene::{ActivateSceneActionDescriptor, CycleScenesDescriptor},
 };
 use std::collections::{HashMap, HashSet};
 
 use super::{devices::Devices, groups::Groups, scripting::ScriptEngine};
+
+const TRIGGERING_DEVICE_ROLLOUT_SOURCE: &str = "__homectl_runtime__/triggering_device";
+
+/// Merges `source_groups` into `group_keys` (without duplicates), sets the
+/// option to `Some(..)` if anything was merged.
+fn merge_source_groups(group_keys: &mut Option<Vec<GroupId>>, source_groups: &[GroupId]) {
+    if source_groups.is_empty() {
+        return;
+    }
+
+    let existing = group_keys.take().unwrap_or_default();
+    let mut seen: HashSet<GroupId> = existing.iter().cloned().collect();
+    let mut merged = existing;
+    for group_id in source_groups {
+        if seen.insert(group_id.clone()) {
+            merged.push(group_id.clone());
+        }
+    }
+    *group_keys = Some(merged);
+}
+
+fn resolve_triggering_device_rollout_source(
+    rollout_source_device_key: &mut Option<DeviceKey>,
+    event_source: Option<&DeviceKey>,
+) {
+    let Some(existing) = rollout_source_device_key.as_ref() else {
+        return;
+    };
+
+    if existing.to_string() != TRIGGERING_DEVICE_ROLLOUT_SOURCE {
+        return;
+    }
+
+    *rollout_source_device_key = event_source.cloned();
+}
+
+/// Rewrites an action so that any descriptor requesting event-source-derived
+/// values is expanded before dispatch. This currently covers source-group
+/// filters and the special rollout source value that maps to the rule's
+/// triggering device.
+fn expand_action_source_context(
+    mut action: Action,
+    event_source: Option<&DeviceKey>,
+    groups: &Groups,
+) -> Action {
+    let source_groups: Vec<GroupId> = match event_source {
+        Some(device_key) => groups.groups_containing_device(device_key),
+        None => Vec::new(),
+    };
+
+    match &mut action {
+        Action::ActivateScene(ActivateSceneActionDescriptor {
+            group_keys,
+            include_source_groups,
+            rollout_source_device_key,
+            ..
+        }) => {
+            if *include_source_groups {
+                merge_source_groups(group_keys, &source_groups);
+                *include_source_groups = false;
+            }
+
+            resolve_triggering_device_rollout_source(rollout_source_device_key, event_source);
+        }
+        Action::CycleScenes(CycleScenesDescriptor {
+            group_keys,
+            include_source_groups,
+            rollout_source_device_key,
+            scenes,
+            ..
+        }) => {
+            if *include_source_groups {
+                merge_source_groups(group_keys, &source_groups);
+                for scene in scenes.iter_mut() {
+                    merge_source_groups(&mut scene.group_keys, &source_groups);
+                }
+                *include_source_groups = false;
+            }
+
+            resolve_triggering_device_rollout_source(rollout_source_device_key, event_source);
+        }
+        Action::Dim(DimDescriptor {
+            group_keys,
+            include_source_groups,
+            ..
+        }) => {
+            if *include_source_groups {
+                merge_source_groups(group_keys, &source_groups);
+                *include_source_groups = false;
+            }
+        }
+        _ => {}
+    }
+
+    action
+}
 
 #[derive(Clone)]
 pub struct Routines {
@@ -201,7 +300,13 @@ impl Routines {
             );
 
             if status.will_trigger {
-                triggered_actions.extend(routine.actions.clone());
+                triggered_actions.extend(
+                    routine
+                        .actions
+                        .iter()
+                        .cloned()
+                        .map(|action| expand_action_source_context(action, event_source, groups)),
+                );
             }
 
             routine_statuses.insert(routine_id, status);
@@ -493,7 +598,9 @@ impl Routines {
                     } else {
                         let old_device = old_state.0.get(&device_key);
                         let old_matched = match old_device {
-                            Some(device) => evaluate_raw_rule_match(device.get_raw_value().as_ref(), rule)?,
+                            Some(device) => {
+                                evaluate_raw_rule_match(device.get_raw_value().as_ref(), rule)?
+                            }
                             None => false,
                         };
 
@@ -673,10 +780,18 @@ fn evaluate_raw_rule_match(raw: Option<&Value>, rule: &RawRule) -> Result<bool> 
             match rule.operator {
                 RawRuleOperator::Eq => Ok(json_values_equal(resolved, expected)),
                 RawRuleOperator::Ne => Ok(!json_values_equal(resolved, expected)),
-                RawRuleOperator::Gt => compare_json_numbers(resolved, expected, |left, right| left > right),
-                RawRuleOperator::Gte => compare_json_numbers(resolved, expected, |left, right| left >= right),
-                RawRuleOperator::Lt => compare_json_numbers(resolved, expected, |left, right| left < right),
-                RawRuleOperator::Lte => compare_json_numbers(resolved, expected, |left, right| left <= right),
+                RawRuleOperator::Gt => {
+                    compare_json_numbers(resolved, expected, |left, right| left > right)
+                }
+                RawRuleOperator::Gte => {
+                    compare_json_numbers(resolved, expected, |left, right| left >= right)
+                }
+                RawRuleOperator::Lt => {
+                    compare_json_numbers(resolved, expected, |left, right| left < right)
+                }
+                RawRuleOperator::Lte => {
+                    compare_json_numbers(resolved, expected, |left, right| left <= right)
+                }
                 RawRuleOperator::Contains => json_contains(resolved, expected),
                 RawRuleOperator::StartsWith => json_starts_with(resolved, expected),
                 RawRuleOperator::Regex => json_regex_match(resolved, expected),
@@ -750,17 +865,20 @@ fn is_json_truthy(value: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{evaluate_raw_rule_match, Routines};
+    use super::{evaluate_raw_rule_match, expand_action_source_context, Routines};
     use crate::core::{devices::Devices, groups::Groups};
-    use crate::types::action::Actions;
+    use crate::types::action::{Action, Actions};
     use crate::types::device::{Device, DeviceData, DeviceId, DeviceKey, DeviceRef, SensorDevice};
     use crate::types::event::{mk_event_channel, RxEventChannel};
     use crate::types::group::GroupsConfig;
     use crate::types::integration::IntegrationId;
-    use crate::types::rule::{RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule, TriggerMode};
+    use crate::types::rule::{
+        RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule, TriggerMode,
+    };
     use crate::utils::cli::Cli;
     use jsonptr::PointerBuf;
     use serde_json::json;
+    use std::str::FromStr;
 
     fn test_cli() -> Cli {
         Cli {
@@ -929,5 +1047,160 @@ mod tests {
         );
         assert!(retriggered.condition_match);
         assert!(retriggered.trigger_match);
+    }
+
+    #[test]
+    fn expand_action_source_context_merges_memberships_into_activate_scene() {
+        use crate::types::group::{GroupConfig, GroupLink};
+        use crate::types::scene::{ActivateSceneActionDescriptor, RolloutStyle};
+        use std::str::FromStr;
+
+        let switch_key = DeviceKey::new(
+            IntegrationId::from("z2m".to_string()),
+            DeviceId::new("switch"),
+        );
+        let mut group_config = GroupsConfig::new();
+        group_config.insert(
+            crate::types::group::GroupId::from_str("room").unwrap(),
+            GroupConfig {
+                name: "Room".into(),
+                devices: Some(vec![DeviceRef::new_with_id(
+                    IntegrationId::from("z2m".to_string()),
+                    DeviceId::new("switch"),
+                )]),
+                groups: None,
+                hidden: None,
+            },
+        );
+        group_config.insert(
+            crate::types::group::GroupId::from_str("floor").unwrap(),
+            GroupConfig {
+                name: "Floor".into(),
+                devices: None,
+                groups: Some(vec![GroupLink {
+                    group_id: crate::types::group::GroupId::from_str("room").unwrap(),
+                }]),
+                hidden: None,
+            },
+        );
+        let mut groups = Groups::new(group_config);
+        let (mut devices, _rx) = test_devices();
+        devices.set_state(
+            &Device::new(
+                IntegrationId::from("z2m".to_string()),
+                DeviceId::new("switch"),
+                "Switch".to_string(),
+                DeviceData::Sensor(SensorDevice::Text {
+                    value: "idle".into(),
+                }),
+                None,
+            ),
+            true,
+            true,
+        );
+        groups.force_invalidate(&devices);
+
+        let action = Action::ActivateScene(ActivateSceneActionDescriptor {
+            scene_id: crate::types::scene::SceneId::from_str("fallback").unwrap(),
+            mirror_from_group: None,
+            device_keys: None,
+            group_keys: Some(vec![
+                crate::types::group::GroupId::from_str("other").unwrap()
+            ]),
+            include_source_groups: true,
+            use_scene_transition: false,
+            transition: None,
+            rollout: None::<RolloutStyle>,
+            rollout_source_device_key: None,
+            rollout_duration_ms: None,
+        });
+
+        let expanded = expand_action_source_context(action, Some(&switch_key), &groups);
+        let Action::ActivateScene(descriptor) = expanded else {
+            panic!("expected ActivateScene action after expansion");
+        };
+        assert!(!descriptor.include_source_groups);
+        let mut keys = descriptor.group_keys.expect("group_keys expected");
+        keys.sort();
+        assert_eq!(
+            keys,
+            vec![
+                crate::types::group::GroupId::from_str("floor").unwrap(),
+                crate::types::group::GroupId::from_str("other").unwrap(),
+                crate::types::group::GroupId::from_str("room").unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn expand_action_source_context_noop_without_flag() {
+        let (devices, _rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::default());
+        let _ = devices;
+
+        let action = Action::ActivateScene(crate::types::scene::ActivateSceneActionDescriptor {
+            scene_id: crate::types::scene::SceneId::from_str("s").unwrap(),
+            mirror_from_group: None,
+            device_keys: None,
+            group_keys: None,
+            include_source_groups: false,
+            use_scene_transition: false,
+            transition: None,
+            rollout: None,
+            rollout_source_device_key: None,
+            rollout_duration_ms: None,
+        });
+
+        let expanded = expand_action_source_context(
+            action.clone(),
+            Some(&DeviceKey::new(
+                IntegrationId::from("z2m".to_string()),
+                DeviceId::new("x"),
+            )),
+            &groups,
+        );
+
+        let Action::ActivateScene(descriptor) = expanded else {
+            panic!("expected ActivateScene");
+        };
+        assert!(descriptor.group_keys.is_none());
+    }
+
+    #[test]
+    fn expand_action_source_context_resolves_triggering_device_rollout_source() {
+        use crate::types::scene::{ActivateSceneActionDescriptor, RolloutStyle, SceneId};
+
+        let switch_key = DeviceKey::new(
+            IntegrationId::from("z2m".to_string()),
+            DeviceId::new("switch"),
+        );
+
+        let action = Action::ActivateScene(ActivateSceneActionDescriptor {
+            scene_id: SceneId::from("fallback".to_string()),
+            mirror_from_group: None,
+            device_keys: None,
+            group_keys: None,
+            include_source_groups: false,
+            use_scene_transition: false,
+            transition: None,
+            rollout: Some(RolloutStyle::Spatial),
+            rollout_source_device_key: Some(DeviceKey::new(
+                IntegrationId::from("__homectl_runtime__".to_string()),
+                DeviceId::new("triggering_device"),
+            )),
+            rollout_duration_ms: Some(1500),
+        });
+
+        let expanded = expand_action_source_context(
+            action,
+            Some(&switch_key),
+            &Groups::new(GroupsConfig::default()),
+        );
+
+        let Action::ActivateScene(descriptor) = expanded else {
+            panic!("expected ActivateScene");
+        };
+
+        assert_eq!(descriptor.rollout_source_device_key, Some(switch_key));
     }
 }

@@ -10,4 +10,9 @@ device_keys: Array<DeviceKey> | null,
 /**
  * Optionally only apply dimming to these groups
  */
-group_keys: Array<GroupId> | null, step: number | null, };
+group_keys: Array<GroupId> | null, 
+/**
+ * If true, extend `group_keys` with every group that contains the
+ * triggering device at rule-evaluation time.
+ */
+include_source_groups: boolean, step: number | null, };

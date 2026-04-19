@@ -493,6 +493,7 @@ impl Devices {
             groups,
             &ActivateSceneDescriptor {
                 scene_id: scene_id.clone(),
+                mirror_from_group: None,
                 device_keys: device_keys.clone(),
                 group_keys: group_keys.clone(),
                 use_scene_transition: false,

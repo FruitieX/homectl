@@ -1227,6 +1227,26 @@ export default function DevicesPage() {
                     </section>
                   </div>
 
+                  <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
+                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
+                      Raw JSON payload
+                    </div>
+                    {device.raw ? (
+                      <details>
+                        <summary className="cursor-pointer select-none text-sm opacity-80">
+                          Show live payload from the integration
+                        </summary>
+                        <pre className="mt-3 max-h-96 overflow-auto rounded-lg border border-base-300 bg-base-100 p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                          {JSON.stringify(device.raw, null, 2)}
+                        </pre>
+                      </details>
+                    ) : (
+                      <p className="text-sm opacity-70">
+                        This device has not published a raw payload.
+                      </p>
+                    )}
+                  </section>
+
                   {'Sensor' in device.data && (
                     <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
                       <div className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">

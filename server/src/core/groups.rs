@@ -5,12 +5,13 @@ use color_eyre::Result;
 use crate::{
     db::config_queries,
     types::{
-        device::{Device, DeviceRef, DevicesState},
+        device::{Device, DeviceKey, DeviceRef, DevicesState},
         group::{
             FlattenedGroupConfig, FlattenedGroupsConfig, GroupConfig, GroupId, GroupLink,
             GroupsConfig,
         },
         integration::IntegrationId,
+        scene::SceneId,
     },
     utils::keys_match,
 };
@@ -246,6 +247,45 @@ impl Groups {
             .collect()
     }
 
+    /// Returns the unanimous currently-active scene of the given group, if
+    /// all online devices in the group share the same scene. Offline devices
+    /// and devices without a scene disqualify the group from reporting a
+    /// unanimous scene, mirroring the semantics used by group rules and the
+    /// scene-cycle detection logic.
+    pub fn get_group_scene_id(
+        &self,
+        devices: &DevicesState,
+        group_id: &GroupId,
+    ) -> Option<SceneId> {
+        let group_devices = self.find_group_devices(devices, group_id);
+        let first = group_devices.first()?;
+        let first_scene = first.get_scene_id()?;
+
+        if group_devices
+            .iter()
+            .all(|device| device.get_scene_id().as_ref() == Some(&first_scene))
+        {
+            Some(first_scene)
+        } else {
+            None
+        }
+    }
+
+    /// Returns every group id that contains the given device.
+    pub fn groups_containing_device(&self, device_key: &DeviceKey) -> Vec<GroupId> {
+        self.flattened_groups
+            .0
+            .iter()
+            .filter_map(|(group_id, group)| {
+                if group.device_keys.contains(device_key) {
+                    Some(group_id.clone())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     pub fn invalidate(
         &mut self,
         old_state: &DevicesState,
@@ -378,5 +418,193 @@ mod eval_group_config_device_links_tests {
         assert_eq!(result.len(), 2);
         assert!(result.contains(&device1));
         assert!(result.contains(&device2));
+    }
+}
+
+#[cfg(test)]
+mod groups_runtime_tests {
+    use std::str::FromStr;
+
+    use ordered_float::OrderedFloat;
+
+    use crate::types::color::{Capabilities, DeviceColor, Hs};
+    use crate::types::device::{
+        ControllableDevice, ControllableState, Device, DeviceData, DeviceId, ManageKind,
+    };
+    use crate::types::event::mk_event_channel;
+    use crate::types::integration::IntegrationId;
+    use crate::types::scene::SceneId;
+    use crate::utils::cli::Cli;
+
+    use super::*;
+
+    fn make_controllable(
+        integration_id: &str,
+        device_id: &str,
+        name: &str,
+        scene_id: Option<&str>,
+    ) -> Device {
+        Device::new(
+            IntegrationId::from(integration_id.to_string()),
+            DeviceId::new(device_id),
+            name.to_string(),
+            DeviceData::Controllable(ControllableDevice {
+                scene_id: scene_id.map(|s| SceneId::from_str(s).unwrap()),
+                state_source: None,
+                capabilities: Capabilities {
+                    xy: false,
+                    hs: true,
+                    rgb: false,
+                    ct: None,
+                },
+                state: ControllableState {
+                    power: true,
+                    brightness: Some(OrderedFloat(1.0)),
+                    color: Some(DeviceColor::Hs(Hs {
+                        h: 0,
+                        s: OrderedFloat(0.0),
+                    })),
+                    transition: None,
+                },
+                managed: ManageKind::Full,
+            }),
+            None,
+        )
+    }
+
+    fn populated_groups(devices_vec: Vec<Device>, config: GroupsConfig) -> (Devices, Groups) {
+        let (tx, _rx) = mk_event_channel();
+        let cli = Cli {
+            dry_run: true,
+            port: 45289,
+            database_url: None,
+            config: None,
+            warmup_time: None,
+            command: None,
+        };
+        let mut devices = Devices::new(tx, &cli);
+        for device in devices_vec {
+            devices.set_state(&device, true, true);
+        }
+        let mut groups = Groups::new(config);
+        groups.force_invalidate(&devices);
+        (devices, groups)
+    }
+
+    #[test]
+    fn group_scene_id_returns_unanimous_scene() {
+        let device_a = make_controllable("z2m", "a", "A", Some("normal"));
+        let device_b = make_controllable("z2m", "b", "B", Some("normal"));
+
+        let mut config = GroupsConfig::new();
+        config.insert(
+            GroupId::from_str("upstairs").unwrap(),
+            GroupConfig {
+                name: "Upstairs".into(),
+                devices: Some(vec![
+                    DeviceRef::new_with_id(
+                        IntegrationId::from("z2m".to_string()),
+                        DeviceId::new("a"),
+                    ),
+                    DeviceRef::new_with_id(
+                        IntegrationId::from("z2m".to_string()),
+                        DeviceId::new("b"),
+                    ),
+                ]),
+                groups: None,
+                hidden: None,
+            },
+        );
+
+        let (devices, groups) = populated_groups(vec![device_a, device_b], config);
+
+        assert_eq!(
+            groups.get_group_scene_id(devices.get_state(), &GroupId::from_str("upstairs").unwrap()),
+            Some(SceneId::from_str("normal").unwrap())
+        );
+    }
+
+    #[test]
+    fn group_scene_id_is_none_when_mixed() {
+        let device_a = make_controllable("z2m", "a", "A", Some("normal"));
+        let device_b = make_controllable("z2m", "b", "B", Some("dark"));
+
+        let mut config = GroupsConfig::new();
+        config.insert(
+            GroupId::from_str("mixed").unwrap(),
+            GroupConfig {
+                name: "Mixed".into(),
+                devices: Some(vec![
+                    DeviceRef::new_with_id(
+                        IntegrationId::from("z2m".to_string()),
+                        DeviceId::new("a"),
+                    ),
+                    DeviceRef::new_with_id(
+                        IntegrationId::from("z2m".to_string()),
+                        DeviceId::new("b"),
+                    ),
+                ]),
+                groups: None,
+                hidden: None,
+            },
+        );
+
+        let (devices, groups) = populated_groups(vec![device_a, device_b], config);
+
+        assert_eq!(
+            groups.get_group_scene_id(devices.get_state(), &GroupId::from_str("mixed").unwrap()),
+            None
+        );
+    }
+
+    #[test]
+    fn groups_containing_device_returns_all_memberships() {
+        let device_a = make_controllable("z2m", "a", "Switch", None);
+
+        let mut config = GroupsConfig::new();
+        config.insert(
+            GroupId::from_str("room").unwrap(),
+            GroupConfig {
+                name: "Room".into(),
+                devices: Some(vec![DeviceRef::new_with_id(
+                    IntegrationId::from("z2m".to_string()),
+                    DeviceId::new("a"),
+                )]),
+                groups: None,
+                hidden: None,
+            },
+        );
+        config.insert(
+            GroupId::from_str("floor").unwrap(),
+            GroupConfig {
+                name: "Floor".into(),
+                devices: None,
+                groups: Some(vec![GroupLink {
+                    group_id: GroupId::from_str("room").unwrap(),
+                }]),
+                hidden: None,
+            },
+        );
+        config.insert(
+            GroupId::from_str("unrelated").unwrap(),
+            GroupConfig {
+                name: "Unrelated".into(),
+                devices: None,
+                groups: None,
+                hidden: None,
+            },
+        );
+
+        let (_devices, groups) = populated_groups(vec![device_a.clone()], config);
+
+        let mut memberships = groups.groups_containing_device(&device_a.get_device_key());
+        memberships.sort();
+        assert_eq!(
+            memberships,
+            vec![
+                GroupId::from_str("floor").unwrap(),
+                GroupId::from_str("room").unwrap(),
+            ]
+        );
     }
 }

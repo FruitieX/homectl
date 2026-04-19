@@ -23,6 +23,11 @@ pub struct DimDescriptor {
     /// Optionally only apply dimming to these groups
     pub group_keys: Option<Vec<GroupId>>,
 
+    /// If true, extend `group_keys` with every group that contains the
+    /// triggering device at rule-evaluation time.
+    #[serde(default)]
+    pub include_source_groups: bool,
+
     // The amount to dim
     pub step: Option<f32>,
 }

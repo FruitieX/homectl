@@ -188,13 +188,10 @@ pub fn mqtt_to_homectl(
         DeviceData::Controllable(controllable_device)
     };
 
-    let raw = config
-        .raw_field
-        .as_deref()
-        .unwrap_or(Pointer::from_static("/raw"))
-        .resolve(&value)
-        .ok()
-        .cloned();
+    let raw = match config.raw_field.as_deref() {
+        Some(pointer) => pointer.resolve(&value).ok().cloned(),
+        None => Some(value.clone()),
+    };
 
     Some(Device {
         id: DeviceId::new(&id),
@@ -391,7 +388,7 @@ mod tests {
                 Capabilities::singleton(ColorMode::Hs),
                 ManageKind::Unmanaged,
             )),
-            raw: None,
+            raw: Some(mqtt_json),
         };
 
         assert_eq!(device, expected);
