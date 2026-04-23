@@ -27,7 +27,8 @@ fn blank_backup_config() -> Value {
                 "is_default": true
             }
         ],
-        "dashboard_widgets": []
+        "dashboard_widgets": [],
+        "widget_settings": []
     })
 }
 
@@ -459,7 +460,8 @@ fn sample_config_export() -> Value {
                 "is_default": true
             }
         ],
-        "dashboard_widgets": []
+        "dashboard_widgets": [],
+        "widget_settings": []
     })
 }
 
@@ -737,17 +739,23 @@ fn persisted_cycle_scenes_spatial_rollout_reuses_rollout_behavior() {
     let devices = get_json(&server.base_url, "/api/v1/devices");
     assert_eq!(device_power(&devices, "Rollout Light 2"), Some(false));
 
-    wait_for("persisted cycle scenes near rollout target to update first", || {
-        let devices = get_json(&server.base_url, "/api/v1/devices");
-        device_power(&devices, "Rollout Light 1") == Some(true)
-            && device_power(&devices, "Rollout Light 2") == Some(false)
-    });
+    wait_for(
+        "persisted cycle scenes near rollout target to update first",
+        || {
+            let devices = get_json(&server.base_url, "/api/v1/devices");
+            device_power(&devices, "Rollout Light 1") == Some(true)
+                && device_power(&devices, "Rollout Light 2") == Some(false)
+        },
+    );
 
-    wait_for("persisted cycle scenes far rollout target to update last", || {
-        let devices = get_json(&server.base_url, "/api/v1/devices");
-        device_power(&devices, "Rollout Light 1") == Some(true)
-            && device_power(&devices, "Rollout Light 2") == Some(true)
-    });
+    wait_for(
+        "persisted cycle scenes far rollout target to update last",
+        || {
+            let devices = get_json(&server.base_url, "/api/v1/devices");
+            device_power(&devices, "Rollout Light 1") == Some(true)
+                && device_power(&devices, "Rollout Light 2") == Some(true)
+        },
+    );
 }
 
 #[test]

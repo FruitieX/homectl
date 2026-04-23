@@ -372,7 +372,7 @@ impl Devices {
             // only when the incoming message actually carries it.
             (_, Some(_)) if incoming.is_unknown_placeholder_sensor() => {
                 if incoming.raw.is_some() {
-                    self.set_raw(incoming).await?;
+                    self.set_raw_without_event(incoming)?;
                 }
             }
 
@@ -453,6 +453,14 @@ impl Devices {
     ///
     /// If raw state hasn't changed, do nothing.
     pub async fn set_raw(&mut self, incoming: &Device) -> Result<()> {
+        self.update_raw(incoming, true)
+    }
+
+    fn set_raw_without_event(&mut self, incoming: &Device) -> Result<()> {
+        self.update_raw(incoming, false)
+    }
+
+    fn update_raw(&mut self, incoming: &Device, emit_internal_state_update: bool) -> Result<()> {
         let device = self.get_device(&incoming.get_device_key()).ok_or_else(|| {
             eyre!(
                 "Could not find device {integration_id}/{name} while trying to set raw field",
@@ -469,7 +477,11 @@ impl Devices {
         let mut device = device.clone();
         device.raw.clone_from(&incoming.raw);
 
-        self.set_state(&device, true, true);
+        if emit_internal_state_update {
+            self.set_state(&device, true, true);
+        } else {
+            self.state.0.insert(device.get_device_key(), device);
+        }
 
         Ok(())
     }
@@ -979,6 +991,38 @@ mod tests {
         let stored = devices.get_device(&current.get_device_key()).unwrap();
         assert_eq!(stored.data, current.data);
         assert_eq!(stored.name, current.name);
+        assert_eq!(stored.raw, incoming.raw);
+    }
+
+    #[tokio::test]
+    async fn placeholder_sensor_update_does_not_emit_internal_state_update() {
+        let (mut devices, mut event_rx) = test_devices();
+        let scenes = Scenes::default();
+        let current = boolean_sensor(
+            "device1",
+            "Kitchen button",
+            true,
+            Some(json!({ "action": "single" })),
+        );
+        let incoming = placeholder_sensor("device1", "device1", Some(json!({ "linkquality": 87 })));
+
+        devices.set_state(&current, true, true);
+        let _ = event_rx
+            .try_recv()
+            .expect("initial sensor state should emit one event");
+
+        devices
+            .handle_external_state_update(&incoming, &scenes)
+            .await
+            .unwrap();
+
+        assert!(
+            event_rx.try_recv().is_err(),
+            "placeholder metadata update should not emit a fresh internal state update"
+        );
+
+        let stored = devices.get_device(&current.get_device_key()).unwrap();
+        assert_eq!(stored.data, current.data);
         assert_eq!(stored.raw, incoming.raw);
     }
 

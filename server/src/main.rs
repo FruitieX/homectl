@@ -5,8 +5,15 @@ use homectl_server::api::config::{parse_config_backup, ParsedConfigBackup};
 use homectl_server::api::init_api;
 use homectl_server::core::simulate;
 use homectl_server::core::{
-    devices::Devices, event::handle_event, groups::Groups, integrations::Integrations,
-    logs::init_logging, routines::Routines, scenes::Scenes, state::AppState, ui::Ui,
+    devices::Devices,
+    event::{handle_event, DeferredEventWork},
+    groups::Groups,
+    integrations::Integrations,
+    logs::init_logging,
+    routines::Routines,
+    scenes::Scenes,
+    state::AppState,
+    ui::Ui,
 };
 use homectl_server::db::{
     actions, config_queries, connect_configured_database, init_db, is_db_configured,
@@ -23,10 +30,12 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 const DATABASE_RECONNECT_INTERVAL_SECS: u64 = 2;
+const SLOW_EVENT_MUTATION_WARN_MS: u64 = 250;
+const SLOW_DEFERRED_WORK_WARN_MS: u64 = 1000;
 
 fn default_backup_config_path() -> &'static Path {
     Path::new("Settings.json")
@@ -161,6 +170,24 @@ async fn run_event_loop(
     runtime_config: RuntimeConfigSnapshot,
 ) -> Result<(), Box<dyn Error>> {
     let (event_tx, mut event_rx) = mk_event_channel();
+    let (deferred_work_tx, mut deferred_work_rx) =
+        tokio::sync::mpsc::unbounded_channel::<DeferredEventWork>();
+
+    tokio::spawn(async move {
+        while let Some(work) = deferred_work_rx.recv().await {
+            let started_at = Instant::now();
+            let result = work.execute().await;
+            let elapsed = started_at.elapsed();
+
+            if elapsed > Duration::from_millis(SLOW_DEFERRED_WORK_WARN_MS) {
+                warn!("Deferred event work took {:?}", elapsed);
+            }
+
+            if let Err(err) = result {
+                error!("Error while executing deferred event work:\n    Err:\n    {err:#?}");
+            }
+        }
+    });
 
     let mut integrations = Integrations::new(event_tx.clone(), cli);
     integrations
@@ -225,13 +252,30 @@ async fn run_event_loop(
             .await
             .expect("Expected sender end of channel to never be dropped");
 
-        let mut state = state.write().await;
-        let result = handle_event(&mut state, &event).await;
+        let started_at = Instant::now();
+        let result = {
+            let mut state = state.write().await;
+            handle_event(&mut state, &event).await
+        };
 
-        if let Err(err) = result {
-            error!(
-                "Error while handling event:\n    Event:\n    {event:#?}\n\n    Err:\n    {err:#?}",
-            );
+        let elapsed = started_at.elapsed();
+        if elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS) {
+            warn!("Event state mutation took {:?}: {event:?}", elapsed);
+        }
+
+        match result {
+            Ok(outcome) => {
+                for work in outcome.into_deferred_work() {
+                    deferred_work_tx
+                        .send(work)
+                        .expect("Deferred event worker should stay alive");
+                }
+            }
+            Err(err) => {
+                error!(
+                    "Error while handling event:\n    Event:\n    {event:#?}\n\n    Err:\n    {err:#?}",
+                );
+            }
         }
     }
 }

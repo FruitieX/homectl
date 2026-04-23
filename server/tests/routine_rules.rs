@@ -145,7 +145,7 @@ fn test_script_no_side_effects() {
     // Note: This test verifies sandboxing - actual restrictions depend on engine config
 
     // Should not be able to eval arbitrary code
-    let result = engine.eval_boolean("typeof eval === 'undefined'");
+    let _result = engine.eval_boolean("typeof eval === 'undefined'");
     // Result depends on engine configuration
 
     // console.log should not crash

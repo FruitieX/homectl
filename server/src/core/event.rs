@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use color_eyre::Result;
 
+use crate::db::actions::{db_store_scene_overrides, db_store_ui_state};
 use crate::types::{
     action::Action,
     device::{Device, DeviceKey, DevicesState},
@@ -12,15 +13,15 @@ use crate::types::{
     rule::ForceTriggerRoutineDescriptor,
     scene::{
         ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor, SceneConfig,
-        SceneId,
+        SceneDevicesConfig, SceneId,
     },
     ui::UiActionDescriptor,
 };
 
 use crate::db::config_queries;
 
-use super::groups::Groups;
 use super::state::AppState;
+use super::{groups::Groups, integrations::Integrations};
 
 /// Resolves the effective scene id for an action that may reference the
 /// currently active scene of another group. Falls back to `fallback_scene_id`
@@ -92,7 +93,102 @@ fn scene_row_from_config(scene_id: &SceneId, config: &SceneConfig) -> config_que
     }
 }
 
-pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
+#[derive(Default)]
+pub struct EventOutcome {
+    deferred_work: Vec<DeferredEventWork>,
+}
+
+impl EventOutcome {
+    fn push(&mut self, work: DeferredEventWork) {
+        self.deferred_work.push(work);
+    }
+
+    pub fn into_deferred_work(self) -> Vec<DeferredEventWork> {
+        self.deferred_work
+    }
+}
+
+pub enum DeferredEventWork {
+    PublishIntegrationState {
+        integrations: Integrations,
+        device: Device,
+    },
+    RunIntegrationAction {
+        integrations: Integrations,
+        descriptor: CustomActionDescriptor,
+    },
+    PersistSceneOverride {
+        scene_id: SceneId,
+        overrides: SceneDevicesConfig,
+    },
+    UpsertConfigScene {
+        scene_id: SceneId,
+        scene: config_queries::SceneRow,
+    },
+    DeleteConfigScene {
+        scene_id: SceneId,
+    },
+    StoreUiState {
+        key: String,
+        value: serde_json::Value,
+    },
+}
+
+impl DeferredEventWork {
+    pub async fn execute(self) -> Result<()> {
+        match self {
+            DeferredEventWork::PublishIntegrationState {
+                integrations,
+                device,
+            } => integrations.set_integration_device_state(device).await,
+            DeferredEventWork::RunIntegrationAction {
+                integrations,
+                descriptor,
+            } => {
+                integrations
+                    .run_integration_action(&descriptor.integration_id, &descriptor.payload)
+                    .await
+            }
+            DeferredEventWork::PersistSceneOverride {
+                scene_id,
+                overrides,
+            } => {
+                if let Err(error) = db_store_scene_overrides(&scene_id, &overrides).await {
+                    warn!("Failed to persist scene override for {scene_id}: {error}");
+                }
+
+                Ok(())
+            }
+            DeferredEventWork::UpsertConfigScene { scene_id, scene } => {
+                if let Err(error) = config_queries::db_upsert_config_scene(&scene).await {
+                    warn!("DB not available when storing scene {scene_id}: {error}");
+                }
+
+                Ok(())
+            }
+            DeferredEventWork::DeleteConfigScene { scene_id } => {
+                if let Err(error) =
+                    config_queries::db_delete_config_scene(&scene_id.to_string()).await
+                {
+                    warn!("DB not available when deleting scene {scene_id}: {error}");
+                }
+
+                Ok(())
+            }
+            DeferredEventWork::StoreUiState { key, value } => {
+                if let Err(error) = db_store_ui_state(&key, &value).await {
+                    warn!("DB not available when storing UI state '{key}': {error}");
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
+pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOutcome> {
+    let mut outcome = EventOutcome::default();
+
     match event {
         Event::ExternalStateUpdate { device } => {
             state
@@ -118,7 +214,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             new,
         } => {
             if state.warming_up {
-                return Ok(());
+                return Ok(outcome);
             }
 
             let invalidated_device = new;
@@ -159,7 +255,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
         } => {
             let has_scene_override = state.scenes.has_override(device);
             if has_scene_override {
-                state.scenes.store_scene_override(device, true).await?;
+                let (scene_id, overrides) =
+                    state.scenes.store_scene_override_in_memory(device, true)?;
+                outcome.push(DeferredEventWork::PersistSceneOverride {
+                    scene_id,
+                    overrides,
+                });
                 state.scenes.force_invalidate(&state.devices, &state.groups);
             }
 
@@ -176,12 +277,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             );
         }
         Event::SetExternalState { device } => {
-            let device = device.color_to_preferred_mode();
-
-            state
-                .integrations
-                .set_integration_device_state(device)
-                .await?;
+            outcome.push(DeferredEventWork::PublishIntegrationState {
+                integrations: state.integrations.clone(),
+                device: device.color_to_preferred_mode(),
+            });
         }
         Event::ApplyDeviceState {
             device,
@@ -199,12 +298,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             state.upsert_scene(scene.clone());
             state.apply_runtime_scenes();
 
-            if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
-                warn!(
-                    "DB not available when storing scene {scene}: {e}",
-                    scene = scene_id
-                );
-            }
+            outcome.push(DeferredEventWork::UpsertConfigScene {
+                scene_id: scene_id.clone(),
+                scene,
+            });
         }
         Event::DbDeleteScene { scene_id } => {
             let deleted = state.delete_scene(&scene_id.to_string());
@@ -212,11 +309,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 state.apply_runtime_scenes();
             }
 
-            if let Err(e) = config_queries::db_delete_config_scene(&scene_id.to_string()).await {
-                warn!(
-                    "DB not available when deleting scene {scene}: {e}",
-                    scene = scene_id
-                );
+            if deleted {
+                outcome.push(DeferredEventWork::DeleteConfigScene {
+                    scene_id: scene_id.clone(),
+                });
             }
         }
         Event::DbEditScene { scene_id, name } => {
@@ -237,12 +333,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             }
 
             if let Some(scene) = updated_scene.as_ref() {
-                if let Err(e) = config_queries::db_upsert_config_scene(scene).await {
-                    warn!(
-                        "DB not available when editing scene {scene}: {e}",
-                        scene = scene_id
-                    );
-                }
+                outcome.push(DeferredEventWork::UpsertConfigScene {
+                    scene_id: scene_id.clone(),
+                    scene: scene.clone(),
+                });
             }
 
             if updated_scene.is_none() {
@@ -349,10 +443,13 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
             integration_id,
             payload,
         })) => {
-            state
-                .integrations
-                .run_integration_action(integration_id, payload)
-                .await?;
+            outcome.push(DeferredEventWork::RunIntegrationAction {
+                integrations: state.integrations.clone(),
+                descriptor: CustomActionDescriptor {
+                    integration_id: integration_id.clone(),
+                    payload: payload.clone(),
+                },
+            });
         }
         Event::Action(Action::ForceTriggerRoutine(ForceTriggerRoutineDescriptor {
             routine_id,
@@ -379,10 +476,13 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
                 .collect();
 
             for device in affected_devices.values() {
-                state
+                let (scene_id, overrides) = state
                     .scenes
-                    .store_scene_override(device, *override_state)
-                    .await?;
+                    .store_scene_override_in_memory(device, *override_state)?;
+                outcome.push(DeferredEventWork::PersistSceneOverride {
+                    scene_id,
+                    overrides,
+                });
             }
             state.scenes.force_invalidate(&state.devices, &state.groups);
             state.refresh_routine_statuses();
@@ -393,24 +493,31 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<()> {
         }
         Event::Action(Action::Ui(action)) => {
             let UiActionDescriptor::StoreUIState { key, value } = action;
-            state.ui.store_state(key.clone(), value.clone()).await?;
+            state.ui.store_state_in_memory(key.clone(), value.clone());
             state.schedule_ws_broadcast();
+            outcome.push(DeferredEventWork::StoreUiState {
+                key: key.clone(),
+                value: value.clone(),
+            });
         }
     }
 
-    Ok(())
+    Ok(outcome)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::handle_event;
+    use super::{handle_event, DeferredEventWork};
     use crate::core::{
         devices::Devices, groups::Groups, integrations::Integrations, routines::Routines,
         scenes::Scenes, state::AppState, ui::Ui, websockets::WebSockets,
     };
     use crate::db::config_queries::{ConfigExport, CoreConfigRow};
     use crate::types::{
+        color::Capabilities,
+        device::{ControllableDevice, Device, DeviceData, DeviceId, ManageKind},
         event::{mk_event_channel, Event},
+        integration::IntegrationId,
         scene::{SceneConfig, SceneId},
     };
     use crate::utils::cli::Cli;
@@ -511,5 +618,43 @@ mod tests {
             .expect("deleting scene should succeed without a database");
 
         assert!(state.runtime_config.scenes.is_empty());
+    }
+
+    #[tokio::test]
+    async fn set_external_state_is_deferred() {
+        let (mut state, _event_rx) = test_state();
+        let device = Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("lamp1"),
+            "Lamp 1".to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                Some(0.5),
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Unmanaged,
+            )),
+            None,
+        );
+
+        let outcome = handle_event(
+            &mut state,
+            &Event::SetExternalState {
+                device: device.clone(),
+            },
+        )
+        .await
+        .expect("set external state should succeed");
+
+        assert_eq!(outcome.deferred_work.len(), 1);
+        match &outcome.deferred_work[0] {
+            DeferredEventWork::PublishIntegrationState {
+                device: deferred_device,
+                ..
+            } => assert_eq!(deferred_device.get_device_key(), device.get_device_key()),
+            _ => panic!("expected deferred integration publish"),
+        }
     }
 }

@@ -12,7 +12,8 @@ use crate::{
         group::GroupId,
         scene::{
             ActivateSceneDescriptor, FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig,
-            SceneDeviceConfig, SceneDeviceStates, SceneId, SceneOverridesConfig, ScenesConfig,
+            SceneDeviceConfig, SceneDeviceStates, SceneDevicesConfig, SceneId,
+            SceneOverridesConfig, ScenesConfig,
         },
     },
 };
@@ -551,6 +552,20 @@ impl Scenes {
         device: &Device,
         store_override: bool,
     ) -> Result<()> {
+        let (scene_id, overrides) = self.store_scene_override_in_memory(device, store_override)?;
+
+        if let Err(error) = db_store_scene_overrides(&scene_id, &overrides).await {
+            warn!("Failed to persist scene override for {scene_id}: {error}");
+        }
+
+        Ok(())
+    }
+
+    pub fn store_scene_override_in_memory(
+        &mut self,
+        device: &Device,
+        store_override: bool,
+    ) -> Result<(SceneId, SceneDevicesConfig)> {
         let scene_id = device.get_scene_id().ok_or_else(|| {
             eyre::eyre!(
                 "Device {name} is not associated with any scene",
@@ -569,11 +584,7 @@ impl Scenes {
             overrides.remove(&device.get_device_key());
         }
 
-        if let Err(error) = db_store_scene_overrides(&scene_id, overrides).await {
-            warn!("Failed to persist scene override for {scene_id}: {error}");
-        }
-
-        Ok(())
+        Ok((scene_id, overrides.clone()))
     }
 
     pub fn has_override(&self, device: &Device) -> bool {
