@@ -60,7 +60,7 @@ croner = "=2.2.0"
 ordered-float = { version = "=5.0.0", features = ["serde"] }
 jsonptr = "=0.7.1"
 serde-this-or-that = "=0.5.0"
-clap = { version = "=4.5.48", features = ["derive", "env"] }
+clap = { version = "=4.6.1", features = ["derive", "env"] }
 boa_engine = "=0.20.0"
 percent-encoding = "=2.3.2"
 regex = "=1.11.1"
