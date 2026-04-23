@@ -1,13 +1,16 @@
-import { Image as KonvaImage } from 'react-konva';
-import { useMemo } from 'react';
+import { Group, Image as KonvaImage, Path } from 'react-konva';
+import type { ReactElement } from 'react';
 import type { FloorplanGrid, TileType } from '@/ui/FloorplanGridEditor';
 
-const tileColors: Record<TileType, string> = {
-  floor: 'transparent',
+type DrawableTileType = Exclude<TileType, 'floor'>;
+
+const tileColors: Record<DrawableTileType, string> = {
   wall: '#374151',
   door: '#92400e',
   window: '#60a5fa',
 };
+
+const drawableTileTypes = ['wall', 'door', 'window'] as const satisfies readonly DrawableTileType[];
 
 export type FloorplanRenderMetrics = {
   width: number;
@@ -89,34 +92,32 @@ export const getFloorplanCellIndex = (
   return totalCells - 1;
 };
 
-const renderFloorplanSurface = (
-  grid: FloorplanGrid | null,
-  image?: HTMLImageElement,
-): HTMLCanvasElement | undefined => {
+type Props = {
+  grid: FloorplanGrid | null;
+  image?: HTMLImageElement;
+};
+
+export const FloorplanBackground = ({ grid, image }: Props) => {
   const metrics = getFloorplanRenderMetrics(grid, image);
   const surfaceWidth = Math.round(metrics.width);
   const surfaceHeight = Math.round(metrics.height);
-  const hasVisibleTiles = grid?.tiles.some((row) => row.some((tile) => tile !== 'floor')) ?? false;
 
-  if (surfaceWidth <= 0 || surfaceHeight <= 0 || (!image && !hasVisibleTiles)) {
-    return undefined;
+  if (surfaceWidth <= 0 || surfaceHeight <= 0) {
+    return null;
   }
 
-  const canvas = document.createElement('canvas');
-  canvas.width = surfaceWidth;
-  canvas.height = surfaceHeight;
-
-  const context = canvas.getContext('2d');
-  if (!context) {
-    return undefined;
-  }
-
-  context.clearRect(0, 0, surfaceWidth, surfaceHeight);
-
-  if (image) {
-    context.drawImage(image, 0, 0, surfaceWidth, surfaceHeight);
-  }
-
+  // Previously this component built an offscreen HTMLCanvasElement and
+  // handed it to a Konva Image node. That round-trip proved unreliable in
+  // Firefox: the first Layer.batchDraw after mount could sample the
+  // offscreen bitmap before it was ready on the compositor side, leaving
+  // the floorplan invisible until an unrelated re-render forced another
+  // redraw. Rendering tiles as native Konva primitives avoids the
+  // HTMLCanvasElement → Konva image bridge entirely.
+  const tilePathData: Record<DrawableTileType, string[]> = {
+    wall: [],
+    door: [],
+    window: [],
+  };
   if (grid) {
     for (let rowIndex = 0; rowIndex < grid.height; rowIndex += 1) {
       const { start: startY, size: height } = getFloorplanCellBounds(
@@ -137,26 +138,42 @@ const renderFloorplanSurface = (
           surfaceWidth,
         );
 
-        context.fillStyle = tileColors[tile];
-        context.fillRect(startX, startY, width, height);
+        tilePathData[tile].push(
+          `M ${startX} ${startY} H ${startX + width} V ${startY + height} H ${startX} Z`,
+        );
       }
     }
   }
 
-  return canvas;
-};
+  const tilePaths: ReactElement[] = drawableTileTypes.flatMap((tileType) => {
+    const pathData = tilePathData[tileType].join(' ');
+    if (pathData === '') {
+      return [];
+    }
 
-type Props = {
-  grid: FloorplanGrid | null;
-  image?: HTMLImageElement;
-};
+    return [
+      <Path
+        key={tileType}
+        data={pathData}
+        fill={tileColors[tileType]}
+        listening={false}
+        strokeEnabled={false}
+        perfectDrawEnabled={false}
+      />,
+    ];
+  });
 
-export const FloorplanBackground = ({ grid, image }: Props) => {
-  const surface = useMemo(() => renderFloorplanSurface(grid, image), [grid, image]);
-
-  if (!surface) {
-    return null;
-  }
-
-  return <KonvaImage image={surface} listening={false} />;
+  return (
+    <Group listening={false}>
+      {image && (
+        <KonvaImage
+          image={image}
+          width={surfaceWidth}
+          height={surfaceHeight}
+          listening={false}
+        />
+      )}
+      {tilePaths}
+    </Group>
+  );
 };

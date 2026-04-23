@@ -156,9 +156,6 @@ importers:
       react-router-dom:
         specifier: 7.14.1
         version: 7.14.1(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
-      use-image:
-        specifier: 1.1.4
-        version: 1.1.4(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       usehooks-ts:
         specifier: 3.1.1
         version: 3.1.1(react@19.2.3)

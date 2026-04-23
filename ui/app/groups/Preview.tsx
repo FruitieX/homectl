@@ -1,9 +1,9 @@
 import { Stage, Layer } from 'react-konva';
-import useImage from 'use-image';
+import { useImageState } from '@/hooks/useImageState';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { ViewportDevice } from '@/ui/ViewportDevice';
-import { useStoredFloorplan } from '@/hooks/useStoredFloorplan';
+import { useAllFloorplans } from '@/hooks/useStoredFloorplan';
 import {
   FloorplanBackground,
   getFloorplanDevicePositions,
@@ -24,8 +24,36 @@ type Props = {
 };
 
 export const Preview = (props: Props) => {
-  const { grid: floorplanGrid, imageUrl } = useStoredFloorplan();
-  const [floorplanImage] = useImage(imageUrl);
+  const { floorplans } = useAllFloorplans();
+
+  // Pick the floorplan that places the most of this group's devices. Falls
+  // back to the first floorplan if no floorplan has any of these devices
+  // (e.g. brand-new group).
+  const deviceKeys = useMemo(
+    () => new Set(props.devices.map((device) => getDeviceKey(device))),
+    [props.devices],
+  );
+  const selectedFloorplan = useMemo(() => {
+    if (floorplans.length === 0) {
+      return null;
+    }
+
+    let best = floorplans[0];
+    let bestScore = -1;
+    for (const floorplan of floorplans) {
+      const score =
+        floorplan.grid?.devices.filter((device) => deviceKeys.has(device.deviceKey)).length ?? 0;
+      if (score > bestScore) {
+        best = floorplan;
+        bestScore = score;
+      }
+    }
+
+    return best;
+  }, [deviceKeys, floorplans]);
+
+  const floorplanGrid = selectedFloorplan?.grid ?? null;
+  const floorplanImage = useImageState(selectedFloorplan?.imageUrl);
 
   const metrics = useMemo(
     () => getFloorplanRenderMetrics(floorplanGrid, floorplanImage),

@@ -5,7 +5,7 @@ import {
   useFloorplans,
 } from '@/hooks/useConfig';
 import { Stage, Layer } from 'react-konva';
-import useImage from 'use-image';
+import { useImageState } from '@/hooks/useImageState';
 import { Device } from '@/bindings/Device';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useResizeObserver } from 'usehooks-ts';
@@ -37,7 +37,7 @@ export const Viewport = () => {
   const { data: floorplans } = useFloorplans();
   const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(null);
   const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(selectedFloorplanId ?? undefined);
-  const [floorplanImage] = useImage(imageUrl);
+  const floorplanImage = useImageState(imageUrl);
 
   const allDevices: Device[] = Object.values(excludeUndefined(state?.devices));
   const controllableDevices = useMemo(

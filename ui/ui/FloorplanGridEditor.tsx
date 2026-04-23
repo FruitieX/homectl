@@ -5,8 +5,15 @@ import {
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
 } from '@/ui/FloorplanBackground';
-import { useCallback, useState, useRef, useEffect, useMemo } from 'react';
-import useImage from 'use-image';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useImageState } from '@/hooks/useImageState';
 
 export type TileType = 'floor' | 'wall' | 'door' | 'window';
 
@@ -71,9 +78,6 @@ const tileLabels: Record<TileType, string> = {
   door: 'Door',
   window: 'Window',
 };
-
-const transparentImageDataUrl =
-  'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
 
 const defaultFloorplanDeviceScale = 1;
 const minFloorplanDeviceScale = 0.5;
@@ -629,8 +633,7 @@ export function FloorplanGridEditor({
   const undoStackRef = useRef<FloorplanGrid[]>([]);
   const activeOperationRef = useRef<ActiveOperation | null>(null);
   const lineAnchorRef = useRef<PaintLineAnchor | null>(null);
-  const [backgroundImage] = useImage(backgroundImageUrl ?? transparentImageDataUrl);
-  const loadedBackgroundImage = backgroundImageUrl ? backgroundImage : undefined;
+  const backgroundImage = useImageState(backgroundImageUrl);
 
   useEffect(() => {
     gridRef.current = grid;
@@ -692,8 +695,8 @@ export function FloorplanGridEditor({
     }
   }, [height, updateLineAnchor, width]);
   const renderMetrics = useMemo(
-    () => getFloorplanRenderMetrics(grid, loadedBackgroundImage),
-    [grid, loadedBackgroundImage],
+    () => getFloorplanRenderMetrics(grid, backgroundImage),
+    [grid, backgroundImage],
   );
   const canvasWidth = Math.round(renderMetrics.width);
   const canvasHeight = Math.round(renderMetrics.height);
@@ -838,10 +841,10 @@ export function FloorplanGridEditor({
     // Clear canvas
     ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
-    const overlayMode = Boolean(loadedBackgroundImage);
+    const overlayMode = Boolean(backgroundImage);
 
-    if (loadedBackgroundImage && overlayMode) {
-      ctx.drawImage(loadedBackgroundImage, 0, 0, canvasWidth, canvasHeight);
+    if (backgroundImage) {
+      ctx.drawImage(backgroundImage, 0, 0, canvasWidth, canvasHeight);
     }
 
     const shouldDrawTiles = !overlayMode || showGrid;
@@ -998,7 +1001,7 @@ export function FloorplanGridEditor({
     groups,
     columnBounds,
     rowBounds,
-    loadedBackgroundImage,
+    backgroundImage,
     devicePositions,
     selectedDevice,
     draggingDevice,
@@ -1011,7 +1014,13 @@ export function FloorplanGridEditor({
     deviceScale,
   ]);
 
-  useEffect(() => {
+  // Use a layout effect so the canvas is repainted before the browser
+  // paints, preventing a flash of empty canvas on Firefox. React's commit
+  // phase sets the `width`/`height` attributes on the canvas (which clears
+  // the bitmap); drawing in useEffect happens after paint, so Firefox shows
+  // a blank frame first. useLayoutEffect fires synchronously after DOM
+  // mutations but before paint, eliminating the flash.
+  useLayoutEffect(() => {
     drawGrid();
   }, [drawGrid]);
 

@@ -52,12 +52,14 @@ export default function FloorplanPage() {
   } = useFloorplans();
   const { data: groups } = useGroups();
   const [loading, setLoading] = useState(false);
+  const [floorplanLoading, setFloorplanLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [grid, setGrid] = useState<FloorplanGrid>(() => createEmptyGrid());
   const [hasChanges, setHasChanges] = useState(false);
   const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | undefined>();
   const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(null);
+  const [loadedFloorplanId, setLoadedFloorplanId] = useState<string | null>(null);
   const [selectedFloorplanName, setSelectedFloorplanName] = useState('');
   const [showCreateFloorplan, setShowCreateFloorplan] = useState(false);
   const [newFloorplanId, setNewFloorplanId] = useState('');
@@ -98,15 +100,25 @@ export default function FloorplanPage() {
       groupIds: groupIdsByDeviceKey[key] ?? [],
     }));
 
+  const selectFloorplan = useCallback((floorplanId: string | null) => {
+    setSelectedFloorplanId(floorplanId);
+    setLoadedFloorplanId(null);
+    setFloorplanLoading(floorplanId !== null);
+  }, []);
+
   useEffect(() => {
     if (floorplans.length === 0) {
-      setSelectedFloorplanId(null);
-      setSelectedFloorplanName('');
+      if (selectedFloorplanId !== null) {
+        selectFloorplan(null);
+      }
+      if (selectedFloorplanName !== '') {
+        setSelectedFloorplanName('');
+      }
       return;
     }
 
     if (!selectedFloorplanId || !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)) {
-      setSelectedFloorplanId(floorplans[0].id);
+      selectFloorplan(floorplans[0].id);
       return;
     }
 
@@ -114,62 +126,77 @@ export default function FloorplanPage() {
     if (selectedFloorplan) {
       setSelectedFloorplanName(selectedFloorplan.name);
     }
-  }, [floorplans, selectedFloorplanId]);
+  }, [floorplans, selectFloorplan, selectedFloorplanId, selectedFloorplanName]);
 
   // Load saved grid and image for the selected floorplan
   useEffect(() => {
     if (!selectedFloorplanId) {
+      setFloorplanLoading(false);
+      setLoadedFloorplanId(null);
       setGrid(createEmptyGrid());
       setBackgroundImageUrl(undefined);
       setHasChanges(false);
       return;
     }
 
+    let cancelled = false;
+
     const loadData = async () => {
       const floorplanQuery = `?id=${encodeURIComponent(selectedFloorplanId)}`;
+      const imageUrl = `${apiEndpoint}/api/v1/config/floorplan/image${floorplanQuery}`;
+
+      setFloorplanLoading(true);
+
+      let nextGrid = createEmptyGrid();
+      let nextBackgroundImageUrl: string | undefined;
 
       try {
-        // Load grid
         const gridResponse = await fetch(`${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`);
         const gridResult = await gridResponse.json();
         if (gridResult.success && gridResult.data) {
           const loadedGrid = deserializeGrid(gridResult.data);
           if (loadedGrid) {
-            setGrid(loadedGrid);
-          } else {
-            setGrid(createEmptyGrid());
+            nextGrid = loadedGrid;
           }
-        } else {
-          setGrid(createEmptyGrid());
         }
       } catch {
-        // Grid not saved yet, use default
-        setGrid(createEmptyGrid());
+        nextGrid = createEmptyGrid();
       }
 
-      // Check for uploaded image
       try {
-        const imageUrl = `${apiEndpoint}/api/v1/config/floorplan/image${floorplanQuery}`;
         const imageResponse = await fetch(imageUrl, { method: 'HEAD' });
         if (imageResponse.ok) {
-          setBackgroundImageUrl(`${imageUrl}&t=${Date.now()}`);
-        } else {
-          setBackgroundImageUrl(undefined);
+          nextBackgroundImageUrl = `${imageUrl}&t=${Date.now()}`;
         }
       } catch {
-        // No image uploaded
-        setBackgroundImageUrl(undefined);
+        nextBackgroundImageUrl = undefined;
       }
 
-      setHasChanges(false);
+      if (!cancelled) {
+        setGrid(nextGrid);
+        setBackgroundImageUrl(nextBackgroundImageUrl);
+        setHasChanges(false);
+        setLoadedFloorplanId(selectedFloorplanId);
+        setFloorplanLoading(false);
+      }
     };
+
     loadData();
+
+    return () => {
+      cancelled = true;
+    };
   }, [apiEndpoint, selectedFloorplanId]);
 
   const handleGridChange = useCallback((newGrid: FloorplanGrid) => {
     setGrid(newGrid);
     setHasChanges(true);
   }, []);
+
+  const isSelectedFloorplanReady =
+    selectedFloorplanId !== null &&
+    loadedFloorplanId === selectedFloorplanId &&
+    !floorplanLoading;
 
   const handleSave = async () => {
     if (!selectedFloorplanId) {
@@ -317,7 +344,7 @@ export default function FloorplanPage() {
         id: newFloorplanId.trim(),
         name: newFloorplanName.trim(),
       });
-      setSelectedFloorplanId(newFloorplanId.trim());
+      selectFloorplan(newFloorplanId.trim());
       setShowCreateFloorplan(false);
       setNewFloorplanId('');
       setNewFloorplanName('');
@@ -363,7 +390,7 @@ export default function FloorplanPage() {
       setLoading(true);
       setError(null);
       await removeFloorplan(selectedFloorplanId);
-      setSelectedFloorplanId(null);
+      selectFloorplan(null);
       setSuccess('Floorplan deleted successfully');
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to delete floorplan');
@@ -380,13 +407,17 @@ export default function FloorplanPage() {
           <button
             className={`btn btn-primary ${hasChanges ? 'btn-accent' : ''}`}
             onClick={handleSave}
-            disabled={loading || !selectedFloorplanId}
+            disabled={loading || floorplanLoading || !selectedFloorplanId}
           >
             {loading ? <span className="loading loading-spinner loading-sm"></span> : null}
             Save Floorplan
           </button>
           <div className="dropdown dropdown-end">
-            <div tabIndex={0} role="button" className="btn btn-ghost">
+            <div
+              tabIndex={0}
+              role="button"
+              className={`btn btn-ghost ${loading || floorplanLoading || !selectedFloorplanId ? 'btn-disabled' : ''}`}
+            >
               More
             </div>
             <ul
@@ -394,7 +425,9 @@ export default function FloorplanPage() {
               className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48"
             >
               <li>
-                <button onClick={handleExport}>Export JSON</button>
+                <button onClick={handleExport} disabled={loading || floorplanLoading || !selectedFloorplanId}>
+                  Export JSON
+                </button>
               </li>
               <li>
                 <label className="cursor-pointer">
@@ -403,6 +436,7 @@ export default function FloorplanPage() {
                     type="file"
                     accept=".json"
                     className="hidden"
+                    disabled={loading || floorplanLoading || !selectedFloorplanId}
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) handleImport(file);
@@ -411,7 +445,10 @@ export default function FloorplanPage() {
                 </label>
               </li>
               <li>
-                <button onClick={() => setGrid(createEmptyGrid())}>
+                <button
+                  onClick={() => setGrid(createEmptyGrid())}
+                  disabled={loading || floorplanLoading || !selectedFloorplanId}
+                >
                   Reset to Empty
                 </button>
               </li>
@@ -446,7 +483,7 @@ export default function FloorplanPage() {
               <select
                 className="select select-bordered"
                 value={selectedFloorplanId ?? ''}
-                onChange={(e) => setSelectedFloorplanId(e.target.value || null)}
+                onChange={(e) => selectFloorplan(e.target.value || null)}
               >
                 {floorplans.map((floorplan) => (
                   <option key={floorplan.id} value={floorplan.id}>
@@ -497,14 +534,27 @@ export default function FloorplanPage() {
       {/* Grid Editor */}
       <div className="card bg-base-200 shadow-xl">
         <div className="card-body">
-          <FloorplanGridEditor
-            key={selectedFloorplanId ?? 'default-floorplan'}
-            grid={grid}
-            onChange={handleGridChange}
-            availableDevices={availableDevices}
-            availableGroups={availableGroups}
-            backgroundImageUrl={backgroundImageUrl}
-          />
+          {!selectedFloorplanId ? (
+            <div className="flex min-h-96 items-center justify-center rounded-lg border border-dashed border-base-300 bg-base-100/40 p-8 text-center text-sm opacity-70">
+              Create or select a floorplan to start editing.
+            </div>
+          ) : !isSelectedFloorplanReady ? (
+            <div className="flex min-h-96 items-center justify-center rounded-lg border border-base-300 bg-base-100/40 p-8">
+              <div className="flex items-center gap-3 text-sm opacity-70">
+                <span className="loading loading-spinner loading-md"></span>
+                Loading floorplan...
+              </div>
+            </div>
+          ) : (
+            <FloorplanGridEditor
+              key={selectedFloorplanId}
+              grid={grid}
+              onChange={handleGridChange}
+              availableDevices={availableDevices}
+              availableGroups={availableGroups}
+              backgroundImageUrl={backgroundImageUrl}
+            />
+          )}
         </div>
       </div>
 
@@ -535,12 +585,12 @@ export default function FloorplanPage() {
                 const file = e.target.files?.[0];
                 if (file) handleImageUpload(file);
               }}
-              disabled={loading}
+              disabled={loading || floorplanLoading || !selectedFloorplanId}
             />
             {backgroundImageUrl && (
               <button
                 className="btn btn-outline btn-error"
-                disabled={loading}
+                disabled={loading || floorplanLoading || !selectedFloorplanId}
                 onClick={handleImageDelete}
               >
                 Remove Image
