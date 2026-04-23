@@ -1,33 +1,61 @@
-use super::with_state;
-use crate::core::state::AppState;
+use super::with_snapshot;
+use crate::core::snapshot::SnapshotHandle;
+use crate::core::state::send_state_ws_from_snapshot;
+use crate::core::websockets::WebSockets;
+use crate::types::event::TxEventChannel;
 use crate::types::websockets::WebSocketRequest;
 use futures::SinkExt;
 use futures_util::StreamExt;
-use std::sync::{
-    atomic::{AtomicUsize, Ordering},
-    Arc,
-};
-use tokio::sync::{mpsc, RwLock};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use tokio::sync::mpsc;
 use warp::{ws::WebSocket, Filter};
 
 /// Our global unique user id counter.
 static NEXT_USER_ID: AtomicUsize = AtomicUsize::new(1);
 
+fn with_ws(
+    ws: WebSockets,
+) -> impl Filter<Extract = (WebSockets,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || ws.clone())
+}
+
+fn with_event_tx(
+    event_tx: TxEventChannel,
+) -> impl Filter<Extract = (TxEventChannel,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || event_tx.clone())
+}
+
 pub fn ws(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    ws_handle: WebSockets,
+    event_tx: TxEventChannel,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("ws")
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
-        .and(with_state(app_state))
-        .map(|ws: warp::ws::Ws, app_state: Arc<RwLock<AppState>>| {
-            // This will call our function if the handshake succeeds.
-            ws.on_upgrade(move |socket| user_connected(socket, app_state))
-        })
+        .and(with_snapshot(snapshot))
+        .and(with_ws(ws_handle))
+        .and(with_event_tx(event_tx))
+        .map(
+            |ws: warp::ws::Ws,
+             snapshot: SnapshotHandle,
+             ws_handle: WebSockets,
+             event_tx: TxEventChannel| {
+                // This will call our function if the handshake succeeds.
+                ws.on_upgrade(move |socket| {
+                    user_connected(socket, snapshot, ws_handle, event_tx)
+                })
+            },
+        )
 }
 
 // https://github.com/seanmonstar/warp/blob/master/examples/websockets_chat.rs
-async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
+async fn user_connected(
+    ws: WebSocket,
+    snapshot: SnapshotHandle,
+    ws_handle: WebSockets,
+    event_tx: TxEventChannel,
+) {
     // Use a counter to assign a new unique ID for this user.
     let my_id = NEXT_USER_ID.fetch_add(1, Ordering::Relaxed);
 
@@ -50,15 +78,13 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
         }
     });
 
-    let app_state = app_state.read().await.clone();
-
     // Save the sender in our list of connected users.
-    app_state.ws.user_connected(my_id, tx).await;
+    ws_handle.user_connected(my_id, tx).await;
 
     // Send snapshot of current state
-    app_state.send_state_ws(Some(my_id)).await;
+    send_state_ws_from_snapshot(&snapshot, &ws_handle, Some(my_id)).await;
 
-    // Let AppState handle incoming user messages
+    // Forward incoming user messages onto the event channel.
     while let Some(result) = user_ws_rx.next().await {
         let msg = match result {
             Ok(msg) => msg,
@@ -75,7 +101,7 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
 
             match msg {
                 Ok(WebSocketRequest::EventMessage(event)) => {
-                    app_state.event_tx.send(event);
+                    event_tx.send(event);
                 }
                 Err(e) => warn!("Error while deserializing websocket message: {e}"),
             }
@@ -84,5 +110,5 @@ async fn user_connected(ws: WebSocket, app_state: Arc<RwLock<AppState>>) {
 
     // user_ws_rx stream will keep processing as long as the user stays
     // connected. Once they disconnect, then...
-    app_state.ws.user_disconnected(my_id).await;
+    ws_handle.user_disconnected(my_id).await;
 }

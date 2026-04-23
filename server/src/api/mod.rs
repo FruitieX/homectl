@@ -1,7 +1,9 @@
-use std::{env, path::PathBuf, sync::Arc};
+use std::{env, path::PathBuf};
 
-use crate::core::state::AppState;
+use crate::core::snapshot::SnapshotHandle;
+use crate::core::state::StateHandle;
 use crate::db::config_queries::WidgetSettingRow;
+use crate::types::event::TxEventChannel;
 use serde::Serialize;
 
 mod actions;
@@ -21,7 +23,6 @@ use widgets::{
 };
 
 use color_eyre::Result;
-use tokio::sync::RwLock;
 use warp::{filters::BoxedFilter, path::FullPath, reply::Response, Filter, Rejection, Reply};
 
 use self::ws::ws;
@@ -92,15 +93,28 @@ impl UiConfigResponse {
     }
 }
 
-pub fn with_state(
-    app_state: &Arc<RwLock<AppState>>,
-) -> impl Filter<Extract = (Arc<RwLock<AppState>>,), Error = std::convert::Infallible> + Clone {
-    let app_state = app_state.clone();
-    warp::any().map(move || app_state.clone())
+pub fn with_snapshot(
+    snapshot: &SnapshotHandle,
+) -> impl Filter<Extract = (SnapshotHandle,), Error = std::convert::Infallible> + Clone {
+    let snapshot = snapshot.clone();
+    warp::any().map(move || snapshot.clone())
+}
+
+pub fn with_handle(
+    handle: &StateHandle,
+) -> impl Filter<Extract = (StateHandle,), Error = std::convert::Infallible> + Clone {
+    let handle = handle.clone();
+    warp::any().map(move || handle.clone())
 }
 
 // Example of warp usage: https://github.com/seanmonstar/warp/blob/master/examples/todos.rs
-pub fn init_api(app_state: &Arc<RwLock<AppState>>, port: u16) -> Result<()> {
+pub fn init_api(
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
+    ws_handle: crate::core::websockets::WebSockets,
+    event_tx: TxEventChannel,
+    port: u16,
+) -> Result<()> {
     let cors = warp::cors()
         .allow_any_origin()
         .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -109,17 +123,19 @@ pub fn init_api(app_state: &Arc<RwLock<AppState>>, port: u16) -> Result<()> {
     let api = warp::path("api")
         .and(warp::path("v1"))
         .and(
-            devices(app_state)
-                .or(actions(app_state))
-                .or(config(app_state)),
+            devices(&snapshot, &handle)
+                .or(actions(event_tx.clone()))
+                .or(config(&snapshot, &handle)),
         )
         .map(Reply::into_response)
         .boxed();
 
-    let ws = ws(app_state).map(Reply::into_response).boxed();
-    let health = health(app_state).map(Reply::into_response).boxed();
-    let ui_config = ui_config_route(app_state);
-    let widgets = widgets::widgets(app_state);
+    let ws = ws(&snapshot, ws_handle, event_tx)
+        .map(Reply::into_response)
+        .boxed();
+    let health = health(&snapshot).map(Reply::into_response).boxed();
+    let ui_config = ui_config_route(snapshot.clone());
+    let widgets = widgets::widgets(snapshot);
 
     let mut routes = ws
         .or(api)
@@ -160,18 +176,15 @@ fn default_ws_endpoint(host: Option<&str>, forwarded_proto: Option<&str>) -> Str
     format!("{ws_scheme}://{host}/ws")
 }
 
-fn ui_config_route(app_state: &Arc<RwLock<AppState>>) -> BoxedFilter<(Response,)> {
+fn ui_config_route(snapshot: SnapshotHandle) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "config")
         .and(warp::get())
         .and(warp::header::optional::<String>("host"))
         .and(warp::header::optional::<String>("x-forwarded-proto"))
-        .and(with_state(app_state))
-        .and_then(
-            |host: Option<String>,
-             forwarded_proto: Option<String>,
-             app_state: Arc<RwLock<AppState>>| async move {
-                let state = app_state.read().await;
-                let widget_settings = state.get_runtime_config().widget_settings.clone();
+        .and_then(move |host: Option<String>, forwarded_proto: Option<String>| {
+            let snapshot = snapshot.clone();
+            async move {
+                let widget_settings = snapshot.load().runtime_config.widget_settings.clone();
 
                 Ok::<_, warp::Rejection>(
                     warp::reply::json(&UiConfigResponse::from_request(
@@ -181,8 +194,8 @@ fn ui_config_route(app_state: &Arc<RwLock<AppState>>) -> BoxedFilter<(Response,)
                     ))
                     .into_response(),
                 )
-            },
-        )
+            }
+        })
         .boxed()
 }
 

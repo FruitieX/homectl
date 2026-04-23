@@ -11,12 +11,11 @@ mod temp_sensors;
 mod train_schedule;
 mod weather;
 
-use std::{env, sync::Arc};
+use std::env;
 
-use crate::core::state::AppState;
+use crate::core::snapshot::SnapshotHandle;
 use crate::db::config_queries::WidgetSettingRow;
 use once_cell::sync::Lazy;
-use tokio::sync::RwLock;
 use warp::{filters::BoxedFilter, reply::Response, Filter, Reply};
 
 pub(crate) const WEATHER_SETTING_KEY: &str = "weather";
@@ -60,18 +59,17 @@ pub(crate) fn widget_setting_string_or_env(
         .or_else(|| env::var(env_name).ok().filter(|value| !value.is_empty()))
 }
 
-pub fn widgets(app_state: &Arc<RwLock<AppState>>) -> BoxedFilter<(Response,)> {
-    let app_state = app_state.clone();
+pub fn widgets(snapshot: SnapshotHandle) -> BoxedFilter<(Response,)> {
     let http = HTTP.clone();
 
-    weather::route(app_state.clone(), http.clone())
-        .or(calendar::route(app_state.clone(), http.clone()))
+    weather::route(snapshot.clone(), http.clone())
+        .or(calendar::route(snapshot.clone(), http.clone()))
         .unify()
-        .or(train_schedule::route(app_state.clone(), http.clone()))
+        .or(train_schedule::route(snapshot.clone(), http.clone()))
         .unify()
-        .or(spot_prices::route(app_state.clone(), http.clone()))
+        .or(spot_prices::route(snapshot.clone(), http.clone()))
         .unify()
-        .or(temp_sensors::route(app_state, http))
+        .or(temp_sensors::route(snapshot, http))
         .unify()
         .map(Reply::into_response)
         .boxed()

@@ -509,8 +509,15 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
 mod tests {
     use super::{handle_event, DeferredEventWork};
     use crate::core::{
-        devices::Devices, groups::Groups, integrations::Integrations, routines::Routines,
-        scenes::Scenes, state::AppState, ui::Ui, websockets::WebSockets,
+        devices::Devices,
+        groups::Groups,
+        integrations::Integrations,
+        routines::Routines,
+        scenes::Scenes,
+        snapshot::{new_snapshot_handle, RuntimeSnapshot},
+        state::AppState,
+        ui::Ui,
+        websockets::WebSockets,
     };
     use crate::db::config_queries::{ConfigExport, CoreConfigRow};
     use crate::types::{
@@ -522,6 +529,7 @@ mod tests {
     };
     use crate::utils::cli::Cli;
     use std::sync::{atomic::AtomicBool, Arc};
+    use tokio::sync::Mutex;
 
     fn test_cli() -> Cli {
         Cli {
@@ -559,18 +567,31 @@ mod tests {
     fn test_state() -> (AppState, crate::types::event::RxEventChannel) {
         let cli = test_cli();
         let (event_tx, event_rx) = mk_event_channel();
+        let runtime_config = empty_runtime_config();
+        let devices = Devices::new(event_tx.clone(), &cli);
+        let snapshot = new_snapshot_handle(RuntimeSnapshot {
+            runtime_config: Arc::new(runtime_config.clone()),
+            devices: Arc::new(devices.get_state().clone()),
+            flattened_groups: Arc::new(Default::default()),
+            flattened_scenes: Arc::new(Default::default()),
+            routine_statuses: Arc::new(Default::default()),
+            ui_state: Arc::new(Default::default()),
+            warming_up: false,
+        });
         let state = AppState {
             warming_up: false,
-            runtime_config: empty_runtime_config(),
+            runtime_config,
             integrations: Integrations::new(event_tx.clone(), &cli),
             groups: Groups::new(Default::default()),
             scenes: Scenes::new(Default::default()),
-            devices: Devices::new(event_tx.clone(), &cli),
+            devices,
             rules: Routines::new(Default::default(), event_tx.clone()),
             event_tx,
             ws: WebSockets::default(),
             ui: Ui::new(),
             ws_broadcast_pending: Arc::new(AtomicBool::new(false)),
+            runtime_apply_lock: Arc::new(Mutex::new(())),
+            snapshot,
         };
 
         (state, event_rx)

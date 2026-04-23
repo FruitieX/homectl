@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
-use crate::core::state::AppState;
+use crate::core::snapshot::SnapshotHandle;
 use serde::Serialize;
-use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter};
 
-use super::with_state;
+use super::with_snapshot;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -14,9 +11,9 @@ struct HealthResponse {
 }
 
 pub fn health(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("health").and(live().or(ready(app_state)))
+    warp::path("health").and(live().or(ready(snapshot)))
 }
 
 fn live() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -31,21 +28,19 @@ fn live() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection>
 }
 
 fn ready(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("ready")
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(ready_impl)
 }
 
 async fn ready_impl(
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl warp::Reply, std::convert::Infallible> {
-    let state = app_state.read().await;
-
     // Not ready while warming up
-    if state.warming_up {
+    if snapshot.load().warming_up {
         let body = HealthResponse {
             status: "warming_up",
             details: None,

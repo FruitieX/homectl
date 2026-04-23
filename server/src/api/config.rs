@@ -9,10 +9,9 @@
 //! - Migration: POST /api/v1/config/migrate/preview, /api/v1/config/migrate/apply
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::sync::Arc;
 
 use crate::core::logs::recent_logs;
-use crate::core::state::AppState;
+use crate::core::state::StateHandle;
 use crate::db::{
     self,
     actions::{db_delete_device, db_update_device},
@@ -38,8 +37,9 @@ use crate::types::{
 use bytes::Buf;
 use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 use warp::{http::StatusCode, Filter, Reply};
+
+use crate::core::snapshot::SnapshotHandle;
 
 use super::{
     widgets::{
@@ -47,7 +47,7 @@ use super::{
         INFLUXDB_SETTING_KEY, TOKEN_FIELD, TRAIN_SCHEDULE_SETTING_KEY, URL_FIELD,
         WEATHER_SETTING_KEY,
     },
-    with_state,
+    with_handle, with_snapshot,
 };
 
 // ============================================================================
@@ -186,6 +186,71 @@ impl<T: Serialize> ApiResponse<T> {
             StatusCode::CREATED,
         )
     }
+}
+
+async fn apply_runtime_integrations_change<F>(
+    handle: &StateHandle,
+    mutate_config: F,
+) -> color_eyre::Result<bool>
+where
+    F: FnOnce(&mut ConfigExport) -> bool,
+{
+    let (apply_lock, mut runtime_config, mut integrations) = handle
+        .mutate(|state| {
+            Box::pin(async move {
+                (
+                    state.runtime_apply_lock.clone(),
+                    state.get_runtime_config().clone(),
+                    state.integrations.clone(),
+                )
+            })
+        })
+        .await?;
+
+    let _apply_guard = apply_lock.lock().await;
+
+    if !mutate_config(&mut runtime_config) {
+        return Ok(false);
+    }
+
+    let removed_ids = integrations
+        .reload_config_rows(&runtime_config.integrations)
+        .await?;
+
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.commit_runtime_integrations_update(runtime_config, integrations, removed_ids);
+            })
+        })
+        .await;
+    Ok(true)
+}
+
+async fn apply_runtime_config_snapshot(
+    handle: &StateHandle,
+    runtime_config: ConfigExport,
+) -> color_eyre::Result<()> {
+    let (apply_lock, mut integrations) = handle
+        .mutate(|state| {
+            Box::pin(async move { (state.runtime_apply_lock.clone(), state.integrations.clone()) })
+        })
+        .await?;
+
+    let _apply_guard = apply_lock.lock().await;
+
+    let removed_ids = integrations
+        .reload_config_rows(&runtime_config.integrations)
+        .await?;
+
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.commit_runtime_config_update(runtime_config, integrations, removed_ids);
+            })
+        })
+        .await;
+    Ok(())
 }
 
 fn error_response(msg: &str, status: StatusCode) -> warp::reply::WithStatus<warp::reply::Json> {
@@ -1017,10 +1082,11 @@ fn rewrite_force_trigger_routine_references(
     }
 }
 
-fn group_response_row(state: &AppState, group: GroupRow) -> GroupResponseRow {
-    let device_keys = state
-        .groups
-        .get_flattened_groups()
+fn group_response_row(
+    flattened_groups: &crate::types::group::FlattenedGroupsConfig,
+    group: GroupRow,
+) -> GroupResponseRow {
+    let device_keys = flattened_groups
         .0
         .iter()
         .find_map(|(group_id, flattened_group)| {
@@ -1095,24 +1161,25 @@ fn get_runtime_floorplan(
 // ============================================================================
 
 pub fn config(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("config").and(
-        core_routes(app_state)
-            .or(runtime_status_routes(app_state))
-            .or(logs_routes(app_state))
-            .or(device_display_name_routes(app_state))
-            .or(device_sensor_config_routes(app_state))
-            .or(device_config_routes(app_state))
-            .or(integrations_routes(app_state))
-            .or(groups_routes(app_state))
-            .or(scenes_routes(app_state))
-            .or(routines_routes(app_state))
-            .or(floorplans_routes(app_state))
-            .or(floorplan_routes(app_state))
-            .or(dashboard_routes(app_state))
-            .or(export_import_routes(app_state))
-            .or(migrate_routes(app_state)),
+        core_routes(snapshot, handle)
+            .or(runtime_status_routes())
+            .or(logs_routes())
+            .or(device_display_name_routes(snapshot, handle))
+            .or(device_sensor_config_routes(snapshot, handle))
+            .or(device_config_routes(handle))
+            .or(integrations_routes(snapshot, handle))
+            .or(groups_routes(snapshot, handle))
+            .or(scenes_routes(snapshot, handle))
+            .or(routines_routes(snapshot, handle))
+            .or(floorplans_routes(snapshot, handle))
+            .or(floorplan_routes(snapshot, handle))
+            .or(dashboard_routes(snapshot, handle))
+            .or(export_import_routes(snapshot, handle))
+            .or(migrate_routes(snapshot, handle)),
     )
 }
 
@@ -1120,60 +1187,63 @@ pub fn config(
 // Core Config
 // ============================================================================
 
-fn logs_routes(
-    app_state: &Arc<RwLock<AppState>>,
-) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+fn logs_routes() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("logs")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
         .and_then(list_logs)
 }
 
-async fn list_logs(_app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
+async fn list_logs() -> Result<impl Reply, warp::Rejection> {
     Ok(ApiResponse::success(recent_logs()))
 }
 
 fn core_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let get = warp::path("core")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_core_config);
 
     let update = warp::path("core")
         .and(warp::path::end())
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(update_core_config);
 
     get.or(update)
 }
 
-async fn get_core_config(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+async fn get_core_config(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
     Ok(ApiResponse::success(CoreConfigPayload::from_runtime(
-        state.get_runtime_config(),
+        &snap.runtime_config,
     )))
 }
 
 async fn update_core_config(
     config: CoreConfigPayload,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let core_config = config.core_config();
     let widget_settings = config.widget_settings();
 
-    {
-        let mut state = app_state.write().await;
-        state.update_core_config(core_config.clone());
-        for setting in &widget_settings {
-            state.upsert_widget_setting(setting.clone());
-        }
-    }
+    let core_for_state = core_config.clone();
+    let widgets_for_state = widget_settings.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.update_core_config(core_for_state);
+                for setting in widgets_for_state {
+                    state.upsert_widget_setting(setting);
+                }
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_update_core_config(&core_config).await {
         warn!("Failed to persist core config: {e}");
@@ -1192,18 +1262,14 @@ async fn update_core_config(
 }
 
 fn runtime_status_routes(
-    app_state: &Arc<RwLock<AppState>>,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("runtime-status")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
         .and_then(get_runtime_status)
 }
 
-async fn get_runtime_status(
-    _app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
+async fn get_runtime_status() -> Result<impl Reply, warp::Rejection> {
     let persistence_available = db::get_db_connection().is_ok();
     Ok(ApiResponse::success(RuntimeStatusResponse {
         persistence_available,
@@ -1212,48 +1278,53 @@ async fn get_runtime_status(
 }
 
 fn device_display_name_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("device-display-names")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_device_display_names);
 
     let upsert = warp::path!("device-display-names" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upsert_device_display_name);
 
     let delete = warp::path!("device-display-names" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_device_display_name);
 
     list.or(upsert).or(delete)
 }
 
 async fn list_device_display_names(
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state.get_runtime_config().device_display_overrides.clone(),
+        snap.runtime_config.device_display_overrides.clone(),
     ))
 }
 
 async fn upsert_device_display_name(
     device_key: String,
     mut row: DeviceDisplayNameRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     row.device_key = decode_path_key(device_key);
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_device_display_override(row.clone());
-    }
+    let row_for_state = row.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_device_display_override(row_for_state);
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_device_display_override(&row).await {
         warn!("Failed to persist device display name override: {e}");
@@ -1264,13 +1335,16 @@ async fn upsert_device_display_name(
 
 async fn delete_device_display_name(
     device_key: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let device_key = decode_path_key(device_key);
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_device_display_override(&device_key)
-    };
+    let key_for_state = device_key.clone();
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move { state.delete_device_display_override(&key_for_state) })
+        })
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Device display name"));
@@ -1284,40 +1358,41 @@ async fn delete_device_display_name(
 }
 
 fn device_sensor_config_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("device-sensor-configs")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_device_sensor_configs);
 
     let upsert = warp::path!("device-sensor-configs" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upsert_device_sensor_config);
 
     let delete = warp::path!("device-sensor-configs" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_device_sensor_config);
 
     list.or(upsert).or(delete)
 }
 
 fn device_config_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let replace = warp::path!("devices" / String / "replace")
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(replace_device_config);
 
     let delete = warp::path!("devices" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_config_device);
 
     replace.or(delete)
@@ -1326,7 +1401,7 @@ fn device_config_routes(
 async fn replace_device_config(
     device_key: String,
     request: ReplaceDeviceRequest,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let source_key = decode_path_key(device_key);
     let replacement_key = request.replacement_device_key.trim().to_string();
@@ -1351,58 +1426,85 @@ async fn replace_device_config(
         ));
     };
 
-    let (rewrite, response) = {
-        let mut state = app_state.write().await;
-        let Some(replacement_device) = state
-            .devices
-            .get_state()
-            .0
-            .values()
-            .find(|device| replacement.matches_device(device))
-            .cloned()
-        else {
+    enum ReplaceOutcome {
+        Ok(DeviceConfigRewriteResult, DeviceConfigMutationResponse),
+        ReplacementMissing,
+        SourceMissing,
+    }
+
+    let source_for_state = source.clone();
+    let replacement_for_state = replacement.clone();
+    let outcome = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let Some(replacement_device) = state
+                    .devices
+                    .get_state()
+                    .0
+                    .values()
+                    .find(|device| replacement_for_state.matches_device(device))
+                    .cloned()
+                else {
+                    return ReplaceOutcome::ReplacementMissing;
+                };
+
+                if state
+                    .devices
+                    .get_state()
+                    .0
+                    .values()
+                    .all(|device| !source_for_state.matches_device(device))
+                {
+                    return ReplaceOutcome::SourceMissing;
+                }
+
+                let mut runtime_config = state.get_runtime_config().clone();
+                let rewrite = rewrite_device_config_references(
+                    &mut runtime_config,
+                    &source_for_state,
+                    Some(&replacement_for_state),
+                    Some(&replacement_device),
+                );
+
+                state.runtime_config = runtime_config;
+                state
+                    .devices
+                    .remove_device(&source_for_state.to_device_key());
+                state.apply_runtime_groups();
+                state.apply_runtime_scenes();
+                state.apply_runtime_routines();
+
+                let response = DeviceConfigMutationResponse {
+                    deleted_device_key: source_for_state.device_key.clone(),
+                    replacement_device_key: Some(replacement_for_state.device_key.clone()),
+                    updated_groups: rewrite.changed_groups.len(),
+                    updated_scenes: rewrite.changed_scenes.len(),
+                    updated_routines: rewrite.changed_routines.len(),
+                    display_override_changed: rewrite.display_override_changed,
+                    sensor_config_changed: rewrite.sensor_config_changed,
+                    position_changed: rewrite.position_changed,
+                };
+
+                ReplaceOutcome::Ok(rewrite, response)
+            })
+        })
+        .await;
+
+    let (rewrite, response) = match outcome {
+        Ok(ReplaceOutcome::Ok(r, resp)) => (r, resp),
+        Ok(ReplaceOutcome::ReplacementMissing) => {
             return Ok(error_response(
                 "Replacement device not found in runtime state.",
                 StatusCode::BAD_REQUEST,
             ));
-        };
-
-        if state
-            .devices
-            .get_state()
-            .0
-            .values()
-            .all(|device| !source.matches_device(device))
-        {
-            return Ok(not_found("Device"));
         }
-
-        let mut runtime_config = state.get_runtime_config().clone();
-        let rewrite = rewrite_device_config_references(
-            &mut runtime_config,
-            &source,
-            Some(&replacement),
-            Some(&replacement_device),
-        );
-
-        state.runtime_config = runtime_config;
-        state.devices.remove_device(&source.to_device_key());
-        state.apply_runtime_groups();
-        state.apply_runtime_scenes();
-        state.apply_runtime_routines();
-
-        let response = DeviceConfigMutationResponse {
-            deleted_device_key: source.device_key.clone(),
-            replacement_device_key: Some(replacement.device_key.clone()),
-            updated_groups: rewrite.changed_groups.len(),
-            updated_scenes: rewrite.changed_scenes.len(),
-            updated_routines: rewrite.changed_routines.len(),
-            display_override_changed: rewrite.display_override_changed,
-            sensor_config_changed: rewrite.sensor_config_changed,
-            position_changed: rewrite.position_changed,
-        };
-
-        (rewrite, response)
+        Ok(ReplaceOutcome::SourceMissing) => return Ok(not_found("Device")),
+        Err(_) => {
+            return Ok(error_response(
+                "State actor unavailable",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ));
+        }
     };
 
     persist_device_config_rewrite(&rewrite, &source).await;
@@ -1418,7 +1520,7 @@ async fn replace_device_config(
 
 async fn delete_config_device(
     device_key: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let source_key = decode_path_key(device_key);
     let Some(source) = DeviceConfigTarget::parse(&source_key) else {
@@ -1428,40 +1530,66 @@ async fn delete_config_device(
         ));
     };
 
-    let (rewrite, response) = {
-        let mut state = app_state.write().await;
+    enum DeleteOutcome {
+        Ok(DeviceConfigRewriteResult, DeviceConfigMutationResponse),
+        NotFound,
+    }
 
-        if state
-            .devices
-            .get_state()
-            .0
-            .values()
-            .all(|device| !source.matches_device(device))
-        {
-            return Ok(not_found("Device"));
+    let source_for_state = source.clone();
+    let outcome = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                if state
+                    .devices
+                    .get_state()
+                    .0
+                    .values()
+                    .all(|device| !source_for_state.matches_device(device))
+                {
+                    return DeleteOutcome::NotFound;
+                }
+
+                let mut runtime_config = state.get_runtime_config().clone();
+                let rewrite = rewrite_device_config_references(
+                    &mut runtime_config,
+                    &source_for_state,
+                    None,
+                    None,
+                );
+
+                state.runtime_config = runtime_config;
+                state
+                    .devices
+                    .remove_device(&source_for_state.to_device_key());
+                state.apply_runtime_groups();
+                state.apply_runtime_scenes();
+                state.apply_runtime_routines();
+
+                let response = DeviceConfigMutationResponse {
+                    deleted_device_key: source_for_state.device_key.clone(),
+                    replacement_device_key: None,
+                    updated_groups: rewrite.changed_groups.len(),
+                    updated_scenes: rewrite.changed_scenes.len(),
+                    updated_routines: rewrite.changed_routines.len(),
+                    display_override_changed: rewrite.display_override_changed,
+                    sensor_config_changed: rewrite.sensor_config_changed,
+                    position_changed: rewrite.position_changed,
+                };
+
+                DeleteOutcome::Ok(rewrite, response)
+            })
+        })
+        .await;
+
+    let (rewrite, response) = match outcome {
+        Ok(DeleteOutcome::Ok(r, resp)) => (r, resp),
+        Ok(DeleteOutcome::NotFound) => return Ok(not_found("Device")),
+        Err(_) => {
+            return Ok(error_response(
+                "State actor unavailable",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ));
         }
-
-        let mut runtime_config = state.get_runtime_config().clone();
-        let rewrite = rewrite_device_config_references(&mut runtime_config, &source, None, None);
-
-        state.runtime_config = runtime_config;
-        state.devices.remove_device(&source.to_device_key());
-        state.apply_runtime_groups();
-        state.apply_runtime_scenes();
-        state.apply_runtime_routines();
-
-        let response = DeviceConfigMutationResponse {
-            deleted_device_key: source.device_key.clone(),
-            replacement_device_key: None,
-            updated_groups: rewrite.changed_groups.len(),
-            updated_scenes: rewrite.changed_scenes.len(),
-            updated_routines: rewrite.changed_routines.len(),
-            display_override_changed: rewrite.display_override_changed,
-            sensor_config_changed: rewrite.sensor_config_changed,
-            position_changed: rewrite.position_changed,
-        };
-
-        (rewrite, response)
     };
 
     persist_device_config_rewrite(&rewrite, &source).await;
@@ -1476,38 +1604,56 @@ async fn delete_config_device(
 }
 
 async fn list_device_sensor_configs(
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state.get_runtime_config().device_sensor_configs.clone(),
+        snap.runtime_config.device_sensor_configs.clone(),
     ))
 }
 
 async fn upsert_device_sensor_config(
     device_ref: String,
     mut row: DeviceSensorConfigRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     row.device_ref = decode_path_key(device_ref);
 
-    {
-        let mut state = app_state.write().await;
-        let device_exists = state
-            .devices
-            .get_state()
-            .0
-            .keys()
-            .any(|device_key| device_key.to_string() == row.device_ref);
+    let row_for_state = row.clone();
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let device_exists = state
+                    .devices
+                    .get_state()
+                    .0
+                    .keys()
+                    .any(|device_key| device_key.to_string() == row_for_state.device_ref);
 
-        if !device_exists {
+                if !device_exists {
+                    return Err(());
+                }
+
+                state.upsert_device_sensor_config(row_for_state);
+                Ok(())
+            })
+        })
+        .await;
+
+    match result {
+        Ok(Ok(())) => {}
+        Ok(Err(())) => {
             return Ok(error_response(
                 "Unknown device key",
                 StatusCode::BAD_REQUEST,
             ));
         }
-
-        state.upsert_device_sensor_config(row.clone());
+        Err(_) => {
+            return Ok(error_response(
+                "State actor unavailable",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ));
+        }
     }
 
     if let Err(e) = config_queries::db_upsert_device_sensor_config(&row).await {
@@ -1519,13 +1665,16 @@ async fn upsert_device_sensor_config(
 
 async fn delete_device_sensor_config(
     device_ref: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let device_ref = decode_path_key(device_ref);
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_device_sensor_config(&device_ref)
-    };
+    let key_for_state = device_ref.clone();
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move { state.delete_device_sensor_config(&key_for_state) })
+        })
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Device sensor config"));
@@ -1543,56 +1692,56 @@ async fn delete_device_sensor_config(
 // ============================================================================
 
 fn integrations_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("integrations")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_integrations);
 
     let get = warp::path!("integrations" / String)
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_integration);
 
     let create = warp::path("integrations")
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(create_integration);
 
     let update = warp::path!("integrations" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(update_integration);
 
     let delete = warp::path!("integrations" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
         .and_then(delete_integration);
 
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_integrations(
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+async fn list_integrations(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state.get_runtime_config().integrations.clone(),
+        snap.runtime_config.integrations.clone(),
     ))
 }
 
 async fn get_integration(
     id: String,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    match state
-        .get_runtime_config()
+    let snap = snapshot.load();
+    match snap
+        .runtime_config
         .integrations
         .iter()
         .find(|integration| integration.id == id)
@@ -1605,14 +1754,26 @@ async fn get_integration(
 
 async fn create_integration(
     integration: IntegrationRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    {
-        let mut state = app_state.write().await;
-        state.upsert_integration(integration.clone());
-        if let Err(e) = state.apply_runtime_integrations().await {
-            warn!("Failed to apply runtime integrations: {e}");
+    if let Err(e) = apply_runtime_integrations_change(&handle, |config| {
+        if let Some(existing) = config
+            .integrations
+            .iter_mut()
+            .find(|existing| existing.id == integration.id)
+        {
+            *existing = integration.clone();
+        } else {
+            config.integrations.push(integration.clone());
+            config
+                .integrations
+                .sort_by(|left, right| left.id.cmp(&right.id));
         }
+        true
+    })
+    .await
+    {
+        warn!("Failed to apply runtime integrations: {e}");
     }
 
     if let Err(e) = config_queries::db_upsert_integration(&integration).await {
@@ -1625,16 +1786,28 @@ async fn create_integration(
 async fn update_integration(
     id: String,
     mut integration: IntegrationRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     integration.id = id;
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_integration(integration.clone());
-        if let Err(e) = state.apply_runtime_integrations().await {
-            warn!("Failed to apply runtime integrations: {e}");
+    if let Err(e) = apply_runtime_integrations_change(&handle, |config| {
+        if let Some(existing) = config
+            .integrations
+            .iter_mut()
+            .find(|existing| existing.id == integration.id)
+        {
+            *existing = integration.clone();
+        } else {
+            config.integrations.push(integration.clone());
+            config
+                .integrations
+                .sort_by(|left, right| left.id.cmp(&right.id));
         }
+        true
+    })
+    .await
+    {
+        warn!("Failed to apply runtime integrations: {e}");
     }
 
     if let Err(e) = config_queries::db_upsert_integration(&integration).await {
@@ -1646,17 +1819,34 @@ async fn update_integration(
 
 async fn delete_integration(
     id: String,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        let deleted = state.delete_integration(&id);
-        if deleted {
-            if let Err(e) = state.apply_runtime_integrations().await {
+    let existed = snapshot
+        .load()
+        .runtime_config
+        .integrations
+        .iter()
+        .any(|integration| integration.id == id);
+
+    let deleted = if !existed {
+        false
+    } else {
+        match apply_runtime_integrations_change(&handle, |config| {
+            let len_before = config.integrations.len();
+            config
+                .integrations
+                .retain(|integration| integration.id != id);
+            config.integrations.len() != len_before
+        })
+        .await
+        {
+            Ok(deleted) => deleted,
+            Err(e) => {
                 warn!("Failed to apply runtime integrations: {e}");
+                true
             }
         }
-        deleted
     };
 
     if !deleted {
@@ -1675,79 +1865,80 @@ async fn delete_integration(
 // ============================================================================
 
 fn groups_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("groups")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_groups);
 
     let get = warp::path!("groups" / String)
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_group);
 
     let create = warp::path("groups")
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(create_group);
 
     let update = warp::path!("groups" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(update_group);
 
     let delete = warp::path!("groups" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_group);
 
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_groups(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+async fn list_groups(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state
-            .get_runtime_config()
+        snap.runtime_config
             .groups
             .iter()
             .cloned()
-            .map(|group| group_response_row(&state, group))
+            .map(|group| group_response_row(&snap.flattened_groups, group))
             .collect::<Vec<_>>(),
     ))
 }
 
-async fn get_group(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    match state
-        .get_runtime_config()
+async fn get_group(id: String, snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    match snap
+        .runtime_config
         .groups
         .iter()
         .find(|group| group.id == id)
         .cloned()
     {
-        Some(group) => Ok(ApiResponse::success(group_response_row(&state, group))),
+        Some(group) => Ok(ApiResponse::success(group_response_row(
+            &snap.flattened_groups,
+            group,
+        ))),
         None => Ok(not_found("Group")),
     }
 }
 
-async fn create_group(
-    group: GroupRow,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    {
-        let mut state = app_state.write().await;
-        state.upsert_group(group.clone());
-        state.apply_runtime_groups();
-    }
+async fn create_group(group: GroupRow, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let group_for_state = group.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_group(group_for_state);
+                state.apply_runtime_groups();
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_group(&group).await {
         warn!("Failed to persist group config: {e}");
@@ -1759,15 +1950,19 @@ async fn create_group(
 async fn update_group(
     id: String,
     mut group: GroupRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     group.id = id;
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_group(group.clone());
-        state.apply_runtime_groups();
-    }
+    let group_for_state = group.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_group(group_for_state);
+                state.apply_runtime_groups();
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_group(&group).await {
         warn!("Failed to persist group config update: {e}");
@@ -1776,18 +1971,20 @@ async fn update_group(
     Ok(ApiResponse::success(group))
 }
 
-async fn delete_group(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        let deleted = state.delete_group(&id);
-        if deleted {
-            state.apply_runtime_groups();
-        }
-        deleted
-    };
+async fn delete_group(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let id_for_state = id.clone();
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_group(&id_for_state);
+                if deleted {
+                    state.apply_runtime_groups();
+                }
+                deleted
+            })
+        })
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Group"));
@@ -1805,54 +2002,50 @@ async fn delete_group(
 // ============================================================================
 
 fn scenes_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("scenes")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_scenes);
 
     let get = warp::path!("scenes" / String)
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_scene);
 
     let create = warp::path("scenes")
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(create_scene);
 
     let update = warp::path!("scenes" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(update_scene);
 
     let delete = warp::path!("scenes" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_scene);
 
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_scenes(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    Ok(ApiResponse::success(
-        state.get_runtime_config().scenes.clone(),
-    ))
+async fn list_scenes(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    Ok(ApiResponse::success(snap.runtime_config.scenes.clone()))
 }
 
-async fn get_scene(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    match state
-        .get_runtime_config()
+async fn get_scene(id: String, snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    match snap
+        .runtime_config
         .scenes
         .iter()
         .find(|scene| scene.id == id)
@@ -1863,15 +2056,16 @@ async fn get_scene(
     }
 }
 
-async fn create_scene(
-    scene: SceneRow,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    {
-        let mut state = app_state.write().await;
-        state.upsert_scene(scene.clone());
-        state.apply_runtime_scenes();
-    }
+async fn create_scene(scene: SceneRow, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let scene_for_state = scene.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_scene(scene_for_state);
+                state.apply_runtime_scenes();
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
         warn!("Failed to persist scene config: {e}");
@@ -1883,15 +2077,19 @@ async fn create_scene(
 async fn update_scene(
     id: String,
     mut scene: SceneRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     scene.id = id;
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_scene(scene.clone());
-        state.apply_runtime_scenes();
-    }
+    let scene_for_state = scene.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_scene(scene_for_state);
+                state.apply_runtime_scenes();
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
         warn!("Failed to persist scene config update: {e}");
@@ -1900,18 +2098,20 @@ async fn update_scene(
     Ok(ApiResponse::success(scene))
 }
 
-async fn delete_scene(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        let deleted = state.delete_scene(&id);
-        if deleted {
-            state.apply_runtime_scenes();
-        }
-        deleted
-    };
+async fn delete_scene(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let id_for_state = id.clone();
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_scene(&id_for_state);
+                if deleted {
+                    state.apply_runtime_scenes();
+                }
+                deleted
+            })
+        })
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Scene"));
@@ -1929,54 +2129,50 @@ async fn delete_scene(
 // ============================================================================
 
 fn routines_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("routines")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_routines);
 
     let get = warp::path!("routines" / String)
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_routine);
 
     let create = warp::path("routines")
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(create_routine);
 
     let update = warp::path!("routines" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(update_routine);
 
     let delete = warp::path!("routines" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_routine);
 
     list.or(get).or(create).or(update).or(delete)
 }
 
-async fn list_routines(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    Ok(ApiResponse::success(
-        state.get_runtime_config().routines.clone(),
-    ))
+async fn list_routines(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    Ok(ApiResponse::success(snap.runtime_config.routines.clone()))
 }
 
-async fn get_routine(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    match state
-        .get_runtime_config()
+async fn get_routine(id: String, snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    match snap
+        .runtime_config
         .routines
         .iter()
         .find(|routine| routine.id == id)
@@ -1989,17 +2185,21 @@ async fn get_routine(
 
 async fn create_routine(
     routine: RoutineRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     if let Err(error) = validate_routine_actions(&routine.actions) {
         return Ok(error_response(&error, StatusCode::BAD_REQUEST));
     }
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_routine(routine.clone());
-        state.apply_runtime_routines();
-    }
+    let routine_for_state = routine.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_routine(routine_for_state);
+                state.apply_runtime_routines();
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_routine(&routine).await {
         warn!("Failed to persist routine config: {e}");
@@ -2011,7 +2211,7 @@ async fn create_routine(
 async fn update_routine(
     id: String,
     mut routine: RoutineRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     if let Err(error) = validate_routine_actions(&routine.actions) {
         return Ok(error_response(&error, StatusCode::BAD_REQUEST));
@@ -2025,55 +2225,88 @@ async fn update_routine(
     };
     let renamed = next_id != id;
 
-    let changed_routines = {
-        let mut state = app_state.write().await;
-        let Some(existing_index) = state
-            .runtime_config
-            .routines
-            .iter()
-            .position(|existing| existing.id == id)
-        else {
-            return Ok(not_found("Routine"));
-        };
+    enum UpdateOutcome {
+        Updated(Vec<RoutineRow>),
+        NotFound,
+        Conflict,
+    }
 
-        if renamed
-            && state
-                .runtime_config
-                .routines
-                .iter()
-                .any(|existing| existing.id == next_id)
-        {
+    let id_for_state = id.clone();
+    let next_id_for_state = next_id.clone();
+    let mut routine_for_state = routine.clone();
+    routine_for_state.id = next_id.clone();
+
+    let outcome = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let Some(existing_index) = state
+                    .runtime_config
+                    .routines
+                    .iter()
+                    .position(|existing| existing.id == id_for_state)
+                else {
+                    return UpdateOutcome::NotFound;
+                };
+
+                if renamed
+                    && state
+                        .runtime_config
+                        .routines
+                        .iter()
+                        .any(|existing| existing.id == next_id_for_state)
+                {
+                    return UpdateOutcome::Conflict;
+                }
+
+                state.runtime_config.routines[existing_index] = routine_for_state.clone();
+
+                let mut changed_routines = vec![routine_for_state.clone()];
+
+                if renamed {
+                    for existing in &mut state.runtime_config.routines {
+                        if existing.id == next_id_for_state {
+                            continue;
+                        }
+
+                        if rewrite_force_trigger_routine_references(
+                            &mut existing.actions,
+                            &id_for_state,
+                            &next_id_for_state,
+                        ) {
+                            changed_routines.push(existing.clone());
+                        }
+                    }
+                }
+
+                state
+                    .runtime_config
+                    .routines
+                    .sort_by(|left, right| left.id.cmp(&right.id));
+                state.apply_runtime_routines();
+
+                UpdateOutcome::Updated(changed_routines)
+            })
+        })
+        .await;
+
+    let changed_routines = match outcome {
+        Ok(UpdateOutcome::Updated(routines)) => routines,
+        Ok(UpdateOutcome::NotFound) => return Ok(not_found("Routine")),
+        Ok(UpdateOutcome::Conflict) => {
             return Ok(error_response(
                 "Routine ID already exists.",
                 StatusCode::BAD_REQUEST,
             ));
         }
-
-        routine.id = next_id.clone();
-        state.runtime_config.routines[existing_index] = routine.clone();
-
-        let mut changed_routines = vec![routine.clone()];
-
-        if renamed {
-            for existing in &mut state.runtime_config.routines {
-                if existing.id == next_id {
-                    continue;
-                }
-
-                if rewrite_force_trigger_routine_references(&mut existing.actions, &id, &next_id) {
-                    changed_routines.push(existing.clone());
-                }
-            }
+        Err(_) => {
+            return Ok(error_response(
+                "State actor unavailable",
+                StatusCode::INTERNAL_SERVER_ERROR,
+            ));
         }
-
-        state
-            .runtime_config
-            .routines
-            .sort_by(|left, right| left.id.cmp(&right.id));
-        state.apply_runtime_routines();
-
-        changed_routines
     };
+
+    routine.id = next_id.clone();
 
     for changed_routine in &changed_routines {
         if let Err(error) = config_queries::db_upsert_routine(changed_routine).await {
@@ -2093,18 +2326,20 @@ async fn update_routine(
     Ok(ApiResponse::success(routine))
 }
 
-async fn delete_routine(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        let deleted = state.delete_routine(&id);
-        if deleted {
-            state.apply_runtime_routines();
-        }
-        deleted
-    };
+async fn delete_routine(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let id_for_state = id.clone();
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_routine(&id_for_state);
+                if deleted {
+                    state.apply_runtime_routines();
+                }
+                deleted
+            })
+        })
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Routine"));
@@ -2122,50 +2357,52 @@ async fn delete_routine(
 // ============================================================================
 
 fn floorplans_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let list = warp::path("floorplans")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(list_floorplans);
 
     let create = warp::path("floorplans")
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(create_floorplan);
 
     let update = warp::path!("floorplans" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(update_floorplan);
 
     let delete = warp::path!("floorplans" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_floorplan);
 
     list.or(create).or(update).or(delete)
 }
 
-async fn list_floorplans(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+async fn list_floorplans(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
     Ok(ApiResponse::success(list_runtime_floorplans(
-        state.get_runtime_config(),
+        &snap.runtime_config,
     )))
 }
 
 async fn create_floorplan(
     floorplan: FloorplanMetadataRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let created = {
-        let mut state = app_state.write().await;
-        state.create_floorplan_metadata(floorplan.clone())
-    };
+    let fp_for_state = floorplan.clone();
+    let created = handle
+        .mutate(move |state| Box::pin(async move { state.create_floorplan_metadata(fp_for_state) }))
+        .await
+        .unwrap_or(false);
 
     if !created {
         return Ok(error_response(
@@ -2184,14 +2421,18 @@ async fn create_floorplan(
 async fn update_floorplan(
     id: String,
     mut floorplan: FloorplanMetadataRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     floorplan.id = id;
 
-    {
-        let mut state = app_state.write().await;
-        state.update_floorplan_metadata(floorplan.clone());
-    }
+    let fp_for_state = floorplan.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.update_floorplan_metadata(fp_for_state);
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_update_floorplan_metadata(&floorplan).await {
         warn!("Failed to persist floorplan metadata update: {e}");
@@ -2200,14 +2441,12 @@ async fn update_floorplan(
     Ok(ApiResponse::success(floorplan))
 }
 
-async fn delete_floorplan(
-    id: String,
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_floorplan(&id)
-    };
+async fn delete_floorplan(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let id_for_state = id.clone();
+    let deleted = handle
+        .mutate(move |state| Box::pin(async move { state.delete_floorplan(&id_for_state) }))
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Floorplan"));
@@ -2241,13 +2480,14 @@ fn floorplan_id_query() -> impl Filter<Extract = (String,), Error = std::convert
 }
 
 fn floorplan_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let get_floorplan = warp::path("floorplan")
         .and(warp::path::end())
         .and(warp::get())
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_floorplan);
 
     let upload_floorplan = warp::path("floorplan")
@@ -2256,63 +2496,63 @@ fn floorplan_routes(
         .and(warp::body::bytes())
         .and(warp::header::optional::<String>("content-type"))
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upload_floorplan);
 
     // Grid endpoints (JSON data for the floor grid)
     let get_grid = warp::path!("floorplan" / "grid")
         .and(warp::get())
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_floorplan_grid);
 
     let save_grid = warp::path!("floorplan" / "grid")
         .and(warp::post())
         .and(warp::body::json())
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(save_floorplan_grid);
 
     // Separate image endpoints
     let get_image = warp::path!("floorplan" / "image")
         .and(warp::get())
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_floorplan_image);
 
     let head_image = warp::path!("floorplan" / "image")
         .and(warp::head())
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(head_floorplan_image);
 
     let upload_image = warp::path!("floorplan" / "image")
         .and(warp::post())
         .and(warp::multipart::form().max_length(10 * 1024 * 1024))
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upload_floorplan_image);
 
     let delete_image = warp::path!("floorplan" / "image")
         .and(warp::delete())
         .and(floorplan_id_query())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_floorplan_image);
 
     let get_group_positions = warp::path!("floorplan" / "groups")
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_group_positions);
 
     let upsert_group_position = warp::path!("floorplan" / "groups" / String)
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upsert_group_position);
 
     let delete_group_position = warp::path!("floorplan" / "groups" / String)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_group_position);
 
     get_floorplan
@@ -2330,10 +2570,10 @@ fn floorplan_routes(
 
 async fn get_floorplan(
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+    let snap = snapshot.load();
+    match get_runtime_floorplan(&snap.runtime_config, &floorplan_id) {
         Some(floorplan) => Ok(ApiResponse::success(FloorplanRow {
             image_data: floorplan.image_data,
             image_mime_type: floorplan.image_mime_type,
@@ -2348,7 +2588,7 @@ async fn upload_floorplan(
     body: bytes::Bytes,
     content_type: Option<String>,
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     // TODO: Get width/height from image metadata
     let floorplan = FloorplanRow {
@@ -2358,10 +2598,15 @@ async fn upload_floorplan(
         height: None,
     };
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_floorplan_content(&floorplan_id, floorplan.clone());
-    }
+    let id_for_state = floorplan_id.clone();
+    let fp_for_state = floorplan.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_floorplan_content(&id_for_state, fp_for_state);
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
         warn!("Failed to persist floorplan upload: {e}");
@@ -2370,26 +2615,28 @@ async fn upload_floorplan(
     Ok(ApiResponse::success(()))
 }
 
-async fn get_group_positions(
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+async fn get_group_positions(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state.get_runtime_config().group_positions.clone(),
+        snap.runtime_config.group_positions.clone(),
     ))
 }
 
 async fn upsert_group_position(
     group_id: String,
     mut pos: GroupPositionRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     pos.group_id = group_id;
 
-    {
-        let mut state = app_state.write().await;
-        state.upsert_group_position(pos.clone());
-    }
+    let pos_for_state = pos.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_group_position(pos_for_state);
+            })
+        })
+        .await;
 
     if let Err(e) = config_queries::db_upsert_group_position(&pos).await {
         warn!("Failed to persist group position: {e}");
@@ -2400,12 +2647,13 @@ async fn upsert_group_position(
 
 async fn delete_group_position(
     group_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_group_position(&group_id)
-    };
+    let id_for_state = group_id.clone();
+    let deleted = handle
+        .mutate(move |state| Box::pin(async move { state.delete_group_position(&id_for_state) }))
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Group position"));
@@ -2420,10 +2668,10 @@ async fn delete_group_position(
 
 async fn get_floorplan_grid(
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+    let snap = snapshot.load();
+    match get_runtime_floorplan(&snap.runtime_config, &floorplan_id) {
         Some(floorplan) => Ok(ApiResponse::success(floorplan.grid_data)),
         None => Ok(ApiResponse::success(Option::<String>::None)),
     }
@@ -2437,12 +2685,17 @@ struct SaveGridRequest {
 async fn save_floorplan_grid(
     request: SaveGridRequest,
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    {
-        let mut state = app_state.write().await;
-        state.set_floorplan_grid(&floorplan_id, request.grid.clone());
-    }
+    let id_for_state = floorplan_id.clone();
+    let grid_for_state = request.grid.clone();
+    let _ = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.set_floorplan_grid(&id_for_state, grid_for_state);
+            })
+        })
+        .await;
 
     if let Err(e) =
         config_queries::db_upsert_floorplan_grid_by_id(&floorplan_id, &request.grid).await
@@ -2455,10 +2708,10 @@ async fn save_floorplan_grid(
 
 async fn get_floorplan_image(
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<Box<dyn Reply>, warp::Rejection> {
-    let state = app_state.read().await;
-    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+    let snap = snapshot.load();
+    match get_runtime_floorplan(&snap.runtime_config, &floorplan_id) {
         Some(floorplan) => {
             if let Some(image_data) = floorplan.image_data {
                 let mime_type = floorplan
@@ -2480,7 +2733,7 @@ async fn get_floorplan_image(
 async fn upload_floorplan_image(
     mut form: warp::multipart::FormData,
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     use futures::TryStreamExt;
 
@@ -2509,10 +2762,15 @@ async fn upload_floorplan_image(
             height: None,
         };
 
-        {
-            let mut state = app_state.write().await;
-            state.upsert_floorplan_content(&floorplan_id, floorplan.clone());
-        }
+        let id_for_state = floorplan_id.clone();
+        let fp_for_state = floorplan.clone();
+        let _ = handle
+            .mutate(move |state| {
+                Box::pin(async move {
+                    state.upsert_floorplan_content(&id_for_state, fp_for_state);
+                })
+            })
+            .await;
 
         if let Err(e) = config_queries::db_upsert_floorplan_by_id(&floorplan_id, &floorplan).await {
             warn!("Failed to persist floorplan image upload: {e}");
@@ -2529,10 +2787,10 @@ async fn upload_floorplan_image(
 
 async fn head_floorplan_image(
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<Box<dyn Reply>, warp::Rejection> {
-    let state = app_state.read().await;
-    match get_runtime_floorplan(state.get_runtime_config(), &floorplan_id) {
+    let snap = snapshot.load();
+    match get_runtime_floorplan(&snap.runtime_config, &floorplan_id) {
         Some(floorplan) => {
             if floorplan.image_data.is_some() {
                 let mime_type = floorplan
@@ -2553,12 +2811,13 @@ async fn head_floorplan_image(
 
 async fn delete_floorplan_image(
     floorplan_id: String,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.clear_floorplan_image(&floorplan_id)
-    };
+    let id_for_state = floorplan_id.clone();
+    let deleted = handle
+        .mutate(move |state| Box::pin(async move { state.clear_floorplan_image(&id_for_state) }))
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Floorplan image"));
@@ -2576,38 +2835,39 @@ async fn delete_floorplan_image(
 // ============================================================================
 
 fn dashboard_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let get_layouts = warp::path!("dashboard" / "layouts")
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_dashboard_layouts);
 
     let upsert_layout = warp::path!("dashboard" / "layouts")
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upsert_dashboard_layout);
 
     let delete_layout = warp::path!("dashboard" / "layouts" / i32)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_dashboard_layout);
 
     let get_widgets = warp::path!("dashboard" / "layouts" / i32 / "widgets")
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_dashboard_widgets);
 
     let upsert_widget = warp::path!("dashboard" / "widgets")
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(upsert_dashboard_widget);
 
     let delete_widget = warp::path!("dashboard" / "widgets" / i32)
         .and(warp::delete())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(delete_dashboard_widget);
 
     get_layouts
@@ -2618,23 +2878,24 @@ fn dashboard_routes(
         .or(delete_widget)
 }
 
-async fn get_dashboard_layouts(
-    app_state: Arc<RwLock<AppState>>,
-) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+async fn get_dashboard_layouts(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state.get_runtime_config().dashboard_layouts.clone(),
+        snap.runtime_config.dashboard_layouts.clone(),
     ))
 }
 
 async fn upsert_dashboard_layout(
     layout: DashboardLayoutRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let local_layout = {
-        let mut state = app_state.write().await;
-        state.upsert_dashboard_layout(layout.clone())
-    };
+    let layout_for_state = layout.clone();
+    let local_layout = handle
+        .mutate(move |state| {
+            Box::pin(async move { state.upsert_dashboard_layout(layout_for_state) })
+        })
+        .await
+        .unwrap_or_else(|_| layout.clone());
 
     match config_queries::db_upsert_dashboard_layout(&layout).await {
         Ok(id) => Ok(ApiResponse::success(DashboardLayoutRow {
@@ -2651,12 +2912,12 @@ async fn upsert_dashboard_layout(
 
 async fn delete_dashboard_layout(
     id: i32,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_dashboard_layout(id)
-    };
+    let deleted = handle
+        .mutate(move |state| Box::pin(async move { state.delete_dashboard_layout(id) }))
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Dashboard layout"));
@@ -2671,12 +2932,11 @@ async fn delete_dashboard_layout(
 
 async fn get_dashboard_widgets(
     layout_id: i32,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
+    let snap = snapshot.load();
     Ok(ApiResponse::success(
-        state
-            .get_runtime_config()
+        snap.runtime_config
             .dashboard_widgets
             .iter()
             .filter(|widget| widget.layout_id == layout_id)
@@ -2687,12 +2947,15 @@ async fn get_dashboard_widgets(
 
 async fn upsert_dashboard_widget(
     widget: DashboardWidgetRow,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let local_widget = {
-        let mut state = app_state.write().await;
-        state.upsert_dashboard_widget(widget.clone())
-    };
+    let widget_for_state = widget.clone();
+    let local_widget = handle
+        .mutate(move |state| {
+            Box::pin(async move { state.upsert_dashboard_widget(widget_for_state) })
+        })
+        .await
+        .unwrap_or_else(|_| widget.clone());
 
     match config_queries::db_upsert_dashboard_widget(&widget).await {
         Ok(id) => Ok(ApiResponse::success(DashboardWidgetRow {
@@ -2708,12 +2971,12 @@ async fn upsert_dashboard_widget(
 
 async fn delete_dashboard_widget(
     id: i32,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let deleted = {
-        let mut state = app_state.write().await;
-        state.delete_dashboard_widget(id)
-    };
+    let deleted = handle
+        .mutate(move |state| Box::pin(async move { state.delete_dashboard_widget(id) }))
+        .await
+        .unwrap_or(false);
 
     if !deleted {
         return Ok(not_found("Dashboard widget"));
@@ -2737,12 +3000,13 @@ struct ImportQuery {
 }
 
 fn export_import_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let export = warp::path("export")
         .and(warp::path::end())
         .and(warp::get())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(export_config);
 
     let import = warp::path("import")
@@ -2750,21 +3014,21 @@ fn export_import_routes(
         .and(warp::post())
         .and(warp::query::<ImportQuery>())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(import_config);
 
     export.or(import)
 }
 
-async fn export_config(app_state: Arc<RwLock<AppState>>) -> Result<impl Reply, warp::Rejection> {
-    let state = app_state.read().await;
-    Ok(ApiResponse::success(state.get_runtime_config().clone()))
+async fn export_config(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    Ok(ApiResponse::success((*snap.runtime_config).clone()))
 }
 
 async fn import_config(
     query: ImportQuery,
     config: ConfigExport,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     // Optionally save version before import
     if query.save_version {
@@ -2774,12 +3038,8 @@ async fn import_config(
         }
     }
 
-    {
-        let mut state = app_state.write().await;
-        state.runtime_config = config.clone();
-        if let Err(e) = state.apply_runtime_config().await {
-            warn!("Failed to apply imported config to runtime state: {e}");
-        }
+    if let Err(e) = apply_runtime_config_snapshot(&handle, config.clone()).await {
+        warn!("Failed to apply imported config to runtime state: {e}");
     }
 
     if let Err(e) = config_queries::db_import_config(&config).await {
@@ -2974,19 +3234,21 @@ impl MigrateApplyRequest {
 }
 
 fn migrate_routes(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let preview = warp::path!("migrate" / "preview")
         .and(warp::post())
         .and(warp::query::<MigrationSelection>())
         .and(warp::body::bytes())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(migrate_preview);
 
     let apply = warp::path!("migrate" / "apply")
         .and(warp::post())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
         .and_then(migrate_apply);
 
     preview.or(apply)
@@ -3589,7 +3851,7 @@ fn non_matching_sensor_state(expected: &SensorDevice) -> SensorDevice {
 async fn migrate_preview(
     selection: MigrationSelection,
     body: bytes::Bytes,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     if !selection.has_any() {
         return Ok(error_response(
@@ -3603,8 +3865,8 @@ async fn migrate_preview(
     match parse_toml_config(&toml_str) {
         Ok(result) => {
             let result = select_migration_preview(result, &selection);
-            let state = app_state.read().await;
-            let preview = canonicalize_migration_preview(result, state.devices.get_state());
+            let snap = snapshot.load();
+            let preview = canonicalize_migration_preview(result, &snap.devices);
 
             Ok(ApiResponse::success(MigratePreviewData {
                 preview: preview.preview,
@@ -3617,7 +3879,8 @@ async fn migrate_preview(
 
 async fn migrate_apply(
     request: MigrateApplyRequest,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let (preview, selection) = request.into_parts();
     if !selection.has_any() {
@@ -3628,18 +3891,14 @@ async fn migrate_apply(
     }
 
     let (preview, merged_config) = {
-        let state = app_state.read().await;
+        let snap = snapshot.load();
         let preview = select_migration_preview(preview, &selection);
 
-        let preview = canonicalize_migration_preview(preview, state.devices.get_state()).preview;
+        let preview = canonicalize_migration_preview(preview, &snap.devices).preview;
 
         (
             preview.clone(),
-            merge_selected_migration_config(
-                state.get_runtime_config().clone(),
-                &preview,
-                &selection,
-            ),
+            merge_selected_migration_config((*snap.runtime_config).clone(), &preview, &selection),
         )
     };
 
@@ -3651,12 +3910,8 @@ async fn migrate_apply(
         routines: preview.routines.len(),
     };
 
-    {
-        let mut state = app_state.write().await;
-        state.runtime_config = merged_config.clone();
-        if let Err(e) = state.apply_runtime_config().await {
-            warn!("Failed to apply migrated config to runtime state: {e}");
-        }
+    if let Err(e) = apply_runtime_config_snapshot(&handle, merged_config.clone()).await {
+        warn!("Failed to apply migrated config to runtime state: {e}");
     }
 
     if let Err(e) = apply_migration(&merged_config).await {

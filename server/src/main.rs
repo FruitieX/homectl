@@ -6,13 +6,14 @@ use homectl_server::api::init_api;
 use homectl_server::core::simulate;
 use homectl_server::core::{
     devices::Devices,
-    event::{handle_event, DeferredEventWork},
+    event::DeferredEventWork,
     groups::Groups,
     integrations::Integrations,
     logs::init_logging,
     routines::Routines,
     scenes::Scenes,
-    state::AppState,
+    snapshot::{new_snapshot_handle, RuntimeSnapshot},
+    state::{spawn_state_actor, AppState, StateHandle},
     ui::Ui,
 };
 use homectl_server::db::{
@@ -31,10 +32,9 @@ use std::error::Error;
 use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
 use std::time::{Duration, Instant};
-use tokio::sync::RwLock;
+use tokio::sync::Mutex;
 
 const DATABASE_RECONNECT_INTERVAL_SECS: u64 = 2;
-const SLOW_EVENT_MUTATION_WARN_MS: u64 = 250;
 const SLOW_DEFERRED_WORK_WARN_MS: u64 = 1000;
 
 fn default_backup_config_path() -> &'static Path {
@@ -100,6 +100,8 @@ impl RuntimeConfigSnapshot {
 async fn main() -> Result<(), Box<dyn Error>> {
     let cli = Cli::parse();
     color_eyre::install()?;
+    #[cfg(feature = "tokio-console")]
+    console_subscriber::init();
     init_logging()?;
 
     match &cli.command {
@@ -214,6 +216,16 @@ async fn run_event_loop(
     integrations.run_register_pass().await?;
     integrations.run_start_pass().await?;
 
+    let snapshot = new_snapshot_handle(RuntimeSnapshot {
+        runtime_config: Arc::new(runtime_config.config.clone()),
+        devices: Arc::new(devices.get_state().clone()),
+        flattened_groups: Arc::new(groups.get_flattened_groups().clone()),
+        flattened_scenes: Arc::new(scenes.get_flattened_scenes().clone()),
+        routine_statuses: Arc::new(rules.get_runtime_statuses()),
+        ui_state: Arc::new(ui.get_state().clone()),
+        warming_up: true,
+    });
+
     let state = AppState {
         warming_up: true,
         runtime_config: runtime_config.config.clone(),
@@ -222,27 +234,47 @@ async fn run_event_loop(
         scenes,
         devices,
         rules,
-        event_tx,
+        event_tx: event_tx.clone(),
         ui,
         ws: Default::default(),
         ws_broadcast_pending: Arc::new(AtomicBool::new(false)),
+        runtime_apply_lock: Arc::new(Mutex::new(())),
+        snapshot: snapshot.clone(),
     };
 
-    let state = Arc::new(RwLock::new(state));
+    let ws_handle = state.ws.clone();
 
-    init_api(&state, port)?;
+    // Spawn the state actor. The actor owns `AppState` by value and is
+    // the sole writer; admin handlers dispatch mutations through
+    // `StateHandle`, and the main loop below forwards incoming events
+    // onto the actor's command channel.
+    let state_handle = spawn_state_actor(state, snapshot.clone(), deferred_work_tx.clone());
+
+    init_api(
+        snapshot.clone(),
+        state_handle.clone(),
+        ws_handle,
+        event_tx.clone(),
+        port,
+    )?;
 
     if cli.database_url.is_some() {
-        start_database_reconnect_loop(state.clone());
+        start_database_reconnect_loop(state_handle.clone());
     }
 
     {
-        let state = state.clone();
+        let state_handle = state_handle.clone();
+        let event_tx = event_tx.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_secs(warmup_time)).await;
-            let mut state = state.write().await;
-            state.warming_up = false;
-            state.event_tx.send(Event::StartupCompleted);
+            let _ = state_handle
+                .mutate(|state| {
+                    Box::pin(async move {
+                        state.warming_up = false;
+                    })
+                })
+                .await;
+            event_tx.send(Event::StartupCompleted);
         });
     }
 
@@ -252,35 +284,11 @@ async fn run_event_loop(
             .await
             .expect("Expected sender end of channel to never be dropped");
 
-        let started_at = Instant::now();
-        let result = {
-            let mut state = state.write().await;
-            handle_event(&mut state, &event).await
-        };
-
-        let elapsed = started_at.elapsed();
-        if elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS) {
-            warn!("Event state mutation took {:?}: {event:?}", elapsed);
-        }
-
-        match result {
-            Ok(outcome) => {
-                for work in outcome.into_deferred_work() {
-                    deferred_work_tx
-                        .send(work)
-                        .expect("Deferred event worker should stay alive");
-                }
-            }
-            Err(err) => {
-                error!(
-                    "Error while handling event:\n    Event:\n    {event:#?}\n\n    Err:\n    {err:#?}",
-                );
-            }
-        }
+        state_handle.send_event(event);
     }
 }
 
-fn start_database_reconnect_loop(state: Arc<RwLock<AppState>>) {
+fn start_database_reconnect_loop(state_handle: StateHandle) {
     tokio::spawn(async move {
         if !is_db_configured() || is_db_connected() {
             return;
@@ -307,7 +315,7 @@ fn start_database_reconnect_loop(state: Arc<RwLock<AppState>>) {
                         "Connected to configured PostgreSQL database in background reconnect loop"
                     );
 
-                    if let Err(error) = synchronize_reconnected_database(&state).await {
+                    if let Err(error) = synchronize_reconnected_database(&state_handle).await {
                         warn!("Failed to synchronize runtime snapshot after database reconnect: {error}");
                     }
 
@@ -328,34 +336,37 @@ fn start_database_reconnect_loop(state: Arc<RwLock<AppState>>) {
     });
 }
 
-async fn synchronize_reconnected_database(state: &Arc<RwLock<AppState>>) -> Result<()> {
+async fn synchronize_reconnected_database(state_handle: &StateHandle) -> Result<()> {
     if config_queries::db_has_config().await? {
         info!(
             "Configured PostgreSQL database became available with existing config; keeping the current runtime snapshot until restart"
         );
     } else {
-        persist_runtime_snapshot(state).await?;
+        persist_runtime_snapshot(state_handle).await?;
     }
 
     Ok(())
 }
 
-async fn persist_runtime_snapshot(state: &Arc<RwLock<AppState>>) -> Result<()> {
-    let (config, devices, scene_overrides, ui_state) = {
-        let state = state.read().await;
-        (
-            state.runtime_config.clone(),
-            state
-                .devices
-                .get_state()
-                .0
-                .values()
-                .cloned()
-                .collect::<Vec<_>>(),
-            state.scenes.get_scene_overrides(),
-            state.ui.get_state().clone(),
-        )
-    };
+async fn persist_runtime_snapshot(state_handle: &StateHandle) -> Result<()> {
+    let (config, devices, scene_overrides, ui_state) = state_handle
+        .mutate(|state| {
+            Box::pin(async move {
+                (
+                    state.runtime_config.clone(),
+                    state
+                        .devices
+                        .get_state()
+                        .0
+                        .values()
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                    state.scenes.get_scene_overrides(),
+                    state.ui.get_state().clone(),
+                )
+            })
+        })
+        .await?;
 
     config_queries::db_import_config(&config).await?;
 

@@ -265,6 +265,13 @@ impl Routines {
 
         let routine_actions = routine.actions.clone();
 
+        info!(
+            "Routine force-triggered: id={} name={:?} actions={}",
+            routine_id.0,
+            routine.name,
+            routine_actions.len(),
+        );
+
         for action in routine_actions {
             self.event_tx.send(Event::Action(action.clone()));
         }
@@ -300,6 +307,13 @@ impl Routines {
             );
 
             if status.will_trigger {
+                info!(
+                    "Routine triggered: id={} name={:?} actions={} event_source={:?}",
+                    routine_id.0,
+                    routine.name,
+                    routine.actions.len(),
+                    event_source,
+                );
                 triggered_actions.extend(
                     routine
                         .actions

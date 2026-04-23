@@ -99,6 +99,60 @@ Event-driven automation rules with:
 - **Rules** – Conditions that must match (sensor values, device states, group states)
 - **Actions** – Operations to perform (ActivateScene, CycleScenes, DimAction, IntegrationAction)
 
+### State actor & runtime snapshot
+The server uses an actor-model architecture for `AppState`:
+
+- **`AppState`** (`server/src/core/state/mod.rs`) is owned by a single
+  tokio task, the **state actor** (`server/src/core/state/actor.rs`).
+  There is no `Arc<RwLock<AppState>>`; the actor is the sole writer.
+- **`StateHandle`** is the only way for non-actor code to mutate state.
+  Use `handle.send_event(event)` for fire-and-forget events, or
+  `handle.mutate(|state| Box::pin(async move { ... })).await?` for
+  admin writes that need to read back a typed result. Each command runs
+  to completion before the next is dequeued.
+- **`SnapshotHandle`** is an `Arc<ArcSwap<RuntimeSnapshot>>` published
+  after every command. Readers (HTTP handlers, widgets, websockets) use
+  `snapshot.load()` — no locking, no `await`. The snapshot carries
+  `runtime_config`, `devices`, `flattened_groups`, `flattened_scenes`,
+  `routine_statuses`, `ui_state`, and `warming_up`.
+- HTTP route builders take `&SnapshotHandle` + `&StateHandle`; they
+  never see `AppState` directly. Warp filters `with_snapshot` and
+  `with_handle` inject them into handlers.
+
+Implications for contributors:
+- For a new read endpoint, extract the data from `snapshot.load()`.
+- For a new admin write, add an `AppState` method and call it from the
+  handler via `handle.mutate(|state| Box::pin(async move { ... })).await`.
+- Do **not** reintroduce `Clone` on `AppState` or wrap it in a lock.
+- Long-running external work (HTTP calls, integration reloads) belongs
+  **outside** the mutate closure. Use the two-phase pattern in
+  `apply_runtime_integrations_change` as a template: first mutate to
+  clone out what you need, run the external work, then a second mutate
+  to commit.
+
+### Per-integration actors
+Each integration instance is owned by its own tokio task
+(`server/src/core/integrations/actor.rs`). `Integrations` stores a
+`HashMap<IntegrationId, IntegrationHandle>` where
+`IntegrationHandle` wraps an `mpsc::UnboundedSender<IntegrationCmd>`.
+There is no `Mutex` around `Box<dyn Integration>` anywhere.
+
+- **Lifecycle commands** (`register`, `start`, `stop`) are dispatched
+  via `handle.register().await` / etc. and carry a oneshot reply so
+  hot-reload can await completion and surface errors.
+- **Data-plane commands** (`set_device_state`, `run_action`) are
+  fire-and-forget to match the old `DeferredEventWork` semantics; the
+  state actor never blocked on them.
+- **Reload** (`Integrations::reload_config_rows`) stops removed /
+  modified integrations via their handle, drops the handle, then
+  spawns a fresh actor via `load_integration`. The per-integration
+  actor exits when the last handle drops and its `Box<dyn Integration>`
+  is dropped inside the task.
+- Adding a new integration requires **no actor plumbing**: implement
+  `Integration` as usual in `server/src/integrations/<name>/mod.rs` and
+  register the module-name branch in
+  `server/src/core/integrations/mod.rs::load_custom_integration`.
+
 ## Development Commands
 
 ### Server

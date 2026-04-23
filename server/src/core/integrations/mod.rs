@@ -1,3 +1,8 @@
+pub mod actor;
+pub mod command;
+
+pub use actor::IntegrationHandle;
+
 use crate::db::config_queries;
 use crate::integrations::cron::Cron;
 use crate::integrations::{
@@ -11,17 +16,9 @@ use crate::types::{
 use crate::utils::cli::Cli;
 use color_eyre::Result;
 use eyre::eyre;
-use std::{collections::HashMap, sync::Arc};
-use tokio::sync::Mutex;
+use std::collections::HashMap;
 
-#[derive(Clone)]
-pub struct LoadedIntegration {
-    integration: Arc<Mutex<Box<dyn Integration>>>,
-    module_name: String,
-    config: serde_json::Value,
-}
-
-pub type CustomIntegrationsMap = HashMap<IntegrationId, LoadedIntegration>;
+pub type CustomIntegrationsMap = HashMap<IntegrationId, IntegrationHandle>;
 
 #[derive(Clone)]
 pub struct Integrations {
@@ -52,26 +49,25 @@ impl Integrations {
         let integration =
             load_custom_integration(module_name, integration_id, config, cli, event_tx)?;
 
-        let loaded_integration = LoadedIntegration {
-            integration: Arc::new(Mutex::new(integration)),
-            module_name: module_name.to_string(),
-            config: config.clone(),
-        };
+        let handle = IntegrationHandle::new(
+            integration,
+            integration_id.clone(),
+            module_name.to_string(),
+            config.clone(),
+        );
 
         self.custom_integrations
-            .insert(integration_id.clone(), loaded_integration);
+            .insert(integration_id.clone(), handle);
 
         Ok(())
     }
 
     pub async fn run_register_pass(&self) -> Result<()> {
-        for (integration_id, li) in self.custom_integrations.iter() {
-            let mut integration = li.integration.lock().await;
-
-            integration.register().await.unwrap();
+        for (integration_id, handle) in self.custom_integrations.iter() {
+            handle.register().await?;
             info!(
                 "registered {} integration {}",
-                li.module_name, integration_id
+                handle.module_name, integration_id
             );
         }
 
@@ -79,11 +75,12 @@ impl Integrations {
     }
 
     pub async fn run_start_pass(&self) -> Result<()> {
-        for (integration_id, li) in self.custom_integrations.iter() {
-            let mut integration = li.integration.lock().await;
-
-            integration.start().await.unwrap();
-            info!("started {} integration {}", li.module_name, integration_id);
+        for (integration_id, handle) in self.custom_integrations.iter() {
+            handle.start().await?;
+            info!(
+                "started {} integration {}",
+                handle.module_name, integration_id
+            );
         }
 
         Ok(())
@@ -103,7 +100,7 @@ impl Integrations {
             return Ok(());
         }
 
-        let li = self
+        let handle = self
             .custom_integrations
             .get(&device.integration_id)
             .ok_or_else(|| {
@@ -113,11 +110,8 @@ impl Integrations {
                 )
             })?;
 
-        let mut integration = li.integration.lock().await;
-
-        integration
-            .set_integration_device_state(&device.clone())
-            .await
+        handle.set_device_state(device);
+        Ok(())
     }
 
     pub async fn run_integration_action(
@@ -125,13 +119,13 @@ impl Integrations {
         integration_id: &IntegrationId,
         payload: &IntegrationActionPayload,
     ) -> Result<()> {
-        let li = self
+        let handle = self
             .custom_integrations
             .get(integration_id)
             .ok_or_else(|| eyre!("Expected to find integration by id {integration_id}"))?;
-        let mut integration = li.integration.lock().await;
 
-        integration.run_integration_action(payload).await
+        handle.run_action(payload.clone());
+        Ok(())
     }
 
     pub async fn load_config_rows(
@@ -196,13 +190,17 @@ impl Integrations {
         let current_ids: Vec<IntegrationId> = self.custom_integrations.keys().cloned().collect();
         for id in &current_ids {
             if !desired.contains_key(id) {
-                if let Some(li) = self.custom_integrations.remove(id) {
+                if let Some(handle) = self.custom_integrations.remove(id) {
                     info!("Stopping removed integration {}", id);
-                    let mut integration = li.integration.lock().await;
-                    if let Err(e) = integration.stop().await {
+                    if let Err(e) = handle.stop().await {
                         warn!("Error stopping integration {}: {e}", id);
                     }
                     removed_ids.push(id.clone());
+                    // Dropping the handle here closes this clone's
+                    // sender; the actor task exits once the last
+                    // sender (held by the state actor's copy of the
+                    // map) is also dropped after commit.
+                    drop(handle);
                 }
             }
         }
@@ -211,23 +209,21 @@ impl Integrations {
             if let Some(existing) = self.custom_integrations.get(id) {
                 if existing.module_name != row.plugin || existing.config != row.config {
                     info!("Restarting modified integration {}", id);
-                    {
-                        let mut integration = existing.integration.lock().await;
-                        if let Err(e) = integration.stop().await {
+                    if let Some(handle) = self.custom_integrations.remove(id) {
+                        if let Err(e) = handle.stop().await {
                             warn!("Error stopping integration {}: {e}", id);
                         }
+                        drop(handle);
                     }
-                    self.custom_integrations.remove(id);
 
                     match self
                         .load_integration(&row.plugin, id, &row.config, &self.cli.clone())
                         .await
                     {
                         Ok(()) => {
-                            if let Some(li) = self.custom_integrations.get(id) {
-                                let mut integration = li.integration.lock().await;
-                                let _ = integration.register().await;
-                                let _ = integration.start().await;
+                            if let Some(handle) = self.custom_integrations.get(id) {
+                                let _ = handle.register().await;
+                                let _ = handle.start().await;
                             }
                             info!("Restarted integration {} (plugin: {})", id, row.plugin);
                         }
@@ -242,10 +238,9 @@ impl Integrations {
                     .await
                 {
                     Ok(()) => {
-                        if let Some(li) = self.custom_integrations.get(id) {
-                            let mut integration = li.integration.lock().await;
-                            let _ = integration.register().await;
-                            let _ = integration.start().await;
+                        if let Some(handle) = self.custom_integrations.get(id) {
+                            let _ = handle.register().await;
+                            let _ = handle.start().await;
                         }
                         info!("Added integration {} (plugin: {})", id, row.plugin);
                     }
@@ -278,11 +273,11 @@ fn load_custom_integration(
 ) -> Result<Box<dyn Integration>> {
     match module_name {
         "circadian" => Ok(Box::new(Circadian::new(id, config, cli, event_tx)?)),
-        "cron" => Ok(Box::new(Cron::new(id, config, cli, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, cli, event_tx)?)),
-        "timer" => Ok(Box::new(Timer::new(id, config, cli, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, cli, event_tx)?)),
         "mqtt" => Ok(Box::new(Mqtt::new(id, config, cli, event_tx)?)),
-        _ => Err(eyre!("Unknown module name {module_name}!")),
+        "timer" => Ok(Box::new(Timer::new(id, config, cli, event_tx)?)),
+        "cron" => Ok(Box::new(Cron::new(id, config, cli, event_tx)?)),
+        _ => Err(eyre!("Unknown module name: {module_name}")),
     }
 }

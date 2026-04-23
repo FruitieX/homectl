@@ -8,12 +8,23 @@ use crate::types::{
     color::ColorMode,
     device::DevicesState,
     event::TxEventChannel,
+    integration::IntegrationId,
     websockets::{StateUpdate, WebSocketResponse},
 };
 
+pub mod actor;
+pub mod command;
+pub mod metrics;
+
+pub use actor::{spawn_state_actor, StateHandle};
+pub use command::StateCommand;
+
 use super::{
     devices::Devices, groups::Groups, integrations::Integrations, routines::Routines,
-    scenes::Scenes, ui::Ui, websockets::WebSockets,
+    scenes::Scenes,
+    snapshot::{RuntimeSnapshot, SnapshotHandle},
+    ui::Ui,
+    websockets::WebSockets,
 };
 
 use color_eyre::Result;
@@ -22,8 +33,8 @@ use std::sync::{
     Arc,
 };
 use std::time::Duration;
+use tokio::sync::Mutex;
 
-#[derive(Clone)]
 pub struct AppState {
     pub warming_up: bool,
     pub runtime_config: ConfigExport,
@@ -36,11 +47,30 @@ pub struct AppState {
     pub ws: WebSockets,
     pub ui: Ui,
     pub ws_broadcast_pending: Arc<AtomicBool>,
+    pub runtime_apply_lock: Arc<Mutex<()>>,
+    pub snapshot: SnapshotHandle,
 }
 
 impl AppState {
     pub fn get_runtime_config(&self) -> &ConfigExport {
         &self.runtime_config
+    }
+
+    /// Republish the runtime snapshot with the current values of
+    /// `runtime_config` and `devices`. Call this at the end of every
+    /// mutation path (event handling, admin config updates, runtime
+    /// reloads) so that snapshot readers observe the latest state.
+    pub fn publish_snapshot(&self) {
+        let snapshot = RuntimeSnapshot {
+            runtime_config: Arc::new(self.runtime_config.clone()),
+            devices: Arc::new(self.devices.get_state().clone()),
+            flattened_groups: Arc::new(self.groups.get_flattened_groups().clone()),
+            flattened_scenes: Arc::new(self.scenes.get_flattened_scenes().clone()),
+            routine_statuses: Arc::new(self.rules.get_runtime_statuses()),
+            ui_state: Arc::new(self.ui.get_state().clone()),
+            warming_up: self.warming_up,
+        };
+        self.snapshot.store(Arc::new(snapshot));
     }
 
     pub fn update_core_config(&mut self, config: CoreConfigRow) {
@@ -422,6 +452,45 @@ impl AppState {
         self.runtime_config.integrations.len() != len_before
     }
 
+    fn remove_devices_for_integrations(&mut self, removed_ids: &[IntegrationId]) {
+        for id in removed_ids {
+            self.devices.remove_devices_by_integration(id);
+        }
+    }
+
+    pub fn commit_runtime_integrations_update(
+        &mut self,
+        runtime_config: ConfigExport,
+        integrations: Integrations,
+        removed_ids: Vec<IntegrationId>,
+    ) {
+        self.runtime_config = runtime_config;
+        self.integrations = integrations;
+        self.remove_devices_for_integrations(&removed_ids);
+
+        if !removed_ids.is_empty() {
+            self.refresh_routine_statuses();
+            self.schedule_ws_broadcast();
+        }
+
+        self.publish_snapshot();
+    }
+
+    pub fn commit_runtime_config_update(
+        &mut self,
+        runtime_config: ConfigExport,
+        integrations: Integrations,
+        removed_ids: Vec<IntegrationId>,
+    ) {
+        self.runtime_config = runtime_config;
+        self.integrations = integrations;
+        self.remove_devices_for_integrations(&removed_ids);
+        self.apply_runtime_groups();
+        self.apply_runtime_scenes();
+        self.apply_runtime_routines();
+        self.publish_snapshot();
+    }
+
     pub async fn apply_runtime_integrations(&mut self) -> Result<()> {
         let removed_ids = self
             .integrations
@@ -529,52 +598,20 @@ impl AppState {
             return;
         }
 
-        let state = self.clone();
+        let snapshot = self.snapshot.clone();
+        let ws = self.ws.clone();
+        let pending = self.ws_broadcast_pending.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
-            state.ws_broadcast_pending.store(false, Ordering::SeqCst);
-            state.send_state_ws(None).await;
+            pending.store(false, Ordering::SeqCst);
+            send_state_ws_from_snapshot(&snapshot, &ws, None).await;
         });
     }
 
     /// Sends current state over WebSockets. If user_id is omitted, the message
     /// is broadcast to all connected peers.
     pub async fn send_state_ws(&self, user_id: Option<usize>) {
-        // Make sure there are any users connected before broadcasting
-        if user_id.is_none() {
-            let num_users = self.ws.num_users().await;
-            if num_users == 0 {
-                return;
-            }
-        }
-
-        let devices = self.devices.get_state();
-        let scenes = self.scenes.get_flattened_scenes().clone();
-        let groups = self.groups.get_flattened_groups().clone();
-        let routine_statuses = self.rules.get_runtime_statuses();
-
-        let devices_converted = devices
-            .0
-            .values()
-            .map(|device| {
-                (
-                    device.get_device_key(),
-                    device.color_to_mode(ColorMode::Hs, true),
-                )
-            })
-            .collect();
-
-        let ui_state = self.ui.get_state().clone();
-
-        let message = WebSocketResponse::State(StateUpdate {
-            devices: DevicesState(devices_converted),
-            scenes,
-            groups,
-            routine_statuses,
-            ui_state,
-        });
-
-        self.ws.send(user_id, &message).await;
+        send_state_ws_from_snapshot(&self.snapshot, &self.ws, user_id).await;
     }
 
     /// Hot-reload integrations from the database with full lifecycle support.
@@ -646,3 +683,41 @@ impl AppState {
         Ok(())
     }
 }
+
+/// Build a `StateUpdate` from the currently published runtime snapshot and
+/// broadcast it to the given WebSocket peers. If `user_id` is omitted, the
+/// message is broadcast to all connected peers.
+pub async fn send_state_ws_from_snapshot(
+    snapshot: &SnapshotHandle,
+    ws: &WebSockets,
+    user_id: Option<usize>,
+) {
+    // Make sure there are any users connected before broadcasting
+    if user_id.is_none() && ws.num_users().await == 0 {
+        return;
+    }
+
+    let snap = snapshot.load();
+    let devices_converted = snap
+        .devices
+        .0
+        .values()
+        .map(|device| {
+            (
+                device.get_device_key(),
+                device.color_to_mode(ColorMode::Hs, true),
+            )
+        })
+        .collect();
+
+    let message = WebSocketResponse::State(StateUpdate {
+        devices: DevicesState(devices_converted),
+        scenes: (*snap.flattened_scenes).clone(),
+        groups: (*snap.flattened_groups).clone(),
+        routine_statuses: (*snap.routine_statuses).clone(),
+        ui_state: (*snap.ui_state).clone(),
+    });
+
+    ws.send(user_id, &message).await;
+}
+

@@ -1,4 +1,4 @@
-use std::{convert::Infallible, sync::Arc};
+use std::convert::Infallible;
 
 use percent_encoding::percent_decode_str;
 
@@ -7,12 +7,12 @@ use crate::types::{
     device::{Device, DeviceId},
 };
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 use warp::Filter;
 
-use crate::core::state::AppState;
+use crate::core::snapshot::SnapshotHandle;
+use crate::core::state::StateHandle;
 
-use super::with_state;
+use super::{with_handle, with_snapshot};
 
 #[derive(serde::Serialize)]
 pub struct DevicesResponse {
@@ -20,9 +20,10 @@ pub struct DevicesResponse {
 }
 
 pub fn devices(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    warp::path("devices").and(get_devices(app_state).or(put_device(app_state)))
+    warp::path("devices").and(get_devices(snapshot).or(put_device(handle)))
 }
 
 #[derive(Serialize, Deserialize)]
@@ -31,22 +32,21 @@ struct GetQuery {
 }
 
 fn get_devices(
-    app_state: &Arc<RwLock<AppState>>,
+    snapshot: &SnapshotHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::get()
         .and(warp::query::<GetQuery>())
-        .and(with_state(app_state))
+        .and(with_snapshot(snapshot))
         .and_then(get_devices_impl)
 }
 
 async fn get_devices_impl(
     query: GetQuery,
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
 ) -> Result<impl warp::Reply, Infallible> {
-    let app_state = app_state.read().await;
-    let devices = app_state.devices.get_state();
-
-    let devices_converted = devices
+    let snapshot = snapshot.load();
+    let devices_converted = snapshot
+        .devices
         .0
         .values()
         .map(|device| device.color_to_mode(query.color_mode.clone().unwrap_or(ColorMode::Hs), true))
@@ -60,19 +60,19 @@ async fn get_devices_impl(
 }
 
 fn put_device(
-    app_state: &Arc<RwLock<AppState>>,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path::tail()
         .and(warp::put())
         .and(warp::body::json())
-        .and(with_state(app_state))
+        .and(with_handle(handle))
         .and_then(put_device_impl)
 }
 
 async fn put_device_impl(
     tail: warp::path::Tail,
     device: Device,
-    app_state: Arc<RwLock<AppState>>,
+    handle: StateHandle,
 ) -> Result<impl warp::Reply, Infallible> {
     // Decode percent-encoded path segment to get the device ID
     let decoded = percent_decode_str(tail.as_str()).decode_utf8_lossy();
@@ -83,14 +83,18 @@ async fn put_device_impl(
         return Ok(warp::reply::json(&DevicesResponse { devices: vec![] }));
     }
 
-    let mut app_state = app_state.write().await;
-
-    app_state.devices.set_state(&device, false, false);
-
-    let devices = app_state.devices.get_state();
-    let response = DevicesResponse {
-        devices: devices.0.values().cloned().collect(),
-    };
+    let response = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.devices.set_state(&device, false, false);
+                let devices = state.devices.get_state();
+                DevicesResponse {
+                    devices: devices.0.values().cloned().collect(),
+                }
+            })
+        })
+        .await
+        .unwrap_or(DevicesResponse { devices: vec![] });
 
     Ok(warp::reply::json(&response))
 }

@@ -8,6 +8,7 @@ pub mod routines;
 pub mod scenes;
 pub mod scripting;
 pub mod simulate;
+pub mod snapshot;
 pub mod state;
 pub mod ui;
 pub mod websockets;

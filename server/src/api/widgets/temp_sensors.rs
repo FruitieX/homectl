@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
-use crate::core::state::AppState;
+use crate::core::snapshot::SnapshotHandle;
 use cached::proc_macro::cached;
 use serde_json::{json, Value};
-use tokio::sync::RwLock;
 use warp::{
     filters::BoxedFilter,
     http::StatusCode,
@@ -34,29 +31,29 @@ const DEVICE_IDS: &[&str] = &[
 ];
 
 pub fn route(
-    app_state: Arc<RwLock<AppState>>,
+    snapshot: SnapshotHandle,
     http: reqwest::Client,
 ) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "influxdb" / "temp-sensors")
         .and(warp::get())
         .and_then(move || {
-            let app_state = app_state.clone();
+            let snapshot = snapshot.clone();
             let http = http.clone();
-            async move { Ok::<_, warp::Rejection>(handle(app_state, http).await) }
+            async move { Ok::<_, warp::Rejection>(handle(snapshot, http).await) }
         })
         .boxed()
 }
 
-async fn handle(app_state: Arc<RwLock<AppState>>, http: reqwest::Client) -> Response {
+async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
     let (url, token) = match (
         widget_setting_string_or_env(
-            &app_state.read().await.get_runtime_config().widget_settings,
+            &snapshot.load().runtime_config.widget_settings,
             INFLUXDB_SETTING_KEY,
             URL_FIELD,
             "INFLUX_URL",
         ),
         widget_setting_string_or_env(
-            &app_state.read().await.get_runtime_config().widget_settings,
+            &snapshot.load().runtime_config.widget_settings,
             INFLUXDB_SETTING_KEY,
             TOKEN_FIELD,
             "INFLUX_TOKEN",

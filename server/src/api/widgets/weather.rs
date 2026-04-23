@@ -1,9 +1,6 @@
-use std::sync::Arc;
-
-use crate::core::state::AppState;
+use crate::core::snapshot::SnapshotHandle;
 use cached::proc_macro::cached;
 use serde_json::{json, Value};
-use tokio::sync::RwLock;
 use warp::{
     filters::BoxedFilter,
     http::StatusCode,
@@ -13,20 +10,20 @@ use warp::{
 
 use super::{widget_setting_string_or_env, API_URL_FIELD, WEATHER_SETTING_KEY};
 
-pub fn route(app_state: Arc<RwLock<AppState>>, http: reqwest::Client) -> BoxedFilter<(Response,)> {
+pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "weather")
         .and(warp::get())
         .and_then(move || {
-            let app_state = app_state.clone();
+            let snapshot = snapshot.clone();
             let http = http.clone();
-            async move { Ok::<_, warp::Rejection>(handle(app_state, http).await) }
+            async move { Ok::<_, warp::Rejection>(handle(snapshot, http).await) }
         })
         .boxed()
 }
 
-async fn handle(app_state: Arc<RwLock<AppState>>, http: reqwest::Client) -> Response {
+async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
     let url = match widget_setting_string_or_env(
-        &app_state.read().await.get_runtime_config().widget_settings,
+        &snapshot.load().runtime_config.widget_settings,
         WEATHER_SETTING_KEY,
         API_URL_FIELD,
         "WEATHER_API_URL",
