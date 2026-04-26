@@ -1,7 +1,7 @@
 import { Button, Input, Modal } from 'react-daisyui';
 import { useCallback, useEffect, useState } from 'react';
 import { useSceneModalState } from '@/hooks/sceneModalState';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
+import { useScenesState, useWebsocket } from '@/hooks/websocket';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 
 type Props = {
@@ -11,7 +11,7 @@ type Props = {
 
 const Component = (props: Props) => {
   const ws = useWebsocket();
-  const state = useWebsocketState();
+  const scenes = useScenesState();
 
   const {
     open: sceneModalOpen,
@@ -20,8 +20,8 @@ const Component = (props: Props) => {
   } = useSceneModalState();
 
   const scene =
-    sceneModalState !== null && state?.scenes !== undefined
-      ? state.scenes[sceneModalState]
+    sceneModalState !== null && scenes !== null
+      ? scenes[sceneModalState]
       : null;
 
   const { visible, close } = props;

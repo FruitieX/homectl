@@ -23,8 +23,7 @@ use crate::types::event::Event;
 /// result. The helper [`super::StateHandle::mutate`] hides this
 /// boilerplate.
 pub type MutateFn = Box<
-    dyn for<'a> FnOnce(&'a mut AppState) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>>
-        + Send,
+    dyn for<'a> FnOnce(&'a mut AppState) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> + Send,
 >;
 
 /// Top-level command routed to the state actor.
@@ -34,7 +33,7 @@ pub enum StateCommand {
     /// optionally notifies the sender when the mutation has completed so
     /// that the event loop can enforce ordering / emit deferred work.
     HandleEvent {
-        event: Event,
+        event: Box<Event>,
         done: Option<oneshot::Sender<()>>,
     },
     /// Run an arbitrary async mutation against `AppState`. The actor
@@ -54,4 +53,3 @@ impl std::fmt::Debug for StateCommand {
         }
     }
 }
-

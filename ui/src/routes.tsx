@@ -1,29 +1,51 @@
 import { Layout } from '../app/providers';
 import ConfigLayout from '../app/config/layout';
-import DashboardPage from '../app/dashboard/page';
-import ConfigDashboardPage from '../app/config/dashboard/page';
-import ConfigDevicesPage from '../app/config/devices/page';
-import ConfigFloorplanPage from '../app/config/floorplan/page';
-import ConfigGroupsPage from '../app/config/groups/page';
-import ConfigImportExportPage from '../app/config/import-export/page';
-import ConfigIntegrationsPage from '../app/config/integrations/page';
-import ConfigLogsPage from '../app/config/logs/page';
-import ConfigMigrationPage from '../app/config/migration/page';
-import ConfigRoutinesPage from '../app/config/routines/page';
-import ConfigScenesPage from '../app/config/scenes/page';
-import ConfigSettingsPage from '../app/config/settings/page';
-import GroupsPage from '../app/groups/page';
-import MapPage from '../app/map/page';
-import SettingsPage from '../app/settings/page';
-import { SceneList } from '../app/groups/[id]/SceneList';
 
-import { useWebsocketState } from '@/hooks/websocket';
+import { useGroupsState } from '@/hooks/websocket';
+import { Suspense, lazy, type ReactNode } from 'react';
 import {
   Navigate,
   Outlet,
   createBrowserRouter,
   useParams,
 } from 'react-router-dom';
+
+const DashboardPage = lazy(() => import('../app/dashboard/page'));
+const ConfigDashboardPage = lazy(() => import('../app/config/dashboard/page'));
+const ConfigDevicesPage = lazy(() => import('../app/config/devices/page'));
+const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
+const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
+const ConfigImportExportPage = lazy(
+  () => import('../app/config/import-export/page'),
+);
+const ConfigIntegrationsPage = lazy(
+  () => import('../app/config/integrations/page'),
+);
+const ConfigLogsPage = lazy(() => import('../app/config/logs/page'));
+const ConfigMigrationPage = lazy(() => import('../app/config/migration/page'));
+const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
+const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
+const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
+const GroupsPage = lazy(() => import('../app/groups/page'));
+const MapPage = lazy(() => import('../app/map/page'));
+const SettingsPage = lazy(() => import('../app/settings/page'));
+const SceneList = lazy(() =>
+  import('../app/groups/[id]/SceneList').then(({ SceneList }) => ({
+    default: SceneList,
+  })),
+);
+
+function RouteLoading() {
+  return (
+    <div className="flex min-h-48 items-center justify-center p-6 text-base-content/70">
+      Loading…
+    </div>
+  );
+}
+
+function withSuspense(element: ReactNode) {
+  return <Suspense fallback={<RouteLoading />}>{element}</Suspense>;
+}
 
 function RootRouteLayout() {
   return (
@@ -43,8 +65,8 @@ function ConfigRouteLayout() {
 
 function GroupScenesRoute() {
   const { id } = useParams();
-  const state = useWebsocketState();
-  const groupDevices = id ? state?.groups[id]?.device_keys : undefined;
+  const groups = useGroupsState();
+  const groupDevices = id ? groups?.[id]?.device_keys : undefined;
 
   if (!groupDevices) {
     return null;
@@ -60,27 +82,27 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <DashboardPage />,
+        element: withSuspense(<DashboardPage />),
       },
       {
         path: 'dashboard',
-        element: <DashboardPage />,
+        element: withSuspense(<DashboardPage />),
       },
       {
         path: 'groups',
-        element: <GroupsPage />,
+        element: withSuspense(<GroupsPage />),
       },
       {
         path: 'groups/:id',
-        element: <GroupScenesRoute />,
+        element: withSuspense(<GroupScenesRoute />),
       },
       {
         path: 'map',
-        element: <MapPage />,
+        element: withSuspense(<MapPage />),
       },
       {
         path: 'settings',
-        element: <SettingsPage />,
+        element: withSuspense(<SettingsPage />),
       },
       {
         path: 'config',
@@ -92,47 +114,47 @@ export const router = createBrowserRouter([
           },
           {
             path: 'dashboard',
-            element: <ConfigDashboardPage />,
+            element: withSuspense(<ConfigDashboardPage />),
           },
           {
             path: 'devices',
-            element: <ConfigDevicesPage />,
+            element: withSuspense(<ConfigDevicesPage />),
           },
           {
             path: 'floorplan',
-            element: <ConfigFloorplanPage />,
+            element: withSuspense(<ConfigFloorplanPage />),
           },
           {
             path: 'groups',
-            element: <ConfigGroupsPage />,
+            element: withSuspense(<ConfigGroupsPage />),
           },
           {
             path: 'import-export',
-            element: <ConfigImportExportPage />,
+            element: withSuspense(<ConfigImportExportPage />),
           },
           {
             path: 'integrations',
-            element: <ConfigIntegrationsPage />,
+            element: withSuspense(<ConfigIntegrationsPage />),
           },
           {
             path: 'logs',
-            element: <ConfigLogsPage />,
+            element: withSuspense(<ConfigLogsPage />),
           },
           {
             path: 'migration',
-            element: <ConfigMigrationPage />,
+            element: withSuspense(<ConfigMigrationPage />),
           },
           {
             path: 'routines',
-            element: <ConfigRoutinesPage />,
+            element: withSuspense(<ConfigRoutinesPage />),
           },
           {
             path: 'scenes',
-            element: <ConfigScenesPage />,
+            element: withSuspense(<ConfigScenesPage />),
           },
           {
             path: 'settings',
-            element: <ConfigSettingsPage />,
+            element: withSuspense(<ConfigSettingsPage />),
           },
         ],
       },

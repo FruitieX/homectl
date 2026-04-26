@@ -13,7 +13,6 @@ use crate::{
         integration::IntegrationId,
         scene::SceneId,
     },
-    utils::keys_match,
 };
 
 use super::devices::Devices;
@@ -286,14 +285,9 @@ impl Groups {
             .collect()
     }
 
-    pub fn invalidate(
-        &mut self,
-        old_state: &DevicesState,
-        new_state: &DevicesState,
-        devices: &Devices,
-    ) -> bool {
+    pub fn invalidate(&mut self, device_was_added: bool, devices: &Devices) -> bool {
         // Only invalidate groups if device ids have changed
-        if !keys_match(&old_state.0, &new_state.0) {
+        if device_was_added {
             self.flattened_groups =
                 mk_flattened_groups(&self.config, &self.device_refs_by_groups, devices);
             true

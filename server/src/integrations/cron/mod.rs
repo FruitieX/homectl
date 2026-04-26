@@ -98,16 +98,33 @@ impl Integration for Cron {
 
             tokio::spawn(async move {
                 loop {
-                    let next = cron.find_next_occurrence(&Local::now(), false).unwrap();
+                    let next = match cron.find_next_occurrence(&Local::now(), false) {
+                        Ok(next) => next,
+                        Err(error) => {
+                            warn!(
+                                "Cron schedule for device {id} failed to calculate next occurrence: {error}; stopping task"
+                            );
+                            break;
+                        }
+                    };
 
                     let duration = next - Local::now();
                     trace!("Sleeping for {duration:?}");
-                    sleep_until(Instant::now() + duration.to_std().unwrap()).await;
+                    let Ok(duration) = duration.to_std() else {
+                        warn!(
+                            "Cron schedule for device {id} produced a negative duration; retrying"
+                        );
+                        continue;
+                    };
+                    sleep_until(Instant::now() + duration).await;
 
                     debug!("Running cron job for device {id}");
 
                     let devices = devices.read().await;
-                    let device = devices.get(&id).unwrap();
+                    let Some(device) = devices.get(&id) else {
+                        warn!("Cron device {id} is not registered; skipping action");
+                        continue;
+                    };
                     if device.is_powered_on() == Some(true) {
                         event_tx.send(Event::Action(action.clone()));
                     }

@@ -22,28 +22,33 @@
       "node",
       "vite/client"
     ],
-    "baseUrl": ".",
     "paths": {
+      "app/*": [
+        "./app/*"
+      ],
+      "utils/*": [
+        "./utils/*"
+      ],
       "@/ui/*": [
-        "ui/*"
+        "./ui/*"
       ],
       "@/lib/*": [
-        "lib/*"
+        "./lib/*"
       ],
       "@/styles/*": [
-        "styles/*"
+        "./styles/*"
       ],
       "@/hooks/*": [
-        "hooks/*"
+        "./hooks/*"
       ],
       "@/bindings/*": [
-        "bindings/*"
+        "./bindings/*"
       ],
       "@/assets/*": [
-        "assets/*"
+        "./assets/*"
       ],
       "@/types/*": [
-        "types/*"
+        "./types/*"
       ]
     }
   },

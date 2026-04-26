@@ -2,6 +2,7 @@ import React, {
   useState,
   useRef,
   useCallback,
+  useMemo,
   useEffect,
   ReactNode,
 } from 'react';
@@ -141,8 +142,8 @@ export const Tooltip: React.FC<TooltipProps> = ({
   }, [position]);
 
   // Throttled version for better performance during scrolling/resizing
-  const throttledCalculatePosition = useCallback(
-    throttle(calculatePosition, 16), // ~60fps
+  const throttledCalculatePosition = useMemo(
+    () => throttle(calculatePosition, 16), // ~60fps
     [calculatePosition],
   );
 

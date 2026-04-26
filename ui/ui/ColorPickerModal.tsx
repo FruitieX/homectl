@@ -24,15 +24,20 @@ import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { black, getBrightness, getColor, getPower } from '@/lib/colors';
 import { useThrottleCallback } from '@react-hook/throttle';
 import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
-import { findDevice } from '@/lib/device';
+import {
+  useDevicesState,
+  useGroupsState,
+  useScenesState,
+  useWebsocket,
+} from '@/hooks/websocket';
 import { Clipboard, X, Dices, Settings } from 'lucide-react';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
 import { excludeUndefined } from 'utils/excludeUndefined';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { StateUpdate } from '@/bindings/StateUpdate';
 import { DeviceKey } from '@/bindings/DeviceKey';
+import { DevicesState } from '@/bindings/DevicesState';
+import { FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
 import clsx from 'clsx';
 import { useToggle } from 'usehooks-ts';
 
@@ -93,20 +98,20 @@ const ColorWheelTab = ({
       });
       latestColor.current = color;
       setHsva(colorToHsva(color));
-      onChange && onChange(color, bri);
+      onChange?.(color, bri);
     },
     [bri, onChange],
   );
 
   const handleChangeComplete = useCallback(() => {
-    onChangeComplete && onChangeComplete(latestColor.current, bri);
+    onChangeComplete?.(latestColor.current, bri);
   }, [bri, onChangeComplete]);
 
   const handleBrightnessChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = Number(event.currentTarget.value) / 100;
       setBri(value);
-      onChange && onChange(latestColor.current, value);
+      onChange?.(latestColor.current, value);
     },
     [onChange],
   );
@@ -193,20 +198,20 @@ const SwatchesTab = ({
       });
       latestColor.current = color;
       setHex(color.value(100).hex());
-      onChange && onChange(color, bri);
+      onChange?.(color, bri);
     },
     [bri, onChange],
   );
 
   const handleChangeComplete = useCallback(() => {
-    onChangeComplete && onChangeComplete(latestColor.current, bri);
+    onChangeComplete?.(latestColor.current, bri);
   }, [bri, onChangeComplete]);
 
   const handleBrightnessChange = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const value = Number(event.currentTarget.value) / 100;
       setBri(value);
-      onChange && onChange(latestColor.current, value);
+      onChange?.(latestColor.current, value);
     },
     [onChange],
   );
@@ -286,7 +291,7 @@ const SlidersTab = ({
       v: 100,
     });
 
-    onChangeComplete && onChangeComplete(color, bri);
+    onChangeComplete?.(color, bri);
   }, [bri, hue, onChangeComplete, sat]);
 
   const handleHueChange = useCallback(
@@ -302,7 +307,7 @@ const SlidersTab = ({
         v: 100,
       });
 
-      onChange && onChange(color, bri);
+      onChange?.(color, bri);
     },
     [bri, inputFocused, onChange, sat],
   );
@@ -320,7 +325,7 @@ const SlidersTab = ({
         v: 100,
       });
 
-      onChange && onChange(color, bri);
+      onChange?.(color, bri);
     },
     [bri, hue, inputFocused, onChange],
   );
@@ -338,7 +343,7 @@ const SlidersTab = ({
         v: 100,
       });
 
-      onChange && onChange(color, bri);
+      onChange?.(color, bri);
     },
     [hue, inputFocused, onChange, sat],
   );
@@ -380,7 +385,7 @@ const SlidersTab = ({
           v: 100,
         });
 
-        onChange && onChange(color, newBri);
+        onChange?.(color, newBri);
       }
     },
     [bri, handleChangeComplete, hue, onChange, sat],
@@ -555,7 +560,7 @@ const ImageTab = ({
       });
       latestColor.current = color;
       setHsva(colorToHsva(color));
-      onChange && onChange(color, bri);
+      onChange?.(color, bri);
     },
     [bri, onChange],
   );
@@ -578,7 +583,8 @@ const ImageTab = ({
     [recomputeColors],
   );
 
-  const state = useWebsocketState();
+  const devices = useDevicesState();
+  const scenes = useScenesState();
   const setDeviceState = useSetDeviceState();
   const handleApplyToDevices = useCallback(() => {
     const randomizedDeviceKeyOrder = deviceKeys
@@ -590,11 +596,15 @@ const ImageTab = ({
       .sort(() => Math.random() - 0.5);
 
     randomizedDeviceKeyOrder?.forEach((deviceKey, index) => {
-      const match = state !== null ? findDevice(state, deviceKey) : null;
+      const match = devices?.[deviceKey];
       const color = randomizedColorOrder[index % computedColors.length];
 
-      if (match && state) {
-        const persistEnabled = isDevicePersistEnabled(state, deviceKey);
+      if (match) {
+        const persistEnabled = isDevicePersistEnabled(
+          devices,
+          scenes,
+          deviceKey,
+        );
 
         setDeviceState(
           match,
@@ -605,7 +615,7 @@ const ImageTab = ({
         );
       }
     });
-  }, [deviceKeys, computedColors, state, setDeviceState]);
+  }, [deviceKeys, computedColors, devices, scenes, setDeviceState]);
 
   return (
     <>
@@ -622,7 +632,7 @@ const ImageTab = ({
         colors={computedColors.map((color) => color.hex())}
         color={hsva}
         onChange={handleChange}
-        className="min-h-[40px] flex-nowrap! overflow-x-auto justify-center pt-4 *:shrink-0"
+        className="min-h-10 flex-nowrap! overflow-x-auto justify-center pt-4 *:shrink-0"
       />
       <div className="flex flex-nowrap gap-4">
         <div>
@@ -653,14 +663,15 @@ const ImageTab = ({
 };
 
 const isDevicePersistEnabled = (
-  state: StateUpdate,
+  devices: DevicesState | null,
+  scenes: FlattenedScenesConfig | null,
   deviceKey: DeviceKey,
 ): boolean => {
-  const device = findDevice(state, deviceKey);
+  const device = devices?.[deviceKey];
   if (device && 'Controllable' in device?.data) {
-    let scene_id = device?.data?.Controllable?.scene_id;
+    const scene_id = device?.data?.Controllable?.scene_id;
     if (!scene_id) return false;
-    let scene = state?.scenes[scene_id];
+    const scene = scenes?.[scene_id];
     if (!scene) return false;
     return scene.active_overrides.includes(deviceKey);
   }
@@ -669,12 +680,11 @@ const isDevicePersistEnabled = (
 
 const ScenesTab = (props: { deviceKeys: string[] }) => {
   const ws = useWebsocket();
-  const state = useWebsocketState();
+  const devices = useDevicesState();
+  const scenes = useScenesState();
   console.log(props.deviceKeys);
   const persistEnabled = props.deviceKeys.every((deviceKey) => {
-    if (state === null) return false;
-
-    return isDevicePersistEnabled(state, deviceKey);
+    return isDevicePersistEnabled(devices, scenes, deviceKey);
   });
 
   const togglePersist = () => {
@@ -741,17 +751,18 @@ export const ColorPickerModal = () => {
     setOpen: setDeviceModalOpen,
   } = useDeviceModalState();
 
-  const state = useWebsocketState();
+  const devices = useDevicesState();
+  const scenes = useScenesState();
+  const groups = useGroupsState();
 
-  const firstDevice =
-    state !== null ? findDevice(state, deviceModalState[0]) : null;
-  const groups = excludeUndefined(state?.groups);
+  const firstDevice = devices?.[deviceModalState[0]];
+  const groupConfigs = excludeUndefined(groups ?? undefined);
 
   const selectedDevicesSet = new Set(deviceModalState);
 
   // A group is active if the list of active devices == the devices contained in
   // the group
-  const activeGroup = Object.values(groups).find((group) => {
+  const activeGroup = Object.values(groupConfigs).find((group) => {
     const groupDevicesSet = new Set(group.device_keys);
 
     return eqSet(selectedDevicesSet, groupDevicesSet);
@@ -778,12 +789,16 @@ export const ColorPickerModal = () => {
 
   const partialSetDeviceColor = useCallback(
     (color: Color, brightness: number) => {
-      if (deviceModalState !== null && state !== null) {
+      if (deviceModalState !== null) {
         deviceModalState.forEach((deviceKey) => {
-          const match = state !== null ? findDevice(state, deviceKey) : null;
+          const match = devices?.[deviceKey];
 
           if (match) {
-            const persistEnabled = isDevicePersistEnabled(state, deviceKey);
+            const persistEnabled = isDevicePersistEnabled(
+              devices,
+              scenes,
+              deviceKey,
+            );
             setDeviceState(
               match,
               persistEnabled,
@@ -796,17 +811,21 @@ export const ColorPickerModal = () => {
         });
       }
     },
-    [deviceModalState, setDeviceState, state],
+    [deviceModalState, devices, scenes, setDeviceState],
   );
 
   const partialSetDevicePower = useCallback(
     (power: boolean) => {
-      if (deviceModalState !== null && state !== null) {
+      if (deviceModalState !== null) {
         deviceModalState.forEach((deviceKey) => {
-          const match = state !== null ? findDevice(state, deviceKey) : null;
+          const match = devices?.[deviceKey];
 
           if (match) {
-            const persistEnabled = isDevicePersistEnabled(state, deviceKey);
+            const persistEnabled = isDevicePersistEnabled(
+              devices,
+              scenes,
+              deviceKey,
+            );
 
             setDeviceState(
               match,
@@ -824,8 +843,9 @@ export const ColorPickerModal = () => {
       deviceModalBrightness,
       deviceModalColor,
       deviceModalState,
+      devices,
+      scenes,
       setDeviceState,
-      state,
     ],
   );
 
@@ -836,9 +856,7 @@ export const ColorPickerModal = () => {
   );
 
   const persistEnabled = deviceModalState.every((deviceKey) => {
-    if (state === null) return false;
-
-    return isDevicePersistEnabled(state, deviceKey);
+    return isDevicePersistEnabled(devices, scenes, deviceKey);
   });
 
   const closeDeviceModal = useCallback(() => {

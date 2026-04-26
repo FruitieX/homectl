@@ -1,5 +1,5 @@
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
+import { useDeviceState, useWebsocket } from '@/hooks/websocket';
 import { produce } from 'immer';
 import { Car, Edit, LampCeiling, X } from 'lucide-react';
 import { Button, Card, Modal } from 'react-daisyui';
@@ -16,10 +16,9 @@ const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
 export const ControlsCard = () => {
   const ws = useWebsocket();
-  const state = useWebsocketState();
 
   let lightsOn = false;
-  const lightDevice = state?.devices[lightDeviceKey];
+  const lightDevice = useDeviceState(lightDeviceKey);
   if (lightDevice && 'Controllable' in lightDevice.data) {
     lightsOn = lightDevice.data.Controllable.state.power;
   }
@@ -27,7 +26,7 @@ export const ControlsCard = () => {
   let carHeater = false;
   // const [vacuumActive, setVacuumActive] = useState(false);
 
-  const carHeaterDevice = state?.devices[carHeaterDeviceKey];
+  const carHeaterDevice = useDeviceState(carHeaterDeviceKey);
   if (carHeaterDevice && 'Controllable' in carHeaterDevice.data) {
     carHeater = carHeaterDevice.data.Controllable.state.power;
   }
@@ -154,14 +153,14 @@ export const ControlsCard = () => {
           </Button>
         </Card.Body>
         {/* <Card.Body className="flex-row items-center justify-around overflow-x-auto"> */}
-          {/* <Button
+        {/* <Button
             color="ghost"
             className={lightsOn ? '' : 'text-zinc-700'}
             size="lg"
             startIcon={<LampCeiling size="3rem" />}
             onClick={toggleMapVisible}
           /> */}
-          {/* <Button
+        {/* <Button
           color="ghost"
           className={vacuumActive ? '' : 'text-zinc-700'}
           size="lg"
@@ -195,5 +194,3 @@ export const ControlsCard = () => {
     </>
   );
 };
-
-

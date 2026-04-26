@@ -20,7 +20,9 @@ use crate::types::{
 
 use crate::db::config_queries;
 
-use super::state::AppState;
+use super::devices::ActivateSceneRequest;
+use super::snapshot::SnapshotChanges;
+use super::state::{AppState, PendingWsUpdate};
 use super::{groups::Groups, integrations::Integrations};
 
 /// Resolves the effective scene id for an action that may reference the
@@ -96,11 +98,20 @@ fn scene_row_from_config(scene_id: &SceneId, config: &SceneConfig) -> config_que
 #[derive(Default)]
 pub struct EventOutcome {
     deferred_work: Vec<DeferredEventWork>,
+    snapshot_changes: SnapshotChanges,
 }
 
 impl EventOutcome {
     fn push(&mut self, work: DeferredEventWork) {
         self.deferred_work.push(work);
+    }
+
+    fn mark_snapshot_changes(&mut self, changes: SnapshotChanges) {
+        self.snapshot_changes.include(changes);
+    }
+
+    pub fn snapshot_changes(&self) -> SnapshotChanges {
+        self.snapshot_changes
     }
 
     pub fn into_deferred_work(self) -> Vec<DeferredEventWork> {
@@ -111,7 +122,7 @@ impl EventOutcome {
 pub enum DeferredEventWork {
     PublishIntegrationState {
         integrations: Integrations,
-        device: Device,
+        device: Box<Device>,
     },
     RunIntegrationAction {
         integrations: Integrations,
@@ -119,11 +130,11 @@ pub enum DeferredEventWork {
     },
     PersistSceneOverride {
         scene_id: SceneId,
-        overrides: SceneDevicesConfig,
+        overrides: Box<SceneDevicesConfig>,
     },
     UpsertConfigScene {
         scene_id: SceneId,
-        scene: config_queries::SceneRow,
+        scene: Box<config_queries::SceneRow>,
     },
     DeleteConfigScene {
         scene_id: SceneId,
@@ -140,7 +151,7 @@ impl DeferredEventWork {
             DeferredEventWork::PublishIntegrationState {
                 integrations,
                 device,
-            } => integrations.set_integration_device_state(device).await,
+            } => integrations.set_integration_device_state(*device).await,
             DeferredEventWork::RunIntegrationAction {
                 integrations,
                 descriptor,
@@ -195,6 +206,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 .devices
                 .handle_external_state_update(device, &state.scenes)
                 .await?;
+            outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::StartupCompleted => {
             state.groups.force_invalidate(&state.devices);
@@ -202,14 +214,15 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             state.scenes.force_invalidate(&state.devices, &state.groups);
 
             state.refresh_routine_statuses();
-            state.schedule_ws_broadcast();
+            let changes = SnapshotChanges::startup_completed();
+            state.schedule_ws_broadcast(changes);
+            outcome.mark_snapshot_changes(changes);
 
             let device_count = state.devices.get_state().0.len();
             info!("Startup completed, discovered {device_count} devices");
         }
         Event::InternalStateUpdate {
-            old_state,
-            new_state,
+            device_key,
             old,
             new,
         } => {
@@ -219,14 +232,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
 
             let invalidated_device = new;
             debug!("invalidating {name}", name = invalidated_device.name);
+            let device_was_added = old.is_none();
 
-            let _groups_invalidated = state
-                .groups
-                .invalidate(old_state, new_state, &state.devices);
+            let _groups_invalidated = state.groups.invalidate(device_was_added, &state.devices);
 
             let invalidated_scenes = state.scenes.invalidate(
-                old_state,
-                new_state,
+                old.as_ref(),
                 invalidated_device,
                 &state.devices,
                 &state.groups,
@@ -237,16 +248,29 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             state
                 .rules
                 .handle_internal_state_update(
-                    old_state,
-                    new_state,
-                    old,
+                    device_key,
+                    old.as_ref(),
                     new,
                     &state.devices,
                     &state.groups,
                 )
                 .await;
 
-            state.schedule_ws_broadcast();
+            let mut changes = SnapshotChanges {
+                devices: true,
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            };
+            if device_was_added {
+                changes.flattened_groups = true;
+                changes.flattened_scenes = true;
+            } else if !invalidated_scenes.is_empty() {
+                changes.flattened_scenes = true;
+            }
+
+            state
+                .schedule_ws_broadcast(PendingWsUpdate::device_upsert(device_key.clone(), changes));
+            outcome.mark_snapshot_changes(changes);
         }
         Event::SetInternalState {
             device,
@@ -259,9 +283,14 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     state.scenes.store_scene_override_in_memory(device, true)?;
                 outcome.push(DeferredEventWork::PersistSceneOverride {
                     scene_id,
-                    overrides,
+                    overrides: Box::new(overrides),
                 });
                 state.scenes.force_invalidate(&state.devices, &state.groups);
+                outcome.mark_snapshot_changes(SnapshotChanges {
+                    flattened_scenes: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                });
             }
 
             let device = device.set_scene(
@@ -275,11 +304,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 skip_external_update.unwrap_or_default(),
                 skip_db_update.unwrap_or(true),
             );
+            outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::SetExternalState { device } => {
             outcome.push(DeferredEventWork::PublishIntegrationState {
                 integrations: state.integrations.clone(),
-                device: device.color_to_preferred_mode(),
+                device: Box::new(device.color_to_preferred_mode()),
             });
         }
         Event::ApplyDeviceState {
@@ -292,6 +322,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 skip_external_update.unwrap_or_default(),
                 skip_db_update.unwrap_or_default(),
             );
+            outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::DbStoreScene { scene_id, config } => {
             let scene = scene_row_from_config(scene_id, config);
@@ -300,8 +331,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
 
             outcome.push(DeferredEventWork::UpsertConfigScene {
                 scene_id: scene_id.clone(),
-                scene,
+                scene: Box::new(scene),
             });
+            outcome.mark_snapshot_changes(SnapshotChanges::scenes());
         }
         Event::DbDeleteScene { scene_id } => {
             let deleted = state.delete_scene(&scene_id.to_string());
@@ -313,6 +345,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 outcome.push(DeferredEventWork::DeleteConfigScene {
                     scene_id: scene_id.clone(),
                 });
+                outcome.mark_snapshot_changes(SnapshotChanges::scenes());
             }
         }
         Event::DbEditScene { scene_id, name } => {
@@ -335,8 +368,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             if let Some(scene) = updated_scene.as_ref() {
                 outcome.push(DeferredEventWork::UpsertConfigScene {
                     scene_id: scene_id.clone(),
-                    scene: scene.clone(),
+                    scene: Box::new(scene.clone()),
                 });
+                outcome.mark_snapshot_changes(SnapshotChanges::scenes());
             }
 
             if updated_scene.is_none() {
@@ -367,20 +401,21 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             );
             state
                 .devices
-                .activate_scene(
-                    &resolved_scene_id,
+                .activate_scene(ActivateSceneRequest {
+                    scene_id: &resolved_scene_id,
                     device_keys,
                     group_keys,
-                    *use_scene_transition,
+                    use_scene_transition: *use_scene_transition,
                     transition,
                     rollout,
                     rollout_source_device_key,
                     rollout_duration_ms,
-                    &device_positions,
-                    &state.groups,
-                    &state.scenes,
-                )
+                    device_positions: &device_positions,
+                    groups: &state.groups,
+                    scenes: &state.scenes,
+                })
                 .await;
+            outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::Action(Action::CycleScenes(CycleScenesDescriptor {
             scenes,
@@ -427,6 +462,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     &state.scenes,
                 )
                 .await;
+            outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::Action(Action::Dim(DimDescriptor {
             device_keys,
@@ -438,6 +474,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 .devices
                 .dim(device_keys, group_keys, step, &state.scenes)
                 .await;
+            outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::Action(Action::Custom(CustomActionDescriptor {
             integration_id,
@@ -481,12 +518,18 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     .store_scene_override_in_memory(device, *override_state)?;
                 outcome.push(DeferredEventWork::PersistSceneOverride {
                     scene_id,
-                    overrides,
+                    overrides: Box::new(overrides),
                 });
             }
             state.scenes.force_invalidate(&state.devices, &state.groups);
             state.refresh_routine_statuses();
-            state.schedule_ws_broadcast();
+            let changes = SnapshotChanges {
+                flattened_scenes: true,
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            };
+            state.schedule_ws_broadcast(changes);
+            outcome.mark_snapshot_changes(changes);
         }
         Event::Action(Action::EvalExpr(expr)) => {
             warn!("Ignoring legacy evalexpr action: {expr}");
@@ -494,7 +537,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         Event::Action(Action::Ui(action)) => {
             let UiActionDescriptor::StoreUIState { key, value } = action;
             state.ui.store_state_in_memory(key.clone(), value.clone());
-            state.schedule_ws_broadcast();
+            let changes = SnapshotChanges::ui_state();
+            state.schedule_ws_broadcast(changes);
+            outcome.mark_snapshot_changes(changes);
             outcome.push(DeferredEventWork::StoreUiState {
                 key: key.clone(),
                 value: value.clone(),
@@ -547,7 +592,6 @@ mod tests {
             version: 1,
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
-                ..CoreConfigRow::default()
             },
             integrations: Vec::new(),
             groups: Vec::new(),
@@ -590,6 +634,7 @@ mod tests {
             ws: WebSockets::default(),
             ui: Ui::new(),
             ws_broadcast_pending: Arc::new(AtomicBool::new(false)),
+            pending_ws_update: Arc::new(std::sync::Mutex::new(Default::default())),
             runtime_apply_lock: Arc::new(Mutex::new(())),
             snapshot,
         };

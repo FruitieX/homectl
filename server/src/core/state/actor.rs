@@ -23,7 +23,10 @@ use super::{
     metrics::{self, ActorMetrics, KIND_LABELS},
     AppState,
 };
-use crate::core::{event::DeferredEventWork, snapshot::SnapshotHandle};
+use crate::core::{
+    event::DeferredEventWork,
+    snapshot::{SnapshotChanges, SnapshotHandle},
+};
 use crate::types::event::Event;
 
 const SLOW_EVENT_MUTATION_WARN_MS: u64 = 250;
@@ -54,7 +57,10 @@ impl StateHandle {
         self.metrics.on_enqueue();
         if self
             .tx
-            .send(StateCommand::HandleEvent { event, done: None })
+            .send(StateCommand::HandleEvent {
+                event: Box::new(event),
+                done: None,
+            })
             .is_err()
         {
             self.metrics.on_dequeue();
@@ -169,14 +175,26 @@ async fn run_actor(
         match cmd {
             StateCommand::HandleEvent { event, done } => {
                 let kind = event_kind(&event);
+                let handle_started_at = Instant::now();
                 let outcome = handle_event(&mut app_state, &event).await;
-                app_state.publish_snapshot();
+                let handle_elapsed = handle_started_at.elapsed();
+                let snapshot_changes = outcome
+                    .as_ref()
+                    .map(|outcome| outcome.snapshot_changes())
+                    .unwrap_or_else(|_| SnapshotChanges::all());
+
+                let publish_started_at = Instant::now();
+                app_state.publish_snapshot(snapshot_changes);
+                let publish_elapsed = publish_started_at.elapsed();
 
                 let elapsed = started_at.elapsed();
                 let slow = elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS);
                 metrics.record(kind_idx, elapsed.as_millis() as u64, slow);
                 if slow {
-                    warn!("Slow event: elapsed={:?} kind={}", elapsed, kind);
+                    warn!(
+                        "Slow event: elapsed={:?} handle_event={:?} publish_snapshot={:?} kind={}",
+                        elapsed, handle_elapsed, publish_elapsed, kind
+                    );
                 }
 
                 match outcome {
@@ -188,9 +206,7 @@ async fn run_actor(
                         }
                     }
                     Err(err) => {
-                        error!(
-                            "Error while handling event (actor): kind={kind} err={err:#?}"
-                        );
+                        error!("Error while handling event (actor): kind={kind} err={err:#?}");
                     }
                 }
 
@@ -199,14 +215,22 @@ async fn run_actor(
                 }
             }
             StateCommand::Mutate(f) => {
+                let mutate_started_at = Instant::now();
                 f(&mut app_state).await;
-                app_state.publish_snapshot();
+                let mutate_elapsed = mutate_started_at.elapsed();
+
+                let publish_started_at = Instant::now();
+                app_state.publish_snapshot(SnapshotChanges::all());
+                let publish_elapsed = publish_started_at.elapsed();
 
                 let elapsed = started_at.elapsed();
                 let slow = elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS);
                 metrics.record(kind_idx, elapsed.as_millis() as u64, slow);
                 if slow {
-                    warn!("Slow mutation: elapsed={:?}", elapsed);
+                    warn!(
+                        "Slow mutation: elapsed={:?} mutate={:?} publish_snapshot={:?}",
+                        elapsed, mutate_elapsed, publish_elapsed
+                    );
                 }
             }
         }

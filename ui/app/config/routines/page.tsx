@@ -10,7 +10,7 @@ import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { useMemo, useState } from 'react';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
-import { useRoutineStatuses, useWebsocketState } from '@/hooks/websocket';
+import { useDevicesState, useRoutineStatuses } from '@/hooks/websocket';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
@@ -41,28 +41,27 @@ export default function RoutinesPage() {
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const { devicesState: apiDevices } = useDevicesApi();
-  const wsState = useWebsocketState();
+  const liveDevices = useDevicesState();
   // Merge live websocket device state over the REST snapshot so editors (for
   // example the raw JSON rule preview) see up-to-date `device.raw` payloads as
   // integrations push updates.
   const devices = useMemo<DevicesState>(() => {
     const merged: DevicesState = { ...apiDevices };
-    for (const [key, device] of Object.entries(wsState?.devices ?? {})) {
+    for (const [key, device] of Object.entries(liveDevices ?? {})) {
       if (device) {
         merged[key] = device;
       }
     }
     return merged;
-  }, [apiDevices, wsState]);
+  }, [apiDevices, liveDevices]);
   const routineStatuses = useRoutineStatuses();
   const groups = useGroupsState();
-  const deviceDisplayNameMap = deviceDisplayNames.reduce<Record<string, string>>(
-    (names, row) => {
-      names[row.device_key] = row.display_name;
-      return names;
-    },
-    {},
-  );
+  const deviceDisplayNameMap = deviceDisplayNames.reduce<
+    Record<string, string>
+  >((names, row) => {
+    names[row.device_key] = row.display_name;
+    return names;
+  }, {});
 
   const sceneList = scenes.map((s) => ({ id: s.id, name: s.name }));
   const routineList = routines.map((r) => ({ id: r.id, name: r.name }));
@@ -123,8 +122,12 @@ export default function RoutinesPage() {
               deviceDisplayNameMap={deviceDisplayNameMap}
               onOpen={() => setOpenId(routine.id)}
               onClose={() => {
-                setOpenId((current) => (current === routine.id ? null : current));
-                setEditingId((current) => (current === routine.id ? null : current));
+                setOpenId((current) =>
+                  current === routine.id ? null : current,
+                );
+                setEditingId((current) =>
+                  current === routine.id ? null : current,
+                );
               }}
               onEdit={() => setEditingId(routine.id)}
               onSave={async (updated) => {
@@ -135,7 +138,9 @@ export default function RoutinesPage() {
               onDelete={async () => {
                 if (confirm(`Delete routine "${routine.name}"?`)) {
                   await remove(routine.id);
-                  setOpenId((current) => (current === routine.id ? null : current));
+                  setOpenId((current) =>
+                    current === routine.id ? null : current,
+                  );
                 }
               }}
             />
@@ -221,7 +226,9 @@ function RoutineCard({
 
     return { label: 'Waiting', className: 'badge-ghost' };
   })();
-  const matchingRuleCount = runtimeStatus?.rules.filter((status) => status.condition_match).length;
+  const matchingRuleCount = runtimeStatus?.rules.filter(
+    (status) => status.condition_match,
+  ).length;
 
   const summary = (
     <div className="space-y-3 pr-4">
@@ -231,7 +238,9 @@ function RoutineCard({
           <div className="text-sm opacity-70">{routine.id}</div>
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end">
-          <div className={`badge ${routine.enabled ? 'badge-success' : 'badge-error'}`}>
+          <div
+            className={`badge ${routine.enabled ? 'badge-success' : 'badge-error'}`}
+          >
             {routine.enabled ? 'Enabled' : 'Disabled'}
           </div>
           {routineStatusBadge ? (
@@ -248,7 +257,8 @@ function RoutineCard({
         {routine.enabled && matchingRuleCount !== undefined ? (
           <>
             {' '}
-            · <span className="font-medium">{matchingRuleCount}</span> matching now
+            · <span className="font-medium">{matchingRuleCount}</span> matching
+            now
           </>
         ) : null}
       </div>
@@ -381,14 +391,17 @@ function RoutineCard({
 
             try {
               finalRules = editMode === 'json' ? JSON.parse(rulesJson) : rules;
-              finalActions = editMode === 'json' ? JSON.parse(actionsJson) : actions;
+              finalActions =
+                editMode === 'json' ? JSON.parse(actionsJson) : actions;
             } catch {
               alert('Invalid JSON in rules or actions');
               return;
             }
 
             if (Array.isArray(finalActions)) {
-              const rolloutValidationError = validateActions(finalActions as Action[]);
+              const rolloutValidationError = validateActions(
+                finalActions as Action[],
+              );
               if (rolloutValidationError) {
                 alert(rolloutValidationError);
                 return;
@@ -405,7 +418,9 @@ function RoutineCard({
               });
             } catch (error) {
               alert(
-                error instanceof Error ? error.message : 'Failed to save routine',
+                error instanceof Error
+                  ? error.message
+                  : 'Failed to save routine',
               );
             }
           }}
@@ -523,7 +538,9 @@ function CreateRoutineModal({
           <button
             className="btn btn-primary"
             disabled={!id || !name}
-            onClick={() => onCreate({ id, name, enabled, rules: [], actions: [] })}
+            onClick={() =>
+              onCreate({ id, name, enabled, rules: [], actions: [] })
+            }
           >
             Create
           </button>

@@ -10,9 +10,12 @@ import {
   useScenes,
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useDevicesState } from '@/hooks/websocket';
 import { getDeviceKey } from '@/lib/device';
-import { getDefaultDeviceLabel, getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import {
+  getDefaultDeviceLabel,
+  getDeviceDisplayLabel,
+} from '@/lib/deviceLabel';
 import { black, getResolvedDeviceColorState } from '@/lib/colors';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import {
@@ -197,7 +200,9 @@ const getManageKindLabel = (managed: ManageKind) => {
   }
 
   if ('Partial' in managed) {
-    return managed.Partial.prev_change_committed ? 'Partial' : 'Partial pending commit';
+    return managed.Partial.prev_change_committed
+      ? 'Partial'
+      : 'Partial pending commit';
   }
 
   return 'Managed';
@@ -277,7 +282,9 @@ const getStateSourceSummary = (
         : 'state';
   const badge = `${scopePrefix} ${kindSuffix}`;
   const groupLabel =
-    source.group_id !== null ? groupNameById[source.group_id] ?? source.group_id : null;
+    source.group_id !== null
+      ? (groupNameById[source.group_id] ?? source.group_id)
+      : null;
 
   if (source.kind === 'device_link') {
     const linkedDevice = source.linked_device_key ?? 'unknown device';
@@ -383,9 +390,10 @@ function SensorConfigFields({
   if (kind === 'auto') {
     return (
       <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-3 text-sm opacity-80">
-        Auto mode currently resolves to <span className="font-medium">{resolvedLabel}</span>{' '}
-        based on the latest sensor payload. Use a manual mode when a switch should look like
-        the physical remote instead of a raw text or JSON field.
+        Auto mode currently resolves to{' '}
+        <span className="font-medium">{resolvedLabel}</span> based on the latest
+        sensor payload. Use a manual mode when a switch should look like the
+        physical remote instead of a raw text or JSON field.
       </div>
     );
   }
@@ -460,7 +468,8 @@ function SensorConfigFields({
 
   return (
     <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-3 text-sm opacity-80">
-      This mode does not need extra mapping values. The inline sensor panel will render a{' '}
+      This mode does not need extra mapping values. The inline sensor panel will
+      render a{' '}
       {kind === 'boolean'
         ? 'boolean button set'
         : kind === 'number'
@@ -483,8 +492,12 @@ function DeviceFactRow({ label, value }: { label: string; value: string }) {
 }
 
 export default function DevicesPage() {
-  const { devices, loading: devicesLoading, refetch: refetchDevices } = useDevicesApi();
-  const wsState = useWebsocketState();
+  const {
+    devices,
+    loading: devicesLoading,
+    refetch: refetchDevices,
+  } = useDevicesApi();
+  const websocketDevices = useDevicesState();
   const { data: groupRows, refetch: refetchGroups } = useGroups();
   const { data: scenes, refetch: refetchScenes } = useScenes();
   const {
@@ -499,20 +512,26 @@ export default function DevicesPage() {
     update: updateDeviceSensorConfig,
     remove: removeDeviceSensorConfig,
   } = useDeviceSensorConfigs();
-  const { replace: replaceConfigDevice, remove: removeConfigDevice } = useConfigDevices();
+  const { replace: replaceConfigDevice, remove: removeConfigDevice } =
+    useConfigDevices();
   const [deviceSearch, setDeviceSearch] = useState('');
-  const [deviceTypeFilter, setDeviceTypeFilter] = useState<DeviceTypeFilter>('all');
+  const [deviceTypeFilter, setDeviceTypeFilter] =
+    useState<DeviceTypeFilter>('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
-  const [displayNameDrafts, setDisplayNameDrafts] = useState<Record<string, string>>({});
-  const [sensorConfigDrafts, setSensorConfigDrafts] = useState<Record<string, DeviceSensorConfig>>(
-    {},
-  );
+  const [displayNameDrafts, setDisplayNameDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [sensorConfigDrafts, setSensorConfigDrafts] = useState<
+    Record<string, DeviceSensorConfig>
+  >({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
   const [mutatingKey, setMutatingKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openDeviceKey, setOpenDeviceKey] = useState<string | null>(null);
-  const [replacementDrafts, setReplacementDrafts] = useState<Record<string, string>>({});
+  const [replacementDrafts, setReplacementDrafts] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     setDisplayNameDrafts(
@@ -529,7 +548,9 @@ export default function DevicesPage() {
           row.device_ref,
           {
             ...row,
-            interaction_kind: normalizeSensorInteractionKind(row.interaction_kind),
+            interaction_kind: normalizeSensorInteractionKind(
+              row.interaction_kind,
+            ),
             config: normalizeSensorInteractionConfig(
               normalizeSensorInteractionKind(row.interaction_kind),
               row.config,
@@ -541,11 +562,17 @@ export default function DevicesPage() {
   }, [deviceSensorConfigs]);
 
   const deviceDisplayNameMap = useMemo(
-    () => Object.fromEntries(deviceDisplayNames.map((row) => [row.device_key, row.display_name])),
+    () =>
+      Object.fromEntries(
+        deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+      ),
     [deviceDisplayNames],
   );
   const deviceSensorConfigMap = useMemo(
-    () => Object.fromEntries(deviceSensorConfigs.map((row) => [row.device_ref, row])),
+    () =>
+      Object.fromEntries(
+        deviceSensorConfigs.map((row) => [row.device_ref, row]),
+      ),
     [deviceSensorConfigs],
   );
   const groups = useMemo(() => {
@@ -556,7 +583,9 @@ export default function DevicesPage() {
         name: group.name,
         device_keys:
           group.device_keys ??
-          group.devices.map((device) => `${device.integration_id}/${device.device_id}`),
+          group.devices.map(
+            (device) => `${device.integration_id}/${device.device_id}`,
+          ),
         hidden: group.hidden,
       };
     }
@@ -572,7 +601,8 @@ export default function DevicesPage() {
     () =>
       Object.entries(groups)
         .filter(
-          (entry): entry is [string, NonNullable<(typeof groups)[string]>] => Boolean(entry[1]),
+          (entry): entry is [string, NonNullable<(typeof groups)[string]>] =>
+            Boolean(entry[1]),
         )
         .map(([id, group]) => ({
           id,
@@ -583,7 +613,10 @@ export default function DevicesPage() {
     [groups],
   );
   const groupNameById = useMemo(
-    () => Object.fromEntries(availableGroups.map((group) => [group.id, group.name])),
+    () =>
+      Object.fromEntries(
+        availableGroups.map((group) => [group.id, group.name]),
+      ),
     [availableGroups],
   );
 
@@ -594,14 +627,14 @@ export default function DevicesPage() {
       mergedDevices.set(getDeviceKey(device), device);
     }
 
-    for (const device of Object.values(wsState?.devices ?? {})) {
+    for (const device of Object.values(websocketDevices ?? {})) {
       if (device) {
         mergedDevices.set(getDeviceKey(device), device);
       }
     }
 
     return Array.from(mergedDevices.values());
-  }, [devices, wsState]);
+  }, [devices, websocketDevices]);
 
   const replacementOptions = useMemo(
     () =>
@@ -612,27 +645,31 @@ export default function DevicesPage() {
         }))
         .sort(
           (left, right) =>
-            left.label.localeCompare(right.label) || left.key.localeCompare(right.key),
+            left.label.localeCompare(right.label) ||
+            left.key.localeCompare(right.key),
         ),
     [deviceDisplayNameMap, liveDevices],
   );
 
   const groupIdsByDeviceKey = useMemo(
     () =>
-      Object.entries(groups).reduce<Record<string, string[]>>((result, [groupId, group]) => {
-        if (!group) {
-          return result;
-        }
-
-        for (const deviceKey of group.device_keys) {
-          if (!result[deviceKey]) {
-            result[deviceKey] = [];
+      Object.entries(groups).reduce<Record<string, string[]>>(
+        (result, [groupId, group]) => {
+          if (!group) {
+            return result;
           }
-          result[deviceKey].push(groupId);
-        }
 
-        return result;
-      }, {}),
+          for (const deviceKey of group.device_keys) {
+            if (!result[deviceKey]) {
+              result[deviceKey] = [];
+            }
+            result[deviceKey].push(groupId);
+          }
+
+          return result;
+        },
+        {},
+      ),
     [groups],
   );
 
@@ -645,7 +682,9 @@ export default function DevicesPage() {
           const deviceRef = getSensorConfigRef(device);
           const type = getDeviceType(device);
           const groupIds = groupIdsByDeviceKey[deviceKey] ?? [];
-          const groupNames = groupIds.map((groupId) => groups[groupId]?.name ?? groupId);
+          const groupNames = groupIds.map(
+            (groupId) => groups[groupId]?.name ?? groupId,
+          );
           const resolvedInteraction = resolveSensorInteraction(
             device,
             deviceSensorConfigMap[deviceRef] ?? null,
@@ -655,7 +694,9 @@ export default function DevicesPage() {
 
           return {
             activeSceneId:
-              'Controllable' in device.data ? device.data.Controllable.scene_id : null,
+              'Controllable' in device.data
+                ? device.data.Controllable.scene_id
+                : null,
             capabilityLabels: getCapabilitiesSummary(device),
             defaultLabel: getDefaultDeviceLabel(device),
             device,
@@ -684,9 +725,13 @@ export default function DevicesPage() {
                 : getSensorRuntimeSummary(device),
             sensorDetails,
             stateDetails:
-              'Controllable' in device.data ? getControllableStateDetails(device) : [],
+              'Controllable' in device.data
+                ? getControllableStateDetails(device)
+                : [],
             stateSource:
-              'Controllable' in device.data ? device.data.Controllable.state_source : null,
+              'Controllable' in device.data
+                ? device.data.Controllable.state_source
+                : null,
             type,
           } satisfies VisibleDeviceEntry;
         })
@@ -695,7 +740,10 @@ export default function DevicesPage() {
             return false;
           }
 
-          if (deviceGroupFilter !== 'all' && !entry.groupIds.includes(deviceGroupFilter)) {
+          if (
+            deviceGroupFilter !== 'all' &&
+            !entry.groupIds.includes(deviceGroupFilter)
+          ) {
             return false;
           }
 
@@ -718,7 +766,8 @@ export default function DevicesPage() {
         })
         .sort(
           (left, right) =>
-            left.label.localeCompare(right.label) || left.deviceKey.localeCompare(right.deviceKey),
+            left.label.localeCompare(right.label) ||
+            left.deviceKey.localeCompare(right.deviceKey),
         ),
     [
       deviceDisplayNameMap,
@@ -732,7 +781,10 @@ export default function DevicesPage() {
     ],
   );
 
-  const updateSensorDraftKind = (deviceRef: string, kind: SensorInteractionKind) => {
+  const updateSensorDraftKind = (
+    deviceRef: string,
+    kind: SensorInteractionKind,
+  ) => {
     setSensorConfigDrafts((previous) => ({
       ...previous,
       [deviceRef]: {
@@ -743,7 +795,11 @@ export default function DevicesPage() {
     }));
   };
 
-  const updateSensorDraftField = (deviceRef: string, field: string, value: string) => {
+  const updateSensorDraftField = (
+    deviceRef: string,
+    field: string,
+    value: string,
+  ) => {
     setSensorConfigDrafts((previous) => {
       const current = previous[deviceRef] ?? createEmptySensorConfig(deviceRef);
       const kind = normalizeSensorInteractionKind(current.interaction_kind);
@@ -766,8 +822,11 @@ export default function DevicesPage() {
     const deviceRef = getSensorConfigRef(device);
     const labelDraft = displayNameDrafts[deviceKey]?.trim() ?? '';
     const existingLabel = deviceDisplayNameMap[deviceKey] ?? '';
-    const sensorDraft = sensorConfigDrafts[deviceRef] ?? createEmptySensorConfig(deviceRef);
-    const nextInteractionKind = normalizeSensorInteractionKind(sensorDraft.interaction_kind);
+    const sensorDraft =
+      sensorConfigDrafts[deviceRef] ?? createEmptySensorConfig(deviceRef);
+    const nextInteractionKind = normalizeSensorInteractionKind(
+      sensorDraft.interaction_kind,
+    );
     const nextInteractionConfig = normalizeSensorInteractionConfig(
       nextInteractionKind,
       sensorDraft.config,
@@ -781,7 +840,10 @@ export default function DevicesPage() {
       'Sensor' in device.data &&
       (nextInteractionKind !== existingInteractionKind ||
         stringifyConfig(nextInteractionKind, nextInteractionConfig) !==
-          stringifyConfig(existingInteractionKind, existingSensorConfig?.config ?? {}));
+          stringifyConfig(
+            existingInteractionKind,
+            existingSensorConfig?.config ?? {},
+          ));
 
     if (!labelChanged && !sensorChanged) {
       setNotice(`No changes to save for ${getDefaultDeviceLabel(device)}.`);
@@ -822,7 +884,11 @@ export default function DevicesPage() {
 
       setNotice(`Saved device settings for ${getDefaultDeviceLabel(device)}.`);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to save device settings');
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to save device settings',
+      );
     } finally {
       setSavingKey(null);
     }
@@ -880,7 +946,11 @@ export default function DevicesPage() {
         `Replaced ${result?.updated_groups ?? 0} group, ${result?.updated_scenes ?? 0} scene, and ${result?.updated_routines ?? 0} routine references for ${getDefaultDeviceLabel(device)}.`,
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to replace device');
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to replace device',
+      );
     } finally {
       setMutatingKey(null);
     }
@@ -909,7 +979,11 @@ export default function DevicesPage() {
         `Deleted ${getDefaultDeviceLabel(device)} and removed ${result?.updated_groups ?? 0} group, ${result?.updated_scenes ?? 0} scene, and ${result?.updated_routines ?? 0} routine references.`,
       );
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to delete device');
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to delete device',
+      );
     } finally {
       setMutatingKey(null);
     }
@@ -928,9 +1002,10 @@ export default function DevicesPage() {
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Devices</h1>
         <p className="max-w-3xl text-sm opacity-70">
-          Configure user-facing device labels, inspect live runtime state, and trigger fake sensor
-          updates without opening the floorplan. Active scenes and scene-derived state sources are
-          shown for controllable devices whenever the runtime exposes them.
+          Configure user-facing device labels, inspect live runtime state, and
+          trigger fake sensor updates without opening the floorplan. Active
+          scenes and scene-derived state sources are shown for controllable
+          devices whenever the runtime exposes them.
         </p>
       </div>
 
@@ -943,7 +1018,10 @@ export default function DevicesPage() {
       {notice && (
         <div className="alert alert-success">
           <span>{notice}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setNotice(null)}>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setNotice(null)}
+          >
             ✕
           </button>
         </div>
@@ -968,7 +1046,9 @@ export default function DevicesPage() {
               <select
                 className="select select-bordered select-sm"
                 value={deviceTypeFilter}
-                onChange={(e) => setDeviceTypeFilter(e.target.value as DeviceTypeFilter)}
+                onChange={(e) =>
+                  setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
+                }
               >
                 <option value="all">All devices</option>
                 <option value="controllable">Lights / devices</option>
@@ -994,7 +1074,9 @@ export default function DevicesPage() {
               </select>
             </label>
 
-            {(deviceSearch || deviceTypeFilter !== 'all' || deviceGroupFilter !== 'all') && (
+            {(deviceSearch ||
+              deviceTypeFilter !== 'all' ||
+              deviceGroupFilter !== 'all') && (
               <button
                 className="btn btn-sm btn-ghost"
                 onClick={() => {
@@ -1010,8 +1092,13 @@ export default function DevicesPage() {
 
           <div className="text-sm opacity-70">
             Matching devices: {visibleDevices.length} total ·{' '}
-            {visibleDevices.filter((entry) => entry.type === 'sensor').length} sensors ·{' '}
-            {visibleDevices.filter((entry) => entry.type === 'controllable').length} controllables
+            {visibleDevices.filter((entry) => entry.type === 'sensor').length}{' '}
+            sensors ·{' '}
+            {
+              visibleDevices.filter((entry) => entry.type === 'controllable')
+                .length
+            }{' '}
+            controllables
           </div>
         </div>
       </div>
@@ -1037,8 +1124,11 @@ export default function DevicesPage() {
           } = entry;
           const labelDraft = displayNameDrafts[deviceKey] ?? '';
           const hasDisplayOverride = Boolean(deviceDisplayNameMap[deviceKey]);
-          const sensorDraft = sensorConfigDrafts[deviceRef] ?? createEmptySensorConfig(deviceRef);
-          const interactionKind = normalizeSensorInteractionKind(sensorDraft.interaction_kind);
+          const sensorDraft =
+            sensorConfigDrafts[deviceRef] ?? createEmptySensorConfig(deviceRef);
+          const interactionKind = normalizeSensorInteractionKind(
+            sensorDraft.interaction_kind,
+          );
           const interactionConfig = normalizeSensorInteractionConfig(
             interactionKind,
             sensorDraft.config,
@@ -1067,7 +1157,9 @@ export default function DevicesPage() {
               open={isOpen}
               onOpen={() => setOpenDeviceKey(deviceKey)}
               onClose={() =>
-                setOpenDeviceKey((current) => (current === deviceKey ? null : current))
+                setOpenDeviceKey((current) =>
+                  current === deviceKey ? null : current,
+                )
               }
               cardClassName="h-fit"
               dialogTitle={label}
@@ -1076,12 +1168,16 @@ export default function DevicesPage() {
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <h2 className="truncate text-base font-semibold">{label}</h2>
+                      <h2 className="truncate text-base font-semibold">
+                        {label}
+                      </h2>
                       <div className="text-xs opacity-60">{deviceKey}</div>
                     </div>
 
                     {hasDisplayOverride && (
-                      <span className="badge badge-primary badge-sm">Custom label</span>
+                      <span className="badge badge-primary badge-sm">
+                        Custom label
+                      </span>
                     )}
                   </div>
 
@@ -1112,9 +1208,13 @@ export default function DevicesPage() {
                       </span>
                     )}
                     {'Controllable' in device.data ? (
-                      <span className="badge badge-outline badge-sm">{sourceSummary.badge}</span>
+                      <span className="badge badge-outline badge-sm">
+                        {sourceSummary.badge}
+                      </span>
                     ) : (
-                      <span className="badge badge-outline badge-sm">{interactionLabel}</span>
+                      <span className="badge badge-outline badge-sm">
+                        {interactionLabel}
+                      </span>
                     )}
                     {groupNames.length > 0 && (
                       <span className="badge badge-ghost badge-sm">
@@ -1139,8 +1239,14 @@ export default function DevicesPage() {
                             label="Active scene"
                             value={getSceneLabel(activeSceneId, sceneNameById)}
                           />
-                          <DeviceFactRow label="Current state" value={runtimeSummary} />
-                          <DeviceFactRow label="State source" value={sourceSummary.description} />
+                          <DeviceFactRow
+                            label="Current state"
+                            value={runtimeSummary}
+                          />
+                          <DeviceFactRow
+                            label="State source"
+                            value={sourceSummary.description}
+                          />
 
                           {stateDetails.length > 0 && (
                             <div className="space-y-2 pt-1">
@@ -1149,7 +1255,10 @@ export default function DevicesPage() {
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {stateDetails.map((detail) => (
-                                  <span key={`${deviceKey}-${detail}`} className="badge badge-outline badge-sm">
+                                  <span
+                                    key={`${deviceKey}-${detail}`}
+                                    className="badge badge-outline badge-sm"
+                                  >
                                     {detail}
                                   </span>
                                 ))}
@@ -1159,11 +1268,19 @@ export default function DevicesPage() {
                         </div>
                       ) : (
                         <div className="space-y-3">
-                          <DeviceFactRow label="Current value" value={runtimeSummary} />
-                          <DeviceFactRow label="Payload shape" value={sensorDetails.kind} />
+                          <DeviceFactRow
+                            label="Current value"
+                            value={runtimeSummary}
+                          />
+                          <DeviceFactRow
+                            label="Payload shape"
+                            value={sensorDetails.kind}
+                          />
                           <DeviceFactRow
                             label="Sensor UI"
-                            value={getSensorInteractionLabel(resolvedInteraction.kind)}
+                            value={getSensorInteractionLabel(
+                              resolvedInteraction.kind,
+                            )}
                           />
                           <DeviceFactRow
                             label="Mapping source"
@@ -1183,14 +1300,31 @@ export default function DevicesPage() {
                       </div>
 
                       <div className="space-y-3">
-                        <DeviceFactRow label="Default label" value={entry.defaultLabel} />
-                        <DeviceFactRow label="Integration" value={device.integration_id} />
                         <DeviceFactRow
-                          label={'Sensor' in device.data ? 'Sensor ref' : 'Device key'}
-                          value={'Sensor' in device.data ? deviceRef : deviceKey}
+                          label="Default label"
+                          value={entry.defaultLabel}
+                        />
+                        <DeviceFactRow
+                          label="Integration"
+                          value={device.integration_id}
+                        />
+                        <DeviceFactRow
+                          label={
+                            'Sensor' in device.data
+                              ? 'Sensor ref'
+                              : 'Device key'
+                          }
+                          value={
+                            'Sensor' in device.data ? deviceRef : deviceKey
+                          }
                         />
 
-                        {manageLabel && <DeviceFactRow label="Manage mode" value={manageLabel} />}
+                        {manageLabel && (
+                          <DeviceFactRow
+                            label="Manage mode"
+                            value={manageLabel}
+                          />
+                        )}
 
                         {capabilityLabels.length > 0 && (
                           <div className="space-y-2 pt-1">
@@ -1199,7 +1333,10 @@ export default function DevicesPage() {
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {capabilityLabels.map((capability) => (
-                                <span key={`${deviceKey}-${capability}`} className="badge badge-outline badge-sm">
+                                <span
+                                  key={`${deviceKey}-${capability}`}
+                                  className="badge badge-outline badge-sm"
+                                >
                                   {capability}
                                 </span>
                               ))}
@@ -1208,17 +1345,24 @@ export default function DevicesPage() {
                         )}
 
                         <div className="space-y-2 pt-1">
-                          <div className="text-xs uppercase tracking-wide opacity-60">Groups</div>
+                          <div className="text-xs uppercase tracking-wide opacity-60">
+                            Groups
+                          </div>
                           {groupNames.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                               {groupNames.map((groupName) => (
-                                <span key={`${deviceKey}-${groupName}`} className="badge badge-ghost badge-sm">
+                                <span
+                                  key={`${deviceKey}-${groupName}`}
+                                  className="badge badge-ghost badge-sm"
+                                >
                                   {groupName}
                                 </span>
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm opacity-70">No config groups reference this device.</div>
+                            <div className="text-sm opacity-70">
+                              No config groups reference this device.
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1251,8 +1395,8 @@ export default function DevicesPage() {
                         Fake Sensor Actions
                       </div>
                       <p className="mb-4 text-sm opacity-75">
-                        Trigger the same fake sensor actions available on the floorplan directly
-                        from configuration.
+                        Trigger the same fake sensor actions available on the
+                        floorplan directly from configuration.
                       </p>
                       <SensorActionPanel
                         device={device}
@@ -1286,7 +1430,9 @@ export default function DevicesPage() {
                       <div className="space-y-4 rounded-xl border border-base-300 bg-base-100/40 p-4">
                         <div className="flex flex-wrap items-start gap-4">
                           <label className="form-control w-full max-w-sm">
-                            <span className="label-text text-sm">Map interaction</span>
+                            <span className="label-text text-sm">
+                              Map interaction
+                            </span>
                             <select
                               className="select select-bordered"
                               value={interactionKind}
@@ -1308,22 +1454,32 @@ export default function DevicesPage() {
                           <div className="space-y-2 text-sm opacity-70">
                             <div>Sensor reference: {deviceRef}</div>
                             <div>
-                              Current payload mode: {getSensorInteractionLabel(resolvedInteraction.kind)}
+                              Current payload mode:{' '}
+                              {getSensorInteractionLabel(
+                                resolvedInteraction.kind,
+                              )}
                             </div>
-                            <div>Last seen sensor shape: {sensorDetails.kind}</div>
+                            <div>
+                              Last seen sensor shape: {sensorDetails.kind}
+                            </div>
                           </div>
                         </div>
 
                         <SensorConfigFields
                           kind={interactionKind}
                           config={interactionConfig}
-                          resolvedLabel={getSensorInteractionLabel(resolvedInteraction.kind)}
-                          onChange={(field, value) => updateSensorDraftField(deviceRef, field, value)}
+                          resolvedLabel={getSensorInteractionLabel(
+                            resolvedInteraction.kind,
+                          )}
+                          onChange={(field, value) =>
+                            updateSensorDraftField(deviceRef, field, value)
+                          }
                         />
                       </div>
                     ) : (
                       <div className="rounded-xl border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-80">
-                        This device is not a sensor, so only the user-facing label applies here.
+                        This device is not a sensor, so only the user-facing
+                        label applies here.
                       </div>
                     )}
 
@@ -1344,7 +1500,9 @@ export default function DevicesPage() {
                         <button
                           className="btn btn-sm btn-ghost"
                           disabled={isMutating}
-                          onClick={() => updateSensorDraftKind(deviceRef, 'auto')}
+                          onClick={() =>
+                            updateSensorDraftKind(deviceRef, 'auto')
+                          }
                         >
                           Use Auto Sensor UI
                         </button>
@@ -1371,13 +1529,16 @@ export default function DevicesPage() {
                         Device Replacement / Deletion
                       </div>
                       <p className="mt-2 text-sm opacity-80">
-                        Replace config references with another device, or delete this device from
-                        runtime memory and the database while removing its saved references.
+                        Replace config references with another device, or delete
+                        this device from runtime memory and the database while
+                        removing its saved references.
                       </p>
                     </div>
 
                     <label className="form-control w-full max-w-md">
-                      <span className="label-text text-sm">Replacement device</span>
+                      <span className="label-text text-sm">
+                        Replacement device
+                      </span>
                       <select
                         className="select select-bordered"
                         disabled={isSaving || isMutating}

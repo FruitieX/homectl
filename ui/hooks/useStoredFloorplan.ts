@@ -6,7 +6,9 @@ import { useEffect, useMemo, useState } from 'react';
 export function useStoredFloorplan(floorplanId?: string | null) {
   const { apiEndpoint } = useAppConfig();
   const [grid, setGrid] = useState<FloorplanGrid | null>(null);
-  const floorplanQuery = floorplanId ? `?id=${encodeURIComponent(floorplanId)}` : '';
+  const floorplanQuery = floorplanId
+    ? `?id=${encodeURIComponent(floorplanId)}`
+    : '';
 
   useEffect(() => {
     let isCancelled = false;
@@ -20,7 +22,9 @@ export function useStoredFloorplan(floorplanId?: string | null) {
       }
 
       try {
-        const response = await fetch(`${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`);
+        const response = await fetch(
+          `${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`,
+        );
         const result = await response.json();
         const nextGrid =
           result.success && typeof result.data === 'string'
@@ -66,6 +70,24 @@ export type StoredFloorplan = {
 // callers (e.g. every group Preview in the list) do not each issue their
 // own fetch storm for the floorplan grids.
 const allFloorplanCache = new Map<string, Promise<StoredFloorplan[]>>();
+const maxAllFloorplanCacheEntries = 8;
+
+function setAllFloorplanCache(
+  cacheKey: string,
+  pending: Promise<StoredFloorplan[]>,
+) {
+  if (!allFloorplanCache.has(cacheKey)) {
+    while (allFloorplanCache.size >= maxAllFloorplanCacheEntries) {
+      const oldestCacheKey = allFloorplanCache.keys().next().value;
+      if (oldestCacheKey === undefined) {
+        break;
+      }
+      allFloorplanCache.delete(oldestCacheKey);
+    }
+  }
+
+  allFloorplanCache.set(cacheKey, pending);
+}
 
 const fetchAllFloorplans = (
   apiEndpoint: string,
@@ -128,7 +150,7 @@ export function useAllFloorplans(): {
     let pending = allFloorplanCache.get(cacheKey);
     if (!pending) {
       pending = fetchAllFloorplans(apiEndpoint, metadata);
-      allFloorplanCache.set(cacheKey, pending);
+      setAllFloorplanCache(cacheKey, pending);
     }
 
     pending

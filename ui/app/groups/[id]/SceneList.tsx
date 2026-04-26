@@ -1,5 +1,9 @@
 import { Menu } from 'react-daisyui';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
+import {
+  useDevicesState,
+  useScenesState,
+  useWebsocket,
+} from '@/hooks/websocket';
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { SceneId } from '@/bindings/SceneId';
@@ -12,12 +16,13 @@ import Preview from '../Preview';
 type Props = { deviceKeys: string[]; showAll?: boolean };
 export const SceneList = (props: Props) => {
   const ws = useWebsocket();
-  const state = useWebsocketState();
+  const liveScenes = useScenesState();
+  const liveDevices = useDevicesState();
 
   const { setOpen: setSceneModalOpen, setState: setSceneModalState } =
     useSceneModalState();
 
-  const scenes = excludeUndefined(state?.scenes);
+  const scenes = excludeUndefined(liveScenes ?? undefined);
 
   if (!scenes) return null;
 
@@ -38,7 +43,9 @@ export const SceneList = (props: Props) => {
 
   filteredScenes.sort((a, b) => a[1].name.localeCompare(b[1].name));
 
-  const devices: Device[] = Object.values(excludeUndefined(state?.devices));
+  const devices: Device[] = Object.values(
+    excludeUndefined(liveDevices ?? undefined),
+  );
 
   const handleSceneClick = (sceneId: SceneId) => () => {
     const msg: WebSocketRequest = {
@@ -117,7 +124,7 @@ export const SceneList = (props: Props) => {
                 )}
               >
                 <div className="flex-1 truncate">{scene.name}</div>
-                <div className="h-[96px] w-[112px]">
+                <div className="h-24 w-28">
                   <Preview devices={previewDevices} />
                 </div>
               </div>

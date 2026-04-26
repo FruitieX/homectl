@@ -572,7 +572,7 @@ const CombinedSensorsChartComponent: React.FC<CombinedSensorsChartProps> = ({
 
       return { x, y };
     },
-    [xScale, yScale, chartType],
+    [xScale, yScale, chartType, innerHeight],
   );
 
   if (width < 10) return null;

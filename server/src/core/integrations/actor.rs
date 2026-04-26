@@ -7,13 +7,22 @@
 //! object and lets independent integrations make progress concurrently
 //! (e.g. during hot-reload or event storms).
 
-use tokio::sync::{mpsc, oneshot};
+use std::{future::Future, time::Duration};
+
+use color_eyre::{eyre::eyre, Result};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::timeout,
+};
 
 use super::command::IntegrationCmd;
 use crate::types::{
     device::Device,
     integration::{Integration, IntegrationActionPayload, IntegrationId},
 };
+
+const LIFECYCLE_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
+const DATA_PLANE_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Cheaply cloneable handle for talking to a per-integration actor. The
 /// `module_name` and `config` fields mirror what `LoadedIntegration`
@@ -42,24 +51,23 @@ impl IntegrationHandle {
         }
     }
 
-    pub async fn register(&self) -> color_eyre::Result<()> {
+    pub async fn register(&self) -> Result<()> {
         self.lifecycle(|done| IntegrationCmd::Register { done })
             .await
     }
 
-    pub async fn start(&self) -> color_eyre::Result<()> {
+    pub async fn start(&self) -> Result<()> {
         self.lifecycle(|done| IntegrationCmd::Start { done }).await
     }
 
-    pub async fn stop(&self) -> color_eyre::Result<()> {
+    pub async fn stop(&self) -> Result<()> {
         self.lifecycle(|done| IntegrationCmd::Stop { done }).await
     }
 
-    async fn lifecycle<F>(&self, make_cmd: F) -> color_eyre::Result<()>
+    async fn lifecycle<F>(&self, make_cmd: F) -> Result<()>
     where
-        F: FnOnce(oneshot::Sender<color_eyre::Result<()>>) -> IntegrationCmd,
+        F: FnOnce(oneshot::Sender<Result<()>>) -> IntegrationCmd,
     {
-        use color_eyre::eyre::eyre;
         let (done_tx, done_rx) = oneshot::channel();
         self.tx
             .send(make_cmd(done_tx))
@@ -96,28 +104,73 @@ async fn run_integration_actor(
     while let Some(cmd) = rx.recv().await {
         match cmd {
             IntegrationCmd::Register { done } => {
-                let _ = done.send(integration.register().await);
+                let result =
+                    run_lifecycle_command(&integration_id, "register", integration.register())
+                        .await;
+                let _ = done.send(result);
             }
             IntegrationCmd::Start { done } => {
-                let _ = done.send(integration.start().await);
+                let result =
+                    run_lifecycle_command(&integration_id, "start", integration.start()).await;
+                let _ = done.send(result);
             }
             IntegrationCmd::Stop { done } => {
-                let _ = done.send(integration.stop().await);
+                let result =
+                    run_lifecycle_command(&integration_id, "stop", integration.stop()).await;
+                let _ = done.send(result);
             }
             IntegrationCmd::SetDeviceState { device } => {
-                if let Err(err) = integration.set_integration_device_state(&device).await {
-                    warn!(
-                        "Integration {integration_id} set_integration_device_state failed: {err:#}"
-                    );
-                }
+                run_data_plane_command(
+                    &integration_id,
+                    "set_integration_device_state",
+                    integration.set_integration_device_state(&device),
+                )
+                .await;
             }
             IntegrationCmd::RunAction { payload } => {
-                if let Err(err) = integration.run_integration_action(&payload).await {
-                    warn!("Integration {integration_id} run_integration_action failed: {err:#}");
-                }
+                run_data_plane_command(
+                    &integration_id,
+                    "run_integration_action",
+                    integration.run_integration_action(&payload),
+                )
+                .await;
             }
         }
     }
 
     debug!("Integration actor for {integration_id} exiting (channel closed)");
+}
+
+async fn run_lifecycle_command<F>(
+    integration_id: &IntegrationId,
+    command_name: &'static str,
+    future: F,
+) -> Result<()>
+where
+    F: Future<Output = Result<()>>,
+{
+    match timeout(LIFECYCLE_COMMAND_TIMEOUT, future).await {
+        Ok(result) => result,
+        Err(_) => Err(eyre!(
+            "Integration {integration_id} {command_name} timed out after {:?}",
+            LIFECYCLE_COMMAND_TIMEOUT
+        )),
+    }
+}
+
+async fn run_data_plane_command<F>(
+    integration_id: &IntegrationId,
+    command_name: &'static str,
+    future: F,
+) where
+    F: Future<Output = Result<()>>,
+{
+    match timeout(DATA_PLANE_COMMAND_TIMEOUT, future).await {
+        Ok(Ok(())) => {}
+        Ok(Err(err)) => warn!("Integration {integration_id} {command_name} failed: {err:#}"),
+        Err(_) => warn!(
+            "Integration {integration_id} {command_name} timed out after {:?}",
+            DATA_PLANE_COMMAND_TIMEOUT
+        ),
+    }
 }

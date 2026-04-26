@@ -94,7 +94,9 @@ export default function ScenesPage() {
   const { data: groups } = useGroups();
   const [activationError, setActivationError] = useState<string | null>(null);
   const [activationNotice, setActivationNotice] = useState<string | null>(null);
-  const [activatingSceneId, setActivatingSceneId] = useState<string | null>(null);
+  const [activatingSceneId, setActivatingSceneId] = useState<string | null>(
+    null,
+  );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -103,14 +105,18 @@ export default function ScenesPage() {
   const deviceOptions = useMemo(
     () =>
       Object.entries(devices)
-        .filter((entry): entry is [string, NonNullable<(typeof devices)[string]>] => entry[1] !== undefined)
+        .filter(
+          (entry): entry is [string, NonNullable<(typeof devices)[string]>] =>
+            entry[1] !== undefined,
+        )
         .map(([key, device]) => ({
           key,
           label: device.name,
         }))
         .sort(
           (left, right) =>
-            left.label.localeCompare(right.label) || left.key.localeCompare(right.key),
+            left.label.localeCompare(right.label) ||
+            left.key.localeCompare(right.key),
         ),
     [devices],
   );
@@ -123,7 +129,8 @@ export default function ScenesPage() {
         }))
         .sort(
           (left, right) =>
-            left.label.localeCompare(right.label) || left.key.localeCompare(right.key),
+            left.label.localeCompare(right.label) ||
+            left.key.localeCompare(right.key),
         ),
     [groups],
   );
@@ -180,7 +187,10 @@ export default function ScenesPage() {
       {activationError && (
         <div className="alert alert-warning">
           <span>{activationError}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setActivationError(null)}>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setActivationError(null)}
+          >
             ✕
           </button>
         </div>
@@ -189,7 +199,10 @@ export default function ScenesPage() {
       {activationNotice && (
         <div className="alert alert-success">
           <span>{activationNotice}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setActivationNotice(null)}>
+          <button
+            className="btn btn-sm btn-ghost"
+            onClick={() => setActivationNotice(null)}
+          >
             ✕
           </button>
         </div>
@@ -223,8 +236,12 @@ export default function ScenesPage() {
                 isOpen={openId === scene.id}
                 onOpen={() => setOpenId(scene.id)}
                 onClose={() => {
-                  setOpenId((current) => (current === scene.id ? null : current));
-                  setEditingId((current) => (current === scene.id ? null : current));
+                  setOpenId((current) =>
+                    current === scene.id ? null : current,
+                  );
+                  setEditingId((current) =>
+                    current === scene.id ? null : current,
+                  );
                 }}
                 onActivate={() => {
                   void activateScene(scene);
@@ -238,7 +255,9 @@ export default function ScenesPage() {
                 onDelete={async () => {
                   if (confirm(`Delete scene "${scene.name}"?`)) {
                     await remove(scene.id);
-                    setOpenId((current) => (current === scene.id ? null : current));
+                    setOpenId((current) =>
+                      current === scene.id ? null : current,
+                    );
                   }
                 }}
               />
@@ -276,10 +295,14 @@ function getSceneConfigSummary(config: SceneDeviceConfig) {
   if ('scene_id' in config) {
     const scope = [];
     if (config.device_keys?.length) {
-      scope.push(`${config.device_keys.length} device${config.device_keys.length === 1 ? '' : 's'}`);
+      scope.push(
+        `${config.device_keys.length} device${config.device_keys.length === 1 ? '' : 's'}`,
+      );
     }
     if (config.group_keys?.length) {
-      scope.push(`${config.group_keys.length} group${config.group_keys.length === 1 ? '' : 's'}`);
+      scope.push(
+        `${config.group_keys.length} group${config.group_keys.length === 1 ? '' : 's'}`,
+      );
     }
 
     return scope.length > 0
@@ -349,15 +372,24 @@ function SceneTargetsSummary({
       ) : (
         <div className="grid gap-3 lg:grid-cols-2">
           {entries.map(([targetKey, config]) => (
-            <div key={targetKey} className="rounded-lg border border-base-300 bg-base-100/70 p-4">
+            <div
+              key={targetKey}
+              className="rounded-lg border border-base-300 bg-base-100/70 p-4"
+            >
               <div className="flex items-start justify-between gap-4">
                 <div>
-                  <div className="font-medium">{optionLabelByKey[targetKey] ?? targetKey}</div>
+                  <div className="font-medium">
+                    {optionLabelByKey[targetKey] ?? targetKey}
+                  </div>
                   <div className="text-xs opacity-60">{targetKey}</div>
                 </div>
-                <span className="badge badge-ghost">{getSceneConfigTypeLabel(config)}</span>
+                <span className="badge badge-ghost">
+                  {getSceneConfigTypeLabel(config)}
+                </span>
               </div>
-              <p className="mt-2 text-sm opacity-80">{getSceneConfigSummary(config)}</p>
+              <p className="mt-2 text-sm opacity-80">
+                {getSceneConfigSummary(config)}
+              </p>
               <SceneResolvedColorPreview
                 config={config}
                 devices={devices}
@@ -396,7 +428,13 @@ function SceneResolvedColorCardSummary({
   );
   const resolvedTargets = [
     ...Object.entries(deviceItems).flatMap(([targetKey, config]) => {
-      const resolved = resolveSceneColor(config, 'device', targetKey, scenes, devices);
+      const resolved = resolveSceneColor(
+        config,
+        'device',
+        targetKey,
+        scenes,
+        devices,
+      );
       if (!resolved) {
         return [];
       }
@@ -410,7 +448,13 @@ function SceneResolvedColorCardSummary({
       ];
     }),
     ...Object.entries(groupItems).flatMap(([targetKey, config]) => {
-      const resolved = resolveSceneColor(config, 'group', targetKey, scenes, devices);
+      const resolved = resolveSceneColor(
+        config,
+        'group',
+        targetKey,
+        scenes,
+        devices,
+      );
       if (!resolved) {
         return [];
       }
@@ -447,7 +491,9 @@ function SceneResolvedColorCardSummary({
         </span>
       ))}
       {resolvedTargets.length > visibleTargets.length && (
-        <span className="badge badge-ghost badge-sm">+{resolvedTargets.length - visibleTargets.length} more</span>
+        <span className="badge badge-ghost badge-sm">
+          +{resolvedTargets.length - visibleTargets.length} more
+        </span>
       )}
     </div>
   );
@@ -492,7 +538,9 @@ function SceneEditorForm({
         group_states: groupStates,
       });
     } catch (error) {
-      setSaveError(error instanceof Error ? error.message : 'Failed to save scene.');
+      setSaveError(
+        error instanceof Error ? error.message : 'Failed to save scene.',
+      );
     } finally {
       setIsSaving(false);
     }
@@ -523,10 +571,10 @@ function SceneEditorForm({
         </div>
 
         <div className="rounded-lg border border-base-300 bg-base-100/60 px-4 py-3 text-sm opacity-75">
-          Scene scripts evaluate a JavaScript expression. Use
-          {' '}defineSceneScript(() =&gt; {'{'} ... {'}'}){' '}
-          for typed autocomplete, plus bindings like
-          {' '}devices["integration/device"]{' '}and{' '}groups["group-id"].
+          Scene scripts evaluate a JavaScript expression. Use{' '}
+          defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed autocomplete,
+          plus bindings like devices[&quot;integration/device&quot;] and{' '}
+          groups[&quot;group-id&quot;].
         </div>
       </div>
 

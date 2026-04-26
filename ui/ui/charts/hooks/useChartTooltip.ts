@@ -63,7 +63,7 @@ export function useChartTooltip<T>({
     hideTooltip: originalHideTooltip,
   } = useTooltip<T>();
 
-  const { containerRef, containerBounds, TooltipInPortal, forceRefreshBounds } =
+  const { containerRef, TooltipInPortal, forceRefreshBounds } =
     useTooltipInPortal({
       scroll: true,
       detectBounds: true,
@@ -71,8 +71,8 @@ export function useChartTooltip<T>({
       debounce: finalConfig.debounce,
     });
 
-  const debouncedForceRefreshBounds = useCallback(
-    debounce(forceRefreshBounds, finalConfig.debounce, { leading: true }),
+  const debouncedForceRefreshBounds = useMemo(
+    () => debounce(forceRefreshBounds, finalConfig.debounce, { leading: true }),
     [forceRefreshBounds, finalConfig.debounce],
   );
 
@@ -90,7 +90,7 @@ export function useChartTooltip<T>({
 
       return { tooltipTop, tooltipLeft };
     },
-    [containerBounds, margin],
+    [margin],
   );
 
   const hideTooltip = useCallback(() => {

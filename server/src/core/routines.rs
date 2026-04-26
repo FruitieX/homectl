@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::db::config_queries;
 use crate::types::{
     action::{Action, Actions},
-    device::{Device, DeviceKey, DevicesState, SensorDevice},
+    device::{Device, DeviceKey, SensorDevice},
     dim::DimDescriptor,
     event::{Event, TxEventChannel},
     group::GroupId,
@@ -17,7 +17,10 @@ use crate::types::{
     },
     scene::{ActivateSceneActionDescriptor, CycleScenesDescriptor},
 };
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use super::{devices::Devices, groups::Groups, scripting::ScriptEngine};
 
@@ -121,10 +124,28 @@ fn expand_action_source_context(
 pub struct Routines {
     config: RoutinesConfig,
     event_tx: TxEventChannel,
-    runtime_statuses: RoutineStatuses,
+    runtime_statuses: Arc<RoutineStatuses>,
     /// Tracks which (routine_id, device_key) pairs have been triggered.
     /// Used for edge-triggered rules to prevent re-triggering until state changes away.
     prev_edge_triggered: HashSet<(RoutineId, DeviceKey)>,
+}
+
+struct RuleEvaluationContext<'a> {
+    event_source: Option<&'a DeviceKey>,
+    old_event_source: Option<&'a Device>,
+    devices: &'a Devices,
+    groups: &'a Groups,
+    update_edge_state: bool,
+}
+
+impl RuleEvaluationContext<'_> {
+    fn old_device_for(&self, device_key: &DeviceKey) -> Option<&Device> {
+        if self.event_source == Some(device_key) {
+            self.old_event_source
+        } else {
+            self.devices.get_device(device_key)
+        }
+    }
 }
 
 #[derive(Default)]
@@ -171,7 +192,7 @@ impl Routines {
         Routines {
             config,
             event_tx,
-            runtime_statuses: Default::default(),
+            runtime_statuses: Arc::new(RoutineStatuses::default()),
             prev_edge_triggered: HashSet::new(),
         }
     }
@@ -199,7 +220,7 @@ impl Routines {
         }
 
         self.config = new_config;
-        self.runtime_statuses = Default::default();
+        self.runtime_statuses = Arc::new(RoutineStatuses::default());
         self.prev_edge_triggered.clear();
     }
 
@@ -213,24 +234,27 @@ impl Routines {
     }
 
     pub fn refresh_runtime_statuses(&mut self, devices: &Devices, groups: &Groups) {
-        let current_state = devices.get_state().clone();
-        let evaluation =
-            self.evaluate_routines(&current_state, &current_state, None, devices, groups, false);
-        self.runtime_statuses = evaluation.statuses;
+        let ctx = RuleEvaluationContext {
+            event_source: None,
+            old_event_source: None,
+            devices,
+            groups,
+            update_edge_state: false,
+        };
+        let evaluation = self.evaluate_routines(&ctx);
+        self.runtime_statuses = Arc::new(evaluation.statuses);
     }
 
-    pub fn get_runtime_statuses(&self) -> RoutineStatuses {
-        self.runtime_statuses.clone()
+    pub fn get_runtime_statuses(&self) -> Arc<RoutineStatuses> {
+        Arc::clone(&self.runtime_statuses)
     }
 
     /// An internal state update has occurred, we need to check if any routines
     /// are triggered by this change and run actions of triggered rules.
-    #[allow(clippy::too_many_arguments)]
     pub async fn handle_internal_state_update(
         &mut self,
-        old_state: &DevicesState,
-        new_state: &DevicesState,
-        old: &Option<Device>,
+        event_source_key: &DeviceKey,
+        old: Option<&Device>,
         event_source: &Device,
         devices: &Devices,
         groups: &Groups,
@@ -238,16 +262,15 @@ impl Routines {
         // For sensors in pulse mode, we need to process even when the device
         // already exists and state hasn't changed. Skip only for truly new devices.
         if old.is_some() || event_source.is_sensor() {
-            let event_source_key = event_source.get_device_key();
-            let evaluation = self.evaluate_routines(
-                old_state,
-                new_state,
-                Some(&event_source_key),
+            let ctx = RuleEvaluationContext {
+                event_source: Some(event_source_key),
+                old_event_source: old,
                 devices,
                 groups,
-                true,
-            );
-            self.runtime_statuses = evaluation.statuses;
+                update_edge_state: true,
+            };
+            let evaluation = self.evaluate_routines(&ctx);
+            self.runtime_statuses = Arc::new(evaluation.statuses);
 
             for action in evaluation.actions {
                 self.event_tx.send(Event::Action(action.clone()));
@@ -279,15 +302,7 @@ impl Routines {
         Ok(())
     }
 
-    fn evaluate_routines(
-        &mut self,
-        old_state: &DevicesState,
-        new_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        groups: &Groups,
-        update_edge_state: bool,
-    ) -> EvaluationResult {
+    fn evaluate_routines(&mut self, ctx: &RuleEvaluationContext<'_>) -> EvaluationResult {
         let mut triggered_actions = Vec::new();
         let mut routine_statuses = HashMap::new();
 
@@ -295,16 +310,7 @@ impl Routines {
 
         for routine_id in routine_ids {
             let routine = self.config.get(&routine_id).unwrap().clone();
-            let status = self.evaluate_routine_status(
-                &routine_id,
-                &routine,
-                old_state,
-                new_state,
-                event_source,
-                devices,
-                groups,
-                update_edge_state,
-            );
+            let status = self.evaluate_routine_status(&routine_id, &routine, ctx);
 
             if status.will_trigger {
                 info!(
@@ -312,15 +318,11 @@ impl Routines {
                     routine_id.0,
                     routine.name,
                     routine.actions.len(),
-                    event_source,
+                    ctx.event_source,
                 );
-                triggered_actions.extend(
-                    routine
-                        .actions
-                        .iter()
-                        .cloned()
-                        .map(|action| expand_action_source_context(action, event_source, groups)),
-                );
+                triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
+                    expand_action_source_context(action, ctx.event_source, ctx.groups)
+                }));
             }
 
             routine_statuses.insert(routine_id, status);
@@ -332,33 +334,16 @@ impl Routines {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn evaluate_routine_status(
         &mut self,
         routine_id: &RoutineId,
         routine: &Routine,
-        old_state: &DevicesState,
-        new_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        groups: &Groups,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> RoutineRuntimeStatus {
         let rule_statuses = routine
             .rules
             .iter()
-            .map(|rule| {
-                self.evaluate_rule_status(
-                    routine_id,
-                    rule,
-                    old_state,
-                    new_state,
-                    event_source,
-                    devices,
-                    groups,
-                    update_edge_state,
-                )
-            })
+            .map(|rule| self.evaluate_rule_status(routine_id, rule, ctx))
             .collect::<Vec<_>>();
 
         let all_conditions_match =
@@ -373,28 +358,13 @@ impl Routines {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     fn evaluate_rule_status(
         &mut self,
         routine_id: &RoutineId,
         rule: &Rule,
-        old_state: &DevicesState,
-        new_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        groups: &Groups,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> RuleRuntimeStatus {
-        match self.try_evaluate_rule_status(
-            routine_id,
-            rule,
-            old_state,
-            new_state,
-            event_source,
-            devices,
-            groups,
-            update_edge_state,
-        ) {
+        match self.try_evaluate_rule_status(routine_id, rule, ctx) {
             Ok(status) => status,
             Err(error) => {
                 error!("Routine rule evaluation error: {error}");
@@ -403,35 +373,18 @@ impl Routines {
         }
     }
 
-    #[allow(clippy::too_many_arguments)]
     #[allow(clippy::only_used_in_recursion)]
     fn try_evaluate_rule_status(
         &mut self,
         routine_id: &RoutineId,
         rule: &Rule,
-        old_state: &DevicesState,
-        new_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        groups: &Groups,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
         match rule {
             Rule::Any(AnyRule { any: rules }) => {
                 let children = rules
                     .iter()
-                    .map(|child_rule| {
-                        self.evaluate_rule_status(
-                            routine_id,
-                            child_rule,
-                            old_state,
-                            new_state,
-                            event_source,
-                            devices,
-                            groups,
-                            update_edge_state,
-                        )
-                    })
+                    .map(|child_rule| self.evaluate_rule_status(routine_id, child_rule, ctx))
                     .collect::<Vec<_>>();
 
                 Ok(RuleRuntimeStatus::from_children(
@@ -440,46 +393,21 @@ impl Routines {
                     children,
                 ))
             }
-            Rule::Sensor(sensor_rule) => self.evaluate_sensor_rule_status(
-                routine_id,
-                sensor_rule,
-                old_state,
-                event_source,
-                devices,
-                update_edge_state,
-            ),
-            Rule::Raw(raw_rule) => self.evaluate_raw_rule_status(
-                routine_id,
-                raw_rule,
-                old_state,
-                event_source,
-                devices,
-                update_edge_state,
-            ),
-            Rule::Device(device_rule) => self.evaluate_device_rule_status(
-                routine_id,
-                device_rule,
-                old_state,
-                event_source,
-                devices,
-                update_edge_state,
-            ),
-            Rule::Group(group_rule) => self.evaluate_group_rule_status(
-                routine_id,
-                group_rule,
-                old_state,
-                event_source,
-                devices,
-                groups,
-                update_edge_state,
-            ),
+            Rule::Sensor(sensor_rule) => {
+                self.evaluate_sensor_rule_status(routine_id, sensor_rule, ctx)
+            }
+            Rule::Raw(raw_rule) => self.evaluate_raw_rule_status(routine_id, raw_rule, ctx),
+            Rule::Device(device_rule) => {
+                self.evaluate_device_rule_status(routine_id, device_rule, ctx)
+            }
+            Rule::Group(group_rule) => self.evaluate_group_rule_status(routine_id, group_rule, ctx),
             Rule::EvalExpr(expr) => Err(eyre!(
                 "Legacy evalexpr rules are no longer supported: {expr}"
             )),
             Rule::Script(ScriptRule { script }) => {
                 let mut engine = ScriptEngine::new();
-                let device_state = devices.get_state();
-                let flattened_groups = groups.get_flattened_groups();
+                let device_state = ctx.devices.get_state();
+                let flattened_groups = ctx.groups.get_flattened_groups();
                 match engine.eval_rule_script(script, device_state, flattened_groups) {
                     Ok(result) => Ok(RuleRuntimeStatus::from_match(result, result)),
                     Err(error) => Err(eyre!("Script rule evaluation error: {error}")),
@@ -492,12 +420,10 @@ impl Routines {
         &mut self,
         routine_id: &RoutineId,
         rule: &SensorRule,
-        old_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let device = devices
+        let device = ctx
+            .devices
             .get_device_by_ref(&rule.device_ref)
             .ok_or_else(|| eyre!("Could not find matching sensor for rule: {:?}", rule))?;
 
@@ -522,7 +448,7 @@ impl Routines {
         };
 
         if !state_matches {
-            if update_edge_state && rule.trigger_mode == TriggerMode::Edge {
+            if ctx.update_edge_state && rule.trigger_mode == TriggerMode::Edge {
                 self.prev_edge_triggered
                     .remove(&(routine_id.clone(), device_key));
             }
@@ -530,18 +456,24 @@ impl Routines {
         }
 
         let trigger_match = match rule.trigger_mode {
-            TriggerMode::Pulse => event_source.map(|es| es == &device_key).unwrap_or(false),
+            TriggerMode::Pulse => ctx
+                .event_source
+                .map(|es| es == &device_key)
+                .unwrap_or(false),
             TriggerMode::Edge => {
                 let edge_key = (routine_id.clone(), device_key.clone());
 
                 if self.prev_edge_triggered.contains(&edge_key) {
                     false
                 } else {
-                    let is_event_source = event_source.map(|es| es == &device_key).unwrap_or(false);
+                    let is_event_source = ctx
+                        .event_source
+                        .map(|es| es == &device_key)
+                        .unwrap_or(false);
                     if !is_event_source {
                         false
                     } else {
-                        let old_device = old_state.0.get(&device_key);
+                        let old_device = ctx.old_device_for(&device_key);
                         let old_matched = old_device
                             .map(|d| match (&rule.state, d.get_sensor_state()) {
                                 (
@@ -561,7 +493,7 @@ impl Routines {
                             .unwrap_or(false);
 
                         let trigger_match = !old_matched;
-                        if trigger_match && update_edge_state {
+                        if trigger_match && ctx.update_edge_state {
                             self.prev_edge_triggered.insert(edge_key);
                         }
                         trigger_match
@@ -578,12 +510,10 @@ impl Routines {
         &mut self,
         routine_id: &RoutineId,
         rule: &RawRule,
-        old_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let device = devices
+        let device = ctx
+            .devices
             .get_device_by_ref(&rule.device_ref)
             .ok_or_else(|| eyre!("Could not find matching device for raw rule: {:?}", rule))?;
 
@@ -591,7 +521,7 @@ impl Routines {
         let state_matches = evaluate_raw_rule_match(device.get_raw_value().as_ref(), rule)?;
 
         if !state_matches {
-            if update_edge_state && rule.trigger_mode == TriggerMode::Edge {
+            if ctx.update_edge_state && rule.trigger_mode == TriggerMode::Edge {
                 self.prev_edge_triggered
                     .remove(&(routine_id.clone(), device_key));
             }
@@ -599,18 +529,24 @@ impl Routines {
         }
 
         let trigger_match = match rule.trigger_mode {
-            TriggerMode::Pulse => event_source.map(|es| es == &device_key).unwrap_or(false),
+            TriggerMode::Pulse => ctx
+                .event_source
+                .map(|es| es == &device_key)
+                .unwrap_or(false),
             TriggerMode::Edge => {
                 let edge_key = (routine_id.clone(), device_key.clone());
 
                 if self.prev_edge_triggered.contains(&edge_key) {
                     false
                 } else {
-                    let is_event_source = event_source.map(|es| es == &device_key).unwrap_or(false);
+                    let is_event_source = ctx
+                        .event_source
+                        .map(|es| es == &device_key)
+                        .unwrap_or(false);
                     if !is_event_source {
                         false
                     } else {
-                        let old_device = old_state.0.get(&device_key);
+                        let old_device = ctx.old_device_for(&device_key);
                         let old_matched = match old_device {
                             Some(device) => {
                                 evaluate_raw_rule_match(device.get_raw_value().as_ref(), rule)?
@@ -619,7 +555,7 @@ impl Routines {
                         };
 
                         let trigger_match = !old_matched;
-                        if trigger_match && update_edge_state {
+                        if trigger_match && ctx.update_edge_state {
                             self.prev_edge_triggered.insert(edge_key);
                         }
                         trigger_match
@@ -636,12 +572,10 @@ impl Routines {
         &mut self,
         routine_id: &RoutineId,
         rule: &DeviceRule,
-        old_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let device = devices
+        let device = ctx
+            .devices
             .get_device_by_ref(&rule.device_ref)
             .ok_or_else(|| eyre!("Could not find matching device for rule: {:?}", rule))?;
 
@@ -650,7 +584,7 @@ impl Routines {
         let state_matches = check_device_state_matches(device, &rule.scene, &rule.power);
 
         if !state_matches {
-            if update_edge_state && rule.trigger_mode == TriggerMode::Edge {
+            if ctx.update_edge_state && rule.trigger_mode == TriggerMode::Edge {
                 self.prev_edge_triggered
                     .remove(&(routine_id.clone(), device_key));
             }
@@ -658,24 +592,30 @@ impl Routines {
         }
 
         let trigger_match = match rule.trigger_mode {
-            TriggerMode::Pulse => event_source.map(|es| es == &device_key).unwrap_or(false),
+            TriggerMode::Pulse => ctx
+                .event_source
+                .map(|es| es == &device_key)
+                .unwrap_or(false),
             TriggerMode::Edge => {
                 let edge_key = (routine_id.clone(), device_key.clone());
 
                 if self.prev_edge_triggered.contains(&edge_key) {
                     false
                 } else {
-                    let is_event_source = event_source.map(|es| es == &device_key).unwrap_or(false);
+                    let is_event_source = ctx
+                        .event_source
+                        .map(|es| es == &device_key)
+                        .unwrap_or(false);
                     if !is_event_source {
                         false
                     } else {
-                        let old_device = old_state.0.get(&device_key);
+                        let old_device = ctx.old_device_for(&device_key);
                         let old_matched = old_device
                             .map(|d| check_device_state_matches(d, &rule.scene, &rule.power))
                             .unwrap_or(false);
 
                         let trigger_match = !old_matched;
-                        if trigger_match && update_edge_state {
+                        if trigger_match && ctx.update_edge_state {
                             self.prev_edge_triggered.insert(edge_key);
                         }
                         trigger_match
@@ -692,13 +632,11 @@ impl Routines {
         &mut self,
         routine_id: &RoutineId,
         rule: &GroupRule,
-        old_state: &DevicesState,
-        event_source: Option<&DeviceKey>,
-        devices: &Devices,
-        groups: &Groups,
-        update_edge_state: bool,
+        ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let group_devices = groups.find_group_devices(devices.get_state(), &rule.group_id);
+        let group_devices = ctx
+            .groups
+            .find_group_devices(ctx.devices.get_state(), &rule.group_id);
 
         if group_devices.is_empty() {
             return Ok(RuleRuntimeStatus::from_match(false, false));
@@ -709,7 +647,7 @@ impl Routines {
             .all(|device| check_device_state_matches(device, &rule.scene, &rule.power));
 
         if !all_match {
-            if update_edge_state && rule.trigger_mode == TriggerMode::Edge {
+            if ctx.update_edge_state && rule.trigger_mode == TriggerMode::Edge {
                 for device in &group_devices {
                     self.prev_edge_triggered
                         .remove(&(routine_id.clone(), device.get_device_key()));
@@ -720,13 +658,13 @@ impl Routines {
 
         let trigger_match = match rule.trigger_mode {
             TriggerMode::Pulse => group_devices.iter().any(|device| {
-                event_source
+                ctx.event_source
                     .map(|es| es == &device.get_device_key())
                     .unwrap_or(false)
             }),
             TriggerMode::Edge => {
                 let any_is_source = group_devices.iter().any(|device| {
-                    event_source
+                    ctx.event_source
                         .map(|es| es == &device.get_device_key())
                         .unwrap_or(false)
                 });
@@ -736,9 +674,7 @@ impl Routines {
                 } else {
                     let old_all_matched = group_devices.iter().all(|device| {
                         let device_key = device.get_device_key();
-                        old_state
-                            .0
-                            .get(&device_key)
+                        ctx.old_device_for(&device_key)
                             .map(|d| check_device_state_matches(d, &rule.scene, &rule.power))
                             .unwrap_or(false)
                     });
@@ -879,7 +815,9 @@ fn is_json_truthy(value: &Value) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{evaluate_raw_rule_match, expand_action_source_context, Routines};
+    use super::{
+        evaluate_raw_rule_match, expand_action_source_context, Routines, RuleEvaluationContext,
+    };
     use crate::core::{devices::Devices, groups::Groups};
     use crate::types::action::{Action, Actions};
     use crate::types::device::{Device, DeviceData, DeviceId, DeviceKey, DeviceRef, SensorDevice};
@@ -957,6 +895,21 @@ mod tests {
         )
     }
 
+    fn rule_eval_ctx<'a>(
+        old_event_source: Option<&'a Device>,
+        device_key: &'a DeviceKey,
+        devices: &'a Devices,
+        groups: &'a Groups,
+    ) -> RuleEvaluationContext<'a> {
+        RuleEvaluationContext {
+            event_source: Some(device_key),
+            old_event_source,
+            devices,
+            groups,
+            update_edge_state: true,
+        }
+    }
+
     #[test]
     fn raw_rule_matches_numeric_thresholds() {
         let rule = raw_rule(RawRuleOperator::Gt, Some(json!(20)));
@@ -995,70 +948,32 @@ mod tests {
 
         let old_device = sensor_device(json!({ "payload": { "temperature": 18 } }));
         devices.set_state(&old_device, true, true);
-        let old_state = devices.get_state().clone();
 
         let matching_device = sensor_device(json!({ "payload": { "temperature": 21 } }));
         devices.set_state(&matching_device, true, true);
-        let new_state = devices.get_state().clone();
+        let first_ctx = rule_eval_ctx(Some(&old_device), &device_key, &devices, &groups);
 
-        let first = routines.evaluate_rule_status(
-            &routine_id,
-            &rule,
-            &old_state,
-            &new_state,
-            Some(&device_key),
-            &devices,
-            &groups,
-            true,
-        );
+        let first = routines.evaluate_rule_status(&routine_id, &rule, &first_ctx);
         assert!(first.condition_match);
         assert!(first.trigger_match);
 
-        let second = routines.evaluate_rule_status(
-            &routine_id,
-            &rule,
-            &old_state,
-            &new_state,
-            Some(&device_key),
-            &devices,
-            &groups,
-            true,
-        );
+        let second = routines.evaluate_rule_status(&routine_id, &rule, &first_ctx);
         assert!(second.condition_match);
         assert!(!second.trigger_match);
 
-        let leaving_state = devices.get_state().clone();
         let non_matching_device = sensor_device(json!({ "payload": { "temperature": 19 } }));
         devices.set_state(&non_matching_device, true, true);
-        let rearm_state = devices.get_state().clone();
+        let rearm_ctx = rule_eval_ctx(Some(&matching_device), &device_key, &devices, &groups);
 
-        let cleared = routines.evaluate_rule_status(
-            &routine_id,
-            &rule,
-            &leaving_state,
-            &rearm_state,
-            Some(&device_key),
-            &devices,
-            &groups,
-            true,
-        );
+        let cleared = routines.evaluate_rule_status(&routine_id, &rule, &rearm_ctx);
         assert!(!cleared.condition_match);
         assert!(!cleared.trigger_match);
 
-        let old_non_matching = devices.get_state().clone();
         devices.set_state(&matching_device, true, true);
-        let reentered_state = devices.get_state().clone();
+        let reentered_ctx =
+            rule_eval_ctx(Some(&non_matching_device), &device_key, &devices, &groups);
 
-        let retriggered = routines.evaluate_rule_status(
-            &routine_id,
-            &rule,
-            &old_non_matching,
-            &reentered_state,
-            Some(&device_key),
-            &devices,
-            &groups,
-            true,
-        );
+        let retriggered = routines.evaluate_rule_status(&routine_id, &rule, &reentered_ctx);
         assert!(retriggered.condition_match);
         assert!(retriggered.trigger_match);
     }

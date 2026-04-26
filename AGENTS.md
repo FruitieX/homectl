@@ -5,7 +5,7 @@
 **homectl** is a home automation platform built as a monorepo with two main packages:
 
 - **`server/`** – Rust backend: core automation engine, HTTP/WebSocket API
-- **`ui/`** – Next.js/React frontend: web interface consuming the server API
+- **`ui/`** – Vite/React Router frontend: web interface consuming the server API
 
 The server unifies home automation systems from different brands by assuming control over individual systems, providing a common interface for configuration, advanced scene control, and reliable state management.
 
@@ -20,8 +20,8 @@ The server unifies home automation systems from different brands by assuming con
 - **Configuration**: TOML (via config + toml crates)
 - **TypeScript Bindings**: ts-rs (generates TypeScript types from Rust structs)
 
-### UI (Next.js)
-- **Framework**: Next.js 15
+### UI (Vite + React Router)
+- **Framework**: Vite with React Router
 - **Language**: TypeScript
 - **UI Components**: React, daisyui, react-daisyui
 - **Styling**: TailwindCSS 4
@@ -47,9 +47,9 @@ The server unifies home automation systems from different brands by assuming con
 │   ├── migrations/        # SQL migrations (sqlx)
 │   ├── Settings.toml      # Runtime configuration
 │   └── Cargo.toml
-├── ui/                     # Next.js frontend
-│   ├── app/               # Next.js App Router pages
-│   │   ├── api/           # API routes
+├── ui/                     # Vite frontend
+│   ├── app/               # Route page components
+│   │   ├── api/           # API helpers/routes
 │   │   ├── config/        # Configuration UI
 │   │   ├── dashboard/     # Dashboard views
 │   │   ├── groups/        # Group management

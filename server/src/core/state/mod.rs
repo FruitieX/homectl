@@ -6,10 +6,12 @@ use crate::db::config_queries::{
 };
 use crate::types::{
     color::ColorMode,
-    device::DevicesState,
+    device::{DeviceKey, DevicesState},
     event::TxEventChannel,
+    group::FlattenedGroupsConfig,
     integration::IntegrationId,
-    websockets::{StateUpdate, WebSocketResponse},
+    routine_status::RoutineStatuses,
+    scene::FlattenedScenesConfig,
 };
 
 pub mod actor;
@@ -20,20 +22,88 @@ pub use actor::{spawn_state_actor, StateHandle};
 pub use command::StateCommand;
 
 use super::{
-    devices::Devices, groups::Groups, integrations::Integrations, routines::Routines,
+    devices::Devices,
+    groups::Groups,
+    integrations::Integrations,
+    routines::Routines,
     scenes::Scenes,
-    snapshot::{RuntimeSnapshot, SnapshotHandle},
+    snapshot::{RuntimeSnapshot, SnapshotChanges, SnapshotHandle},
     ui::Ui,
     websockets::WebSockets,
 };
 
 use color_eyre::Result;
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use serde::Serialize;
 use std::time::Duration;
+use std::{
+    collections::{BTreeSet, HashMap},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex as StdMutex,
+    },
+};
 use tokio::sync::Mutex;
+
+#[derive(Clone, Default)]
+pub struct PendingWsUpdate {
+    send_full_state: bool,
+    changes: SnapshotChanges,
+    device_upserts: BTreeSet<DeviceKey>,
+    device_removals: BTreeSet<DeviceKey>,
+}
+
+impl PendingWsUpdate {
+    pub fn full_state() -> Self {
+        Self {
+            send_full_state: true,
+            changes: SnapshotChanges::all(),
+            ..Self::default()
+        }
+    }
+
+    pub fn device_upsert(device_key: DeviceKey, mut changes: SnapshotChanges) -> Self {
+        changes.devices = true;
+        Self {
+            changes,
+            device_upserts: BTreeSet::from([device_key]),
+            ..Self::default()
+        }
+    }
+
+    pub fn device_removals(device_keys: Vec<DeviceKey>, mut changes: SnapshotChanges) -> Self {
+        changes.devices = true;
+        Self {
+            changes,
+            device_removals: device_keys.into_iter().collect(),
+            ..Self::default()
+        }
+    }
+
+    fn include(&mut self, other: Self) {
+        self.send_full_state |= other.send_full_state;
+        self.changes.include(other.changes);
+        self.device_upserts.extend(other.device_upserts);
+        self.device_removals.extend(other.device_removals);
+    }
+
+    fn has_websocket_changes(&self) -> bool {
+        self.send_full_state
+            || self.changes.devices
+            || self.changes.flattened_groups
+            || self.changes.flattened_scenes
+            || self.changes.routine_statuses
+            || self.changes.ui_state
+    }
+}
+
+impl From<SnapshotChanges> for PendingWsUpdate {
+    fn from(changes: SnapshotChanges) -> Self {
+        Self {
+            changes,
+            ..Self::default()
+        }
+    }
+}
 
 pub struct AppState {
     pub warming_up: bool,
@@ -47,6 +117,7 @@ pub struct AppState {
     pub ws: WebSockets,
     pub ui: Ui,
     pub ws_broadcast_pending: Arc<AtomicBool>,
+    pub pending_ws_update: Arc<StdMutex<PendingWsUpdate>>,
     pub runtime_apply_lock: Arc<Mutex<()>>,
     pub snapshot: SnapshotHandle,
 }
@@ -56,18 +127,45 @@ impl AppState {
         &self.runtime_config
     }
 
-    /// Republish the runtime snapshot with the current values of
-    /// `runtime_config` and `devices`. Call this at the end of every
-    /// mutation path (event handling, admin config updates, runtime
-    /// reloads) so that snapshot readers observe the latest state.
-    pub fn publish_snapshot(&self) {
+    /// Republish changed runtime snapshot fields while reusing unchanged
+    /// `Arc` payloads from the currently published snapshot.
+    pub fn publish_snapshot(&self, changes: SnapshotChanges) {
+        if changes.is_empty() {
+            return;
+        }
+
+        let previous = self.snapshot.load();
         let snapshot = RuntimeSnapshot {
-            runtime_config: Arc::new(self.runtime_config.clone()),
-            devices: Arc::new(self.devices.get_state().clone()),
-            flattened_groups: Arc::new(self.groups.get_flattened_groups().clone()),
-            flattened_scenes: Arc::new(self.scenes.get_flattened_scenes().clone()),
-            routine_statuses: Arc::new(self.rules.get_runtime_statuses()),
-            ui_state: Arc::new(self.ui.get_state().clone()),
+            runtime_config: if changes.runtime_config {
+                Arc::new(self.runtime_config.clone())
+            } else {
+                Arc::clone(&previous.runtime_config)
+            },
+            devices: if changes.devices {
+                Arc::new(self.devices.get_state().clone())
+            } else {
+                Arc::clone(&previous.devices)
+            },
+            flattened_groups: if changes.flattened_groups {
+                Arc::new(self.groups.get_flattened_groups().clone())
+            } else {
+                Arc::clone(&previous.flattened_groups)
+            },
+            flattened_scenes: if changes.flattened_scenes {
+                Arc::new(self.scenes.get_flattened_scenes().clone())
+            } else {
+                Arc::clone(&previous.flattened_scenes)
+            },
+            routine_statuses: if changes.routine_statuses {
+                self.rules.get_runtime_statuses()
+            } else {
+                Arc::clone(&previous.routine_statuses)
+            },
+            ui_state: if changes.ui_state {
+                Arc::new(self.ui.get_state().clone())
+            } else {
+                Arc::clone(&previous.ui_state)
+            },
             warming_up: self.warming_up,
         };
         self.snapshot.store(Arc::new(snapshot));
@@ -425,7 +523,12 @@ impl AppState {
         self.groups.force_invalidate(&self.devices);
         self.scenes.force_invalidate(&self.devices, &self.groups);
         self.refresh_routine_statuses();
-        self.schedule_ws_broadcast();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            flattened_groups: true,
+            flattened_scenes: true,
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
     }
 
     pub fn upsert_integration(&mut self, integration: IntegrationRow) {
@@ -452,10 +555,12 @@ impl AppState {
         self.runtime_config.integrations.len() != len_before
     }
 
-    fn remove_devices_for_integrations(&mut self, removed_ids: &[IntegrationId]) {
+    fn remove_devices_for_integrations(&mut self, removed_ids: &[IntegrationId]) -> Vec<DeviceKey> {
+        let mut removed_device_keys = Vec::new();
         for id in removed_ids {
-            self.devices.remove_devices_by_integration(id);
+            removed_device_keys.extend(self.devices.remove_devices_by_integration(id));
         }
+        removed_device_keys
     }
 
     pub fn commit_runtime_integrations_update(
@@ -466,14 +571,19 @@ impl AppState {
     ) {
         self.runtime_config = runtime_config;
         self.integrations = integrations;
-        self.remove_devices_for_integrations(&removed_ids);
+        let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
 
         if !removed_ids.is_empty() {
             self.refresh_routine_statuses();
-            self.schedule_ws_broadcast();
+            self.schedule_ws_broadcast(PendingWsUpdate::device_removals(
+                removed_device_keys,
+                SnapshotChanges {
+                    devices: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                },
+            ));
         }
-
-        self.publish_snapshot();
     }
 
     pub fn commit_runtime_config_update(
@@ -484,11 +594,16 @@ impl AppState {
     ) {
         self.runtime_config = runtime_config;
         self.integrations = integrations;
-        self.remove_devices_for_integrations(&removed_ids);
+        let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
         self.apply_runtime_groups();
         self.apply_runtime_scenes();
         self.apply_runtime_routines();
-        self.publish_snapshot();
+        if !removed_device_keys.is_empty() {
+            self.schedule_ws_broadcast(PendingWsUpdate::device_removals(
+                removed_device_keys,
+                SnapshotChanges::devices(),
+            ));
+        }
     }
 
     pub async fn apply_runtime_integrations(&mut self) -> Result<()> {
@@ -497,13 +612,21 @@ impl AppState {
             .reload_config_rows(&self.runtime_config.integrations)
             .await?;
 
+        let mut removed_device_keys = Vec::new();
         for id in &removed_ids {
-            self.devices.remove_devices_by_integration(id);
+            removed_device_keys.extend(self.devices.remove_devices_by_integration(id));
         }
 
         if !removed_ids.is_empty() {
             self.refresh_routine_statuses();
-            self.schedule_ws_broadcast();
+            self.schedule_ws_broadcast(PendingWsUpdate::device_removals(
+                removed_device_keys,
+                SnapshotChanges {
+                    devices: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                },
+            ));
         }
 
         Ok(())
@@ -547,7 +670,11 @@ impl AppState {
             .load_config_rows(&self.runtime_config.scenes, overrides);
         self.scenes.force_invalidate(&self.devices, &self.groups);
         self.refresh_routine_statuses();
-        self.schedule_ws_broadcast();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            flattened_scenes: true,
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
     }
 
     pub fn upsert_routine(&mut self, routine: RoutineRow) {
@@ -577,7 +704,10 @@ impl AppState {
     pub fn apply_runtime_routines(&mut self) {
         self.rules.load_config_rows(&self.runtime_config.routines);
         self.refresh_routine_statuses();
-        self.schedule_ws_broadcast();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
     }
 
     pub async fn refresh_runtime_config_from_db(&mut self) -> Result<()> {
@@ -590,9 +720,19 @@ impl AppState {
             .refresh_runtime_statuses(&self.devices, &self.groups);
     }
 
-    /// Schedule a debounced WebSocket broadcast
-    /// Batches multiple state updates within 100ms into a single broadcast
-    pub fn schedule_ws_broadcast(&self) {
+    /// Schedule a debounced WebSocket broadcast.
+    ///
+    /// Batches multiple state updates within 100ms into a single targeted
+    /// patch, preserving full-state sends for initial websocket syncs.
+    pub fn schedule_ws_broadcast(&self, update: impl Into<PendingWsUpdate>) {
+        {
+            let mut pending_update = self
+                .pending_ws_update
+                .lock()
+                .expect("pending_ws_update lock poisoned");
+            pending_update.include(update.into());
+        }
+
         // If broadcast already scheduled, skip
         if self.ws_broadcast_pending.swap(true, Ordering::SeqCst) {
             return;
@@ -601,10 +741,18 @@ impl AppState {
         let snapshot = self.snapshot.clone();
         let ws = self.ws.clone();
         let pending = self.ws_broadcast_pending.clone();
+        let pending_update = self.pending_ws_update.clone();
         tokio::spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
             pending.store(false, Ordering::SeqCst);
-            send_state_ws_from_snapshot(&snapshot, &ws, None).await;
+            let update = {
+                let mut pending_update = pending_update
+                    .lock()
+                    .expect("pending_ws_update lock poisoned");
+                std::mem::take(&mut *pending_update)
+            };
+
+            send_state_ws_patch_from_snapshot(&snapshot, &ws, None, update).await;
         });
     }
 
@@ -625,12 +773,20 @@ impl AppState {
                     warn!("Failed to refresh runtime config snapshot: {e}");
                 }
                 // Clean up devices belonging to removed integrations
+                let mut removed_device_keys = Vec::new();
                 for id in &removed_ids {
-                    self.devices.remove_devices_by_integration(id);
+                    removed_device_keys.extend(self.devices.remove_devices_by_integration(id));
                 }
                 if !removed_ids.is_empty() {
                     self.refresh_routine_statuses();
-                    self.schedule_ws_broadcast();
+                    self.schedule_ws_broadcast(PendingWsUpdate::device_removals(
+                        removed_device_keys,
+                        SnapshotChanges {
+                            devices: true,
+                            routine_statuses: true,
+                            ..SnapshotChanges::none()
+                        },
+                    ));
                 }
             }
             Err(e) => {
@@ -652,7 +808,12 @@ impl AppState {
         self.scenes.force_invalidate(&self.devices, &self.groups);
 
         self.refresh_routine_statuses();
-        self.schedule_ws_broadcast();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            flattened_groups: true,
+            flattened_scenes: true,
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
         Ok(())
     }
 
@@ -667,7 +828,11 @@ impl AppState {
         self.scenes.force_invalidate(&self.devices, &self.groups);
 
         self.refresh_routine_statuses();
-        self.schedule_ws_broadcast();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            flattened_scenes: true,
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
         Ok(())
     }
 
@@ -679,9 +844,51 @@ impl AppState {
             warn!("Failed to refresh runtime config snapshot: {e}");
         }
         self.refresh_routine_statuses();
-        self.schedule_ws_broadcast();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
         Ok(())
     }
+}
+
+#[derive(Serialize)]
+struct StateUpdateRef<'a> {
+    devices: DevicesState,
+    scenes: &'a FlattenedScenesConfig,
+    groups: &'a FlattenedGroupsConfig,
+    routine_statuses: &'a RoutineStatuses,
+    ui_state: &'a HashMap<String, serde_json::Value>,
+}
+
+#[derive(Serialize)]
+enum WebSocketResponseRef<'a> {
+    State(StateUpdateRef<'a>),
+}
+
+#[derive(Serialize)]
+struct DevicesPatchRef<'a> {
+    upserted: DevicesState,
+    removed: &'a [DeviceKey],
+}
+
+#[derive(Serialize)]
+struct StatePatchRef<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    devices: Option<DevicesPatchRef<'a>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scenes: Option<&'a FlattenedScenesConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    groups: Option<&'a FlattenedGroupsConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    routine_statuses: Option<&'a RoutineStatuses>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ui_state: Option<&'a HashMap<String, serde_json::Value>>,
+}
+
+#[derive(Serialize)]
+enum WebSocketPatchResponseRef<'a> {
+    Patch(StatePatchRef<'a>),
 }
 
 /// Build a `StateUpdate` from the currently published runtime snapshot and
@@ -710,14 +917,90 @@ pub async fn send_state_ws_from_snapshot(
         })
         .collect();
 
-    let message = WebSocketResponse::State(StateUpdate {
+    let message = WebSocketResponseRef::State(StateUpdateRef {
         devices: DevicesState(devices_converted),
-        scenes: (*snap.flattened_scenes).clone(),
-        groups: (*snap.flattened_groups).clone(),
-        routine_statuses: (*snap.routine_statuses).clone(),
-        ui_state: (*snap.ui_state).clone(),
+        scenes: snap.flattened_scenes.as_ref(),
+        groups: snap.flattened_groups.as_ref(),
+        routine_statuses: snap.routine_statuses.as_ref(),
+        ui_state: snap.ui_state.as_ref(),
     });
 
     ws.send(user_id, &message).await;
 }
 
+/// Build a targeted `StatePatch` from the currently published runtime snapshot
+/// and broadcast it to the given WebSocket peers.
+pub async fn send_state_ws_patch_from_snapshot(
+    snapshot: &SnapshotHandle,
+    ws: &WebSockets,
+    user_id: Option<usize>,
+    update: PendingWsUpdate,
+) {
+    if !update.has_websocket_changes() {
+        return;
+    }
+
+    if update.send_full_state {
+        send_state_ws_from_snapshot(snapshot, ws, user_id).await;
+        return;
+    }
+
+    // Make sure there are any users connected before broadcasting.
+    if user_id.is_none() && ws.num_users().await == 0 {
+        return;
+    }
+
+    let snap = snapshot.load();
+    let removed_devices = update.device_removals.into_iter().collect::<Vec<_>>();
+    let devices = if update.changes.devices {
+        let device_upserts = if update.device_upserts.is_empty() && removed_devices.is_empty() {
+            snap.devices
+                .0
+                .values()
+                .map(|device| {
+                    (
+                        device.get_device_key(),
+                        device.color_to_mode(ColorMode::Hs, true),
+                    )
+                })
+                .collect()
+        } else {
+            update
+                .device_upserts
+                .into_iter()
+                .filter_map(|device_key| {
+                    snap.devices
+                        .0
+                        .get(&device_key)
+                        .map(|device| (device_key, device.color_to_mode(ColorMode::Hs, true)))
+                })
+                .collect()
+        };
+
+        Some(DevicesPatchRef {
+            upserted: DevicesState(device_upserts),
+            removed: &removed_devices,
+        })
+    } else {
+        None
+    };
+
+    let message = WebSocketPatchResponseRef::Patch(StatePatchRef {
+        devices,
+        scenes: update
+            .changes
+            .flattened_scenes
+            .then_some(snap.flattened_scenes.as_ref()),
+        groups: update
+            .changes
+            .flattened_groups
+            .then_some(snap.flattened_groups.as_ref()),
+        routine_statuses: update
+            .changes
+            .routine_statuses
+            .then_some(snap.routine_statuses.as_ref()),
+        ui_state: update.changes.ui_state.then_some(snap.ui_state.as_ref()),
+    });
+
+    ws.send(user_id, &message).await;
+}

@@ -1,4 +1,4 @@
-import { useWebsocketState } from '@/hooks/websocket';
+import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import {
   useDeviceDisplayNames,
   useDeviceSensorConfigs,
@@ -31,15 +31,22 @@ const fallbackFloorplanWidth = 1500;
 const fallbackFloorplanHeight = 1200;
 
 export const Viewport = () => {
-  const state = useWebsocketState();
+  const liveDevices = useDevicesState();
+  const liveGroups = useGroupsState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const { data: deviceSensorConfigs } = useDeviceSensorConfigs();
   const { data: floorplans } = useFloorplans();
-  const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(null);
-  const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(selectedFloorplanId ?? undefined);
+  const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(
+    null,
+  );
+  const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(
+    selectedFloorplanId ?? undefined,
+  );
   const floorplanImage = useImageState(imageUrl);
 
-  const allDevices: Device[] = Object.values(excludeUndefined(state?.devices));
+  const allDevices: Device[] = Object.values(
+    excludeUndefined(liveDevices ?? undefined),
+  );
   const controllableDevices = useMemo(
     () => allDevices.filter((d) => 'Controllable' in d.data),
     [allDevices],
@@ -48,7 +55,7 @@ export const Viewport = () => {
     () => allDevices.filter((d) => 'Sensor' in d.data),
     [allDevices],
   );
-  const groups = excludeUndefined(state?.groups);
+  const groups = excludeUndefined(liveGroups ?? undefined);
   const groupMasks = floorplanGrid?.groups ?? {};
   const deviceDisplayNameMap = Object.fromEntries(
     deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
@@ -74,7 +81,10 @@ export const Viewport = () => {
       return;
     }
 
-    if (!selectedFloorplanId || !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)) {
+    if (
+      !selectedFloorplanId ||
+      !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)
+    ) {
       setSelectedFloorplanId(floorplans[0].id);
     }
   }, [floorplans, selectedFloorplanId]);
@@ -98,7 +108,8 @@ export const Viewport = () => {
       const floorplanWidth = metrics.width || fallbackFloorplanWidth;
       const floorplanHeight = metrics.height || fallbackFloorplanHeight;
       const scale =
-        scalePaddingFactor * Math.min(width / floorplanWidth, height / floorplanHeight);
+        scalePaddingFactor *
+        Math.min(width / floorplanWidth, height / floorplanHeight);
       setInitialScale({ x: scale, y: scale });
     }
   }, [floorplanGrid, floorplanImage, width, height]);
@@ -133,7 +144,8 @@ export const Viewport = () => {
 
   const sortedGroups = Object.entries(groups)
     .filter(
-      ([groupId, group]) => !group.hidden && (groupMasks[groupId]?.length ?? 0) > 0,
+      ([groupId, group]) =>
+        !group.hidden && (groupMasks[groupId]?.length ?? 0) > 0,
     )
     .sort(([leftId, leftGroup], [rightId, rightGroup]) => {
       const sizeDelta =
@@ -147,14 +159,18 @@ export const Viewport = () => {
   const activeSensor =
     activeSensorKey === null
       ? null
-      : allDevices.find((device) => getDeviceKey(device) === activeSensorKey) ?? null;
+      : (allDevices.find(
+          (device) => getDeviceKey(device) === activeSensorKey,
+        ) ?? null);
 
   return (
     <div ref={containerRef} className="absolute left-0 top-0 h-full w-full">
       {floorplans.length > 0 && (
         <div className="absolute left-4 top-4 z-10 rounded-box bg-base-100/90 p-3 shadow-lg backdrop-blur">
           <label className="form-control w-52">
-            <span className="label-text text-xs uppercase opacity-60">Floorplan</span>
+            <span className="label-text text-xs uppercase opacity-60">
+              Floorplan
+            </span>
             <select
               className="select select-bordered select-sm"
               value={selectedFloorplanId ?? ''}
@@ -205,7 +221,9 @@ export const Viewport = () => {
             })}
 
             {controllableDevices.map((device) => {
-              const placement = getViewportDevicePlacement(getDeviceKey(device));
+              const placement = getViewportDevicePlacement(
+                getDeviceKey(device),
+              );
               if (!placement) return null;
               return (
                 <ViewportDevice
@@ -226,7 +244,9 @@ export const Viewport = () => {
             })}
 
             {sensorDevices.map((device) => {
-              const placement = getViewportDevicePlacement(getDeviceKey(device));
+              const placement = getViewportDevicePlacement(
+                getDeviceKey(device),
+              );
               if (!placement) return null;
               return (
                 <ViewportSensor
@@ -235,7 +255,9 @@ export const Viewport = () => {
                   label={getDeviceDisplayLabel(device, deviceDisplayNameMap)}
                   position={placement.position}
                   scale={placement.scale}
-                  onOpenActions={(sensor) => setActiveSensorKey(getDeviceKey(sensor))}
+                  onOpenActions={(sensor) =>
+                    setActiveSensorKey(getDeviceKey(sensor))
+                  }
                 />
               );
             })}
@@ -248,7 +270,7 @@ export const Viewport = () => {
         sensorConfig={
           activeSensor === null
             ? null
-            : deviceSensorConfigMap[getSensorConfigRef(activeSensor)] ?? null
+            : (deviceSensorConfigMap[getSensorConfigRef(activeSensor)] ?? null)
         }
         label={
           activeSensor === null

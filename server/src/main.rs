@@ -41,7 +41,7 @@ fn default_backup_config_path() -> &'static Path {
     Path::new("Settings.json")
 }
 
-fn backup_config_path<'a>(cli: &'a Cli) -> &'a Path {
+fn backup_config_path(cli: &Cli) -> &Path {
     if let Some(config_path) = cli.config.as_deref() {
         Path::new(config_path)
     } else {
@@ -221,7 +221,7 @@ async fn run_event_loop(
         devices: Arc::new(devices.get_state().clone()),
         flattened_groups: Arc::new(groups.get_flattened_groups().clone()),
         flattened_scenes: Arc::new(scenes.get_flattened_scenes().clone()),
-        routine_statuses: Arc::new(rules.get_runtime_statuses()),
+        routine_statuses: rules.get_runtime_statuses(),
         ui_state: Arc::new(ui.get_state().clone()),
         warming_up: true,
     });
@@ -238,6 +238,7 @@ async fn run_event_loop(
         ui,
         ws: Default::default(),
         ws_broadcast_pending: Arc::new(AtomicBool::new(false)),
+        pending_ws_update: Arc::new(std::sync::Mutex::new(Default::default())),
         runtime_apply_lock: Arc::new(Mutex::new(())),
         snapshot: snapshot.clone(),
     };

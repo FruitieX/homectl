@@ -3,7 +3,7 @@
 This repository contains the homectl home automation platform split into two packages:
 
 - `server/` (Rust) – core automation engine and HTTP/WebSocket API
-- `ui/` (Next.js / React) – web interface consuming the server API
+- `ui/` (Vite / React Router) – web interface consuming the server API
 
 ## Packages
 
@@ -31,7 +31,7 @@ If the database named in `DATABASE_URL` does not exist yet, the server creates
 it automatically before running migrations when the configured PostgreSQL role
 has permission to create databases.
 
-### UI (Next.js)
+### UI (Vite + React Router)
 See [ui/README.md](ui/README.md) for UI specific documentation.
 
 Development:
@@ -47,7 +47,7 @@ Root GitHub Workflows:
 - `ui-ci.yml` – Builds and publishes the UI image (`ghcr.io/<owner>/<repo>-ui`).
 - `release-please.yml` – Uses manifest mode to create independent releases for `server` and `ui`.
 
-Legacy per-package workflows were deprecated in-place and converted to no-op callable workflows.
+Legacy per-package workflow placeholders have been removed; CI lives in the root workflow directory.
 
 ## Releases & Versioning
 `release-please` manages versions independently using:
@@ -60,7 +60,7 @@ Unified formatting via root `.editorconfig`.
 ## Directory Overview
 ```
 server/   Rust backend source, migrations, scripts
-ui/       Next.js frontend, generated TypeScript bindings
+ui/       Vite frontend, generated TypeScript bindings
 .github/  Workflows (monorepo aware)
 ```
 

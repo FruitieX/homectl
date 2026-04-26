@@ -43,3 +43,9 @@ impl Ui {
         self.ui_state = db_get_ui_state().await.unwrap_or_default();
     }
 }
+
+impl Default for Ui {
+    fn default() -> Self {
+        Self::new()
+    }
+}

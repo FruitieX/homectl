@@ -21,8 +21,8 @@ pub async fn db_update_device(device: &Device) -> Result<Device> {
          ON CONFLICT (integration_id, device_id) DO UPDATE SET \
              name = excluded.name, state = excluded.state",
     )
-    .bind(&device.integration_id.to_string())
-    .bind(&device.id.to_string())
+    .bind(device.integration_id.to_string())
+    .bind(device.id.to_string())
     .bind(&device.name)
     .bind(&state_str)
     .execute(db)
@@ -39,8 +39,8 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Option<Device>> {
         "SELECT integration_id, device_id, name, state FROM devices \
          WHERE integration_id = $1 AND device_id = $2",
     )
-    .bind(&key.integration_id.to_string())
-    .bind(&key.device_id.to_string())
+    .bind(key.integration_id.to_string())
+    .bind(key.device_id.to_string())
     .fetch_optional(db)
     .await?;
 
@@ -97,8 +97,8 @@ pub async fn db_delete_device(device_key: &DeviceKey) -> Result<bool> {
     let db = get_db_connection()?;
 
     let result = sqlx::query("DELETE FROM devices WHERE integration_id = $1 AND device_id = $2")
-        .bind(&device_key.integration_id.to_string())
-        .bind(&device_key.device_id.to_string())
+        .bind(device_key.integration_id.to_string())
+        .bind(device_key.device_id.to_string())
         .execute(db)
         .await?;
 
@@ -200,7 +200,7 @@ pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<
              name = excluded.name, hidden = excluded.hidden, script = excluded.script, \
              updated_at = CURRENT_TIMESTAMP",
     )
-    .bind(&scene_id.to_string())
+    .bind(scene_id.to_string())
     .bind(&config.name)
     .bind(config.hidden)
     .bind(&config.script)
@@ -222,7 +222,7 @@ pub async fn db_store_scene_overrides(
         "INSERT INTO scene_overrides (scene_id, overrides) VALUES ($1, $2) \
          ON CONFLICT (scene_id) DO UPDATE SET overrides = excluded.overrides",
     )
-    .bind(&scene_id.to_string())
+    .bind(scene_id.to_string())
     .bind(&overrides_str)
     .execute(db)
     .await?;
@@ -251,7 +251,7 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
     let db = get_db_connection()?;
 
     sqlx::query("DELETE FROM scenes WHERE id = $1")
-        .bind(&scene_id.to_string())
+        .bind(scene_id.to_string())
         .execute(db)
         .await?;
 
@@ -263,7 +263,7 @@ pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
 
     sqlx::query("UPDATE scenes SET name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2")
         .bind(name)
-        .bind(&scene_id.to_string())
+        .bind(scene_id.to_string())
         .execute(db)
         .await?;
 

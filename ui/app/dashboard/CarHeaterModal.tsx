@@ -6,7 +6,7 @@ import {
   useCarHeaterModalOpenState,
   useCarHeaterModalState,
 } from '@/hooks/carHeaterModalState';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
+import { useDeviceState, useWebsocket } from '@/hooks/websocket';
 import clsx from 'clsx';
 import deepEqual from 'deep-equal';
 import { produce } from 'immer';
@@ -26,13 +26,11 @@ import { useToggle } from 'usehooks-ts';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
 const UnmemoizedCarHeaterModal = () => {
   const ws = useWebsocket();
-  const appState = useWebsocketState();
+  const carHeaterDevice = useDeviceState(carHeaterDeviceKey);
   const { state, toggleEnabled, storeState } = useCarHeaterModalState();
 
   const { open, setOpen } = useCarHeaterModalOpenState();
   const close = useCallback(() => setOpen(false), [setOpen]);
-
-  const carHeaterDevice = appState?.devices[carHeaterDeviceKey];
 
   const [formState, setFormState] =
     useState<CarHeaterModalState>(carModalDefaultState);

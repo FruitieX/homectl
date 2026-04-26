@@ -2,7 +2,7 @@ import { use } from 'react';
 
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { SceneList } from './SceneList';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useGroupsState } from '@/hooks/websocket';
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -10,9 +10,9 @@ type Props = {
 
 export default function Page(props: Props) {
   const params = use(props.params);
-  const state = useWebsocketState();
+  const groups = useGroupsState();
 
-  const group: FlattenedGroupConfig | undefined = state?.groups[params.id];
+  const group: FlattenedGroupConfig | undefined = groups?.[params.id];
   const groupDevices = group?.device_keys;
 
   if (!groupDevices) return null;

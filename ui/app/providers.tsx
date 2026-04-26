@@ -2,31 +2,44 @@ import { Provider as JotaiProvider } from 'jotai';
 import { useProvideWebsocketState } from '@/hooks/websocket';
 import '@/styles/globals.css';
 import { HomectlBottomNavigation } from '@/ui/BottomNavigation';
-import { ColorPickerModal } from '@/ui/ColorPickerModal';
 import { Navbar } from '@/ui/Navbar';
-import { SaveSceneModal } from '@/ui/SaveSceneModal';
-import { SceneModal } from '@/ui/SceneModal';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useApplyTheme } from '@/hooks/theme';
-import { useEffect } from 'react';
-import { CarHeaterModal } from './dashboard/CarHeaterModal';
+import { Suspense, lazy, useEffect, type ReactNode } from 'react';
 
-export const Providers = ({ children }: { children: React.ReactNode }) => {
+const ColorPickerModal = lazy(() =>
+  import('@/ui/ColorPickerModal').then(({ ColorPickerModal }) => ({
+    default: ColorPickerModal,
+  })),
+);
+const SaveSceneModal = lazy(() =>
+  import('@/ui/SaveSceneModal').then(({ SaveSceneModal }) => ({
+    default: SaveSceneModal,
+  })),
+);
+const SceneModal = lazy(() =>
+  import('@/ui/SceneModal').then(({ SceneModal }) => ({
+    default: SceneModal,
+  })),
+);
+const CarHeaterModal = lazy(() =>
+  import('./dashboard/CarHeaterModal').then(({ CarHeaterModal }) => ({
+    default: CarHeaterModal,
+  })),
+);
+
+export const Providers = ({ children }: { children: ReactNode }) => {
   return <JotaiProvider>{children}</JotaiProvider>;
 };
 
-export const ProvideAppConfig = ({
-  children,
-}: {
-  children: React.ReactNode;
-}) => {
+export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {
   const appConfigLoaded = useProvideAppConfig();
   if (!appConfigLoaded) return null;
 
   return children;
 };
 
-export const Layout = ({ children }: { children: React.ReactNode }) => {
+export const Layout = ({ children }: { children: ReactNode }) => {
   useProvideWebsocketState();
   useApplyTheme();
 
@@ -57,10 +70,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <Navbar />
       <main className="flex min-h-0 flex-1 flex-col">{children}</main>
       <HomectlBottomNavigation />
-      <ColorPickerModal />
-      <SaveSceneModal />
-      <SceneModal />
-      <CarHeaterModal />
+      <Suspense fallback={null}>
+        <ColorPickerModal />
+        <SaveSceneModal />
+        <SceneModal />
+        <CarHeaterModal />
+      </Suspense>
     </>
   );
 };

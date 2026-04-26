@@ -46,7 +46,7 @@ export function recalculateTooltipsAfterAnimation(
             if (htmlElement.style.display !== 'none') {
               const { display } = htmlElement.style;
               htmlElement.style.display = 'none';
-              htmlElement.offsetHeight; // Force reflow
+              htmlElement.getBoundingClientRect(); // Force reflow
               htmlElement.style.display = display;
             }
           });

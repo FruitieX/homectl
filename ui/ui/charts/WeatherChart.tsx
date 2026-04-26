@@ -738,7 +738,7 @@ const WeatherChartComponent: React.FC<WeatherChartProps> = ({
         formatYValue,
         getGradientId,
       };
-    }, [data, innerWidth, innerHeight, chartType]);
+    }, [limitedData, innerWidth, innerHeight, chartType]);
 
   // Function to find data point based on position
   const findDataPoint = (

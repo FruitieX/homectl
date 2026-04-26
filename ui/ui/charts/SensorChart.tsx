@@ -43,12 +43,9 @@ const TemperatureLine = memo(
     xScale: any;
     yScale: any;
   }) => {
-    const validData = data.filter((d) => d.temp !== undefined);
-
-    if (validData.length === 0) return null;
-
     // Group consecutive data points to handle gaps
     const dataSegments = useMemo(() => {
+      const validData = data.filter((d) => d.temp !== undefined);
       if (validData.length === 0) return [];
 
       const segments: SensorDataPoint[][] = [];
@@ -68,7 +65,9 @@ const TemperatureLine = memo(
       segments.push(currentSegment);
 
       return segments;
-    }, [validData]);
+    }, [data]);
+
+    if (dataSegments.length === 0) return null;
 
     return (
       <g>
@@ -153,12 +152,9 @@ const HumidityLine = memo(
     xScale: any;
     yScale: any;
   }) => {
-    const validData = data.filter((d) => d.humidity !== undefined);
-
-    if (validData.length === 0) return null;
-
     // Group consecutive data points to handle gaps
     const dataSegments = useMemo(() => {
+      const validData = data.filter((d) => d.humidity !== undefined);
       if (validData.length === 0) return [];
 
       const segments: SensorDataPoint[][] = [];
@@ -178,7 +174,9 @@ const HumidityLine = memo(
       segments.push(currentSegment);
 
       return segments;
-    }, [validData]);
+    }, [data]);
+
+    if (dataSegments.length === 0) return null;
 
     return (
       <g>

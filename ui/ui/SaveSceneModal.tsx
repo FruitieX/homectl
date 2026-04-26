@@ -1,11 +1,10 @@
 import { Button, Input, Modal } from 'react-daisyui';
 import { useCallback, useState } from 'react';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
+import { useDevicesState, useWebsocket } from '@/hooks/websocket';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { SceneConfig } from '@/bindings/SceneConfig';
 import { SceneDeviceState } from '@/bindings/SceneDeviceState';
-import { findDevice } from '@/lib/device';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
 import { SceneDevicesSearchConfig } from '@/bindings/SceneDevicesSearchConfig';
 import { ExcludeUndefined } from 'utils/excludeUndefined';
@@ -17,13 +16,13 @@ type Props = {
 
 const Component = (props: Props) => {
   const ws = useWebsocket();
-  const state = useWebsocketState();
+  const devices = useDevicesState();
 
   const { setOpen: setSaveSceneModalOpen } = useSaveSceneModalState();
 
   const [_selectedDevices, setSelectedDevices] = useSelectedDevices();
   const selectedDevices = _selectedDevices.flatMap((d) => {
-    const device = state !== null ? findDevice(state, d) : null;
+    const device = devices?.[d];
     if (device !== null && device !== undefined) {
       return [device];
     }

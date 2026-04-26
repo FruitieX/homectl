@@ -4,7 +4,7 @@ use ts_rs::TS;
 
 use super::scene::{SceneConfig, SceneId};
 
-use super::{action::Action, device::Device, device::DevicesState};
+use super::{action::Action, device::Device, device::DeviceKey};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
@@ -18,8 +18,7 @@ pub enum Event {
     /// Internal device state update has taken place, need to take appropriate
     /// actions such as checking (and possibly triggering) routines.
     InternalStateUpdate {
-        old_state: DevicesState,
-        new_state: DevicesState,
+        device_key: DeviceKey,
         old: Option<Device>,
         new: Device,
     },

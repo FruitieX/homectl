@@ -31,6 +31,20 @@ struct SpatialRolloutPlan {
     delayed_device_keys: Vec<(DeviceKey, u64)>,
 }
 
+pub struct ActivateSceneRequest<'a> {
+    pub scene_id: &'a SceneId,
+    pub device_keys: &'a Option<Vec<DeviceKey>>,
+    pub group_keys: &'a Option<Vec<GroupId>>,
+    pub use_scene_transition: bool,
+    pub transition: &'a Option<OrderedFloat<f32>>,
+    pub rollout: &'a Option<RolloutStyle>,
+    pub rollout_source_device_key: &'a Option<DeviceKey>,
+    pub rollout_duration_ms: &'a Option<u64>,
+    pub device_positions: &'a [DevicePositionRow],
+    pub groups: &'a Groups,
+    pub scenes: &'a Scenes,
+}
+
 fn compute_rollout_delay_ms(
     distance: f32,
     min_distance: f32,
@@ -195,7 +209,10 @@ impl Devices {
     }
 
     /// Remove all devices belonging to a specific integration.
-    pub fn remove_devices_by_integration(&mut self, integration_id: &IntegrationId) {
+    pub fn remove_devices_by_integration(
+        &mut self,
+        integration_id: &IntegrationId,
+    ) -> Vec<DeviceKey> {
         let keys_to_remove: Vec<DeviceKey> = self
             .state
             .0
@@ -207,6 +224,8 @@ impl Devices {
         for key in &keys_to_remove {
             self.state.0.remove(key);
         }
+
+        keys_to_remove
     }
 
     pub fn remove_device(&mut self, device_key: &DeviceKey) -> bool {
@@ -425,15 +444,11 @@ impl Devices {
             }
         }
 
-        // TODO: a solution which does not require cloning the entire state each
-        // time
-        let old_states = { self.state.clone() };
         let old = old.cloned();
-        self.state.0.insert(device_key, device.clone());
+        self.state.0.insert(device_key.clone(), device.clone());
 
         self.event_tx.send(Event::InternalStateUpdate {
-            old_state: old_states,
-            new_state: self.state.clone(),
+            device_key,
             old,
             new: device.clone(),
         });
@@ -490,24 +505,15 @@ impl Devices {
         self.state.0.get(device_key)
     }
 
-    fn resolve_scene_devices(
-        &self,
-        scene_id: &SceneId,
-        device_keys: &Option<Vec<DeviceKey>>,
-        group_keys: &Option<Vec<GroupId>>,
-        use_scene_transition: bool,
-        transition: &Option<OrderedFloat<f32>>,
-        groups: &Groups,
-        scenes: &Scenes,
-    ) -> Option<Vec<Device>> {
-        let scene_devices_config = scenes.find_scene_devices_config(
+    fn resolve_scene_devices(&self, request: &ActivateSceneRequest<'_>) -> Option<Vec<Device>> {
+        let scene_devices_config = request.scenes.find_scene_devices_config(
             self,
-            groups,
+            request.groups,
             &ActivateSceneDescriptor {
-                scene_id: scene_id.clone(),
+                scene_id: request.scene_id.clone(),
                 mirror_from_group: None,
-                device_keys: device_keys.clone(),
-                group_keys: group_keys.clone(),
+                device_keys: request.device_keys.clone(),
+                group_keys: request.group_keys.clone(),
                 use_scene_transition: false,
                 transition: None,
             },
@@ -517,11 +523,11 @@ impl Devices {
             .keys()
             .filter_map(|device_key| self.get_device(device_key))
             .map(|device| {
-                let scene_device = device.set_scene(Some(scene_id), scenes, self);
+                let scene_device = device.set_scene(Some(request.scene_id), request.scenes, self);
 
-                if let Some(transition) = transition {
+                if let Some(transition) = request.transition {
                     scene_device.set_transition(Some(transition.0))
-                } else if use_scene_transition {
+                } else if request.use_scene_transition {
                     scene_device
                 } else {
                     scene_device.set_transition(None)
@@ -624,21 +630,8 @@ impl Devices {
         }
     }
 
-    pub async fn activate_scene(
-        &mut self,
-        scene_id: &SceneId,
-        device_keys: &Option<Vec<DeviceKey>>,
-        group_keys: &Option<Vec<GroupId>>,
-        use_scene_transition: bool,
-        transition: &Option<OrderedFloat<f32>>,
-        rollout: &Option<RolloutStyle>,
-        rollout_source_device_key: &Option<DeviceKey>,
-        rollout_duration_ms: &Option<u64>,
-        device_positions: &[DevicePositionRow],
-        groups: &Groups,
-        scenes: &Scenes,
-    ) -> Option<bool> {
-        let group_keys_description = if let Some(group_keys) = group_keys {
+    pub async fn activate_scene(&mut self, request: ActivateSceneRequest<'_>) -> Option<bool> {
+        let group_keys_description = if let Some(group_keys) = request.group_keys {
             format!(
                 " for groups: {}",
                 group_keys
@@ -650,7 +643,7 @@ impl Devices {
         } else {
             "".to_string()
         };
-        let device_keys_description = if let Some(device_keys) = device_keys {
+        let device_keys_description = if let Some(device_keys) = request.device_keys {
             format!(
                 " for devices: {}",
                 device_keys
@@ -662,35 +655,29 @@ impl Devices {
         } else {
             "".to_string()
         };
-        let rollout_description = rollout
+        let rollout_description = request
+            .rollout
             .as_ref()
             .map(|style| format!(" with {style:?} rollout"))
             .unwrap_or_default();
-        let transition_description = match transition {
+        let transition_description = match request.transition {
             Some(value) => format!(" with {:.1}s transition override", value.0),
-            None if use_scene_transition => " using scene transitions".to_string(),
+            None if request.use_scene_transition => " using scene transitions".to_string(),
             None => " with no transition".to_string(),
         };
         info!(
-            "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}{transition_description}"
+            "Activating scene {scene_id}{group_keys_description}{device_keys_description}{rollout_description}{transition_description}",
+            scene_id = request.scene_id,
         );
 
-        let resolved_devices = self.resolve_scene_devices(
-            scene_id,
-            device_keys,
-            group_keys,
-            use_scene_transition,
-            transition,
-            groups,
-            scenes,
-        )?;
+        let resolved_devices = self.resolve_scene_devices(&request)?;
 
         self.apply_devices_with_rollout(
             resolved_devices,
-            rollout,
-            rollout_source_device_key,
-            rollout_duration_ms,
-            device_positions,
+            request.rollout,
+            request.rollout_source_device_key,
+            request.rollout_duration_ms,
+            request.device_positions,
         )
         .await;
 
@@ -743,19 +730,19 @@ impl Devices {
             )
         }?;
 
-        self.activate_scene(
-            &next_scene.scene_id,
-            &next_scene.device_keys,
-            &next_scene.group_keys,
-            next_scene.use_scene_transition,
-            &next_scene.transition,
+        self.activate_scene(ActivateSceneRequest {
+            scene_id: &next_scene.scene_id,
+            device_keys: &next_scene.device_keys,
+            group_keys: &next_scene.group_keys,
+            use_scene_transition: next_scene.use_scene_transition,
+            transition: &next_scene.transition,
             rollout,
             rollout_source_device_key,
             rollout_duration_ms,
             device_positions,
             groups,
             scenes,
-        )
+        })
         .await;
 
         Some(())
@@ -772,8 +759,8 @@ impl Devices {
 
 #[cfg(test)]
 mod tests {
-    use super::Devices;
     use super::{build_spatial_rollout_plan, SpatialRolloutPlan};
+    use super::{ActivateSceneRequest, Devices};
     use crate::core::{groups::Groups, scenes::Scenes};
     use crate::db::config_queries::DevicePositionRow;
     use crate::types::color::Capabilities;
@@ -1080,19 +1067,19 @@ mod tests {
         scenes.force_invalidate(&devices, &groups);
 
         let result = devices
-            .activate_scene(
-                &scene_id,
-                &None,
-                &None,
-                false,
-                &Some(OrderedFloat(1.5)),
-                &None,
-                &None,
-                &None,
-                &[],
-                &groups,
-                &scenes,
-            )
+            .activate_scene(ActivateSceneRequest {
+                scene_id: &scene_id,
+                device_keys: &None,
+                group_keys: &None,
+                use_scene_transition: false,
+                transition: &Some(OrderedFloat(1.5)),
+                rollout: &None,
+                rollout_source_device_key: &None,
+                rollout_duration_ms: &None,
+                device_positions: &[],
+                groups: &groups,
+                scenes: &scenes,
+            })
             .await;
 
         assert_eq!(result, Some(true));
@@ -1145,19 +1132,19 @@ mod tests {
         scenes.force_invalidate(&devices, &groups);
 
         let result = devices
-            .activate_scene(
-                &scene_id,
-                &None,
-                &None,
-                false,
-                &None,
-                &None,
-                &None,
-                &None,
-                &[],
-                &groups,
-                &scenes,
-            )
+            .activate_scene(ActivateSceneRequest {
+                scene_id: &scene_id,
+                device_keys: &None,
+                group_keys: &None,
+                use_scene_transition: false,
+                transition: &None,
+                rollout: &None,
+                rollout_source_device_key: &None,
+                rollout_duration_ms: &None,
+                device_positions: &[],
+                groups: &groups,
+                scenes: &scenes,
+            })
             .await;
 
         assert_eq!(result, Some(true));
@@ -1210,19 +1197,19 @@ mod tests {
         scenes.force_invalidate(&devices, &groups);
 
         let result = devices
-            .activate_scene(
-                &scene_id,
-                &None,
-                &None,
-                true,
-                &None,
-                &None,
-                &None,
-                &None,
-                &[],
-                &groups,
-                &scenes,
-            )
+            .activate_scene(ActivateSceneRequest {
+                scene_id: &scene_id,
+                device_keys: &None,
+                group_keys: &None,
+                use_scene_transition: true,
+                transition: &None,
+                rollout: &None,
+                rollout_source_device_key: &None,
+                rollout_duration_ms: &None,
+                device_positions: &[],
+                groups: &groups,
+                scenes: &scenes,
+            })
             .await;
 
         assert_eq!(result, Some(true));

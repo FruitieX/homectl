@@ -14,6 +14,18 @@ use color_eyre::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
+type FloorplanImageDbRow = (Option<Vec<u8>>, Option<String>, Option<i32>, Option<i32>);
+type FloorplanExportDbRow = (
+    String,
+    String,
+    Option<Vec<u8>>,
+    Option<String>,
+    Option<i32>,
+    Option<i32>,
+    Option<String>,
+);
+type DashboardWidgetDbRow = (i32, i32, String, String, i32, i32, i32, i32, i32);
+
 // ============================================================================
 // Types for config entities
 // ============================================================================
@@ -968,7 +980,7 @@ pub async fn db_get_floorplan() -> Result<Option<FloorplanRow>> {
 pub async fn db_get_floorplan_by_id(id: &str) -> Result<Option<FloorplanRow>> {
     let db = get_db_connection()?;
 
-    let row: Option<(Option<Vec<u8>>, Option<String>, Option<i32>, Option<i32>)> = sqlx::query_as(
+    let row: Option<FloorplanImageDbRow> = sqlx::query_as(
         "SELECT image_data, image_mime_type, width, height FROM floorplans WHERE id = $1",
     )
     .bind(id)
@@ -1099,15 +1111,7 @@ pub async fn db_get_floorplans() -> Result<Vec<FloorplanMetadataRow>> {
 pub async fn db_get_floorplan_exports() -> Result<Vec<FloorplanExportRow>> {
     let db = get_db_connection()?;
 
-    let rows: Vec<(
-        String,
-        String,
-        Option<Vec<u8>>,
-        Option<String>,
-        Option<i32>,
-        Option<i32>,
-        Option<String>,
-    )> = sqlx::query_as(
+    let rows: Vec<FloorplanExportDbRow> = sqlx::query_as(
         "SELECT id, name, image_data, image_mime_type, width, height, grid_data \
          FROM floorplans ORDER BY sort_order, name",
     )
@@ -1339,7 +1343,7 @@ pub async fn db_delete_dashboard_layout(id: i32) -> Result<bool> {
 pub async fn db_get_dashboard_widgets(layout_id: i32) -> Result<Vec<DashboardWidgetRow>> {
     let db = get_db_connection()?;
 
-    let rows: Vec<(i32, i32, String, String, i32, i32, i32, i32, i32)> = sqlx::query_as(
+    let rows: Vec<DashboardWidgetDbRow> = sqlx::query_as(
         "SELECT id, layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order \
          FROM dashboard_widgets WHERE layout_id = $1 ORDER BY sort_order",
     )

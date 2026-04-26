@@ -13,7 +13,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use color_eyre::Result;
-use eyre::Context;
+use eyre::{eyre, Context};
 use rand::{distributions::Alphanumeric, Rng};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::Deserialize;
@@ -163,10 +163,9 @@ impl Integration for Mqtt {
         Ok(())
     }
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
-        let client = self
-            .client
-            .as_ref()
-            .expect("Expected self.client to be set in start phase");
+        let client = self.client.as_ref().ok_or_else(|| {
+            eyre!("MQTT client is not initialized; start phase has not completed")
+        })?;
 
         let topic = self
             .config
@@ -190,10 +189,9 @@ impl Integration for Mqtt {
     async fn run_integration_action(&mut self, payload: &IntegrationActionPayload) -> Result<()> {
         let action: CustomMqttAction = serde_json::from_str(&payload.to_string())?;
 
-        let client = self
-            .client
-            .as_ref()
-            .expect("Expected self.client to be set in start phase");
+        let client = self.client.as_ref().ok_or_else(|| {
+            eyre!("MQTT client is not initialized; start phase has not completed")
+        })?;
 
         client
             .publish(action.topic, QoS::AtLeastOnce, true, action.json)

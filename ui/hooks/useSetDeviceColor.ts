@@ -1,6 +1,6 @@
 import { Device } from '@/bindings/Device';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
-import { useWebsocket, useWebsocketState } from '@/hooks/websocket';
+import { useWebsocket } from '@/hooks/websocket';
 import Color from 'color';
 import { produce } from 'immer';
 import { useCallback } from 'react';

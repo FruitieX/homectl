@@ -112,7 +112,10 @@ export function getRolloutValidationError({
     return null;
   }
 
-  if (!rollout_source_device_key && (!rollout_duration_ms || rollout_duration_ms <= 0)) {
+  if (
+    !rollout_source_device_key &&
+    (!rollout_duration_ms || rollout_duration_ms <= 0)
+  ) {
     return 'Spatial rollout requires a source device and a duration greater than 0.';
   }
 
@@ -127,7 +130,9 @@ export function getRolloutValidationError({
   return null;
 }
 
-function isRolloutAction(action: Action): action is ActivateSceneAction | CycleScenesAction {
+function isRolloutAction(
+  action: Action,
+): action is ActivateSceneAction | CycleScenesAction {
   return action.action === 'ActivateScene' || action.action === 'CycleScenes';
 }
 
@@ -230,8 +235,7 @@ function DeviceKeysSelector({
             onChange={() => handleToggle(key)}
           />
           <span className="text-sm truncate">
-            {device.name}{' '}
-            <span className="opacity-60 text-xs">({key})</span>
+            {device.name} <span className="opacity-60 text-xs">({key})</span>
           </span>
         </label>
       ))}
@@ -243,7 +247,8 @@ interface GroupKeysSelectorProps {
   groups: FlattenedGroupsConfig;
   value: string[];
   onChange: (keys: string[]) => void;
-}function GroupKeysSelector({
+}
+function GroupKeysSelector({
   groups,
   value,
   onChange,
@@ -521,7 +526,7 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
                 ? value.rollout_source_device_key
                 : undefined,
               rollout_duration_ms: nextRollout
-                ? value.rollout_duration_ms ?? DEFAULT_ROLLOUT_DURATION_MS
+                ? (value.rollout_duration_ms ?? DEFAULT_ROLLOUT_DURATION_MS)
                 : undefined,
             });
           }}
@@ -592,7 +597,8 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
               }}
             />
             <span className="label-text-alt mt-1 opacity-60">
-              Total time for the rollout to reach the farthest positioned target.
+              Total time for the rollout to reach the farthest positioned
+              target.
             </span>
           </div>
 
@@ -629,7 +635,9 @@ function getTransitionBehaviorMode({
   return 'none';
 }
 
-function getTransitionBehaviorUpdate(mode: TransitionBehaviorMode): TransitionBehaviorFields {
+function getTransitionBehaviorUpdate(
+  mode: TransitionBehaviorMode,
+): TransitionBehaviorFields {
   switch (mode) {
     case 'scene':
       return { use_scene_transition: true, transition: undefined };
@@ -668,7 +676,11 @@ function TransitionBehaviorEditor({
           className="select select-bordered select-sm"
           value={mode}
           onChange={(e) =>
-            onChange(getTransitionBehaviorUpdate(e.target.value as TransitionBehaviorMode))
+            onChange(
+              getTransitionBehaviorUpdate(
+                e.target.value as TransitionBehaviorMode,
+              ),
+            )
           }
         >
           <option value="none">No transition</option>
@@ -701,7 +713,11 @@ function TransitionBehaviorEditor({
               });
             }}
           />
-          {fixedHelpText ? <span className="label-text-alt mt-1 opacity-60">{fixedHelpText}</span> : null}
+          {fixedHelpText ? (
+            <span className="label-text-alt mt-1 opacity-60">
+              {fixedHelpText}
+            </span>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -942,7 +958,7 @@ function CycleScenesEditor({
             }
           />
           <span className="label-text">
-            Don't wrap (stop at last scene instead of cycling back)
+            Don&apos;t wrap (stop at last scene instead of cycling back)
           </span>
         </label>
       </div>
@@ -1209,10 +1225,7 @@ export function ActionEditor({
             <option value="SetDeviceState">Set Device State</option>
             <option value="Custom">Custom</option>
           </select>
-          <button
-            className="btn btn-ghost btn-xs btn-error"
-            onClick={onRemove}
-          >
+          <button className="btn btn-ghost btn-xs btn-error" onClick={onRemove}>
             ✕
           </button>
         </div>
@@ -1250,10 +1263,7 @@ export function ActionEditor({
           />
         )}
         {actionType === 'Ui' && (
-          <UiActionEditor
-            action={action as UiAction}
-            onChange={onChange}
-          />
+          <UiActionEditor action={action as UiAction} onChange={onChange} />
         )}
         {['Dim', 'SetDeviceState', 'Custom'].includes(actionType) && (
           <JsonActionEditor action={action} onChange={onChange} />

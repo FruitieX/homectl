@@ -13,6 +13,15 @@ use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+type LegacyFloorplanRow = (
+    Option<Vec<u8>>,
+    Option<String>,
+    Option<i32>,
+    Option<i32>,
+    Option<String>,
+);
+type DashboardWidgetDbRow = (i32, i32, String, String, i32, i32, i32, i32, i32);
+
 /// Load config for simulation from a legacy SQLite DB file when available, or
 /// from the optional JSON backup config file otherwise.
 pub async fn prepare_simulation_config(
@@ -226,13 +235,7 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
             )
             .collect(),
         Err(_) => {
-            let legacy_floorplan: Option<(
-                Option<Vec<u8>>,
-                Option<String>,
-                Option<i32>,
-                Option<i32>,
-                Option<String>,
-            )> = sqlx::query_as(
+            let legacy_floorplan: Option<LegacyFloorplanRow> = sqlx::query_as(
                 "SELECT image_data, image_mime_type, width, height, grid_data FROM floorplan LIMIT 1",
             )
             .fetch_optional(&pool)
@@ -292,7 +295,7 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
             name,
             is_default,
         });
-        let widgets: Vec<(i32, i32, String, String, i32, i32, i32, i32, i32)> = sqlx::query_as(
+        let widgets: Vec<DashboardWidgetDbRow> = sqlx::query_as(
             "SELECT id, layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order \
              FROM dashboard_widgets WHERE layout_id = ? ORDER BY sort_order",
         )
@@ -564,7 +567,7 @@ async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExpo
             name,
             is_default,
         });
-        let widgets: Vec<(i32, i32, String, String, i32, i32, i32, i32, i32)> = sqlx::query_as(
+        let widgets: Vec<DashboardWidgetDbRow> = sqlx::query_as(
             "SELECT id, layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order \
              FROM dashboard_widgets WHERE layout_id = $1 ORDER BY sort_order",
         )

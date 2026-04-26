@@ -6,8 +6,7 @@ use crate::{
     types::{
         device::{
             ControllableState, Device, DeviceData, DeviceId, DeviceKey, DeviceRef,
-            DeviceStateSource, DeviceStateSourceKind, DeviceStateSourceScope, DevicesState,
-            SensorDevice,
+            DeviceStateSource, DeviceStateSourceKind, DeviceStateSourceScope, SensorDevice,
         },
         group::GroupId,
         scene::{
@@ -1003,15 +1002,12 @@ impl Scenes {
 
     pub fn invalidate(
         &mut self,
-        old_state: &DevicesState,
-        _new_state: &DevicesState,
+        old_device: Option<&Device>,
         invalidated_device: &Device,
         devices: &Devices,
         groups: &Groups,
     ) -> HashSet<SceneId> {
-        let is_new_device = !old_state
-            .0
-            .contains_key(&invalidated_device.get_device_key());
+        let is_new_device = old_device.is_none();
 
         let invalidated_scenes = self
             .device_invalidation_map
@@ -1226,7 +1222,7 @@ mod tests {
         };
 
         assert_eq!(data.scene_id, Some(scene_id));
-        assert_eq!(data.state.power, true);
+        assert!(data.state.power);
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.45)));
         assert_eq!(
             data.state_source,
@@ -1301,7 +1297,7 @@ mod tests {
             panic!("expected controllable device");
         };
 
-        assert_eq!(data.state.power, true);
+        assert!(data.state.power);
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.4)));
         assert_eq!(
             data.state_source,
@@ -1375,7 +1371,7 @@ mod tests {
             panic!("expected controllable device");
         };
 
-        assert_eq!(data.state.power, true);
+        assert!(data.state.power);
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.55)));
         assert_eq!(
             data.state_source,

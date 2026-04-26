@@ -12,7 +12,7 @@ use async_trait::async_trait;
 use color_eyre::Result;
 use eyre::Context;
 use ordered_float::OrderedFloat;
-use palette::Mix;
+use palette::{IntoColor, Mix};
 use serde::Deserialize;
 use std::time::Duration;
 use tokio::time;
@@ -116,20 +116,33 @@ fn get_night_fade(circadian: &Circadian) -> f32 {
 }
 
 fn get_circadian_color(circadian: &Circadian) -> DeviceColor {
+    let i = get_night_fade(circadian);
+
     match (
         circadian.converted_day_color.clone(),
         circadian.converted_night_color.clone(),
     ) {
         (DeviceColor::Hs(day), DeviceColor::Hs(night)) => {
-            let i = get_night_fade(circadian);
             let day = palette::Hsv::new(day.h as f32, *day.s, 1.0);
             let night = palette::Hsv::new(night.h as f32, *night.s, 1.0);
             let color = day.mix(night, i);
 
             color.into()
         }
-        (DeviceColor::Ct(_), DeviceColor::Ct(_)) => todo!(),
-        _ => panic!("Mixed color types not supported"),
+        (DeviceColor::Ct(day), DeviceColor::Ct(night)) => {
+            let ct = ((1.0 - i) * day.ct as f32 + i * night.ct as f32)
+                .round()
+                .clamp(0.0, u16::MAX as f32) as u16;
+            DeviceColor::new_from_ct(ct)
+        }
+        (day, night) => {
+            let day_yxy: palette::Yxy = (&day).into();
+            let night_yxy: palette::Yxy = (&night).into();
+            let day: palette::Hsv = day_yxy.into_color();
+            let night: palette::Hsv = night_yxy.into_color();
+
+            day.mix(night, i).into()
+        }
     }
 }
 

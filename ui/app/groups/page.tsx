@@ -1,6 +1,6 @@
 import { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
 import { GroupId } from '@/bindings/GroupId';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { Menu } from 'react-daisyui';
 
 import { Link } from 'react-router-dom';
@@ -11,16 +11,19 @@ import { excludeUndefined } from 'utils/excludeUndefined';
 import Preview from './Preview';
 
 export default function Page() {
-  const state = useWebsocketState();
+  const liveGroups = useGroupsState();
+  const liveDevices = useDevicesState();
 
   const groups: [GroupId, FlattenedGroupConfig][] = Object.entries(
-    excludeUndefined(state?.groups),
+    excludeUndefined(liveGroups ?? undefined),
   );
 
   const filteredGroups = groups.filter(([, group]) => !group.hidden);
   filteredGroups.sort((a, b) => a[1].name.localeCompare(b[1].name));
 
-  const devices: Device[] = Object.values(excludeUndefined(state?.devices));
+  const devices: Device[] = Object.values(
+    excludeUndefined(liveDevices ?? undefined),
+  );
 
   return (
     <>
@@ -35,7 +38,7 @@ export default function Page() {
               <Menu.Item>
                 <div className="flex py-0">
                   <div className="flex-1 truncate">{group.name}</div>
-                  <div className="h-[96px] w-[112px]">
+                  <div className="h-24 w-28">
                     <Preview
                       devices={filteredDevices}
                       overrideColor={Color({ h: 35, s: 50, v: 100 })}

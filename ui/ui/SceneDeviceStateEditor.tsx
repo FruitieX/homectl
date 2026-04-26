@@ -225,7 +225,9 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
           />
           <div className="form-control">
             <label className="label">
-              <span className="label-text">Hue: {config.color.Hs?.h ?? 0}°</span>
+              <span className="label-text">
+                Hue: {config.color.Hs?.h ?? 0}°
+              </span>
             </label>
             <input
               type="range"
@@ -233,10 +235,15 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
               max="360"
               value={config.color.Hs?.h ?? 0}
               className="range range-sm"
-              style={{ accentColor: `hsl(${config.color.Hs?.h ?? 0}, 100%, 50%)` }}
+              style={{
+                accentColor: `hsl(${config.color.Hs?.h ?? 0}, 100%, 50%)`,
+              }}
               onChange={(e) =>
                 updateColor({
-                  Hs: { h: Number(e.target.value), s: config.color?.Hs?.s ?? 1 },
+                  Hs: {
+                    h: Number(e.target.value),
+                    s: config.color?.Hs?.s ?? 1,
+                  },
                 })
               }
             />
@@ -244,8 +251,7 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
           <div className="form-control">
             <label className="label">
               <span className="label-text">
-                Saturation:{' '}
-                {Math.round((config.color.Hs?.s ?? 1) * 100)}%
+                Saturation: {Math.round((config.color.Hs?.s ?? 1) * 100)}%
               </span>
             </label>
             <input
@@ -364,7 +370,9 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
               max="500"
               value={config.color.Ct?.ct ?? 300}
               className="range range-sm"
-              onChange={(e) => updateColor({ Ct: { ct: Number(e.target.value) } })}
+              onChange={(e) =>
+                updateColor({ Ct: { ct: Number(e.target.value) } })
+              }
             />
             <div className="flex justify-between text-xs opacity-60 mt-1">
               <span>Cool (6500K)</span>
@@ -403,7 +411,8 @@ function DeviceLinkEditor({
           className="select select-bordered select-sm"
           value={getSceneDeviceLinkTargetKey(config)}
           onChange={(e) => {
-            const [integration_id, ...deviceIdParts] = e.target.value.split('/');
+            const [integration_id, ...deviceIdParts] =
+              e.target.value.split('/');
             const device_id = deviceIdParts.join('/');
 
             onChange({
@@ -454,7 +463,10 @@ function DeviceLinkEditor({
               value={Math.round(config.brightness * 100)}
               className="range range-sm flex-1"
               onChange={(e) =>
-                onChange({ ...config, brightness: Number(e.target.value) / 100 })
+                onChange({
+                  ...config,
+                  brightness: Number(e.target.value) / 100,
+                })
               }
             />
           )}
@@ -509,12 +521,14 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
             const nextValue = e.target.value.trim();
             onChange({
               ...config,
-              transition: nextValue ? Math.max(0, Number(nextValue)) : undefined,
+              transition: nextValue
+                ? Math.max(0, Number(nextValue))
+                : undefined,
             });
           }}
         />
         <span className="label-text-alt mt-1 opacity-60">
-          Leave empty to inherit the linked scene's transition values.
+          Leave empty to inherit the linked scene&apos;s transition values.
         </span>
       </div>
     </div>
@@ -546,7 +560,9 @@ function SceneTargetConfigEditor({
 }: SceneTargetConfigEditorProps) {
   const configType = getConfigType(config);
 
-  const handleTypeChange = (newType: 'device_state' | 'device_link' | 'scene_link') => {
+  const handleTypeChange = (
+    newType: 'device_state' | 'device_link' | 'scene_link',
+  ) => {
     if (newType === 'device_state') {
       onChange({ power: true, brightness: 1 });
     } else if (newType === 'device_link') {
@@ -564,10 +580,7 @@ function SceneTargetConfigEditor({
             <h4 className="font-semibold">{targetLabel ?? targetKey}</h4>
             <p className="text-xs opacity-60">{targetKey}</p>
           </div>
-          <button
-            className="btn btn-ghost btn-xs btn-error"
-            onClick={onRemove}
-          >
+          <button className="btn btn-ghost btn-xs btn-error" onClick={onRemove}>
             ✕
           </button>
         </div>
@@ -579,7 +592,11 @@ function SceneTargetConfigEditor({
           <select
             className="select select-bordered select-sm"
             value={configType}
-            onChange={(e) => handleTypeChange(e.target.value as 'device_state' | 'device_link' | 'scene_link')}
+            onChange={(e) =>
+              handleTypeChange(
+                e.target.value as 'device_state' | 'device_link' | 'scene_link',
+              )
+            }
           >
             <option value="device_state">Device State</option>
             <option value="device_link">Link to Device</option>
@@ -598,10 +615,7 @@ function SceneTargetConfigEditor({
         />
 
         {isDeviceState(config) && (
-          <DeviceStateEditor
-            config={config}
-            onChange={onChange}
-          />
+          <DeviceStateEditor config={config} onChange={onChange} />
         )}
         {isDeviceLink(config) && (
           <DeviceLinkEditor
@@ -678,8 +692,7 @@ function AddSceneTargetModal({
                   }}
                 >
                   <span className="truncate">
-                    {label}{' '}
-                    <span className="opacity-60">({key})</span>
+                    {label} <span className="opacity-60">({key})</span>
                   </span>
                 </button>
               ))}
@@ -832,8 +845,10 @@ export function SceneDeviceStateEditor({
       key,
       label: (device as Device).name,
     }))
-    .sort((left, right) =>
-      left.label.localeCompare(right.label) || left.key.localeCompare(right.key),
+    .sort(
+      (left, right) =>
+        left.label.localeCompare(right.label) ||
+        left.key.localeCompare(right.key),
     );
 
   return (
@@ -856,7 +871,10 @@ export function SceneDeviceStateEditor({
         <button className="btn btn-ghost" onClick={onCancel}>
           Cancel
         </button>
-        <button className="btn btn-primary" onClick={() => onSave(deviceStates)}>
+        <button
+          className="btn btn-primary"
+          onClick={() => onSave(deviceStates)}
+        >
           Save Device States
         </button>
       </div>

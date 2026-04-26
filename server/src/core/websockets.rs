@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::types::websockets::WebSocketResponse;
+use serde::Serialize;
 use tokio::sync::{mpsc::Sender, RwLock};
 
 type Users = Arc<RwLock<HashMap<usize, Sender<warp::ws::Message>>>>;
@@ -23,38 +23,55 @@ impl WebSockets {
         self.users.read().await.len()
     }
 
-    pub async fn send(&self, user_id: Option<usize>, message: &WebSocketResponse) -> Option<()> {
-        let s = serde_json::to_string(message).unwrap();
+    pub async fn send<T>(&self, user_id: Option<usize>, message: &T) -> Option<()>
+    where
+        T: Serialize + ?Sized,
+    {
+        let s = match serde_json::to_string(message) {
+            Ok(s) => s,
+            Err(error) => {
+                warn!("Failed to serialize WebSocket message: {error}");
+                return None;
+            }
+        };
         let msg = warp::ws::Message::text(s);
-
-        let mut users = self.users.write().await;
 
         match user_id {
             Some(user_id) => {
-                if let Some(user) = users.get(&user_id) {
+                let user = { self.users.read().await.get(&user_id).cloned() };
+                if let Some(user) = user {
                     // try_send fails immediately if channel is full (client is slow)
                     if user.try_send(msg).is_err() {
                         warn!("Removing slow WebSocket client {user_id}");
-                        users.remove(&user_id);
+                        self.user_disconnected(user_id).await;
                         return None;
                     }
                 }
                 Some(())
             }
             None => {
-                // Broadcast to all users
+                let users = {
+                    self.users
+                        .read()
+                        .await
+                        .iter()
+                        .map(|(id, sender)| (*id, sender.clone()))
+                        .collect::<Vec<_>>()
+                };
                 let mut dead_users = Vec::new();
 
-                for (id, user) in users.iter() {
+                for (id, user) in users {
                     if user.try_send(msg.clone()).is_err() {
-                        dead_users.push(*id);
+                        dead_users.push(id);
                     }
                 }
 
-                // Clean up dead/slow connections
-                for id in dead_users {
-                    warn!("Removing dead/slow WebSocket client {id}");
-                    users.remove(&id);
+                if !dead_users.is_empty() {
+                    let mut users = self.users.write().await;
+                    for id in dead_users {
+                        warn!("Removing dead/slow WebSocket client {id}");
+                        users.remove(&id);
+                    }
                 }
 
                 Some(())

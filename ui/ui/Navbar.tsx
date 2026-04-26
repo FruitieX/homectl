@@ -4,7 +4,7 @@ import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useWebsocketState } from '@/hooks/websocket';
+import { useGroupsState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
@@ -13,7 +13,7 @@ export const Navbar = () => {
   const navigate = useNavigate();
 
   const pathname = useLocation().pathname;
-  const state = useWebsocketState();
+  const groups = useGroupsState();
 
   let title = 'homectl';
   let back: string | null = null;
@@ -28,7 +28,7 @@ export const Navbar = () => {
     title = 'Settings';
   } else if (pathname?.startsWith('/groups/')) {
     const groupId = pathname.split('/')[2];
-    const group = (state?.groups ?? {})[groupId];
+    const group = (groups ?? {})[groupId];
     const groupName = group?.name ?? '...';
 
     title = `Scenes for ${groupName}`;

@@ -217,13 +217,13 @@ where
         .reload_config_rows(&runtime_config.integrations)
         .await?;
 
-    let _ = handle
+    handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.commit_runtime_integrations_update(runtime_config, integrations, removed_ids);
             })
         })
-        .await;
+        .await?;
     Ok(true)
 }
 
@@ -243,13 +243,13 @@ async fn apply_runtime_config_snapshot(
         .reload_config_rows(&runtime_config.integrations)
         .await?;
 
-    let _ = handle
+    handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.commit_runtime_config_update(runtime_config, integrations, removed_ids);
             })
         })
-        .await;
+        .await?;
     Ok(())
 }
 
@@ -3324,7 +3324,6 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
     // Convert core config
     let core = CoreConfigRow {
         warmup_time_seconds: config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1) as i32,
-        ..CoreConfigRow::default()
     };
 
     // Convert integrations
@@ -4057,7 +4056,6 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
-                ..CoreConfigRow::default()
             },
         };
 
@@ -4139,7 +4137,6 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
-                ..CoreConfigRow::default()
             },
         };
 
@@ -4209,7 +4206,6 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
-                ..CoreConfigRow::default()
             },
         };
 
@@ -4241,7 +4237,6 @@ devices = [
             version: 1,
             core: CoreConfigRow {
                 warmup_time_seconds: 5,
-                ..CoreConfigRow::default()
             },
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
@@ -4278,7 +4273,6 @@ devices = [
             routines: Vec::new(),
             core: CoreConfigRow {
                 warmup_time_seconds: 9,
-                ..CoreConfigRow::default()
             },
         };
 
@@ -4328,7 +4322,6 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
-                ..CoreConfigRow::default()
             },
         };
 
@@ -4364,7 +4357,6 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
-                ..CoreConfigRow::default()
             },
         };
 
