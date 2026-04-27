@@ -29,34 +29,14 @@ import { Input } from '@/ui/primitives/input';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 
-const optionalUrlSchema = z
-  .string()
-  .trim()
-  .refine((value) => value === '' || URL.canParse(value), 'Enter a valid URL');
-
 const coreConfigFormSchema = z.object({
   warmupTimeSeconds: z.number().int().min(0).max(60),
-  weatherApiUrl: optionalUrlSchema,
-  trainApiUrl: optionalUrlSchema,
-  influxUrl: optionalUrlSchema,
-  influxToken: z.string(),
-  calendarIcsUrl: optionalUrlSchema,
 });
 
 const coreConfigApiResponseSchema = z
   .object({
     warmupTimeSeconds: z.number().optional(),
     warmup_time_seconds: z.number().optional(),
-    weatherApiUrl: z.string().optional(),
-    weather_api_url: z.string().optional(),
-    trainApiUrl: z.string().optional(),
-    train_api_url: z.string().optional(),
-    influxUrl: z.string().optional(),
-    influx_url: z.string().optional(),
-    influxToken: z.string().optional(),
-    influx_token: z.string().optional(),
-    calendarIcsUrl: z.string().optional(),
-    calendar_ics_url: z.string().optional(),
   })
   .passthrough();
 
@@ -71,11 +51,6 @@ type CoreConfigApiResponse = z.infer<typeof coreConfigApiResponseSchema>;
 
 const defaultValues: CoreConfigFormValues = {
   warmupTimeSeconds: 1,
-  weatherApiUrl: '',
-  trainApiUrl: '',
-  influxUrl: '',
-  influxToken: '',
-  calendarIcsUrl: '',
 };
 
 function normalizeCoreConfig(
@@ -84,11 +59,6 @@ function normalizeCoreConfig(
   return {
     warmupTimeSeconds:
       value?.warmupTimeSeconds ?? value?.warmup_time_seconds ?? 1,
-    weatherApiUrl: value?.weatherApiUrl ?? value?.weather_api_url ?? '',
-    trainApiUrl: value?.trainApiUrl ?? value?.train_api_url ?? '',
-    influxUrl: value?.influxUrl ?? value?.influx_url ?? '',
-    influxToken: value?.influxToken ?? value?.influx_token ?? '',
-    calendarIcsUrl: value?.calendarIcsUrl ?? value?.calendar_ics_url ?? '',
   };
 }
 
@@ -112,11 +82,6 @@ async function updateCoreConfig(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       warmup_time_seconds: values.warmupTimeSeconds,
-      weather_api_url: values.weatherApiUrl,
-      train_api_url: values.trainApiUrl,
-      influx_url: values.influxUrl,
-      influx_token: values.influxToken,
-      calendar_ics_url: values.calendarIcsUrl,
     }),
   });
   const result = coreConfigEnvelopeSchema.parse(await response.json());
@@ -130,9 +95,7 @@ async function updateCoreConfig(
 
 export default function SettingsPage() {
   const { apiEndpoint } = useAppConfig();
-  const [settingsTab, setSettingsTab] = useState<'core' | 'sources' | 'info'>(
-    'core',
-  );
+  const [settingsTab, setSettingsTab] = useState<'core' | 'info'>('core');
   const form = useForm<CoreConfigFormValues>({
     resolver: zodResolver(coreConfigFormSchema),
     defaultValues,
@@ -168,7 +131,7 @@ export default function SettingsPage() {
   };
 
   const changeSettingsTab = (value: string) => {
-    if (value === 'core' || value === 'sources' || value === 'info') {
+    if (value === 'core' || value === 'info') {
       setSettingsTab(value);
     }
   };
@@ -217,7 +180,7 @@ export default function SettingsPage() {
               Server Settings
             </h1>
             <p className="text-sm text-muted-foreground">
-              Tune startup behavior and dashboard data sources.
+              Tune startup behavior and inspect server endpoints.
             </p>
           </div>
           <Button
@@ -242,9 +205,8 @@ export default function SettingsPage() {
         )}
 
         <Tabs value={settingsTab} onValueChange={changeSettingsTab}>
-          <TabsList className="grid h-auto w-full grid-cols-3">
+          <TabsList className="grid h-auto w-full grid-cols-2">
             <TabsTrigger value="core">Core</TabsTrigger>
-            <TabsTrigger value="sources">Sources</TabsTrigger>
             <TabsTrigger value="info">Info</TabsTrigger>
           </TabsList>
 
@@ -295,85 +257,6 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="sources" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Dashboard Data Sources</CardTitle>
-                <CardDescription>
-                  Server-side sources for weather, calendar, train, and InfluxDB
-                  widgets.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
-                <FormField
-                  control={form.control}
-                  name="weatherApiUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Weather API URL</FormLabel>
-                      <FormControl>
-                        <Input type="url" autoComplete="url" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="trainApiUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Train API URL</FormLabel>
-                      <FormControl>
-                        <Input type="url" autoComplete="url" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="influxUrl"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>InfluxDB URL</FormLabel>
-                      <FormControl>
-                        <Input type="url" autoComplete="url" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="influxToken"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>InfluxDB Token</FormLabel>
-                      <FormControl>
-                        <Input type="password" autoComplete="off" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="calendarIcsUrl"
-                  render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                      <FormLabel>Calendar ICS URL</FormLabel>
-                      <FormControl>
-                        <Input type="url" autoComplete="url" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
           <TabsContent value="info" className="mt-4">
             <Card>
               <CardHeader>
@@ -402,8 +285,8 @@ export default function SettingsPage() {
                   </code>
                 </p>
                 <p>
-                  Device labels and map sensor controls now live under the
-                  Devices page.
+                  Dashboard source settings now live on each configurable widget
+                  instance in Config → Dashboard.
                 </p>
               </CardContent>
             </Card>

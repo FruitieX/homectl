@@ -7,6 +7,8 @@ import useIdle from '@/hooks/useIdle';
 import { useAppConfig } from '@/hooks/appConfig';
 import {
   type DashboardWidget,
+  buildDashboardWidgetProxyPath,
+  getDashboardWidgetOptionNumber,
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
@@ -107,9 +109,34 @@ const fetchWeather = async (weatherUrl: string): Promise<WeatherResponse> => {
 export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { apiEndpoint } = useAppConfig();
   const [weather, setWeather] = useState<WeatherResponse | null>(null);
-  const weatherUrl = resolveDashboardWidgetUrl(
-    apiEndpoint,
-    getDashboardWidgetOptionString(widget, 'weatherPath', '/api/weather'),
+  const weatherUrlOverride = getDashboardWidgetOptionString(
+    widget,
+    'weatherUrl',
+    '',
+  );
+  const weatherPath = weatherUrlOverride
+    ? buildDashboardWidgetProxyPath('/api/weather', { url: weatherUrlOverride })
+    : getDashboardWidgetOptionString(widget, 'weatherPath', '/api/weather');
+  const weatherUrl = resolveDashboardWidgetUrl(apiEndpoint, weatherPath);
+  const forecastHours = getDashboardWidgetOptionNumber(
+    widget,
+    'forecastHours',
+    48,
+  );
+  const forecastDays = getDashboardWidgetOptionNumber(
+    widget,
+    'forecastDays',
+    5,
+  );
+  const refreshSeconds = getDashboardWidgetOptionNumber(
+    widget,
+    'refreshSeconds',
+    60,
+  );
+  const outdoorSensorId = getDashboardWidgetOptionString(
+    widget,
+    'outdoorSensorId',
+    'D83534387029',
   );
   const sensorPath = getDashboardWidgetOptionString(
     widget,
@@ -126,7 +153,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const tempSensors = useTempSensorsQuery(sensorPath);
 
   const latestFrontyardTemp = tempSensors?.findLast(
-    (row) => row.device_id === 'D83534387029',
+    (row) => row.device_id === outdoorSensorId,
   )?._value;
 
   useEffect(() => {
@@ -145,10 +172,13 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
     };
   }, [weatherUrl]);
 
-  useInterval(async () => {
-    const weather = await fetchWeather(weatherUrl);
-    setWeather(weather);
-  }, 60 * 1000);
+  useInterval(
+    async () => {
+      const weather = await fetchWeather(weatherUrl);
+      setWeather(weather);
+    },
+    Math.max(30, refreshSeconds) * 1000,
+  );
 
   useTimeout(
     () => {
@@ -184,8 +214,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
         return new Date(series.time) >= roundToHour(new Date());
       }) ?? [];
 
-    // Get hourly data for next 48 hours
-    const hourlyData = currentAndFutureSeries?.slice(0, 48) || [];
+    const hourlyData = currentAndFutureSeries?.slice(0, forecastHours) || [];
 
     // Aggregate daily data for next 5 days with min/max values and improved symbol code logic
     const dailyData: DailyWeatherData[] = currentAndFutureSeries
@@ -203,7 +232,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
           // Process each day to get aggregated data
           return Array.from(dailyGroups.entries())
-            .slice(0, 5) // Limit to 5 days
+            .slice(0, forecastDays)
             .map(([dateKey, dayDataPoints]) => {
               const date = new Date(dateKey);
 
@@ -268,14 +297,14 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
       : [];
 
     return { currentAndFutureSeries, hourlyData, dailyData };
-  }, [weather]);
+  }, [forecastDays, forecastHours, weather]);
 
   // Limit chart data to the selected long-term range (5 days) matching dailyData
   const chartSeries = useMemo(() => {
     const now = new Date();
-    const cutoff = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000); // rolling 120h
+    const cutoff = new Date(now.getTime() + forecastDays * 24 * 60 * 60 * 1000);
     return currentAndFutureSeries.filter((s) => new Date(s.time) <= cutoff);
-  }, [currentAndFutureSeries]);
+  }, [currentAndFutureSeries, forecastDays]);
 
   // Memoize chart data transformations
   const temperatureChartData = useMemo(() => {
@@ -368,14 +397,14 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             onValueChange={(value) => setActiveTab(Number(value))}
           >
             <TabsList className="w-full justify-start overflow-x-auto">
-              <TabsTrigger value="0">Hourly (48h)</TabsTrigger>
-              <TabsTrigger value="1">Long-term (5d)</TabsTrigger>
+              <TabsTrigger value="0">Hourly ({forecastHours}h)</TabsTrigger>
+              <TabsTrigger value="1">Long-term ({forecastDays}d)</TabsTrigger>
             </TabsList>
           </Tabs>
 
           <div
             ref={modalBodyRef}
-            className="relative flex max-h-[70vh] flex-col gap-3 overflow-y-auto overflow-x-hidden pr-4 -mr-4 pb-4"
+            className="relative flex flex-col gap-3 overflow-x-hidden pb-4"
           >
             {activeTab === 0 && (
               <>
@@ -393,7 +422,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                   return (
                     <Fragment key={index}>
                       {index === 0 && (
-                        <div className="sticky top-0 z-20 flex flex-row border-b border-border bg-background pb-3 text-base">
+                        <div className="sticky top-0 z-20 flex flex-row rounded-2xl border border-border bg-popover/95 px-3 py-2 text-base shadow-sm backdrop-blur">
                           <span className="w-24 text-sm text-muted-foreground">
                             Time
                           </span>
@@ -406,17 +435,17 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                         </div>
                       )}
                       {isNewDay && (
-                        <div className="bg-background">
-                          <div className="flex items-center py-3 -mx-6 px-6">
-                            <div className="flex-1 h-px bg-gray-300"></div>
-                            <div className="px-4 text-sm font-semibold text-gray-600">
+                        <div>
+                          <div className="-mx-2 flex items-center px-2 py-3">
+                            <div className="h-px flex-1 bg-border"></div>
+                            <div className="px-4 text-sm font-semibold text-muted-foreground">
                               {currentDate.toLocaleDateString('en-FI', {
                                 weekday: 'long',
                                 month: 'short',
                                 day: 'numeric',
                               })}
                             </div>
-                            <div className="flex-1 h-px bg-gray-300"></div>
+                            <div className="h-px flex-1 bg-border"></div>
                           </div>
                         </div>
                       )}
@@ -473,7 +502,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                                 weekday: 'short',
                               })}
                         </div>
-                        <div className="text-xs text-gray-600 mb-2">
+                        <div className="mb-2 text-xs text-muted-foreground">
                           {dayData.date.toLocaleDateString('en-FI', {
                             month: 'short',
                             day: 'numeric',
@@ -487,10 +516,10 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                         <div className="text-lg font-bold">
                           {Math.round(dayData.maxTemp)}°
                         </div>
-                        <div className="text-sm text-gray-600">
+                        <div className="text-sm text-muted-foreground">
                           {Math.round(dayData.minTemp)}°
                         </div>
-                        <div className="text-xs text-blue-600 mt-1">
+                        <div className="mt-1 text-xs text-sky-500">
                           {dayData.precipitation > 0
                             ? `${dayData.precipitation.toFixed(1)}mm`
                             : ''}

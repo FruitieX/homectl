@@ -29,7 +29,10 @@ import {
 import Tooltip from '@/ui/Tooltip';
 import {
   type DashboardWidget,
+  buildDashboardWidgetProxyPath,
+  getDashboardWidgetOptionBoolean,
   getDashboardWidgetOptionString,
+  getDashboardWidgetOptionStringArray,
 } from '@/hooks/useDashboard';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
@@ -80,7 +83,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
   return (
     <Button
       variant="ghost"
-      className="h-auto w-22 shrink-0 p-2"
+      className="h-auto min-h-20 min-w-24 max-w-36 flex-1 basis-28 p-2"
       onClick={onClick}
     >
       <div
@@ -186,13 +189,51 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const isIdle = useIdle();
-  const sensorData = useSensorData(
-    getDashboardWidgetOptionString(
-      widget,
-      'sensorPath',
-      '/api/influxdb/temp-sensors',
-    ),
+  const sensorIds = getDashboardWidgetOptionStringArray(widget, 'sensorIds');
+  const indoorSensorIds = getDashboardWidgetOptionStringArray(
+    widget,
+    'indoorSensorIds',
   );
+  const prioritySensorIds = getDashboardWidgetOptionStringArray(
+    widget,
+    'prioritySensorIds',
+  );
+  const influxUrl = getDashboardWidgetOptionString(widget, 'influxUrl', '');
+  const influxToken = getDashboardWidgetOptionString(widget, 'influxToken', '');
+  const sensorPath = getDashboardWidgetOptionString(
+    widget,
+    'sensorPath',
+    '/api/influxdb/temp-sensors',
+  );
+  const range = getDashboardWidgetOptionString(widget, 'range', '-6h');
+  const window = getDashboardWidgetOptionString(widget, 'window', '10m');
+  const hasProxyOptions =
+    influxUrl ||
+    influxToken ||
+    sensorIds.length > 0 ||
+    range !== '-6h' ||
+    window !== '10m';
+  const endpointPath = hasProxyOptions
+    ? buildDashboardWidgetProxyPath('/api/influxdb/temp-sensors', {
+        url: influxUrl,
+        token: influxToken,
+        device_ids: sensorIds.join(','),
+        range,
+        window,
+      })
+    : sensorPath;
+  const wrapPreview = getDashboardWidgetOptionBoolean(
+    widget,
+    'wrapPreview',
+    true,
+  );
+  const sensorData = useSensorData({
+    endpointPath,
+    sensorIds,
+    indoorSensorIds: indoorSensorIds.length > 0 ? indoorSensorIds : undefined,
+    prioritySensorIds:
+      prioritySensorIds.length > 0 ? prioritySensorIds : undefined,
+  });
 
   // Reset scroll position to x=0 when user becomes idle
   useEffect(() => {
@@ -423,11 +464,15 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   return (
     <>
       <Card className="col-span-4 overflow-hidden">
-        <CardContent className="p-1">
-          {/* Horizontal scrollable sensor list */}
+        <CardContent className="flex h-full items-center p-3">
           <div
             ref={scrollContainerRef}
-            className="flex gap-2 overflow-x-auto h-full"
+            className={clsx(
+              'flex w-full items-center gap-2',
+              wrapPreview
+                ? 'flex-wrap justify-center overflow-hidden'
+                : 'h-full overflow-x-auto',
+            )}
           >
             {sensorData.map((sensor) => (
               <SensorCard

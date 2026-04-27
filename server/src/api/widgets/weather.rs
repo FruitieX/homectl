@@ -1,5 +1,6 @@
 use crate::core::snapshot::SnapshotHandle;
 use cached::proc_macro::cached;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use warp::{
     filters::BoxedFilter,
@@ -13,21 +14,35 @@ use super::{widget_setting_string_or_env, API_URL_FIELD, WEATHER_SETTING_KEY};
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "weather")
         .and(warp::get())
-        .and_then(move || {
+        .and(warp::query::<WeatherQuery>())
+        .and_then(move |query: WeatherQuery| {
             let snapshot = snapshot.clone();
             let http = http.clone();
-            async move { Ok::<_, warp::Rejection>(handle(snapshot, http).await) }
+            async move { Ok::<_, warp::Rejection>(handle(query, snapshot, http).await) }
         })
         .boxed()
 }
 
-async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
-    let url = match widget_setting_string_or_env(
-        &snapshot.load().runtime_config.widget_settings,
-        WEATHER_SETTING_KEY,
-        API_URL_FIELD,
-        "WEATHER_API_URL",
-    ) {
+#[derive(Debug, Default, Deserialize)]
+struct WeatherQuery {
+    url: Option<String>,
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+async fn handle(query: WeatherQuery, snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
+    let url = match non_empty(query.url).or_else(|| {
+        widget_setting_string_or_env(
+            &snapshot.load().runtime_config.widget_settings,
+            WEATHER_SETTING_KEY,
+            API_URL_FIELD,
+            "WEATHER_API_URL",
+        )
+    }) {
         Some(url) => url,
         None => {
             return error(

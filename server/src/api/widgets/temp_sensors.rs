@@ -1,5 +1,6 @@
 use crate::core::snapshot::SnapshotHandle;
 use cached::proc_macro::cached;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use warp::{
     filters::BoxedFilter,
@@ -8,9 +9,7 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{
-    influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD,
-};
+use super::{influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD};
 
 /// Known temperature/humidity sensor device IDs. The Flux query needs the
 /// explicit list so InfluxDB can filter on them server-side (mirrors what the
@@ -30,34 +29,80 @@ const DEVICE_IDS: &[&str] = &[
     "C76A03460A73",
 ];
 
-pub fn route(
-    snapshot: SnapshotHandle,
-    http: reqwest::Client,
-) -> BoxedFilter<(Response,)> {
+pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "influxdb" / "temp-sensors")
         .and(warp::get())
-        .and_then(move || {
+        .and(warp::query::<TempSensorsQuery>())
+        .and_then(move |query: TempSensorsQuery| {
             let snapshot = snapshot.clone();
             let http = http.clone();
-            async move { Ok::<_, warp::Rejection>(handle(snapshot, http).await) }
+            async move { Ok::<_, warp::Rejection>(handle(query, snapshot, http).await) }
         })
         .boxed()
 }
 
-async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
+#[derive(Debug, Default, Deserialize)]
+struct TempSensorsQuery {
+    url: Option<String>,
+    token: Option<String>,
+    device_ids: Option<String>,
+    range: Option<String>,
+    window: Option<String>,
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn is_safe_flux_atom(value: &str) -> bool {
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | ':' | '/'))
+}
+
+fn is_safe_flux_duration(value: &str) -> bool {
+    value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+}
+
+fn parse_device_ids(value: Option<String>) -> Vec<String> {
+    non_empty(value)
+        .map(|ids| {
+            ids.split(',')
+                .map(str::trim)
+                .filter(|id| !id.is_empty() && is_safe_flux_atom(id))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .filter(|ids| !ids.is_empty())
+        .unwrap_or_else(|| DEVICE_IDS.iter().map(|id| (*id).to_string()).collect())
+}
+
+async fn handle(
+    query: TempSensorsQuery,
+    snapshot: SnapshotHandle,
+    http: reqwest::Client,
+) -> Response {
     let (url, token) = match (
-        widget_setting_string_or_env(
-            &snapshot.load().runtime_config.widget_settings,
-            INFLUXDB_SETTING_KEY,
-            URL_FIELD,
-            "INFLUX_URL",
-        ),
-        widget_setting_string_or_env(
-            &snapshot.load().runtime_config.widget_settings,
-            INFLUXDB_SETTING_KEY,
-            TOKEN_FIELD,
-            "INFLUX_TOKEN",
-        ),
+        non_empty(query.url).or_else(|| {
+            widget_setting_string_or_env(
+                &snapshot.load().runtime_config.widget_settings,
+                INFLUXDB_SETTING_KEY,
+                URL_FIELD,
+                "INFLUX_URL",
+            )
+        }),
+        non_empty(query.token).or_else(|| {
+            widget_setting_string_or_env(
+                &snapshot.load().runtime_config.widget_settings,
+                INFLUXDB_SETTING_KEY,
+                TOKEN_FIELD,
+                "INFLUX_TOKEN",
+            )
+        }),
     ) {
         (Some(url), Some(token)) => (url, token),
         _ => {
@@ -68,7 +113,14 @@ async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
         }
     };
 
-    let result = fetch_temp_sensors(url, token, http).await;
+    let device_ids = parse_device_ids(query.device_ids);
+    let range = non_empty(query.range)
+        .filter(|value| is_safe_flux_duration(value))
+        .unwrap_or_else(|| "-6h".to_string());
+    let window = non_empty(query.window)
+        .filter(|value| is_safe_flux_duration(value))
+        .unwrap_or_else(|| "10m".to_string());
+    let result = fetch_temp_sensors(url, token, device_ids, range, window, http).await;
 
     match result {
         Ok(value) => reply::json(&value).into_response(),
@@ -83,15 +135,24 @@ async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
     result = true,
     time = 60,
     key = "String",
-    convert = r#"{ url.clone() }"#,
+    convert = r#"{ format!("{}|{}|{}|{}", url, device_ids.join(","), range, window) }"#,
     sync_writes = "by_key"
 )]
 async fn fetch_temp_sensors(
     url: String,
     token: String,
+    device_ids: Vec<String>,
+    range: String,
+    window: String,
     http: reqwest::Client,
 ) -> Result<Value, String> {
-    let rows = influx::query(&http, &url, &token, &build_query()).await?;
+    let rows = influx::query(
+        &http,
+        &url,
+        &token,
+        &build_query(&device_ids, &range, &window),
+    )
+    .await?;
     Ok(Value::Array(rows))
 }
 
@@ -99,8 +160,8 @@ fn error(status: StatusCode, message: &str) -> Response {
     reply::with_status(reply::json(&json!({ "error": message })), status).into_response()
 }
 
-fn build_query() -> String {
-    let filters = DEVICE_IDS
+fn build_query(device_ids: &[String], range: &str, window: &str) -> String {
+    let filters = device_ids
         .iter()
         .map(|id| format!("(r[\"device_id\"] == \"{id}\")"))
         .collect::<Vec<_>>()
@@ -109,10 +170,10 @@ fn build_query() -> String {
     format!(
         r#"
           from(bucket: "home")
-            |> range(start: -6h)
+                        |> range(start: {range})
             |> filter(fn: (r) => {filters})
             |> filter(fn: (r) => r["_field"] == "tempc" or r["_field"] == "hum")
-            |> aggregateWindow(every: 10m, fn: mean, createEmpty: false)
+                        |> aggregateWindow(every: {window}, fn: mean, createEmpty: false)
             |> yield(name: "mean")
         "#
     )

@@ -33,7 +33,7 @@ export function DrawerContent({
       <DrawerOverlay />
       <DrawerPrimitive.Content
         className={cn(
-          'fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[92dvh] flex-col overflow-y-auto overscroll-contain rounded-t-4xl border border-border bg-popover text-popover-foreground shadow-2xl outline-none',
+          'fixed inset-x-0 bottom-0 z-50 mt-24 flex max-h-[92dvh] flex-col overflow-hidden rounded-t-4xl border border-border bg-popover text-popover-foreground shadow-2xl outline-none',
           className,
         )}
         {...props}

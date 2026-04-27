@@ -35,6 +35,15 @@ interface SensorData {
   color: string;
 }
 
+interface SensorDataOptions {
+  endpointPath?: string;
+  sensorIds?: string[];
+  indoorSensorIds?: string[];
+  prioritySensorIds?: string[];
+}
+
+const EMPTY_SENSOR_IDS: string[] = [];
+
 // Mapping from device_id to sensor name (duplicated from API route)
 const DEVICE_ID_TO_NAME: Record<string, string> = {
   D83431306571: 'Bathroom',
@@ -116,11 +125,18 @@ const normalizeSensorRows = (value: unknown): SensorRow[] => {
     const deviceId = typeof row.device_id === 'string' ? row.device_id : null;
     const integrationId =
       typeof row.integration_id === 'string' ? row.integration_id : null;
-    const field = row._field === 'tempc' || row._field === 'hum' ? row._field : null;
+    const field =
+      row._field === 'tempc' || row._field === 'hum' ? row._field : null;
     const time = parseInfluxTime(row._time);
     const numericValue = parseInfluxNumber(row._value);
 
-    if (!deviceId || !integrationId || !field || !time || numericValue === null) {
+    if (
+      !deviceId ||
+      !integrationId ||
+      !field ||
+      !time ||
+      numericValue === null
+    ) {
       return [];
     }
 
@@ -185,7 +201,17 @@ export const useTempSensorsQuery = (
   return tempSensors;
 };
 
-export const useSensorData = (endpointPath = '/api/influxdb/temp-sensors') => {
+export const useSensorData = (
+  optionsOrEndpoint: string | SensorDataOptions = '/api/influxdb/temp-sensors',
+) => {
+  const options =
+    typeof optionsOrEndpoint === 'string'
+      ? { endpointPath: optionsOrEndpoint }
+      : optionsOrEndpoint;
+  const endpointPath = options.endpointPath ?? '/api/influxdb/temp-sensors';
+  const selectedSensorIds = options.sensorIds ?? EMPTY_SENSOR_IDS;
+  const indoorSensorIds = options.indoorSensorIds ?? INDOOR_SENSORS;
+  const prioritySensorIds = options.prioritySensorIds ?? PRIORITY_SENSORS;
   const rawSensorData = useTempSensorsQuery(endpointPath);
 
   const sensorData = useMemo(() => {
@@ -207,20 +233,33 @@ export const useSensorData = (endpointPath = '/api/influxdb/temp-sensors') => {
       '#7c8a99', // Steel blue-gray
     ];
 
-    // Initialize all known devices
-    Object.entries(DEVICE_ID_TO_NAME).forEach(
-      ([deviceId, deviceName], index) => {
-        deviceMap.set(deviceId, {
-          device_id: deviceId,
-          device_name: deviceName,
-          temp_data: [],
-          humidity_data: [],
-          is_priority: PRIORITY_SENSORS.includes(deviceId),
-          is_indoor: INDOOR_SENSORS.includes(deviceId),
-          color: colors[index % colors.length],
-        });
-      },
+    const discoveredDeviceIds = Array.from(
+      new Set(rawSensorData.map((row) => row.device_id)),
     );
+    const configuredDeviceIds =
+      selectedSensorIds.length > 0 ? selectedSensorIds : discoveredDeviceIds;
+    const knownDeviceIds = Array.from(
+      new Set([...Object.keys(DEVICE_ID_TO_NAME), ...configuredDeviceIds]),
+    );
+
+    knownDeviceIds.forEach((deviceId, index) => {
+      if (
+        selectedSensorIds.length > 0 &&
+        !selectedSensorIds.includes(deviceId)
+      ) {
+        return;
+      }
+
+      deviceMap.set(deviceId, {
+        device_id: deviceId,
+        device_name: DEVICE_ID_TO_NAME[deviceId] ?? deviceId,
+        temp_data: [],
+        humidity_data: [],
+        is_priority: prioritySensorIds.includes(deviceId),
+        is_indoor: indoorSensorIds.includes(deviceId),
+        color: colors[index % colors.length],
+      });
+    });
 
     // Process raw sensor data
     rawSensorData.forEach((row) => {
@@ -260,7 +299,7 @@ export const useSensorData = (endpointPath = '/api/influxdb/temp-sensors') => {
       if (!a.is_priority && b.is_priority) return 1;
       return a.device_name.localeCompare(b.device_name);
     });
-  }, [rawSensorData]);
+  }, [indoorSensorIds, prioritySensorIds, rawSensorData, selectedSensorIds]);
 
   return sensorData;
 };

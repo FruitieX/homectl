@@ -39,13 +39,13 @@ export function ResponsiveOverlay({
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const isFullscreen = presentation === 'fullscreen';
   const contentClassName = cn(
+    'grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden',
     className,
-    isFullscreen &&
-      'grid h-[min(86dvh,56rem)] max-w-6xl grid-rows-[auto_minmax(0,1fr)] overflow-hidden',
+    isFullscreen && 'h-[min(86dvh,56rem)] max-w-6xl',
   );
   const bodyClassName = cn(
-    'min-h-0',
-    isFullscreen && 'flex flex-col overflow-y-auto overscroll-contain',
+    'min-h-0 overflow-y-auto overscroll-contain',
+    isFullscreen && 'flex flex-col',
   );
 
   if (isDesktop) {
@@ -68,7 +68,8 @@ export function ResponsiveOverlay({
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent
         className={cn(
-          isFullscreen && 'h-[92dvh] max-h-[92dvh] overflow-hidden',
+          'h-auto max-h-[92dvh] overflow-hidden',
+          isFullscreen && 'h-[92dvh]',
           className,
         )}
       >
@@ -76,9 +77,7 @@ export function ResponsiveOverlay({
           <DrawerTitle>{title}</DrawerTitle>
           {description && <DrawerDescription>{description}</DrawerDescription>}
         </DrawerHeader>
-        <div className={cn(bodyClassName, isFullscreen && 'flex-1')}>
-          {children}
-        </div>
+        <div className={cn(bodyClassName, 'flex-1')}>{children}</div>
       </DrawerContent>
     </Drawer>
   );

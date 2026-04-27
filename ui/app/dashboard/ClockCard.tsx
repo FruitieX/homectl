@@ -6,6 +6,8 @@ import useIdle from '@/hooks/useIdle';
 import { useAppConfig } from '@/hooks/appConfig';
 import {
   type DashboardWidget,
+  buildDashboardWidgetProxyPath,
+  getDashboardWidgetOptionBoolean,
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
@@ -46,10 +48,28 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [time, setTime] = useState<Date | null>(null);
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const calendarUrl = resolveDashboardWidgetUrl(
-    apiEndpoint,
-    getDashboardWidgetOptionString(widget, 'calendarPath', '/api/calendar'),
+  const showSeconds = getDashboardWidgetOptionBoolean(
+    widget,
+    'showSeconds',
+    false,
   );
+  const showDate = getDashboardWidgetOptionBoolean(widget, 'showDate', true);
+  const showCalendar = getDashboardWidgetOptionBoolean(
+    widget,
+    'showCalendar',
+    true,
+  );
+  const calendarUrlOverride = getDashboardWidgetOptionString(
+    widget,
+    'calendarUrl',
+    '',
+  );
+  const calendarPath = calendarUrlOverride
+    ? buildDashboardWidgetProxyPath('/api/calendar', {
+        url: calendarUrlOverride,
+      })
+    : getDashboardWidgetOptionString(widget, 'calendarPath', '/api/calendar');
+  const calendarUrl = resolveDashboardWidgetUrl(apiEndpoint, calendarPath);
 
   const isIdle = useIdle();
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
@@ -243,7 +263,7 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   };
 
   const renderCalendarInfo = () => {
-    if (error || !calendar) return null;
+    if (!showCalendar || error || !calendar) return null;
 
     const events = calendar.events;
     const currentEvent = getCurrentEvent(events);
@@ -256,8 +276,8 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
     if (!displayEvent) return null;
 
     return (
-      <div className="text-center mt-1 w-full">
-        <div className="flex items-center justify-center gap-1 mb-1">
+      <div className="mt-3 w-full border-t border-border/60 pt-3 text-center">
+        <div className="mb-1 flex items-center justify-center gap-1">
           <Calendar className="size-3" />
           {currentEvent && <Badge>Now</Badge>}
           {!currentEvent && nextEvent && (
@@ -267,12 +287,12 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
             <Badge>All day</Badge>
           )}
         </div>
-        <div className="text-xs font-medium truncate max-w-full">
+        <div className="max-w-full truncate text-xs font-medium">
           {displayEvent.summary}
         </div>
         <div className="flex min-w-0 items-center justify-center gap-1 text-xs text-muted-foreground">
           <Clock className="size-3 shrink-0" />
-          <div className="truncate max-w-full">
+          <div className="max-w-full truncate">
             {formatEventTimeDisplay(displayEvent)}
           </div>
         </div>
@@ -288,15 +308,27 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="h-full w-full"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="flex w-full items-center justify-center px-0 py-5">
-            <span className="text-[clamp(1.5rem,8vw,3rem)] leading-none">
+          <CardContent className="flex w-full flex-col items-center justify-center px-4 py-5">
+            <span className="font-mono text-[clamp(1.75rem,8vw,3.5rem)] leading-none tracking-tight">
               {time !== null && (
                 <>
                   {time.getHours().toString().padStart(2, '0')}:
                   {time.getMinutes().toString().padStart(2, '0')}
+                  {showSeconds
+                    ? `:${time.getSeconds().toString().padStart(2, '0')}`
+                    : ''}
                 </>
               )}
             </span>
+            {showDate && time ? (
+              <span className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                {time.toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </span>
+            ) : null}
             {renderCalendarInfo()}
           </CardContent>
         </Button>

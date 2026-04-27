@@ -9,6 +9,10 @@ export type WidgetType =
   | 'controls'
   | 'spot_price'
   | 'train_schedule'
+  | 'text'
+  | 'link'
+  | 'iframe'
+  | 'image'
   | 'custom';
 
 export interface DashboardWidget {
@@ -40,8 +44,74 @@ export function getDashboardWidgetOptionString(
   return typeof value === 'string' && value.trim() ? value : fallbackValue;
 }
 
+export function getDashboardWidgetOptionNumber(
+  widget: DashboardWidget | null | undefined,
+  optionKey: string,
+  fallbackValue: number,
+) {
+  const value = widget?.options[optionKey];
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallbackValue;
+  }
+
+  return fallbackValue;
+}
+
+export function getDashboardWidgetOptionBoolean(
+  widget: DashboardWidget | null | undefined,
+  optionKey: string,
+  fallbackValue: boolean,
+) {
+  const value = widget?.options[optionKey];
+  return typeof value === 'boolean' ? value : fallbackValue;
+}
+
+export function getDashboardWidgetOptionStringArray(
+  widget: DashboardWidget | null | undefined,
+  optionKey: string,
+  fallbackValue: string[] = [],
+) {
+  const value = widget?.options[optionKey];
+
+  if (Array.isArray(value)) {
+    return value.filter((item): item is string => typeof item === 'string');
+  }
+
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }
+
+  return fallbackValue;
+}
+
 export function resolveDashboardWidgetUrl(apiEndpoint: string, path: string) {
   return ABSOLUTE_URL_PATTERN.test(path) ? path : `${apiEndpoint}${path}`;
+}
+
+export function buildDashboardWidgetProxyPath(
+  path: string,
+  params: Record<string, string | number | boolean | null | undefined>,
+) {
+  const searchParams = new URLSearchParams();
+
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return;
+    }
+
+    searchParams.set(key, String(value));
+  });
+
+  const query = searchParams.toString();
+  return query ? `${path}?${query}` : path;
 }
 
 type DashboardLayoutRow = {
@@ -73,6 +143,8 @@ export const widgetRegistry: Record<
     defaultOptions: {
       showSeconds: false,
       showDate: true,
+      showCalendar: true,
+      calendarUrl: '',
       calendarPath: '/api/calendar',
     },
   },
@@ -82,8 +154,13 @@ export const widgetRegistry: Record<
     defaultOptions: {
       location: '',
       units: 'metric',
+      weatherUrl: '',
       weatherPath: '/api/weather',
+      outdoorSensorId: 'D83534387029',
       sensorPath: '/api/influxdb/temp-sensors',
+      forecastHours: 48,
+      forecastDays: 5,
+      refreshSeconds: 60,
     },
   },
   sensors: {
@@ -91,7 +168,14 @@ export const widgetRegistry: Record<
     description: 'Displays sensor data charts',
     defaultOptions: {
       sensorIds: [],
+      indoorSensorIds: [],
+      prioritySensorIds: [],
+      influxUrl: '',
+      influxToken: '',
       sensorPath: '/api/influxdb/temp-sensors',
+      range: '-6h',
+      window: '10m',
+      wrapPreview: true,
     },
   },
   controls: {
@@ -113,8 +197,31 @@ export const widgetRegistry: Record<
     defaultOptions: {
       stationCode: '',
       limit: 5,
+      trainApiUrl: '',
       trainSchedulePath: '/api/train-schedule',
+      stationId: 'HSL:2131551',
+      walkMinutes: 12,
     },
+  },
+  text: {
+    name: 'Text',
+    description: 'Static dashboard note or status text',
+    defaultOptions: { body: 'Add useful dashboard text here.' },
+  },
+  link: {
+    name: 'Link',
+    description: 'Large tap target linking to another view or service',
+    defaultOptions: { url: '/', label: 'Open', description: '' },
+  },
+  iframe: {
+    name: 'Iframe',
+    description: 'Embedded local dashboard or camera view',
+    defaultOptions: { url: '', title: 'Embedded view' },
+  },
+  image: {
+    name: 'Image',
+    description: 'Static image, camera snapshot, or status graphic',
+    defaultOptions: { imageUrl: '', alt: 'Dashboard image' },
   },
   custom: {
     name: 'Custom',

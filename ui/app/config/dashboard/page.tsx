@@ -8,12 +8,14 @@ import {
   type WidgetType,
 } from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
+import { DASHBOARD_GRID_HELP } from '@/lib/dashboard-layout';
 import {
   ConfigField,
   ConfigFormActions,
   ConfigFormSection,
   ConfigHelpPanel,
 } from '@/ui/config-form';
+import { DashboardGridEditor } from '@/ui/DashboardGridEditor';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -39,6 +41,117 @@ const isWidgetType = (value: string): value is WidgetType =>
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toCsv = (value: unknown) =>
+  Array.isArray(value)
+    ? value
+        .filter((item): item is string => typeof item === 'string')
+        .join(', ')
+    : typeof value === 'string'
+      ? value
+      : '';
+
+const fromCsv = (value: string) =>
+  value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+function OptionTextField({
+  label,
+  value,
+  placeholder,
+  type = 'text',
+  onChange,
+}: {
+  label: string;
+  value: string;
+  placeholder?: string;
+  type?: 'text' | 'url' | 'password';
+  onChange: (value: string) => void;
+}) {
+  return (
+    <ConfigField label={label}>
+      <Input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </ConfigField>
+  );
+}
+
+function OptionNumberField({
+  label,
+  value,
+  min,
+  max,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min?: number;
+  max?: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <ConfigField label={label}>
+      <Input
+        type="number"
+        value={value}
+        min={min}
+        max={max}
+        onChange={(event) => onChange(event.target.valueAsNumber || 0)}
+      />
+    </ConfigField>
+  );
+}
+
+function OptionCheckboxField({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-muted/30 p-4">
+      <input
+        type="checkbox"
+        className="size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span className="text-sm font-medium">{label}</span>
+    </label>
+  );
+}
+
+function OptionCsvField({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string;
+  value: unknown;
+  placeholder?: string;
+  onChange: (value: string[]) => void;
+}) {
+  return (
+    <ConfigField label={label} description="Comma-separated values.">
+      <Input
+        value={toCsv(value)}
+        placeholder={placeholder}
+        onChange={(event) => onChange(fromCsv(event.target.value))}
+      />
+    </ConfigField>
+  );
+}
 
 export default function DashboardConfigPage() {
   const {
@@ -209,110 +322,23 @@ export default function DashboardConfigPage() {
                 description="Add the first widget to start building the dashboard."
               />
             ) : (
-              <div className="grid gap-3">
-                {sortedWidgets.map((widget, index) => (
-                  <Card key={widget.id} className="rounded-2xl bg-muted/30">
-                    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="min-w-0">
-                        <div className="font-medium">{widget.title}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">
-                          {widgetRegistry[widget.widget_type]?.name ||
-                            widget.widget_type}
-                          <span className="ml-2">
-                            ({widget.width}×{widget.height})
-                          </span>
-                        </div>
-                        <div className="mt-2 text-xs text-muted-foreground">
-                          Position {widget.position + 1} · grid {widget.x},{' '}
-                          {widget.y}
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={index === 0}
-                          onClick={() => {
-                            const nextIds = sortedWidgets.map(
-                              (item) => item.id,
-                            );
-                            [nextIds[index - 1], nextIds[index]] = [
-                              nextIds[index],
-                              nextIds[index - 1],
-                            ];
-                            void reorderWidgets(nextIds);
-                          }}
-                        >
-                          ↑
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          disabled={index === sortedWidgets.length - 1}
-                          onClick={() => {
-                            const nextIds = sortedWidgets.map(
-                              (item) => item.id,
-                            );
-                            [nextIds[index], nextIds[index + 1]] = [
-                              nextIds[index + 1],
-                              nextIds[index],
-                            ];
-                            void reorderWidgets(nextIds);
-                          }}
-                        >
-                          ↓
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setEditingWidget(widget)}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm(`Remove widget "${widget.title}"?`)) {
-                              void removeWidget(widget.id);
-                            }
-                          }}
-                        >
-                          ✕
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
+              <div className="space-y-3">
+                <DashboardGridEditor
+                  widgets={sortedWidgets}
+                  onEdit={setEditingWidget}
+                  onRemove={(widget) => {
+                    if (confirm(`Remove widget "${widget.title}"?`)) {
+                      void removeWidget(widget.id);
+                    }
+                  }}
+                  onUpdateWidget={updateWidget}
+                  onReorderWidgets={reorderWidgets}
+                />
               </div>
             )}
           </CardContent>
         </Card>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Available Widget Types</CardTitle>
-          <CardDescription>
-            These presets can be added to any dashboard layout.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
-            {Object.entries(widgetRegistry).map(([type, info]) => (
-              <Card key={type} className="rounded-2xl bg-muted/30">
-                <CardContent className="p-4">
-                  <div className="font-medium">{info.name}</div>
-                  <div className="mt-1 text-sm text-muted-foreground">
-                    {info.description}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       {showAddLayout && (
         <AddLayoutOverlay
@@ -411,6 +437,279 @@ function AddLayoutOverlay({
   );
 }
 
+function WidgetOptionFields({
+  widgetType,
+  options,
+  onChange,
+}: {
+  widgetType: WidgetType;
+  options: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}) {
+  const getString = (key: string, fallback = '') => {
+    const value = options[key];
+    return typeof value === 'string' ? value : fallback;
+  };
+  const getNumber = (key: string, fallback: number) => {
+    const value = options[key];
+    return typeof value === 'number' && Number.isFinite(value)
+      ? value
+      : fallback;
+  };
+  const getBoolean = (key: string, fallback: boolean) => {
+    const value = options[key];
+    return typeof value === 'boolean' ? value : fallback;
+  };
+
+  if (widgetType === 'clock') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Calendar ICS URL"
+          type="url"
+          value={getString('calendarUrl')}
+          placeholder="https://calendar.google.com/.../basic.ics"
+          onChange={(value) => onChange('calendarUrl', value)}
+        />
+        <OptionTextField
+          label="Calendar endpoint path"
+          value={getString('calendarPath', '/api/calendar')}
+          onChange={(value) => onChange('calendarPath', value)}
+        />
+        <OptionCheckboxField
+          label="Show calendar summary"
+          checked={getBoolean('showCalendar', true)}
+          onChange={(value) => onChange('showCalendar', value)}
+        />
+        <OptionCheckboxField
+          label="Show date under clock"
+          checked={getBoolean('showDate', true)}
+          onChange={(value) => onChange('showDate', value)}
+        />
+        <OptionCheckboxField
+          label="Show seconds"
+          checked={getBoolean('showSeconds', false)}
+          onChange={(value) => onChange('showSeconds', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'weather') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Weather API URL"
+          type="url"
+          value={getString('weatherUrl')}
+          onChange={(value) => onChange('weatherUrl', value)}
+        />
+        <OptionTextField
+          label="Weather endpoint path"
+          value={getString('weatherPath', '/api/weather')}
+          onChange={(value) => onChange('weatherPath', value)}
+        />
+        <OptionTextField
+          label="Outdoor temperature sensor id"
+          value={getString('outdoorSensorId', 'D83534387029')}
+          onChange={(value) => onChange('outdoorSensorId', value)}
+        />
+        <OptionTextField
+          label="Sensor endpoint path"
+          value={getString('sensorPath', '/api/influxdb/temp-sensors')}
+          onChange={(value) => onChange('sensorPath', value)}
+        />
+        <OptionNumberField
+          label="Hourly forecast hours"
+          value={getNumber('forecastHours', 48)}
+          min={1}
+          max={120}
+          onChange={(value) => onChange('forecastHours', value)}
+        />
+        <OptionNumberField
+          label="Long-term days"
+          value={getNumber('forecastDays', 5)}
+          min={1}
+          max={10}
+          onChange={(value) => onChange('forecastDays', value)}
+        />
+        <OptionNumberField
+          label="Refresh seconds"
+          value={getNumber('refreshSeconds', 60)}
+          min={30}
+          onChange={(value) => onChange('refreshSeconds', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'sensors') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="InfluxDB URL"
+          type="url"
+          value={getString('influxUrl')}
+          onChange={(value) => onChange('influxUrl', value)}
+        />
+        <OptionTextField
+          label="InfluxDB token"
+          type="password"
+          value={getString('influxToken')}
+          onChange={(value) => onChange('influxToken', value)}
+        />
+        <OptionTextField
+          label="Sensor endpoint path"
+          value={getString('sensorPath', '/api/influxdb/temp-sensors')}
+          onChange={(value) => onChange('sensorPath', value)}
+        />
+        <OptionTextField
+          label="Range"
+          value={getString('range', '-6h')}
+          onChange={(value) => onChange('range', value)}
+        />
+        <OptionTextField
+          label="Aggregation window"
+          value={getString('window', '10m')}
+          onChange={(value) => onChange('window', value)}
+        />
+        <OptionCsvField
+          label="Sensor ids to query"
+          value={options.sensorIds}
+          onChange={(value) => onChange('sensorIds', value)}
+        />
+        <OptionCsvField
+          label="Indoor sensor ids"
+          value={options.indoorSensorIds}
+          onChange={(value) => onChange('indoorSensorIds', value)}
+        />
+        <OptionCsvField
+          label="Priority sensor ids"
+          value={options.prioritySensorIds}
+          onChange={(value) => onChange('prioritySensorIds', value)}
+        />
+        <OptionCheckboxField
+          label="Wrap preview sensor chips"
+          checked={getBoolean('wrapPreview', true)}
+          onChange={(value) => onChange('wrapPreview', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'train_schedule') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Train API URL"
+          type="url"
+          value={getString('trainApiUrl')}
+          onChange={(value) => onChange('trainApiUrl', value)}
+        />
+        <OptionTextField
+          label="Train endpoint path"
+          value={getString('trainSchedulePath', '/api/train-schedule')}
+          onChange={(value) => onChange('trainSchedulePath', value)}
+        />
+        <OptionTextField
+          label="Station id"
+          value={getString('stationId', 'HSL:2131551')}
+          onChange={(value) => onChange('stationId', value)}
+        />
+        <OptionNumberField
+          label="Walk minutes"
+          value={getNumber('walkMinutes', 12)}
+          min={0}
+          onChange={(value) => onChange('walkMinutes', value)}
+        />
+        <OptionNumberField
+          label="Result limit"
+          value={getNumber('limit', 5)}
+          min={1}
+          max={20}
+          onChange={(value) => onChange('limit', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'text') {
+    return (
+      <ConfigField label="Body text">
+        <Textarea
+          className="min-h-32"
+          value={getString('body')}
+          onChange={(event) => onChange('body', event.target.value)}
+        />
+      </ConfigField>
+    );
+  }
+
+  if (widgetType === 'link') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="URL"
+          value={getString('url', '/')}
+          onChange={(value) => onChange('url', value)}
+        />
+        <OptionTextField
+          label="Button label"
+          value={getString('label', 'Open')}
+          onChange={(value) => onChange('label', value)}
+        />
+        <OptionTextField
+          label="Description"
+          value={getString('description')}
+          onChange={(value) => onChange('description', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'iframe') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Iframe URL"
+          type="url"
+          value={getString('url')}
+          onChange={(value) => onChange('url', value)}
+        />
+        <OptionTextField
+          label="Iframe title"
+          value={getString('title', 'Embedded view')}
+          onChange={(value) => onChange('title', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'image') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Image URL"
+          type="url"
+          value={getString('imageUrl')}
+          onChange={(value) => onChange('imageUrl', value)}
+        />
+        <OptionTextField
+          label="Alt text"
+          value={getString('alt', 'Dashboard image')}
+          onChange={(value) => onChange('alt', value)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ConfigHelpPanel>
+      This widget type only exposes advanced JSON options for now.
+    </ConfigHelpPanel>
+  );
+}
+
 function WidgetOverlay({
   mode,
   widget,
@@ -443,6 +742,26 @@ function WidgetOverlay({
   const [submitting, setSubmitting] = useState(false);
 
   const registryItem = widgetRegistry[widgetType];
+  const parsedOptions = (() => {
+    try {
+      const parsed: unknown = JSON.parse(options);
+      return isRecord(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  })();
+  const setOption = (key: string, value: unknown) => {
+    setOptions(
+      JSON.stringify(
+        {
+          ...parsedOptions,
+          [key]: value,
+        },
+        null,
+        2,
+      ),
+    );
+  };
   const changeTab = (value: string) => {
     if (value === 'basics' || value === 'layout' || value === 'options') {
       setEditTab(value);
@@ -559,9 +878,8 @@ function WidgetOverlay({
               description="Control how many grid cells this widget occupies."
             >
               <ConfigHelpPanel>
-                Widgets span the full screen width on phones, then use the
-                configured width as more columns become available. Keep critical
-                widgets at the top by ordering them first in the list.
+                {DASHBOARD_GRID_HELP} Keep critical widgets at the top by
+                ordering them first in the visual editor.
               </ConfigHelpPanel>
               <div className="grid grid-cols-2 gap-4">
                 <ConfigField label="Width">
@@ -592,7 +910,18 @@ function WidgetOverlay({
 
           <TabsContent value="options" className="mt-4">
             <ConfigFormSection
-              title="Widget options"
+              title="Widget settings"
+              description="Common options for this widget instance. Advanced JSON below stays in sync with these fields."
+              className="mb-4"
+            >
+              <WidgetOptionFields
+                widgetType={widgetType}
+                options={parsedOptions}
+                onChange={setOption}
+              />
+            </ConfigFormSection>
+            <ConfigFormSection
+              title="Advanced JSON"
               description="Advanced per-widget settings stored as JSON."
             >
               <ConfigField label="Options (JSON)">

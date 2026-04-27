@@ -4,6 +4,8 @@ import { useInterval } from 'usehooks-ts';
 import { useAppConfig } from '@/hooks/appConfig';
 import {
   type DashboardWidget,
+  buildDashboardWidgetProxyPath,
+  getDashboardWidgetOptionNumber,
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
@@ -83,13 +85,34 @@ function getSecSinceMidnight(d: Date) {
 export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { apiEndpoint } = useAppConfig();
   const [trains, setTrains] = useState<Train[]>([]);
+  const trainApiUrl = getDashboardWidgetOptionString(widget, 'trainApiUrl', '');
+  const stationId = getDashboardWidgetOptionString(
+    widget,
+    'stationId',
+    'HSL:2131551',
+  );
+  const walkMinutes = getDashboardWidgetOptionNumber(widget, 'walkMinutes', 12);
+  const resultLimit = getDashboardWidgetOptionNumber(widget, 'limit', 5);
+  const hasProxyOptions =
+    trainApiUrl ||
+    stationId !== 'HSL:2131551' ||
+    walkMinutes !== 12 ||
+    resultLimit !== 5;
+  const trainSchedulePath = hasProxyOptions
+    ? buildDashboardWidgetProxyPath('/api/train-schedule', {
+        url: trainApiUrl,
+        station_id: stationId,
+        walk_minutes: walkMinutes,
+        limit: resultLimit,
+      })
+    : getDashboardWidgetOptionString(
+        widget,
+        'trainSchedulePath',
+        '/api/train-schedule',
+      );
   const trainScheduleUrl = resolveDashboardWidgetUrl(
     apiEndpoint,
-    getDashboardWidgetOptionString(
-      widget,
-      'trainSchedulePath',
-      '/api/train-schedule',
-    ),
+    trainSchedulePath,
   );
 
   useEffect(() => {

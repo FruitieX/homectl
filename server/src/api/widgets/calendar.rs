@@ -3,6 +3,7 @@ use cached::proc_macro::cached;
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeZone, Utc};
 use ical::parser::ical::component::IcalEvent;
 use ical::property::Property;
+use serde::Deserialize;
 use serde_json::{json, Value};
 use warp::{
     filters::BoxedFilter,
@@ -16,21 +17,35 @@ use super::{widget_setting_string_or_env, CALENDAR_SETTING_KEY, ICS_URL_FIELD};
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "calendar")
         .and(warp::get())
-        .and_then(move || {
+        .and(warp::query::<CalendarQuery>())
+        .and_then(move |query: CalendarQuery| {
             let snapshot = snapshot.clone();
             let http = http.clone();
-            async move { Ok::<_, warp::Rejection>(handle(snapshot, http).await) }
+            async move { Ok::<_, warp::Rejection>(handle(query, snapshot, http).await) }
         })
         .boxed()
 }
 
-async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
-    let url = match widget_setting_string_or_env(
-        &snapshot.load().runtime_config.widget_settings,
-        CALENDAR_SETTING_KEY,
-        ICS_URL_FIELD,
-        "GOOGLE_CALENDAR_ICS_URL",
-    ) {
+#[derive(Debug, Default, Deserialize)]
+struct CalendarQuery {
+    url: Option<String>,
+}
+
+fn non_empty(value: Option<String>) -> Option<String> {
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+async fn handle(query: CalendarQuery, snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
+    let url = match non_empty(query.url).or_else(|| {
+        widget_setting_string_or_env(
+            &snapshot.load().runtime_config.widget_settings,
+            CALENDAR_SETTING_KEY,
+            ICS_URL_FIELD,
+            "GOOGLE_CALENDAR_ICS_URL",
+        )
+    }) {
         Some(url) => url,
         None => {
             return error(
