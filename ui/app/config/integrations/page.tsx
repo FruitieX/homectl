@@ -1,7 +1,42 @@
-import { useIntegrations, Integration } from '@/hooks/useConfig';
+import { useState } from 'react';
+
+import { type Integration, useIntegrations } from '@/hooks/useConfig';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
-import { useState, useCallback } from 'react';
+import {
+  ConfigField,
+  ConfigFormActions,
+  ConfigFormSection,
+  ConfigReadOnlyGrid,
+  ConfigReadOnlyItem,
+  ConfigToggleRow,
+} from '@/ui/config-form';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { Textarea } from '@/ui/primitives/textarea';
+
+const pluginOptions = ['mqtt', 'circadian', 'cron', 'timer', 'dummy'];
+const selectClassName =
+  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const enabledBadgeClassName =
+  'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
+const disabledBadgeClassName =
+  'border-transparent bg-destructive/15 text-destructive dark:text-red-300';
 
 const getIntegrationSearchValues = (integration: Integration) => [
   integration.id,
@@ -11,40 +46,50 @@ const getIntegrationSearchValues = (integration: Integration) => [
 ];
 
 export default function IntegrationsPage() {
-  const { data: integrations, loading, error, create, update, remove } = useIntegrations();
+  const {
+    data: integrations,
+    loading,
+    error,
+    create,
+    update,
+    remove,
+  } = useIntegrations();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const editingIntegration = integrations.find(
+    (integration) => integration.id === editingId,
+  );
   const visibleIntegrations = integrations.filter((integration) =>
     matchesConfigSearch(search, ...getIntegrationSearchValues(integration)),
   );
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <span className="loading loading-spinner loading-lg"></span>
+      <div className="flex h-full items-center justify-center">
+        <Skeleton className="size-12 rounded-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="alert alert-error">
-        <span>Error loading integrations: {error}</span>
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>Error loading integrations: {error}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Integrations</h1>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowCreate(true)}
-        >
-          Add Integration
-        </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
+          <p className="text-sm text-muted-foreground">
+            Connect plugins, schedules, and virtual devices to the runtime.
+          </p>
+        </div>
+        <Button onClick={() => setShowCreate(true)}>Add Integration</Button>
       </div>
 
       <ConfigListSearchBar
@@ -55,24 +100,18 @@ export default function IntegrationsPage() {
         value={search}
       />
 
-      {/* Integrations list */}
       {visibleIntegrations.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
-          No integrations match the current search.
-        </div>
+        <EmptyState
+          title="No integrations match the current search"
+          description="Try a different plugin name, id, or configuration value."
+        />
       ) : (
         <div className="grid gap-4">
           {visibleIntegrations.map((integration) => (
             <IntegrationCard
               key={integration.id}
               integration={integration}
-              isEditing={editingId === integration.id}
               onEdit={() => setEditingId(integration.id)}
-              onSave={async (updated) => {
-                await update(integration.id, updated);
-                setEditingId(null);
-              }}
-              onCancel={() => setEditingId(null)}
               onDelete={async () => {
                 if (confirm(`Delete integration "${integration.id}"?`)) {
                   await remove(integration.id);
@@ -83,13 +122,25 @@ export default function IntegrationsPage() {
         </div>
       )}
 
-      {/* Create modal */}
       {showCreate && (
-        <CreateIntegrationModal
+        <IntegrationOverlay
+          mode="create"
           onClose={() => setShowCreate(false)}
-          onCreate={async (integration) => {
+          onSubmit={async (integration) => {
             await create(integration);
             setShowCreate(false);
+          }}
+        />
+      )}
+
+      {editingIntegration && (
+        <IntegrationOverlay
+          mode="edit"
+          integration={editingIntegration}
+          onClose={() => setEditingId(null)}
+          onSubmit={async (integration) => {
+            await update(editingIntegration.id, integration);
+            setEditingId(null);
           }}
         />
       )}
@@ -99,427 +150,324 @@ export default function IntegrationsPage() {
 
 function IntegrationCard({
   integration,
-  isEditing,
   onEdit,
-  onSave,
-  onCancel,
   onDelete,
 }: {
   integration: Integration;
-  isEditing: boolean;
   onEdit: () => void;
-  onSave: (integration: Partial<Integration>) => Promise<void>;
-  onCancel: () => void;
   onDelete: () => void;
 }) {
-  const [config, setConfig] = useState(integration.config);
-  const [enabled, setEnabled] = useState(integration.enabled);
-  const [useJsonMode, setUseJsonMode] = useState(false);
-  const [jsonText, setJsonText] = useState(
-    JSON.stringify(integration.config, null, 2),
-  );
-
-  const updateKey = useCallback(
-    (key: string, value: string) => {
-      setConfig((prev) => {
-        const updated = { ...prev };
-        // Try to parse as JSON value (numbers, booleans, arrays, objects)
-        try {
-          updated[key] = JSON.parse(value);
-        } catch {
-          updated[key] = value;
-        }
-        return updated;
-      });
-    },
-    [],
-  );
-
-  const removeKey = useCallback((key: string) => {
-    setConfig((prev) => {
-      const updated = { ...prev };
-      delete updated[key];
-      return updated;
-    });
-  }, []);
-
-  const addKey = useCallback(() => {
-    setConfig((prev) => ({ ...prev, '': '' }));
-  }, []);
-
-  const renameKey = useCallback((oldKey: string, newKey: string) => {
-    if (oldKey === newKey) return;
-    setConfig((prev) => {
-      const entries = Object.entries(prev);
-      const updated: Record<string, unknown> = {};
-      for (const [k, v] of entries) {
-        updated[k === oldKey ? newKey : k] = v;
-      }
-      return updated;
-    });
-  }, []);
-
-  if (isEditing) {
-    const effectiveConfig = useJsonMode ? (() => {
-      try { return JSON.parse(jsonText); } catch { return config; }
-    })() : config;
-
-    return (
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">{integration.id}</h2>
-          <div className="badge badge-secondary">{integration.plugin}</div>
-
-          <div className="form-control">
-            <label className="label cursor-pointer">
-              <span className="label-text">Enabled</span>
-              <input
-                type="checkbox"
-                className="toggle toggle-primary"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-              />
-            </label>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="label-text font-medium">Configuration</span>
-            <button
-              className="btn btn-xs btn-ghost"
-              onClick={() => {
-                if (!useJsonMode) {
-                  setJsonText(JSON.stringify(config, null, 2));
-                } else {
-                  try {
-                    setConfig(JSON.parse(jsonText));
-                  } catch {
-                    // Keep current config if JSON is invalid
-                  }
-                }
-                setUseJsonMode(!useJsonMode);
-              }}
-            >
-              {useJsonMode ? 'Key-Value' : 'JSON'}
-            </button>
-          </div>
-
-          {useJsonMode ? (
-            <textarea
-              className="textarea textarea-bordered h-48 font-mono text-sm"
-              value={jsonText}
-              onChange={(e) => setJsonText(e.target.value)}
-            />
-          ) : (
-            <div className="space-y-2">
-              {Object.entries(config).map(([key, value], index) => {
-                const isComplex =
-                  typeof value === 'object' && value !== null;
-                const displayValue = isComplex
-                  ? JSON.stringify(value)
-                  : String(value ?? '');
-
-                return (
-                  <div key={`${integration.id}-${index}`} className="flex gap-2 items-start">
-                    <input
-                      type="text"
-                      className="input input-bordered input-sm flex-1 font-mono text-xs"
-                      value={key}
-                      onChange={(e) => renameKey(key, e.target.value)}
-                      placeholder="key"
-                    />
-                    <input
-                      type="text"
-                      className="input input-bordered input-sm flex-[2] font-mono text-xs"
-                      value={displayValue}
-                      onChange={(e) => updateKey(key, e.target.value)}
-                      placeholder="value"
-                    />
-                    <button
-                      className="btn btn-ghost btn-xs btn-error"
-                      onClick={() => removeKey(key)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                );
-              })}
-              <button
-                className="btn btn-xs btn-outline w-full"
-                onClick={addKey}
-              >
-                + Add Field
-              </button>
-            </div>
-          )}
-
-          <div className="card-actions justify-end">
-            <button className="btn btn-ghost" onClick={onCancel}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => {
-                onSave({
-                  plugin: integration.plugin,
-                  config: effectiveConfig,
-                  enabled,
-                });
-              }}
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="card bg-base-200 shadow-xl">
-      <div className="card-body">
-        <div className="flex justify-between items-start">
+    <Card>
+      <CardHeader>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h2 className="card-title">{integration.id}</h2>
-            <div className="flex gap-2 mt-1">
-              <div className="badge badge-secondary">{integration.plugin}</div>
-              <div className={`badge ${integration.enabled ? 'badge-success' : 'badge-error'}`}>
+            <CardTitle>{integration.id}</CardTitle>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Badge variant="secondary">{integration.plugin}</Badge>
+              <Badge
+                className={
+                  integration.enabled
+                    ? enabledBadgeClassName
+                    : disabledBadgeClassName
+                }
+              >
                 {integration.enabled ? 'Enabled' : 'Disabled'}
-              </div>
+              </Badge>
             </div>
           </div>
           <div className="flex gap-2">
-            <button className="btn btn-sm btn-ghost" onClick={onEdit}>
+            <Button variant="ghost" size="sm" onClick={onEdit}>
               Edit
-            </button>
-            <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
               Delete
-            </button>
+            </Button>
           </div>
         </div>
-
-        <details className="collapse bg-base-300 mt-2">
-          <summary className="collapse-title text-sm font-medium">
+      </CardHeader>
+      <CardContent>
+        <details className="rounded-2xl border border-border bg-muted/30">
+          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
             Configuration
           </summary>
-          <div className="collapse-content">
-            <pre className="text-xs overflow-auto">
-              {JSON.stringify(integration.config, null, 2)}
-            </pre>
-          </div>
+          <pre className="max-h-72 overflow-auto border-t border-border px-4 py-3 text-xs">
+            {JSON.stringify(integration.config, null, 2)}
+          </pre>
         </details>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function CreateIntegrationModal({
-  onClose,
-  onCreate,
+function ConfigEditor({
+  config,
+  onConfigChange,
 }: {
-  onClose: () => void;
-  onCreate: (integration: Partial<Integration>) => Promise<void>;
+  config: Record<string, unknown>;
+  onConfigChange: (config: Record<string, unknown>) => void;
 }) {
-  const [id, setId] = useState('');
-  const [plugin, setPlugin] = useState('');
-  const [config, setConfig] = useState<Record<string, unknown>>({});
-  const [enabled, setEnabled] = useState(true);
-  const [useJsonMode, setUseJsonMode] = useState(false);
-  const [jsonText, setJsonText] = useState('{}');
+  const updateKey = (key: string, value: string) => {
+    const updated = { ...config };
+    try {
+      updated[key] = JSON.parse(value);
+    } catch {
+      updated[key] = value;
+    }
+    onConfigChange(updated);
+  };
 
-  const plugins = ['mqtt', 'circadian', 'cron', 'timer', 'dummy'];
+  const removeKey = (key: string) => {
+    const updated = { ...config };
+    delete updated[key];
+    onConfigChange(updated);
+  };
 
-  const updateKey = useCallback(
-    (key: string, value: string) => {
-      setConfig((prev) => {
-        const updated = { ...prev };
-        try {
-          updated[key] = JSON.parse(value);
-        } catch {
-          updated[key] = value;
-        }
-        return updated;
-      });
-    },
-    [],
-  );
-
-  const removeKey = useCallback((key: string) => {
-    setConfig((prev) => {
-      const updated = { ...prev };
-      delete updated[key];
-      return updated;
-    });
-  }, []);
-
-  const addKey = useCallback(() => {
-    setConfig((prev) => ({ ...prev, '': '' }));
-  }, []);
-
-  const renameKey = useCallback((oldKey: string, newKey: string) => {
-    if (oldKey === newKey) return;
-    setConfig((prev) => {
-      const entries = Object.entries(prev);
-      const updated: Record<string, unknown> = {};
-      for (const [k, v] of entries) {
-        updated[k === oldKey ? newKey : k] = v;
-      }
-      return updated;
-    });
-  }, []);
-
-  const effectiveConfig = useJsonMode
-    ? (() => {
-        try {
-          return JSON.parse(jsonText);
-        } catch {
-          return config;
-        }
-      })()
-    : config;
+  const renameKey = (oldKey: string, newKey: string) => {
+    if (oldKey === newKey) {
+      return;
+    }
+    const updated: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(config)) {
+      updated[key === oldKey ? newKey : key] = value;
+    }
+    onConfigChange(updated);
+  };
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg">Add Integration</h3>
+    <ConfigFormSection
+      title="Configuration fields"
+      description="Use key/value rows for common plugin settings. Values are parsed as JSON when possible."
+      className="bg-muted/20"
+    >
+      <div className="space-y-2">
+        {Object.entries(config).map(([key, value], index) => {
+          const displayValue =
+            typeof value === 'object' && value !== null
+              ? JSON.stringify(value)
+              : String(value ?? '');
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Integration ID</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="e.g. my-mqtt"
-          />
-        </div>
-
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Plugin</span>
-          </label>
-          <select
-            className="select select-bordered"
-            value={plugin}
-            onChange={(e) => setPlugin(e.target.value)}
-          >
-            <option value="">Select plugin...</option>
-            {plugins.map((p) => (
-              <option key={p} value={p}>
-                {p}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-control mt-4">
-          <label className="label cursor-pointer">
-            <span className="label-text">Enabled</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-primary"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
-          </label>
-        </div>
-
-        <div className="mt-4">
-          <div className="flex items-center justify-between">
-            <span className="label-text font-medium">Configuration</span>
-            <button
-              className="btn btn-xs btn-ghost"
-              onClick={() => {
-                if (!useJsonMode) {
-                  setJsonText(JSON.stringify(config, null, 2));
-                } else {
-                  try {
-                    setConfig(JSON.parse(jsonText));
-                  } catch {
-                    // Keep current config if JSON is invalid
-                  }
-                }
-                setUseJsonMode(!useJsonMode);
-              }}
+          return (
+            <div
+              key={`integration-config-${index}`}
+              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)_auto]"
             >
-              {useJsonMode ? 'Key-Value' : 'JSON'}
-            </button>
-          </div>
-
-          {useJsonMode ? (
-            <textarea
-              className="textarea textarea-bordered h-32 font-mono text-sm w-full mt-2"
-              value={jsonText}
-              onChange={(e) => setJsonText(e.target.value)}
-            />
-          ) : (
-            <div className="space-y-2 mt-2">
-              {Object.entries(config).map(([key, value], index) => {
-                const isComplex =
-                  typeof value === 'object' && value !== null;
-                const displayValue = isComplex
-                  ? JSON.stringify(value)
-                  : String(value ?? '');
-
-                return (
-                  <div key={`new-integration-${index}`} className="flex gap-2 items-start">
-                    <input
-                      type="text"
-                      className="input input-bordered input-sm flex-1 font-mono text-xs"
-                      value={key}
-                      onChange={(e) => renameKey(key, e.target.value)}
-                      placeholder="key"
-                    />
-                    <input
-                      type="text"
-                      className="input input-bordered input-sm flex-[2] font-mono text-xs"
-                      value={displayValue}
-                      onChange={(e) => updateKey(key, e.target.value)}
-                      placeholder="value"
-                    />
-                    <button
-                      className="btn btn-ghost btn-xs btn-error"
-                      onClick={() => removeKey(key)}
-                    >
-                      ✕
-                    </button>
-                  </div>
-                );
-              })}
-              <button
-                className="btn btn-xs btn-outline w-full"
-                onClick={addKey}
+              <Input
+                className="font-mono text-xs"
+                value={key}
+                onChange={(event) => renameKey(key, event.target.value)}
+                placeholder="key"
+              />
+              <Input
+                className="font-mono text-xs"
+                value={displayValue}
+                onChange={(event) => updateKey(key, event.target.value)}
+                placeholder="value"
+              />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => removeKey(key)}
               >
-                + Add Field
-              </button>
+                ✕
+              </Button>
             </div>
-          )}
-        </div>
-
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            disabled={!id || !plugin}
-            onClick={() => {
-              onCreate({
-                id,
-                plugin,
-                config: effectiveConfig,
-                enabled,
-              });
-            }}
-          >
-            Create
-          </button>
-        </div>
+          );
+        })}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={() => onConfigChange({ ...config, '': '' })}
+        >
+          + Add Field
+        </Button>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ConfigFormSection>
+  );
+}
+
+function IntegrationOverlay({
+  mode,
+  integration,
+  onClose,
+  onSubmit,
+}: {
+  mode: 'create' | 'edit';
+  integration?: Integration;
+  onClose: () => void;
+  onSubmit: (integration: Partial<Integration>) => Promise<void>;
+}) {
+  const [id, setId] = useState(integration?.id ?? '');
+  const [plugin, setPlugin] = useState(integration?.plugin ?? '');
+  const [config, setConfig] = useState<Record<string, unknown>>(
+    integration?.config ?? {},
+  );
+  const [enabled, setEnabled] = useState(integration?.enabled ?? true);
+  const [editTab, setEditTab] = useState<'basics' | 'fields' | 'json'>(
+    'basics',
+  );
+  const [jsonText, setJsonText] = useState(
+    JSON.stringify(integration?.config ?? {}, null, 2),
+  );
+  const isCreate = mode === 'create';
+
+  const changeTab = (value: string) => {
+    if (value === 'json') {
+      setJsonText(JSON.stringify(config, null, 2));
+      setEditTab('json');
+      return;
+    }
+
+    if (editTab === 'json') {
+      try {
+        setConfig(JSON.parse(jsonText));
+      } catch {
+        alert('Invalid JSON - fix before leaving the JSON tab');
+        return;
+      }
+    }
+
+    if (value === 'basics' || value === 'fields') {
+      setEditTab(value);
+    }
+  };
+
+  const submit = () => {
+    let effectiveConfig = config;
+
+    if (editTab === 'json') {
+      try {
+        effectiveConfig = JSON.parse(jsonText);
+      } catch {
+        alert('Invalid JSON in configuration');
+        return;
+      }
+    }
+
+    void onSubmit({
+      id,
+      plugin,
+      config: effectiveConfig,
+      enabled,
+    });
+  };
+
+  return (
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title={isCreate ? 'Add Integration' : `Edit ${integration?.id ?? id}`}
+      description={
+        isCreate
+          ? 'Create a new integration instance and initial plugin config.'
+          : 'Adjust whether the integration is enabled and update plugin configuration.'
+      }
+      presentation="fullscreen"
+      className="max-w-2xl"
+    >
+      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <Tabs value={editTab} onValueChange={changeTab}>
+          <TabsList className="grid h-auto w-full grid-cols-3">
+            <TabsTrigger value="basics">Basics</TabsTrigger>
+            <TabsTrigger value="fields">Fields</TabsTrigger>
+            <TabsTrigger value="json">JSON</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="basics" className="mt-4 space-y-4">
+            <ConfigFormSection
+              title="Integration identity"
+              description="Pick a stable id and plugin type. Existing integration ids and plugins are read-only to avoid breaking references."
+            >
+              {isCreate ? (
+                <div className="grid gap-4 md:grid-cols-2">
+                  <ConfigField label="Integration ID">
+                    <Input
+                      value={id}
+                      onChange={(event) => setId(event.target.value)}
+                      placeholder="e.g. my-mqtt"
+                    />
+                  </ConfigField>
+
+                  <ConfigField label="Plugin">
+                    <select
+                      className={selectClassName}
+                      value={plugin}
+                      onChange={(event) => setPlugin(event.target.value)}
+                    >
+                      <option value="">Select plugin...</option>
+                      {pluginOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                  </ConfigField>
+                </div>
+              ) : (
+                <ConfigReadOnlyGrid>
+                  <ConfigReadOnlyItem
+                    label="Integration ID"
+                    value={integration?.id}
+                  />
+                  <ConfigReadOnlyItem
+                    label="Plugin"
+                    value={integration?.plugin}
+                  />
+                </ConfigReadOnlyGrid>
+              )}
+
+              <ConfigToggleRow
+                label="Enabled"
+                description="Disabled integrations stay in configuration but will not be started by the runtime."
+              >
+                <input
+                  type="checkbox"
+                  className={checkboxClassName}
+                  checked={enabled}
+                  onChange={(event) => setEnabled(event.target.checked)}
+                />
+              </ConfigToggleRow>
+            </ConfigFormSection>
+          </TabsContent>
+
+          <TabsContent value="fields" className="mt-4">
+            <ConfigEditor config={config} onConfigChange={setConfig} />
+          </TabsContent>
+
+          <TabsContent value="json" className="mt-4">
+            <ConfigFormSection
+              title="Advanced JSON"
+              description="Use this for nested plugin settings that do not fit into key/value rows."
+            >
+              <Textarea
+                className="h-96 font-mono text-sm"
+                value={jsonText}
+                onChange={(event) => setJsonText(event.target.value)}
+              />
+            </ConfigFormSection>
+          </TabsContent>
+        </Tabs>
+
+        <ConfigFormActions>
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!id || !plugin} onClick={submit}>
+            {isCreate ? 'Create' : 'Save'}
+          </Button>
+        </ConfigFormActions>
+      </div>
+    </ResponsiveOverlay>
   );
 }

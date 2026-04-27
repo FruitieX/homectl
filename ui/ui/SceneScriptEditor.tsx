@@ -47,7 +47,11 @@ function indentBlock(value: string) {
     .join('\n');
 }
 
-function buildBindingDescription(kind: 'device' | 'group', key: string, label?: string) {
+function buildBindingDescription(
+  kind: 'device' | 'group',
+  key: string,
+  label?: string,
+) {
   if (label && label !== key) {
     return `Live ${kind} binding for ${label} (${key}).`;
   }
@@ -231,7 +235,10 @@ function getCompletionContext(
   });
   const trimmed = linePrefix.trimEnd();
   const currentLineTrimmed = linePrefix.trim();
-  const previousNonEmptyLine = findPreviousNonEmptyLine(model, position.lineNumber);
+  const previousNonEmptyLine = findPreviousNonEmptyLine(
+    model,
+    position.lineNumber,
+  );
 
   if (trimmed.endsWith('devices.')) {
     return 'device-members';
@@ -249,9 +256,7 @@ function getCompletionContext(
   }
 
   if (currentLineTrimmed.length === 0) {
-    if (
-      /(?:return|const\s+\w+\s*=)\s*\{$/.test(previousNonEmptyLine)
-    ) {
+    if (/(?:return|const\s+\w+\s*=)\s*\{$/.test(previousNonEmptyLine)) {
       return 'scene-result-keys';
     }
 
@@ -288,7 +293,9 @@ function buildDeviceBindingCompletions(
   const useMemberInsert = context === 'device-members';
 
   return deviceOptions.map(({ key, label }, index) => {
-    const insertText = useMemberInsert ? `[${quote(key)}]` : `devices[${quote(key)}]`;
+    const insertText = useMemberInsert
+      ? `[${quote(key)}]`
+      : `devices[${quote(key)}]`;
 
     return {
       label: buildBindingLabel(insertText, label),
@@ -296,7 +303,8 @@ function buildDeviceBindingCompletions(
         ? monaco.languages.CompletionItemKind.Property
         : monaco.languages.CompletionItemKind.Constant,
       insertText,
-      detail: label && label !== key ? `Device binding: ${label}` : 'Device binding',
+      detail:
+        label && label !== key ? `Device binding: ${label}` : 'Device binding',
       documentation: buildBindingDescription('device', key, label),
       filterText: `${insertText} ${key} ${label ?? ''}`,
       sortText: `1${String(index).padStart(4, '0')}`,
@@ -312,7 +320,9 @@ function buildGroupBindingCompletions(
   const useMemberInsert = context === 'group-members';
 
   return groupOptions.map(({ key, label }, index) => {
-    const insertText = useMemberInsert ? `[${quote(key)}]` : `groups[${quote(key)}]`;
+    const insertText = useMemberInsert
+      ? `[${quote(key)}]`
+      : `groups[${quote(key)}]`;
 
     return {
       label: buildBindingLabel(insertText, label),
@@ -320,7 +330,8 @@ function buildGroupBindingCompletions(
         ? monaco.languages.CompletionItemKind.Property
         : monaco.languages.CompletionItemKind.Constant,
       insertText,
-      detail: label && label !== key ? `Group binding: ${label}` : 'Group binding',
+      detail:
+        label && label !== key ? `Group binding: ${label}` : 'Group binding',
       documentation: buildBindingDescription('group', key, label),
       filterText: `${insertText} ${key} ${label ?? ''}`,
       sortText: `2${String(index).padStart(4, '0')}`,
@@ -348,9 +359,9 @@ function buildSceneScriptCompletions(
       label: buildBindingLabel(quote(key), label),
       kind: monaco.languages.CompletionItemKind.Property,
       insertTextRules: snippet,
-      insertText:
-        `${quote(key)}: deviceState({\n  power: \${1:true},\n  brightness: \${2:0.5},\n}),`,
-      detail: label && label !== key ? `Scene target: ${label}` : 'Scene target',
+      insertText: `${quote(key)}: deviceState({\n  power: \${1:true},\n  brightness: \${2:0.5},\n}),`,
+      detail:
+        label && label !== key ? `Scene target: ${label}` : 'Scene target',
       documentation: `Create an override entry for ${label && label !== key ? `${label} (${key})` : key}.`,
       filterText: `${key} ${label ?? ''}`,
       sortText: `0${String(index).padStart(4, '0')}`,
@@ -411,9 +422,14 @@ function buildSceneScriptCompletions(
       insertTextRules: snippet,
       insertText:
         '{\n  integration_id: ${1:' +
-        quote((deviceKeys[0] ?? 'integration/device').split('/')[0] ?? 'integration') +
+        quote(
+          (deviceKeys[0] ?? 'integration/device').split('/')[0] ??
+            'integration',
+        ) +
         '},\n  device_id: ${2:' +
-        quote((deviceKeys[0] ?? 'integration/device').split('/')[1] ?? 'device') +
+        quote(
+          (deviceKeys[0] ?? 'integration/device').split('/')[1] ?? 'device',
+        ) +
         '},\n  brightness: ${3:1},\n}',
       detail: 'Link scene target to another device',
       documentation: 'SceneDeviceLink fields supported by the runtime.',
@@ -545,7 +561,7 @@ export default function SceneScriptEditor({
   }, [deviceOptions, editorId, groupOptions, monaco, sceneIds]);
 
   return (
-    <div className="overflow-hidden rounded-xl border border-base-300 bg-base-100/70">
+    <div className="overflow-hidden rounded-xl border border-border bg-card/70">
       <Editor
         defaultLanguage="javascript"
         height="24rem"

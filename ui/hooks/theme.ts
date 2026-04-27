@@ -6,10 +6,6 @@ export type ThemeMode = 'light' | 'dark' | 'auto';
 
 const themeAtom = atomWithStorage<ThemeMode>('homectl-theme', 'auto');
 
-// DaisyUI theme names
-const LIGHT_THEME = 'corporate';
-const DARK_THEME = 'business';
-
 const getSystemPrefersDark = (): boolean => {
   if (typeof window === 'undefined') return true;
   return window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -24,8 +20,9 @@ const getEffectiveTheme = (mode: ThemeMode): 'light' | 'dark' => {
 
 const applyTheme = (mode: ThemeMode) => {
   const effectiveTheme = getEffectiveTheme(mode);
-  const daisyuiTheme = effectiveTheme === 'dark' ? DARK_THEME : LIGHT_THEME;
-  document.documentElement.setAttribute('data-theme', daisyuiTheme);
+  const root = document.documentElement;
+
+  root.classList.toggle('dark', effectiveTheme === 'dark');
 };
 
 export const useTheme = () => {

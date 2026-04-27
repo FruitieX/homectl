@@ -13,6 +13,13 @@ import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
+  ConfigField,
+  ConfigFormActions,
+  ConfigFormSection,
+  ConfigHelpPanel,
+  ConfigToggleRow,
+} from '@/ui/config-form';
+import {
   SceneTargetOption,
   SceneTargetSectionEditor,
 } from '@/ui/SceneDeviceStateEditor';
@@ -22,6 +29,17 @@ import {
   resolveSceneColor,
   type SceneTargetKind,
 } from '@/ui/SceneResolvedColorPreview';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 const LazySceneScriptEditor = lazy(() => import('@/ui/SceneScriptEditor'));
 
@@ -30,7 +48,7 @@ const NoSSRSceneScriptEditor = (
 ) => (
   <Suspense
     fallback={
-      <div className="flex h-96 items-center justify-center rounded-xl border border-base-300 bg-base-100/50 text-sm opacity-70">
+      <div className="flex h-96 items-center justify-center rounded-xl border border-border bg-muted/30 text-sm text-muted-foreground">
         Loading script editor...
       </div>
     }
@@ -162,50 +180,59 @@ export default function ScenesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="loading loading-spinner loading-lg"></span>
+        <Skeleton className="size-12 rounded-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="alert alert-error">
-        <span>Error loading scenes: {error}</span>
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>Error loading scenes: {error}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Scenes</h1>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          Add Scene
-        </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Scenes</h1>
+          <p className="text-sm text-muted-foreground">
+            Compose scripted and linked scene presets for devices and groups.
+          </p>
+        </div>
+        <Button onClick={() => setShowCreate(true)}>Add Scene</Button>
       </div>
 
       {activationError && (
-        <div className="alert alert-warning">
-          <span>{activationError}</span>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setActivationError(null)}
-          >
-            ✕
-          </button>
-        </div>
+        <Alert variant="warning">
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{activationError}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActivationError(null)}
+            >
+              ✕
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {activationNotice && (
-        <div className="alert alert-success">
-          <span>{activationNotice}</span>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setActivationNotice(null)}
-          >
-            ✕
-          </button>
-        </div>
+        <Alert>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{activationNotice}</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setActivationNotice(null)}
+            >
+              ✕
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       <div className="space-y-4">
@@ -218,9 +245,10 @@ export default function ScenesPage() {
         />
 
         {visibleScenes.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
-            No scenes match the current search.
-          </div>
+          <EmptyState
+            title="No scenes match the current search"
+            description="Try another id, name, script, or target key."
+          />
         ) : (
           <div className="grid gap-4">
             {visibleScenes.map((scene) => (
@@ -366,7 +394,7 @@ function SceneTargetsSummary({
       </div>
 
       {entries.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-70">
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
           {emptyMessage}
         </div>
       ) : (
@@ -374,20 +402,20 @@ function SceneTargetsSummary({
           {entries.map(([targetKey, config]) => (
             <div
               key={targetKey}
-              className="rounded-lg border border-base-300 bg-base-100/70 p-4"
+              className="rounded-2xl border border-border bg-background/70 p-4"
             >
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <div className="font-medium">
                     {optionLabelByKey[targetKey] ?? targetKey}
                   </div>
-                  <div className="text-xs opacity-60">{targetKey}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {targetKey}
+                  </div>
                 </div>
-                <span className="badge badge-ghost">
-                  {getSceneConfigTypeLabel(config)}
-                </span>
+                <Badge variant="muted">{getSceneConfigTypeLabel(config)}</Badge>
               </div>
-              <p className="mt-2 text-sm opacity-80">
+              <p className="mt-2 text-sm text-foreground/80">
                 {getSceneConfigSummary(config)}
               </p>
               <SceneResolvedColorPreview
@@ -480,10 +508,10 @@ function SceneResolvedColorCardSummary({
       {visibleTargets.map(({ key, label, resolved }) => (
         <span
           key={key}
-          className="inline-flex max-w-full items-center gap-2 rounded-full border border-base-300 bg-base-100/60 px-3 py-1 text-xs opacity-85"
+          className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs text-foreground/85"
         >
           <ResolvedColorDot
-            className="inline-flex h-3 w-3 shrink-0 rounded-full border border-base-content/15 shadow-inner"
+            className="inline-flex h-3 w-3 shrink-0 rounded-full border border-foreground/15 shadow-inner"
             color={resolved.color}
             isPowered={resolved.isPowered}
           />
@@ -491,9 +519,9 @@ function SceneResolvedColorCardSummary({
         </span>
       ))}
       {resolvedTargets.length > visibleTargets.length && (
-        <span className="badge badge-ghost badge-sm">
+        <Badge variant="muted">
           +{resolvedTargets.length - visibleTargets.length} more
-        </span>
+        </Badge>
       )}
     </div>
   );
@@ -521,9 +549,23 @@ function SceneEditorForm({
   const [script, setScript] = useState(scene.script || '');
   const [deviceStates, setDeviceStates] = useState(scene.device_states || {});
   const [groupStates, setGroupStates] = useState(scene.group_states || {});
+  const [editTab, setEditTab] = useState<
+    'basics' | 'script' | 'devices' | 'groups'
+  >('basics');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const otherScenes = scenes.filter((candidate) => candidate.id !== scene.id);
+
+  const changeTab = (value: string) => {
+    if (
+      value === 'basics' ||
+      value === 'script' ||
+      value === 'devices' ||
+      value === 'groups'
+    ) {
+      setEditTab(value);
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
@@ -547,98 +589,130 @@ function SceneEditorForm({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start">
-        <div className="space-y-4">
-          <input
-            type="text"
-            className="input input-bordered font-bold text-lg w-full"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
+    <div className="flex min-h-full flex-col">
+      <Tabs value={editTab} onValueChange={changeTab}>
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+          <TabsTrigger value="basics">Basics</TabsTrigger>
+          <TabsTrigger value="script">Script</TabsTrigger>
+          <TabsTrigger value="devices">Devices</TabsTrigger>
+          <TabsTrigger value="groups">Groups</TabsTrigger>
+        </TabsList>
 
-          <div className="form-control">
-            <label className="label cursor-pointer justify-start gap-3">
+        <TabsContent value="basics" className="mt-4">
+          <ConfigFormSection
+            title="Scene identity"
+            description="Name the preset and decide whether it should be hidden from normal scene lists."
+          >
+            <ConfigField label="Scene name">
+              <Input
+                type="text"
+                className="w-full text-lg font-bold"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+              />
+            </ConfigField>
+
+            <ConfigToggleRow
+              label="Hidden"
+              description="Hidden scenes remain available for automations and linked scene targets."
+            >
               <input
                 type="checkbox"
-                className="toggle"
+                className={checkboxClassName}
                 checked={hidden}
                 onChange={(event) => setHidden(event.target.checked)}
               />
-              <span className="label-text">Hidden</span>
-            </label>
-          </div>
-        </div>
+            </ConfigToggleRow>
+          </ConfigFormSection>
+        </TabsContent>
 
-        <div className="rounded-lg border border-base-300 bg-base-100/60 px-4 py-3 text-sm opacity-75">
-          Scene scripts evaluate a JavaScript expression. Use{' '}
-          defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed autocomplete,
-          plus bindings like devices[&quot;integration/device&quot;] and{' '}
-          groups[&quot;group-id&quot;].
-        </div>
-      </div>
+        <TabsContent value="script" className="mt-4 space-y-4">
+          <ConfigFormSection
+            title="Script"
+            description="Optional JavaScript expression for advanced scene state generation."
+          >
+            <ConfigHelpPanel>
+              Scene scripts evaluate a JavaScript expression. Use{' '}
+              defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed
+              autocomplete, plus bindings like
+              devices[&quot;integration/device&quot;] and{' '}
+              groups[&quot;group-id&quot;].
+            </ConfigHelpPanel>
+            <ConfigField label="Script (JavaScript)">
+              <NoSSRSceneScriptEditor
+                deviceOptions={deviceOptions}
+                groupOptions={groupOptions}
+                sceneIds={otherScenes.map((candidate) => candidate.id)}
+                value={script}
+                onChange={setScript}
+              />
+            </ConfigField>
+          </ConfigFormSection>
+        </TabsContent>
 
-      <div className="space-y-2">
-        <label className="label px-0">
-          <span className="label-text font-medium">Script (JavaScript)</span>
-        </label>
-        <NoSSRSceneScriptEditor
-          deviceOptions={deviceOptions}
-          groupOptions={groupOptions}
-          sceneIds={otherScenes.map((candidate) => candidate.id)}
-          value={script}
-          onChange={setScript}
-        />
-      </div>
+        <TabsContent value="devices" className="mt-4">
+          <ConfigFormSection
+            title="Device targets"
+            description="Set explicit device states or link a target to another device or scene."
+          >
+            <SceneTargetSectionEditor
+              addLabel="Add Device"
+              allScenes={scenes}
+              emptyDescription="Add devices to configure their states for this scene."
+              emptyTitle="No device targets configured"
+              items={deviceStates}
+              options={deviceOptions}
+              scenes={otherScenes}
+              sectionTitle="Device Targets"
+              targetKind="device"
+              devices={devices}
+              onChange={setDeviceStates}
+            />
+          </ConfigFormSection>
+        </TabsContent>
 
-      <SceneTargetSectionEditor
-        addLabel="Add Device"
-        allScenes={scenes}
-        emptyDescription="Add devices to configure their states for this scene."
-        emptyTitle="No device targets configured"
-        items={deviceStates}
-        options={deviceOptions}
-        scenes={otherScenes}
-        sectionTitle="Device Targets"
-        targetKind="device"
-        devices={devices}
-        onChange={setDeviceStates}
-      />
-
-      <SceneTargetSectionEditor
-        addLabel="Add Group"
-        allScenes={scenes}
-        emptyDescription="Add groups to apply the same target config to all devices in that group."
-        emptyTitle="No group targets configured"
-        items={groupStates}
-        options={groupOptions}
-        scenes={otherScenes}
-        sectionTitle="Group Targets"
-        targetKind="group"
-        devices={devices}
-        onChange={setGroupStates}
-      />
+        <TabsContent value="groups" className="mt-4">
+          <ConfigFormSection
+            title="Group targets"
+            description="Apply shared state to all devices in a group, with optional per-device overrides."
+          >
+            <SceneTargetSectionEditor
+              addLabel="Add Group"
+              allScenes={scenes}
+              emptyDescription="Add groups to apply the same target config to all devices in that group."
+              emptyTitle="No group targets configured"
+              items={groupStates}
+              options={groupOptions}
+              scenes={otherScenes}
+              sectionTitle="Group Targets"
+              targetKind="group"
+              devices={devices}
+              onChange={setGroupStates}
+            />
+          </ConfigFormSection>
+        </TabsContent>
+      </Tabs>
 
       {saveError && (
-        <div className="alert alert-error">
-          <span>{saveError}</span>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="card-actions justify-end gap-2 pt-4 border-t border-base-300">
-        <button className="btn btn-sm btn-ghost" onClick={onCancel}>
+      <ConfigFormActions>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          className="btn btn-sm btn-primary"
+        </Button>
+        <Button
+          size="sm"
           disabled={isSaving}
           onClick={() => {
             void handleSave();
           }}
         >
           {isSaving ? 'Saving...' : 'Save'}
-        </button>
-      </div>
+        </Button>
+      </ConfigFormActions>
     </div>
   );
 }
@@ -683,26 +757,26 @@ function SceneCard({
     <div className="space-y-3 pr-4">
       <div className="flex justify-between items-start gap-4">
         <div>
-          <h2 className="card-title">{scene.name}</h2>
-          <div className="text-sm opacity-70">{scene.id}</div>
+          <h2 className="text-lg font-semibold leading-tight">{scene.name}</h2>
+          <div className="text-sm text-muted-foreground">{scene.id}</div>
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end">
-          {scene.hidden && <div className="badge badge-ghost">Hidden</div>}
-          {scene.script && <div className="badge badge-info">Script</div>}
+          {scene.hidden && <Badge variant="muted">Hidden</Badge>}
+          {scene.script && <Badge variant="secondary">Script</Badge>}
           {deviceStateCount > 0 && (
-            <div className="badge badge-secondary">
+            <Badge variant="secondary">
               {deviceStateCount} device{deviceStateCount !== 1 ? 's' : ''}
-            </div>
+            </Badge>
           )}
           {groupStateCount > 0 && (
-            <div className="badge badge-accent">
+            <Badge variant="outline">
               {groupStateCount} group{groupStateCount !== 1 ? 's' : ''}
-            </div>
+            </Badge>
           )}
         </div>
       </div>
 
-      <div className="text-sm opacity-80">
+      <div className="text-sm text-foreground/80">
         <span className="font-medium">{deviceStateCount}</span> device targets ·{' '}
         <span className="font-medium">{groupStateCount}</span> group targets
         {scene.script ? ' · scripted overrides enabled' : ''}
@@ -724,16 +798,16 @@ function SceneCard({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">Script</h3>
-          <span className="text-sm opacity-60">
+          <span className="text-sm text-muted-foreground">
             {scene.script ? 'Enabled' : 'Not configured'}
           </span>
         </div>
         {scene.script ? (
-          <pre className="overflow-x-auto rounded-lg border border-base-300 bg-base-100/70 p-4 text-sm leading-6">
+          <pre className="overflow-x-auto rounded-2xl border border-border bg-background/70 p-4 text-sm leading-6">
             <code>{scene.script}</code>
           </pre>
         ) : (
-          <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-70">
+          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
             No scene script configured.
           </div>
         )}
@@ -759,28 +833,34 @@ function SceneCard({
         title="Group Targets"
       />
 
-      <div className="card-actions justify-end mt-2 gap-2">
-        <button
-          className="btn btn-sm btn-secondary"
+      <div className="mt-2 flex justify-end gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
           disabled={isActivating}
           onClick={onActivate}
           type="button"
         >
           {isActivating ? (
             <>
-              <span className="loading loading-spinner loading-xs"></span>
+              <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
               Activating
             </>
           ) : (
             'Activate'
           )}
-        </button>
-        <button className="btn btn-sm btn-ghost" onClick={onEdit}>
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onEdit}>
           Edit
-        </button>
-        <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          onClick={onDelete}
+        >
           Delete
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -824,64 +904,62 @@ function CreateSceneModal({
   const [hidden, setHidden] = useState(false);
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg">Add Scene</h3>
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title="Add Scene"
+      description="Create a new scene preset."
+      className="max-w-xl"
+    >
+      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <ConfigFormSection
+          title="Scene identity"
+          description="Create the scene shell first; targets and scripts can be added from the edit modal."
+        >
+          <ConfigField label="Scene ID">
+            <Input
+              type="text"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              placeholder="evening-relax"
+            />
+          </ConfigField>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Scene ID</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="evening-relax"
-          />
-        </div>
+          <ConfigField label="Name">
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Evening Relax"
+            />
+          </ConfigField>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Name</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Evening Relax"
-          />
-        </div>
-
-        <div className="form-control mt-4">
-          <label className="label cursor-pointer">
-            <span className="label-text">Hidden</span>
+          <ConfigToggleRow label="Hidden">
             <input
               type="checkbox"
-              className="toggle"
+              className={checkboxClassName}
               checked={hidden}
               onChange={(e) => setHidden(e.target.checked)}
             />
-          </label>
-        </div>
+          </ConfigToggleRow>
+        </ConfigFormSection>
 
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
+        <ConfigFormActions>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
             disabled={!id || !name}
             onClick={() => onCreate({ id, name, hidden })}
           >
             Create
-          </button>
-        </div>
+          </Button>
+        </ConfigFormActions>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ResponsiveOverlay>
   );
 }

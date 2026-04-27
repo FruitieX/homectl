@@ -1,6 +1,5 @@
 import clsx from 'clsx';
 import { useEffect, useState } from 'react';
-import { Card, Table } from 'react-daisyui';
 import { useInterval } from 'usehooks-ts';
 import { useAppConfig } from '@/hooks/appConfig';
 import {
@@ -8,6 +7,7 @@ import {
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
+import { Card, CardContent } from '@/ui/primitives/card';
 
 type Trip = {
   routeShortName: string;
@@ -56,7 +56,9 @@ type HslResponse = {
   };
 };
 
-const fetchTrainSchedule = async (trainScheduleUrl: string): Promise<Train[]> => {
+const fetchTrainSchedule = async (
+  trainScheduleUrl: string,
+): Promise<Train[]> => {
   const res = await fetch(trainScheduleUrl);
   if (!res.ok) {
     throw new Error(`Failed to fetch train schedule: ${res.status}`);
@@ -112,38 +114,41 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   }, 60 * 1000);
 
   return (
-    <Card compact className="col-span-4 bg-base-300">
-      <Card.Body className="py-4">
-        <Table>
-          <Table.Head>
-            <span>Train</span>
-            <span>Departure</span>
-            <span>Leave home</span>
-          </Table.Head>
-          <Table.Body>
+    <Card className="col-span-4">
+      <CardContent className="overflow-x-auto py-4">
+        <table className="w-full text-left text-sm">
+          <thead className="text-xs uppercase text-muted-foreground">
+            <tr>
+              <th className="px-3 py-2 font-medium">Train</th>
+              <th className="px-3 py-2 font-medium">Departure</th>
+              <th className="px-3 py-2 font-medium">Leave home</th>
+            </tr>
+          </thead>
+          <tbody>
             {trains.map((train, index) => {
               return (
-                <Table.Row key={index} className={'text-xl'}>
-                  <span>{train.name}</span>
-                  <span>{train.departureFormatted}</span>
-                  <span
-                    className={
-                      train.realtime ? 'font-extrabold' : 'text-stone-500'
-                    }
+                <tr key={index} className="border-t border-border text-xl">
+                  <td className="px-3 py-2">{train.name}</td>
+                  <td className="px-3 py-2">{train.departureFormatted}</td>
+                  <td
+                    className={clsx(
+                      'px-3 py-2',
+                      train.realtime ? 'font-extrabold' : 'text-stone-500',
+                    )}
                   >
                     {train.minUntilHomeDeparture}
-                  </span>
-                </Table.Row>
+                  </td>
+                </tr>
               );
             })}
-          </Table.Body>
-        </Table>
+          </tbody>
+        </table>
         {trains.length === 0 && (
-          <span className="text-stone-500 pl-4 font-extrabold py-2">
+          <span className="py-2 pl-4 font-extrabold text-muted-foreground">
             No scheduled trains
           </span>
         )}
-      </Card.Body>
+      </CardContent>
     </Card>
   );
 };

@@ -1,180 +1,339 @@
+import { useEffect, useState } from 'react';
+
 import {
   useDashboardLayouts,
   useDashboardWidgets,
   widgetRegistry,
-  WidgetType,
-  DashboardWidget,
+  type DashboardWidget,
+  type WidgetType,
 } from '@/hooks/useDashboard';
-import { useState } from 'react';
+import { cn } from '@/lib/cn';
+import {
+  ConfigField,
+  ConfigFormActions,
+  ConfigFormSection,
+  ConfigHelpPanel,
+} from '@/ui/config-form';
+import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { Textarea } from '@/ui/primitives/textarea';
+
+const selectClassName =
+  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+
+const isWidgetType = (value: string): value is WidgetType =>
+  value in widgetRegistry;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 export default function DashboardConfigPage() {
-  const { layouts, loading: layoutsLoading, createLayout, deleteLayout } = useDashboardLayouts();
+  const {
+    layouts,
+    loading: layoutsLoading,
+    error: layoutsError,
+    createLayout,
+    deleteLayout,
+  } = useDashboardLayouts();
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const {
     widgets,
     loading: widgetsLoading,
+    error: widgetsError,
     addWidget,
     updateWidget,
     removeWidget,
+    reorderWidgets,
   } = useDashboardWidgets(selectedLayoutId);
+  const [showAddLayout, setShowAddLayout] = useState(false);
   const [showAddWidget, setShowAddWidget] = useState(false);
-  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(null);
+  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(
+    null,
+  );
 
-  // Select first layout by default
-  if (!selectedLayoutId && layouts.length > 0) {
-    setSelectedLayoutId(layouts[0].id);
-  }
+  useEffect(() => {
+    if (!selectedLayoutId && layouts.length > 0) {
+      setSelectedLayoutId(
+        layouts.find((layout) => layout.is_default)?.id ?? layouts[0].id,
+      );
+    }
+  }, [layouts, selectedLayoutId]);
+
+  const selectedLayout = layouts.find(
+    (layout) => layout.id === selectedLayoutId,
+  );
+  const sortedWidgets = [...widgets].sort((a, b) => a.position - b.position);
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Dashboard Configuration</h1>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Dashboard Configuration
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Compose mobile-first dashboards from reusable widgets and layouts.
+          </p>
+        </div>
+        <Button onClick={() => setShowAddLayout(true)}>Add Layout</Button>
       </div>
 
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Layout selection */}
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title">Layouts</h2>
-            <p className="text-sm opacity-70">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Layouts</CardTitle>
+            <CardDescription>
               Create multiple dashboard layouts for different use cases.
-            </p>
-
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {layoutsError ? (
+              <Alert variant="destructive">
+                <AlertTitle>Could not load layouts</AlertTitle>
+                <AlertDescription>{layoutsError}</AlertDescription>
+              </Alert>
+            ) : null}
             {layoutsLoading ? (
-              <span className="loading loading-spinner"></span>
+              <div className="space-y-2">
+                <Skeleton className="h-12" />
+                <Skeleton className="h-12" />
+              </div>
+            ) : layouts.length === 0 ? (
+              <EmptyState
+                title="No layouts yet"
+                description="Create a layout before adding widgets."
+              />
             ) : (
-              <div className="space-y-2 mt-4">
+              <div className="space-y-2">
                 {layouts.map((layout) => (
-                  <div
+                  <button
                     key={layout.id}
-                    className={`flex items-center justify-between p-2 rounded cursor-pointer ${
-                      selectedLayoutId === layout.id ? 'bg-primary text-primary-content' : 'bg-base-300'
-                    }`}
+                    type="button"
+                    className={cn(
+                      'w-full rounded-2xl border p-3 text-left transition hover:bg-accent hover:text-accent-foreground',
+                      selectedLayoutId === layout.id
+                        ? 'border-primary bg-primary text-primary-foreground shadow-sm'
+                        : 'border-border bg-background',
+                    )}
                     onClick={() => setSelectedLayoutId(layout.id)}
                   >
-                    <span>{layout.name}</span>
-                    <div className="flex gap-1">
-                      {layout.is_default && (
-                        <div className="badge badge-sm">Default</div>
-                      )}
-                      <button
-                        className="btn btn-xs btn-ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (confirm(`Delete layout "${layout.name}"?`)) {
-                            deleteLayout(layout.id);
-                          }
-                        }}
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="card-actions mt-4">
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={async () => {
-                  const name = prompt('Layout name:');
-                  if (name) {
-                    const layout = await createLayout({ name, is_default: layouts.length === 0 });
-                    setSelectedLayoutId(layout.id);
-                  }
-                }}
-              >
-                Add Layout
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* Widget list */}
-        <div className="card bg-base-200 shadow-xl md:col-span-2">
-          <div className="card-body">
-            <div className="flex justify-between items-center">
-              <h2 className="card-title">Widgets</h2>
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={() => setShowAddWidget(true)}
-                disabled={!selectedLayoutId}
-              >
-                Add Widget
-              </button>
-            </div>
-
-            {!selectedLayoutId ? (
-              <p className="text-sm opacity-70">Select a layout to manage widgets.</p>
-            ) : widgetsLoading ? (
-              <span className="loading loading-spinner"></span>
-            ) : widgets.length === 0 ? (
-              <p className="text-sm opacity-70">No widgets in this layout.</p>
-            ) : (
-              <div className="grid gap-2 mt-4">
-                {widgets
-                  .sort((a, b) => a.position - b.position)
-                  .map((widget) => (
-                    <div
-                      key={widget.id}
-                      className="flex items-center justify-between p-3 bg-base-300 rounded"
-                    >
-                      <div>
-                        <div className="font-medium">{widget.title}</div>
-                        <div className="text-sm opacity-70">
-                          {widgetRegistry[widget.widget_type]?.name || widget.widget_type}
-                          <span className="ml-2">
-                            ({widget.width}×{widget.height})
-                          </span>
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">
+                          {layout.name}
+                        </div>
+                        <div className="truncate text-xs opacity-75">
+                          {layout.id}
                         </div>
                       </div>
-                      <div className="flex gap-1">
-                        <button
-                          className="btn btn-xs btn-ghost"
-                          onClick={() => setEditingWidget(widget)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="btn btn-xs btn-ghost btn-error"
-                          onClick={() => {
-                            if (confirm(`Remove widget "${widget.title}"?`)) {
-                              removeWidget(widget.id);
+                      <div className="flex shrink-0 items-center gap-2">
+                        {layout.is_default && (
+                          <Badge variant="secondary">Default</Badge>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (confirm(`Delete layout "${layout.name}"?`)) {
+                              void deleteLayout(layout.id);
+                              setSelectedLayoutId((current) =>
+                                current === layout.id ? null : current,
+                              );
                             }
                           }}
                         >
                           ✕
-                        </button>
+                        </Button>
                       </div>
                     </div>
-                  ))}
+                  </button>
+                ))}
               </div>
             )}
-          </div>
-        </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle>Widgets</CardTitle>
+              <CardDescription>
+                {selectedLayout
+                  ? `Manage widgets in ${selectedLayout.name}.`
+                  : 'Select a layout to manage widgets.'}
+              </CardDescription>
+            </div>
+            <Button
+              size="sm"
+              disabled={!selectedLayoutId}
+              onClick={() => setShowAddWidget(true)}
+            >
+              Add Widget
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {widgetsError ? (
+              <Alert variant="destructive" className="mb-4">
+                <AlertTitle>Could not load widgets</AlertTitle>
+                <AlertDescription>{widgetsError}</AlertDescription>
+              </Alert>
+            ) : null}
+            {!selectedLayoutId ? (
+              <EmptyState
+                title="No layout selected"
+                description="Pick a layout from the list to edit its widgets."
+              />
+            ) : widgetsLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-16" />
+                <Skeleton className="h-16" />
+              </div>
+            ) : sortedWidgets.length === 0 ? (
+              <EmptyState
+                title="No widgets in this layout"
+                description="Add the first widget to start building the dashboard."
+              />
+            ) : (
+              <div className="grid gap-3">
+                {sortedWidgets.map((widget, index) => (
+                  <Card key={widget.id} className="rounded-2xl bg-muted/30">
+                    <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="font-medium">{widget.title}</div>
+                        <div className="mt-1 text-sm text-muted-foreground">
+                          {widgetRegistry[widget.widget_type]?.name ||
+                            widget.widget_type}
+                          <span className="ml-2">
+                            ({widget.width}×{widget.height})
+                          </span>
+                        </div>
+                        <div className="mt-2 text-xs text-muted-foreground">
+                          Position {widget.position + 1} · grid {widget.x},{' '}
+                          {widget.y}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-wrap gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={index === 0}
+                          onClick={() => {
+                            const nextIds = sortedWidgets.map(
+                              (item) => item.id,
+                            );
+                            [nextIds[index - 1], nextIds[index]] = [
+                              nextIds[index],
+                              nextIds[index - 1],
+                            ];
+                            void reorderWidgets(nextIds);
+                          }}
+                        >
+                          ↑
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={index === sortedWidgets.length - 1}
+                          onClick={() => {
+                            const nextIds = sortedWidgets.map(
+                              (item) => item.id,
+                            );
+                            [nextIds[index], nextIds[index + 1]] = [
+                              nextIds[index + 1],
+                              nextIds[index],
+                            ];
+                            void reorderWidgets(nextIds);
+                          }}
+                        >
+                          ↓
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditingWidget(widget)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => {
+                            if (confirm(`Remove widget "${widget.title}"?`)) {
+                              void removeWidget(widget.id);
+                            }
+                          }}
+                        >
+                          ✕
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Widget registry info */}
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Available Widget Types</h2>
-          <div className="grid md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Available Widget Types</CardTitle>
+          <CardDescription>
+            These presets can be added to any dashboard layout.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4">
             {Object.entries(widgetRegistry).map(([type, info]) => (
-              <div key={type} className="p-3 bg-base-300 rounded">
-                <div className="font-medium">{info.name}</div>
-                <div className="text-sm opacity-70">{info.description}</div>
-              </div>
+              <Card key={type} className="rounded-2xl bg-muted/30">
+                <CardContent className="p-4">
+                  <div className="font-medium">{info.name}</div>
+                  <div className="mt-1 text-sm text-muted-foreground">
+                    {info.description}
+                  </div>
+                </CardContent>
+              </Card>
             ))}
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Add widget modal */}
+      {showAddLayout && (
+        <AddLayoutOverlay
+          isDefault={layouts.length === 0}
+          onClose={() => setShowAddLayout(false)}
+          onCreate={async (name) => {
+            const layout = await createLayout({
+              name,
+              is_default: layouts.length === 0,
+            });
+            setSelectedLayoutId(layout.id);
+            setShowAddLayout(false);
+          }}
+        />
+      )}
+
       {showAddWidget && (
-        <AddWidgetModal
+        <WidgetOverlay
+          mode="add"
           onClose={() => setShowAddWidget(false)}
-          onAdd={async (widget) => {
+          onSubmit={async (widget) => {
             await addWidget({
               ...widget,
               position: widgets.length,
@@ -184,12 +343,12 @@ export default function DashboardConfigPage() {
         />
       )}
 
-      {/* Edit widget modal */}
       {editingWidget && (
-        <EditWidgetModal
+        <WidgetOverlay
+          mode="edit"
           widget={editingWidget}
           onClose={() => setEditingWidget(null)}
-          onSave={async (updated) => {
+          onSubmit={async (updated) => {
             await updateWidget(editingWidget.id, updated);
             setEditingWidget(null);
           }}
@@ -199,229 +358,275 @@ export default function DashboardConfigPage() {
   );
 }
 
-function AddWidgetModal({
+function AddLayoutOverlay({
+  isDefault,
   onClose,
-  onAdd,
+  onCreate,
 }: {
+  isDefault: boolean;
   onClose: () => void;
-  onAdd: (widget: Partial<DashboardWidget>) => Promise<void>;
+  onCreate: (name: string) => Promise<void>;
 }) {
-  const [widgetType, setWidgetType] = useState<WidgetType>('clock');
-  const [title, setTitle] = useState('');
-  const [width, setWidth] = useState(2);
-  const [height, setHeight] = useState(2);
-  const [options, setOptions] = useState('{}');
+  const [name, setName] = useState('');
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg">Add Widget</h3>
-
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Widget Type</span>
-          </label>
-          <select
-            className="select select-bordered"
-            value={widgetType}
-            onChange={(e) => {
-              const type = e.target.value as WidgetType;
-              setWidgetType(type);
-              setTitle(widgetRegistry[type].name);
-              setOptions(JSON.stringify(widgetRegistry[type].defaultOptions, null, 2));
-            }}
-          >
-            {Object.entries(widgetRegistry).map(([type, info]) => (
-              <option key={type} value={type}>
-                {info.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Title</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Width</span>
-            </label>
-            <input
-              type="number"
-              className="input input-bordered"
-              value={width}
-              onChange={(e) => setWidth(parseInt(e.target.value) || 1)}
-              min={1}
-              max={8}
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title="Add Layout"
+      description={
+        isDefault
+          ? 'This will become the default dashboard layout.'
+          : 'Create another dashboard layout.'
+      }
+      className="max-w-xl"
+    >
+      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <ConfigFormSection
+          title="Layout details"
+          description="Create a named dashboard layout that can hold widgets."
+        >
+          <ConfigField label="Layout name">
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="Main dashboard"
             />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Height</span>
-            </label>
-            <input
-              type="number"
-              className="input input-bordered"
-              value={height}
-              onChange={(e) => setHeight(parseInt(e.target.value) || 1)}
-              min={1}
-              max={8}
-            />
-          </div>
-        </div>
-
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Options (JSON)</span>
-          </label>
-          <textarea
-            className="textarea textarea-bordered h-24 font-mono text-sm"
-            value={options}
-            onChange={(e) => setOptions(e.target.value)}
-          />
-        </div>
-
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
+          </ConfigField>
+        </ConfigFormSection>
+        <ConfigFormActions>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              try {
-                onAdd({
-                  widget_type: widgetType,
-                  title: title || widgetRegistry[widgetType].name,
-                  width,
-                  height,
-                  options: JSON.parse(options),
-                });
-              } catch {
-                alert('Invalid JSON in options');
-              }
-            }}
-          >
-            Add
-          </button>
-        </div>
+          </Button>
+          <Button disabled={!name.trim()} onClick={() => onCreate(name.trim())}>
+            Create
+          </Button>
+        </ConfigFormActions>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ResponsiveOverlay>
   );
 }
 
-function EditWidgetModal({
+function WidgetOverlay({
+  mode,
   widget,
   onClose,
-  onSave,
+  onSubmit,
 }: {
-  widget: DashboardWidget;
+  mode: 'add' | 'edit';
+  widget?: DashboardWidget;
   onClose: () => void;
-  onSave: (widget: Partial<DashboardWidget>) => Promise<void>;
+  onSubmit: (widget: Partial<DashboardWidget>) => Promise<void>;
 }) {
-  const [title, setTitle] = useState(widget.title);
-  const [width, setWidth] = useState(widget.width);
-  const [height, setHeight] = useState(widget.height);
-  const [options, setOptions] = useState(JSON.stringify(widget.options, null, 2));
+  const initialWidgetType = widget?.widget_type ?? 'clock';
+  const [widgetType, setWidgetType] = useState<WidgetType>(initialWidgetType);
+  const [title, setTitle] = useState(
+    widget?.title ?? widgetRegistry[initialWidgetType].name,
+  );
+  const [width, setWidth] = useState(widget?.width ?? 2);
+  const [height, setHeight] = useState(widget?.height ?? 2);
+  const [options, setOptions] = useState(
+    JSON.stringify(
+      widget?.options ?? widgetRegistry[initialWidgetType].defaultOptions,
+      null,
+      2,
+    ),
+  );
+  const [editTab, setEditTab] = useState<'basics' | 'layout' | 'options'>(
+    'basics',
+  );
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  const registryItem = widgetRegistry[widgetType];
+  const changeTab = (value: string) => {
+    if (value === 'basics' || value === 'layout' || value === 'options') {
+      setEditTab(value);
+    }
+  };
+
+  const submit = async () => {
+    setSubmitError(null);
+    let parsedOptions: Record<string, unknown>;
+
+    try {
+      const parsed: unknown = JSON.parse(options);
+      parsedOptions = isRecord(parsed) ? parsed : {};
+    } catch {
+      setSubmitError('Options must be valid JSON.');
+      setEditTab('options');
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      await onSubmit({
+        widget_type: widgetType,
+        title: title || registryItem.name,
+        width,
+        height,
+        options: parsedOptions,
+      });
+    } catch (error) {
+      setSubmitError(
+        error instanceof Error ? error.message : 'Failed to save widget.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg">Edit Widget</h3>
-        <div className="badge badge-secondary mt-2">
-          {widgetRegistry[widget.widget_type]?.name || widget.widget_type}
-        </div>
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title={mode === 'add' ? 'Add Widget' : 'Edit Widget'}
+      description={
+        mode === 'add'
+          ? 'Choose a widget preset and customize its layout footprint.'
+          : 'Adjust widget title, size, and JSON options.'
+      }
+      presentation="fullscreen"
+      className="max-w-2xl"
+    >
+      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <Tabs value={editTab} onValueChange={changeTab}>
+          <TabsList className="grid h-auto w-full grid-cols-3">
+            <TabsTrigger value="basics">Basics</TabsTrigger>
+            <TabsTrigger value="layout">Layout</TabsTrigger>
+            <TabsTrigger value="options">Options</TabsTrigger>
+          </TabsList>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Title</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
-        </div>
+          <TabsContent value="basics" className="mt-4 space-y-4">
+            <ConfigFormSection
+              title="Widget basics"
+              description="Choose what the widget shows and how it is labeled on the dashboard."
+            >
+              <ConfigField label="Widget Type">
+                {mode === 'add' ? (
+                  <select
+                    className={selectClassName}
+                    value={widgetType}
+                    onChange={(event) => {
+                      const type = event.target.value;
+                      if (!isWidgetType(type)) {
+                        return;
+                      }
+                      setWidgetType(type);
+                      setTitle(widgetRegistry[type].name);
+                      setOptions(
+                        JSON.stringify(
+                          widgetRegistry[type].defaultOptions,
+                          null,
+                          2,
+                        ),
+                      );
+                    }}
+                  >
+                    {Object.entries(widgetRegistry).map(([type, info]) => (
+                      <option key={type} value={type}>
+                        {info.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <Badge variant="secondary">
+                    {registryItem?.name || widget?.widget_type}
+                  </Badge>
+                )}
+              </ConfigField>
 
-        <div className="grid grid-cols-2 gap-4 mt-4">
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Width</span>
-            </label>
-            <input
-              type="number"
-              className="input input-bordered"
-              value={width}
-              onChange={(e) => setWidth(parseInt(e.target.value) || 1)}
-              min={1}
-              max={8}
-            />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Height</span>
-            </label>
-            <input
-              type="number"
-              className="input input-bordered"
-              value={height}
-              onChange={(e) => setHeight(parseInt(e.target.value) || 1)}
-              min={1}
-              max={8}
-            />
-          </div>
-        </div>
+              <ConfigField label="Title">
+                <Input
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                />
+              </ConfigField>
+            </ConfigFormSection>
+          </TabsContent>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Options (JSON)</span>
-          </label>
-          <textarea
-            className="textarea textarea-bordered h-32 font-mono text-sm"
-            value={options}
-            onChange={(e) => setOptions(e.target.value)}
-          />
-        </div>
+          <TabsContent value="layout" className="mt-4">
+            <ConfigFormSection
+              title="Layout footprint"
+              description="Control how many grid cells this widget occupies."
+            >
+              <ConfigHelpPanel>
+                Widgets span the full screen width on phones, then use the
+                configured width as more columns become available. Keep critical
+                widgets at the top by ordering them first in the list.
+              </ConfigHelpPanel>
+              <div className="grid grid-cols-2 gap-4">
+                <ConfigField label="Width">
+                  <Input
+                    type="number"
+                    value={width}
+                    onChange={(event) =>
+                      setWidth(parseInt(event.target.value) || 1)
+                    }
+                    min={1}
+                    max={8}
+                  />
+                </ConfigField>
+                <ConfigField label="Height">
+                  <Input
+                    type="number"
+                    value={height}
+                    onChange={(event) =>
+                      setHeight(parseInt(event.target.value) || 1)
+                    }
+                    min={1}
+                    max={8}
+                  />
+                </ConfigField>
+              </div>
+            </ConfigFormSection>
+          </TabsContent>
 
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
+          <TabsContent value="options" className="mt-4">
+            <ConfigFormSection
+              title="Widget options"
+              description="Advanced per-widget settings stored as JSON."
+            >
+              <ConfigField label="Options (JSON)">
+                <Textarea
+                  className="h-96 font-mono text-sm"
+                  value={options}
+                  onChange={(event) => setOptions(event.target.value)}
+                />
+              </ConfigField>
+            </ConfigFormSection>
+          </TabsContent>
+        </Tabs>
+
+        {submitError ? (
+          <Alert variant="destructive" className="mt-4">
+            <AlertTitle>Widget was not saved</AlertTitle>
+            <AlertDescription>{submitError}</AlertDescription>
+          </Alert>
+        ) : null}
+
+        <ConfigFormActions>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
+            disabled={submitting}
             onClick={() => {
-              try {
-                onSave({
-                  title,
-                  width,
-                  height,
-                  options: JSON.parse(options),
-                });
-              } catch {
-                alert('Invalid JSON in options');
-              }
+              void submit();
             }}
           >
-            Save
-          </button>
-        </div>
+            {submitting ? 'Saving…' : mode === 'add' ? 'Add' : 'Save'}
+          </Button>
+        </ConfigFormActions>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ResponsiveOverlay>
   );
 }

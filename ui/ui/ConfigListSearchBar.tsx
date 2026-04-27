@@ -1,3 +1,8 @@
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { Input } from '@/ui/primitives/input';
+import { Label } from '@/ui/primitives/label';
+
 type ConfigListSearchBarProps = {
   filteredCount: number;
   onChange: (value: string) => void;
@@ -16,31 +21,36 @@ export function ConfigListSearchBar({
   const hasActiveSearch = value.trim().length > 0;
 
   return (
-    <div className="card bg-base-200 shadow-xl">
-      <div className="card-body gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <label className="form-control w-full sm:max-w-sm">
-          <span className="label-text text-sm">Search</span>
-          <input
+    <Card>
+      <CardContent className="flex flex-col gap-3 pt-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="grid w-full gap-2 sm:max-w-sm">
+          <Label htmlFor="config-list-search">Search</Label>
+          <Input
+            id="config-list-search"
             type="text"
-            className="input input-bordered input-sm"
             placeholder={placeholder}
             value={value}
             onChange={(event) => onChange(event.target.value)}
           />
-        </label>
+        </div>
 
-        <div className="flex items-center gap-3 text-sm opacity-70">
+        <div className="flex items-center gap-3 text-sm text-muted-foreground">
           <span>
             Showing {filteredCount} of {totalCount}
           </span>
 
           {hasActiveSearch && (
-            <button className="btn btn-sm btn-ghost" type="button" onClick={() => onChange('')}>
+            <Button
+              variant="ghost"
+              size="sm"
+              type="button"
+              onClick={() => onChange('')}
+            >
               Clear
-            </button>
+            </Button>
           )}
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }

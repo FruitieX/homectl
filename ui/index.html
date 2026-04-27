@@ -15,20 +15,23 @@
 				const theme = stored ? JSON.parse(stored) : 'auto';
 				let effectiveTheme = theme;
 				if (theme === 'auto') {
-					effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches
+					effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)')
+						.matches
 						? 'dark'
 						: 'light';
 				}
-				const daisyuiTheme = effectiveTheme === 'dark' ? 'business' : 'corporate';
-				document.documentElement.setAttribute('data-theme', daisyuiTheme);
+				document.documentElement.classList.toggle(
+					'dark',
+					effectiveTheme === 'dark',
+				);
 			} catch (error) {
-				document.documentElement.setAttribute('data-theme', 'business');
+				document.documentElement.classList.add('dark');
 			}
 		})();
 	</script>
 </head>
 
-<body class="flex flex-col overflow-hidden" style="touch-action: none;">
+<body class="flex flex-col overflow-hidden" style="touch-action: none">
 	<div id="root" class="flex min-h-dvh flex-1 flex-col overflow-hidden"></div>
 	<script type="module" src="/src/main.tsx"></script>
 </body>

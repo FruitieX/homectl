@@ -1,4 +1,3 @@
-import { Badge, Button, Card, Modal } from 'react-daisyui';
 import { useTimeout, useToggle } from 'usehooks-ts';
 import {
   X,
@@ -32,6 +31,9 @@ import {
   type DashboardWidget,
   getDashboardWidgetOptionString,
 } from '@/hooks/useDashboard';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 
 interface SensorReading {
   time: Date;
@@ -77,8 +79,8 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
 
   return (
     <Button
-      color="ghost"
-      className="h-auto p-2 flex-shrink-0 w-22"
+      variant="ghost"
+      className="h-auto w-22 shrink-0 p-2"
       onClick={onClick}
     >
       <div
@@ -420,8 +422,8 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card compact className="col-span-4 bg-base-300">
-        <Card.Body className="p-1">
+      <Card className="col-span-4 overflow-hidden">
+        <CardContent className="p-1">
           {/* Horizontal scrollable sensor list */}
           <div
             ref={scrollContainerRef}
@@ -435,22 +437,31 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
               />
             ))}
           </div>
-        </Card.Body>
+        </CardContent>
       </Card>
 
-      <Modal.Legacy
+      <ResponsiveOverlay
         open={detailsModalOpen}
-        onClickBackdrop={toggleDetailsModal}
-        responsive
-        className="pt-0"
+        onOpenChange={setDetailsModalOpen}
+        title={
+          viewMode === 'individual'
+            ? (activeSensor?.device_name ?? 'Sensor details')
+            : 'Sensor overview'
+        }
+        description={
+          viewMode === 'individual'
+            ? 'Recent readings, trends, and history for this sensor.'
+            : `Combined ${sensorFilter} sensor readings and trends.`
+        }
+        className="max-w-5xl"
       >
-        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 bg-base-100 bg-opacity-75 backdrop-blur-sm z-50">
+        <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
           <div className="flex items-center justify-between font-bold">
             <div className="flex items-center gap-2">
               {viewMode === 'combined' && (
                 <Button
                   size="sm"
-                  color="ghost"
+                  variant="ghost"
                   onClick={handleBackToIndividual}
                   className="p-1"
                 >
@@ -521,21 +532,21 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                       {/* Filter Controls */}
                       {viewMode === 'combined' && (
                         <div className="flex justify-center gap-2 relative z-10 pt-4">
-                          <div className="join">
+                          <div className="flex rounded-2xl bg-muted p-1">
                             <Button
                               size="sm"
-                              className={`join-item ${
-                                sensorFilter === 'indoor' ? 'btn-active' : ''
-                              }`}
+                              variant={
+                                sensorFilter === 'indoor' ? 'default' : 'ghost'
+                              }
                               onClick={() => setSensorFilter('indoor')}
                             >
                               Indoor sensors
                             </Button>
                             <Button
                               size="sm"
-                              className={`join-item ${
-                                sensorFilter === 'outdoor' ? 'btn-active' : ''
-                              }`}
+                              variant={
+                                sensorFilter === 'outdoor' ? 'default' : 'ghost'
+                              }
                               onClick={() => setSensorFilter('outdoor')}
                             >
                               Outdoor sensors
@@ -650,72 +661,239 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
             </div>
             <div className="flex gap-2">
               {viewMode === 'individual' && (
-                <Button size="sm" color="ghost" onClick={handleViewAllClick}>
+                <Button size="sm" variant="ghost" onClick={handleViewAllClick}>
                   View All
                 </Button>
               )}
-              <Button onClick={toggleDetailsModal} variant="outline">
+              <Button
+                onClick={toggleDetailsModal}
+                variant="outline"
+                size="icon"
+              >
                 <X />
               </Button>
             </div>
           </div>
-        </Modal.Header>
 
-        <Modal.Body className="flex flex-col gap-4 relative">
-          {viewMode === 'individual' ? (
-            <>
-              {/* Individual sensor statistics */}
-              {(tempStats || humidityStats) && (
+          <div className="relative flex flex-col gap-4">
+            {viewMode === 'individual' ? (
+              <>
+                {/* Individual sensor statistics */}
+                {(tempStats || humidityStats) && (
+                  <div className="grid grid-cols-2 gap-4">
+                    {tempStats && (
+                      <div className="rounded-2xl border border-border bg-muted/40 p-3">
+                        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                          <Thermometer size={16} />
+                          Temperature
+                        </h4>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span>Current:</span>
+                            <span
+                              className="font-mono"
+                              style={{
+                                color: getTemperatureColor(
+                                  tempStats.current || 0,
+                                ),
+                              }}
+                            >
+                              {formatStatValue(tempStats.current || 0, '°C')}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Min:</span>
+                            <Tooltip
+                              content={`Recorded at ${tempStats.minTime?.toLocaleString()}`}
+                              position="top"
+                            >
+                              <span
+                                className="font-mono cursor-help"
+                                style={{
+                                  color: getTemperatureColor(tempStats.min),
+                                }}
+                              >
+                                {formatStatValue(tempStats.min, '°C')}
+                              </span>
+                            </Tooltip>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Max:</span>
+                            <Tooltip
+                              content={`Recorded at ${tempStats.maxTime?.toLocaleString()}`}
+                              position="top"
+                            >
+                              <span
+                                className="font-mono cursor-help"
+                                style={{
+                                  color: getTemperatureColor(tempStats.max),
+                                }}
+                              >
+                                {formatStatValue(tempStats.max, '°C')}
+                              </span>
+                            </Tooltip>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Average:</span>
+                            <span
+                              className="font-mono"
+                              style={{
+                                color: getTemperatureColor(tempStats.avg),
+                              }}
+                            >
+                              {formatStatValue(tempStats.avg, '°C')}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {humidityStats && (
+                      <div className="rounded-2xl border border-border bg-muted/40 p-3">
+                        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                          <Droplets size={16} />
+                          Humidity
+                        </h4>
+                        <div className="space-y-1 text-xs">
+                          <div className="flex justify-between">
+                            <span>Current:</span>
+                            <span
+                              className="font-mono"
+                              style={{
+                                color: getHumidityColor(
+                                  humidityStats.current || 0,
+                                ),
+                              }}
+                            >
+                              {formatStatValue(
+                                humidityStats.current || 0,
+                                '%',
+                                0,
+                              )}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Min:</span>
+                            <Tooltip
+                              content={`Recorded at ${humidityStats.minTime?.toLocaleString()}`}
+                              position="top"
+                            >
+                              <span
+                                className="font-mono cursor-help"
+                                style={{
+                                  color: getHumidityColor(humidityStats.min),
+                                }}
+                              >
+                                {formatStatValue(humidityStats.min, '%', 0)}
+                              </span>
+                            </Tooltip>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Max:</span>
+                            <Tooltip
+                              content={`Recorded at ${humidityStats.maxTime?.toLocaleString()}`}
+                              position="top"
+                            >
+                              <span
+                                className="font-mono cursor-help"
+                                style={{
+                                  color: getHumidityColor(humidityStats.max),
+                                }}
+                              >
+                                {formatStatValue(humidityStats.max, '%', 0)}
+                              </span>
+                            </Tooltip>
+                          </div>
+                          <div className="flex justify-between">
+                            <span>Average:</span>
+                            <span
+                              className="font-mono"
+                              style={{
+                                color: getHumidityColor(humidityStats.avg),
+                              }}
+                            >
+                              {formatStatValue(humidityStats.avg, '%', 0)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Individual sensor chart */}
+                {individualChartData.length > 0 ? (
+                  <ResponsiveChart height={350} className="rounded-lg">
+                    {({ width, height }) => (
+                      <SensorChart
+                        data={individualChartData}
+                        width={width}
+                        height={height}
+                        animate={true}
+                        showTemperature={!!tempStats}
+                        showHumidity={!!humidityStats}
+                      />
+                    )}
+                  </ResponsiveChart>
+                ) : (
+                  <div className="p-8 text-stone-500 text-center">
+                    <div className="text-4xl mb-2">📡</div>
+                    <div>Sensor offline</div>
+                    <div className="text-sm mt-1 text-stone-600">
+                      No data available
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : (
+              <>
+                {/* Combined sensors statistics */}
                 <div className="grid grid-cols-2 gap-4">
-                  {tempStats && (
-                    <div className="bg-base-200 rounded-lg p-3">
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  {overallStats.temp && (
+                    <div className="rounded-2xl border border-border bg-muted/40 p-3">
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2 justify-center">
                         <Thermometer size={16} />
+                        {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
                         Temperature
                       </h4>
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
-                          <span>Current:</span>
-                          <span
-                            className="font-mono"
-                            style={{
-                              color: getTemperatureColor(
-                                tempStats.current || 0,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(tempStats.current || 0, '°C')}
+                          <span>
+                            Min ({overallStats.temp.minSensor?.deviceName}):
                           </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Min:</span>
                           <Tooltip
-                            content={`Recorded at ${tempStats.minTime?.toLocaleString()}`}
+                            content={`Latest reading from ${overallStats.temp.minSensor?.deviceName}`}
                             position="top"
                           >
                             <span
                               className="font-mono cursor-help"
                               style={{
-                                color: getTemperatureColor(tempStats.min),
+                                color: getTemperatureColor(
+                                  overallStats.temp.min!,
+                                ),
                               }}
                             >
-                              {formatStatValue(tempStats.min, '°C')}
+                              {formatStatValue(overallStats.temp.min!, '°C')}
                             </span>
                           </Tooltip>
                         </div>
                         <div className="flex justify-between">
-                          <span>Max:</span>
+                          <span>
+                            Max ({overallStats.temp.maxSensor?.deviceName}):
+                          </span>
                           <Tooltip
-                            content={`Recorded at ${tempStats.maxTime?.toLocaleString()}`}
+                            content={`Latest reading from ${overallStats.temp.maxSensor?.deviceName}`}
                             position="top"
                           >
                             <span
                               className="font-mono cursor-help"
                               style={{
-                                color: getTemperatureColor(tempStats.max),
+                                color: getTemperatureColor(
+                                  overallStats.temp.max!,
+                                ),
                               }}
                             >
-                              {formatStatValue(tempStats.max, '°C')}
+                              {formatStatValue(overallStats.temp.max!, '°C')}
                             </span>
                           </Tooltip>
                         </div>
@@ -724,69 +902,84 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                           <span
                             className="font-mono"
                             style={{
-                              color: getTemperatureColor(tempStats.avg),
+                              color: getTemperatureColor(
+                                overallStats.temp.avg!,
+                              ),
                             }}
                           >
-                            {formatStatValue(tempStats.avg, '°C')}
+                            {formatStatValue(overallStats.temp.avg!, '°C')}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Sensors:</span>
+                          <span className="font-mono">
+                            {
+                              sensorData.filter(
+                                (s) =>
+                                  s.temp_data.length > 0 &&
+                                  (sensorFilter === 'indoor'
+                                    ? s.is_indoor
+                                    : !s.is_indoor),
+                              ).length
+                            }
                           </span>
                         </div>
                       </div>
                     </div>
                   )}
-
-                  {humidityStats && (
-                    <div className="bg-base-200 rounded-lg p-3">
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                  {overallStats.humidity && (
+                    <div className="rounded-2xl border border-border bg-muted/40 p-3">
+                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2 justify-center">
                         <Droplets size={16} />
+                        {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
                         Humidity
                       </h4>
                       <div className="space-y-1 text-xs">
                         <div className="flex justify-between">
-                          <span>Current:</span>
-                          <span
-                            className="font-mono"
-                            style={{
-                              color: getHumidityColor(
-                                humidityStats.current || 0,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(
-                              humidityStats.current || 0,
-                              '%',
-                              0,
-                            )}
+                          <span>
+                            Min ({overallStats.humidity.minSensor?.deviceName}):
                           </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Min:</span>
                           <Tooltip
-                            content={`Recorded at ${humidityStats.minTime?.toLocaleString()}`}
+                            content={`Latest reading from ${overallStats.humidity.minSensor?.deviceName}`}
                             position="top"
                           >
                             <span
                               className="font-mono cursor-help"
                               style={{
-                                color: getHumidityColor(humidityStats.min),
+                                color: getHumidityColor(
+                                  overallStats.humidity.min!,
+                                ),
                               }}
                             >
-                              {formatStatValue(humidityStats.min, '%', 0)}
+                              {formatStatValue(
+                                overallStats.humidity.min!,
+                                '%',
+                                0,
+                              )}
                             </span>
                           </Tooltip>
                         </div>
                         <div className="flex justify-between">
-                          <span>Max:</span>
+                          <span>
+                            Max ({overallStats.humidity.maxSensor?.deviceName}):
+                          </span>
                           <Tooltip
-                            content={`Recorded at ${humidityStats.maxTime?.toLocaleString()}`}
+                            content={`Latest reading from ${overallStats.humidity.maxSensor?.deviceName}`}
                             position="top"
                           >
                             <span
                               className="font-mono cursor-help"
                               style={{
-                                color: getHumidityColor(humidityStats.max),
+                                color: getHumidityColor(
+                                  overallStats.humidity.max!,
+                                ),
                               }}
                             >
-                              {formatStatValue(humidityStats.max, '%', 0)}
+                              {formatStatValue(
+                                overallStats.humidity.max!,
+                                '%',
+                                0,
+                              )}
                             </span>
                           </Tooltip>
                         </div>
@@ -795,287 +988,119 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                           <span
                             className="font-mono"
                             style={{
-                              color: getHumidityColor(humidityStats.avg),
+                              color: getHumidityColor(
+                                overallStats.humidity.avg!,
+                              ),
                             }}
                           >
-                            {formatStatValue(humidityStats.avg, '%', 0)}
+                            {formatStatValue(
+                              overallStats.humidity.avg!,
+                              '%',
+                              0,
+                            )}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Sensors:</span>
+                          <span className="font-mono">
+                            {
+                              sensorData.filter(
+                                (s) =>
+                                  s.humidity_data.length > 0 &&
+                                  (sensorFilter === 'indoor'
+                                    ? s.is_indoor
+                                    : !s.is_indoor),
+                              ).length
+                            }
                           </span>
                         </div>
                       </div>
                     </div>
                   )}
                 </div>
-              )}
 
-              {/* Individual sensor chart */}
-              {individualChartData.length > 0 ? (
-                <ResponsiveChart height={350} className="rounded-lg">
-                  {({ width, height }) => (
-                    <SensorChart
-                      data={individualChartData}
-                      width={width}
-                      height={height}
-                      animate={true}
-                      showTemperature={!!tempStats}
-                      showHumidity={!!humidityStats}
-                    />
-                  )}
-                </ResponsiveChart>
-              ) : (
-                <div className="p-8 text-stone-500 text-center">
-                  <div className="text-4xl mb-2">📡</div>
-                  <div>Sensor offline</div>
-                  <div className="text-sm mt-1 text-stone-600">
-                    No data available
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <>
-              {/* Combined sensors statistics */}
-              <div className="grid grid-cols-2 gap-4">
-                {overallStats.temp && (
-                  <div className="bg-base-200 rounded-lg p-3">
-                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2 justify-center">
+                {/* Temperature Chart */}
+                <div className="space-y-4">
+                  <div>
+                    <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
                       <Thermometer size={16} />
-                      {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
                       Temperature
-                    </h4>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <span>
-                          Min ({overallStats.temp.minSensor?.deviceName}):
-                        </span>
-                        <Tooltip
-                          content={`Latest reading from ${overallStats.temp.minSensor?.deviceName}`}
-                          position="top"
-                        >
-                          <span
-                            className="font-mono cursor-help"
-                            style={{
-                              color: getTemperatureColor(
-                                overallStats.temp.min!,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(overallStats.temp.min!, '°C')}
-                          </span>
-                        </Tooltip>
+                    </h5>
+                    {combinedChartData.length > 0 &&
+                    combinedChartData.some((d) => d.tempReadings.length > 0) ? (
+                      <ResponsiveChart height={250} className="rounded-lg">
+                        {({ width, height }) => (
+                          <CombinedSensorsChart
+                            key={`temp-chart-${sensorFilter}`}
+                            data={combinedChartData}
+                            width={width}
+                            height={height}
+                            animate={true}
+                            showTemperature={true}
+                            showHumidity={false}
+                            sensorFilter={sensorFilter}
+                            onSensorFilterChange={setSensorFilter}
+                            chartType="temperature"
+                            chartId="temperature"
+                          />
+                        )}
+                      </ResponsiveChart>
+                    ) : (
+                      <div className="rounded-2xl border border-border bg-muted/40 p-8 text-center text-stone-500">
+                        <div className="text-4xl mb-2">📡</div>
+                        <div>No temperature data</div>
+                        <div className="text-sm mt-1 text-stone-600">
+                          No recent data available from any {sensorFilter}{' '}
+                          sensors
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span>
-                          Max ({overallStats.temp.maxSensor?.deviceName}):
-                        </span>
-                        <Tooltip
-                          content={`Latest reading from ${overallStats.temp.maxSensor?.deviceName}`}
-                          position="top"
-                        >
-                          <span
-                            className="font-mono cursor-help"
-                            style={{
-                              color: getTemperatureColor(
-                                overallStats.temp.max!,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(overallStats.temp.max!, '°C')}
-                          </span>
-                        </Tooltip>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Average:</span>
-                        <span
-                          className="font-mono"
-                          style={{
-                            color: getTemperatureColor(overallStats.temp.avg!),
-                          }}
-                        >
-                          {formatStatValue(overallStats.temp.avg!, '°C')}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Sensors:</span>
-                        <span className="font-mono">
-                          {
-                            sensorData.filter(
-                              (s) =>
-                                s.temp_data.length > 0 &&
-                                (sensorFilter === 'indoor'
-                                  ? s.is_indoor
-                                  : !s.is_indoor),
-                            ).length
-                          }
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                )}
-                {overallStats.humidity && (
-                  <div className="bg-base-200 rounded-lg p-3">
-                    <h4 className="text-sm font-medium mb-2 flex items-center gap-2 justify-center">
+
+                  <div>
+                    <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
                       <Droplets size={16} />
-                      {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
                       Humidity
-                    </h4>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <span>
-                          Min ({overallStats.humidity.minSensor?.deviceName}):
-                        </span>
-                        <Tooltip
-                          content={`Latest reading from ${overallStats.humidity.minSensor?.deviceName}`}
-                          position="top"
-                        >
-                          <span
-                            className="font-mono cursor-help"
-                            style={{
-                              color: getHumidityColor(
-                                overallStats.humidity.min!,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(
-                              overallStats.humidity.min!,
-                              '%',
-                              0,
-                            )}
-                          </span>
-                        </Tooltip>
+                    </h5>
+                    {combinedChartData.some(
+                      (d) => d.humidityReadings.length > 0,
+                    ) ? (
+                      <ResponsiveChart height={300} className="rounded-lg">
+                        {({ width, height }) => (
+                          <CombinedSensorsChart
+                            key={`humidity-chart-${sensorFilter}`}
+                            data={combinedChartData}
+                            width={width}
+                            height={height}
+                            animate={true}
+                            showTemperature={false}
+                            showHumidity={true}
+                            sensorFilter={sensorFilter}
+                            onSensorFilterChange={setSensorFilter}
+                            chartType="humidity"
+                            chartId="humidity"
+                          />
+                        )}
+                      </ResponsiveChart>
+                    ) : (
+                      <div className="rounded-2xl border border-border bg-muted/40 p-8 text-center text-stone-500">
+                        <div className="text-4xl mb-2">📡</div>
+                        <div>No humidity data</div>
+                        <div className="text-sm mt-1 text-stone-600">
+                          No recent data available from any {sensorFilter}{' '}
+                          sensors
+                        </div>
                       </div>
-                      <div className="flex justify-between">
-                        <span>
-                          Max ({overallStats.humidity.maxSensor?.deviceName}):
-                        </span>
-                        <Tooltip
-                          content={`Latest reading from ${overallStats.humidity.maxSensor?.deviceName}`}
-                          position="top"
-                        >
-                          <span
-                            className="font-mono cursor-help"
-                            style={{
-                              color: getHumidityColor(
-                                overallStats.humidity.max!,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(
-                              overallStats.humidity.max!,
-                              '%',
-                              0,
-                            )}
-                          </span>
-                        </Tooltip>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Average:</span>
-                        <span
-                          className="font-mono"
-                          style={{
-                            color: getHumidityColor(overallStats.humidity.avg!),
-                          }}
-                        >
-                          {formatStatValue(overallStats.humidity.avg!, '%', 0)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Sensors:</span>
-                        <span className="font-mono">
-                          {
-                            sensorData.filter(
-                              (s) =>
-                                s.humidity_data.length > 0 &&
-                                (sensorFilter === 'indoor'
-                                  ? s.is_indoor
-                                  : !s.is_indoor),
-                            ).length
-                          }
-                        </span>
-                      </div>
-                    </div>
+                    )}
                   </div>
-                )}
-              </div>
-
-              {/* Temperature Chart */}
-              <div className="space-y-4">
-                <div>
-                  <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Thermometer size={16} />
-                    Temperature
-                  </h5>
-                  {combinedChartData.length > 0 &&
-                  combinedChartData.some((d) => d.tempReadings.length > 0) ? (
-                    <ResponsiveChart height={250} className="rounded-lg">
-                      {({ width, height }) => (
-                        <CombinedSensorsChart
-                          key={`temp-chart-${sensorFilter}`}
-                          data={combinedChartData}
-                          width={width}
-                          height={height}
-                          animate={true}
-                          showTemperature={true}
-                          showHumidity={false}
-                          sensorFilter={sensorFilter}
-                          onSensorFilterChange={setSensorFilter}
-                          chartType="temperature"
-                          chartId="temperature"
-                        />
-                      )}
-                    </ResponsiveChart>
-                  ) : (
-                    <div className="p-8 text-stone-500 text-center bg-base-200 rounded-lg">
-                      <div className="text-4xl mb-2">📡</div>
-                      <div>No temperature data</div>
-                      <div className="text-sm mt-1 text-stone-600">
-                        No recent data available from any {sensorFilter} sensors
-                      </div>
-                    </div>
-                  )}
                 </div>
+              </>
+            )}
 
-                <div>
-                  <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Droplets size={16} />
-                    Humidity
-                  </h5>
-                  {combinedChartData.some(
-                    (d) => d.humidityReadings.length > 0,
-                  ) ? (
-                    <ResponsiveChart height={300} className="rounded-lg">
-                      {({ width, height }) => (
-                        <CombinedSensorsChart
-                          key={`humidity-chart-${sensorFilter}`}
-                          data={combinedChartData}
-                          width={width}
-                          height={height}
-                          animate={true}
-                          showTemperature={false}
-                          showHumidity={true}
-                          sensorFilter={sensorFilter}
-                          onSensorFilterChange={setSensorFilter}
-                          chartType="humidity"
-                          chartId="humidity"
-                        />
-                      )}
-                    </ResponsiveChart>
-                  ) : (
-                    <div className="p-8 text-stone-500 text-center bg-base-200 rounded-lg">
-                      <div className="text-4xl mb-2">📡</div>
-                      <div>No humidity data</div>
-                      <div className="text-sm mt-1 text-stone-600">
-                        No recent data available from any {sensorFilter} sensors
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* Legends removed as requested */}
-        </Modal.Body>
-      </Modal.Legacy>
+            {/* Legends removed as requested */}
+          </div>
+        </div>
+      </ResponsiveOverlay>
     </>
   );
 };

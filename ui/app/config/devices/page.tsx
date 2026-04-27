@@ -32,9 +32,31 @@ import {
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
+import {
+  ConfigField,
+  ConfigFormSection,
+  ConfigHelpPanel,
+} from '@/ui/config-form';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { useEffect, useMemo, useState } from 'react';
 
 type DeviceTypeFilter = 'all' | 'controllable' | 'sensor' | 'other';
+
+const selectClassName =
+  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const fieldClassName = 'space-y-2';
+const fieldLabelClassName = 'text-sm font-medium';
+const dashedPanelClassName =
+  'rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground';
+const spinnerClassName =
+  'size-3 animate-spin rounded-full border-2 border-current border-t-transparent';
 
 type VisibleDeviceEntry = {
   activeSceneId: string | null;
@@ -389,7 +411,7 @@ function SensorConfigFields({
 }: SensorConfigFieldsProps) {
   if (kind === 'auto') {
     return (
-      <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-3 text-sm opacity-80">
+      <div className={dashedPanelClassName}>
         Auto mode currently resolves to{' '}
         <span className="font-medium">{resolvedLabel}</span> based on the latest
         sensor payload. Use a manual mode when a switch should look like the
@@ -401,24 +423,22 @@ function SensorConfigFields({
   if (kind === 'on_off_buttons') {
     return (
       <div className="grid gap-3 md:grid-cols-2">
-        <label className="form-control">
-          <span className="label-text text-sm">On value</span>
-          <input
+        <ConfigField label="On value">
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={config.on_value ?? ''}
             onChange={(e) => onChange('on_value', e.target.value)}
           />
-        </label>
-        <label className="form-control">
-          <span className="label-text text-sm">Off value</span>
-          <input
+        </ConfigField>
+        <ConfigField label="Off value">
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={config.off_value ?? ''}
             onChange={(e) => onChange('off_value', e.target.value)}
           />
-        </label>
+        </ConfigField>
       </div>
     );
   }
@@ -426,48 +446,44 @@ function SensorConfigFields({
   if (kind === 'hue_dimmer') {
     return (
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <label className="form-control">
-          <span className="label-text text-sm">On value</span>
-          <input
+        <ConfigField label="On value">
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={config.on_value ?? ''}
             onChange={(e) => onChange('on_value', e.target.value)}
           />
-        </label>
-        <label className="form-control">
-          <span className="label-text text-sm">Dim up value</span>
-          <input
+        </ConfigField>
+        <ConfigField label="Dim up value">
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={config.up_value ?? ''}
             onChange={(e) => onChange('up_value', e.target.value)}
           />
-        </label>
-        <label className="form-control">
-          <span className="label-text text-sm">Dim down value</span>
-          <input
+        </ConfigField>
+        <ConfigField label="Dim down value">
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={config.down_value ?? ''}
             onChange={(e) => onChange('down_value', e.target.value)}
           />
-        </label>
-        <label className="form-control">
-          <span className="label-text text-sm">Off value</span>
-          <input
+        </ConfigField>
+        <ConfigField label="Off value">
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={config.off_value ?? ''}
             onChange={(e) => onChange('off_value', e.target.value)}
           />
-        </label>
+        </ConfigField>
       </div>
     );
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-base-300 bg-base-100/40 p-3 text-sm opacity-80">
+    <div className={dashedPanelClassName}>
       This mode does not need extra mapping values. The inline sensor panel will
       render a{' '}
       {kind === 'boolean'
@@ -485,7 +501,7 @@ function SensorConfigFields({
 function DeviceFactRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="grid grid-cols-[7rem_minmax(0,1fr)] gap-3 text-sm">
-      <span className="opacity-60">{label}</span>
+      <span className="text-muted-foreground">{label}</span>
       <span className="wrap-break-word font-medium">{value}</span>
     </div>
   );
@@ -529,9 +545,23 @@ export default function DevicesPage() {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [openDeviceKey, setOpenDeviceKey] = useState<string | null>(null);
+  const [deviceDetailTab, setDeviceDetailTab] = useState<
+    'runtime' | 'config' | 'actions' | 'raw'
+  >('runtime');
   const [replacementDrafts, setReplacementDrafts] = useState<
     Record<string, string>
   >({});
+
+  const changeDeviceDetailTab = (value: string) => {
+    if (
+      value === 'runtime' ||
+      value === 'config' ||
+      value === 'actions' ||
+      value === 'raw'
+    ) {
+      setDeviceDetailTab(value);
+    }
+  };
 
   useEffect(() => {
     setDisplayNameDrafts(
@@ -992,7 +1022,7 @@ export default function DevicesPage() {
   if (devicesLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <span className="loading loading-spinner loading-lg"></span>
+        <Skeleton className="size-12 rounded-full" />
       </div>
     );
   }
@@ -1001,7 +1031,7 @@ export default function DevicesPage() {
     <div className="space-y-6">
       <div className="space-y-2">
         <h1 className="text-2xl font-bold">Devices</h1>
-        <p className="max-w-3xl text-sm opacity-70">
+        <p className="max-w-3xl text-sm text-muted-foreground">
           Configure user-facing device labels, inspect live runtime state, and
           trigger fake sensor updates without opening the floorplan. Active
           scenes and scene-derived state sources are shown for controllable
@@ -1010,41 +1040,40 @@ export default function DevicesPage() {
       </div>
 
       {error && (
-        <div className="alert alert-warning">
-          <span>{error}</span>
-        </div>
+        <Alert variant="warning">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {notice && (
-        <div className="alert alert-success">
-          <span>{notice}</span>
-          <button
-            className="btn btn-sm btn-ghost"
-            onClick={() => setNotice(null)}
-          >
-            ✕
-          </button>
-        </div>
+        <Alert>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{notice}</span>
+            <Button variant="ghost" size="sm" onClick={() => setNotice(null)}>
+              ✕
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body space-y-4">
+      <Card>
+        <CardContent className="space-y-4 p-5">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="form-control w-full max-w-xs">
-              <span className="label-text text-sm">Search</span>
-              <input
+            <label className={fieldClassName + ' w-full max-w-xs'}>
+              <span className={fieldLabelClassName}>Search</span>
+              <Input
                 type="text"
-                className="input input-bordered input-sm"
+                className="h-9"
                 placeholder="Search by label, id, or group"
                 value={deviceSearch}
                 onChange={(e) => setDeviceSearch(e.target.value)}
               />
             </label>
 
-            <label className="form-control w-full max-w-48">
-              <span className="label-text text-sm">Type</span>
+            <label className={fieldClassName + ' w-full max-w-48'}>
+              <span className={fieldLabelClassName}>Type</span>
               <select
-                className="select select-bordered select-sm"
+                className={selectClassName + ' h-9'}
                 value={deviceTypeFilter}
                 onChange={(e) =>
                   setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
@@ -1057,10 +1086,10 @@ export default function DevicesPage() {
               </select>
             </label>
 
-            <label className="form-control w-full max-w-xs">
-              <span className="label-text text-sm">Group</span>
+            <label className={fieldClassName + ' w-full max-w-xs'}>
+              <span className={fieldLabelClassName}>Group</span>
               <select
-                className="select select-bordered select-sm"
+                className={selectClassName + ' h-9'}
                 value={deviceGroupFilter}
                 onChange={(e) => setDeviceGroupFilter(e.target.value)}
               >
@@ -1077,8 +1106,9 @@ export default function DevicesPage() {
             {(deviceSearch ||
               deviceTypeFilter !== 'all' ||
               deviceGroupFilter !== 'all') && (
-              <button
-                className="btn btn-sm btn-ghost"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setDeviceSearch('');
                   setDeviceTypeFilter('all');
@@ -1086,11 +1116,11 @@ export default function DevicesPage() {
                 }}
               >
                 Clear Filters
-              </button>
+              </Button>
             )}
           </div>
 
-          <div className="text-sm opacity-70">
+          <div className="text-sm text-muted-foreground">
             Matching devices: {visibleDevices.length} total ·{' '}
             {visibleDevices.filter((entry) => entry.type === 'sensor').length}{' '}
             sensors ·{' '}
@@ -1100,8 +1130,8 @@ export default function DevicesPage() {
             }{' '}
             controllables
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {visibleDevices.map((entry) => {
@@ -1171,20 +1201,20 @@ export default function DevicesPage() {
                       <h2 className="truncate text-base font-semibold">
                         {label}
                       </h2>
-                      <div className="text-xs opacity-60">{deviceKey}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {deviceKey}
+                      </div>
                     </div>
 
-                    {hasDisplayOverride && (
-                      <span className="badge badge-primary badge-sm">
-                        Custom label
-                      </span>
-                    )}
+                    {hasDisplayOverride && <Badge>Custom label</Badge>}
                   </div>
 
-                  <div className="text-sm opacity-80">{runtimeSummary}</div>
+                  <div className="text-sm text-foreground/80">
+                    {runtimeSummary}
+                  </div>
 
                   {resolvedColorPreview && (
-                    <div className="flex items-center gap-2 text-xs opacity-75">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <ResolvedColorDot
                         color={resolvedColorPreview.color}
                         isPowered={resolvedColorPreview.isPowered}
@@ -1195,44 +1225,53 @@ export default function DevicesPage() {
                           : 'Current color'}
                       </span>
                       {!resolvedColorPreview.isPowered && (
-                        <span className="opacity-60">device off</span>
+                        <span>device off</span>
                       )}
                     </div>
                   )}
 
                   <div className="flex flex-wrap gap-2 text-xs">
-                    <span className="badge badge-outline badge-sm">{type}</span>
+                    <Badge variant="outline">{type}</Badge>
                     {'Controllable' in device.data && (
-                      <span className="badge badge-outline badge-sm">
+                      <Badge variant="outline">
                         {getSceneLabel(activeSceneId, sceneNameById)}
-                      </span>
+                      </Badge>
                     )}
                     {'Controllable' in device.data ? (
-                      <span className="badge badge-outline badge-sm">
-                        {sourceSummary.badge}
-                      </span>
+                      <Badge variant="outline">{sourceSummary.badge}</Badge>
                     ) : (
-                      <span className="badge badge-outline badge-sm">
-                        {interactionLabel}
-                      </span>
+                      <Badge variant="outline">{interactionLabel}</Badge>
                     )}
                     {groupNames.length > 0 && (
-                      <span className="badge badge-ghost badge-sm">
+                      <Badge variant="muted">
                         {getGroupCountLabel(groupNames)}
-                      </span>
+                      </Badge>
                     )}
                   </div>
                 </div>
               }
             >
               {isOpen ? (
-                <div className="space-y-4">
-                  <div className="grid gap-4 xl:grid-cols-2">
-                    <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
-                      <div className="mb-3 text-xs font-semibold uppercase tracking-wide opacity-60">
-                        Runtime
-                      </div>
+                <Tabs
+                  value={deviceDetailTab}
+                  onValueChange={changeDeviceDetailTab}
+                  className="space-y-4"
+                >
+                  <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+                    <TabsTrigger value="runtime">Runtime</TabsTrigger>
+                    <TabsTrigger value="config">Config</TabsTrigger>
+                    <TabsTrigger value="actions">Actions</TabsTrigger>
+                    <TabsTrigger value="raw">Raw</TabsTrigger>
+                  </TabsList>
 
+                  <TabsContent
+                    value="runtime"
+                    className="mt-4 grid gap-4 xl:grid-cols-2"
+                  >
+                    <ConfigFormSection
+                      title="Runtime"
+                      description="Live state currently reported by the integration and runtime state resolver."
+                    >
                       {'Controllable' in device.data ? (
                         <div className="space-y-3">
                           <DeviceFactRow
@@ -1250,17 +1289,17 @@ export default function DevicesPage() {
 
                           {stateDetails.length > 0 && (
                             <div className="space-y-2 pt-1">
-                              <div className="text-xs uppercase tracking-wide opacity-60">
+                              <div className="text-xs uppercase tracking-wide text-muted-foreground">
                                 State details
                               </div>
                               <div className="flex flex-wrap gap-2">
                                 {stateDetails.map((detail) => (
-                                  <span
+                                  <Badge
                                     key={`${deviceKey}-${detail}`}
-                                    className="badge badge-outline badge-sm"
+                                    variant="outline"
                                   >
                                     {detail}
-                                  </span>
+                                  </Badge>
                                 ))}
                               </div>
                             </div>
@@ -1292,13 +1331,12 @@ export default function DevicesPage() {
                           />
                         </div>
                       )}
-                    </section>
+                    </ConfigFormSection>
 
-                    <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
-                      <div className="mb-3 text-xs font-semibold uppercase tracking-wide opacity-60">
-                        Identity
-                      </div>
-
+                    <ConfigFormSection
+                      title="Identity"
+                      description="Static ids, display names, capabilities, and config group membership."
+                    >
                       <div className="space-y-3">
                         <DeviceFactRow
                           label="Default label"
@@ -1328,255 +1366,267 @@ export default function DevicesPage() {
 
                         {capabilityLabels.length > 0 && (
                           <div className="space-y-2 pt-1">
-                            <div className="text-xs uppercase tracking-wide opacity-60">
+                            <div className="text-xs uppercase tracking-wide text-muted-foreground">
                               Capabilities
                             </div>
                             <div className="flex flex-wrap gap-2">
                               {capabilityLabels.map((capability) => (
-                                <span
+                                <Badge
                                   key={`${deviceKey}-${capability}`}
-                                  className="badge badge-outline badge-sm"
+                                  variant="outline"
                                 >
                                   {capability}
-                                </span>
+                                </Badge>
                               ))}
                             </div>
                           </div>
                         )}
 
                         <div className="space-y-2 pt-1">
-                          <div className="text-xs uppercase tracking-wide opacity-60">
+                          <div className="text-xs uppercase tracking-wide text-muted-foreground">
                             Groups
                           </div>
                           {groupNames.length > 0 ? (
                             <div className="flex flex-wrap gap-2">
                               {groupNames.map((groupName) => (
-                                <span
+                                <Badge
                                   key={`${deviceKey}-${groupName}`}
-                                  className="badge badge-ghost badge-sm"
+                                  variant="muted"
                                 >
                                   {groupName}
-                                </span>
+                                </Badge>
                               ))}
                             </div>
                           ) : (
-                            <div className="text-sm opacity-70">
+                            <div className="text-sm text-muted-foreground">
                               No config groups reference this device.
                             </div>
                           )}
                         </div>
                       </div>
-                    </section>
-                  </div>
+                    </ConfigFormSection>
+                  </TabsContent>
 
-                  <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
-                    <div className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
-                      Raw JSON payload
-                    </div>
-                    {device.raw ? (
-                      <details>
-                        <summary className="cursor-pointer select-none text-sm opacity-80">
-                          Show live payload from the integration
-                        </summary>
-                        <pre className="mt-3 max-h-96 overflow-auto rounded-lg border border-base-300 bg-base-100 p-3 text-xs font-mono whitespace-pre-wrap break-all">
-                          {JSON.stringify(device.raw, null, 2)}
-                        </pre>
-                      </details>
-                    ) : (
-                      <p className="text-sm opacity-70">
-                        This device has not published a raw payload.
-                      </p>
-                    )}
-                  </section>
-
-                  {'Sensor' in device.data && (
-                    <section className="rounded-xl border border-base-300 bg-base-100/70 p-4">
-                      <div className="mb-2 text-xs font-semibold uppercase tracking-wide opacity-60">
-                        Fake Sensor Actions
-                      </div>
-                      <p className="mb-4 text-sm opacity-75">
-                        Trigger the same fake sensor actions available on the
-                        floorplan directly from configuration.
-                      </p>
-                      <SensorActionPanel
-                        device={device}
-                        sensorConfig={deviceSensorConfigMap[deviceRef] ?? null}
-                      />
-                    </section>
-                  )}
-
-                  <section className="rounded-xl border border-base-300 bg-base-100/70 p-4 space-y-4">
-                    <div className="text-xs font-semibold uppercase tracking-wide opacity-60">
-                      Configuration
-                    </div>
-
-                    <label className="form-control w-full max-w-md">
-                      <span className="label-text text-sm">Custom label</span>
-                      <input
-                        type="text"
-                        className="input input-bordered"
-                        placeholder="Use integration label"
-                        value={labelDraft}
-                        onChange={(e) =>
-                          setDisplayNameDrafts((previous) => ({
-                            ...previous,
-                            [deviceKey]: e.target.value,
-                          }))
-                        }
-                      />
-                    </label>
-
-                    {'Sensor' in device.data ? (
-                      <div className="space-y-4 rounded-xl border border-base-300 bg-base-100/40 p-4">
-                        <div className="flex flex-wrap items-start gap-4">
-                          <label className="form-control w-full max-w-sm">
-                            <span className="label-text text-sm">
-                              Map interaction
-                            </span>
-                            <select
-                              className="select select-bordered"
-                              value={interactionKind}
-                              onChange={(e) =>
-                                updateSensorDraftKind(
-                                  deviceRef,
-                                  e.target.value as SensorInteractionKind,
-                                )
-                              }
-                            >
-                              {SENSOR_INTERACTION_OPTIONS.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-
-                          <div className="space-y-2 text-sm opacity-70">
-                            <div>Sensor reference: {deviceRef}</div>
-                            <div>
-                              Current payload mode:{' '}
-                              {getSensorInteractionLabel(
-                                resolvedInteraction.kind,
-                              )}
-                            </div>
-                            <div>
-                              Last seen sensor shape: {sensorDetails.kind}
-                            </div>
-                          </div>
-                        </div>
-
-                        <SensorConfigFields
-                          kind={interactionKind}
-                          config={interactionConfig}
-                          resolvedLabel={getSensorInteractionLabel(
-                            resolvedInteraction.kind,
-                          )}
-                          onChange={(field, value) =>
-                            updateSensorDraftField(deviceRef, field, value)
+                  <TabsContent value="config" className="mt-4">
+                    <ConfigFormSection
+                      title="Configuration"
+                      description="Customize how this device is displayed and how sensor payloads appear in control surfaces."
+                    >
+                      <ConfigField
+                        label="Custom label"
+                        className="w-full max-w-md"
+                      >
+                        <Input
+                          type="text"
+                          placeholder="Use integration label"
+                          value={labelDraft}
+                          onChange={(e) =>
+                            setDisplayNameDrafts((previous) => ({
+                              ...previous,
+                              [deviceKey]: e.target.value,
+                            }))
                           }
                         />
-                      </div>
-                    ) : (
-                      <div className="rounded-xl border border-dashed border-base-300 bg-base-100/40 p-4 text-sm opacity-80">
-                        This device is not a sensor, so only the user-facing
-                        label applies here.
-                      </div>
-                    )}
+                      </ConfigField>
 
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        className="btn btn-sm btn-ghost"
-                        disabled={isMutating}
-                        onClick={() =>
-                          setDisplayNameDrafts((previous) => ({
-                            ...previous,
-                            [deviceKey]: '',
-                          }))
-                        }
-                      >
-                        Use Integration Label
-                      </button>
-                      {'Sensor' in device.data && (
-                        <button
-                          className="btn btn-sm btn-ghost"
+                      {'Sensor' in device.data ? (
+                        <div className="space-y-4 rounded-2xl border border-border bg-muted/30 p-4">
+                          <div className="flex flex-wrap items-start gap-4">
+                            <ConfigField
+                              label="Map interaction"
+                              className="w-full max-w-sm"
+                            >
+                              <select
+                                className={selectClassName}
+                                value={interactionKind}
+                                onChange={(e) =>
+                                  updateSensorDraftKind(
+                                    deviceRef,
+                                    e.target.value as SensorInteractionKind,
+                                  )
+                                }
+                              >
+                                {SENSOR_INTERACTION_OPTIONS.map((option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  >
+                                    {option.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </ConfigField>
+
+                            <div className="space-y-2 text-sm text-muted-foreground">
+                              <div>Sensor reference: {deviceRef}</div>
+                              <div>
+                                Current payload mode:{' '}
+                                {getSensorInteractionLabel(
+                                  resolvedInteraction.kind,
+                                )}
+                              </div>
+                              <div>
+                                Last seen sensor shape: {sensorDetails.kind}
+                              </div>
+                            </div>
+                          </div>
+
+                          <SensorConfigFields
+                            kind={interactionKind}
+                            config={interactionConfig}
+                            resolvedLabel={getSensorInteractionLabel(
+                              resolvedInteraction.kind,
+                            )}
+                            onChange={(field, value) =>
+                              updateSensorDraftField(deviceRef, field, value)
+                            }
+                          />
+                        </div>
+                      ) : (
+                        <div className={dashedPanelClassName}>
+                          This device is not a sensor, so only the user-facing
+                          label applies here.
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           disabled={isMutating}
                           onClick={() =>
-                            updateSensorDraftKind(deviceRef, 'auto')
+                            setDisplayNameDrafts((previous) => ({
+                              ...previous,
+                              [deviceKey]: '',
+                            }))
                           }
                         >
-                          Use Auto Sensor UI
-                        </button>
+                          Use Integration Label
+                        </Button>
+                        {'Sensor' in device.data && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={isMutating}
+                            onClick={() =>
+                              updateSensorDraftKind(deviceRef, 'auto')
+                            }
+                          >
+                            Use Auto Sensor UI
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          disabled={isSaving || isMutating}
+                          onClick={() => void saveDeviceSettings(device)}
+                        >
+                          {isSaving && <span className={spinnerClassName} />}
+                          Save Changes
+                        </Button>
+                      </div>
+
+                      {hasDisplayOverride && (
+                        <div className="text-xs text-muted-foreground">
+                          A display name override is active for this device.
+                        </div>
                       )}
-                      <button
-                        className={`btn btn-sm btn-primary ${isSaving ? 'loading' : ''}`}
-                        disabled={isSaving || isMutating}
-                        onClick={() => void saveDeviceSettings(device)}
-                      >
-                        Save Changes
-                      </button>
-                    </div>
+                    </ConfigFormSection>
+                  </TabsContent>
 
-                    {hasDisplayOverride && (
-                      <div className="text-xs opacity-60">
-                        A display name override is active for this device.
-                      </div>
+                  <TabsContent value="actions" className="mt-4 space-y-4">
+                    {'Sensor' in device.data ? (
+                      <ConfigFormSection
+                        title="Fake sensor actions"
+                        description="Trigger the same fake sensor actions available on the floorplan directly from configuration."
+                      >
+                        <SensorActionPanel
+                          device={device}
+                          sensorConfig={
+                            deviceSensorConfigMap[deviceRef] ?? null
+                          }
+                        />
+                      </ConfigFormSection>
+                    ) : (
+                      <ConfigHelpPanel>
+                        This device does not expose fake sensor actions.
+                      </ConfigHelpPanel>
                     )}
-                  </section>
 
-                  <section className="rounded-xl border border-error/30 bg-error/5 p-4 space-y-4">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-wide text-error">
-                        Device Replacement / Deletion
+                    <ConfigFormSection
+                      title="Device replacement / deletion"
+                      description="Replace config references with another device, or delete this device from runtime memory and the database while removing saved references."
+                      className="border-destructive/30 bg-destructive/5"
+                    >
+                      <ConfigField
+                        label="Replacement device"
+                        className="w-full max-w-md"
+                      >
+                        <select
+                          className={selectClassName}
+                          disabled={isSaving || isMutating}
+                          value={replacementDraft}
+                          onChange={(event) =>
+                            setReplacementDrafts((previous) => ({
+                              ...previous,
+                              [deviceKey]: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Select replacement device...</option>
+                          {availableReplacementOptions.map((option) => (
+                            <option key={option.key} value={option.key}>
+                              {option.label} ({option.key})
+                            </option>
+                          ))}
+                        </select>
+                      </ConfigField>
+
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="border-amber-400/60 text-amber-700 hover:bg-amber-500/10 dark:text-amber-300"
+                          disabled={isSaving || isMutating || !replacementDraft}
+                          onClick={() => void replaceDeviceReferences(device)}
+                        >
+                          {isMutating && <span className={spinnerClassName} />}
+                          Replace References
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={isSaving || isMutating}
+                          onClick={() => void deleteDeviceConfig(device)}
+                        >
+                          {isMutating && <span className={spinnerClassName} />}
+                          Delete Device
+                        </Button>
                       </div>
-                      <p className="mt-2 text-sm opacity-80">
-                        Replace config references with another device, or delete
-                        this device from runtime memory and the database while
-                        removing its saved references.
-                      </p>
-                    </div>
+                    </ConfigFormSection>
+                  </TabsContent>
 
-                    <label className="form-control w-full max-w-md">
-                      <span className="label-text text-sm">
-                        Replacement device
-                      </span>
-                      <select
-                        className="select select-bordered"
-                        disabled={isSaving || isMutating}
-                        value={replacementDraft}
-                        onChange={(event) =>
-                          setReplacementDrafts((previous) => ({
-                            ...previous,
-                            [deviceKey]: event.target.value,
-                          }))
-                        }
-                      >
-                        <option value="">Select replacement device...</option>
-                        {availableReplacementOptions.map((option) => (
-                          <option key={option.key} value={option.key}>
-                            {option.label} ({option.key})
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        className={`btn btn-sm btn-warning ${isMutating ? 'loading' : ''}`}
-                        disabled={isSaving || isMutating || !replacementDraft}
-                        onClick={() => void replaceDeviceReferences(device)}
-                      >
-                        Replace References
-                      </button>
-                      <button
-                        className={`btn btn-sm btn-error ${isMutating ? 'loading' : ''}`}
-                        disabled={isSaving || isMutating}
-                        onClick={() => void deleteDeviceConfig(device)}
-                      >
-                        Delete Device
-                      </button>
-                    </div>
-                  </section>
-                </div>
+                  <TabsContent value="raw" className="mt-4">
+                    <ConfigFormSection
+                      title="Raw JSON payload"
+                      description="Latest raw payload published by the integration."
+                    >
+                      {device.raw ? (
+                        <details>
+                          <summary className="cursor-pointer select-none text-sm text-foreground/80">
+                            Show live payload from the integration
+                          </summary>
+                          <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                            {JSON.stringify(device.raw, null, 2)}
+                          </pre>
+                        </details>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          This device has not published a raw payload.
+                        </p>
+                      )}
+                    </ConfigFormSection>
+                  </TabsContent>
+                </Tabs>
               ) : null}
             </ExpandableConfigCard>
           );
@@ -1584,9 +1634,10 @@ export default function DevicesPage() {
       </div>
 
       {visibleDevices.length === 0 && (
-        <div className="rounded-xl border border-dashed border-base-300 bg-base-200/40 p-6 text-sm opacity-70">
-          No devices match the current filters.
-        </div>
+        <EmptyState
+          title="No devices match the current filters"
+          description="Clear filters or search for another label, id, or group."
+        />
       )}
     </div>
   );

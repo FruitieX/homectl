@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useEffect } from 'react';
 import { useTooltip, useTooltipInPortal } from '@visx/tooltip';
 import { localPoint } from '@visx/event';
-import { debounce } from 'lodash';
+import debounce from 'lodash/debounce';
 
 export interface TooltipConfig {
   zIndex?: number;

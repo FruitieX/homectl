@@ -1,5 +1,4 @@
-import { useDeviceDisplayNames } from '@/hooks/useConfig';
-import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import { cn } from '@/lib/cn';
 import { extractJsonPointers, resolveJsonPointer } from '../utils/jsonPointers';
 import { useState, useCallback } from 'react';
 import { TriggerMode } from '@/bindings/TriggerMode';
@@ -8,6 +7,24 @@ import { GroupId } from '@/bindings/GroupId';
 import { Device } from '@/bindings/Device';
 import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { ConfigField } from '@/ui/config-form';
+import {
+  DeviceSelect,
+  GroupSelect,
+  splitDeviceKey,
+} from '@/ui/config-selectors';
+import { Input } from '@/ui/primitives/input';
+import { Textarea } from '@/ui/primitives/textarea';
+
+const selectClassName =
+  'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const fieldClassName = 'space-y-2';
+const fieldLabelClassName = 'text-sm font-medium';
+const helpTextClassName = 'text-xs text-muted-foreground';
 
 // Rule types (matching server types, without ts-rs export issues)
 export interface SensorRule {
@@ -104,7 +121,12 @@ const rawStringOperators = new Set<RawRuleOperator>([
   'regex',
 ]);
 
-const rawNumericOperators = new Set<RawRuleOperator>(['gt', 'gte', 'lt', 'lte']);
+const rawNumericOperators = new Set<RawRuleOperator>([
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+]);
 
 function getDeviceByRef(
   devices: DevicesState,
@@ -116,6 +138,19 @@ function getDeviceByRef(
   }
 
   return devices[`${integrationId}/${deviceId}`];
+}
+
+function getDeviceKeyFromRef(integrationId?: string, deviceId?: string) {
+  return integrationId && deviceId ? `${integrationId}/${deviceId}` : '';
+}
+
+function getDeviceRefUpdate(deviceKey: string) {
+  return (
+    splitDeviceKey(deviceKey) ?? {
+      integration_id: undefined,
+      device_id: undefined,
+    }
+  );
 }
 
 function formatRawPreviewValue(value: unknown) {
@@ -264,12 +299,12 @@ interface TriggerModeSelectorProps {
 
 function TriggerModeSelector({ value, onChange }: TriggerModeSelectorProps) {
   return (
-    <div className="form-control">
-      <label className="label">
-        <span className="label-text">Trigger Mode</span>
+    <div className={fieldClassName}>
+      <label>
+        <span className={fieldLabelClassName}>Trigger Mode</span>
       </label>
       <select
-        className="select select-bordered select-sm"
+        className={selectClassName}
         value={value}
         onChange={(e) => onChange(e.target.value as TriggerMode)}
       >
@@ -277,7 +312,7 @@ function TriggerModeSelector({ value, onChange }: TriggerModeSelectorProps) {
         <option value="edge">Edge (on change to match)</option>
         <option value="level">Level (while matching)</option>
       </select>
-      <span className="label-text-alt mt-1 opacity-60">
+      <span className={helpTextClassName}>
         {value === 'pulse' && 'Triggers on every matching state update'}
         {value === 'edge' &&
           'Triggers only when state changes from non-matching to matching'}
@@ -288,113 +323,13 @@ function TriggerModeSelector({ value, onChange }: TriggerModeSelectorProps) {
   );
 }
 
-interface DeviceSelectorProps {
-  devices: DevicesState;
-  integrationId?: string;
-  deviceId?: string;
-  onChange: (ref: {
-    integration_id?: string;
-    device_id?: string;
-  }) => void;
-}
-
-function DeviceSelector({
-  devices,
-  integrationId,
-  deviceId,
-  onChange,
-}: DeviceSelectorProps) {
-  const { data: deviceDisplayNames } = useDeviceDisplayNames();
-  const deviceDisplayNameMap = Object.fromEntries(
-    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
-  );
-  const deviceList = Object.entries(devices)
-    .map(([key, device]) => ({
-      key,
-      device: device as Device,
-      label: getDeviceDisplayLabel(device as Device, deviceDisplayNameMap),
-    }))
-    .sort((left, right) => left.label.localeCompare(right.label) || left.key.localeCompare(right.key));
-
-  const currentValue = (() => {
-    if (integrationId && deviceId) {
-      return `${integrationId}/${deviceId}`;
-    }
-
-    return '';
-  })();
-
-  return (
-    <div className="form-control">
-      <label className="label">
-        <span className="label-text">Device</span>
-      </label>
-      <select
-        className="select select-bordered select-sm"
-        value={currentValue}
-        onChange={(e) => {
-          if (!e.target.value) {
-            onChange({});
-            return;
-          }
-
-          const [intId, ...idParts] = e.target.value.split('/');
-          const device_id = idParts.join('/');
-          onChange({ integration_id: intId, device_id });
-        }}
-      >
-        <option value="">Select device...</option>
-        {deviceList.map(({ key, device, label }) => (
-          <option key={key} value={key}>
-            {label} ({key})
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
-interface GroupSelectorProps {
-  groups: FlattenedGroupsConfig;
-  value: GroupId;
-  onChange: (groupId: GroupId) => void;
-}
-
-function GroupSelector({ groups, value, onChange }: GroupSelectorProps) {
-  const groupList = Object.entries(groups);
-
-  return (
-    <div className="form-control">
-      <label className="label">
-        <span className="label-text">Group</span>
-      </label>
-      <select
-        className="select select-bordered select-sm"
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-      >
-        <option value="">Select group...</option>
-        {groupList.map(([id, group]) => (
-          <option key={id} value={id}>
-            {group?.name ?? id}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 interface SensorRuleEditorProps {
   rule: SensorRule;
   devices: DevicesState;
   onChange: (rule: SensorRule) => void;
 }
 
-function SensorRuleEditor({
-  rule,
-  devices,
-  onChange,
-}: SensorRuleEditorProps) {
+function SensorRuleEditor({ rule, devices, onChange }: SensorRuleEditorProps) {
   const stateType =
     'value' in rule.state
       ? typeof rule.state.value === 'boolean'
@@ -406,19 +341,25 @@ function SensorRuleEditor({
 
   return (
     <div className="space-y-3">
-      <DeviceSelector
-        devices={devices}
-        integrationId={rule.integration_id}
-        deviceId={rule.device_id}
-        onChange={(ref) => onChange({ ...rule, ...ref })}
-      />
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Device</span>
+        </label>
+        <DeviceSelect
+          devices={devices}
+          value={getDeviceKeyFromRef(rule.integration_id, rule.device_id)}
+          onChange={(deviceKey) =>
+            onChange({ ...rule, ...getDeviceRefUpdate(deviceKey) })
+          }
+        />
+      </div>
 
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">State Type</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>State Type</span>
         </label>
         <select
-          className="select select-bordered select-sm"
+          className={selectClassName}
           value={stateType}
           onChange={(e) => {
             const type = e.target.value;
@@ -441,17 +382,17 @@ function SensorRuleEditor({
       </div>
 
       {'value' in rule.state && typeof rule.state.value === 'boolean' && (
-        <div className="form-control">
-          <label className="label cursor-pointer justify-start gap-3">
+        <div className={fieldClassName}>
+          <label className="flex cursor-pointer items-center gap-3">
             <input
               type="checkbox"
-              className="toggle toggle-primary"
+              className={checkboxClassName}
               checked={rule.state.value}
               onChange={(e) =>
                 onChange({ ...rule, state: { value: e.target.checked } })
               }
             />
-            <span className="label-text">
+            <span className={fieldLabelClassName}>
               {rule.state.value ? 'On / True' : 'Off / False'}
             </span>
           </label>
@@ -459,13 +400,13 @@ function SensorRuleEditor({
       )}
 
       {'value' in rule.state && typeof rule.state.value === 'number' && (
-        <div className="form-control">
-          <label className="label">
-            <span className="label-text">Value</span>
+        <div className={fieldClassName}>
+          <label>
+            <span className={fieldLabelClassName}>Value</span>
           </label>
-          <input
+          <Input
             type="number"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={rule.state.value}
             onChange={(e) =>
               onChange({ ...rule, state: { value: Number(e.target.value) } })
@@ -475,13 +416,13 @@ function SensorRuleEditor({
       )}
 
       {'value' in rule.state && typeof rule.state.value === 'string' && (
-        <div className="form-control">
-          <label className="label">
-            <span className="label-text">Value</span>
+        <div className={fieldClassName}>
+          <label>
+            <span className={fieldLabelClassName}>Value</span>
           </label>
-          <input
+          <Input
             type="text"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={rule.state.value}
             onChange={(e) =>
               onChange({ ...rule, state: { value: e.target.value } })
@@ -519,18 +460,24 @@ function DeviceRuleEditor({
 }: DeviceRuleEditorProps) {
   return (
     <div className="space-y-3">
-      <DeviceSelector
-        devices={devices}
-        integrationId={rule.integration_id}
-        deviceId={rule.device_id}
-        onChange={(ref) => onChange({ ...rule, ...ref })}
-      />
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Device</span>
+        </label>
+        <DeviceSelect
+          devices={devices}
+          value={getDeviceKeyFromRef(rule.integration_id, rule.device_id)}
+          onChange={(deviceKey) =>
+            onChange({ ...rule, ...getDeviceRefUpdate(deviceKey) })
+          }
+        />
+      </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={rule.power !== undefined}
             onChange={(e) =>
               onChange({
@@ -539,20 +486,18 @@ function DeviceRuleEditor({
               })
             }
           />
-          <span className="label-text">Match Power State</span>
+          <span className={fieldLabelClassName}>Match Power State</span>
         </label>
         {rule.power !== undefined && (
           <div className="ml-8">
-            <label className="label cursor-pointer justify-start gap-3">
+            <label className="flex cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
-                className="toggle toggle-primary toggle-sm"
+                className={checkboxClassName}
                 checked={rule.power}
-                onChange={(e) =>
-                  onChange({ ...rule, power: e.target.checked })
-                }
+                onChange={(e) => onChange({ ...rule, power: e.target.checked })}
               />
-              <span className="label-text">
+              <span className={fieldLabelClassName}>
                 {rule.power ? 'On' : 'Off'}
               </span>
             </label>
@@ -560,11 +505,11 @@ function DeviceRuleEditor({
         )}
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={rule.scene !== undefined}
             onChange={(e) =>
               onChange({
@@ -573,12 +518,12 @@ function DeviceRuleEditor({
               })
             }
           />
-          <span className="label-text">Match Scene</span>
+          <span className={fieldLabelClassName}>Match Scene</span>
         </label>
         {rule.scene !== undefined && (
           <div className="ml-8 mt-1">
             <select
-              className="select select-bordered select-sm"
+              className={selectClassName}
               value={rule.scene || ''}
               onChange={(e) =>
                 onChange({ ...rule, scene: e.target.value || undefined })
@@ -645,37 +590,43 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
 
   const previewBorderClass =
     previewState.kind === 'resolved'
-      ? 'border-success/40'
+      ? 'border-emerald-500/40'
       : previewState.kind === 'empty-path'
-        ? 'border-info/40'
+        ? 'border-sky-500/40'
         : previewState.kind === 'missing-path'
-          ? 'border-warning/40'
-          : 'border-base-300';
+          ? 'border-amber-500/40'
+          : 'border-border';
 
   return (
     <div className="space-y-3">
-      <DeviceSelector
-        devices={devices}
-        integrationId={rule.integration_id}
-        deviceId={rule.device_id}
-        onChange={(ref) => onChange({ ...rule, ...ref })}
-      />
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Device</span>
+        </label>
+        <DeviceSelect
+          devices={devices}
+          value={getDeviceKeyFromRef(rule.integration_id, rule.device_id)}
+          onChange={(deviceKey) =>
+            onChange({ ...rule, ...getDeviceRefUpdate(deviceKey) })
+          }
+        />
+      </div>
 
       {selectedDevice && rawPayload !== null && (
-        <details className="rounded-lg border border-base-300 bg-base-200/60">
-          <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide opacity-70">
+        <details className="rounded-2xl border border-border bg-muted/40">
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Live raw payload ({availablePaths.length} fields)
           </summary>
-          <pre className="max-h-60 overflow-auto border-t border-base-300 bg-base-100 px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all">
+          <pre className="max-h-60 overflow-auto border-t border-border bg-background px-3 py-2 text-xs font-mono whitespace-pre-wrap break-all">
             {JSON.stringify(rawPayload, null, 2)}
           </pre>
         </details>
       )}
 
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">JSON Pointer path</span>
-          <span className="label-text-alt opacity-60">
+      <div className={fieldClassName}>
+        <label className="flex flex-wrap items-center justify-between gap-2">
+          <span className={fieldLabelClassName}>JSON Pointer path</span>
+          <span className={helpTextClassName}>
             {!selectedDevice
               ? 'Select a device first'
               : availablePaths.length > 0
@@ -683,10 +634,10 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
                 : 'No raw payload fields to discover'}
           </span>
         </label>
-        <input
+        <Input
           type="text"
           list={availablePaths.length > 0 ? datalistId : undefined}
-          className="input input-bordered input-sm font-mono"
+          className="h-9 font-mono"
           placeholder="/payload/temperature"
           value={rule.path}
           onChange={(e) => setPath(e.target.value)}
@@ -698,13 +649,13 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
             ))}
           </datalist>
         )}
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Use{' '}
           <a
             href="https://datatracker.ietf.org/doc/html/rfc6901"
             target="_blank"
             rel="noreferrer"
-            className="link link-hover"
+            className="text-primary underline-offset-4 hover:underline"
           >
             JSON Pointer
           </a>{' '}
@@ -724,9 +675,12 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
                 key={path}
                 type="button"
                 onClick={() => setPath(path)}
-                className={`badge badge-sm gap-1 font-mono text-xs normal-case ${
-                  isActive ? 'badge-primary' : 'badge-outline hover:badge-primary'
-                }`}
+                className={cn(
+                  'inline-flex items-center rounded-full border px-2 py-0.5 font-mono text-xs transition-colors',
+                  isActive
+                    ? 'border-transparent bg-primary text-primary-foreground'
+                    : 'border-border bg-background hover:bg-accent hover:text-accent-foreground',
+                )}
                 title={`${path} = ${formatRawPreviewValue(resolved)}`}
               >
                 {tokens.join('/') || '/'}
@@ -734,37 +688,42 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
             );
           })}
           {availablePaths.length > 40 && (
-            <span className="text-xs opacity-60 self-center">
+            <span className="self-center text-xs text-muted-foreground">
               +{availablePaths.length - 40} more…
             </span>
           )}
         </div>
       )}
 
-      <div className={`rounded-lg border bg-base-200 px-3 py-2 ${previewBorderClass}`}>
+      <div
+        className={cn(
+          'rounded-2xl border bg-muted/40 px-3 py-2',
+          previewBorderClass,
+        )}
+      >
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Current value preview
           </div>
-          <span className="text-[10px] uppercase tracking-wide opacity-50">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
             live
           </span>
         </div>
         {previewState.kind === 'no-device' && (
-          <div className="mt-2 text-sm opacity-70">
+          <div className="mt-2 text-sm text-muted-foreground">
             Select a device to see its live raw payload.
           </div>
         )}
         {previewState.kind === 'no-raw' && (
-          <div className="mt-2 text-sm opacity-70">
+          <div className="mt-2 text-sm text-muted-foreground">
             This device has not published a raw payload yet.
           </div>
         )}
         {previewState.kind === 'missing-path' && (
           <div className="mt-2 text-sm">
-            <span className="opacity-70">Path </span>
+            <span className="text-muted-foreground">Path </span>
             <code className="font-mono">{rule.path}</code>
-            <span className="opacity-70">
+            <span className="text-muted-foreground">
               {' '}
               did not resolve. Pick one of the discovered paths above.
             </span>
@@ -772,7 +731,7 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
         )}
         {previewState.kind === 'empty-path' && (
           <>
-            <div className="mt-2 text-xs opacity-70">
+            <div className="mt-2 text-xs text-muted-foreground">
               Matching against the root payload (no path set):
             </div>
             <pre className="mt-1 max-h-40 overflow-auto text-sm font-mono whitespace-pre-wrap break-all">
@@ -787,12 +746,12 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
         )}
       </div>
 
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Operator</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Operator</span>
         </label>
         <select
-          className="select select-bordered select-sm"
+          className={selectClassName}
           value={rule.operator}
           onChange={(e) => {
             const nextOperator = e.target.value as RawRuleOperator;
@@ -816,15 +775,15 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
       </div>
 
       {valueEditorKind === 'boolean' && (
-        <div className="form-control">
-          <label className="label cursor-pointer justify-start gap-3">
+        <div className={fieldClassName}>
+          <label className="flex cursor-pointer items-center gap-3">
             <input
               type="checkbox"
-              className="toggle toggle-primary"
+              className={checkboxClassName}
               checked={Boolean(rule.value)}
               onChange={(e) => onChange({ ...rule, value: e.target.checked })}
             />
-            <span className="label-text">
+            <span className={fieldLabelClassName}>
               {Boolean(rule.value) ? 'True' : 'False'}
             </span>
           </label>
@@ -832,13 +791,13 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
       )}
 
       {valueEditorKind === 'number' && (
-        <div className="form-control">
-          <label className="label">
-            <span className="label-text">Expected value</span>
+        <div className={fieldClassName}>
+          <label>
+            <span className={fieldLabelClassName}>Expected value</span>
           </label>
-          <input
+          <Input
             type="number"
-            className="input input-bordered input-sm"
+            className="h-9"
             value={typeof rule.value === 'number' ? rule.value : 0}
             onChange={(e) =>
               onChange({ ...rule, value: Number(e.target.value) })
@@ -848,13 +807,13 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
       )}
 
       {valueEditorKind === 'string' && (
-        <div className="form-control">
-          <label className="label">
-            <span className="label-text">Expected value</span>
+        <div className={fieldClassName}>
+          <label>
+            <span className={fieldLabelClassName}>Expected value</span>
           </label>
-          <input
+          <Input
             type="text"
-            className="input input-bordered input-sm font-mono"
+            className="h-9 font-mono"
             value={typeof rule.value === 'string' ? rule.value : ''}
             onChange={(e) => onChange({ ...rule, value: e.target.value })}
           />
@@ -862,7 +821,7 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
       )}
 
       {valueEditorKind === 'unsupported' && (
-        <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-sm">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-300">
           This visual editor currently supports scalar comparison values. Switch
           to JSON edit mode for array or object comparisons.
         </div>
@@ -891,17 +850,22 @@ function GroupRuleEditor({
 }: GroupRuleEditorProps) {
   return (
     <div className="space-y-3">
-      <GroupSelector
-        groups={groups}
-        value={rule.group_id}
-        onChange={(groupId) => onChange({ ...rule, group_id: groupId })}
-      />
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Group</span>
+        </label>
+        <GroupSelect
+          groups={groups}
+          value={rule.group_id}
+          onChange={(groupId) => onChange({ ...rule, group_id: groupId })}
+        />
+      </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={rule.power !== undefined}
             onChange={(e) =>
               onChange({
@@ -910,20 +874,18 @@ function GroupRuleEditor({
               })
             }
           />
-          <span className="label-text">Match Power State</span>
+          <span className={fieldLabelClassName}>Match Power State</span>
         </label>
         {rule.power !== undefined && (
           <div className="ml-8">
-            <label className="label cursor-pointer justify-start gap-3">
+            <label className="flex cursor-pointer items-center gap-3">
               <input
                 type="checkbox"
-                className="toggle toggle-primary toggle-sm"
+                className={checkboxClassName}
                 checked={rule.power}
-                onChange={(e) =>
-                  onChange({ ...rule, power: e.target.checked })
-                }
+                onChange={(e) => onChange({ ...rule, power: e.target.checked })}
               />
-              <span className="label-text">
+              <span className={fieldLabelClassName}>
                 {rule.power ? 'On' : 'Off'}
               </span>
             </label>
@@ -931,11 +893,11 @@ function GroupRuleEditor({
         )}
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={rule.scene !== undefined}
             onChange={(e) =>
               onChange({
@@ -944,12 +906,12 @@ function GroupRuleEditor({
               })
             }
           />
-          <span className="label-text">Match Scene</span>
+          <span className={fieldLabelClassName}>Match Scene</span>
         </label>
         {rule.scene !== undefined && (
           <div className="ml-8 mt-1">
             <select
-              className="select select-bordered select-sm"
+              className={selectClassName}
               value={rule.scene || ''}
               onChange={(e) =>
                 onChange({ ...rule, scene: e.target.value || undefined })
@@ -982,12 +944,12 @@ interface ScriptRuleEditorProps {
 function ScriptRuleEditor({ rule, onChange }: ScriptRuleEditorProps) {
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">JavaScript Code</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>JavaScript Code</span>
         </label>
-        <textarea
-          className="textarea textarea-bordered h-32 font-mono text-sm"
+        <Textarea
+          className="h-32 font-mono text-sm"
           value={rule.script}
           onChange={(e) => onChange({ ...rule, script: e.target.value })}
           placeholder={`// Return true to trigger the routine
@@ -996,7 +958,7 @@ function ScriptRuleEditor({ rule, onChange }: ScriptRuleEditorProps) {
 const sensor = devices["zigbee/motion-sensor"];
 return sensor?.data?.OnOffSensor?.value === true;`}
         />
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Script should return a boolean. Available globals: devices, groups
         </span>
       </div>
@@ -1060,31 +1022,47 @@ export function RuleEditor({
   };
 
   return (
-    <div className={`card bg-base-${depth > 0 ? '300' : '200'} ${depth > 0 ? 'p-3' : ''}`}>
-      <div className={depth > 0 ? '' : 'card-body p-4'}>
-        <div className="flex justify-between items-start mb-2">
-          <select
-            className="select select-bordered select-sm"
-            value={ruleType}
-            onChange={(e) =>
-              handleTypeChange(
-                e.target.value as 'sensor' | 'raw' | 'device' | 'group' | 'any' | 'script',
-              )
-            }
+    <Card
+      className={cn('rounded-2xl bg-muted/30', depth > 0 && 'bg-muted/50 p-3')}
+    >
+      <CardContent className={depth > 0 ? 'space-y-4 p-0' : 'space-y-4 p-4'}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <ConfigField
+            label="Rule type"
+            description="Choose the condition this rule evaluates."
+            className="w-full max-w-sm"
           >
-            <option value="sensor">Sensor Rule</option>
-            <option value="raw">Raw JSON Rule</option>
-            <option value="device">Device Rule</option>
-            <option value="group">Group Rule</option>
-            <option value="any">Any (OR)</option>
-            <option value="script">Script Rule</option>
-          </select>
-          <button
-            className="btn btn-ghost btn-xs btn-error"
+            <select
+              className={selectClassName}
+              value={ruleType}
+              onChange={(e) =>
+                handleTypeChange(
+                  e.target.value as
+                    | 'sensor'
+                    | 'raw'
+                    | 'device'
+                    | 'group'
+                    | 'any'
+                    | 'script',
+                )
+              }
+            >
+              <option value="sensor">Sensor Rule</option>
+              <option value="raw">Raw JSON Rule</option>
+              <option value="device">Device Rule</option>
+              <option value="group">Group Rule</option>
+              <option value="any">Any (OR)</option>
+              <option value="script">Script Rule</option>
+            </select>
+          </ConfigField>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
             onClick={onRemove}
           >
             ✕
-          </button>
+          </Button>
         </div>
 
         {ruleType === 'sensor' && (
@@ -1128,13 +1106,10 @@ export function RuleEditor({
           />
         )}
         {ruleType === 'script' && (
-          <ScriptRuleEditor
-            rule={rule as ScriptRule}
-            onChange={onChange}
-          />
+          <ScriptRuleEditor rule={rule as ScriptRule} onChange={onChange} />
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1174,7 +1149,7 @@ function AnyRuleEditor({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm opacity-70">
+      <p className="text-sm text-muted-foreground">
         Any of these rules matching will trigger the routine:
       </p>
       <div className="space-y-2">
@@ -1191,9 +1166,9 @@ function AnyRuleEditor({
           />
         ))}
       </div>
-      <button className="btn btn-sm btn-outline" onClick={handleAddRule}>
+      <Button variant="outline" size="sm" onClick={handleAddRule}>
         + Add OR Rule
-      </button>
+      </Button>
     </div>
   );
 }
@@ -1238,17 +1213,20 @@ export function RuleBuilder({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h4 className="font-medium">
-          Rules <span className="opacity-60">(all must match)</span>
-        </h4>
-        <button className="btn btn-sm btn-primary" onClick={handleAddRule}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h4 className="font-medium">Rules</h4>
+          <p className="text-sm text-muted-foreground">
+            All rules must match before actions run.
+          </p>
+        </div>
+        <Button size="sm" onClick={handleAddRule}>
           Add Rule
-        </button>
+        </Button>
       </div>
 
       {rules.length === 0 ? (
-        <div className="text-center py-4 opacity-60">
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 py-4 text-center text-sm text-muted-foreground">
           No rules configured. Add a rule to define when this routine triggers.
         </div>
       ) : (

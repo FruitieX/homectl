@@ -1,20 +1,9 @@
 import { useRuntimeStatus } from '@/hooks/useConfig';
-import { Navbar } from '@/ui/Navbar';
+import { getActiveConfigSection } from './sections';
+import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { Button } from '@/ui/primitives/button';
+import { motion, useReducedMotion } from 'framer-motion';
 import { Link, useLocation } from 'react-router-dom';
-
-const configTabs = [
-  { href: '/config/integrations', label: 'Integrations' },
-  { href: '/config/groups', label: 'Groups' },
-  { href: '/config/scenes', label: 'Scenes' },
-  { href: '/config/routines', label: 'Routines' },
-  { href: '/config/dashboard', label: 'Dashboard' },
-  { href: '/config/floorplan', label: 'Floorplan' },
-  { href: '/config/devices', label: 'Devices' },
-  { href: '/config/logs', label: 'Logs' },
-  { href: '/config/settings', label: 'Settings' },
-  { href: '/config/import-export', label: 'Import/Export' },
-  { href: '/config/migration', label: 'TOML Migration' },
-];
 
 export default function ConfigLayout({
   children,
@@ -23,44 +12,64 @@ export default function ConfigLayout({
 }) {
   const pathname = useLocation().pathname;
   const { data: runtimeStatus } = useRuntimeStatus(5000);
+  const reduceMotion = useReducedMotion();
+  const activeSection = getActiveConfigSection(pathname);
+  const isHub = pathname === '/config';
 
   return (
-    <div className="flex flex-col h-full">
-      <Navbar />
-
-      {/* Tab navigation */}
-      <div className="tabs tabs-boxed bg-base-200 p-2 gap-1">
-        {configTabs.map((tab) => (
-          <Link
-            key={tab.href}
-            to={tab.href}
-            className={`tab ${pathname?.startsWith(tab.href) ? 'tab-active' : ''}`}
-          >
-            {tab.label}
-          </Link>
-        ))}
+    <div className="flex h-full flex-col bg-background">
+      <div className="border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur-xl">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              Configuration
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              {activeSection && !isHub
+                ? `${activeSection.label}: ${activeSection.description}`
+                : 'Search integrations, automations, layouts, and runtime settings.'}
+            </p>
+          </div>
+          <Button asChild variant={isHub ? 'secondary' : 'outline'} size="sm">
+            <Link to="/config" aria-current={isHub ? 'page' : undefined}>
+              Config hub
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {runtimeStatus?.memory_only_mode && (
-        <div className="mx-4 mt-4 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm">
+        <Alert variant="warning" className="mx-4 mt-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-amber-700">
-                Memory-only runtime
-              </p>
-              <p className="mt-1 text-sm leading-6">
-                Config changes are live, but a restart will drop them unless you export a JSON backup.
-              </p>
+            <div className="space-y-1">
+              <AlertTitle>Memory-only runtime</AlertTitle>
+              <AlertDescription>
+                Config changes are live, but a restart will drop them unless you
+                export a JSON backup.
+              </AlertDescription>
             </div>
-            <Link className="btn btn-sm border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200" to="/config/import-export">
-              Export backup
-            </Link>
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="border-amber-400 bg-amber-100 text-amber-950 hover:bg-amber-200 dark:bg-amber-400/10 dark:text-amber-100"
+            >
+              <Link to="/config/import-export">Export backup</Link>
+            </Button>
           </div>
-        </div>
+        </Alert>
       )}
 
       {/* Content area */}
-      <div className="flex-1 overflow-auto p-4">{children}</div>
+      <motion.div
+        key={pathname}
+        animate={{ opacity: 1, y: 0 }}
+        className="flex-1 overflow-auto p-4 pb-[calc(env(safe-area-inset-bottom)+5rem)]"
+        initial={reduceMotion ? false : { opacity: 0, y: 8 }}
+        transition={{ duration: 0.18, ease: 'easeOut' }}
+      >
+        {children}
+      </motion.div>
     </div>
   );
 }

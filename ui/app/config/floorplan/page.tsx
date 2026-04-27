@@ -17,6 +17,29 @@ import {
   serializeGrid,
   deserializeGrid,
 } from '@/ui/FloorplanGridEditor';
+import {
+  ConfigField,
+  ConfigFormActions,
+  ConfigFormSection,
+} from '@/ui/config-form';
+import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Skeleton } from '@/ui/primitives/skeleton';
+
+const selectClassName =
+  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const fieldClassName = 'space-y-2';
+const fieldLabelClassName = 'text-sm font-medium';
 
 const getFloorplanDeviceType = (device: Device) => {
   if ('Sensor' in device.data) {
@@ -57,9 +80,15 @@ export default function FloorplanPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [grid, setGrid] = useState<FloorplanGrid>(() => createEmptyGrid());
   const [hasChanges, setHasChanges] = useState(false);
-  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | undefined>();
-  const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(null);
-  const [loadedFloorplanId, setLoadedFloorplanId] = useState<string | null>(null);
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<
+    string | undefined
+  >();
+  const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(
+    null,
+  );
+  const [loadedFloorplanId, setLoadedFloorplanId] = useState<string | null>(
+    null,
+  );
   const [selectedFloorplanName, setSelectedFloorplanName] = useState('');
   const [showCreateFloorplan, setShowCreateFloorplan] = useState(false);
   const [newFloorplanId, setNewFloorplanId] = useState('');
@@ -73,7 +102,8 @@ export default function FloorplanPage() {
     name: group.name,
     hidden: group.hidden,
   }));
-  const groupIdsByDeviceKey = groups.reduce<Record<string, string[]>>((result, group) => {
+  const groupIdsByDeviceKey = groups.reduce<Record<string, string[]>>(
+    (result, group) => {
       for (const deviceKey of getGroupDeviceKeys(group)) {
         if (!result[deviceKey]) {
           result[deviceKey] = [];
@@ -82,16 +112,26 @@ export default function FloorplanPage() {
       }
 
       return result;
-    }, {});
+    },
+    {},
+  );
   const availableDevices = [...devices]
     .map((device) => ({
       device,
       key: getDeviceKey(device),
     }))
     .sort((left, right) => {
-      const leftLabel = getDeviceDisplayLabel(left.device, deviceDisplayNameMap);
-      const rightLabel = getDeviceDisplayLabel(right.device, deviceDisplayNameMap);
-      return leftLabel.localeCompare(rightLabel) || left.key.localeCompare(right.key);
+      const leftLabel = getDeviceDisplayLabel(
+        left.device,
+        deviceDisplayNameMap,
+      );
+      const rightLabel = getDeviceDisplayLabel(
+        right.device,
+        deviceDisplayNameMap,
+      );
+      return (
+        leftLabel.localeCompare(rightLabel) || left.key.localeCompare(right.key)
+      );
     })
     .map(({ device, key }) => ({
       key,
@@ -117,12 +157,17 @@ export default function FloorplanPage() {
       return;
     }
 
-    if (!selectedFloorplanId || !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)) {
+    if (
+      !selectedFloorplanId ||
+      !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)
+    ) {
       selectFloorplan(floorplans[0].id);
       return;
     }
 
-    const selectedFloorplan = floorplans.find((floorplan) => floorplan.id === selectedFloorplanId);
+    const selectedFloorplan = floorplans.find(
+      (floorplan) => floorplan.id === selectedFloorplanId,
+    );
     if (selectedFloorplan) {
       setSelectedFloorplanName(selectedFloorplan.name);
     }
@@ -151,7 +196,9 @@ export default function FloorplanPage() {
       let nextBackgroundImageUrl: string | undefined;
 
       try {
-        const gridResponse = await fetch(`${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`);
+        const gridResponse = await fetch(
+          `${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`,
+        );
         const gridResult = await gridResponse.json();
         if (gridResult.success && gridResult.data) {
           const loadedGrid = deserializeGrid(gridResult.data);
@@ -210,9 +257,9 @@ export default function FloorplanPage() {
       const response = await fetch(
         `${apiEndpoint}/api/v1/config/floorplan/grid?id=${encodeURIComponent(selectedFloorplanId)}`,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grid: serializeGrid(grid) }),
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ grid: serializeGrid(grid) }),
         },
       );
 
@@ -245,8 +292,8 @@ export default function FloorplanPage() {
       const response = await fetch(
         `${apiEndpoint}/api/v1/config/floorplan/image?id=${encodeURIComponent(selectedFloorplanId)}`,
         {
-        method: 'POST',
-        body: formData,
+          method: 'POST',
+          body: formData,
         },
       );
 
@@ -381,8 +428,14 @@ export default function FloorplanPage() {
       return;
     }
 
-    const selectedFloorplan = floorplans.find((floorplan) => floorplan.id === selectedFloorplanId);
-    if (!confirm(`Delete floorplan "${selectedFloorplan?.name ?? selectedFloorplanId}"?`)) {
+    const selectedFloorplan = floorplans.find(
+      (floorplan) => floorplan.id === selectedFloorplanId,
+    );
+    if (
+      !confirm(
+        `Delete floorplan "${selectedFloorplan?.name ?? selectedFloorplanId}"?`,
+      )
+    ) {
       return;
     }
 
@@ -401,87 +454,96 @@ export default function FloorplanPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center flex-wrap gap-2">
-        <h1 className="text-2xl font-bold">Floorplan Editor</h1>
-        <div className="flex gap-2">
-          <button
-            className={`btn btn-primary ${hasChanges ? 'btn-accent' : ''}`}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">
+            Floorplan Editor
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Manage floorplan canvases, background images, device placements, and
+            group masks.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={hasChanges ? 'secondary' : 'default'}
             onClick={handleSave}
             disabled={loading || floorplanLoading || !selectedFloorplanId}
           >
-            {loading ? <span className="loading loading-spinner loading-sm"></span> : null}
+            {loading ? (
+              <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+            ) : null}
             Save Floorplan
-          </button>
-          <div className="dropdown dropdown-end">
-            <div
-              tabIndex={0}
-              role="button"
-              className={`btn btn-ghost ${loading || floorplanLoading || !selectedFloorplanId ? 'btn-disabled' : ''}`}
-            >
-              More
-            </div>
-            <ul
-              tabIndex={0}
-              className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-48"
-            >
-              <li>
-                <button onClick={handleExport} disabled={loading || floorplanLoading || !selectedFloorplanId}>
-                  Export JSON
-                </button>
-              </li>
-              <li>
-                <label className="cursor-pointer">
-                  Import JSON
-                  <input
-                    type="file"
-                    accept=".json"
-                    className="hidden"
-                    disabled={loading || floorplanLoading || !selectedFloorplanId}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleImport(file);
-                    }}
-                  />
-                </label>
-              </li>
-              <li>
-                <button
-                  onClick={() => setGrid(createEmptyGrid())}
-                  disabled={loading || floorplanLoading || !selectedFloorplanId}
-                >
-                  Reset to Empty
-                </button>
-              </li>
-            </ul>
-          </div>
+          </Button>
+          <Button
+            variant="outline"
+            disabled={loading || floorplanLoading || !selectedFloorplanId}
+            onClick={handleExport}
+          >
+            Export JSON
+          </Button>
+          <Button
+            asChild
+            variant="outline"
+            className={
+              loading || floorplanLoading || !selectedFloorplanId
+                ? 'pointer-events-none opacity-50'
+                : undefined
+            }
+          >
+            <label>
+              Import JSON
+              <input
+                type="file"
+                accept=".json"
+                className="hidden"
+                disabled={loading || floorplanLoading || !selectedFloorplanId}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleImport(file);
+                }}
+              />
+            </label>
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={loading || floorplanLoading || !selectedFloorplanId}
+            onClick={() => setGrid(createEmptyGrid())}
+          >
+            Reset
+          </Button>
         </div>
       </div>
 
       {error && (
-        <div className="alert alert-error">
-          <span>{error}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
+        <Alert variant="destructive">
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <Button variant="ghost" size="sm" onClick={() => setError(null)}>
+              ✕
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {success && (
-        <div className="alert alert-success">
-          <span>{success}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setSuccess(null)}>
-            ✕
-          </button>
-        </div>
+        <Alert>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{success}</span>
+            <Button variant="ghost" size="sm" onClick={() => setSuccess(null)}>
+              ✕
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body space-y-4">
+      <Card>
+        <CardContent className="space-y-4 p-5">
           <div className="flex flex-wrap items-end gap-3">
-            <label className="form-control w-full max-w-sm">
-              <span className="label-text text-sm">Active floorplan</span>
+            <label className={fieldClassName + ' w-full max-w-sm'}>
+              <span className={fieldLabelClassName}>Active floorplan</span>
               <select
-                className="select select-bordered"
+                className={selectClassName}
                 value={selectedFloorplanId ?? ''}
                 onChange={(e) => selectFloorplan(e.target.value || null)}
               >
@@ -493,55 +555,59 @@ export default function FloorplanPage() {
               </select>
             </label>
 
-            <label className="form-control w-full max-w-sm">
-              <span className="label-text text-sm">Floorplan name</span>
-              <input
+            <label className={fieldClassName + ' w-full max-w-sm'}>
+              <span className={fieldLabelClassName}>Floorplan name</span>
+              <Input
                 type="text"
-                className="input input-bordered"
                 value={selectedFloorplanName}
                 onChange={(e) => setSelectedFloorplanName(e.target.value)}
                 disabled={!selectedFloorplanId}
               />
             </label>
 
-            <button
-              className="btn btn-outline"
+            <Button
+              variant="outline"
               disabled={loading || !selectedFloorplanId}
               onClick={handleRenameFloorplan}
             >
               Rename
-            </button>
+            </Button>
 
-            <button className="btn btn-secondary" onClick={() => setShowCreateFloorplan(true)}>
+            <Button
+              variant="secondary"
+              onClick={() => setShowCreateFloorplan(true)}
+            >
               New Floorplan
-            </button>
+            </Button>
 
-            <button
-              className="btn btn-error btn-outline"
+            <Button
+              variant="destructive"
               disabled={loading || !selectedFloorplanId}
               onClick={handleDeleteFloorplan}
             >
               Delete
-            </button>
+            </Button>
           </div>
 
-          <p className="text-sm opacity-70">
-            Each floorplan stores its own grid, image overlay, device placements, and group masks.
+          <p className="text-sm text-muted-foreground">
+            Each floorplan stores its own grid, image overlay, device
+            placements, and group masks.
           </p>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Grid Editor */}
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
+      <Card>
+        <CardContent className="p-5">
           {!selectedFloorplanId ? (
-            <div className="flex min-h-96 items-center justify-center rounded-lg border border-dashed border-base-300 bg-base-100/40 p-8 text-center text-sm opacity-70">
-              Create or select a floorplan to start editing.
-            </div>
+            <EmptyState
+              title="No floorplan selected"
+              description="Create or select a floorplan to start editing."
+            />
           ) : !isSelectedFloorplanReady ? (
-            <div className="flex min-h-96 items-center justify-center rounded-lg border border-base-300 bg-base-100/40 p-8">
-              <div className="flex items-center gap-3 text-sm opacity-70">
-                <span className="loading loading-spinner loading-md"></span>
+            <div className="flex min-h-96 items-center justify-center rounded-2xl border border-border bg-muted/30 p-8">
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <Skeleton className="size-6 rounded-full" />
                 Loading floorplan...
               </div>
             </div>
@@ -555,32 +621,32 @@ export default function FloorplanPage() {
               backgroundImageUrl={backgroundImageUrl}
             />
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* Optional: Background image upload */}
-      <div className="collapse collapse-arrow bg-base-200">
-        <input type="checkbox" />
-        <div className="collapse-title font-medium">
+      <details className="rounded-3xl border border-border bg-card p-5 shadow-sm">
+        <summary className="cursor-pointer list-none font-medium">
           Optional: Upload Background Image
-        </div>
-        <div className="collapse-content">
-          <p className="text-sm opacity-70 mb-4">
-            Upload an SVG, PNG, or JPEG image to show beneath the editable floorplan grid in both
-            the editor and the map view. The grid stretches across the full image, so you can raise
-            the grid resolution without pushing it outside the image bounds.
+        </summary>
+        <div className="mt-4">
+          <p className="text-sm text-muted-foreground mb-4">
+            Upload an SVG, PNG, or JPEG image to show beneath the editable
+            floorplan grid in both the editor and the map view. The grid
+            stretches across the full image, so you can raise the grid
+            resolution without pushing it outside the image bounds.
           </p>
           {backgroundImageUrl && (
-            <p className="text-sm text-success mb-3">
+            <p className="mb-3 text-sm text-emerald-600 dark:text-emerald-300">
               A background image is currently attached to this floorplan.
             </p>
           )}
           <div className="flex flex-wrap gap-3 items-center">
-            <input
+            <Input
               ref={fileInputRef}
               type="file"
               accept=".svg,.png,.jpg,.jpeg"
-              className="file-input file-input-bordered w-full max-w-md"
+              className="w-full max-w-md"
               onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (file) handleImageUpload(file);
@@ -588,20 +654,20 @@ export default function FloorplanPage() {
               disabled={loading || floorplanLoading || !selectedFloorplanId}
             />
             {backgroundImageUrl && (
-              <button
-                className="btn btn-outline btn-error"
+              <Button
+                variant="destructive"
                 disabled={loading || floorplanLoading || !selectedFloorplanId}
                 onClick={handleImageDelete}
               >
                 Remove Image
-              </button>
+              </Button>
             )}
           </div>
         </div>
-      </div>
+      </details>
 
       {/* Info */}
-      <div className="alert alert-info">
+      <Alert>
         <svg
           xmlns="http://www.w3.org/2000/svg"
           fill="none"
@@ -616,54 +682,75 @@ export default function FloorplanPage() {
           ></path>
         </svg>
         <div>
-          <h3 className="font-bold">How to Use</h3>
+          <AlertTitle>How to Use</AlertTitle>
           <ul className="text-sm list-disc list-inside">
-            <li><strong>Draw Walls:</strong> Select a tile type and click/drag to paint</li>
-            <li><strong>Place Devices:</strong> Select a device and click to place it on the grid</li>
-            <li><strong>Paint Groups:</strong> Choose a group and paint its room footprint tile by tile</li>
+            <li>
+              <strong>Draw Walls:</strong> Select a tile type and click/drag to
+              paint
+            </li>
+            <li>
+              <strong>Place Devices:</strong> Select a device and click to place
+              it on the grid
+            </li>
+            <li>
+              <strong>Paint Groups:</strong> Choose a group and paint its room
+              footprint tile by tile
+            </li>
             <li>Drag placed devices to reposition them</li>
             <li>Group masks and grid walls are saved with the floorplan</li>
           </ul>
         </div>
-      </div>
+      </Alert>
 
       {showCreateFloorplan && (
-        <dialog className="modal modal-open">
-          <div className="modal-box max-w-lg space-y-4">
-            <h3 className="font-bold text-lg">Create Floorplan</h3>
+        <ResponsiveOverlay
+          open
+          onOpenChange={(open) => {
+            if (!open) {
+              setShowCreateFloorplan(false);
+            }
+          }}
+          title="Create Floorplan"
+          description="Create a separate floorplan canvas and grid."
+          className="max-w-lg"
+        >
+          <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+            <ConfigFormSection
+              title="Floorplan identity"
+              description="Create a separate editable grid, background image, and room mask set."
+            >
+              <ConfigField label="Floorplan ID">
+                <Input
+                  type="text"
+                  placeholder="upstairs"
+                  value={newFloorplanId}
+                  onChange={(e) => setNewFloorplanId(e.target.value)}
+                />
+              </ConfigField>
 
-            <label className="form-control">
-              <span className="label-text">Floorplan ID</span>
-              <input
-                type="text"
-                className="input input-bordered"
-                placeholder="upstairs"
-                value={newFloorplanId}
-                onChange={(e) => setNewFloorplanId(e.target.value)}
-              />
-            </label>
+              <ConfigField label="Floorplan name">
+                <Input
+                  type="text"
+                  placeholder="Upstairs"
+                  value={newFloorplanName}
+                  onChange={(e) => setNewFloorplanName(e.target.value)}
+                />
+              </ConfigField>
+            </ConfigFormSection>
 
-            <label className="form-control">
-              <span className="label-text">Floorplan name</span>
-              <input
-                type="text"
-                className="input input-bordered"
-                placeholder="Upstairs"
-                value={newFloorplanName}
-                onChange={(e) => setNewFloorplanName(e.target.value)}
-              />
-            </label>
-
-            <div className="modal-action">
-              <button className="btn btn-ghost" onClick={() => setShowCreateFloorplan(false)}>
+            <ConfigFormActions>
+              <Button
+                variant="ghost"
+                onClick={() => setShowCreateFloorplan(false)}
+              >
                 Cancel
-              </button>
-              <button className="btn btn-primary" disabled={loading} onClick={handleCreateFloorplan}>
+              </Button>
+              <Button disabled={loading} onClick={handleCreateFloorplan}>
                 Create
-              </button>
-            </div>
+              </Button>
+            </ConfigFormActions>
           </div>
-        </dialog>
+        </ResponsiveOverlay>
       )}
     </div>
   );

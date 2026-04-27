@@ -1,4 +1,7 @@
-import { getFloorplanGroupFill, getFloorplanGroupStroke } from '@/lib/floorplanGroupColor';
+import {
+  getFloorplanGroupFill,
+  getFloorplanGroupStroke,
+} from '@/lib/floorplanGroupColor';
 import {
   getFloorplanCellBounds,
   getFloorplanCellIndex,
@@ -14,6 +17,19 @@ import {
   useState,
 } from 'react';
 import { useImageState } from '@/hooks/useImageState';
+import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
+import {
+  FloorplanBackgroundControls,
+  FloorplanDeviceScaleControl,
+  FloorplanLegend,
+  FloorplanModeBar,
+} from '@/ui/floorplan/FloorplanEditorControls';
+
+const selectClassName =
+  'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export type TileType = 'floor' | 'wall' | 'door' | 'window';
 
@@ -66,10 +82,10 @@ interface FloorplanGridEditorProps {
 }
 
 const tileColors: Record<TileType, string> = {
-  floor: '#e5e7eb',    // gray-200
-  wall: '#374151',     // gray-700
-  door: '#92400e',     // amber-800
-  window: '#60a5fa',   // blue-400
+  floor: '#e5e7eb', // gray-200
+  wall: '#374151', // gray-700
+  door: '#92400e', // amber-800
+  window: '#60a5fa', // blue-400
 };
 
 const tileLabels: Record<TileType, string> = {
@@ -149,7 +165,10 @@ const normalizeGroupMasks = (
   }
 
   const normalized = Object.entries(groups as Record<string, unknown>)
-    .map(([groupId, points]) => [groupId, normalizeGroupPoints(points, width, height)] as const)
+    .map(
+      ([groupId, points]) =>
+        [groupId, normalizeGroupPoints(points, width, height)] as const,
+    )
     .filter(([, points]) => points.length > 0);
 
   return Object.fromEntries(normalized);
@@ -244,12 +263,17 @@ const applyTilePoints = (
   points: GridPoint[],
   tile: TileType,
 ): FloorplanGrid | null => {
-  const targetPoints = new Set(points.map((point) => getCellKey(point.x, point.y)));
+  const targetPoints = new Set(
+    points.map((point) => getCellKey(point.x, point.y)),
+  );
   let changed = false;
 
   const nextTiles = sourceGrid.tiles.map((row, rowIndex) =>
     row.map((currentTile, columnIndex) => {
-      if (!targetPoints.has(getCellKey(columnIndex, rowIndex)) || currentTile === tile) {
+      if (
+        !targetPoints.has(getCellKey(columnIndex, rowIndex)) ||
+        currentTile === tile
+      ) {
         return currentTile;
       }
 
@@ -324,7 +348,9 @@ const moveDeviceOnGrid = (
   x: number,
   y: number,
 ): FloorplanGrid | null => {
-  const device = sourceGrid.devices.find((candidate) => candidate.deviceKey === deviceKey);
+  const device = sourceGrid.devices.find(
+    (candidate) => candidate.deviceKey === deviceKey,
+  );
   if (!device || (device.x === x && device.y === y)) {
     return null;
   }
@@ -355,7 +381,9 @@ const placeSelectedDeviceOnGrid = (
     return moveDeviceOnGrid(sourceGrid, selectedDevice, x, y);
   }
 
-  const deviceInfo = availableDevices.find((device) => device.key === selectedDevice);
+  const deviceInfo = availableDevices.find(
+    (device) => device.key === selectedDevice,
+  );
   if (!deviceInfo) {
     return null;
   }
@@ -379,7 +407,9 @@ const removeDeviceFromGrid = (
 
   return {
     ...sourceGrid,
-    devices: sourceGrid.devices.filter((device) => device.deviceKey !== deviceKey),
+    devices: sourceGrid.devices.filter(
+      (device) => device.deviceKey !== deviceKey,
+    ),
   };
 };
 
@@ -405,12 +435,18 @@ const resizeGridState = (
   const newTiles = buildEmptyTiles(newWidth, newHeight);
   for (let y = 0; y < sourceGrid.height; y += 1) {
     for (let x = 0; x < sourceGrid.width; x += 1) {
-      const translatedPoint = translateGridPoint({ x, y }, offsets, newWidth, newHeight);
+      const translatedPoint = translateGridPoint(
+        { x, y },
+        offsets,
+        newWidth,
+        newHeight,
+      );
       if (!translatedPoint) {
         continue;
       }
 
-      newTiles[translatedPoint.y][translatedPoint.x] = sourceGrid.tiles[y]?.[x] ?? 'floor';
+      newTiles[translatedPoint.y][translatedPoint.x] =
+        sourceGrid.tiles[y]?.[x] ?? 'floor';
     }
   }
 
@@ -425,17 +461,25 @@ const resizeGridState = (
   });
   const newGroups = Object.fromEntries(
     Object.entries(sourceGrid.groups)
-      .map(([groupId, points]) => [
-        groupId,
-        normalizeGroupPoints(
-          points.flatMap((point) => {
-            const translatedPoint = translateGridPoint(point, offsets, newWidth, newHeight);
-            return translatedPoint ? [translatedPoint] : [];
-          }),
-          newWidth,
-          newHeight,
-        ),
-      ] as const)
+      .map(
+        ([groupId, points]) =>
+          [
+            groupId,
+            normalizeGroupPoints(
+              points.flatMap((point) => {
+                const translatedPoint = translateGridPoint(
+                  point,
+                  offsets,
+                  newWidth,
+                  newHeight,
+                );
+                return translatedPoint ? [translatedPoint] : [];
+              }),
+              newWidth,
+              newHeight,
+            ),
+          ] as const,
+      )
       .filter(([, points]) => points.length > 0),
   );
 
@@ -515,7 +559,10 @@ const cropGridState = (sourceGrid: FloorplanGrid): FloorplanGrid | null => {
   const nextHeight = bounds.maxY - bounds.minY + 1;
   const nextTiles = Array.from({ length: nextHeight }, (_, rowIndex) =>
     Array.from({ length: nextWidth }, (_, columnIndex) => {
-      return sourceGrid.tiles[rowIndex + bounds.minY]?.[columnIndex + bounds.minX] ?? 'floor';
+      return (
+        sourceGrid.tiles[rowIndex + bounds.minY]?.[columnIndex + bounds.minX] ??
+        'floor'
+      );
     }),
   );
   const nextDevices = sourceGrid.devices
@@ -533,21 +580,24 @@ const cropGridState = (sourceGrid: FloorplanGrid): FloorplanGrid | null => {
     }));
   const nextGroups = Object.fromEntries(
     Object.entries(sourceGrid.groups)
-      .map(([groupId, points]) => [
-        groupId,
-        points
-          .filter(
-            (point) =>
-              point.x >= bounds.minX &&
-              point.x <= bounds.maxX &&
-              point.y >= bounds.minY &&
-              point.y <= bounds.maxY,
-          )
-          .map((point) => ({
-            x: point.x - bounds.minX,
-            y: point.y - bounds.minY,
-          })),
-      ] as const)
+      .map(
+        ([groupId, points]) =>
+          [
+            groupId,
+            points
+              .filter(
+                (point) =>
+                  point.x >= bounds.minX &&
+                  point.x <= bounds.maxX &&
+                  point.y >= bounds.minY &&
+                  point.y <= bounds.maxY,
+              )
+              .map((point) => ({
+                x: point.x - bounds.minX,
+                y: point.y - bounds.minY,
+              })),
+          ] as const,
+      )
       .filter(([, points]) => points.length > 0),
   );
 
@@ -626,7 +676,9 @@ export function FloorplanGridEditor({
   const [hoveredCell, setHoveredCell] = useState<GridPoint | null>(null);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [deviceSearch, setDeviceSearch] = useState('');
-  const [deviceTypeFilter, setDeviceTypeFilter] = useState<'all' | FloorplanDeviceType>('all');
+  const [deviceTypeFilter, setDeviceTypeFilter] = useState<
+    'all' | FloorplanDeviceType
+  >('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gridRef = useRef(grid);
@@ -741,7 +793,8 @@ export function FloorplanGridEditor({
     return getLinePoints(lineAnchor.cell, hoveredCell);
   }, [hoveredCell, isPainting, isShiftHeld, lineAnchor, mode, selectedGroup]);
   const sortedGroups = [...availableGroups].sort((left, right) => {
-    const hiddenDelta = Number(Boolean(left.hidden)) - Number(Boolean(right.hidden));
+    const hiddenDelta =
+      Number(Boolean(left.hidden)) - Number(Boolean(right.hidden));
     if (hiddenDelta !== 0) {
       return hiddenDelta;
     }
@@ -812,7 +865,11 @@ export function FloorplanGridEditor({
         return;
       }
 
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'z' || event.shiftKey) {
+      if (
+        !(event.ctrlKey || event.metaKey) ||
+        event.key.toLowerCase() !== 'z' ||
+        event.shiftKey
+      ) {
         return;
       }
 
@@ -870,7 +927,10 @@ export function FloorplanGridEditor({
       for (const [groupId, points] of Object.entries(groups)) {
         const isSelected = groupId === selectedGroup;
         const fill = getFloorplanGroupFill(groupId, isSelected ? 0.45 : 0.2);
-        const stroke = getFloorplanGroupStroke(groupId, isSelected ? 0.95 : 0.35);
+        const stroke = getFloorplanGroupStroke(
+          groupId,
+          isSelected ? 0.95 : 0.35,
+        );
 
         for (const point of points) {
           const column = columnBounds[point.x];
@@ -953,7 +1013,9 @@ export function FloorplanGridEditor({
 
     // Draw devices
     devices.forEach((device) => {
-      const isSelected = selectedDevice === device.deviceKey || draggingDevice === device.deviceKey;
+      const isSelected =
+        selectedDevice === device.deviceKey ||
+        draggingDevice === device.deviceKey;
       const position = devicePositions[device.deviceKey];
       const column = columnBounds[device.x];
       const row = rowBounds[device.y];
@@ -966,13 +1028,7 @@ export function FloorplanGridEditor({
       const labelFontSize = 10 * deviceScale;
 
       ctx.beginPath();
-      ctx.arc(
-        position.x,
-        position.y,
-        scaledRadius,
-        0,
-        Math.PI * 2,
-      );
+      ctx.arc(position.x, position.y, scaledRadius, 0, Math.PI * 2);
       ctx.fillStyle = isSelected ? '#f59e0b' : '#10b981';
       ctx.fill();
       ctx.strokeStyle = isSelected ? '#d97706' : '#059669';
@@ -984,11 +1040,7 @@ export function FloorplanGridEditor({
       ctx.textAlign = 'center';
       const labelY = position.y + scaledRadius + 12 * deviceScale;
       if (labelY < canvasHeight) {
-        ctx.fillText(
-          device.deviceName.slice(0, 10),
-          position.x,
-          labelY,
-        );
+        ctx.fillText(device.deviceName.slice(0, 10), position.x, labelY);
       }
     });
   }, [
@@ -1070,7 +1122,11 @@ export function FloorplanGridEditor({
       const tile = e.button === 2 ? 'floor' : selectedTool;
       if (e.shiftKey && currentLineAnchor?.mode === 'tiles') {
         applyDiscreteChange(
-          applyTilePoints(currentGrid, getLinePoints(currentLineAnchor.cell, coords), tile),
+          applyTilePoints(
+            currentGrid,
+            getLinePoints(currentLineAnchor.cell, coords),
+            tile,
+          ),
           currentGrid,
         );
         updateLineAnchor({ mode: 'tiles', cell: coords });
@@ -1114,7 +1170,12 @@ export function FloorplanGridEditor({
         return;
       }
 
-      const nextGrid = applyGroupPoints(currentGrid, selectedGroup, [coords], paintMode);
+      const nextGrid = applyGroupPoints(
+        currentGrid,
+        selectedGroup,
+        [coords],
+        paintMode,
+      );
 
       activeOperationRef.current = {
         kind: 'groups',
@@ -1139,7 +1200,10 @@ export function FloorplanGridEditor({
           return;
         }
 
-        applyDiscreteChange(removeDeviceFromGrid(currentGrid, deviceAtPos.deviceKey), currentGrid);
+        applyDiscreteChange(
+          removeDeviceFromGrid(currentGrid, deviceAtPos.deviceKey),
+          currentGrid,
+        );
         if (selectedDevice === deviceAtPos.deviceKey) {
           setSelectedDevice(null);
         }
@@ -1193,7 +1257,11 @@ export function FloorplanGridEditor({
       const sourceGrid = activeOperation.straightLine
         ? activeOperation.baseGrid
         : gridRef.current;
-      const nextGrid = applyTilePoints(sourceGrid, points, activeOperation.tile);
+      const nextGrid = applyTilePoints(
+        sourceGrid,
+        points,
+        activeOperation.tile,
+      );
       const nextOperation = {
         ...activeOperation,
         lastCell: coords,
@@ -1294,7 +1362,10 @@ export function FloorplanGridEditor({
   const fillAll = (type: TileType) => {
     const currentGrid = cloneGrid(gridRef.current);
     applyDiscreteChange(
-      { ...currentGrid, tiles: currentGrid.tiles.map((row) => row.map(() => type)) },
+      {
+        ...currentGrid,
+        tiles: currentGrid.tiles.map((row) => row.map(() => type)),
+      },
       currentGrid,
     );
   };
@@ -1338,7 +1409,9 @@ export function FloorplanGridEditor({
       newWidth,
       newHeight,
     );
-    updateLineAnchor(nextAnchorCell ? { ...currentLineAnchor, cell: nextAnchorCell } : null);
+    updateLineAnchor(
+      nextAnchorCell ? { ...currentLineAnchor, cell: nextAnchorCell } : null,
+    );
   };
 
   const updateDeviceScale = (nextScale: number) => {
@@ -1380,7 +1453,10 @@ export function FloorplanGridEditor({
       return false;
     }
 
-    if (deviceGroupFilter !== 'all' && !device.groupIds.includes(deviceGroupFilter)) {
+    if (
+      deviceGroupFilter !== 'all' &&
+      !device.groupIds.includes(deviceGroupFilter)
+    ) {
       return false;
     }
 
@@ -1391,7 +1467,8 @@ export function FloorplanGridEditor({
     const haystack = `${device.name} ${device.key}`.toLowerCase();
     return haystack.includes(normalizedDeviceSearch);
   };
-  const filteredAvailableDevices = availableDevices.filter(matchesDeviceFilters);
+  const filteredAvailableDevices =
+    availableDevices.filter(matchesDeviceFilters);
   const unplacedDevices = filteredAvailableDevices.filter(
     (device) => !devices.find((placed) => placed.deviceKey === device.key),
   );
@@ -1408,143 +1485,75 @@ export function FloorplanGridEditor({
 
   return (
     <div className="space-y-4">
-      {/* Mode selector */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="tabs tabs-boxed w-fit">
-          <button
-            className={`tab ${mode === 'tiles' ? 'tab-active' : ''}`}
-            onClick={() => setMode('tiles')}
-          >
-            Draw Walls
-          </button>
-          <button
-            className={`tab ${mode === 'devices' ? 'tab-active' : ''}`}
-            onClick={() => setMode('devices')}
-          >
-            Place Devices
-          </button>
-          <button
-            className={`tab ${mode === 'groups' ? 'tab-active' : ''}`}
-            onClick={() => setMode('groups')}
-          >
-            Paint Groups
-          </button>
-        </div>
+      <FloorplanModeBar
+        mode={mode}
+        canUndo={undoStack.length > 0}
+        canAutoCrop={canAutoCrop}
+        onModeChange={setMode}
+        onUndo={handleUndo}
+        onAutoCrop={autoCrop}
+      />
 
-        <button
-          className="btn btn-sm btn-outline"
-          disabled={undoStack.length === 0}
-          onClick={handleUndo}
-        >
-          Undo
-          <span className="text-xs opacity-70">Ctrl/Cmd+Z</span>
-        </button>
-
-        <button
-          className="btn btn-sm btn-outline"
-          disabled={!canAutoCrop}
-          onClick={autoCrop}
-        >
-          Auto Crop
-        </button>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-base-300 bg-base-100/40 px-3 py-2">
-        <span className="text-sm font-medium">Device scale</span>
-        <input
-          type="range"
-          className="range range-sm w-40"
-          min={minFloorplanDeviceScale}
-          max={maxFloorplanDeviceScale}
-          step={0.1}
-          value={grid.deviceScale}
-          onChange={(e) => updateDeviceScale(parseFloat(e.target.value))}
-        />
-        <input
-          type="number"
-          className="input input-bordered input-sm w-20"
-          min={minFloorplanDeviceScale}
-          max={maxFloorplanDeviceScale}
-          step={0.1}
-          value={grid.deviceScale.toFixed(1)}
-          onChange={(e) => updateDeviceScale(parseFloat(e.target.value))}
-        />
-        <span className="text-sm opacity-70">{Math.round(grid.deviceScale * 100)}%</span>
-      </div>
+      <FloorplanDeviceScaleControl
+        value={grid.deviceScale}
+        min={minFloorplanDeviceScale}
+        max={maxFloorplanDeviceScale}
+        onChange={updateDeviceScale}
+      />
 
       {backgroundImageUrl && (
-        <div className="flex flex-wrap gap-4 items-center">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm"
-              checked={showGrid}
-              onChange={(e) => setShowGrid(e.target.checked)}
-            />
-            <span className="text-sm">Show walls overlay</span>
-          </label>
-          {showGrid && (
-            <label className="flex items-center gap-2">
-              <span className="text-sm">Opacity:</span>
-              <input
-                type="range"
-                className="range range-sm w-24"
-                min={0.1}
-                max={1}
-                step={0.1}
-                value={gridOpacity}
-                onChange={(e) => setGridOpacity(parseFloat(e.target.value))}
-              />
-            </label>
-          )}
-          <div className="text-sm opacity-70">
-            {mode === 'tiles'
-              ? 'Trace walls, doors, and windows directly over the background image'
-              : mode === 'groups'
-                ? 'Paint group areas directly on the background image'
-                : 'Place devices directly on the background image'}
-          </div>
-        </div>
+        <FloorplanBackgroundControls
+          mode={mode}
+          showGrid={showGrid}
+          gridOpacity={gridOpacity}
+          onShowGridChange={setShowGrid}
+          onGridOpacityChange={setGridOpacity}
+        />
       )}
 
       {/* Tile toolbar */}
       {mode === 'tiles' && (
         <div className="space-y-3">
           <div className="flex flex-wrap gap-4 items-center">
-            <div className="join">
+            <div className="flex flex-wrap rounded-2xl bg-muted p-1">
               {(Object.keys(tileColors) as TileType[]).map((type) => (
-                <button
+                <Button
                   key={type}
-                  className={`btn btn-sm join-item ${selectedTool === type ? 'btn-primary' : ''}`}
+                  variant={selectedTool === type ? 'default' : 'ghost'}
+                  size="sm"
                   onClick={() => setSelectedTool(type)}
                 >
                   <span
-                    className="w-4 h-4 rounded border border-base-300"
+                    className="w-4 h-4 rounded border border-border"
                     style={{ backgroundColor: tileColors[type] }}
                   />
                   {tileLabels[type]}
-                </button>
+                </Button>
               ))}
             </div>
 
-            <div className="divider divider-horizontal m-0"></div>
+            <div className="h-8 w-px bg-border" />
 
             <div className="flex gap-2 items-center">
               <span className="text-sm">Size:</span>
-              <input
+              <Input
                 type="number"
-                className="input input-sm input-bordered w-16"
+                className="h-9 w-16"
                 value={width}
-                onChange={(e) => resizeGrid(parseInt(e.target.value) || 10, height)}
+                onChange={(e) =>
+                  resizeGrid(parseInt(e.target.value) || 10, height)
+                }
                 min={5}
                 max={100}
               />
               <span>×</span>
-              <input
+              <Input
                 type="number"
-                className="input input-sm input-bordered w-16"
+                className="h-9 w-16"
                 value={height}
-                onChange={(e) => resizeGrid(width, parseInt(e.target.value) || 10)}
+                onChange={(e) =>
+                  resizeGrid(width, parseInt(e.target.value) || 10)
+                }
                 min={5}
                 max={100}
               />
@@ -1552,69 +1561,80 @@ export function FloorplanGridEditor({
 
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm">Expand:</span>
-              <div className="join">
-                <button
-                  className={`btn btn-xs join-item ${horizontalResizeDirection === 'left' ? 'btn-primary' : 'btn-outline'}`}
+              <div className="flex rounded-xl bg-muted p-1">
+                <Button
+                  variant={
+                    horizontalResizeDirection === 'left' ? 'default' : 'ghost'
+                  }
+                  size="sm"
                   onClick={() => setHorizontalResizeDirection('left')}
                   type="button"
                 >
                   Left
-                </button>
-                <button
-                  className={`btn btn-xs join-item ${horizontalResizeDirection === 'right' ? 'btn-primary' : 'btn-outline'}`}
+                </Button>
+                <Button
+                  variant={
+                    horizontalResizeDirection === 'right' ? 'default' : 'ghost'
+                  }
+                  size="sm"
                   onClick={() => setHorizontalResizeDirection('right')}
                   type="button"
                 >
                   Right
-                </button>
+                </Button>
               </div>
-              <div className="join">
-                <button
-                  className={`btn btn-xs join-item ${verticalResizeDirection === 'top' ? 'btn-primary' : 'btn-outline'}`}
+              <div className="flex rounded-xl bg-muted p-1">
+                <Button
+                  variant={
+                    verticalResizeDirection === 'top' ? 'default' : 'ghost'
+                  }
+                  size="sm"
                   onClick={() => setVerticalResizeDirection('top')}
                   type="button"
                 >
                   Top
-                </button>
-                <button
-                  className={`btn btn-xs join-item ${verticalResizeDirection === 'bottom' ? 'btn-primary' : 'btn-outline'}`}
+                </Button>
+                <Button
+                  variant={
+                    verticalResizeDirection === 'bottom' ? 'default' : 'ghost'
+                  }
+                  size="sm"
                   onClick={() => setVerticalResizeDirection('bottom')}
                   type="button"
                 >
                   Bottom
-                </button>
+                </Button>
               </div>
             </div>
 
-            <label className="label cursor-pointer gap-2">
-              <span className="label-text text-sm">Straight drag mode</span>
+            <label className="flex cursor-pointer items-center gap-2">
+              <span className="text-sm font-medium">Straight drag mode</span>
               <input
                 type="checkbox"
-                className="toggle toggle-sm"
+                className={checkboxClassName}
                 checked={straightLineMode}
                 onChange={(e) => setStraightLineMode(e.target.checked)}
               />
             </label>
 
-            <div className="dropdown dropdown-end">
-              <div tabIndex={0} role="button" className="btn btn-sm btn-ghost">
-                Fill All
-              </div>
-              <ul
-                tabIndex={0}
-                className="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-32"
-              >
-                {(Object.keys(tileColors) as TileType[]).map((type) => (
-                  <li key={type}>
-                    <button onClick={() => fillAll(type)}>{tileLabels[type]}</button>
-                  </li>
-                ))}
-              </ul>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-sm text-muted-foreground">Fill all:</span>
+              {(Object.keys(tileColors) as TileType[]).map((type) => (
+                <Button
+                  key={type}
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => fillAll(type)}
+                >
+                  {tileLabels[type]}
+                </Button>
+              ))}
             </div>
           </div>
 
-          <div className="text-sm opacity-70">
-            Left click paints, right click temporarily erases back to floor, and Shift now previews a line from the last clicked cell to the cursor.
+          <div className="text-sm text-muted-foreground">
+            Left click paints, right click temporarily erases back to floor, and
+            Shift now previews a line from the last clicked cell to the cursor.
             {lineAnchor?.mode === 'tiles'
               ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
               : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
@@ -1624,18 +1644,20 @@ export function FloorplanGridEditor({
 
       {mode === 'groups' && (
         <div className="space-y-3">
-          <div className="text-sm opacity-70">
-            Select a group, then click and drag to paint its area. Right click temporarily erases, and holding Shift previews a line from the last clicked cell.
+          <div className="text-sm text-muted-foreground">
+            Select a group, then click and drag to paint its area. Right click
+            temporarily erases, and holding Shift previews a line from the last
+            clicked cell.
             {lineAnchor?.mode === 'groups'
               ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
               : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
           </div>
 
           <div className="flex flex-wrap gap-3 items-center">
-            <label className="form-control w-full max-w-sm">
-              <span className="label-text text-sm">Group</span>
+            <label className="space-y-2 w-full max-w-sm">
+              <span className="text-sm font-medium">Group</span>
               <select
-                className="select select-bordered select-sm"
+                className={selectClassName}
                 value={selectedGroup ?? ''}
                 onChange={(e) => setSelectedGroup(e.target.value || null)}
               >
@@ -1649,34 +1671,37 @@ export function FloorplanGridEditor({
               </select>
             </label>
 
-            <div className="join">
-              <button
-                className={`btn btn-sm join-item ${groupPaintMode === 'paint' ? 'btn-primary' : 'btn-outline'}`}
+            <div className="flex rounded-2xl bg-muted p-1">
+              <Button
+                variant={groupPaintMode === 'paint' ? 'default' : 'ghost'}
+                size="sm"
                 onClick={() => setGroupPaintMode('paint')}
               >
                 Paint
-              </button>
-              <button
-                className={`btn btn-sm join-item ${groupPaintMode === 'erase' ? 'btn-primary' : 'btn-outline'}`}
+              </Button>
+              <Button
+                variant={groupPaintMode === 'erase' ? 'default' : 'ghost'}
+                size="sm"
                 onClick={() => setGroupPaintMode('erase')}
               >
                 Erase
-              </button>
+              </Button>
             </div>
 
-            <label className="label cursor-pointer gap-2">
-              <span className="label-text text-sm">Straight drag mode</span>
+            <label className="flex cursor-pointer items-center gap-2">
+              <span className="text-sm font-medium">Straight drag mode</span>
               <input
                 type="checkbox"
-                className="toggle toggle-sm"
+                className={checkboxClassName}
                 checked={straightLineMode}
                 onChange={(e) => setStraightLineMode(e.target.checked)}
               />
             </label>
 
-            <button
-              className="btn btn-sm btn-ghost"
-              disabled={!selectedGroup || !(groups[selectedGroup]?.length)}
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={!selectedGroup || !groups[selectedGroup]?.length}
               onClick={() => {
                 if (!selectedGroup) {
                   return;
@@ -1685,21 +1710,26 @@ export function FloorplanGridEditor({
                 const currentGrid = cloneGrid(gridRef.current);
                 const nextGroups = { ...currentGrid.groups };
                 delete nextGroups[selectedGroup];
-                applyDiscreteChange({ ...currentGrid, groups: nextGroups }, currentGrid);
+                applyDiscreteChange(
+                  { ...currentGrid, groups: nextGroups },
+                  currentGrid,
+                );
               }}
             >
               Clear Group
-            </button>
+            </Button>
           </div>
 
           {Object.keys(groups).length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-base-300">
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
               {Object.entries(groups).map(([groupId, points]) => {
                 const info = sortedGroups.find((group) => group.id === groupId);
                 return (
-                  <button
+                  <Button
                     key={groupId}
-                    className={`badge badge-lg gap-2 px-3 py-3 border ${selectedGroup === groupId ? 'badge-primary' : 'badge-outline'}`}
+                    variant={selectedGroup === groupId ? 'default' : 'outline'}
+                    size="sm"
+                    className="gap-2 rounded-full"
                     onClick={() => setSelectedGroup(groupId)}
                   >
                     <span
@@ -1710,8 +1740,10 @@ export function FloorplanGridEditor({
                       }}
                     />
                     {info?.name ?? groupId}
-                    <span className="opacity-70">{points.length}</span>
-                  </button>
+                    <span className="text-muted-foreground">
+                      {points.length}
+                    </span>
+                  </Button>
                 );
               })}
             </div>
@@ -1722,28 +1754,31 @@ export function FloorplanGridEditor({
       {/* Device toolbar */}
       {mode === 'devices' && (
         <div className="space-y-3">
-          <div className="text-sm opacity-70">
-            Select a device below, then click on the grid to place it. Drag placed devices to move them.
+          <div className="text-sm text-muted-foreground">
+            Select a device below, then click on the grid to place it. Drag
+            placed devices to move them.
           </div>
           <div className="flex flex-wrap gap-3 items-end">
-            <label className="form-control w-full max-w-xs">
-              <span className="label-text text-sm">Search</span>
-              <input
+            <label className="space-y-2 w-full max-w-xs">
+              <span className="text-sm font-medium">Search</span>
+              <Input
                 type="text"
-                className="input input-bordered input-sm"
+                className="h-9"
                 placeholder="Search by name or id"
                 value={deviceSearch}
                 onChange={(e) => setDeviceSearch(e.target.value)}
               />
             </label>
 
-            <label className="form-control w-full max-w-[12rem]">
-              <span className="label-text text-sm">Type</span>
+            <label className="w-full max-w-48 space-y-2">
+              <span className="text-sm font-medium">Type</span>
               <select
-                className="select select-bordered select-sm"
+                className={selectClassName}
                 value={deviceTypeFilter}
                 onChange={(e) =>
-                  setDeviceTypeFilter(e.target.value as 'all' | FloorplanDeviceType)
+                  setDeviceTypeFilter(
+                    e.target.value as 'all' | FloorplanDeviceType,
+                  )
                 }
               >
                 <option value="all">All devices</option>
@@ -1753,10 +1788,10 @@ export function FloorplanGridEditor({
               </select>
             </label>
 
-            <label className="form-control w-full max-w-xs">
-              <span className="label-text text-sm">Group</span>
+            <label className="space-y-2 w-full max-w-xs">
+              <span className="text-sm font-medium">Group</span>
               <select
-                className="select select-bordered select-sm"
+                className={selectClassName}
                 value={deviceGroupFilter}
                 onChange={(e) => setDeviceGroupFilter(e.target.value)}
               >
@@ -1770,9 +1805,12 @@ export function FloorplanGridEditor({
               </select>
             </label>
 
-            {(deviceSearch || deviceTypeFilter !== 'all' || deviceGroupFilter !== 'all') && (
-              <button
-                className="btn btn-sm btn-ghost"
+            {(deviceSearch ||
+              deviceTypeFilter !== 'all' ||
+              deviceGroupFilter !== 'all') && (
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setDeviceSearch('');
                   setDeviceTypeFilter('all');
@@ -1780,64 +1818,101 @@ export function FloorplanGridEditor({
                 }}
               >
                 Clear Filters
-              </button>
+              </Button>
             )}
           </div>
 
-          <div className="text-sm opacity-70">
-            Matching devices: {filteredAvailableDevices.length} total · {unplacedDevices.length} unplaced · {placedDevices.length} placed
+          <div className="text-sm text-muted-foreground">
+            Matching devices: {filteredAvailableDevices.length} total ·{' '}
+            {unplacedDevices.length} unplaced · {placedDevices.length} placed
           </div>
 
-          <div className="max-h-56 overflow-y-auto rounded-lg border border-base-300 bg-base-100/40 p-2">
+          <div className="max-h-56 overflow-y-auto rounded-2xl border border-border bg-muted/30 p-2">
             <div className="flex flex-wrap gap-2">
               {unplacedDevices.map((device) => (
-                <button
+                <Button
                   key={device.key}
-                  className={`btn btn-sm ${selectedDevice === device.key ? 'btn-primary' : 'btn-outline'}`}
+                  variant={
+                    selectedDevice === device.key ? 'default' : 'outline'
+                  }
+                  size="sm"
                   onClick={() => setSelectedDevice(device.key)}
                 >
                   {device.name}
-                </button>
+                </Button>
               ))}
               {unplacedDevices.length === 0 && availableDevices.length > 0 && (
-                <span className="text-sm opacity-70 px-1 py-2">
+                <span className="px-1 py-2 text-sm text-muted-foreground">
                   {filteredAvailableDevices.length === 0
                     ? 'No devices match the current filters.'
                     : 'All matching devices are already placed.'}
                 </span>
               )}
               {availableDevices.length === 0 && (
-                <span className="text-sm opacity-70 px-1 py-2">No devices available.</span>
+                <span className="px-1 py-2 text-sm text-muted-foreground">
+                  No devices available.
+                </span>
               )}
             </div>
           </div>
           {devices.length > 0 && (
-            <div className="flex flex-wrap gap-2 pt-2 border-t border-base-300">
-              <span className="text-sm opacity-70">Placed:</span>
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+              <span className="text-sm text-muted-foreground">Placed:</span>
               {placedDevices.map((d) => (
-                <div
+                <Button
                   key={d.deviceKey}
-                  className={`badge badge-lg gap-1 cursor-pointer ${selectedDevice === d.deviceKey ? 'badge-primary' : ''}`}
+                  variant={
+                    selectedDevice === d.deviceKey ? 'default' : 'outline'
+                  }
+                  size="sm"
+                  className="gap-1 rounded-full"
                   onClick={() => setSelectedDevice(d.deviceKey)}
                 >
                   {d.deviceName}
-                  <button
-                    className="btn btn-xs btn-ghost btn-circle"
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="ml-1 inline-flex size-5 items-center justify-center rounded-full hover:bg-background/20"
                     onClick={(e) => {
                       e.stopPropagation();
                       const currentGrid = cloneGrid(gridRef.current);
-                      const nextGrid = removeDeviceFromGrid(currentGrid, d.deviceKey);
-                      if (applyDiscreteChange(nextGrid, currentGrid) && selectedDevice === d.deviceKey) {
+                      const nextGrid = removeDeviceFromGrid(
+                        currentGrid,
+                        d.deviceKey,
+                      );
+                      if (
+                        applyDiscreteChange(nextGrid, currentGrid) &&
+                        selectedDevice === d.deviceKey
+                      ) {
                         setSelectedDevice(null);
+                      }
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        const currentGrid = cloneGrid(gridRef.current);
+                        const nextGrid = removeDeviceFromGrid(
+                          currentGrid,
+                          d.deviceKey,
+                        );
+                        if (
+                          applyDiscreteChange(nextGrid, currentGrid) &&
+                          selectedDevice === d.deviceKey
+                        ) {
+                          setSelectedDevice(null);
+                        }
                       }
                     }}
                   >
                     ✕
-                  </button>
-                </div>
+                  </span>
+                </Button>
               ))}
               {placedDevices.length === 0 && (
-                <span className="text-sm opacity-70">No placed devices match the current filters.</span>
+                <span className="text-sm text-muted-foreground">
+                  No placed devices match the current filters.
+                </span>
               )}
             </div>
           )}
@@ -1845,7 +1920,7 @@ export function FloorplanGridEditor({
       )}
 
       {/* Canvas */}
-      <div className="overflow-auto border border-base-300 rounded-lg bg-base-300 p-2">
+      <div className="overflow-auto rounded-2xl border border-border bg-muted/40 p-2">
         <canvas
           ref={canvasRef}
           width={canvasWidth}
@@ -1860,22 +1935,7 @@ export function FloorplanGridEditor({
         />
       </div>
 
-      {/* Legend */}
-      <div className="flex gap-4 text-sm flex-wrap">
-        {(Object.keys(tileColors) as TileType[]).map((type) => (
-          <div key={type} className="flex items-center gap-1">
-            <span
-              className="w-4 h-4 rounded border border-base-300"
-              style={{ backgroundColor: tileColors[type] }}
-            />
-            <span className="opacity-70">{tileLabels[type]}</span>
-          </div>
-        ))}
-        <div className="flex items-center gap-1">
-          <span className="w-4 h-4 rounded-full bg-emerald-500"></span>
-          <span className="opacity-70">Device</span>
-        </div>
-      </div>
+      <FloorplanLegend tileColors={tileColors} tileLabels={tileLabels} />
     </div>
   );
 }
@@ -1910,10 +1970,16 @@ export function deserializeGrid(json: string): FloorplanGrid | null {
       return null;
     }
 
-    const width = typeof parsed.width === 'number' && parsed.width > 0 ? parsed.width : 64;
-    const height = typeof parsed.height === 'number' && parsed.height > 0 ? parsed.height : 64;
+    const width =
+      typeof parsed.width === 'number' && parsed.width > 0 ? parsed.width : 64;
+    const height =
+      typeof parsed.height === 'number' && parsed.height > 0
+        ? parsed.height
+        : 64;
     const tileSize =
-      typeof parsed.tileSize === 'number' && parsed.tileSize > 0 ? parsed.tileSize : 20;
+      typeof parsed.tileSize === 'number' && parsed.tileSize > 0
+        ? parsed.tileSize
+        : 20;
     const deviceScale = normalizeFloorplanDeviceScale(
       typeof parsed.deviceScale === 'number'
         ? parsed.deviceScale
@@ -1924,7 +1990,10 @@ export function deserializeGrid(json: string): FloorplanGrid | null {
       ? buildEmptyTiles(width, height).map((row, rowIndex) =>
           row.map((_, columnIndex) => {
             const tile = parsed.tiles?.[rowIndex]?.[columnIndex];
-            return tile === 'wall' || tile === 'door' || tile === 'window' || tile === 'floor'
+            return tile === 'wall' ||
+              tile === 'door' ||
+              tile === 'window' ||
+              tile === 'floor'
               ? tile
               : 'floor';
           }),

@@ -1,4 +1,5 @@
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { useAppConfig } from './appConfig';
 
@@ -156,77 +157,93 @@ async function readApiResponse<T>(response: Response, fallbackMessage: string) {
 // Generic fetch hook for config API
 function useConfigApi<T>(endpoint: string) {
   const { apiEndpoint } = useAppConfig();
-  const [data, setData] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const baseUrl = `${apiEndpoint}/api/v1/config`;
+  const queryKey = ['config', baseUrl, endpoint] as const;
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true);
+  const query = useQuery({
+    queryKey,
+    queryFn: async () => {
       const response = await fetch(`${baseUrl}/${endpoint}`);
       const result = await readApiResponse<T[]>(response, 'Failed to fetch');
-      if (result.success && result.data) {
-        setData(result.data);
-      } else {
-        setError(result.error || 'Failed to fetch');
-      }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Unknown error');
-    } finally {
-      setLoading(false);
-    }
-  }, [baseUrl, endpoint]);
+      return result.data ?? [];
+    },
+  });
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
-  const create = useCallback(
-    async (item: Partial<T>) => {
+  const createMutation = useMutation({
+    mutationFn: async (item: Partial<T>) => {
       const response = await fetch(`${baseUrl}/${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item),
       });
       const result = await readApiResponse<T>(response, 'Failed to create');
-      await fetchData();
       return result.data;
     },
-    [baseUrl, endpoint, fetchData],
-  );
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey });
+    },
+  });
 
-  const update = useCallback(
-    async (id: string, item: Partial<T>) => {
-      const response = await fetch(`${baseUrl}/${endpoint}/${encodeURIComponent(id)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, ...item }),
-      });
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, item }: { id: string; item: Partial<T> }) => {
+      const response = await fetch(
+        `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, ...item }),
+        },
+      );
       const result = await readApiResponse<T>(response, 'Failed to update');
-      await fetchData();
       return result.data;
     },
-    [baseUrl, endpoint, fetchData],
-  );
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey });
+    },
+  });
 
-  const remove = useCallback(
-    async (id: string) => {
-      const response = await fetch(`${baseUrl}/${endpoint}/${encodeURIComponent(id)}`, {
-        method: 'DELETE',
-      });
-      const result = await readApiResponse<unknown>(response, 'Failed to delete');
-      if (result.success) {
-        await fetchData();
-      } else {
+  const removeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await fetch(
+        `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
+        {
+          method: 'DELETE',
+        },
+      );
+      const result = await readApiResponse<unknown>(
+        response,
+        'Failed to delete',
+      );
+      if (!result.success) {
         throw new Error(result.error || 'Failed to delete');
       }
     },
-    [baseUrl, endpoint, fetchData],
-  );
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey });
+    },
+  });
 
-  return { data, loading, error, refetch: fetchData, create, update, remove };
+  const refetch = async () => {
+    await query.refetch();
+  };
+
+  const create = (item: Partial<T>) => createMutation.mutateAsync(item);
+  const update = (id: string, item: Partial<T>) =>
+    updateMutation.mutateAsync({ id, item });
+  const remove = (id: string) => removeMutation.mutateAsync(id);
+  const error = query.error instanceof Error ? query.error.message : null;
+
+  return {
+    data: query.data ?? [],
+    loading: query.isLoading,
+    error,
+    refetch,
+    create,
+    update,
+    remove,
+  };
 }
 
 // Specialized hooks for each config type
@@ -260,11 +277,16 @@ export function useConfigDevices() {
 
   const replace = useCallback(
     async (deviceKey: string, replacementDeviceKey: string) => {
-      const response = await fetch(`${baseUrl}/${encodeURIComponent(deviceKey)}/replace`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ replacement_device_key: replacementDeviceKey }),
-      });
+      const response = await fetch(
+        `${baseUrl}/${encodeURIComponent(deviceKey)}/replace`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            replacement_device_key: replacementDeviceKey,
+          }),
+        },
+      );
       const result = await readApiResponse<DeviceConfigMutationResult>(
         response,
         'Failed to replace device references',
@@ -276,9 +298,12 @@ export function useConfigDevices() {
 
   const remove = useCallback(
     async (deviceKey: string) => {
-      const response = await fetch(`${baseUrl}/${encodeURIComponent(deviceKey)}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(
+        `${baseUrl}/${encodeURIComponent(deviceKey)}`,
+        {
+          method: 'DELETE',
+        },
+      );
       const result = await readApiResponse<DeviceConfigMutationResult>(
         response,
         'Failed to delete device',
@@ -322,7 +347,9 @@ export function useLogs(pollIntervalMs = 5000) {
 
         setError(result.error || 'Failed to fetch logs');
       } catch (nextError) {
-        setError(nextError instanceof Error ? nextError.message : 'Unknown error');
+        setError(
+          nextError instanceof Error ? nextError.message : 'Unknown error',
+        );
       } finally {
         if (!background) {
           setLoading(false);
@@ -362,7 +389,9 @@ export function useRuntimeStatus(pollIntervalMs = 5000) {
       }
 
       try {
-        const response = await fetch(`${apiEndpoint}/api/v1/config/runtime-status`);
+        const response = await fetch(
+          `${apiEndpoint}/api/v1/config/runtime-status`,
+        );
         const result = await readApiResponse<RuntimeStatus>(
           response,
           'Failed to fetch runtime status',
@@ -374,7 +403,9 @@ export function useRuntimeStatus(pollIntervalMs = 5000) {
         }
       } catch (nextError) {
         if (!cancelled) {
-          setError(nextError instanceof Error ? nextError.message : 'Unknown error');
+          setError(
+            nextError instanceof Error ? nextError.message : 'Unknown error',
+          );
         }
       } finally {
         if (!background && !cancelled) {

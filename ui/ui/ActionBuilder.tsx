@@ -3,6 +3,28 @@ import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { Device } from '@/bindings/Device';
 import type { RolloutStyle } from '@/bindings/RolloutStyle';
+import { cn } from '@/lib/cn';
+import { ConfigField } from '@/ui/config-form';
+import {
+  DeviceMultiSelect,
+  GroupMultiSelect,
+  GroupSelect,
+  RoutineSelect,
+  SceneSelect,
+} from '@/ui/config-selectors';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { Input } from '@/ui/primitives/input';
+import { Textarea } from '@/ui/primitives/textarea';
+
+const selectClassName =
+  'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const fieldClassName = 'space-y-2';
+const fieldLabelClassName = 'text-sm font-medium';
+const helpTextClassName = 'text-xs text-muted-foreground';
+const panelClassName = 'rounded-2xl border border-border bg-muted/30 p-3';
 
 const rolloutStyleOptions: RolloutStyle[] = ['spatial'];
 export const DEFAULT_ROLLOUT_DURATION_MS = 1500;
@@ -151,162 +173,6 @@ export function validateActions(actions: Action[]): string | null {
   return null;
 }
 
-interface SceneSelectorProps {
-  scenes: { id: string; name: string }[];
-  value: string;
-  onChange: (sceneId: string) => void;
-}
-
-function SceneSelector({ scenes, value, onChange }: SceneSelectorProps) {
-  return (
-    <select
-      className="select select-bordered select-sm"
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">Select scene...</option>
-      {scenes.map((scene) => (
-        <option key={scene.id} value={scene.id}>
-          {scene.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-interface RoutineSelectorProps {
-  routines: { id: string; name: string }[];
-  value: string;
-  onChange: (routineId: string) => void;
-}
-
-function RoutineSelector({ routines, value, onChange }: RoutineSelectorProps) {
-  return (
-    <select
-      className="select select-bordered select-sm"
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">Select routine...</option>
-      {routines.map((routine) => (
-        <option key={routine.id} value={routine.id}>
-          {routine.name}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-interface DeviceKeysSelectorProps {
-  devices: DevicesState;
-  value: string[];
-  onChange: (keys: string[]) => void;
-}
-
-function DeviceKeysSelector({
-  devices,
-  value,
-  onChange,
-}: DeviceKeysSelectorProps) {
-  const deviceList = Object.entries(devices).map(([key, device]) => ({
-    key,
-    device: device as Device,
-  }));
-
-  const handleToggle = (key: string) => {
-    if (value.includes(key)) {
-      onChange(value.filter((k) => k !== key));
-    } else {
-      onChange([...value, key]);
-    }
-  };
-
-  return (
-    <div className="max-h-40 overflow-y-auto border border-base-300 rounded-lg p-2">
-      {deviceList.map(({ key, device }) => (
-        <label
-          key={key}
-          className="flex items-center gap-2 p-1 hover:bg-base-200 rounded cursor-pointer"
-        >
-          <input
-            type="checkbox"
-            className="checkbox checkbox-xs"
-            checked={value.includes(key)}
-            onChange={() => handleToggle(key)}
-          />
-          <span className="text-sm truncate">
-            {device.name} <span className="opacity-60 text-xs">({key})</span>
-          </span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
-interface GroupKeysSelectorProps {
-  groups: FlattenedGroupsConfig;
-  value: string[];
-  onChange: (keys: string[]) => void;
-}
-function GroupKeysSelector({
-  groups,
-  value,
-  onChange,
-}: GroupKeysSelectorProps) {
-  const groupList = Object.entries(groups);
-
-  const handleToggle = (key: string) => {
-    if (value.includes(key)) {
-      onChange(value.filter((k) => k !== key));
-    } else {
-      onChange([...value, key]);
-    }
-  };
-
-  return (
-    <div className="max-h-40 overflow-y-auto border border-base-300 rounded-lg p-2">
-      {groupList.map(([key, group]) => (
-        <label
-          key={key}
-          className="flex items-center gap-2 p-1 hover:bg-base-200 rounded cursor-pointer"
-        >
-          <input
-            type="checkbox"
-            className="checkbox checkbox-xs"
-            checked={value.includes(key)}
-            onChange={() => handleToggle(key)}
-          />
-          <span className="text-sm truncate">{group?.name ?? key}</span>
-        </label>
-      ))}
-    </div>
-  );
-}
-
-interface GroupSelectorProps {
-  groups: FlattenedGroupsConfig;
-  value: string;
-  onChange: (groupId: string) => void;
-}
-
-function GroupSelector({ groups, value, onChange }: GroupSelectorProps) {
-  const groupList = Object.entries(groups);
-  return (
-    <select
-      className="select select-bordered select-sm"
-      value={value || ''}
-      onChange={(e) => onChange(e.target.value)}
-    >
-      <option value="">Select group...</option>
-      {groupList.map(([key, group]) => (
-        <option key={key} value={key}>
-          {group?.name ?? key}
-        </option>
-      ))}
-    </select>
-  );
-}
-
 interface TargetFilterFields {
   device_keys?: string[];
   group_keys?: string[];
@@ -348,11 +214,11 @@ function TargetFiltersEditor({
 
   return (
     <>
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={deviceFilterEnabled}
             onChange={(e) => {
               setShowDeviceFilter(e.target.checked);
@@ -361,10 +227,10 @@ function TargetFiltersEditor({
               }
             }}
           />
-          <span className="label-text">Filter by Devices</span>
+          <span className={fieldLabelClassName}>Filter by Devices</span>
         </label>
         {deviceFilterEnabled && (
-          <DeviceKeysSelector
+          <DeviceMultiSelect
             devices={devices}
             value={value.device_keys || []}
             onChange={(keys) => {
@@ -377,11 +243,11 @@ function TargetFiltersEditor({
         )}
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={groupFilterEnabled}
             onChange={(e) => {
               setShowGroupFilter(e.target.checked);
@@ -390,10 +256,10 @@ function TargetFiltersEditor({
               }
             }}
           />
-          <span className="label-text">Filter by Groups</span>
+          <span className={fieldLabelClassName}>Filter by Groups</span>
         </label>
         {groupFilterEnabled && (
-          <GroupKeysSelector
+          <GroupMultiSelect
             groups={groups}
             value={value.group_keys || []}
             onChange={(keys) => {
@@ -435,12 +301,12 @@ function MirrorFromGroupField({
   return (
     <div className="space-y-2">
       {label ? (
-        <label className="label py-0">
-          <span className="label-text">{label}</span>
+        <label>
+          <span className={fieldLabelClassName}>{label}</span>
         </label>
       ) : null}
       <div className="flex flex-wrap gap-2 items-center">
-        <SceneSelector
+        <SceneSelect
           scenes={scenes}
           value={scene_id}
           onChange={(id) => onChange({ scene_id: id, mirror_from_group })}
@@ -448,7 +314,7 @@ function MirrorFromGroupField({
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="checkbox checkbox-xs"
+            className={checkboxClassName}
             checked={mirrorEnabled}
             onChange={(e) =>
               onChange({
@@ -460,7 +326,7 @@ function MirrorFromGroupField({
           Mirror from group
         </label>
         {mirrorEnabled ? (
-          <GroupSelector
+          <GroupSelect
             groups={groups}
             value={mirror_from_group ?? ''}
             onChange={(id) =>
@@ -470,7 +336,7 @@ function MirrorFromGroupField({
         ) : null}
       </div>
       {mirrorEnabled ? (
-        <div className="text-xs opacity-60">
+        <div className={helpTextClassName}>
           Uses the scene currently active in the selected group. Falls back to
           the scene above if that group has no single active scene.
         </div>
@@ -510,13 +376,13 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
   const validationError = getRolloutValidationError(value);
 
   return (
-    <div className="space-y-3 rounded-lg border border-base-300 p-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Rollout Style</span>
+    <div className={cn('space-y-3', panelClassName)}>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Rollout Style</span>
         </label>
         <select
-          className="select select-bordered select-sm"
+          className={selectClassName}
           value={rollout}
           onChange={(e) => {
             const nextRollout = e.target.value.trim() as RolloutStyle | '';
@@ -538,19 +404,19 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
             </option>
           ))}
         </select>
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Select how scene activation should roll out across positioned devices.
         </span>
       </div>
 
       {hasRollout && (
         <>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Rollout Source Device</span>
+          <div className={fieldClassName}>
+            <label>
+              <span className={fieldLabelClassName}>Rollout Source Device</span>
             </label>
             <select
-              className="select select-bordered select-sm"
+              className={selectClassName}
               value={value.rollout_source_device_key ?? ''}
               onChange={(e) =>
                 onChange({
@@ -569,21 +435,20 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
                 </option>
               ))}
             </select>
-            <span className="label-text-alt mt-1 opacity-60">
+            <span className={helpTextClassName}>
               Use a fixed origin device, or choose the triggering device to
               center the rollout on whichever device fired the routine.
             </span>
           </div>
 
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Rollout Duration (ms)</span>
+          <div className={fieldClassName}>
+            <label>
+              <span className={fieldLabelClassName}>Rollout Duration (ms)</span>
             </label>
-            <input
+            <Input
               type="number"
               min="1"
               step="100"
-              className="input input-bordered input-sm"
               value={value.rollout_duration_ms ?? ''}
               placeholder={String(DEFAULT_ROLLOUT_DURATION_MS)}
               onChange={(e) => {
@@ -596,14 +461,14 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
                 });
               }}
             />
-            <span className="label-text-alt mt-1 opacity-60">
+            <span className={helpTextClassName}>
               Total time for the rollout to reach the farthest positioned
               target.
             </span>
           </div>
 
           {validationError && (
-            <div className="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-sm text-error">
+            <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               {validationError}
             </div>
           )}
@@ -667,13 +532,13 @@ function TransitionBehaviorEditor({
   const mode = getTransitionBehaviorMode(value);
 
   return (
-    <div className="space-y-3 rounded-lg border border-base-300 p-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">{label}</span>
+    <div className={cn('space-y-3', panelClassName)}>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>{label}</span>
         </label>
         <select
-          className="select select-bordered select-sm"
+          className={selectClassName}
           value={mode}
           onChange={(e) =>
             onChange(
@@ -690,19 +555,18 @@ function TransitionBehaviorEditor({
       </div>
 
       {mode === 'scene' && sceneHelpText ? (
-        <div className="text-sm opacity-60">{sceneHelpText}</div>
+        <div className="text-sm text-muted-foreground">{sceneHelpText}</div>
       ) : null}
 
       {mode === 'fixed' ? (
-        <div className="form-control">
-          <label className="label">
-            <span className="label-text">Fixed Transition (s)</span>
+        <div className={fieldClassName}>
+          <label>
+            <span className={fieldLabelClassName}>Fixed Transition (s)</span>
           </label>
-          <input
+          <Input
             type="number"
             min="0"
             step="0.1"
-            className="input input-bordered input-sm"
             value={value.transition ?? ''}
             placeholder="0.4"
             onChange={(e) => {
@@ -714,9 +578,7 @@ function TransitionBehaviorEditor({
             }}
           />
           {fixedHelpText ? (
-            <span className="label-text-alt mt-1 opacity-60">
-              {fixedHelpText}
-            </span>
+            <span className={helpTextClassName}>{fixedHelpText}</span>
           ) : null}
         </div>
       ) : null}
@@ -741,9 +603,9 @@ function ActivateSceneEditor({
 }: ActivateSceneEditorProps) {
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Scene</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Scene</span>
         </label>
         <MirrorFromGroupField
           scene_id={action.scene_id}
@@ -761,11 +623,11 @@ function ActivateSceneEditor({
         onChange={(fields) => onChange({ ...action, ...fields })}
       />
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={action.include_source_groups ?? false}
             onChange={(e) =>
               onChange({
@@ -774,7 +636,7 @@ function ActivateSceneEditor({
               })
             }
           />
-          <span className="label-text">
+          <span className={fieldLabelClassName}>
             Also include groups that contain the triggering device
           </span>
         </label>
@@ -842,18 +704,20 @@ function CycleScenesEditor({
 
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Scenes (in order)</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Scenes (in order)</span>
         </label>
         <div className="space-y-3">
           {action.scenes.map((s, index) => (
             <div
               key={index}
-              className="space-y-2 rounded-lg border border-base-300 p-2"
+              className="space-y-2 rounded-2xl border border-border bg-muted/20 p-2"
             >
               <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-sm opacity-60 w-6">{index + 1}.</span>
+                <span className="w-6 text-sm text-muted-foreground">
+                  {index + 1}.
+                </span>
                 <MirrorFromGroupField
                   scene_id={s.scene_id}
                   mirror_from_group={s.mirror_from_group}
@@ -861,16 +725,18 @@ function CycleScenesEditor({
                   scenes={scenes}
                   onChange={(update) => handleSceneFieldChange(index, update)}
                 />
-                <button
-                  className="btn btn-ghost btn-xs btn-error ml-auto"
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto text-destructive hover:text-destructive"
                   onClick={() => handleRemoveScene(index)}
                 >
                   ✕
-                </button>
+                </Button>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
                 <select
-                  className="select select-bordered select-sm w-48"
+                  className={cn(selectClassName, 'w-48')}
                   value={getTransitionBehaviorMode(s)}
                   onChange={(event) =>
                     handleSceneFieldChange(
@@ -886,11 +752,11 @@ function CycleScenesEditor({
                   <option value="fixed">Fixed transition</option>
                 </select>
                 {getTransitionBehaviorMode(s) === 'fixed' ? (
-                  <input
+                  <Input
                     type="number"
                     min="0"
                     step="0.1"
-                    className="input input-bordered input-sm w-36"
+                    className="h-9 w-36"
                     value={s.transition ?? ''}
                     placeholder="0.4s"
                     onChange={(event) => {
@@ -906,8 +772,8 @@ function CycleScenesEditor({
                 ) : null}
               </div>
 
-              <div className="rounded-lg border border-base-300 p-3">
-                <div className="text-xs font-medium uppercase tracking-wide opacity-60">
+              <div className={panelClassName}>
+                <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Scene Filters
                 </div>
                 <div className="mt-2 space-y-3">
@@ -923,16 +789,18 @@ function CycleScenesEditor({
             </div>
           ))}
         </div>
-        <button
-          className="btn btn-sm btn-outline mt-2"
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-2"
           onClick={handleAddScene}
         >
           + Add Scene
-        </button>
+        </Button>
       </div>
 
-      <div className="space-y-2 rounded-lg border border-base-300 p-3">
-        <div className="text-sm opacity-70">
+      <div className={cn('space-y-2', panelClassName)}>
+        <div className="text-sm text-muted-foreground">
           Use these filters to choose which devices and groups are considered
           when determining the current scene before cycling.
         </div>
@@ -944,11 +812,11 @@ function CycleScenesEditor({
         />
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={action.nowrap || false}
             onChange={(e) =>
               onChange({
@@ -957,17 +825,17 @@ function CycleScenesEditor({
               })
             }
           />
-          <span className="label-text">
+          <span className={fieldLabelClassName}>
             Don&apos;t wrap (stop at last scene instead of cycling back)
           </span>
         </label>
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={action.include_source_groups ?? false}
             onChange={(e) =>
               onChange({
@@ -976,7 +844,7 @@ function CycleScenesEditor({
               })
             }
           />
-          <span className="label-text">
+          <span className={fieldLabelClassName}>
             Also include groups that contain the triggering device
           </span>
         </label>
@@ -1004,16 +872,16 @@ function ForceTriggerRoutineEditor({
 }: ForceTriggerRoutineEditorProps) {
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Routine to Trigger</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Routine to Trigger</span>
         </label>
-        <RoutineSelector
+        <RoutineSelect
           routines={routines}
           value={action.routine_id}
           onChange={(id) => onChange({ ...action, routine_id: id })}
         />
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Force triggers another routine regardless of its rules
         </span>
       </div>
@@ -1034,28 +902,28 @@ function ToggleOverrideEditor({
 }: ToggleOverrideEditorProps) {
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Devices</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Devices</span>
         </label>
-        <DeviceKeysSelector
+        <DeviceMultiSelect
           devices={devices}
           value={action.device_keys}
           onChange={(keys) => onChange({ ...action, device_keys: keys })}
         />
       </div>
 
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="toggle toggle-primary"
+            className={checkboxClassName}
             checked={action.override_state}
             onChange={(e) =>
               onChange({ ...action, override_state: e.target.checked })
             }
           />
-          <span className="label-text">
+          <span className={fieldLabelClassName}>
             {action.override_state ? 'Enable Override' : 'Disable Override'}
           </span>
         </label>
@@ -1072,25 +940,25 @@ interface UiActionEditorProps {
 function UiActionEditor({ action, onChange }: UiActionEditorProps) {
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">State Key</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>State Key</span>
         </label>
-        <input
+        <Input
           type="text"
-          className="input input-bordered input-sm"
+          className="h-9"
           value={action.state_key}
           onChange={(e) => onChange({ ...action, state_key: e.target.value })}
           placeholder="ui_state_key"
         />
       </div>
 
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">State Value (JSON)</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>State Value (JSON)</span>
         </label>
-        <textarea
-          className="textarea textarea-bordered h-24 font-mono text-sm"
+        <Textarea
+          className="h-24 font-mono text-sm"
           value={
             typeof action.state_value === 'string'
               ? action.state_value
@@ -1123,12 +991,15 @@ function JsonActionEditor({ action, onChange }: JsonActionEditorProps) {
 
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Action JSON</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Action JSON</span>
         </label>
-        <textarea
-          className={`textarea textarea-bordered h-32 font-mono text-sm ${error ? 'textarea-error' : ''}`}
+        <Textarea
+          className={cn(
+            'h-32 font-mono text-sm',
+            error && 'border-destructive focus-visible:ring-destructive',
+          )}
           value={json}
           onChange={(e) => {
             setJson(e.target.value);
@@ -1141,7 +1012,7 @@ function JsonActionEditor({ action, onChange }: JsonActionEditorProps) {
             }
           }}
         />
-        {error && <span className="label-text-alt text-error">{error}</span>}
+        {error && <span className="text-xs text-destructive">{error}</span>}
       </div>
     </div>
   );
@@ -1208,26 +1079,37 @@ export function ActionEditor({
   };
 
   return (
-    <div className="card bg-base-200">
-      <div className="card-body p-4">
-        <div className="flex justify-between items-start mb-2">
-          <select
-            className="select select-bordered select-sm"
-            value={actionType}
-            onChange={(e) => handleTypeChange(e.target.value)}
+    <Card className="rounded-2xl bg-muted/30">
+      <CardContent className="space-y-4 p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <ConfigField
+            label="Action type"
+            description="Choose what this routine does when it triggers."
+            className="w-full max-w-sm"
           >
-            <option value="ActivateScene">Activate Scene</option>
-            <option value="CycleScenes">Cycle Scenes</option>
-            <option value="ForceTriggerRoutine">Trigger Routine</option>
-            <option value="ToggleDeviceOverride">Toggle Override</option>
-            <option value="Ui">UI State</option>
-            <option value="Dim">Dim</option>
-            <option value="SetDeviceState">Set Device State</option>
-            <option value="Custom">Custom</option>
-          </select>
-          <button className="btn btn-ghost btn-xs btn-error" onClick={onRemove}>
+            <select
+              className={selectClassName}
+              value={actionType}
+              onChange={(e) => handleTypeChange(e.target.value)}
+            >
+              <option value="ActivateScene">Activate Scene</option>
+              <option value="CycleScenes">Cycle Scenes</option>
+              <option value="ForceTriggerRoutine">Trigger Routine</option>
+              <option value="ToggleDeviceOverride">Toggle Override</option>
+              <option value="Ui">UI State</option>
+              <option value="Dim">Dim</option>
+              <option value="SetDeviceState">Set Device State</option>
+              <option value="Custom">Custom</option>
+            </select>
+          </ConfigField>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={onRemove}
+          >
             ✕
-          </button>
+          </Button>
         </div>
 
         {actionType === 'ActivateScene' && (
@@ -1268,8 +1150,8 @@ export function ActionEditor({
         {['Dim', 'SetDeviceState', 'Custom'].includes(actionType) && (
           <JsonActionEditor action={action} onChange={onChange} />
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -1312,15 +1194,20 @@ export function ActionBuilder({
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h4 className="font-medium">Actions</h4>
-        <button className="btn btn-sm btn-primary" onClick={handleAddAction}>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h4 className="font-medium">Actions</h4>
+          <p className="text-sm text-muted-foreground">
+            Actions run in order after every routine rule matches.
+          </p>
+        </div>
+        <Button size="sm" onClick={handleAddAction}>
           Add Action
-        </button>
+        </Button>
       </div>
 
       {actions.length === 0 ? (
-        <div className="text-center py-4 opacity-60">
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 py-4 text-center text-sm text-muted-foreground">
           No actions configured. Add an action to define what happens when this
           routine triggers.
         </div>

@@ -3,12 +3,8 @@ import ConfigLayout from '../app/config/layout';
 
 import { useGroupsState } from '@/hooks/websocket';
 import { Suspense, lazy, type ReactNode } from 'react';
-import {
-  Navigate,
-  Outlet,
-  createBrowserRouter,
-  useParams,
-} from 'react-router-dom';
+import { Outlet, createBrowserRouter, useParams } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 
 const DashboardPage = lazy(() => import('../app/dashboard/page'));
 const ConfigDashboardPage = lazy(() => import('../app/config/dashboard/page'));
@@ -23,6 +19,7 @@ const ConfigIntegrationsPage = lazy(
 );
 const ConfigLogsPage = lazy(() => import('../app/config/logs/page'));
 const ConfigMigrationPage = lazy(() => import('../app/config/migration/page'));
+const ConfigPage = lazy(() => import('../app/config/page'));
 const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
 const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
 const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
@@ -37,7 +34,7 @@ const SceneList = lazy(() =>
 
 function RouteLoading() {
   return (
-    <div className="flex min-h-48 items-center justify-center p-6 text-base-content/70">
+    <div className="flex min-h-48 items-center justify-center p-6 text-muted-foreground">
       Loading…
     </div>
   );
@@ -110,7 +107,7 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Navigate to="/config/integrations" replace />,
+            element: withSuspense(<ConfigPage />),
           },
           {
             path: 'dashboard',

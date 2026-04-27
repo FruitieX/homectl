@@ -1,5 +1,4 @@
 import { Fragment, useEffect, useState, useRef, useMemo } from 'react';
-import { Button, Card, Modal, Tabs } from 'react-daisyui';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import { X } from 'lucide-react';
 import clsx from 'clsx';
@@ -14,6 +13,10 @@ import {
 import { getUvIndexColor } from '@/lib/uvIndex';
 import { WeatherChart } from '@/ui/charts/WeatherChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -154,16 +157,16 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
     detailsModalOpen && isIdle ? 10 * 1000 : null,
   );
 
-  // Reset scroll position and tab when modal closes (after animation)
+  // Reset scroll position and tab after the overlay closes.
   useEffect(() => {
     if (!detailsModalOpen) {
-      // Wait for modal close animation to complete before resetting
+      // Wait for the close animation to complete before resetting.
       const timeoutId = setTimeout(() => {
         setActiveTab(0);
         if (modalBodyRef.current) {
           modalBodyRef.current.scrollTop = 0;
         }
-      }, 300); // Modal animation duration
+      }, 300);
 
       return () => clearTimeout(timeoutId);
     }
@@ -332,225 +335,229 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card compact className="col-span-1 bg-base-300">
-        <Button color="ghost" className="h-full" onClick={toggleDetailsModal}>
-          <Card.Body>
+      <Card className="col-span-1 overflow-hidden">
+        <Button
+          variant="ghost"
+          className="h-full w-full"
+          onClick={toggleDetailsModal}
+        >
+          <CardContent className="p-5">
             {renderWeatherDetail(
               currentAndFutureSeries[0],
               true,
               latestFrontyardTemp ? Math.round(latestFrontyardTemp) : undefined,
             )}
-          </Card.Body>
+          </CardContent>
         </Button>
       </Card>
-      <Modal.Legacy
+      <ResponsiveOverlay
         open={detailsModalOpen}
-        onClickBackdrop={toggleDetailsModal}
-        responsive
-        className="py-0"
+        onOpenChange={setDetailsModalOpen}
+        title="Weather forecast"
+        description="Hourly and five-day forecast details."
+        className="max-w-5xl"
       >
-        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
-          <div className="flex items-center justify-between font-bold mb-4">
-            <div className="mx-4 text-center">Weather forecast</div>
-            <Button onClick={toggleDetailsModal} variant="outline">
+        <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+          <div className="flex items-center justify-end">
+            <Button onClick={toggleDetailsModal} variant="outline" size="icon">
               <X />
             </Button>
           </div>
-
           <Tabs
-            className="flex-nowrap overflow-x-auto"
-            variant="bordered"
-            size="lg"
+            value={String(activeTab)}
+            onValueChange={(value) => setActiveTab(Number(value))}
           >
-            <Tabs.Tab active={activeTab === 0} onClick={() => setActiveTab(0)}>
-              Hourly (48h)
-            </Tabs.Tab>
-            <Tabs.Tab active={activeTab === 1} onClick={() => setActiveTab(1)}>
-              Long-term (5d)
-            </Tabs.Tab>
+            <TabsList className="w-full justify-start overflow-x-auto">
+              <TabsTrigger value="0">Hourly (48h)</TabsTrigger>
+              <TabsTrigger value="1">Long-term (5d)</TabsTrigger>
+            </TabsList>
           </Tabs>
-        </Modal.Header>
 
-        <Modal.Body
-          ref={modalBodyRef}
-          className="flex flex-col gap-3 relative overflow-y-auto overflow-x-hidden max-h-[70vh] pr-4 -mr-4 pb-4"
-        >
-          {activeTab === 0 && (
-            <>
-              {hourlyData.map((series, index) => {
-                const rainProbability =
-                  series.data.next_1_hours?.details
-                    ?.probability_of_precipitation || 0;
-                const currentDate = new Date(series.time);
-                const prevDate =
-                  index > 0 ? new Date(hourlyData[index - 1].time) : null;
-                const isNewDay =
-                  index === 0 ||
-                  (prevDate && currentDate.getDate() !== prevDate.getDate());
-
-                return (
-                  <Fragment key={index}>
-                    {index === 0 && (
-                      <div className="sticky top-0 z-20 bg-base-100 flex flex-row pb-3 text-base border-b">
-                        <span className="stat-title w-24">Time</span>
-                        <span className="stat-title">Forecast</span>
-                        <span className="stat-title flex-1 text-right">
-                          Rain probability
-                        </span>
-                      </div>
-                    )}
-                    {isNewDay && (
-                      <div className="bg-base-100">
-                        <div className="flex items-center py-3 -mx-6 px-6">
-                          <div className="flex-1 h-px bg-gray-300"></div>
-                          <div className="px-4 text-sm font-semibold text-gray-600">
-                            {currentDate.toLocaleDateString('en-FI', {
-                              weekday: 'long',
-                              month: 'short',
-                              day: 'numeric',
-                            })}
-                          </div>
-                          <div className="flex-1 h-px bg-gray-300"></div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex flex-row items-center">
-                      <div className="w-24 text-2xl flex flex-col items-start">
-                        <span>
-                          {currentDate.toLocaleTimeString('fi-FI', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                          })}
-                        </span>
-                      </div>
-                      {renderWeatherDetail(series, false)}
-                      <span className="flex-1" />
-                      <span
-                        className={clsx(
-                          'flex items-center',
-                          rainProbability > 20
-                            ? rainProbability > 50
-                              ? 'text-red-500'
-                              : 'text-yellow-500'
-                            : 'text-green-500',
-                        )}
-                        title={`${Math.round(rainProbability)}% chance of precipitation in the next hour`}
-                      >
-                        {Math.round(rainProbability)} %
-                      </span>
-                    </div>
-                  </Fragment>
-                );
-              })}
-            </>
-          )}
-
-          {activeTab === 1 && (
-            <>
-              {/* Daily forecast cards (stretched to fill width) */}
-              <div className="flex flex-row gap-2 w-full">
-                {dailyData.map((dayData, index) => {
-                  const today = new Date();
-                  const isToday =
-                    dayData.date.toDateString() === today.toDateString();
+          <div
+            ref={modalBodyRef}
+            className="relative flex max-h-[70vh] flex-col gap-3 overflow-y-auto overflow-x-hidden pr-4 -mr-4 pb-4"
+          >
+            {activeTab === 0 && (
+              <>
+                {hourlyData.map((series, index) => {
+                  const rainProbability =
+                    series.data.next_1_hours?.details
+                      ?.probability_of_precipitation || 0;
+                  const currentDate = new Date(series.time);
+                  const prevDate =
+                    index > 0 ? new Date(hourlyData[index - 1].time) : null;
+                  const isNewDay =
+                    index === 0 ||
+                    (prevDate && currentDate.getDate() !== prevDate.getDate());
 
                   return (
-                    <div
-                      key={index}
-                      className="bg-base-200 rounded-lg p-3 text-center flex-1"
-                    >
-                      <div className="text-sm font-semibold mb-2">
-                        {isToday
-                          ? 'Today'
-                          : dayData.date.toLocaleDateString('en-US', {
-                              weekday: 'short',
+                    <Fragment key={index}>
+                      {index === 0 && (
+                        <div className="sticky top-0 z-20 flex flex-row border-b border-border bg-background pb-3 text-base">
+                          <span className="w-24 text-sm text-muted-foreground">
+                            Time
+                          </span>
+                          <span className="text-sm text-muted-foreground">
+                            Forecast
+                          </span>
+                          <span className="flex-1 text-right text-sm text-muted-foreground">
+                            Rain probability
+                          </span>
+                        </div>
+                      )}
+                      {isNewDay && (
+                        <div className="bg-background">
+                          <div className="flex items-center py-3 -mx-6 px-6">
+                            <div className="flex-1 h-px bg-gray-300"></div>
+                            <div className="px-4 text-sm font-semibold text-gray-600">
+                              {currentDate.toLocaleDateString('en-FI', {
+                                weekday: 'long',
+                                month: 'short',
+                                day: 'numeric',
+                              })}
+                            </div>
+                            <div className="flex-1 h-px bg-gray-300"></div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-row items-center">
+                        <div className="w-24 text-2xl flex flex-col items-start">
+                          <span>
+                            {currentDate.toLocaleTimeString('fi-FI', {
+                              hour: '2-digit',
+                              minute: '2-digit',
                             })}
+                          </span>
+                        </div>
+                        {renderWeatherDetail(series, false)}
+                        <span className="flex-1" />
+                        <span
+                          className={clsx(
+                            'flex items-center',
+                            rainProbability > 20
+                              ? rainProbability > 50
+                                ? 'text-red-500'
+                                : 'text-yellow-500'
+                              : 'text-green-500',
+                          )}
+                          title={`${Math.round(rainProbability)}% chance of precipitation in the next hour`}
+                        >
+                          {Math.round(rainProbability)} %
+                        </span>
                       </div>
-                      <div className="text-xs text-gray-600 mb-2">
-                        {dayData.date.toLocaleDateString('en-FI', {
-                          month: 'short',
-                          day: 'numeric',
-                        })}
-                      </div>
-                      <img
-                        className="w-12 h-12 mx-auto mb-2"
-                        src={`/weathericons/${dayData.symbolCode}.svg`}
-                        alt="Weather icon"
-                      />
-                      <div className="text-lg font-bold">
-                        {Math.round(dayData.maxTemp)}°
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {Math.round(dayData.minTemp)}°
-                      </div>
-                      <div className="text-xs text-blue-600 mt-1">
-                        {dayData.precipitation > 0
-                          ? `${dayData.precipitation.toFixed(1)}mm`
-                          : ''}
-                      </div>
-                    </div>
+                    </Fragment>
                   );
                 })}
-              </div>
+              </>
+            )}
 
-              {/* Temperature chart */}
-              <div>
-                <ResponsiveChart
-                  height={250}
-                  className="rounded-lg overflow-hidden bg-base-200/50"
-                >
-                  {({ width, height }) => (
-                    <WeatherChart
-                      data={temperatureChartData}
-                      width={width}
-                      height={height}
-                      chartType="temperature"
-                      animate={true}
-                    />
-                  )}
-                </ResponsiveChart>
-              </div>
+            {activeTab === 1 && (
+              <>
+                {/* Daily forecast cards (stretched to fill width) */}
+                <div className="flex flex-row gap-2 w-full">
+                  {dailyData.map((dayData, index) => {
+                    const today = new Date();
+                    const isToday =
+                      dayData.date.toDateString() === today.toDateString();
 
-              {/* Precipitation chart */}
-              <div>
-                <ResponsiveChart
-                  height={250}
-                  className="rounded-lg overflow-hidden bg-base-200/50"
-                >
-                  {({ width, height }) => (
-                    <WeatherChart
-                      data={precipitationChartData}
-                      width={width}
-                      height={height}
-                      chartType="precipitation"
-                      animate={true}
-                    />
-                  )}
-                </ResponsiveChart>
-              </div>
+                    return (
+                      <div
+                        key={index}
+                        className="flex-1 rounded-2xl border border-border bg-muted/50 p-3 text-center"
+                      >
+                        <div className="text-sm font-semibold mb-2">
+                          {isToday
+                            ? 'Today'
+                            : dayData.date.toLocaleDateString('en-US', {
+                                weekday: 'short',
+                              })}
+                        </div>
+                        <div className="text-xs text-gray-600 mb-2">
+                          {dayData.date.toLocaleDateString('en-FI', {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </div>
+                        <img
+                          className="w-12 h-12 mx-auto mb-2"
+                          src={`/weathericons/${dayData.symbolCode}.svg`}
+                          alt="Weather icon"
+                        />
+                        <div className="text-lg font-bold">
+                          {Math.round(dayData.maxTemp)}°
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {Math.round(dayData.minTemp)}°
+                        </div>
+                        <div className="text-xs text-blue-600 mt-1">
+                          {dayData.precipitation > 0
+                            ? `${dayData.precipitation.toFixed(1)}mm`
+                            : ''}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
 
-              {/* Wind speed chart */}
-              <div>
-                <ResponsiveChart
-                  height={250}
-                  className="rounded-lg overflow-hidden bg-base-200/50"
-                >
-                  {({ width, height }) => (
-                    <WeatherChart
-                      data={windChartData}
-                      width={width}
-                      height={height}
-                      chartType="wind"
-                      animate={true}
-                    />
-                  )}
-                </ResponsiveChart>
-              </div>
-            </>
-          )}
-        </Modal.Body>
-      </Modal.Legacy>
+                {/* Temperature chart */}
+                <div>
+                  <ResponsiveChart
+                    height={250}
+                    className="overflow-hidden rounded-2xl bg-muted/40"
+                  >
+                    {({ width, height }) => (
+                      <WeatherChart
+                        data={temperatureChartData}
+                        width={width}
+                        height={height}
+                        chartType="temperature"
+                        animate={true}
+                      />
+                    )}
+                  </ResponsiveChart>
+                </div>
+
+                {/* Precipitation chart */}
+                <div>
+                  <ResponsiveChart
+                    height={250}
+                    className="overflow-hidden rounded-2xl bg-muted/40"
+                  >
+                    {({ width, height }) => (
+                      <WeatherChart
+                        data={precipitationChartData}
+                        width={width}
+                        height={height}
+                        chartType="precipitation"
+                        animate={true}
+                      />
+                    )}
+                  </ResponsiveChart>
+                </div>
+
+                {/* Wind speed chart */}
+                <div>
+                  <ResponsiveChart
+                    height={250}
+                    className="overflow-hidden rounded-2xl bg-muted/40"
+                  >
+                    {({ width, height }) => (
+                      <WeatherChart
+                        data={windChartData}
+                        width={width}
+                        height={height}
+                        chartType="wind"
+                        animate={true}
+                      />
+                    )}
+                  </ResponsiveChart>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </ResponsiveOverlay>
     </>
   );
 };
@@ -574,6 +581,7 @@ const renderWeatherDetail = (
       <img
         className="w-16"
         src={`/weathericons/${series.data.next_1_hours?.summary?.symbol_code || series.data.next_6_hours?.summary?.symbol_code || 'clearsky_day'}.svg`}
+        alt="Weather icon"
       />
       <div className={clsx('flex flex-col', horizontal ? 'items-center' : '')}>
         <span className="whitespace-nowrap text-2xl">
@@ -583,14 +591,14 @@ const renderWeatherDetail = (
           °C
         </span>
         <span className="flex gap-2">
-          <span className="stat-title">
+          <span className="text-sm text-muted-foreground">
             {Math.round(series.data.instant.details.wind_speed)} m/s
           </span>
           {series.data.instant.details.ultraviolet_index_clear_sky !==
             undefined && (
             <span
               className={clsx(
-                'stat-title',
+                'text-sm text-muted-foreground',
                 getUvIndexColor(
                   series.data.instant.details.ultraviolet_index_clear_sky,
                 ),

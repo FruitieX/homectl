@@ -1,6 +1,8 @@
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
+import { Button } from '@/ui/primitives/button';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
 
 type Props = {
@@ -22,35 +24,38 @@ export const SensorActionModal = ({
     return null;
   }
 
+  const title = label ?? (device.name.trim() || device.id);
+  const deviceKey = getDeviceKey(device);
+
   return (
-    <div className="modal modal-open">
-      <div className="modal-box max-w-2xl space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h3 className="text-lg font-bold">{label ?? (device.name.trim() || device.id)}</h3>
-            <div className="text-sm opacity-70">{getDeviceKey(device)}</div>
-          </div>
-          <button className="btn btn-sm btn-circle btn-ghost" onClick={onClose}>
-            ✕
-          </button>
-        </div>
-
-        <p className="text-sm opacity-70">
-          Trigger fake sensor updates from the map without touching the physical device.
-        </p>
-
+    <ResponsiveOverlay
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          onClose();
+        }
+      }}
+      title={title}
+      description={
+        <>
+          <span className="block font-mono text-xs">{deviceKey}</span>
+          <span className="block">
+            Trigger fake sensor updates from the map without touching the
+            physical device.
+          </span>
+        </>
+      }
+      className="max-w-2xl"
+    >
+      <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
         <SensorActionPanel device={device} sensorConfig={sensorConfig} />
 
         <div className="flex justify-end">
-          <button className="btn btn-ghost" onClick={onClose}>
+          <Button variant="ghost" onClick={onClose}>
             Close
-          </button>
+          </Button>
         </div>
       </div>
-
-      <button className="modal-backdrop" onClick={onClose}>
-        close
-      </button>
-    </div>
+    </ResponsiveOverlay>
   );
 };

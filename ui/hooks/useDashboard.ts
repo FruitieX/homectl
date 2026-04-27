@@ -16,6 +16,8 @@ export interface DashboardWidget {
   widget_type: WidgetType;
   title: string;
   position: number;
+  x: number;
+  y: number;
   width: number;
   height: number;
   options: Record<string, unknown>;
@@ -127,6 +129,8 @@ export const defaultDashboardWidgets: DashboardWidget[] = [
     widget_type: 'weather',
     title: widgetRegistry.weather.name,
     position: 0,
+    x: 0,
+    y: 0,
     width: 1,
     height: 1,
     options: widgetRegistry.weather.defaultOptions,
@@ -136,6 +140,8 @@ export const defaultDashboardWidgets: DashboardWidget[] = [
     widget_type: 'controls',
     title: widgetRegistry.controls.name,
     position: 1,
+    x: 1,
+    y: 0,
     width: 1,
     height: 1,
     options: widgetRegistry.controls.defaultOptions,
@@ -145,6 +151,8 @@ export const defaultDashboardWidgets: DashboardWidget[] = [
     widget_type: 'clock',
     title: widgetRegistry.clock.name,
     position: 2,
+    x: 2,
+    y: 0,
     width: 2,
     height: 1,
     options: widgetRegistry.clock.defaultOptions,
@@ -154,6 +162,8 @@ export const defaultDashboardWidgets: DashboardWidget[] = [
     widget_type: 'sensors',
     title: widgetRegistry.sensors.name,
     position: 3,
+    x: 0,
+    y: 1,
     width: 4,
     height: 1,
     options: widgetRegistry.sensors.defaultOptions,
@@ -163,6 +173,8 @@ export const defaultDashboardWidgets: DashboardWidget[] = [
     widget_type: 'spot_price',
     title: widgetRegistry.spot_price.name,
     position: 4,
+    x: 0,
+    y: 2,
     width: 4,
     height: 1,
     options: widgetRegistry.spot_price.defaultOptions,
@@ -172,6 +184,8 @@ export const defaultDashboardWidgets: DashboardWidget[] = [
     widget_type: 'train_schedule',
     title: widgetRegistry.train_schedule.name,
     position: 5,
+    x: 0,
+    y: 3,
     width: 4,
     height: 1,
     options: widgetRegistry.train_schedule.defaultOptions,
@@ -194,7 +208,9 @@ function toDashboardLayout(row: DashboardLayoutRow): DashboardLayout {
   };
 }
 
-function toDashboardLayoutRow(layout: Partial<DashboardLayout>): DashboardLayoutRow {
+function toDashboardLayoutRow(
+  layout: Partial<DashboardLayout>,
+): DashboardLayoutRow {
   return {
     id: layout.id ? Number(layout.id) : 0,
     name: layout.name ?? 'New layout',
@@ -205,7 +221,10 @@ function toDashboardLayoutRow(layout: Partial<DashboardLayout>): DashboardLayout
 function toDashboardWidget(row: DashboardWidgetRow): DashboardWidget {
   const widgetType = getWidgetType(row.widget_type);
   const config = isRecord(row.config) ? row.config : {};
-  const title = typeof config.title === 'string' ? config.title : widgetRegistry[widgetType].name;
+  const title =
+    typeof config.title === 'string'
+      ? config.title
+      : widgetRegistry[widgetType].name;
   const options = isRecord(config.options) ? config.options : config;
 
   return {
@@ -213,6 +232,8 @@ function toDashboardWidget(row: DashboardWidgetRow): DashboardWidget {
     widget_type: widgetType,
     title,
     position: row.sort_order,
+    x: row.grid_x,
+    y: row.grid_y,
     width: row.grid_w,
     height: row.grid_h,
     options,
@@ -224,24 +245,32 @@ function toDashboardWidgetRow(
   widget: Partial<DashboardWidget>,
   existingRow?: DashboardWidgetRow,
 ): DashboardWidgetRow {
-  const widgetType = widget.widget_type ?? getWidgetType(existingRow?.widget_type ?? 'custom');
+  const widgetType =
+    widget.widget_type ?? getWidgetType(existingRow?.widget_type ?? 'custom');
   const registryEntry = widgetRegistry[widgetType];
-  const existingConfig = isRecord(existingRow?.config) ? existingRow.config : {};
-  const existingOptions = isRecord(existingConfig.options) ? existingConfig.options : {};
+  const existingConfig = isRecord(existingRow?.config)
+    ? existingRow.config
+    : {};
+  const existingOptions = isRecord(existingConfig.options)
+    ? existingConfig.options
+    : {};
 
   return {
-    id: widget.id ? Number(widget.id) : existingRow?.id ?? 0,
+    id: widget.id ? Number(widget.id) : (existingRow?.id ?? 0),
     layout_id: Number(layoutId),
     widget_type: widgetType,
     config: {
       ...existingConfig,
       title:
         widget.title ??
-        (typeof existingConfig.title === 'string' ? existingConfig.title : registryEntry.name),
-      options: widget.options ?? existingOptions ?? registryEntry.defaultOptions,
+        (typeof existingConfig.title === 'string'
+          ? existingConfig.title
+          : registryEntry.name),
+      options:
+        widget.options ?? existingOptions ?? registryEntry.defaultOptions,
     },
-    grid_x: existingRow?.grid_x ?? 0,
-    grid_y: existingRow?.grid_y ?? 0,
+    grid_x: widget.x ?? existingRow?.grid_x ?? 0,
+    grid_y: widget.y ?? existingRow?.grid_y ?? 0,
     grid_w: widget.width ?? existingRow?.grid_w ?? 2,
     grid_h: widget.height ?? existingRow?.grid_h ?? 2,
     sort_order: widget.position ?? existingRow?.sort_order ?? 0,
@@ -263,7 +292,9 @@ export function useDashboardLayouts() {
       const response = await fetch(baseUrl);
       const result = await response.json();
       if (result.success) {
-        setLayouts((result.data as DashboardLayoutRow[]).map(toDashboardLayout));
+        setLayouts(
+          (result.data as DashboardLayoutRow[]).map(toDashboardLayout),
+        );
       } else {
         setError(result.error || 'Failed to fetch layouts');
       }
@@ -308,7 +339,14 @@ export function useDashboardLayouts() {
     [baseUrl, fetchLayouts],
   );
 
-  return { layouts, loading, error, refetch: fetchLayouts, createLayout, deleteLayout };
+  return {
+    layouts,
+    loading,
+    error,
+    refetch: fetchLayouts,
+    createLayout,
+    deleteLayout,
+  };
 }
 
 // Hook for managing widgets in a layout
@@ -357,7 +395,7 @@ export function useDashboardWidgets(layoutId: string | null) {
         throw new Error('A layout must be selected before adding a widget');
       }
 
-      const response = await fetch(baseUrl, {
+      const response = await fetch(`${baseUrl}/widgets`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(toDashboardWidgetRow(layoutId, widget)),

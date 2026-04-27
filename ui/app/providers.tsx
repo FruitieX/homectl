@@ -1,11 +1,15 @@
 import { Provider as JotaiProvider } from 'jotai';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { useProvideWebsocketState } from '@/hooks/websocket';
 import '@/styles/globals.css';
 import { HomectlBottomNavigation } from '@/ui/BottomNavigation';
 import { Navbar } from '@/ui/Navbar';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useApplyTheme } from '@/hooks/theme';
-import { Suspense, lazy, useEffect, type ReactNode } from 'react';
+import { createHomectlQueryClient } from '@/lib/query-client';
+import { Toaster } from '@/ui/primitives/toaster';
+import { TooltipProvider } from '@/ui/primitives/tooltip';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 
 const ColorPickerModal = lazy(() =>
   import('@/ui/ColorPickerModal').then(({ ColorPickerModal }) => ({
@@ -29,7 +33,18 @@ const CarHeaterModal = lazy(() =>
 );
 
 export const Providers = ({ children }: { children: ReactNode }) => {
-  return <JotaiProvider>{children}</JotaiProvider>;
+  const [queryClient] = useState(() => createHomectlQueryClient());
+
+  return (
+    <JotaiProvider>
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider delayDuration={250}>
+          {children}
+          <Toaster richColors position="top-center" />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </JotaiProvider>
+  );
 };
 
 export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {

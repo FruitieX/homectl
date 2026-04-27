@@ -1,51 +1,70 @@
 import { useTheme, ThemeMode } from '@/hooks/theme';
 import { Sun, Moon, Monitor } from 'lucide-react';
+import { cn } from '@/lib/cn';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { Button } from '@/ui/primitives/button';
 
-const themeOptions: { value: ThemeMode; label: string; icon: React.ReactNode }[] = [
-  { value: 'light', label: 'Light', icon: <Sun className="w-5 h-5" /> },
-  { value: 'dark', label: 'Dark', icon: <Moon className="w-5 h-5" /> },
-  { value: 'auto', label: 'Auto', icon: <Monitor className="w-5 h-5" /> },
+const themeOptions: {
+  value: ThemeMode;
+  label: string;
+  icon: React.ReactNode;
+}[] = [
+  { value: 'light', label: 'Light', icon: <Sun className="size-5" /> },
+  { value: 'dark', label: 'Dark', icon: <Moon className="size-5" /> },
+  { value: 'auto', label: 'Auto', icon: <Monitor className="size-5" /> },
 ];
 
 export default function SettingsPage() {
   const [themeMode, setThemeMode] = useTheme();
 
   return (
-    <div className="flex flex-col gap-6 p-4 overflow-auto">
-      <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="flex flex-col gap-5 overflow-auto p-4 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+        <p className="text-sm text-muted-foreground">
+          Personalize the app shell and display preferences.
+        </p>
+      </div>
 
-      <div className="card bg-base-200">
-        <div className="card-body">
-          <h2 className="card-title">Appearance</h2>
-          
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text text-base">Theme</span>
-            </label>
-            <div className="join w-full">
+      <Card className="max-w-2xl">
+        <CardHeader>
+          <CardTitle>Appearance</CardTitle>
+          <CardDescription>
+            Choose a theme or let homectl follow the system preference.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted p-1">
               {themeOptions.map((option) => (
-                <button
+                <Button
                   key={option.value}
-                  className={`join-item btn flex-1 ${
-                    themeMode === option.value ? 'btn-primary' : 'btn-ghost'
-                  }`}
+                  variant={themeMode === option.value ? 'default' : 'ghost'}
+                  className={cn(
+                    'h-16 flex-col rounded-xl text-xs sm:h-11 sm:flex-row sm:text-sm',
+                    themeMode === option.value && 'shadow-sm',
+                  )}
                   onClick={() => setThemeMode(option.value)}
                 >
                   {option.icon}
-                  <span className="ml-2">{option.label}</span>
-                </button>
+                  <span>{option.label}</span>
+                </Button>
               ))}
             </div>
-            <label className="label">
-              <span className="label-text-alt text-base-content/70">
-                {themeMode === 'auto'
-                  ? 'Theme follows your system preference'
-                  : `Using ${themeMode} theme`}
-              </span>
-            </label>
+            <p className="text-sm text-muted-foreground">
+              {themeMode === 'auto'
+                ? 'Theme follows your system preference.'
+                : `Using ${themeMode} theme.`}
+            </p>
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

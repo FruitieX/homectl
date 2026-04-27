@@ -10,7 +10,6 @@ import { ChartTooltip } from './ChartTooltip';
 import { ChartInteractionOverlay } from './ChartInteractionOverlay';
 import { getTemperatureColor } from '@/ui/charts/TemperatureSensorChart';
 import { getHumidityColor } from '@/lib/humidityColors';
-import { Button } from 'react-daisyui';
 
 interface SensorReading {
   time: Date;

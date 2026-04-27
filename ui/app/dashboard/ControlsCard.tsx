@@ -2,15 +2,17 @@ import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useDeviceState, useWebsocket } from '@/hooks/websocket';
 import { produce } from 'immer';
 import { Car, Edit, LampCeiling, X } from 'lucide-react';
-import { Button, Card, Modal } from 'react-daisyui';
 import { useTimeout, useToggle } from 'usehooks-ts';
 import Viewport from '../map/Viewport';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { useCallback, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
 import useIdle from '@/hooks/useIdle';
 import clsx from 'clsx';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 
 const lightDeviceKey = 'tuya/bf25d876e90e147950dnm2';
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
@@ -111,18 +113,14 @@ export const ControlsCard = () => {
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
 
-  const clearSelectedDevices = useCallback(() => {
-    setSelectedDevices([]);
-  }, [setSelectedDevices]);
-
   useEffect(() => {
-    clearSelectedDevices();
-  }, [mapVisible, clearSelectedDevices]);
+    setSelectedDevices([]);
+  }, [mapVisible, setSelectedDevices]);
 
-  const editSelectedDevices = useCallback(() => {
+  const editSelectedDevices = () => {
     setDeviceModalState(selectedDevices);
     setDeviceModalOpen(true);
-  }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
+  };
 
   const carHeaterModalOpenState = useCarHeaterModalOpenState();
 
@@ -135,23 +133,26 @@ export const ControlsCard = () => {
 
   return (
     <>
-      <Card compact className="col-span-1 h-full bg-base-300">
-        <Card.Body className="h-full p-0">
+      <Card className="col-span-1 h-full overflow-hidden">
+        <CardContent className="h-full p-0">
           <Button
-            color="ghost"
+            variant="ghost"
             className={clsx(
               carHeater ? '' : 'opacity-30',
-              'h-full w-full justify-center rounded-box',
+              'h-full w-full justify-center rounded-3xl',
             )}
             size="lg"
-            startIcon={<Car size="3rem" />}
             onClick={() => toggleCarHeater()}
             onContextMenu={() => carHeaterModalOpenState.setOpen(true)}
-            loading={carHeaterLoading}
           >
+            {carHeaterLoading ? (
+              <span className="size-8 animate-spin rounded-full border-4 border-current border-t-transparent" />
+            ) : (
+              <Car size="3rem" />
+            )}
             <span className="sr-only">Toggle car heater</span>
           </Button>
-        </Card.Body>
+        </CardContent>
         {/* <Card.Body className="flex-row items-center justify-around overflow-x-auto"> */}
         {/* <Button
             color="ghost"
@@ -169,28 +170,29 @@ export const ControlsCard = () => {
         /> */}
         {/* </Card.Body> */}
       </Card>
-      <Modal.Legacy
-        responsive
+      <ResponsiveOverlay
         open={mapVisible}
-        onClickBackdrop={toggleMapVisible}
-        className="h-svh! pt-0 overflow-hidden"
+        onOpenChange={setMapVisible}
+        title="Floorplan"
+        description="Quick access to floorplan device controls from the dashboard."
+        className="max-w-6xl"
       >
-        <Modal.Header className="gap-3 flex items-center justify-between font-bold sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
-          <div className="mx-4 text-center">Floorplan</div>
-          <div className="flex-1" />
-          {selectedDevices.length > 0 && (
-            <Button
-              color="ghost"
-              startIcon={<Edit />}
-              onClick={editSelectedDevices}
-            />
-          )}
-          <Button onClick={toggleMapVisible} variant="outline">
-            <X />
-          </Button>
-        </Modal.Header>
-        {mapVisible && <Viewport />}
-      </Modal.Legacy>
+        <div className="space-y-3 px-5 pb-5 md:px-0 md:pb-0">
+          <div className="flex items-center justify-end gap-2">
+            {selectedDevices.length > 0 && (
+              <Button variant="ghost" size="icon" onClick={editSelectedDevices}>
+                <Edit />
+              </Button>
+            )}
+            <Button onClick={toggleMapVisible} variant="outline" size="icon">
+              <X />
+            </Button>
+          </div>
+          <div className="relative h-[70dvh] overflow-hidden rounded-3xl border border-border bg-background">
+            {mapVisible && <Viewport />}
+          </div>
+        </div>
+      </ResponsiveOverlay>
     </>
   );
 };

@@ -32,7 +32,7 @@ export type ResolvedSceneColor = {
 };
 
 const previewDotClassName =
-  'inline-flex h-4 w-4 shrink-0 rounded-full border border-base-content/15 shadow-inner';
+  'inline-flex h-4 w-4 shrink-0 rounded-full border border-foreground/15 shadow-inner';
 
 function clampBrightness(value: number) {
   return Math.max(0, Math.min(1, value));
@@ -77,7 +77,8 @@ function xyToRgb(x: number, y: number) {
   g = g <= 0.0031308 ? 12.92 * g : 1.055 * Math.pow(g, 1 / 2.4) - 0.055;
   b = b <= 0.0031308 ? 12.92 * b : 1.055 * Math.pow(b, 1 / 2.4) - 0.055;
 
-  const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255)));
+  const clamp = (value: number) =>
+    Math.max(0, Math.min(255, Math.round(value * 255)));
 
   return {
     r: clamp(r),
@@ -98,7 +99,10 @@ function getColorObject(color: ColorInput): Color | null {
     return Color.rgb(color.Rgb.r, color.Rgb.g, color.Rgb.b);
   }
   if ('Ct' in color && color.Ct) {
-    const normalized = Math.max(0, Math.min(1, (color.Ct.ct - 153) / (500 - 153)));
+    const normalized = Math.max(
+      0,
+      Math.min(1, (color.Ct.ct - 153) / (500 - 153)),
+    );
     return Color.rgb(
       Math.round(255 - normalized * 55),
       Math.round(240 - normalized * 30),
@@ -146,7 +150,9 @@ function getSceneTargetConfig(
     : scene.group_states?.[targetKey];
 }
 
-function getLinkedDeviceColor(device: Device | undefined): ResolvedSceneColor | null {
+function getLinkedDeviceColor(
+  device: Device | undefined,
+): ResolvedSceneColor | null {
   if (!device) {
     return null;
   }
@@ -163,15 +169,23 @@ function getLinkedDeviceColor(device: Device | undefined): ResolvedSceneColor | 
   };
 }
 
-function getConfiguredStateColor(config: SceneDeviceConfig): ResolvedSceneColor | null {
+function getConfiguredStateColor(
+  config: SceneDeviceConfig,
+): ResolvedSceneColor | null {
   if ('scene_id' in config || 'integration_id' in config) {
     return null;
   }
 
   const brightness = clampBrightness(
-    typeof config.brightness === 'number' ? config.brightness : config.power === false ? 0 : 1,
+    typeof config.brightness === 'number'
+      ? config.brightness
+      : config.power === false
+        ? 0
+        : 1,
   );
-  const color = getColorObject(config.color) ?? (brightness > 0 || config.power ? white : null);
+  const color =
+    getColorObject(config.color) ??
+    (brightness > 0 || config.power ? white : null);
 
   if (!color) {
     return null;
@@ -194,7 +208,9 @@ export function resolveSceneColor(
 ): ResolvedSceneColor | null {
   if ('integration_id' in config) {
     const linkedDeviceKey = getSceneDeviceLinkTargetKey(config);
-    return getLinkedDeviceColor(linkedDeviceKey ? devices[linkedDeviceKey] : undefined);
+    return getLinkedDeviceColor(
+      linkedDeviceKey ? devices[linkedDeviceKey] : undefined,
+    );
   }
 
   if ('scene_id' in config) {
@@ -224,7 +240,11 @@ export function resolveSceneColor(
       return null;
     }
 
-    const linkedConfig = getSceneTargetConfig(linkedScene, targetKind, targetKey);
+    const linkedConfig = getSceneTargetConfig(
+      linkedScene,
+      targetKind,
+      targetKey,
+    );
     if (!linkedConfig) {
       return null;
     }
@@ -267,7 +287,13 @@ export function SceneResolvedColorPreview({
   targetKey: string;
   targetKind: SceneTargetKind;
 }) {
-  const resolved = resolveSceneColor(config, targetKind, targetKey, scenes, devices);
+  const resolved = resolveSceneColor(
+    config,
+    targetKind,
+    targetKey,
+    scenes,
+    devices,
+  );
 
   if (!resolved) {
     return null;

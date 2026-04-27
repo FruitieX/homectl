@@ -3,7 +3,11 @@ import type { RuleRuntimeStatus } from '@/bindings/RuleRuntimeStatus';
 import type { TriggerMode } from '@/bindings/TriggerMode';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
-import { getDeviceDisplayLabel, getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
+import {
+  getDeviceDisplayLabel,
+  getDeviceDisplayLabelFromKey,
+} from '@/lib/deviceLabel';
+import { cn } from '@/lib/cn';
 import { resolveJsonPointer } from '../utils/jsonPointers';
 import {
   type Action,
@@ -28,6 +32,55 @@ import {
   type SensorRule,
   getRuleType,
 } from '@/ui/RuleBuilder';
+import { Badge } from '@/ui/primitives/badge';
+import { Card, CardContent } from '@/ui/primitives/card';
+
+type BadgeTone =
+  | 'primary'
+  | 'secondary'
+  | 'accent'
+  | 'warning'
+  | 'info'
+  | 'neutral'
+  | 'success'
+  | 'error'
+  | 'ghost';
+
+const badgeToneClassName: Record<BadgeTone, string> = {
+  primary: 'border-transparent bg-primary text-primary-foreground',
+  secondary: 'border-transparent bg-secondary text-secondary-foreground',
+  accent: 'border-transparent bg-accent text-accent-foreground',
+  warning:
+    'border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  info: 'border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  neutral: 'border-transparent bg-muted text-muted-foreground',
+  success:
+    'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  error:
+    'border-transparent bg-destructive/15 text-destructive dark:text-red-300',
+  ghost: 'border-transparent bg-muted/70 text-muted-foreground',
+};
+
+function StatusBadge({ label, tone }: { label: string; tone: BadgeTone }) {
+  return <Badge className={badgeToneClassName[tone]}>{label}</Badge>;
+}
+
+function RuleStatusAside({
+  statusBadge,
+  triggerMode,
+}: {
+  statusBadge: ReturnType<typeof getRuleStatusBadge>;
+  triggerMode?: TriggerMode;
+}) {
+  return (
+    <div className="flex flex-col items-end gap-1">
+      <StatusBadge label={statusBadge.label} tone={statusBadge.tone} />
+      {triggerMode ? (
+        <Badge variant="outline">{formatTriggerMode(triggerMode)}</Badge>
+      ) : null}
+    </div>
+  );
+}
 
 interface RoutineRuleListProps {
   rules: Rule[];
@@ -61,33 +114,35 @@ function SectionCard({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded-xl border border-base-300 bg-base-300 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide opacity-80">
-            {title}
-          </h3>
-          <p className="mt-1 text-sm opacity-70">{description}</p>
-        </div>
-        <div className="badge badge-outline badge-sm">{count}</div>
-      </div>
-
-      <div className="mt-4 space-y-3">
-        {count === 0 ? (
-          <div className="rounded-lg border border-dashed border-base-content/20 bg-base-100 px-4 py-6 text-center text-sm opacity-60">
-            {emptyMessage}
+    <Card className="rounded-2xl bg-muted/30">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">
+              {title}
+            </h3>
+            <p className="mt-1 text-sm text-muted-foreground">{description}</p>
           </div>
-        ) : (
-          children
-        )}
-      </div>
-    </section>
+          <Badge variant="outline">{count}</Badge>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {count === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border bg-background/70 px-4 py-6 text-center text-sm text-muted-foreground">
+              {emptyMessage}
+            </div>
+          ) : (
+            children
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function SummaryCard({
   badge,
-  badgeClassName,
+  badgeTone,
   title,
   summary,
   meta,
@@ -95,7 +150,7 @@ function SummaryCard({
   children,
 }: {
   badge: string;
-  badgeClassName: string;
+  badgeTone: BadgeTone;
   title: string;
   summary: string;
   meta?: string;
@@ -103,42 +158,46 @@ function SummaryCard({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-lg border border-base-300 bg-base-100 p-3 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={`badge badge-sm ${badgeClassName}`}>{badge}</span>
-            <h4 className="font-medium leading-tight">{title}</h4>
+    <Card className="rounded-2xl bg-background/70">
+      <CardContent className="p-3">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge label={badge} tone={badgeTone} />
+              <h4 className="font-medium leading-tight">{title}</h4>
+            </div>
+            <p className="text-sm text-foreground/80">{summary}</p>
+            {meta ? (
+              <p className="text-xs text-muted-foreground">{meta}</p>
+            ) : null}
           </div>
-          <p className="text-sm opacity-80">{summary}</p>
-          {meta ? <p className="text-xs opacity-60">{meta}</p> : null}
+          {aside ? <div className="shrink-0">{aside}</div> : null}
         </div>
-        {aside ? <div className="shrink-0">{aside}</div> : null}
-      </div>
 
-      {children ? <div className="mt-3">{children}</div> : null}
-    </div>
+        {children ? <div className="mt-3">{children}</div> : null}
+      </CardContent>
+    </Card>
   );
 }
 
 function getRuleStatusBadge(status?: RuleRuntimeStatus) {
   if (!status) {
-    return { label: 'No live state', className: 'badge-ghost' };
+    return { label: 'No live state', tone: 'ghost' as const };
   }
 
   if (status.error) {
-    return { label: 'Error', className: 'badge-error' };
+    return { label: 'Error', tone: 'error' as const };
   }
 
   if (status.trigger_match) {
-    return { label: 'Trigger-ready', className: 'badge-success' };
+    return { label: 'Trigger-ready', tone: 'success' as const };
   }
 
   if (status.condition_match) {
-    return { label: 'Matching', className: 'badge-info' };
+    return { label: 'Matching', tone: 'info' as const };
   }
 
-  return { label: 'Not matching', className: 'badge-ghost' };
+  return { label: 'Not matching', tone: 'ghost' as const };
 }
 
 function getRuleLiveNote(
@@ -172,7 +231,10 @@ function getRuleLiveNote(
   return 'The current state does not match this rule.';
 }
 
-function getRoutineRuleSummary(status: RoutineRuntimeStatus | undefined, ruleCount: number) {
+function getRoutineRuleSummary(
+  status: RoutineRuntimeStatus | undefined,
+  ruleCount: number,
+) {
   if (ruleCount === 0) {
     return 'No rules configured yet.';
   }
@@ -181,7 +243,9 @@ function getRoutineRuleSummary(status: RoutineRuntimeStatus | undefined, ruleCou
     return 'All of these rules must be ready before the routine can trigger.';
   }
 
-  const matchingRules = status.rules.filter((ruleStatus) => ruleStatus.condition_match).length;
+  const matchingRules = status.rules.filter(
+    (ruleStatus) => ruleStatus.condition_match,
+  ).length;
 
   if (status.will_trigger) {
     return `All ${ruleCount} rules are trigger-ready on the current update.`;
@@ -196,8 +260,8 @@ function getRoutineRuleSummary(status: RoutineRuntimeStatus | undefined, ruleCou
 
 function JsonDetails({ label, value }: { label: string; value: unknown }) {
   return (
-    <details className="rounded-lg border border-base-300 bg-base-200">
-      <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wide opacity-70">
+    <details className="rounded-2xl border border-border bg-muted/40">
+      <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
         {label}
       </summary>
       <pre className="overflow-x-auto px-3 pb-3 text-xs">
@@ -354,10 +418,7 @@ function formatDeviceConditions(
     : 'matches its configured state';
 }
 
-function getGroupLabel(
-  groupId: string,
-  groups: FlattenedGroupsConfig,
-) {
+function getGroupLabel(groupId: string, groups: FlattenedGroupsConfig) {
   return groups[groupId]?.name ?? groupId;
 }
 
@@ -490,7 +551,7 @@ function RuleSummaryItem({
   depth?: number;
 }) {
   const ruleType = getRuleType(rule);
-  const nestedClassName = depth > 0 ? 'pl-3 border-l border-base-300' : '';
+  const nestedClassName = cn(depth > 0 && 'border-l border-border pl-3');
   const liveBadge = getRuleStatusBadge(status);
 
   if (ruleType === 'sensor') {
@@ -506,21 +567,17 @@ function RuleSummaryItem({
       <div className={nestedClassName}>
         <SummaryCard
           badge="Sensor"
-          badgeClassName="badge-secondary"
+          badgeTone="secondary"
           title={device.label}
           summary={formatSensorState(sensorRule)}
           meta={[device.meta, getRuleLiveNote(status, sensorRule.trigger_mode)]
             .filter(Boolean)
             .join(' · ')}
           aside={
-            <div className="flex flex-col items-end gap-1">
-              <span className={`badge badge-sm ${liveBadge.className}`}>
-                {liveBadge.label}
-              </span>
-              <span className="badge badge-outline badge-sm">
-                {formatTriggerMode(sensorRule.trigger_mode)}
-              </span>
-            </div>
+            <RuleStatusAside
+              statusBadge={liveBadge}
+              triggerMode={sensorRule.trigger_mode}
+            />
           }
         />
       </div>
@@ -535,9 +592,10 @@ function RuleSummaryItem({
       devices,
       deviceDisplayNameMap,
     });
-    const liveDevice = rawRule.integration_id && rawRule.device_id
-      ? devices[`${rawRule.integration_id}/${rawRule.device_id}`]
-      : undefined;
+    const liveDevice =
+      rawRule.integration_id && rawRule.device_id
+        ? devices[`${rawRule.integration_id}/${rawRule.device_id}`]
+        : undefined;
     const previewValue = liveDevice?.raw
       ? resolveJsonPointer(liveDevice.raw, rawRule.path)
       : undefined;
@@ -546,7 +604,7 @@ function RuleSummaryItem({
       <div className={nestedClassName}>
         <SummaryCard
           badge="Raw"
-          badgeClassName="badge-neutral"
+          badgeTone="neutral"
           title={device.label}
           summary={formatRawRuleSummary(rawRule)}
           meta={[
@@ -559,14 +617,10 @@ function RuleSummaryItem({
             .filter(Boolean)
             .join(' · ')}
           aside={
-            <div className="flex flex-col items-end gap-1">
-              <span className={`badge badge-sm ${liveBadge.className}`}>
-                {liveBadge.label}
-              </span>
-              <span className="badge badge-outline badge-sm">
-                {formatTriggerMode(rawRule.trigger_mode)}
-              </span>
-            </div>
+            <RuleStatusAside
+              statusBadge={liveBadge}
+              triggerMode={rawRule.trigger_mode}
+            />
           }
         />
       </div>
@@ -586,21 +640,17 @@ function RuleSummaryItem({
       <div className={nestedClassName}>
         <SummaryCard
           badge="Device"
-          badgeClassName="badge-primary"
+          badgeTone="primary"
           title={device.label}
           summary={formatDeviceConditions(deviceRule, sceneLabels)}
           meta={[device.meta, getRuleLiveNote(status, deviceRule.trigger_mode)]
             .filter(Boolean)
             .join(' · ')}
           aside={
-            <div className="flex flex-col items-end gap-1">
-              <span className={`badge badge-sm ${liveBadge.className}`}>
-                {liveBadge.label}
-              </span>
-              <span className="badge badge-outline badge-sm">
-                {formatTriggerMode(deviceRule.trigger_mode)}
-              </span>
-            </div>
+            <RuleStatusAside
+              statusBadge={liveBadge}
+              triggerMode={deviceRule.trigger_mode}
+            />
           }
         />
       </div>
@@ -613,21 +663,20 @@ function RuleSummaryItem({
       <div className={nestedClassName}>
         <SummaryCard
           badge="Group"
-          badgeClassName="badge-accent"
+          badgeTone="accent"
           title={getGroupLabel(groupRule.group_id, groups)}
           summary={formatDeviceConditions(groupRule, sceneLabels)}
-          meta={[groupRule.group_id, getRuleLiveNote(status, groupRule.trigger_mode)]
+          meta={[
+            groupRule.group_id,
+            getRuleLiveNote(status, groupRule.trigger_mode),
+          ]
             .filter(Boolean)
             .join(' · ')}
           aside={
-            <div className="flex flex-col items-end gap-1">
-              <span className={`badge badge-sm ${liveBadge.className}`}>
-                {liveBadge.label}
-              </span>
-              <span className="badge badge-outline badge-sm">
-                {formatTriggerMode(groupRule.trigger_mode)}
-              </span>
-            </div>
+            <RuleStatusAside
+              statusBadge={liveBadge}
+              triggerMode={groupRule.trigger_mode}
+            />
           }
         />
       </div>
@@ -641,15 +690,11 @@ function RuleSummaryItem({
       <div className={nestedClassName}>
         <SummaryCard
           badge="Any"
-          badgeClassName="badge-warning"
+          badgeTone="warning"
           title="Any nested rule can match"
           summary="This branch is satisfied when at least one of the rules below matches."
           meta={getRuleLiveNote(status)}
-          aside={
-            <span className={`badge badge-sm ${liveBadge.className}`}>
-              {liveBadge.label}
-            </span>
-          }
+          aside={<StatusBadge label={liveBadge.label} tone={liveBadge.tone} />}
         >
           <div className="space-y-2">
             {anyRule.any.map((nestedRule, index) => (
@@ -675,15 +720,11 @@ function RuleSummaryItem({
     <div className={nestedClassName}>
       <SummaryCard
         badge="Script"
-        badgeClassName="badge-info"
+        badgeTone="info"
         title="JavaScript rule"
         summary={summarizeScript(scriptRule.script)}
         meta={getRuleLiveNote(status)}
-        aside={
-          <span className={`badge badge-sm ${liveBadge.className}`}>
-            {liveBadge.label}
-          </span>
-        }
+        aside={<StatusBadge label={liveBadge.label} tone={liveBadge.tone} />}
       >
         <JsonDetails label="Show script" value={scriptRule.script} />
       </SummaryCard>
@@ -745,7 +786,7 @@ function ActionSummaryItem({
     return (
       <SummaryCard
         badge="Scene"
-        badgeClassName="badge-primary"
+        badgeTone="primary"
         title={title}
         summary={summary}
         meta={metaParts.filter(Boolean).join(' · ')}
@@ -779,7 +820,9 @@ function ActionSummaryItem({
       deviceDisplayNameMap,
     });
     const meta = [
-      cycleAction.nowrap ? 'stops at the final scene' : 'wraps back to the start',
+      cycleAction.nowrap
+        ? 'stops at the final scene'
+        : 'wraps back to the start',
       ...filters,
       rollout,
       cycleAction.include_source_groups ? '+ source groups' : '',
@@ -790,9 +833,13 @@ function ActionSummaryItem({
     return (
       <SummaryCard
         badge="Cycle"
-        badgeClassName="badge-secondary"
+        badgeTone="secondary"
         title="Cycle through scenes"
-        summary={sequence.length > 0 ? sequence.join(' → ') : 'No scenes configured yet'}
+        summary={
+          sequence.length > 0
+            ? sequence.join(' → ')
+            : 'No scenes configured yet'
+        }
         meta={meta}
       />
     );
@@ -803,8 +850,10 @@ function ActionSummaryItem({
     return (
       <SummaryCard
         badge="Routine"
-        badgeClassName="badge-accent"
-        title={routineLabels[routineAction.routine_id] ?? routineAction.routine_id}
+        badgeTone="accent"
+        title={
+          routineLabels[routineAction.routine_id] ?? routineAction.routine_id
+        }
         summary="Force trigger this routine regardless of its own rules."
         meta={routineAction.routine_id}
       />
@@ -820,8 +869,12 @@ function ActionSummaryItem({
     return (
       <SummaryCard
         badge="Override"
-        badgeClassName="badge-warning"
-        title={overrideAction.override_state ? 'Enable scene override' : 'Disable scene override'}
+        badgeTone="warning"
+        title={
+          overrideAction.override_state
+            ? 'Enable scene override'
+            : 'Disable scene override'
+        }
         summary={
           labels.length > 0
             ? `Applies to ${summarizeNames(labels, 3)}`
@@ -837,7 +890,7 @@ function ActionSummaryItem({
     return (
       <SummaryCard
         badge="UI"
-        badgeClassName="badge-info"
+        badgeTone="info"
         title={uiAction.state_key || 'UI state key'}
         summary="Store this value in UI state."
       >
@@ -848,12 +901,16 @@ function ActionSummaryItem({
 
   if (actionType === 'Dim') {
     const dimAction = action as DimAction;
-    const deviceCount = dimAction.devices ? Object.keys(dimAction.devices).length : 0;
-    const groupCount = dimAction.groups ? Object.keys(dimAction.groups).length : 0;
+    const deviceCount = dimAction.devices
+      ? Object.keys(dimAction.devices).length
+      : 0;
+    const groupCount = dimAction.groups
+      ? Object.keys(dimAction.groups).length
+      : 0;
     return (
       <SummaryCard
         badge="Dim"
-        badgeClassName="badge-neutral"
+        badgeTone="neutral"
         title={dimAction.name || 'Dim action'}
         summary="Apply a dim configuration."
         meta={`${deviceCount} device config${deviceCount === 1 ? '' : 's'} · ${groupCount} group config${groupCount === 1 ? '' : 's'}`}
@@ -876,7 +933,7 @@ function ActionSummaryItem({
     return (
       <SummaryCard
         badge="Device"
-        badgeClassName="badge-primary"
+        badgeTone="primary"
         title={device.label}
         summary="Set this device to a specific state."
         meta={device.meta}
@@ -890,7 +947,7 @@ function ActionSummaryItem({
   return (
     <SummaryCard
       badge="Custom"
-      badgeClassName="badge-neutral"
+      badgeTone="neutral"
       title="Custom integration action"
       summary="Send a custom payload through an integration action."
     >

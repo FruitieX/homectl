@@ -21,7 +21,7 @@ export interface TooltipRecalculationOptions {
 }
 
 /**
- * Simple utility to recalculate tooltip positions after modal animations
+ * Simple utility to recalculate tooltip positions after overlay animations
  * This is a lightweight alternative to the full animation tracker
  */
 export function recalculateTooltipsAfterAnimation(
@@ -79,13 +79,13 @@ export function recalculateTooltipsAfterAnimation(
 }
 
 /**
- * Hook-compatible function to be called after modal transitions
- * Usage: Call this in a useEffect after modal animation completes
+ * Hook-compatible function to be called after overlay transitions
+ * Usage: Call this in a useEffect after overlay animation completes
  */
 export function handleModalAnimationComplete(
   recalculateCallback?: () => void,
 ): void {
-  // Standard delay for most modal animations
+  // Standard delay for most overlay animations
   const delay = 150;
 
   setTimeout(() => {
@@ -172,42 +172,4 @@ export function waitForAnimationsComplete(
     element.addEventListener('transitionend', handleTransitionEnd);
     element.addEventListener('animationend', handleAnimationEnd);
   });
-}
-
-/**
- * Simple function to call after DaisyUI modal animations
- * Automatically detects modal and waits for animation completion
- */
-export async function handleDaisyUIModalAnimation(
-  recalculateCallback?: () => void,
-): Promise<void> {
-  const modal = document.querySelector('.modal-box');
-  if (!modal) {
-    // No modal found, call callback immediately
-    if (recalculateCallback) {
-      recalculateCallback();
-    }
-    return;
-  }
-
-  try {
-    // Wait for modal animations to complete
-    await waitForAnimationsComplete(modal, 500);
-
-    // Additional settling time
-    await new Promise((resolve) => setTimeout(resolve, 100));
-
-    // Recalculate tooltips
-    if (recalculateCallback) {
-      recalculateCallback();
-    }
-
-    await recalculateTooltipsAfterAnimation({ delay: 0 });
-  } catch (error) {
-    console.warn('Error handling modal animation:', error);
-    // Fallback: still call the callback
-    if (recalculateCallback) {
-      recalculateCallback();
-    }
-  }
 }

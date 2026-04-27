@@ -8,7 +8,13 @@ import {
   resolveSensorInteraction,
   stringifySensorPayload,
 } from '@/lib/sensorInteraction';
-import { useEffect, useMemo, useState } from 'react';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { Input } from '@/ui/primitives/input';
+import { Textarea } from '@/ui/primitives/textarea';
+import { useEffect, useState } from 'react';
 
 type Props = {
   device: Device;
@@ -45,12 +51,13 @@ const sendSensorPayload = async (
   }
 
   if (!Array.isArray(result.devices) || result.devices.length === 0) {
-    throw new Error('Sensor update was accepted but no device state was returned');
+    throw new Error(
+      'Sensor update was accepted but no device state was returned',
+    );
   }
 };
 
-const controlButtonClass =
-  'btn h-16 min-h-16 border-base-300 bg-base-100 text-sm font-semibold shadow-sm hover:border-primary';
+const controlButtonClass = 'h-16 min-h-16 rounded-2xl text-sm font-semibold';
 
 export function SensorActionPanel({ device, sensorConfig }: Props) {
   const { apiEndpoint } = useAppConfig();
@@ -60,24 +67,23 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sensor = useMemo(() => getSensorDetails(device), [device]);
-  const resolvedInteraction = useMemo(
-    () => resolveSensorInteraction(device, sensorConfig),
-    [device, sensorConfig],
-  );
+  const sensor = getSensorDetails(device);
+  const resolvedInteraction = resolveSensorInteraction(device, sensorConfig);
+  const sensorPayloadJson = stringifySensorPayload(sensor.payload);
+  const initialNumberValue =
+    sensor.kind === 'number'
+      ? String(sensor.value)
+      : sensor.kind === 'state' && typeof sensor.value.brightness === 'number'
+        ? String(sensor.value.brightness)
+        : '0';
+  const initialTextValue = sensor.kind === 'text' ? sensor.value : '';
 
   useEffect(() => {
-    setCustomPayload(stringifySensorPayload(sensor.payload));
-    setNumberValue(
-      sensor.kind === 'number'
-        ? String(sensor.value)
-        : sensor.kind === 'state' && typeof sensor.value.brightness === 'number'
-          ? String(sensor.value.brightness)
-          : '0',
-    );
-    setTextValue(sensor.kind === 'text' ? sensor.value : '');
+    setCustomPayload(sensorPayloadJson);
+    setNumberValue(initialNumberValue);
+    setTextValue(initialTextValue);
     setError(null);
-  }, [device, sensor]);
+  }, [device.id, initialNumberValue, initialTextValue, sensorPayloadJson]);
 
   const runAction = async (payload: unknown) => {
     if (submitting) {
@@ -90,7 +96,11 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
       await sendSensorPayload(apiEndpoint, device, payload);
       setCustomPayload(stringifySensorPayload(payload));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to send sensor payload');
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to send sensor payload',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -108,7 +118,11 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
       await sendSensorPayload(apiEndpoint, device, { value: false });
       setCustomPayload(stringifySensorPayload({ value: false }));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : 'Failed to pulse sensor');
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : 'Failed to pulse sensor',
+      );
     } finally {
       setSubmitting(false);
     }
@@ -131,50 +145,61 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
     }
 
     await runAction({
-      value: getSensorButtonValue(resolvedInteraction.kind, button, resolvedInteraction.config),
+      value: getSensorButtonValue(
+        resolvedInteraction.kind,
+        button,
+        resolvedInteraction.config,
+      ),
     });
   };
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2 text-xs uppercase tracking-wide opacity-70">
-        <span className="badge badge-outline">{getSensorInteractionLabel(resolvedInteraction.kind)}</span>
-        <span className="badge badge-outline">
-          {resolvedInteraction.source === 'saved' ? 'Saved mapping' : 'Auto detected'}
-        </span>
+        <Badge variant="outline">
+          {getSensorInteractionLabel(resolvedInteraction.kind)}
+        </Badge>
+        <Badge variant="outline">
+          {resolvedInteraction.source === 'saved'
+            ? 'Saved mapping'
+            : 'Auto detected'}
+        </Badge>
       </div>
 
       {error && (
-        <div className="alert alert-error py-2">
-          <span>{error}</span>
-        </div>
+        <Alert variant="destructive" className="py-2">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="rounded-lg bg-base-200 p-3 text-sm">
-        <div className="font-medium">Current sensor payload</div>
-        <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs opacity-80">
-          {stringifySensorPayload(sensor.payload)}
-        </pre>
-      </div>
+      <Card>
+        <CardContent className="pt-5 text-sm">
+          <div className="font-medium">Current sensor payload</div>
+          <pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-xs text-muted-foreground">
+            {sensorPayloadJson}
+          </pre>
+        </CardContent>
+      </Card>
 
       {resolvedInteraction.kind === 'on_off_buttons' && (
         <div className="space-y-2">
           <div className="font-medium">Button panel</div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              className={`${controlButtonClass} btn-primary`}
+            <Button
+              className={controlButtonClass}
               disabled={submitting}
               onClick={() => void runConfiguredButton('on')}
             >
               On
-            </button>
-            <button
-              className={`${controlButtonClass} btn-outline`}
+            </Button>
+            <Button
+              variant="outline"
+              className={controlButtonClass}
               disabled={submitting}
               onClick={() => void runConfiguredButton('off')}
             >
               Off
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -183,34 +208,37 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         <div className="space-y-2">
           <div className="font-medium">Hue dimmer</div>
           <div className="grid gap-3 sm:grid-cols-2">
-            <button
-              className={`${controlButtonClass} btn-primary`}
+            <Button
+              className={controlButtonClass}
               disabled={submitting}
               onClick={() => void runConfiguredButton('on')}
             >
               On
-            </button>
-            <button
-              className={`${controlButtonClass} btn-outline`}
+            </Button>
+            <Button
+              variant="outline"
+              className={controlButtonClass}
               disabled={submitting}
               onClick={() => void runConfiguredButton('up')}
             >
               Dim Up
-            </button>
-            <button
-              className={`${controlButtonClass} btn-outline`}
+            </Button>
+            <Button
+              variant="outline"
+              className={controlButtonClass}
               disabled={submitting}
               onClick={() => void runConfiguredButton('down')}
             >
               Dim Down
-            </button>
-            <button
-              className={`${controlButtonClass} btn-secondary`}
+            </Button>
+            <Button
+              variant="secondary"
+              className={controlButtonClass}
               disabled={submitting}
               onClick={() => void runConfiguredButton('off')}
             >
               Off
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -219,27 +247,29 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         <div className="space-y-2">
           <div className="font-medium">Quick actions</div>
           <div className="flex flex-wrap gap-2">
-            <button
-              className="btn btn-sm btn-primary"
+            <Button
+              size="sm"
               disabled={submitting}
               onClick={() => void runAction({ value: true })}
             >
               Set On
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
               onClick={() => void runAction({ value: false })}
             >
               Set Off
-            </button>
-            <button
-              className="btn btn-sm btn-secondary"
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
               disabled={submitting}
               onClick={() => void runBooleanPulse()}
             >
               Pulse
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -248,33 +278,41 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         <div className="space-y-2">
           <div className="font-medium">Quick actions</div>
           <div className="flex flex-wrap items-center gap-2">
-            <input
+            <Input
               type="number"
-              className="input input-bordered input-sm w-32"
+              className="w-32"
               value={numberValue}
               onChange={(e) => setNumberValue(e.target.value)}
             />
-            <button
-              className="btn btn-sm btn-primary"
+            <Button
+              size="sm"
               disabled={submitting}
-              onClick={() => void runAction({ value: Number(numberValue) || 0 })}
+              onClick={() =>
+                void runAction({ value: Number(numberValue) || 0 })
+              }
             >
               Send Value
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
-              onClick={() => setNumberValue(String((Number(numberValue) || 0) - 1))}
+              onClick={() =>
+                setNumberValue(String((Number(numberValue) || 0) - 1))
+              }
             >
               -1
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
-              onClick={() => setNumberValue(String((Number(numberValue) || 0) + 1))}
+              onClick={() =>
+                setNumberValue(String((Number(numberValue) || 0) + 1))
+              }
             >
               +1
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -283,19 +321,19 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         <div className="space-y-2">
           <div className="font-medium">Quick actions</div>
           <div className="flex flex-wrap items-center gap-2">
-            <input
+            <Input
               type="text"
-              className="input input-bordered input-sm flex-1"
+              className="min-w-48 flex-1"
               value={textValue}
               onChange={(e) => setTextValue(e.target.value)}
             />
-            <button
-              className="btn btn-sm btn-primary"
+            <Button
+              size="sm"
               disabled={submitting}
               onClick={() => void runAction({ value: textValue })}
             >
               Send Text
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -304,70 +342,80 @@ export function SensorActionPanel({ device, sensorConfig }: Props) {
         <div className="space-y-2">
           <div className="font-medium">Quick actions</div>
           <div className="flex flex-wrap gap-2">
-            <button
-              className="btn btn-sm btn-primary"
+            <Button
+              size="sm"
               disabled={submitting}
               onClick={() => void runStatePatch({ power: true })}
             >
               Power On
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
               onClick={() => void runStatePatch({ power: false })}
             >
               Power Off
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
-              onClick={() => void runStatePatch({ power: true, brightness: 0.25 })}
+              onClick={() =>
+                void runStatePatch({ power: true, brightness: 0.25 })
+              }
             >
               Dim 25%
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
-              onClick={() => void runStatePatch({ power: true, brightness: 0.5 })}
+              onClick={() =>
+                void runStatePatch({ power: true, brightness: 0.5 })
+              }
             >
               Dim 50%
-            </button>
-            <button
-              className="btn btn-sm btn-outline"
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               disabled={submitting}
               onClick={() => void runStatePatch({ power: true, brightness: 1 })}
             >
               Dim 100%
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
-      <details className="collapse collapse-arrow bg-base-200">
-        <summary className="collapse-title px-4 py-3 text-sm font-medium">
+      <details className="rounded-2xl border border-border bg-muted/40">
+        <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
           Advanced JSON trigger
         </summary>
-        <div className="collapse-content space-y-3 px-4 pb-4">
-          <textarea
-            className="textarea textarea-bordered h-40 w-full font-mono text-xs"
+        <div className="space-y-3 border-t border-border px-4 py-4">
+          <Textarea
+            className="h-40 font-mono text-xs"
             value={customPayload}
             onChange={(e) => setCustomPayload(e.target.value)}
           />
           <div className="flex justify-end">
-            <button
-              className={`btn btn-primary ${submitting ? 'loading' : ''}`}
+            <Button
               disabled={submitting}
               onClick={() => {
+                let payload: unknown;
                 try {
-                  const payload = JSON.parse(customPayload) as unknown;
-                  void runAction(payload);
+                  payload = JSON.parse(customPayload);
                 } catch {
                   setError('Invalid JSON payload');
+                  return;
                 }
+
+                void runAction(payload);
               }}
             >
-              Send JSON
-            </button>
+              {submitting ? 'Sending…' : 'Send JSON'}
+            </Button>
           </div>
         </div>
       </details>

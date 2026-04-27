@@ -2865,6 +2865,12 @@ fn dashboard_routes(
         .and(with_handle(handle))
         .and_then(upsert_dashboard_widget);
 
+    let upsert_widget_legacy = warp::path!("dashboard")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(upsert_dashboard_widget);
+
     let delete_widget = warp::path!("dashboard" / "widgets" / i32)
         .and(warp::delete())
         .and(with_handle(handle))
@@ -2875,6 +2881,7 @@ fn dashboard_routes(
         .or(delete_layout)
         .or(get_widgets)
         .or(upsert_widget)
+        .or(upsert_widget_legacy)
         .or(delete_widget)
 }
 

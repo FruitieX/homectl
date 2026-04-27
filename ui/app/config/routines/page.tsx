@@ -15,7 +15,33 @@ import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
+import {
+  ConfigField,
+  ConfigFormActions,
+  ConfigFormSection,
+  ConfigToggleRow,
+} from '@/ui/config-form';
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { Textarea } from '@/ui/primitives/textarea';
+
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const statusBadgeClassName = {
+  success:
+    'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
+  error:
+    'border-transparent bg-destructive/15 text-destructive dark:text-red-300',
+  warning:
+    'border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300',
+  muted: 'border-transparent bg-muted text-muted-foreground',
+};
 
 const getRoutineSearchValues = (routine: Routine) => [
   routine.id,
@@ -72,16 +98,16 @@ export default function RoutinesPage() {
   if (loading || scenesLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <span className="loading loading-spinner loading-lg"></span>
+        <Skeleton className="size-12 rounded-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="alert alert-error">
-        <span>Error loading routines: {error}</span>
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>Error loading routines: {error}</AlertDescription>
+      </Alert>
     );
   }
 
@@ -89,9 +115,7 @@ export default function RoutinesPage() {
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Routines</h1>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          Add Routine
-        </button>
+        <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
       </div>
 
       <ConfigListSearchBar
@@ -103,7 +127,7 @@ export default function RoutinesPage() {
       />
 
       {visibleRoutines.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
           No routines match the current search.
         </div>
       ) : (
@@ -199,7 +223,9 @@ function RoutineCard({
   const [enabled, setEnabled] = useState(routine.enabled);
   const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
   const [actions, setActions] = useState<Action[]>(routine.actions as Action[]);
-  const [editMode, setEditMode] = useState<'visual' | 'json'>('visual');
+  const [editTab, setEditTab] = useState<
+    'basics' | 'rules' | 'actions' | 'json'
+  >('basics');
   const [rulesJson, setRulesJson] = useState(
     JSON.stringify(routine.rules, null, 2),
   );
@@ -213,40 +239,72 @@ function RoutineCard({
     }
 
     if (!runtimeStatus) {
-      return { label: 'No live state', className: 'badge-ghost' };
+      return { label: 'No live state', className: statusBadgeClassName.muted };
     }
 
     if (runtimeStatus.will_trigger) {
-      return { label: 'Triggering', className: 'badge-success' };
+      return { label: 'Triggering', className: statusBadgeClassName.success };
     }
 
     if (runtimeStatus.all_conditions_match) {
-      return { label: 'Conditions met', className: 'badge-warning' };
+      return {
+        label: 'Conditions met',
+        className: statusBadgeClassName.warning,
+      };
     }
 
-    return { label: 'Waiting', className: 'badge-ghost' };
+    return { label: 'Waiting', className: statusBadgeClassName.muted };
   })();
   const matchingRuleCount = runtimeStatus?.rules.filter(
     (status) => status.condition_match,
   ).length;
 
+  const changeTab = (value: string) => {
+    if (value === 'json') {
+      setRulesJson(JSON.stringify(rules, null, 2));
+      setActionsJson(JSON.stringify(actions, null, 2));
+      setEditTab('json');
+      return;
+    }
+
+    if (editTab === 'json') {
+      try {
+        setRules(JSON.parse(rulesJson));
+        setActions(JSON.parse(actionsJson));
+      } catch {
+        alert('Invalid JSON - fix before leaving the JSON tab');
+        return;
+      }
+    }
+
+    if (value === 'basics' || value === 'rules' || value === 'actions') {
+      setEditTab(value);
+    }
+  };
+
   const summary = (
     <div className="space-y-3 pr-4">
       <div className="flex justify-between items-start gap-4">
         <div>
-          <h2 className="card-title">{routine.name}</h2>
-          <div className="text-sm opacity-70">{routine.id}</div>
+          <h2 className="text-lg font-semibold leading-tight">
+            {routine.name}
+          </h2>
+          <div className="text-sm text-muted-foreground">{routine.id}</div>
         </div>
         <div className="flex flex-wrap gap-2 items-center justify-end">
-          <div
-            className={`badge ${routine.enabled ? 'badge-success' : 'badge-error'}`}
+          <Badge
+            className={
+              routine.enabled
+                ? statusBadgeClassName.success
+                : statusBadgeClassName.error
+            }
           >
             {routine.enabled ? 'Enabled' : 'Disabled'}
-          </div>
+          </Badge>
           {routineStatusBadge ? (
-            <div className={`badge ${routineStatusBadge.className}`}>
+            <Badge className={routineStatusBadge.className}>
               {routineStatusBadge.label}
-            </div>
+            </Badge>
           ) : null}
         </div>
       </div>
@@ -266,71 +324,57 @@ function RoutineCard({
   );
 
   const editContent = (
-    <div className="space-y-4">
-      <label className="form-control w-full max-w-md">
-        <span className="label-text text-sm">Routine ID</span>
-        <input
-          type="text"
-          className="input input-bordered font-mono"
-          value={id}
-          onChange={(e) => setId(e.target.value)}
-        />
-      </label>
+    <div className="flex min-h-full flex-col">
+      <Tabs value={editTab} onValueChange={changeTab}>
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+          <TabsTrigger value="basics">Basics</TabsTrigger>
+          <TabsTrigger value="rules">Rules</TabsTrigger>
+          <TabsTrigger value="actions">Actions</TabsTrigger>
+          <TabsTrigger value="json">JSON</TabsTrigger>
+        </TabsList>
 
-      <input
-        type="text"
-        className="input input-bordered font-bold text-lg w-full"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-
-      <div className="flex justify-between items-center">
-        <div className="form-control">
-          <label className="label cursor-pointer gap-3">
-            <span className="label-text">Enabled</span>
-            <input
-              type="checkbox"
-              className="toggle toggle-primary"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
-          </label>
-        </div>
-
-        <div className="btn-group">
-          <button
-            className={`btn btn-sm ${editMode === 'visual' ? 'btn-active' : ''}`}
-            onClick={() => {
-              if (editMode === 'json') {
-                try {
-                  setRules(JSON.parse(rulesJson));
-                  setActions(JSON.parse(actionsJson));
-                } catch {
-                  alert('Invalid JSON - fix before switching to visual');
-                  return;
-                }
-              }
-              setEditMode('visual');
-            }}
+        <TabsContent value="basics" className="mt-4">
+          <ConfigFormSection
+            title="Routine identity"
+            description="The id is used by routine actions and logs; keep it stable after creation."
           >
-            Visual
-          </button>
-          <button
-            className={`btn btn-sm ${editMode === 'json' ? 'btn-active' : ''}`}
-            onClick={() => {
-              setRulesJson(JSON.stringify(rules, null, 2));
-              setActionsJson(JSON.stringify(actions, null, 2));
-              setEditMode('json');
-            }}
-          >
-            JSON
-          </button>
-        </div>
-      </div>
+            <ConfigField label="Routine ID" className="w-full max-w-md">
+              <Input
+                type="text"
+                className="font-mono"
+                value={id}
+                onChange={(e) => setId(e.target.value)}
+              />
+            </ConfigField>
 
-      {editMode === 'visual' ? (
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="border border-base-300 rounded-lg p-4">
+            <ConfigField label="Name">
+              <Input
+                type="text"
+                className="w-full text-lg font-bold"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+              />
+            </ConfigField>
+
+            <ConfigToggleRow
+              label="Enabled"
+              description="Disabled routines remain saved but do not evaluate or trigger."
+            >
+              <input
+                type="checkbox"
+                className={checkboxClassName}
+                checked={enabled}
+                onChange={(e) => setEnabled(e.target.checked)}
+              />
+            </ConfigToggleRow>
+          </ConfigFormSection>
+        </TabsContent>
+
+        <TabsContent value="rules" className="mt-4">
+          <ConfigFormSection
+            title="Rules"
+            description="All rules must match before routine actions run."
+          >
             <RuleBuilder
               rules={rules}
               devices={devices}
@@ -338,8 +382,14 @@ function RoutineCard({
               scenes={scenes}
               onChange={setRules}
             />
-          </div>
-          <div className="border border-base-300 rounded-lg p-4">
+          </ConfigFormSection>
+        </TabsContent>
+
+        <TabsContent value="actions" className="mt-4">
+          <ConfigFormSection
+            title="Actions"
+            description="Actions run in order when all routine rules match."
+          >
             <ActionBuilder
               actions={actions}
               devices={devices}
@@ -348,51 +398,52 @@ function RoutineCard({
               routines={routines}
               onChange={setActions}
             />
-          </div>
-        </div>
-      ) : (
-        <div className="grid md:grid-cols-2 gap-4">
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Rules (JSON)</span>
-            </label>
-            <textarea
-              className="textarea textarea-bordered h-48 font-mono text-xs"
-              value={rulesJson}
-              onChange={(e) => setRulesJson(e.target.value)}
-              placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
-            />
-          </div>
+          </ConfigFormSection>
+        </TabsContent>
 
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">Actions (JSON)</span>
-            </label>
-            <textarea
-              className="textarea textarea-bordered h-48 font-mono text-xs"
-              value={actionsJson}
-              onChange={(e) => setActionsJson(e.target.value)}
-              placeholder='[{"ActivateScene": {"scene_id": "..."}]'
-            />
-          </div>
-        </div>
-      )}
+        <TabsContent value="json" className="mt-4">
+          <ConfigFormSection
+            title="Advanced JSON"
+            description="Edit the raw routine payload when a visual editor does not expose an edge case."
+          >
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ConfigField label="Rules (JSON)">
+                <Textarea
+                  className="h-64 font-mono text-xs"
+                  value={rulesJson}
+                  onChange={(e) => setRulesJson(e.target.value)}
+                  placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+                />
+              </ConfigField>
 
-      <div className="card-actions justify-end mt-2">
-        <button className="btn btn-sm btn-ghost" onClick={onCancel}>
+              <ConfigField label="Actions (JSON)">
+                <Textarea
+                  className="h-64 font-mono text-xs"
+                  value={actionsJson}
+                  onChange={(e) => setActionsJson(e.target.value)}
+                  placeholder='[{"ActivateScene": {"scene_id": "..."}]'
+                />
+              </ConfigField>
+            </div>
+          </ConfigFormSection>
+        </TabsContent>
+      </Tabs>
+
+      <ConfigFormActions>
+        <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          className="btn btn-sm btn-primary"
+        </Button>
+        <Button
+          size="sm"
           disabled={!id.trim() || !name.trim()}
           onClick={async () => {
             let finalRules: Rule[] | unknown[];
             let finalActions: Action[] | unknown[];
+            const saveFromJson = editTab === 'json';
 
             try {
-              finalRules = editMode === 'json' ? JSON.parse(rulesJson) : rules;
-              finalActions =
-                editMode === 'json' ? JSON.parse(actionsJson) : actions;
+              finalRules = saveFromJson ? JSON.parse(rulesJson) : rules;
+              finalActions = saveFromJson ? JSON.parse(actionsJson) : actions;
             } catch {
               alert('Invalid JSON in rules or actions');
               return;
@@ -426,8 +477,8 @@ function RoutineCard({
           }}
         >
           Save
-        </button>
-      </div>
+        </Button>
+      </ConfigFormActions>
     </div>
   );
 
@@ -452,13 +503,18 @@ function RoutineCard({
         />
       </div>
 
-      <div className="card-actions justify-end">
-        <button className="btn btn-sm btn-ghost" onClick={onEdit}>
+      <div className="flex justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onEdit}>
           Edit
-        </button>
-        <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="text-destructive hover:text-destructive"
+          onClick={onDelete}
+        >
           Delete
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -489,66 +545,64 @@ function CreateRoutineModal({
   const [enabled, setEnabled] = useState(true);
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg">Add Routine</h3>
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title="Add Routine"
+      description="Create a new automation routine."
+      className="max-w-xl"
+    >
+      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <ConfigFormSection
+          title="Routine identity"
+          description="Start with a name and id; rules and actions can be added after creation."
+        >
+          <ConfigField label="Routine ID">
+            <Input
+              type="text"
+              value={id}
+              onChange={(e) => setId(e.target.value)}
+              placeholder="motion-lights"
+            />
+          </ConfigField>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Routine ID</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="motion-lights"
-          />
-        </div>
+          <ConfigField label="Name">
+            <Input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Motion Activated Lights"
+            />
+          </ConfigField>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Name</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Motion Activated Lights"
-          />
-        </div>
-
-        <div className="form-control mt-4">
-          <label className="label cursor-pointer">
-            <span className="label-text">Enabled</span>
+          <ConfigToggleRow label="Enabled">
             <input
               type="checkbox"
-              className="toggle toggle-primary"
+              className={checkboxClassName}
               checked={enabled}
               onChange={(e) => setEnabled(e.target.checked)}
             />
-          </label>
-        </div>
+          </ConfigToggleRow>
+        </ConfigFormSection>
 
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
+        <ConfigFormActions>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
             disabled={!id || !name}
             onClick={() =>
               onCreate({ id, name, enabled, rules: [], actions: [] })
             }
           >
             Create
-          </button>
-        </div>
+          </Button>
+        </ConfigFormActions>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ResponsiveOverlay>
   );
 }

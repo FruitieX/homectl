@@ -1,4 +1,3 @@
-import { Card } from 'react-daisyui';
 import { useSpotPriceQuery } from '@/hooks/influxdb';
 import {
   type DashboardWidget,
@@ -7,6 +6,7 @@ import {
 import { SpotPriceChart, spotPriceToColor } from '@/ui/charts/SpotPriceChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { useMemo } from 'react';
+import { Card, CardContent } from '@/ui/primitives/card';
 
 export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
   const spotPrice = useSpotPriceQuery(
@@ -37,11 +37,8 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card
-        compact
-        className="col-span-4 flex-row justify-around bg-base-300 overflow-hidden min-h-60"
-      >
-        <Card.Body className="p-2 w-full">
+      <Card className="col-span-4 min-h-60 flex-row justify-around overflow-hidden">
+        <CardContent className="w-full p-2">
           <ResponsiveChart
             height={240}
             className="rounded-lg overflow-hidden w-full"
@@ -56,7 +53,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               />
             )}
           </ResponsiveChart>
-        </Card.Body>
+        </CardContent>
       </Card>
     </>
   );

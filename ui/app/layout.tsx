@@ -11,10 +11,9 @@ const themeScript = `
     if (theme === 'auto') {
       effectiveTheme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
-    const daisyuiTheme = effectiveTheme === 'dark' ? 'business' : 'corporate';
-    document.documentElement.setAttribute('data-theme', daisyuiTheme);
+    document.documentElement.classList.toggle('dark', effectiveTheme === 'dark');
   } catch (e) {
-    document.documentElement.setAttribute('data-theme', 'business');
+    document.documentElement.classList.add('dark');
   }
 })();
 `;
@@ -36,7 +35,7 @@ export default function RootLayout({
         <link rel="manifest" href="/manifest.json" />
       </head>
       <body
-        className="flex flex-col overflow-hidden"
+        className="flex flex-col overflow-hidden bg-background text-foreground antialiased"
         // Disables scrolling on iOS Safari
         style={{ touchAction: 'none' }}
       >

@@ -1,15 +1,51 @@
-import { Device } from '@/bindings/Device';
-import { useDeviceDisplayNames, useGroups, Group } from '@/hooks/useConfig';
+import { useState } from 'react';
+
+import { type Device } from '@/bindings/Device';
+import {
+  type Group,
+  useDeviceDisplayNames,
+  useGroups,
+} from '@/hooks/useConfig';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { getDeviceKey } from '@/lib/device';
-import { getDeviceDisplayLabel, getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
+import {
+  getDeviceDisplayLabel,
+  getDeviceDisplayLabelFromKey,
+} from '@/lib/deviceLabel';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
-import { useMemo, useState } from 'react';
+import {
+  ConfigField,
+  ConfigFormActions,
+  ConfigFormSection,
+  ConfigReadOnlyGrid,
+  ConfigReadOnlyItem,
+  ConfigToggleRow,
+} from '@/ui/config-form';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const fieldLabelClassName = 'text-sm font-medium';
 
 type GroupDevice = Group['devices'][number];
 
-const getGroupDeviceKey = (device: GroupDevice) => `${device.integration_id}/${device.device_id}`;
+const getGroupDeviceKey = (device: GroupDevice) =>
+  `${device.integration_id}/${device.device_id}`;
 
 const getGroupSearchValues = (
   group: Group,
@@ -46,6 +82,7 @@ export default function GroupsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const editingGroup = groups.find((group) => group.id === editingId);
   const deviceDisplayNameMap = Object.fromEntries(
     deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
   );
@@ -53,32 +90,38 @@ export default function GroupsPage() {
     allDevices.map((device) => [getDeviceKey(device), device]),
   ) as Record<string, Device>;
   const visibleGroups = groups.filter((group) =>
-    matchesConfigSearch(search, ...getGroupSearchValues(group, deviceDisplayNameMap, devicesByKey)),
+    matchesConfigSearch(
+      search,
+      ...getGroupSearchValues(group, deviceDisplayNameMap, devicesByKey),
+    ),
   );
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <span className="loading loading-spinner loading-lg"></span>
+      <div className="flex h-full items-center justify-center">
+        <Skeleton className="size-12 rounded-full" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="alert alert-error">
-        <span>Error loading groups: {error}</span>
-      </div>
+      <Alert variant="destructive">
+        <AlertDescription>Error loading groups: {error}</AlertDescription>
+      </Alert>
     );
   }
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Groups</h1>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)}>
-          Add Group
-        </button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Groups</h1>
+          <p className="text-sm text-muted-foreground">
+            Organize devices and nested groups into controllable targets.
+          </p>
+        </div>
+        <Button onClick={() => setShowCreate(true)}>Add Group</Button>
       </div>
 
       <ConfigListSearchBar
@@ -90,9 +133,10 @@ export default function GroupsPage() {
       />
 
       {visibleGroups.length === 0 ? (
-        <div className="rounded-lg border border-dashed border-base-300 bg-base-200/50 p-6 text-center text-sm opacity-70">
-          No groups match the current search.
-        </div>
+        <EmptyState
+          title="No groups match the current search"
+          description="Try another name, id, linked group, or device label."
+        />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {visibleGroups.map((group) => (
@@ -102,13 +146,7 @@ export default function GroupsPage() {
               allGroups={groups}
               deviceDisplayNameMap={deviceDisplayNameMap}
               devicesByKey={devicesByKey}
-              isEditing={editingId === group.id}
               onEdit={() => setEditingId(group.id)}
-              onSave={async (updated) => {
-                await update(group.id, updated);
-                setEditingId(null);
-              }}
-              onCancel={() => setEditingId(null)}
               onDelete={async () => {
                 if (confirm(`Delete group "${group.name}"?`)) {
                   await remove(group.id);
@@ -120,13 +158,26 @@ export default function GroupsPage() {
       )}
 
       {showCreate && (
-        <CreateGroupModal
+        <GroupOverlay
+          allGroups={groups}
           onClose={() => setShowCreate(false)}
-          onCreate={async (group) => {
+          onSubmit={async (group) => {
             await create(group);
             setShowCreate(false);
           }}
+        />
+      )}
+
+      {editingGroup && (
+        <GroupOverlay
+          mode="edit"
+          group={editingGroup}
           allGroups={groups}
+          onClose={() => setEditingId(null)}
+          onSubmit={async (updated) => {
+            await update(editingGroup.id, updated);
+            setEditingId(null);
+          }}
         />
       )}
     </div>
@@ -149,16 +200,15 @@ function DevicePicker({
   const devicesByKey = Object.fromEntries(
     allDevices.map((device) => [getDeviceKey(device), device]),
   ) as Record<string, Device>;
-
-  const availableDevices = useMemo(() => {
-    return allDevices
-      .map((device) => ({
-        key: getDeviceKey(device),
-        label: getDeviceDisplayLabel(device, deviceDisplayNameMap),
-        device,
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
-  }, [allDevices, deviceDisplayNameMap]);
+  const availableDevices = allDevices
+    .map((device) => ({
+      key: getDeviceKey(device),
+      label: getDeviceDisplayLabel(device, deviceDisplayNameMap),
+      device,
+    }))
+    .sort(
+      (a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key),
+    );
 
   const isSelected = (deviceKey: string) =>
     selected.some((device) => getGroupDeviceKey(device) === deviceKey);
@@ -168,33 +218,34 @@ function DevicePicker({
       onChange(
         selected.filter((device) => getGroupDeviceKey(device) !== deviceKey),
       );
-    } else {
-      const nextDevice = devicesByKey[deviceKey];
-      if (!nextDevice) {
-        return;
-      }
-
-      onChange([
-        ...selected,
-        {
-          integration_id: nextDevice.integration_id,
-          device_id: nextDevice.id,
-        },
-      ]);
+      return;
     }
+
+    const nextDevice = devicesByKey[deviceKey];
+    if (!nextDevice) {
+      return;
+    }
+
+    onChange([
+      ...selected,
+      {
+        integration_id: nextDevice.integration_id,
+        device_id: nextDevice.id,
+      },
+    ]);
   };
 
   const filtered = availableDevices.filter(({ key, label, device }) =>
-    `${label} ${device.name} ${key}`.toLowerCase().includes(search.toLowerCase()),
+    `${label} ${device.name} ${key}`
+      .toLowerCase()
+      .includes(search.toLowerCase()),
   );
 
   return (
     <div className="space-y-2">
-      <label className="label">
-        <span className="label-text">
-          Devices ({selected.length} selected)
-        </span>
-      </label>
+      <div className={fieldLabelClassName}>
+        Devices ({selected.length} selected)
+      </div>
 
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
@@ -210,31 +261,31 @@ function DevicePicker({
                 );
 
             return (
-              <span key={deviceKey} className="badge badge-sm gap-1">
+              <Badge key={deviceKey} variant="secondary" className="gap-1">
                 {label}
                 <button
+                  type="button"
                   className="text-xs opacity-60 hover:opacity-100"
                   onClick={() => toggle(deviceKey)}
                 >
                   ✕
                 </button>
-              </span>
+              </Badge>
             );
           })}
         </div>
       )}
 
-      <input
-        type="text"
-        className="input input-bordered input-sm w-full"
+      <Input
+        className="h-9"
         placeholder="Search devices..."
         value={search}
-        onChange={(e) => setSearch(e.target.value)}
+        onChange={(event) => setSearch(event.target.value)}
       />
 
-      <div className="max-h-48 overflow-y-auto border border-base-300 rounded-lg p-1">
+      <div className="max-h-48 overflow-y-auto rounded-2xl border border-border bg-background/60 p-1">
         {filtered.length === 0 ? (
-          <div className="text-sm opacity-60 p-2 text-center">
+          <div className="p-2 text-center text-sm text-muted-foreground">
             {availableDevices.length === 0
               ? 'No devices available'
               : 'No matching devices'}
@@ -243,16 +294,16 @@ function DevicePicker({
           filtered.map(({ key, label, device }) => (
             <label
               key={key}
-              className="flex items-center gap-2 p-1.5 hover:bg-base-200 rounded cursor-pointer"
+              className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-muted"
             >
               <input
                 type="checkbox"
-                className="checkbox checkbox-xs"
+                className={checkboxClassName}
                 checked={isSelected(key)}
                 onChange={() => toggle(key)}
               />
-              <span className="text-sm truncate">{label}</span>
-              <span className="text-xs opacity-50 truncate ml-auto">
+              <span className="truncate text-sm">{label}</span>
+              <span className="ml-auto truncate text-xs text-muted-foreground">
                 {device.integration_id}/{device.id}
               </span>
             </label>
@@ -274,7 +325,7 @@ function GroupLinker({
   selected: string[];
   onChange: (groups: string[]) => void;
 }) {
-  const available = allGroups.filter((g) => g.id !== currentGroupId);
+  const available = allGroups.filter((group) => group.id !== currentGroupId);
 
   if (available.length === 0) {
     return null;
@@ -290,45 +341,46 @@ function GroupLinker({
 
   return (
     <div className="space-y-2">
-      <label className="label">
-        <span className="label-text">
-          Linked Groups ({selected.length} selected)
-        </span>
-      </label>
+      <div className={fieldLabelClassName}>
+        Linked Groups ({selected.length} selected)
+      </div>
 
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {selected.map((id) => {
-            const group = allGroups.find((g) => g.id === id);
+            const group = allGroups.find((item) => item.id === id);
             return (
-              <span key={id} className="badge badge-sm badge-primary gap-1">
+              <Badge key={id} className="gap-1">
                 {group?.name ?? id}
                 <button
+                  type="button"
                   className="text-xs opacity-60 hover:opacity-100"
                   onClick={() => toggle(id)}
                 >
                   ✕
                 </button>
-              </span>
+              </Badge>
             );
           })}
         </div>
       )}
 
-      <div className="max-h-32 overflow-y-auto border border-base-300 rounded-lg p-1">
+      <div className="max-h-32 overflow-y-auto rounded-2xl border border-border bg-background/60 p-1">
         {available.map((group) => (
           <label
             key={group.id}
-            className="flex items-center gap-2 p-1.5 hover:bg-base-200 rounded cursor-pointer"
+            className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-muted"
           >
             <input
               type="checkbox"
-              className="checkbox checkbox-xs"
+              className={checkboxClassName}
               checked={selected.includes(group.id)}
               onChange={() => toggle(group.id)}
             />
-            <span className="text-sm truncate">{group.name}</span>
-            <span className="text-xs opacity-50 ml-auto">{group.id}</span>
+            <span className="truncate text-sm">{group.name}</span>
+            <span className="ml-auto text-xs text-muted-foreground">
+              {group.id}
+            </span>
           </label>
         ))}
       </div>
@@ -341,97 +393,30 @@ function GroupCard({
   allGroups,
   deviceDisplayNameMap,
   devicesByKey,
-  isEditing,
   onEdit,
-  onSave,
-  onCancel,
   onDelete,
 }: {
   group: Group;
   allGroups: Group[];
   deviceDisplayNameMap: Record<string, string>;
   devicesByKey: Record<string, Device>;
-  isEditing: boolean;
   onEdit: () => void;
-  onSave: (group: Partial<Group>) => Promise<void>;
-  onCancel: () => void;
   onDelete: () => void;
 }) {
-  const [name, setName] = useState(group.name);
-  const [hidden, setHidden] = useState(group.hidden);
-  const [devices, setDevices] = useState<GroupDevice[]>(group.devices);
-  const [linkedGroups, setLinkedGroups] = useState<string[]>(
-    group.linked_groups,
-  );
-
-  if (isEditing) {
-    return (
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <input
-            type="text"
-            className="input input-bordered font-bold text-lg"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-
-          <div className="form-control">
-            <label className="label cursor-pointer">
-              <span className="label-text">Hidden</span>
-              <input
-                type="checkbox"
-                className="toggle"
-                checked={hidden}
-                onChange={(e) => setHidden(e.target.checked)}
-              />
-            </label>
-          </div>
-
-          <DevicePicker selected={devices} onChange={setDevices} />
-
-          <GroupLinker
-            currentGroupId={group.id}
-            allGroups={allGroups}
-            selected={linkedGroups}
-            onChange={setLinkedGroups}
-          />
-
-          <div className="card-actions justify-end mt-2">
-            <button className="btn btn-sm btn-ghost" onClick={onCancel}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-sm btn-primary"
-              onClick={() =>
-                onSave({
-                  name,
-                  hidden,
-                  devices,
-                  linked_groups: linkedGroups,
-                })
-              }
-            >
-              Save
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="card bg-base-200 shadow-xl">
-      <div className="card-body">
-        <div className="flex justify-between items-start">
+    <Card>
+      <CardHeader>
+        <div className="flex items-start justify-between gap-3">
           <div>
-            <h2 className="card-title">{group.name}</h2>
-            <div className="text-sm opacity-70">{group.id}</div>
+            <CardTitle>{group.name}</CardTitle>
+            <CardDescription>{group.id}</CardDescription>
           </div>
-          {group.hidden && <div className="badge badge-ghost">Hidden</div>}
+          {group.hidden && <Badge variant="muted">Hidden</Badge>}
         </div>
-
+      </CardHeader>
+      <CardContent className="space-y-3">
         {group.devices.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-2">
+          <div className="flex flex-wrap gap-1">
             {group.devices.map((device) => {
               const deviceKey = getGroupDeviceKey(device);
               const matchingDevice = devicesByKey[deviceKey];
@@ -444,123 +429,183 @@ function GroupCard({
                   );
 
               return (
-                <span key={deviceKey} className="badge badge-sm badge-ghost">
+                <Badge key={deviceKey} variant="secondary">
                   {label}
-                </span>
+                </Badge>
               );
             })}
           </div>
         )}
 
         {group.linked_groups.length > 0 && (
-          <div className="flex flex-wrap gap-1 mt-1">
+          <div className="flex flex-wrap gap-1">
             {group.linked_groups.map((id) => {
-              const linked = allGroups.find((g) => g.id === id);
+              const linked = allGroups.find((item) => item.id === id);
               return (
-                <span key={id} className="badge badge-sm badge-primary badge-outline">
+                <Badge key={id} variant="outline">
                   {linked?.name ?? id}
-                </span>
+                </Badge>
               );
             })}
           </div>
         )}
 
         {group.devices.length === 0 && group.linked_groups.length === 0 && (
-          <div className="text-sm opacity-50 mt-2">No devices or links</div>
+          <div className="text-sm text-muted-foreground">
+            No devices or links
+          </div>
         )}
 
-        <div className="card-actions justify-end mt-2">
-          <button className="btn btn-sm btn-ghost" onClick={onEdit}>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" size="sm" onClick={onEdit}>
             Edit
-          </button>
-          <button className="btn btn-sm btn-error btn-ghost" onClick={onDelete}>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
             Delete
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
-function CreateGroupModal({
+function GroupOverlay({
+  mode = 'create',
+  group,
   onClose,
-  onCreate,
+  onSubmit,
   allGroups,
 }: {
+  mode?: 'create' | 'edit';
+  group?: Group;
   onClose: () => void;
-  onCreate: (group: Partial<Group>) => Promise<void>;
+  onSubmit: (group: Partial<Group>) => Promise<void>;
   allGroups: Group[];
 }) {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [hidden, setHidden] = useState(false);
-  const [devices, setDevices] = useState<GroupDevice[]>([]);
-  const [linkedGroups, setLinkedGroups] = useState<string[]>([]);
+  const [id, setId] = useState(group?.id ?? '');
+  const [name, setName] = useState(group?.name ?? '');
+  const [hidden, setHidden] = useState(group?.hidden ?? false);
+  const [devices, setDevices] = useState<GroupDevice[]>(group?.devices ?? []);
+  const [linkedGroups, setLinkedGroups] = useState<string[]>(
+    group?.linked_groups ?? [],
+  );
+  const [editTab, setEditTab] = useState<'basics' | 'devices' | 'links'>(
+    'basics',
+  );
+  const isCreate = mode === 'create';
+
+  const changeTab = (value: string) => {
+    if (value === 'basics' || value === 'devices' || value === 'links') {
+      setEditTab(value);
+    }
+  };
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box max-w-lg">
-        <h3 className="font-bold text-lg">Add Group</h3>
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title={isCreate ? 'Add Group' : `Edit ${group?.name ?? name}`}
+      description={
+        isCreate
+          ? 'Create a group and optionally add devices or linked groups.'
+          : 'Update group visibility, device membership, and nested links.'
+      }
+      presentation="fullscreen"
+      className="max-w-2xl"
+    >
+      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <Tabs value={editTab} onValueChange={changeTab}>
+          <TabsList className="grid h-auto w-full grid-cols-3">
+            <TabsTrigger value="basics">Basics</TabsTrigger>
+            <TabsTrigger value="devices">Devices</TabsTrigger>
+            <TabsTrigger value="links">Links</TabsTrigger>
+          </TabsList>
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Group ID</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={id}
-            onChange={(e) => setId(e.target.value)}
-            placeholder="living-room"
-          />
-        </div>
+          <TabsContent value="basics" className="mt-4 space-y-4">
+            <ConfigFormSection
+              title="Group identity"
+              description="Keep ids stable; names and visibility can be adjusted any time."
+            >
+              {isCreate ? (
+                <ConfigField
+                  label="Group ID"
+                  description="Used in scenes, routines, and nested group references."
+                >
+                  <Input
+                    value={id}
+                    onChange={(event) => setId(event.target.value)}
+                    placeholder="living-room"
+                  />
+                </ConfigField>
+              ) : (
+                <ConfigReadOnlyGrid>
+                  <ConfigReadOnlyItem label="Group ID" value={group?.id} />
+                </ConfigReadOnlyGrid>
+              )}
 
-        <div className="form-control mt-4">
-          <label className="label">
-            <span className="label-text">Name</span>
-          </label>
-          <input
-            type="text"
-            className="input input-bordered"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Living Room"
-          />
-        </div>
+              <ConfigField label="Name">
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Living Room"
+                />
+              </ConfigField>
 
-        <div className="form-control mt-4">
-          <label className="label cursor-pointer">
-            <span className="label-text">Hidden</span>
-            <input
-              type="checkbox"
-              className="toggle"
-              checked={hidden}
-              onChange={(e) => setHidden(e.target.checked)}
-            />
-          </label>
-        </div>
+              <ConfigToggleRow
+                label="Hidden"
+                description="Hidden groups are available for automation but stay out of primary control surfaces."
+              >
+                <input
+                  type="checkbox"
+                  className={checkboxClassName}
+                  checked={hidden}
+                  onChange={(event) => setHidden(event.target.checked)}
+                />
+              </ConfigToggleRow>
+            </ConfigFormSection>
+          </TabsContent>
 
-        <div className="mt-4">
-          <DevicePicker selected={devices} onChange={setDevices} />
-        </div>
+          <TabsContent value="devices" className="mt-4">
+            <ConfigFormSection
+              title="Devices"
+              description="Select all directly controlled devices that belong to this group."
+            >
+              <DevicePicker selected={devices} onChange={setDevices} />
+            </ConfigFormSection>
+          </TabsContent>
 
-        <div className="mt-4">
-          <GroupLinker
-            allGroups={allGroups}
-            selected={linkedGroups}
-            onChange={setLinkedGroups}
-          />
-        </div>
+          <TabsContent value="links" className="mt-4">
+            <ConfigFormSection
+              title="Linked groups"
+              description="Nest other groups to build larger controllable areas without duplicating devices."
+            >
+              <GroupLinker
+                currentGroupId={group?.id}
+                allGroups={allGroups}
+                selected={linkedGroups}
+                onChange={setLinkedGroups}
+              />
+            </ConfigFormSection>
+          </TabsContent>
+        </Tabs>
 
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
+        <ConfigFormActions>
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
             disabled={!id || !name}
             onClick={() =>
-              onCreate({
+              onSubmit({
                 id,
                 name,
                 hidden,
@@ -569,13 +614,10 @@ function CreateGroupModal({
               })
             }
           >
-            Create
-          </button>
-        </div>
+            {isCreate ? 'Create' : 'Save'}
+          </Button>
+        </ConfigFormActions>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ResponsiveOverlay>
   );
 }

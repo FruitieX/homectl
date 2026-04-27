@@ -4,7 +4,6 @@ import {
   SceneDeviceState,
   SceneDeviceLink,
   ActivateSceneDescriptor,
-  DeviceColor,
   Scene,
   getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
@@ -14,6 +13,22 @@ import {
   SceneResolvedColorPreview,
   type SceneTargetKind,
 } from '@/ui/SceneResolvedColorPreview';
+import { cn } from '@/lib/cn';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { SceneColorEditor } from '@/ui/SceneColorEditor';
+
+const selectClassName =
+  'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+const checkboxClassName =
+  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+const rangeClassName =
+  'h-2 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary';
+const fieldClassName = 'space-y-2';
+const fieldLabelClassName = 'text-sm font-medium';
+const helpTextClassName = 'text-xs text-muted-foreground';
 
 // Helper to determine the config type
 function getConfigType(
@@ -39,115 +54,31 @@ function isSceneLink(
   return getConfigType(config) === 'scene_link';
 }
 
-// Color mode helpers
-function getColorMode(
-  color?: DeviceColor,
-): 'hs' | 'xy' | 'rgb' | 'ct' | undefined {
-  if (!color) return undefined;
-  if ('Hs' in color) return 'hs';
-  if ('Xy' in color) return 'xy';
-  if ('Rgb' in color) return 'rgb';
-  if ('Ct' in color) return 'ct';
-  return undefined;
-}
-
-// Convert HSL to RGB for preview
-function hslToRgb(
-  h: number,
-  s: number,
-  l: number,
-): { r: number; g: number; b: number } {
-  const c = (1 - Math.abs(2 * l - 1)) * s;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = l - c / 2;
-  let r = 0,
-    g = 0,
-    b = 0;
-
-  if (h < 60) {
-    r = c;
-    g = x;
-  } else if (h < 120) {
-    r = x;
-    g = c;
-  } else if (h < 180) {
-    g = c;
-    b = x;
-  } else if (h < 240) {
-    g = x;
-    b = c;
-  } else if (h < 300) {
-    r = x;
-    b = c;
-  } else {
-    r = c;
-    b = x;
-  }
-
-  return {
-    r: Math.round((r + m) * 255),
-    g: Math.round((g + m) * 255),
-    b: Math.round((b + m) * 255),
-  };
-}
-
-// Get color preview CSS
-function getColorPreview(color?: DeviceColor, brightness?: number): string {
-  if (!color) return 'transparent';
-
-  const b = brightness ?? 1;
-
-  if ('Hs' in color && color.Hs) {
-    const { r, g, b: blue } = hslToRgb(color.Hs.h, color.Hs.s, 0.5);
-    return `rgb(${Math.round(r * b)}, ${Math.round(g * b)}, ${Math.round(blue * b)})`;
-  }
-  if ('Rgb' in color && color.Rgb) {
-    return `rgb(${Math.round(color.Rgb.r * b)}, ${Math.round(color.Rgb.g * b)}, ${Math.round(color.Rgb.b * b)})`;
-  }
-  if ('Ct' in color && color.Ct) {
-    // Color temperature: warm (2700K) to cool (6500K)
-    const ct = color.Ct.ct;
-    const warmth = Math.max(0, Math.min(1, (ct - 153) / (500 - 153)));
-    const r = Math.round((255 - warmth * 55) * b);
-    const g = Math.round((240 - warmth * 30) * b);
-    const blu = Math.round((200 + warmth * 55) * b);
-    return `rgb(${r}, ${g}, ${blu})`;
-  }
-
-  return 'gray';
-}
-
 interface DeviceStateEditorProps {
   config: SceneDeviceState;
   onChange: (config: SceneDeviceState) => void;
 }
 
 function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
-  const colorMode = getColorMode(config.color);
-
-  const updateColor = (newColor: DeviceColor) => {
-    onChange({ ...config, color: newColor });
-  };
-
   return (
     <div className="space-y-3">
       {/* Power */}
-      <div className="form-control">
-        <label className="label cursor-pointer justify-start gap-3">
+      <div className={fieldClassName}>
+        <label className="flex cursor-pointer items-center gap-3">
           <input
             type="checkbox"
-            className="toggle toggle-primary"
+            className={checkboxClassName}
             checked={config.power ?? true}
             onChange={(e) => onChange({ ...config, power: e.target.checked })}
           />
-          <span className="label-text">Power</span>
+          <span className={fieldLabelClassName}>Power</span>
         </label>
       </div>
 
       {/* Brightness */}
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>
             Brightness: {Math.round((config.brightness ?? 1) * 100)}%
           </span>
         </label>
@@ -156,7 +87,7 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
           min="0"
           max="100"
           value={Math.round((config.brightness ?? 1) * 100)}
-          className="range range-primary range-sm"
+          className={rangeClassName}
           onChange={(e) =>
             onChange({ ...config, brightness: Number(e.target.value) / 100 })
           }
@@ -164,9 +95,9 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
       </div>
 
       {/* Transition */}
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>
             Transition: {config.transition ?? 0.4}s
           </span>
         </label>
@@ -176,211 +107,18 @@ function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
           max="50"
           step="1"
           value={(config.transition ?? 0.4) * 10}
-          className="range range-sm"
+          className={rangeClassName}
           onChange={(e) =>
             onChange({ ...config, transition: Number(e.target.value) / 10 })
           }
         />
       </div>
 
-      {/* Color mode selector */}
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Color Mode</span>
-        </label>
-        <select
-          className="select select-bordered select-sm"
-          value={colorMode ?? 'none'}
-          onChange={(e) => {
-            const mode = e.target.value;
-            if (mode === 'none') {
-              onChange({ ...config, color: undefined });
-            } else if (mode === 'hs') {
-              onChange({ ...config, color: { Hs: { h: 30, s: 1 } } });
-            } else if (mode === 'rgb') {
-              onChange({
-                ...config,
-                color: { Rgb: { r: 255, g: 200, b: 100 } },
-              });
-            } else if (mode === 'ct') {
-              onChange({ ...config, color: { Ct: { ct: 300 } } });
-            }
-          }}
-        >
-          <option value="none">No color</option>
-          <option value="hs">Hue/Saturation</option>
-          <option value="rgb">RGB</option>
-          <option value="ct">Color Temperature</option>
-        </select>
-      </div>
-
-      {/* Color editor based on mode */}
-      {colorMode === 'hs' && config.color && 'Hs' in config.color && (
-        <div className="space-y-2 p-3 bg-base-300 rounded-lg">
-          <div
-            className="w-full h-8 rounded"
-            style={{
-              backgroundColor: getColorPreview(config.color, config.brightness),
-            }}
-          />
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">
-                Hue: {config.color.Hs?.h ?? 0}°
-              </span>
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="360"
-              value={config.color.Hs?.h ?? 0}
-              className="range range-sm"
-              style={{
-                accentColor: `hsl(${config.color.Hs?.h ?? 0}, 100%, 50%)`,
-              }}
-              onChange={(e) =>
-                updateColor({
-                  Hs: {
-                    h: Number(e.target.value),
-                    s: config.color?.Hs?.s ?? 1,
-                  },
-                })
-              }
-            />
-          </div>
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">
-                Saturation: {Math.round((config.color.Hs?.s ?? 1) * 100)}%
-              </span>
-            </label>
-            <input
-              type="range"
-              min="0"
-              max="100"
-              value={(config.color.Hs?.s ?? 1) * 100}
-              className="range range-sm"
-              onChange={(e) =>
-                updateColor({
-                  Hs: {
-                    h: config.color?.Hs?.h ?? 0,
-                    s: Number(e.target.value) / 100,
-                  },
-                })
-              }
-            />
-          </div>
-        </div>
-      )}
-
-      {colorMode === 'rgb' && config.color && 'Rgb' in config.color && (
-        <div className="space-y-2 p-3 bg-base-300 rounded-lg">
-          <div
-            className="w-full h-8 rounded"
-            style={{
-              backgroundColor: getColorPreview(config.color, config.brightness),
-            }}
-          />
-          <div className="grid grid-cols-3 gap-2">
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text text-xs">R</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="255"
-                className="input input-bordered input-sm"
-                value={config.color.Rgb?.r ?? 255}
-                onChange={(e) =>
-                  updateColor({
-                    Rgb: {
-                      r: Number(e.target.value),
-                      g: config.color?.Rgb?.g ?? 200,
-                      b: config.color?.Rgb?.b ?? 100,
-                    },
-                  })
-                }
-              />
-            </div>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text text-xs">G</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="255"
-                className="input input-bordered input-sm"
-                value={config.color.Rgb?.g ?? 200}
-                onChange={(e) =>
-                  updateColor({
-                    Rgb: {
-                      r: config.color?.Rgb?.r ?? 255,
-                      g: Number(e.target.value),
-                      b: config.color?.Rgb?.b ?? 100,
-                    },
-                  })
-                }
-              />
-            </div>
-            <div className="form-control">
-              <label className="label">
-                <span className="label-text text-xs">B</span>
-              </label>
-              <input
-                type="number"
-                min="0"
-                max="255"
-                className="input input-bordered input-sm"
-                value={config.color.Rgb?.b ?? 100}
-                onChange={(e) =>
-                  updateColor({
-                    Rgb: {
-                      r: config.color?.Rgb?.r ?? 255,
-                      g: config.color?.Rgb?.g ?? 200,
-                      b: Number(e.target.value),
-                    },
-                  })
-                }
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {colorMode === 'ct' && config.color && 'Ct' in config.color && (
-        <div className="space-y-2 p-3 bg-base-300 rounded-lg">
-          <div
-            className="w-full h-8 rounded"
-            style={{
-              backgroundColor: getColorPreview(config.color, config.brightness),
-            }}
-          />
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text">
-                Color Temp: {config.color.Ct?.ct ?? 300} mireds (~
-                {Math.round(1000000 / (config.color.Ct?.ct ?? 300))}K)
-              </span>
-            </label>
-            <input
-              type="range"
-              min="153"
-              max="500"
-              value={config.color.Ct?.ct ?? 300}
-              className="range range-sm"
-              onChange={(e) =>
-                updateColor({ Ct: { ct: Number(e.target.value) } })
-              }
-            />
-            <div className="flex justify-between text-xs opacity-60 mt-1">
-              <span>Cool (6500K)</span>
-              <span>Warm (2000K)</span>
-            </div>
-          </div>
-        </div>
-      )}
+      <SceneColorEditor
+        color={config.color}
+        brightness={config.brightness}
+        onChange={(color) => onChange({ ...config, color })}
+      />
     </div>
   );
 }
@@ -403,12 +141,12 @@ function DeviceLinkEditor({
 
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Link to Device</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Link to Device</span>
         </label>
         <select
-          className="select select-bordered select-sm"
+          className={selectClassName}
           value={getSceneDeviceLinkTargetKey(config)}
           onChange={(e) => {
             const [integration_id, ...deviceIdParts] =
@@ -429,14 +167,14 @@ function DeviceLinkEditor({
             </option>
           ))}
         </select>
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Scene will copy state from this device (e.g. circadian color)
         </span>
       </div>
 
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>
             Brightness Override:{' '}
             {config.brightness !== undefined
               ? `${Math.round(config.brightness * 100)}%`
@@ -446,7 +184,7 @@ function DeviceLinkEditor({
         <div className="flex items-center gap-2">
           <input
             type="checkbox"
-            className="checkbox checkbox-sm"
+            className={checkboxClassName}
             checked={config.brightness !== undefined}
             onChange={(e) =>
               onChange({
@@ -461,7 +199,7 @@ function DeviceLinkEditor({
               min="0"
               max="100"
               value={Math.round(config.brightness * 100)}
-              className="range range-sm flex-1"
+              className={cn(rangeClassName, 'flex-1')}
               onChange={(e) =>
                 onChange({
                   ...config,
@@ -485,12 +223,12 @@ interface SceneLinkEditorProps {
 function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
   return (
     <div className="space-y-3">
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Link to Scene</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Link to Scene</span>
         </label>
         <select
-          className="select select-bordered select-sm"
+          className={selectClassName}
           value={config.scene_id}
           onChange={(e) => onChange({ ...config, scene_id: e.target.value })}
         >
@@ -501,20 +239,20 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
             </option>
           ))}
         </select>
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Scene will inherit all device states from the linked scene
         </span>
       </div>
 
-      <div className="form-control">
-        <label className="label">
-          <span className="label-text">Transition Override (s)</span>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Transition Override (s)</span>
         </label>
-        <input
+        <Input
           type="number"
           min="0"
           step="0.1"
-          className="input input-bordered input-sm"
+          className="h-9"
           value={config.transition ?? ''}
           placeholder="Use linked scene transition"
           onChange={(e) => {
@@ -527,7 +265,7 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
             });
           }}
         />
-        <span className="label-text-alt mt-1 opacity-60">
+        <span className={helpTextClassName}>
           Leave empty to inherit the linked scene&apos;s transition values.
         </span>
       </div>
@@ -573,24 +311,29 @@ function SceneTargetConfigEditor({
   };
 
   return (
-    <div className="card bg-base-200">
-      <div className="card-body p-4">
+    <Card className="rounded-2xl bg-muted/30">
+      <CardContent className="p-4">
         <div className="flex justify-between items-start">
           <div>
             <h4 className="font-semibold">{targetLabel ?? targetKey}</h4>
-            <p className="text-xs opacity-60">{targetKey}</p>
+            <p className="text-xs text-muted-foreground">{targetKey}</p>
           </div>
-          <button className="btn btn-ghost btn-xs btn-error" onClick={onRemove}>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={onRemove}
+          >
             ✕
-          </button>
+          </Button>
         </div>
 
-        <div className="form-control mt-2">
-          <label className="label">
-            <span className="label-text">Config Type</span>
+        <div className={cn(fieldClassName, 'mt-2')}>
+          <label>
+            <span className={fieldLabelClassName}>Config Type</span>
           </label>
           <select
-            className="select select-bordered select-sm"
+            className={selectClassName}
             value={configType}
             onChange={(e) =>
               handleTypeChange(
@@ -604,7 +347,7 @@ function SceneTargetConfigEditor({
           </select>
         </div>
 
-        <div className="divider my-2"></div>
+        <div className="my-2 h-px bg-border" />
 
         <SceneResolvedColorPreview
           config={config}
@@ -631,8 +374,8 @@ function SceneTargetConfigEditor({
             onChange={onChange}
           />
         )}
-      </div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -665,13 +408,21 @@ function AddSceneTargetModal({
     );
 
   return (
-    <dialog className="modal modal-open">
-      <div className="modal-box">
-        <h3 className="font-bold text-lg">Add Target</h3>
-
-        <input
+    <ResponsiveOverlay
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title="Add Target"
+      description="Choose a device or group target for this scene."
+      className="max-w-2xl"
+    >
+      <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+        <Input
           type="text"
-          className="input input-bordered w-full mt-4"
+          className="w-full"
           placeholder="Search targets..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -679,37 +430,39 @@ function AddSceneTargetModal({
 
         <div className="mt-4 max-h-60 overflow-y-auto">
           {availableTargets.length === 0 ? (
-            <p className="text-center opacity-60 py-4">No targets found</p>
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              No targets found
+            </p>
           ) : (
             <div className="space-y-1">
               {availableTargets.map(({ key, label }) => (
-                <button
+                <Button
                   key={key}
-                  className="btn btn-ghost btn-sm w-full justify-start"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start"
                   onClick={() => {
                     onAdd(key);
                     onClose();
                   }}
                 >
                   <span className="truncate">
-                    {label} <span className="opacity-60">({key})</span>
+                    {label}{' '}
+                    <span className="text-muted-foreground">({key})</span>
                   </span>
-                </button>
+                </Button>
               ))}
             </div>
           )}
         </div>
 
-        <div className="modal-action">
-          <button className="btn btn-ghost" onClick={onClose}>
+        <div className="flex justify-end">
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
+          </Button>
         </div>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button onClick={onClose}>close</button>
-      </form>
-    </dialog>
+    </ResponsiveOverlay>
   );
 }
 
@@ -784,16 +537,13 @@ export function SceneTargetSectionEditor({
     <div className="space-y-4">
       <div className="flex justify-between items-center">
         <h3 className="text-lg font-semibold">{sectionTitle}</h3>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={() => setShowAddTarget(true)}
-        >
+        <Button size="sm" onClick={() => setShowAddTarget(true)}>
           {addLabel}
-        </button>
+        </Button>
       </div>
 
       {Object.keys(items).length === 0 ? (
-        <div className="text-center py-8 opacity-60">
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 py-8 text-center text-muted-foreground">
           <p>{emptyTitle}</p>
           <p className="text-sm mt-1">{emptyDescription}</p>
         </div>
@@ -867,16 +617,11 @@ export function SceneDeviceStateEditor({
         onChange={setDeviceStates}
       />
 
-      <div className="flex justify-end gap-2 pt-4 border-t border-base-300">
-        <button className="btn btn-ghost" onClick={onCancel}>
+      <div className="flex justify-end gap-2 border-t border-border pt-4">
+        <Button variant="ghost" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          className="btn btn-primary"
-          onClick={() => onSave(deviceStates)}
-        >
-          Save Device States
-        </button>
+        </Button>
+        <Button onClick={() => onSave(deviceStates)}>Save Device States</Button>
       </div>
     </div>
   );

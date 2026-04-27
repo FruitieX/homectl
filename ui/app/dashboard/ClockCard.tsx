@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Button, Card, Modal } from 'react-daisyui';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import { X, Calendar, Clock } from 'lucide-react';
 import clsx from 'clsx';
@@ -10,6 +9,12 @@ import {
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 
 type CalendarEvent = {
   id: string;
@@ -25,7 +30,9 @@ type CalendarResponse = {
   events: CalendarEvent[];
 };
 
-const fetchCalendar = async (calendarUrl: string): Promise<CalendarResponse> => {
+const fetchCalendar = async (
+  calendarUrl: string,
+): Promise<CalendarResponse> => {
   const res = await fetch(calendarUrl);
   if (!res.ok) {
     throw new Error(`Failed to fetch calendar: ${res.status}`);
@@ -251,22 +258,20 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
     return (
       <div className="text-center mt-1 w-full">
         <div className="flex items-center justify-center gap-1 mb-1">
-          <Calendar className="w-3 h-3" />
-          {currentEvent && (
-            <div className="badge badge-success badge-xs">Now</div>
-          )}
+          <Calendar className="size-3" />
+          {currentEvent && <Badge>Now</Badge>}
           {!currentEvent && nextEvent && (
-            <div className="badge badge-info badge-xs">Upcoming</div>
+            <Badge variant="secondary">Upcoming</Badge>
           )}
           {!currentEvent && !nextEvent && currentAllDayEvent && (
-            <div className="badge badge-success badge-xs">All day</div>
+            <Badge>All day</Badge>
           )}
         </div>
         <div className="text-xs font-medium truncate max-w-full">
           {displayEvent.summary}
         </div>
-        <div className="text-xs text-base-content/70 flex items-center justify-center gap-1 min-w-0">
-          <Clock className="w-3 h-3 flex-shrink-0" />
+        <div className="flex min-w-0 items-center justify-center gap-1 text-xs text-muted-foreground">
+          <Clock className="size-3 shrink-0" />
           <div className="truncate max-w-full">
             {formatEventTimeDisplay(displayEvent)}
           </div>
@@ -277,13 +282,13 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card compact className="col-span-2 bg-base-300">
+      <Card className="col-span-2 overflow-hidden">
         <Button
-          color="ghost"
+          variant="ghost"
           className="h-full w-full"
           onClick={toggleDetailsModal}
         >
-          <Card.Body className="flex items-center justify-center w-full px-0">
+          <CardContent className="flex w-full items-center justify-center px-0 py-5">
             <span className="text-[clamp(1.5rem,8vw,3rem)] leading-none">
               {time !== null && (
                 <>
@@ -293,92 +298,86 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
               )}
             </span>
             {renderCalendarInfo()}
-          </Card.Body>
+          </CardContent>
         </Button>
       </Card>
-      <Modal.Legacy
+      <ResponsiveOverlay
         open={detailsModalOpen}
-        onClickBackdrop={toggleDetailsModal}
-        responsive
-        className="pt-0"
+        onOpenChange={setDetailsModalOpen}
+        title="Today's agenda"
+        description="Upcoming and in-progress calendar events."
+        className="max-w-3xl"
       >
-        <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
-          <div className="flex items-center justify-between font-bold">
-            <div className="mx-4 text-center">{"Today's agenda"}</div>
-            <Button onClick={toggleDetailsModal} variant="outline">
+        <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+          <div className="flex justify-end">
+            <Button onClick={toggleDetailsModal} variant="outline" size="icon">
               <X />
             </Button>
           </div>
-        </Modal.Header>
-        <Modal.Body className="flex flex-col gap-4 pt-1">
-          {error && (
-            <div className="alert alert-error">
-              <span>{error}</span>
-            </div>
-          )}
-          {calendar && calendar.events.length === 0 && (
-            <div className="text-center py-8">
-              <Calendar className="w-16 h-16 mx-auto mb-4 text-base-content/50" />
-              <p className="text-lg">No events scheduled for today</p>
-            </div>
-          )}
-          {calendar &&
-            calendar.events.map((event, index) => {
-              const now = new Date();
-              const eventStart = new Date(event.start);
-              const eventEnd = new Date(event.end);
-              const isCurrentEvent = eventStart <= now && eventEnd > now;
-              const isPastEvent = eventEnd < now;
-              const isUpcomingEvent = eventStart > now;
 
-              return (
-                <div
-                  key={event.id}
-                  className={clsx(
-                    'card bg-base-200 p-4',
-                    isCurrentEvent && 'ring-2 ring-success',
-                    isPastEvent && 'opacity-60',
-                  )}
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0">
-                      {isCurrentEvent && (
-                        <div className="badge badge-success badge-sm">Now</div>
-                      )}
-                      {isUpcomingEvent && (
-                        <div className="badge badge-info badge-sm">
-                          Upcoming
-                        </div>
-                      )}
-                      {isPastEvent && (
-                        <div className="badge badge-ghost badge-sm">Past</div>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="font-semibold text-lg mb-1">
-                        {event.summary}
-                      </h3>
-                      <div className="flex items-center gap-2 text-sm text-base-content/70 mb-2">
-                        <Clock className="w-4 h-4" />
-                        <span>{formatEventTimeDisplay(event)}</span>
+          <div className="flex flex-col gap-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {calendar && calendar.events.length === 0 && (
+              <EmptyState
+                icon={<Calendar className="size-12" />}
+                title="No events scheduled for today"
+              />
+            )}
+            {calendar &&
+              calendar.events.map((event, index) => {
+                const now = new Date();
+                const eventStart = new Date(event.start);
+                const eventEnd = new Date(event.end);
+                const isCurrentEvent = eventStart <= now && eventEnd > now;
+                const isPastEvent = eventEnd < now;
+                const isUpcomingEvent = eventStart > now;
+
+                return (
+                  <Card
+                    key={event.id}
+                    className={clsx(
+                      isCurrentEvent && 'ring-2 ring-primary',
+                      isPastEvent && 'opacity-60',
+                    )}
+                  >
+                    <CardContent className="flex items-start gap-3 p-4">
+                      <div className="shrink-0">
+                        {isCurrentEvent && <Badge>Now</Badge>}
+                        {isUpcomingEvent && (
+                          <Badge variant="secondary">Upcoming</Badge>
+                        )}
+                        {isPastEvent && <Badge variant="outline">Past</Badge>}
                       </div>
-                      {event.location && (
-                        <div className="text-sm text-base-content/70 mb-2">
-                          📍 {event.location}
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-lg mb-1">
+                          {event.summary}
+                        </h3>
+                        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+                          <Clock className="w-4 h-4" />
+                          <span>{formatEventTimeDisplay(event)}</span>
                         </div>
-                      )}
-                      {event.description && (
-                        <div className="text-sm text-base-content/80 mt-2">
-                          {event.description}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-        </Modal.Body>
-      </Modal.Legacy>
+                        {event.location && (
+                          <div className="mb-2 text-sm text-muted-foreground">
+                            📍 {event.location}
+                          </div>
+                        )}
+                        {event.description && (
+                          <div className="mt-2 text-sm text-muted-foreground">
+                            {event.description}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+          </div>
+        </div>
+      </ResponsiveOverlay>
     </>
   );
 };

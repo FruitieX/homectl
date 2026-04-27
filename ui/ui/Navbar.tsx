@@ -1,5 +1,4 @@
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { Button } from 'react-daisyui';
 import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
@@ -8,6 +7,7 @@ import { useGroupsState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
+import { Button } from '@/ui/primitives/button';
 
 export const Navbar = () => {
   const navigate = useNavigate();
@@ -84,55 +84,80 @@ export const Navbar = () => {
   if (isFullscreen) {
     return isIdle ? null : (
       <Button
-        className="absolute top-3 right-1 z-10 opacity-20"
-        color="ghost"
-        startIcon={isFullscreen ? <Shrink /> : <Expand />}
+        className="absolute right-2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-10 opacity-30 backdrop-blur"
+        variant="ghost"
+        size="icon"
         onClick={toggleFullscreen}
-      />
+      >
+        {isFullscreen ? <Shrink /> : <Expand />}
+      </Button>
     );
   }
 
   return (
-    <div className="navbar z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
+    <header className="z-10 flex h-14 shrink-0 items-center gap-1 border-b border-border/50 bg-background/80 px-2 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl supports-backdrop-filter:bg-background/70">
       {back !== null && (
         <Button
-          color="ghost"
-          startIcon={<ChevronLeft />}
+          aria-label="Go back"
+          variant="ghost"
+          size="icon"
           onClick={navigateBack}
-        />
+        >
+          <ChevronLeft />
+        </Button>
       )}
       {selectedDevices.length === 0 || title !== 'Floorplan' ? (
-        <a className="btn-ghost btn text-xl normal-case">{title}</a>
+        <div className="flex min-w-0 flex-1 items-center px-2">
+          <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
+            {title}
+          </h1>
+        </div>
       ) : (
         <>
           <Button
-            color="ghost"
-            startIcon={<X />}
+            aria-label="Clear selected devices"
+            variant="ghost"
+            size="icon"
             onClick={clearSelectedDevices}
-          />
-          <a className="btn-ghost btn text-xl normal-case">
-            {selectedDevices.length}{' '}
-            {selectedDevices.length === 1 ? 'device' : 'devices'}
-          </a>
-          <div className="flex-1" />
-          <Button color="ghost" startIcon={<Save />} onClick={saveScene} />
+          >
+            <X />
+          </Button>
+          <div className="flex min-w-0 flex-1 items-center px-2">
+            <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
+              {selectedDevices.length}{' '}
+              {selectedDevices.length === 1 ? 'device' : 'devices'}
+            </h1>
+          </div>
           <Button
-            color="ghost"
-            startIcon={<Edit />}
+            aria-label="Save selected devices as scene"
+            variant="ghost"
+            size="icon"
+            onClick={saveScene}
+          >
+            <Save />
+          </Button>
+          <Button
+            aria-label="Edit selected devices"
+            variant="ghost"
+            size="icon"
             onClick={editSelectedDevices}
-          />
+          >
+            <Edit />
+          </Button>
         </>
       )}
       {title === 'Dashboard' && (
         <>
-          <div className="flex-1" />
           <Button
-            color="ghost"
-            startIcon={isFullscreen ? <Shrink /> : <Expand />}
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+            variant="ghost"
+            size="icon"
             onClick={toggleFullscreen}
-          />
+          >
+            {isFullscreen ? <Shrink /> : <Expand />}
+          </Button>
         </>
       )}
-    </div>
+    </header>
   );
 };

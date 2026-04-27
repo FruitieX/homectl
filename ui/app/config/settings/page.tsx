@@ -1,263 +1,415 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useAppConfig } from '@/hooks/appConfig';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { Save, Server, Wifi } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
 
-interface CoreConfig {
-  warmupTimeSeconds: number;
-  weatherApiUrl: string;
-  trainApiUrl: string;
-  influxUrl: string;
-  influxToken: string;
-  calendarIcsUrl: string;
+import { useAppConfig } from '@/hooks/appConfig';
+import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/ui/primitives/form';
+import { Input } from '@/ui/primitives/input';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+
+const optionalUrlSchema = z
+  .string()
+  .trim()
+  .refine((value) => value === '' || URL.canParse(value), 'Enter a valid URL');
+
+const coreConfigFormSchema = z.object({
+  warmupTimeSeconds: z.number().int().min(0).max(60),
+  weatherApiUrl: optionalUrlSchema,
+  trainApiUrl: optionalUrlSchema,
+  influxUrl: optionalUrlSchema,
+  influxToken: z.string(),
+  calendarIcsUrl: optionalUrlSchema,
+});
+
+const coreConfigApiResponseSchema = z
+  .object({
+    warmupTimeSeconds: z.number().optional(),
+    warmup_time_seconds: z.number().optional(),
+    weatherApiUrl: z.string().optional(),
+    weather_api_url: z.string().optional(),
+    trainApiUrl: z.string().optional(),
+    train_api_url: z.string().optional(),
+    influxUrl: z.string().optional(),
+    influx_url: z.string().optional(),
+    influxToken: z.string().optional(),
+    influx_token: z.string().optional(),
+    calendarIcsUrl: z.string().optional(),
+    calendar_ics_url: z.string().optional(),
+  })
+  .passthrough();
+
+const coreConfigEnvelopeSchema = z.object({
+  success: z.boolean(),
+  data: coreConfigApiResponseSchema.nullish(),
+  error: z.string().nullish(),
+});
+
+type CoreConfigFormValues = z.infer<typeof coreConfigFormSchema>;
+type CoreConfigApiResponse = z.infer<typeof coreConfigApiResponseSchema>;
+
+const defaultValues: CoreConfigFormValues = {
+  warmupTimeSeconds: 1,
+  weatherApiUrl: '',
+  trainApiUrl: '',
+  influxUrl: '',
+  influxToken: '',
+  calendarIcsUrl: '',
+};
+
+function normalizeCoreConfig(
+  value: CoreConfigApiResponse | null | undefined,
+): CoreConfigFormValues {
+  return {
+    warmupTimeSeconds:
+      value?.warmupTimeSeconds ?? value?.warmup_time_seconds ?? 1,
+    weatherApiUrl: value?.weatherApiUrl ?? value?.weather_api_url ?? '',
+    trainApiUrl: value?.trainApiUrl ?? value?.train_api_url ?? '',
+    influxUrl: value?.influxUrl ?? value?.influx_url ?? '',
+    influxToken: value?.influxToken ?? value?.influx_token ?? '',
+    calendarIcsUrl: value?.calendarIcsUrl ?? value?.calendar_ics_url ?? '',
+  };
 }
 
-interface CoreConfigApiResponse {
-  warmupTimeSeconds?: number;
-  warmup_time_seconds?: number;
-  weatherApiUrl?: string;
-  weather_api_url?: string;
-  trainApiUrl?: string;
-  train_api_url?: string;
-  influxUrl?: string;
-  influx_url?: string;
-  influxToken?: string;
-  influx_token?: string;
-  calendarIcsUrl?: string;
-  calendar_ics_url?: string;
+async function readCoreConfig(apiEndpoint: string) {
+  const response = await fetch(`${apiEndpoint}/api/v1/config/core`);
+  const result = coreConfigEnvelopeSchema.parse(await response.json());
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'Failed to load settings');
+  }
+
+  return normalizeCoreConfig(result.data);
+}
+
+async function updateCoreConfig(
+  apiEndpoint: string,
+  values: CoreConfigFormValues,
+) {
+  const response = await fetch(`${apiEndpoint}/api/v1/config/core`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      warmup_time_seconds: values.warmupTimeSeconds,
+      weather_api_url: values.weatherApiUrl,
+      train_api_url: values.trainApiUrl,
+      influx_url: values.influxUrl,
+      influx_token: values.influxToken,
+      calendar_ics_url: values.calendarIcsUrl,
+    }),
+  });
+  const result = coreConfigEnvelopeSchema.parse(await response.json());
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'Failed to save settings');
+  }
+
+  return normalizeCoreConfig(result.data);
 }
 
 export default function SettingsPage() {
   const { apiEndpoint } = useAppConfig();
-  const [config, setConfig] = useState<CoreConfig | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dirty, setDirty] = useState(false);
+  const [settingsTab, setSettingsTab] = useState<'core' | 'sources' | 'info'>(
+    'core',
+  );
+  const form = useForm<CoreConfigFormValues>({
+    resolver: zodResolver(coreConfigFormSchema),
+    defaultValues,
+  });
 
-  const normalizeCoreConfig = useCallback((value: CoreConfigApiResponse | null | undefined) => {
-    const warmupTimeSeconds = value?.warmupTimeSeconds ?? value?.warmup_time_seconds ?? 1;
-    return {
-      warmupTimeSeconds,
-      weatherApiUrl: value?.weatherApiUrl ?? value?.weather_api_url ?? '',
-      trainApiUrl: value?.trainApiUrl ?? value?.train_api_url ?? '',
-      influxUrl: value?.influxUrl ?? value?.influx_url ?? '',
-      influxToken: value?.influxToken ?? value?.influx_token ?? '',
-      calendarIcsUrl: value?.calendarIcsUrl ?? value?.calendar_ics_url ?? '',
-    };
-  }, []);
+  const query = useQuery({
+    queryKey: ['config', apiEndpoint, 'core'],
+    queryFn: () => readCoreConfig(apiEndpoint),
+  });
 
-  const fetchConfig = useCallback(async () => {
-    try {
-      const res = await fetch(`${apiEndpoint}/api/v1/config/core`);
-      const data = await res.json();
-      if (data.success) {
-        setConfig(normalizeCoreConfig(data.data));
-        setError(null);
-      } else {
-        setError(data.error || 'Failed to load settings');
-      }
-    } catch {
-      setError('Failed to connect to server');
-    } finally {
-      setLoading(false);
-    }
-  }, [apiEndpoint, normalizeCoreConfig]);
+  const mutation = useMutation({
+    mutationFn: (values: CoreConfigFormValues) =>
+      updateCoreConfig(apiEndpoint, values),
+    onSuccess: (values) => {
+      form.reset(values);
+      toast.success('Settings saved');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to save settings',
+      );
+    },
+  });
 
   useEffect(() => {
-    void fetchConfig();
-  }, [fetchConfig]);
+    if (query.data) {
+      form.reset(query.data);
+    }
+  }, [form, query.data]);
 
-  const handleSave = async () => {
-    if (!config) return;
+  const onSubmit = (values: CoreConfigFormValues) => {
+    mutation.mutate(values);
+  };
 
-    setSaving(true);
-    try {
-      const res = await fetch(`${apiEndpoint}/api/v1/config/core`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          warmup_time_seconds: config.warmupTimeSeconds,
-          weather_api_url: config.weatherApiUrl,
-          train_api_url: config.trainApiUrl,
-          influx_url: config.influxUrl,
-          influx_token: config.influxToken,
-          calendar_ics_url: config.calendarIcsUrl,
-        }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        setConfig(normalizeCoreConfig(data.data));
-        setDirty(false);
-        setError(null);
-      } else {
-        setError(data.error || 'Failed to save settings');
-      }
-    } catch {
-      setError('Failed to connect to server');
-    } finally {
-      setSaving(false);
+  const changeSettingsTab = (value: string) => {
+    if (value === 'core' || value === 'sources' || value === 'info') {
+      setSettingsTab(value);
     }
   };
 
-  const updateConfig = (updates: Partial<CoreConfig>) => {
-    if (!config) return;
-    setConfig({ ...config, ...updates });
-    setDirty(true);
-  };
-
-  if (loading) {
+  if (query.isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <span className="loading loading-spinner loading-lg"></span>
+      <div className="grid max-w-3xl gap-4">
+        <Skeleton className="h-20" />
+        <Skeleton className="h-44" />
+        <Skeleton className="h-80" />
       </div>
     );
   }
 
-  if (error && !config) {
+  if (query.error && !query.data) {
     return (
-      <div className="alert alert-error">
-        <span>{error}</span>
-        <button className="btn btn-sm" onClick={() => void fetchConfig()}>
-          Retry
-        </button>
-      </div>
+      <Alert variant="destructive" className="max-w-3xl">
+        <AlertTitle>Could not load settings</AlertTitle>
+        <AlertDescription className="mt-2 flex flex-col gap-3">
+          <span>
+            {query.error instanceof Error
+              ? query.error.message
+              : 'Failed to connect to server'}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void query.refetch()}
+          >
+            Retry
+          </Button>
+        </AlertDescription>
+      </Alert>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Server Settings</h1>
-        <button
-          className={`btn btn-primary ${saving ? 'loading' : ''}`}
-          disabled={!dirty || saving}
-          onClick={handleSave}
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </div>
-
-      {error && (
-        <div className="alert alert-warning">
-          <span>{error}</span>
-        </div>
-      )}
-
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Core Settings</h2>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Warmup Time (seconds)</span>
-            </label>
-            <input
-              type="number"
-              className="input input-bordered w-full max-w-xs"
-              min={0}
-              max={60}
-              value={config?.warmupTimeSeconds ?? 1}
-              onChange={(e) =>
-                updateConfig({
-                  warmupTimeSeconds: parseInt(e.target.value, 10) || 0,
-                })
-              }
-            />
-            <label className="label">
-              <span className="label-text-alt opacity-70">
-                Time in seconds to wait for integrations to discover devices before starting
-                routines. Increase this if devices are not ready when routines first run.
-              </span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Dashboard Data Sources</h2>
-          <p className="text-sm opacity-70">
-            These server-side sources back the weather, calendar, train, and InfluxDB dashboard
-            widgets.
-          </p>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Weather API URL</span>
-            </label>
-            <input
-              type="url"
-              className="input input-bordered w-full"
-              value={config?.weatherApiUrl ?? ''}
-              onChange={(e) => updateConfig({ weatherApiUrl: e.target.value })}
-            />
-          </div>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Train API URL</span>
-            </label>
-            <input
-              type="url"
-              className="input input-bordered w-full"
-              value={config?.trainApiUrl ?? ''}
-              onChange={(e) => updateConfig({ trainApiUrl: e.target.value })}
-            />
-          </div>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">InfluxDB URL</span>
-            </label>
-            <input
-              type="url"
-              className="input input-bordered w-full"
-              value={config?.influxUrl ?? ''}
-              onChange={(e) => updateConfig({ influxUrl: e.target.value })}
-            />
-          </div>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">InfluxDB Token</span>
-            </label>
-            <input
-              type="password"
-              className="input input-bordered w-full"
-              value={config?.influxToken ?? ''}
-              onChange={(e) => updateConfig({ influxToken: e.target.value })}
-            />
-          </div>
-
-          <div className="form-control">
-            <label className="label">
-              <span className="label-text font-medium">Calendar ICS URL</span>
-            </label>
-            <input
-              type="url"
-              className="input input-bordered w-full"
-              value={config?.calendarIcsUrl ?? ''}
-              onChange={(e) => updateConfig({ calendarIcsUrl: e.target.value })}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Server Information</h2>
-          <div className="text-sm opacity-70 space-y-1">
-            <p>
-              <span className="font-medium">API Endpoint:</span>{' '}
-              <code className="bg-base-300 px-1 rounded">/api/v1</code>
+    <Form {...form}>
+      <form
+        className="max-w-3xl space-y-5"
+        onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Server Settings
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              Tune startup behavior and dashboard data sources.
             </p>
-            <p>
-              <span className="font-medium">WebSocket:</span>{' '}
-              <code className="bg-base-300 px-1 rounded">/api/v1/ws</code>
-            </p>
-            <p>Device labels and map sensor controls now live under the Devices page.</p>
           </div>
+          <Button
+            type="submit"
+            disabled={!form.formState.isDirty || mutation.isPending}
+            className="w-full sm:w-auto"
+          >
+            <Save />
+            {mutation.isPending ? 'Saving…' : 'Save changes'}
+          </Button>
         </div>
-      </div>
-    </div>
+
+        {query.error && (
+          <Alert variant="warning">
+            <AlertTitle>Settings may be stale</AlertTitle>
+            <AlertDescription>
+              {query.error instanceof Error
+                ? query.error.message
+                : 'Failed to refresh settings'}
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <Tabs value={settingsTab} onValueChange={changeSettingsTab}>
+          <TabsList className="grid h-auto w-full grid-cols-3">
+            <TabsTrigger value="core">Core</TabsTrigger>
+            <TabsTrigger value="sources">Sources</TabsTrigger>
+            <TabsTrigger value="info">Info</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="core" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Core Settings</CardTitle>
+                <CardDescription>
+                  Controls how long homectl waits before automation routines
+                  begin.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="warmupTimeSeconds"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Warmup Time (seconds)</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={60}
+                          inputMode="numeric"
+                          value={field.value}
+                          onBlur={field.onBlur}
+                          onChange={(event) =>
+                            field.onChange(
+                              Number.isNaN(event.target.valueAsNumber)
+                                ? 0
+                                : event.target.valueAsNumber,
+                            )
+                          }
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Increase this if devices are not ready when routines
+                        first run.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="sources" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Dashboard Data Sources</CardTitle>
+                <CardDescription>
+                  Server-side sources for weather, calendar, train, and InfluxDB
+                  widgets.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-2">
+                <FormField
+                  control={form.control}
+                  name="weatherApiUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Weather API URL</FormLabel>
+                      <FormControl>
+                        <Input type="url" autoComplete="url" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="trainApiUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Train API URL</FormLabel>
+                      <FormControl>
+                        <Input type="url" autoComplete="url" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="influxUrl"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>InfluxDB URL</FormLabel>
+                      <FormControl>
+                        <Input type="url" autoComplete="url" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="influxToken"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>InfluxDB Token</FormLabel>
+                      <FormControl>
+                        <Input type="password" autoComplete="off" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="calendarIcsUrl"
+                  render={({ field }) => (
+                    <FormItem className="md:col-span-2">
+                      <FormLabel>Calendar ICS URL</FormLabel>
+                      <FormControl>
+                        <Input type="url" autoComplete="url" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="info" className="mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Server Information</CardTitle>
+                <CardDescription>
+                  Runtime endpoints exposed by the server process.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p className="flex items-center gap-2">
+                  <Server className="size-4" />
+                  <span className="font-medium text-foreground">
+                    API Endpoint:
+                  </span>
+                  <code className="rounded-md bg-muted px-1.5 py-0.5">
+                    /api/v1
+                  </code>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Wifi className="size-4" />
+                  <span className="font-medium text-foreground">
+                    WebSocket:
+                  </span>
+                  <code className="rounded-md bg-muted px-1.5 py-0.5">
+                    /api/v1/ws
+                  </code>
+                </p>
+                <p>
+                  Device labels and map sensor controls now live under the
+                  Devices page.
+                </p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </form>
+    </Form>
   );
 }

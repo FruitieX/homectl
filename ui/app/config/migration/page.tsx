@@ -1,6 +1,21 @@
-import { useAppConfig } from '@/hooks/appConfig';
-import { Modal } from 'react-daisyui';
 import { useRef, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Info, Upload, X } from 'lucide-react';
+
+import { useAppConfig } from '@/hooks/appConfig';
+import { cn } from '@/lib/cn';
+import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 
 type MigrationSelection = {
   core: boolean;
@@ -111,7 +126,10 @@ function formatPreviewSuccess(selection: MigrationSelection) {
   return `${selected.join(', ')} parsed and validated successfully. Review the preview below.`;
 }
 
-function formatPreviewWarning(selection: MigrationSelection, validationErrors: string[]) {
+function formatPreviewWarning(
+  selection: MigrationSelection,
+  validationErrors: string[],
+) {
   const selected = getSelectedSectionLabels(selection);
   const label = selected.join(', ');
   const issueLabel = validationErrors.length === 1 ? 'warning' : 'warnings';
@@ -141,7 +159,8 @@ function formatMigrationSuccess(
     parts.push(`imported ${result.routines} routines`);
   }
 
-  const summary = parts.length > 0 ? `${parts.join(', ')}.` : 'made no changes.';
+  const summary =
+    parts.length > 0 ? `${parts.join(', ')}.` : 'made no changes.';
   const integrationsOnly =
     selection.integrations &&
     !selection.core &&
@@ -156,6 +175,14 @@ function formatMigrationSuccess(
   return `Migration complete! ${summary}`;
 }
 
+async function readApiResult<T>(response: Response, fallbackMessage: string) {
+  try {
+    return (await response.json()) as ApiResult<T>;
+  } catch {
+    return { success: false, error: fallbackMessage } satisfies ApiResult<T>;
+  }
+}
+
 export default function MigrationPage() {
   const { apiEndpoint } = useAppConfig();
   const [loading, setLoading] = useState(false);
@@ -164,10 +191,22 @@ export default function MigrationPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [preview, setPreview] = useState<MigrationPreview | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
-  const [selection, setSelection] = useState<MigrationSelection>(defaultMigrationSelection);
+  const [selection, setSelection] = useState<MigrationSelection>(
+    defaultMigrationSelection,
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const selectedSectionLabels = getSelectedSectionLabels(selection);
+
+  const resetUploadState = () => {
+    setValidationErrors([]);
+    setPreview(null);
+    setConfirmOpen(false);
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSelectionChange = (
     section: MigrationSectionKey,
@@ -179,13 +218,7 @@ export default function MigrationPage() {
     }));
     setError(null);
     setSuccess(null);
-    setConfirmOpen(false);
-    setValidationErrors([]);
-    setPreview(null);
-
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    resetUploadState();
   };
 
   const toggleSelection = (section: MigrationSectionKey) => {
@@ -195,50 +228,67 @@ export default function MigrationPage() {
   const handleTomlUpload = async (file: File) => {
     if (!hasSelectedSections(selection)) {
       setError('Select at least one section to import.');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      resetUploadState();
       return;
     }
 
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    setConfirmOpen(false);
+    setValidationErrors([]);
+    setPreview(null);
+
+    let text: string;
     try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-      setConfirmOpen(false);
-      setValidationErrors([]);
-      setPreview(null);
+      text = await file.text();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : 'Upload failed',
+      );
+      setLoading(false);
+      resetUploadState();
+      return;
+    }
 
-      const text = await file.text();
-
-      const response = await fetch(
+    let response: Response;
+    try {
+      response = await fetch(
         `${apiEndpoint}/api/v1/config/migrate/preview?${buildMigrationQuery(selection)}`,
         {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: text,
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: text,
         },
       );
-
-      const result: ApiResult<MigrationPreviewData> = await response.json();
-      if (result.success && result.data) {
-        setPreview(result.data.preview);
-        setValidationErrors(result.data.validation_errors);
-        setSuccess(
-          result.data.validation_errors.length > 0
-            ? formatPreviewWarning(selection, result.data.validation_errors)
-            : formatPreviewSuccess(selection),
-        );
-      } else {
-        setValidationErrors([]);
-        setError(result.error || 'Failed to parse TOML');
-      }
-    } catch (e) {
-      setValidationErrors([]);
-      setError(e instanceof Error ? e.message : 'Upload failed');
-    } finally {
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : 'Upload failed',
+      );
       setLoading(false);
+      resetUploadState();
+      return;
     }
+
+    const result = await readApiResult<MigrationPreviewData>(
+      response,
+      'Failed to parse TOML',
+    );
+
+    if (result.success && result.data) {
+      setPreview(result.data.preview);
+      setValidationErrors(result.data.validation_errors);
+      setSuccess(
+        result.data.validation_errors.length > 0
+          ? formatPreviewWarning(selection, result.data.validation_errors)
+          : formatPreviewSuccess(selection),
+      );
+    } else {
+      setValidationErrors([]);
+      setError(result.error || 'Failed to parse TOML');
+    }
+
+    setLoading(false);
   };
 
   const applyMigration = async () => {
@@ -248,24 +298,26 @@ export default function MigrationPage() {
     setError(null);
     setSuccess(null);
 
-    let result: ApiResult<MigrationApplyResult>;
-
+    let response: Response;
     try {
-      const response = await fetch(`${apiEndpoint}/api/v1/config/migrate/apply`, {
+      response = await fetch(`${apiEndpoint}/api/v1/config/migrate/apply`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preview, selection }),
       });
-
-      result = await response.json();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Migration failed');
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : 'Migration failed',
+      );
       setLoading(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
+      resetUploadState();
       return;
     }
+
+    const result = await readApiResult<MigrationApplyResult>(
+      response,
+      'Migration failed',
+    );
 
     if (result.success && result.data) {
       setSuccess(formatMigrationSuccess(result.data, selection));
@@ -305,294 +357,269 @@ export default function MigrationPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">TOML Migration</h1>
+    <div className="max-w-6xl space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">TOML Migration</h1>
+        <p className="text-sm text-muted-foreground">
+          Import legacy Settings.toml sections in controlled passes.
+        </p>
       </div>
 
-      <div className="alert alert-warning">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="stroke-current shrink-0 h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
-        <div>
-          <h3 className="font-bold">One-time Migration</h3>
-          <div className="text-sm">
-            This tool imports your existing Settings.toml configuration into the
-            database. Use it in two passes: import integrations first, wait for device
-            discovery and the warmup period, then rerun the migration for groups,
-            scenes, and routines.
-          </div>
-        </div>
-      </div>
+      <Alert variant="warning">
+        <AlertTriangle className="size-4" />
+        <AlertTitle>One-time Migration</AlertTitle>
+        <AlertDescription>
+          This tool imports your existing Settings.toml configuration into the
+          database. Use it in two passes: import integrations first, wait for
+          device discovery and warmup, then rerun the migration for groups,
+          scenes, and routines.
+        </AlertDescription>
+      </Alert>
 
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Import Scope</h2>
-          <p className="text-sm opacity-70">
+      <Card>
+        <CardHeader>
+          <CardTitle>Import Scope</CardTitle>
+          <CardDescription>
             Preview and apply only use the sections checked below.
-          </p>
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Alert>
+            <Info className="size-4" />
+            <AlertTitle>Recommended flow</AlertTitle>
+            <AlertDescription>
+              First import integrations only, then wait for integrations to
+              discover devices. After discovery, upload the same TOML again and
+              import the remaining sections.
+            </AlertDescription>
+          </Alert>
 
-          <div className="alert alert-info mt-4">
-            <span className="text-sm leading-6">
-              Recommended flow: first import integrations only, then wait for
-              the integrations to discover devices. This is needed to be able to
-              translate device names as possibly used in the config into device
-              ID:s correctly. After that, upload the same TOML again and import
-              the remaining sections.
-            </span>
-          </div>
-
-          <div className="mt-4 grid max-w-3xl gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {migrationSectionOptions.map((option) => (
               <button
-                type="button"
                 key={option.key}
+                type="button"
                 aria-pressed={selection[option.key]}
-                className={`flex w-full items-start justify-between gap-3 rounded-xl border p-4 text-left transition-none ${
+                className={cn(
+                  'flex w-full items-start justify-between gap-3 rounded-2xl border p-4 text-left transition-colors',
                   selection[option.key]
-                    ? 'border-primary bg-base-100'
-                    : 'border-base-300 bg-base-100/60'
-                }`}
+                    ? 'border-primary bg-primary/10'
+                    : 'border-border bg-background/60 hover:bg-accent/50',
+                )}
                 disabled={loading}
                 onClick={() => toggleSelection(option.key)}
               >
-                <div>
-                  <div className="font-medium">{option.label}</div>
-                  <div className="text-xs opacity-70">{option.description}</div>
-                </div>
-                <span
-                  className={`badge badge-sm shrink-0 ${
-                    selection[option.key] ? 'badge-primary' : 'badge-ghost'
-                  }`}
+                <span>
+                  <span className="block font-medium">{option.label}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {option.description}
+                  </span>
+                </span>
+                <Badge
+                  variant={selection[option.key] ? 'default' : 'outline'}
+                  className="shrink-0"
                 >
                   {selection[option.key] ? 'Include' : 'Skip'}
-                </span>
+                </Badge>
               </button>
             ))}
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
-      {/* Upload section */}
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body">
-          <h2 className="card-title">Upload Settings.toml</h2>
-          <p className="text-sm opacity-70">
-            Upload your existing TOML configuration file. Preview and apply will only
-            use the sections selected above.
-          </p>
-
-          <div className="form-control mt-4">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".toml"
-              className="file-input file-input-bordered w-full max-w-md"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleTomlUpload(file);
-              }}
-              disabled={loading}
-            />
-          </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Upload Settings.toml</CardTitle>
+          <CardDescription>
+            Upload your legacy TOML configuration file. Preview and apply will
+            only use selected sections.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Input
+            ref={fileInputRef}
+            type="file"
+            accept=".toml"
+            className="max-w-md file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void handleTomlUpload(file);
+            }}
+            disabled={loading}
+          />
 
           {loading && (
-            <div className="flex items-center gap-2 mt-2">
-              <span className="loading loading-spinner loading-sm"></span>
-              <span>Processing...</span>
-            </div>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Upload className="size-4 animate-pulse" /> Processing…
+            </p>
           )}
-        </div>
-      </div>
-
+        </CardContent>
+      </Card>
 
       {error && (
-        <div className="alert alert-error">
-          <span className="whitespace-pre-wrap text-sm">{error}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
+        <Alert variant="destructive">
+          <AlertTitle>Migration failed</AlertTitle>
+          <AlertDescription className="flex items-start justify-between gap-3">
+            <span className="whitespace-pre-wrap">{error}</span>
+            <Button variant="ghost" size="icon" onClick={() => setError(null)}>
+              <X />
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {preview && validationErrors.length > 0 && (
-        <div className="alert alert-warning">
-          <div>
-            <h3 className="font-bold">Entries Will Be Dropped On Import</h3>
-            <div className="mt-1 text-sm opacity-80">
+        <Alert variant="warning">
+          <AlertTriangle className="size-4" />
+          <AlertTitle>Entries Will Be Dropped On Import</AlertTitle>
+          <AlertDescription>
+            <p>
               Some entries in the uploaded TOML could not be matched to existing
-              devices. You can proceed with the import, but the affected entries
-              below will be skipped.
-            </div>
-            <ul className="mt-3 list-disc list-inside space-y-1 text-sm whitespace-pre-wrap">
+              devices. You can proceed, but affected entries will be skipped.
+            </p>
+            <ul className="mt-3 list-inside list-disc space-y-1 whitespace-pre-wrap text-sm">
               {validationErrors.map((issue) => (
                 <li key={issue}>{issue}</li>
               ))}
             </ul>
-          </div>
-        </div>
+          </AlertDescription>
+        </Alert>
       )}
 
       {success && (
-        <div className="alert alert-success">
-          <span>{success}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setSuccess(null)}>
-            ✕
-          </button>
-        </div>
+        <Alert>
+          <CheckCircle2 className="size-4" />
+          <AlertTitle>Done</AlertTitle>
+          <AlertDescription className="flex items-start justify-between gap-3">
+            <span>{success}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSuccess(null)}
+            >
+              <X />
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      {/* Preview section */}
       {preview && (
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title">Migration Preview</h2>
-            <p className="text-sm opacity-70">
+        <Card>
+          <CardHeader>
+            <CardTitle>Migration Preview</CardTitle>
+            <CardDescription>
               Review the selected sections before applying this migration run.
-            </p>
-
-            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
-              <span className="opacity-70">Previewing:</span>
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted-foreground">Previewing:</span>
               {selectedSectionLabels.map((label) => (
-                <span key={label} className="badge badge-outline">
+                <Badge key={label} variant="outline">
                   {label}
-                </span>
+                </Badge>
               ))}
             </div>
 
-            <div className="grid gap-4 mt-4 md:grid-cols-2 xl:grid-cols-5">
-              <PreviewSection title="Core Settings" count={selection.core ? 1 : 0} />
-              <PreviewSection title="Integrations" count={preview.integrations.length} />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              <PreviewSection
+                title="Core Settings"
+                count={selection.core ? 1 : 0}
+              />
+              <PreviewSection
+                title="Integrations"
+                count={preview.integrations.length}
+              />
               <PreviewSection title="Groups" count={preview.groups.length} />
               <PreviewSection title="Scenes" count={preview.scenes.length} />
-              <PreviewSection title="Routines" count={preview.routines.length} />
+              <PreviewSection
+                title="Routines"
+                count={preview.routines.length}
+              />
             </div>
 
-            <details className="collapse bg-base-300 mt-4">
-              <summary className="collapse-title text-sm font-medium">
+            <details className="rounded-2xl border border-border bg-muted/50">
+              <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
                 Full Configuration JSON
               </summary>
-              <div className="collapse-content">
-                <pre className="text-xs overflow-auto max-h-96">
-                  {JSON.stringify(preview, null, 2)}
-                </pre>
-              </div>
+              <pre className="max-h-96 overflow-auto border-t border-border p-4 text-xs text-muted-foreground">
+                {JSON.stringify(preview, null, 2)}
+              </pre>
             </details>
-
-            <div className="card-actions mt-4">
-              <button
-                className="btn btn-ghost"
-                onClick={() => {
-                  setValidationErrors([]);
-                  setPreview(null);
-                  if (fileInputRef.current) {
-                    fileInputRef.current.value = '';
-                  }
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn btn-primary"
-                onClick={handleMigrate}
-                disabled={loading}
-              >
-                Apply Selected Sections
-              </button>
-            </div>
-          </div>
-        </div>
+          </CardContent>
+          <CardFooter className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="ghost" onClick={resetUploadState}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={() => void handleMigrate()}
+              disabled={loading}
+            >
+              Apply Selected Sections
+            </Button>
+          </CardFooter>
+        </Card>
       )}
 
-      <Modal.Legacy
-        responsive
+      <ResponsiveOverlay
         open={confirmOpen}
-        onClickBackdrop={() => {
+        onOpenChange={(open) => {
           if (!loading) {
-            setConfirmOpen(false);
+            setConfirmOpen(open);
           }
         }}
+        title="Apply migration with warnings?"
+        description="Some TOML entries cannot be resolved and will be dropped if you continue."
       >
-        <button
-          type="button"
-          className="btn btn-sm btn-circle absolute right-2 top-2"
-          onClick={() => setConfirmOpen(false)}
-          disabled={loading}
-          aria-label="Close warning confirmation"
-        >
-          ✕
-        </button>
-
-        <Modal.Header className="font-bold">
-          Apply migration with warnings?
-        </Modal.Header>
-
-        <Modal.Body>
-          <p className="text-sm leading-6 opacity-80">
-            This migration preview contains {validationErrors.length} name-resolution{' '}
-            {validationErrors.length === 1 ? 'issue' : 'issues'}.
-          </p>
-          <p className="mt-3 text-sm leading-6 opacity-80">
-            If you continue, the affected entries will be dropped from the
-            imported groups, scenes, routines, or other migrated config.
+        <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+          <p className="text-sm text-muted-foreground">
+            This migration preview contains {validationErrors.length}{' '}
+            name-resolution {validationErrors.length === 1 ? 'issue' : 'issues'}
+            .
           </p>
 
-          <div className="alert alert-warning mt-4">
-            <div>
-              <h3 className="font-bold">Affected entries</h3>
-              <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 text-sm whitespace-pre-wrap">
+          <Alert variant="warning">
+            <AlertTriangle className="size-4" />
+            <AlertTitle>Affected entries</AlertTitle>
+            <AlertDescription>
+              <ul className="mt-2 max-h-64 list-disc space-y-1 overflow-auto pl-5 whitespace-pre-wrap text-sm">
                 {validationErrors.map((issue) => (
                   <li key={issue}>{issue}</li>
                 ))}
               </ul>
-            </div>
-          </div>
-        </Modal.Body>
+            </AlertDescription>
+          </Alert>
 
-        <Modal.Actions>
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() => setConfirmOpen(false)}
-            disabled={loading}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-warning"
-            onClick={handleConfirmMigrate}
-            disabled={loading}
-          >
-            Apply anyway
-          </button>
-        </Modal.Actions>
-      </Modal.Legacy>
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => setConfirmOpen(false)}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              className="bg-amber-500 text-amber-950 hover:bg-amber-400"
+              onClick={() => void handleConfirmMigrate()}
+              disabled={loading}
+            >
+              Apply anyway
+            </Button>
+          </div>
+        </div>
+      </ResponsiveOverlay>
     </div>
   );
 }
 
-function PreviewSection({
-  title,
-  count,
-}: {
-  title: string;
-  count: number;
-}) {
+function PreviewSection({ title, count }: { title: string; count: number }) {
   return (
-    <div className="p-4 bg-base-300 rounded">
-      <div className="text-3xl font-bold">{count}</div>
-      <div className="text-sm opacity-70">{title}</div>
+    <div className="rounded-2xl border border-border bg-muted p-4">
+      <div className="text-3xl font-bold tracking-tight">{count}</div>
+      <div className="text-sm text-muted-foreground">{title}</div>
     </div>
   );
 }

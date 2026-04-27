@@ -1,8 +1,11 @@
-import { Button, Input, Modal } from 'react-daisyui';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { useSceneModalState } from '@/hooks/sceneModalState';
 import { useScenesState, useWebsocket } from '@/hooks/websocket';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
+import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
+import { Label } from '@/ui/primitives/label';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 
 type Props = {
   visible: boolean;
@@ -31,32 +34,28 @@ const Component = (props: Props) => {
     setValue(scene?.name ?? '');
   }, [scene, sceneModalOpen]);
 
-  const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.currentTarget.value;
-    setValue(newValue);
-  }, []);
+  const handleChange = (event: ChangeEvent<HTMLInputElement>) => {
+    setValue(event.currentTarget.value);
+  };
 
-  const submit = useCallback(
-    (e: React.FormEvent) => {
-      e.preventDefault();
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
 
-      if (sceneModalState === null) return;
+    if (sceneModalState === null) return;
 
-      const msg: WebSocketRequest = {
-        EventMessage: {
-          DbEditScene: {
-            scene_id: sceneModalState,
-            name: value,
-          },
+    const msg: WebSocketRequest = {
+      EventMessage: {
+        DbEditScene: {
+          scene_id: sceneModalState,
+          name: value,
         },
-      };
+      },
+    };
 
-      const data = JSON.stringify(msg);
-      ws?.send(data);
-      setSceneModalOpen(false);
-    },
-    [sceneModalState, setSceneModalOpen, value, ws],
-  );
+    const data = JSON.stringify(msg);
+    ws?.send(data);
+    setSceneModalOpen(false);
+  };
 
   const [askDeleteConfirmation, setAskDeleteConfirmation] = useState(false);
 
@@ -64,73 +63,72 @@ const Component = (props: Props) => {
     setAskDeleteConfirmation(false);
   }, [sceneModalOpen]);
 
-  const handleDelete = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleDelete = () => {
+    if (sceneModalState === null) return;
 
-      if (sceneModalState === null) return;
-
-      const msg: WebSocketRequest = {
-        EventMessage: {
-          DbDeleteScene: {
-            scene_id: sceneModalState,
-          },
+    const msg: WebSocketRequest = {
+      EventMessage: {
+        DbDeleteScene: {
+          scene_id: sceneModalState,
         },
-      };
+      },
+    };
 
-      const data = JSON.stringify(msg);
-      ws?.send(data);
-      setSceneModalOpen(false);
-      setAskDeleteConfirmation(false);
-    },
-    [sceneModalState, setSceneModalOpen, ws],
-  );
-
-  const handleAskConfirmation = useCallback(
-    (e: React.MouseEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-      setAskDeleteConfirmation(true);
-    },
-    [],
-  );
+    const data = JSON.stringify(msg);
+    ws?.send(data);
+    setSceneModalOpen(false);
+    setAskDeleteConfirmation(false);
+  };
 
   return (
-    <Modal.Legacy responsive open={visible} onClickBackdrop={close}>
-      <Button
-        size="sm"
-        shape="circle"
-        className="absolute right-2 top-2"
-        onClick={close}
-      >
-        ✕
-      </Button>
-      <Modal.Header className="font-bold">{`Edit scene ${scene?.name}`}</Modal.Header>
+    <ResponsiveOverlay
+      open={visible}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          close();
+        }
+      }}
+      title={scene?.name ? `Edit ${scene.name}` : 'Edit scene'}
+      description="Rename or delete this scene. Deleting a scene cannot be undone."
+    >
+      <form className="space-y-5 px-5 pb-5 md:px-0 md:pb-0" onSubmit={submit}>
+        <div className="space-y-2">
+          <Label htmlFor="scene-edit-name">Scene name</Label>
+          <Input
+            id="scene-edit-name"
+            autoFocus
+            onChange={handleChange}
+            value={value}
+          />
+        </div>
 
-      <form onSubmit={submit}>
-        <Modal.Body>
-          <label className="label">
-            <span className="label-text">Scene name</span>
-          </label>
-          <Input onChange={handleChange} value={value} />
-        </Modal.Body>
-
-        <Modal.Actions>
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between">
           <Button
-            color="error"
-            onClick={
-              askDeleteConfirmation ? handleDelete : handleAskConfirmation
-            }
+            type="button"
+            variant="destructive"
+            onClick={() => {
+              if (askDeleteConfirmation) {
+                handleDelete();
+                return;
+              }
+
+              setAskDeleteConfirmation(true);
+            }}
           >
-            {askDeleteConfirmation ? 'Confirm?' : 'Delete'}
+            {askDeleteConfirmation ? 'Confirm delete' : 'Delete scene'}
           </Button>
-          <Button type="submit" onClick={submit}>
-            Save
-          </Button>
-        </Modal.Actions>
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="ghost" onClick={close}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={value.trim().length === 0}>
+              Save changes
+            </Button>
+          </div>
+        </div>
       </form>
-    </Modal.Legacy>
+    </ResponsiveOverlay>
   );
 };
 
@@ -138,9 +136,10 @@ export const SceneModal = () => {
   const { open: sceneModalOpen, setOpen: setSceneModalOpen } =
     useSceneModalState();
 
-  const closeSceneModal = useCallback(() => {
-    setSceneModalOpen(false);
-  }, [setSceneModalOpen]);
-
-  return <Component visible={sceneModalOpen} close={closeSceneModal} />;
+  return (
+    <Component
+      visible={sceneModalOpen}
+      close={() => setSceneModalOpen(false)}
+    />
+  );
 };

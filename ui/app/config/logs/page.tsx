@@ -1,12 +1,37 @@
 import { LogLevel, UiLogEntry, useLogs } from '@/hooks/useConfig';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import { Input } from '@/ui/primitives/input';
+import { Label } from '@/ui/primitives/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/ui/primitives/select';
+import { Skeleton } from '@/ui/primitives/skeleton';
+import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
-const levelBadgeClass: Record<LogLevel, string> = {
-  ERROR: 'badge-error',
-  WARN: 'badge-warning',
-  INFO: 'badge-info',
-  DEBUG: 'badge-neutral',
-  TRACE: 'badge-ghost',
+const levelBadgeVariant: Record<
+  LogLevel,
+  'default' | 'destructive' | 'secondary' | 'muted' | 'outline'
+> = {
+  ERROR: 'destructive',
+  WARN: 'secondary',
+  INFO: 'default',
+  DEBUG: 'muted',
+  TRACE: 'outline',
 };
 
 const levelOptions: Array<LogLevel | 'ALL'> = [
@@ -38,7 +63,8 @@ function matchesSearchFilter(entry: UiLogEntry, search: string) {
     return true;
   }
 
-  const haystack = `${entry.level} ${entry.target} ${entry.message}`.toLowerCase();
+  const haystack =
+    `${entry.level} ${entry.target} ${entry.message}`.toLowerCase();
   return haystack.includes(search);
 }
 
@@ -55,103 +81,116 @@ export default function LogsPage() {
 
   if (loading && data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <span className="loading loading-spinner loading-lg"></span>
+      <div className="grid max-w-6xl gap-4">
+        <Skeleton className="h-24" />
+        <Skeleton className="h-36" />
+        <Skeleton className="h-32" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 max-w-6xl">
+    <div className="max-w-6xl space-y-5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-bold">Server Logs</h1>
-          <p className="text-sm text-base-content/70">
-            Recent runtime logs from the server process. This view auto-refreshes every 5 seconds.
+          <h1 className="text-2xl font-bold tracking-tight">Server Logs</h1>
+          <p className="text-sm text-muted-foreground">
+            Recent runtime logs from the server process. This view
+            auto-refreshes every 5 seconds.
           </p>
         </div>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="text-xs text-base-content/60">
-            {lastUpdated ? `Last updated ${formatTimestamp(lastUpdated)}` : 'Waiting for first update'}
+          <div className="text-xs text-muted-foreground">
+            {lastUpdated
+              ? `Last updated ${formatTimestamp(lastUpdated)}`
+              : 'Waiting for first update'}
           </div>
-          <button className="btn btn-outline btn-sm" onClick={() => void refetch()}>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            <RefreshCw />
             Refresh Now
-          </button>
+          </Button>
         </div>
       </div>
 
       {error && (
-        <div className="alert alert-warning">
-          <span>{error}</span>
-        </div>
+        <Alert variant="warning">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="card bg-base-200 shadow-xl">
-        <div className="card-body gap-4">
+      <Card>
+        <CardContent className="gap-4 pt-5">
           <div className="flex flex-col gap-3 lg:flex-row">
-            <label className="form-control w-full lg:max-w-xs">
-              <div className="label">
-                <span className="label-text font-medium">Level</span>
-              </div>
-              <select
-                className="select select-bordered"
+            <div className="grid w-full gap-2 lg:max-w-xs">
+              <Label>Level</Label>
+              <Select
                 value={levelFilter}
-                onChange={(event) => setLevelFilter(event.target.value as LogLevel | 'ALL')}
+                onValueChange={(value) =>
+                  setLevelFilter(value as LogLevel | 'ALL')
+                }
               >
-                {levelOptions.map((level) => (
-                  <option key={level} value={level}>
-                    {level === 'ALL' ? 'All levels' : level}
-                  </option>
-                ))}
-              </select>
-            </label>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {levelOptions.map((level) => (
+                    <SelectItem key={level} value={level}>
+                      {level === 'ALL' ? 'All levels' : level}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-            <label className="form-control w-full">
-              <div className="label">
-                <span className="label-text font-medium">Search</span>
-              </div>
-              <input
+            <div className="grid w-full gap-2">
+              <Label htmlFor="log-search">Search</Label>
+              <Input
+                id="log-search"
                 type="search"
-                className="input input-bordered w-full"
                 placeholder="Filter by target or message"
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
               />
-            </label>
+            </div>
           </div>
 
-          <div className="text-sm text-base-content/70">
+          <div className="mt-4 text-sm text-muted-foreground">
             Showing {visibleLogs.length} of {data.length} buffered log entries.
           </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {visibleLogs.length === 0 ? (
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body text-base-content/70">
-            <p>No matching log entries.</p>
-            <p>Errors such as failed routine checks will appear here once the server emits them.</p>
-          </div>
-        </div>
+        <EmptyState
+          title="No matching log entries"
+          description="Errors such as failed routine checks will appear here once the server emits them."
+        />
       ) : (
         <div className="space-y-3">
           {visibleLogs.map((entry, index) => (
-            <div key={`${entry.timestamp}-${entry.target}-${index}`} className="card bg-base-200 shadow-xl">
-              <div className="card-body gap-3">
+            <Card key={`${entry.timestamp}-${entry.target}-${index}`}>
+              <CardHeader className="gap-3">
                 <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className={`badge ${levelBadgeClass[entry.level]}`}>{entry.level}</span>
-                    <span className="font-mono text-sm break-all">{entry.target}</span>
+                    <Badge variant={levelBadgeVariant[entry.level]}>
+                      {entry.level}
+                    </Badge>
+                    <CardTitle className="break-all font-mono text-sm">
+                      {entry.target}
+                    </CardTitle>
                   </div>
-                  <div className="text-sm text-base-content/60">{formatTimestamp(entry.timestamp)}</div>
+                  <CardDescription>
+                    {formatTimestamp(entry.timestamp)}
+                  </CardDescription>
                 </div>
-
-                <pre className="whitespace-pre-wrap break-words rounded-lg bg-base-300 p-4 text-sm leading-6">
+              </CardHeader>
+              <CardContent>
+                <pre className="whitespace-pre-wrap wrap-break-word rounded-2xl bg-muted p-4 text-sm leading-6 text-muted-foreground">
                   {entry.message}
                 </pre>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           ))}
         </div>
       )}

@@ -10,18 +10,16 @@ import { useDeviceState, useWebsocket } from '@/hooks/websocket';
 import clsx from 'clsx';
 import deepEqual from 'deep-equal';
 import { produce } from 'immer';
-import { Edit, Settings, Trash, X } from 'lucide-react';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Accordion,
-  Button,
-  Divider,
-  Form,
-  Input,
-  Modal,
-  Toggle,
-} from 'react-daisyui';
+import { Edit, Plus, Settings, Trash } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToggle } from 'usehooks-ts';
+import { Button } from '@/ui/primitives/button';
+import { Card, CardContent } from '@/ui/primitives/card';
+import { Input } from '@/ui/primitives/input';
+import { Label } from '@/ui/primitives/label';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Separator } from '@/ui/primitives/separator';
+import { Switch } from '@/ui/primitives/switch';
 
 const carHeaterDeviceKey = 'tuya_devices/bfe553b84e883ace37nvxw';
 const UnmemoizedCarHeaterModal = () => {
@@ -162,58 +160,48 @@ const UnmemoizedCarHeaterModal = () => {
   };
 
   return (
-    <Modal.Legacy
-      responsive
+    <ResponsiveOverlay
       open={open}
-      onClickBackdrop={close}
-      className="pt-0"
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          close();
+        }
+      }}
+      title="Car heater timer"
+      description="Schedule the heater to warm the car before departure."
+      className="max-w-4xl"
     >
-      <Button
-        size="sm"
-        shape="circle"
-        className="absolute right-2 top-2"
-        onClick={close}
-      >
-        ✕
-      </Button>
-      <Modal.Header className="sticky w-auto top-0 p-6 m-0 -mx-6 z-10 bg-base-100 bg-opacity-75 backdrop-blur-sm">
-        <div className="flex items-center justify-between font-bold">
-          <div className="mx-4 text-center">Car heater timer</div>
-          <Button onClick={close} variant="outline">
-            <X />
-          </Button>
-        </div>
-      </Modal.Header>
-      {
-        <div className="flex flex-wrap gap-3">
-          {formState.timers.map((timer, index) => (
-            <CarHeaterModalForm
-              key={index}
-              modalOpen={open}
-              state={timer}
-              storedState={state.timers[index]}
-              setState={(index, state) => {
-                setFormState({
-                  ...formState,
-                  timers: formState.timers.map((t, i) =>
-                    i === index ? state : t,
-                  ),
-                });
-              }}
-              remove={() =>
-                setFormState({
-                  ...formState,
-                  timers: formState.timers.filter((_, i) => i !== index),
-                })
-              }
-              index={index}
-              submit={submit}
-            />
-          ))}
-          <Button onClick={addTimer}>Add timer</Button>
-        </div>
-      }
-    </Modal.Legacy>
+      <div className="flex flex-col gap-3 px-5 pb-5 md:px-0 md:pb-0">
+        {formState.timers.map((timer, index) => (
+          <CarHeaterModalForm
+            key={index}
+            modalOpen={open}
+            state={timer}
+            storedState={state.timers[index]}
+            setState={(index, state) => {
+              setFormState({
+                ...formState,
+                timers: formState.timers.map((t, i) =>
+                  i === index ? state : t,
+                ),
+              });
+            }}
+            remove={() =>
+              setFormState({
+                ...formState,
+                timers: formState.timers.filter((_, i) => i !== index),
+              })
+            }
+            index={index}
+            submit={submit}
+          />
+        ))}
+        <Button onClick={addTimer} className="w-full sm:w-fit">
+          <Plus />
+          Add timer
+        </Button>
+      </div>
+    </ResponsiveOverlay>
   );
 };
 
@@ -270,178 +258,179 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
   const [showSettings, toggleShowSettings] = useToggle(false);
 
   return (
-    <Accordion defaultChecked={index === 0} icon="plus" className="bg-base-200">
-      <Accordion.Title
-        className={clsx('text-xl font-medium', !enabled && 'text-neutral-500')}
+    <details open={index === 0}>
+      <summary
+        className={clsx(
+          'flex cursor-pointer list-none items-center justify-between rounded-3xl border border-border bg-card px-4 py-3 text-lg font-medium shadow-sm',
+          !enabled && 'text-muted-foreground',
+        )}
       >
-        {`${name}` +
-          (enabled
-            ? ` (${String(hour).padStart(2, '0')}:${String(minute).padStart(
-                2,
-                '0',
-              )}, ${repeat === 'weekday' ? 'weekdays' : repeat})`
-            : ' (inactive)')}
-      </Accordion.Title>
-      <Accordion.Content>
-        <div>When do you need to leave?</div>
-        <div className="flex gap-6 pt-3 pb-6 flex-wrap justify-around">
-          <Form>
-            <Form.Label className="text-center">
-              <span className="label-text">Hour</span>
-            </Form.Label>
-            <div className="flex">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-zinc-700"
-                type="button"
-                onClick={() =>
-                  setState(index, {
-                    ...state,
-                    hour: Math.max(0, state.hour - 1),
-                  })
-                }
-              >
-                -
-              </Button>
-              <Input
-                size="lg"
-                className="w-14 text-2xl text-center"
-                value={String(state.hour).padStart(2, '0')}
-                onChange={(event) => {
-                  const value = event.currentTarget.valueAsNumber;
-
-                  if (isNaN(value)) {
-                    return;
+        <span>
+          {`${name}` +
+            (enabled
+              ? ` (${String(hour).padStart(2, '0')}:${String(minute).padStart(
+                  2,
+                  '0',
+                )}, ${repeat === 'weekday' ? 'weekdays' : repeat})`
+              : ' (inactive)')}
+        </span>
+        <Plus className="size-4" />
+      </summary>
+      <Card className="mt-2">
+        <CardContent className="space-y-4 pt-5">
+          <div className="text-sm text-muted-foreground">
+            When do you need to leave?
+          </div>
+          <div className="flex flex-wrap justify-around gap-6 pb-2">
+            <div className="grid gap-2 text-center">
+              <Label>Hour</Label>
+              <div className="flex">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  type="button"
+                  onClick={() =>
+                    setState(index, {
+                      ...state,
+                      hour: Math.max(0, state.hour - 1),
+                    })
                   }
+                >
+                  -
+                </Button>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  className="h-12 w-16 rounded-none text-center text-2xl"
+                  value={String(state.hour).padStart(2, '0')}
+                  onChange={(event) => {
+                    const value = event.currentTarget.valueAsNumber;
 
-                  setState(index, {
-                    ...state,
-                    hour: event.currentTarget.valueAsNumber,
-                  });
-                }}
-                min={0}
-                max={23}
-              />
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-zinc-700"
-                type="button"
-                onClick={() =>
-                  setState(index, {
-                    ...state,
-                    hour: Math.min(23, state.hour + 1),
-                  })
-                }
-              >
-                +
-              </Button>
-            </div>
-          </Form>
-          <Form>
-            <Form.Label className="text-center">
-              <span className="label-text">Minute</span>
-            </Form.Label>
-            <div className="flex">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-zinc-700"
-                type="button"
-                onClick={() =>
-                  setState(index, {
-                    ...state,
-                    minute: Math.max(0, state.minute - 5),
-                  })
-                }
-              >
-                -
-              </Button>
-              <Input
-                size="lg"
-                className="w-14 text-2xl text-center"
-                value={String(state.minute).padStart(2, '0')}
-                onChange={(event) => {
-                  const value = event.currentTarget.valueAsNumber;
+                    if (isNaN(value)) {
+                      return;
+                    }
 
-                  if (isNaN(value)) {
-                    return;
+                    setState(index, {
+                      ...state,
+                      hour: event.currentTarget.valueAsNumber,
+                    });
+                  }}
+                  min={0}
+                  max={23}
+                />
+                <Button
+                  size="lg"
+                  variant="outline"
+                  type="button"
+                  onClick={() =>
+                    setState(index, {
+                      ...state,
+                      hour: Math.min(23, state.hour + 1),
+                    })
                   }
-
-                  setState(index, {
-                    ...state,
-                    minute: event.currentTarget.valueAsNumber,
-                  });
-                }}
-                step={5}
-                min={0}
-                max={59}
-              />
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-zinc-700"
-                type="button"
-                onClick={() =>
-                  setState(index, {
-                    ...state,
-                    minute: Math.min(55, state.minute + 5),
-                  })
-                }
-              >
-                +
-              </Button>
+                >
+                  +
+                </Button>
+              </div>
             </div>
-          </Form>
-        </div>
-        <div className="flex gap-6 flex-wrap pb-3">
-          <Form className="flex flex-1 flex-col">
-            <Form.Label title="Enabled" className="flex-col">
-              <Toggle
+            <div className="grid gap-2 text-center">
+              <Label>Minute</Label>
+              <div className="flex">
+                <Button
+                  size="lg"
+                  variant="outline"
+                  type="button"
+                  onClick={() =>
+                    setState(index, {
+                      ...state,
+                      minute: Math.max(0, state.minute - 5),
+                    })
+                  }
+                >
+                  -
+                </Button>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  className="h-12 w-16 rounded-none text-center text-2xl"
+                  value={String(state.minute).padStart(2, '0')}
+                  onChange={(event) => {
+                    const value = event.currentTarget.valueAsNumber;
+
+                    if (isNaN(value)) {
+                      return;
+                    }
+
+                    setState(index, {
+                      ...state,
+                      minute: event.currentTarget.valueAsNumber,
+                    });
+                  }}
+                  step={5}
+                  min={0}
+                  max={59}
+                />
+                <Button
+                  size="lg"
+                  variant="outline"
+                  type="button"
+                  onClick={() =>
+                    setState(index, {
+                      ...state,
+                      minute: Math.min(55, state.minute + 5),
+                    })
+                  }
+                >
+                  +
+                </Button>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-4 pb-3">
+            <div className="flex flex-1 flex-col items-center gap-2 rounded-2xl border border-border p-3">
+              <Label>Enabled</Label>
+              <Switch
                 checked={state.enabled}
-                className="flex-1"
-                onChange={() =>
+                onCheckedChange={() =>
                   setState(index, { ...state, enabled: !state.enabled })
                 }
-                size="lg"
               />
-            </Form.Label>
-          </Form>
-          <Form className="flex flex-1 flex-col">
-            <Form.Label title="Repeat" className="flex-col w-full pb-1" />
-            <div className="flex justify-center w-full">
-              <Button
-                type="button"
-                color={state.repeat === 'once' ? 'primary' : 'ghost'}
-                onClick={() => setState(index, { ...state, repeat: 'once' })}
-                size="sm"
-              >
-                Once
-              </Button>
-              <Button
-                type="button"
-                color={state.repeat === 'weekday' ? 'primary' : 'ghost'}
-                onClick={() => setState(index, { ...state, repeat: 'weekday' })}
-                size="sm"
-              >
-                Weekdays
-              </Button>
-              <Button
-                type="button"
-                color={state.repeat === 'daily' ? 'primary' : 'ghost'}
-                onClick={() => setState(index, { ...state, repeat: 'daily' })}
-                size="sm"
-              >
-                Daily
-              </Button>
             </div>
-          </Form>
-        </div>
-        <Divider className="my-0" />
-        {showSettings && (
-          <>
-            <div className="flex py-3 gap-3 flex-wrap">
+            <div className="flex flex-1 flex-col items-center gap-2 rounded-2xl border border-border p-3">
+              <Label>Repeat</Label>
+              <div className="flex justify-center gap-1">
+                <Button
+                  type="button"
+                  variant={state.repeat === 'once' ? 'default' : 'ghost'}
+                  onClick={() => setState(index, { ...state, repeat: 'once' })}
+                  size="sm"
+                >
+                  Once
+                </Button>
+                <Button
+                  type="button"
+                  variant={state.repeat === 'weekday' ? 'default' : 'ghost'}
+                  onClick={() =>
+                    setState(index, { ...state, repeat: 'weekday' })
+                  }
+                  size="sm"
+                >
+                  Weekdays
+                </Button>
+                <Button
+                  type="button"
+                  variant={state.repeat === 'daily' ? 'default' : 'ghost'}
+                  onClick={() => setState(index, { ...state, repeat: 'daily' })}
+                  size="sm"
+                >
+                  Daily
+                </Button>
+              </div>
+            </div>
+          </div>
+          <Separator />
+          {showSettings && (
+            <div className="flex flex-wrap gap-3 py-3">
               {renameActive ? (
                 <>
                   <Input
@@ -461,48 +450,45 @@ const CarHeaterModalForm = (props: CarHeaterModalFormProps) => {
                 </>
               ) : (
                 <>
-                  <Button
-                    onClick={toggleRenameActive}
-                    startIcon={<Edit />}
-                    className="flex-1"
-                  >
+                  <Button onClick={toggleRenameActive} className="flex-1">
+                    <Edit />
                     Rename
                   </Button>
                   <Button
                     onClick={() => remove(index)}
-                    startIcon={<Trash />}
-                    color="error"
+                    variant="destructive"
                     className="flex-1"
                   >
+                    <Trash />
                     Delete
                   </Button>
                 </>
               )}
             </div>
-          </>
-        )}
-        <div className="pt-3 flex justify-between items-center">
-          {state?.enabled
-            ? `Heater will turn on at ${String(timerOnDate.getHours()).padStart(
-                2,
-                '0',
-              )}:${String(timerOnDate.getMinutes()).padStart(2, '0')}` +
-              (state?.repeat === 'once'
-                ? ''
-                : state?.repeat === 'weekday'
-                  ? ' every weekday'
-                  : ' daily')
-            : 'Heater timer is off'}
-          <Button
-            className="bg-transparent border-transparent"
-            onClick={toggleShowSettings}
-            startIcon={<Settings />}
-            color="ghost"
-          />
-        </div>
-      </Accordion.Content>
-    </Accordion>
+          )}
+          <div className="flex items-center justify-between gap-3 pt-3 text-sm text-muted-foreground">
+            <span>
+              {state?.enabled
+                ? `Heater will turn on at ${String(
+                    timerOnDate.getHours(),
+                  ).padStart(2, '0')}:${String(
+                    timerOnDate.getMinutes(),
+                  ).padStart(2, '0')}` +
+                  (state?.repeat === 'once'
+                    ? ''
+                    : state?.repeat === 'weekday'
+                      ? ' every weekday'
+                      : ' daily')
+                : 'Heater timer is off'}
+            </span>
+            <Button variant="ghost" size="icon" onClick={toggleShowSettings}>
+              <Settings />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </details>
   );
 };
 
-export const CarHeaterModal = memo(UnmemoizedCarHeaterModal);
+export const CarHeaterModal = UnmemoizedCarHeaterModal;

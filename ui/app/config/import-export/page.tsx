@@ -1,4 +1,19 @@
-import { useConfigExport, ConfigExport, useRuntimeStatus } from '@/hooks/useConfig';
+import {
+  useConfigExport,
+  ConfigExport,
+  useRuntimeStatus,
+} from '@/hooks/useConfig';
+import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { Button } from '@/ui/primitives/button';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/ui/primitives/card';
+import { Download, Info, Upload, X } from 'lucide-react';
 import { useState, useRef } from 'react';
 
 export default function ImportExportPage() {
@@ -61,121 +76,120 @@ export default function ImportExportPage() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Import / Export Configuration</h1>
-
-      <div className={`alert ${isMemoryOnly ? 'alert-warning' : 'alert-info'} shadow-sm`}>
-        <div>
-          <h2 className="font-semibold">Durability</h2>
-          <p className="text-sm leading-6">
-            {isMemoryOnly
-              ? 'The server is currently running without active database persistence. Export a JSON backup after important changes, because imports and editor updates only live in memory until you persist them again.'
-              : 'JSON exports are still the fastest rollback point before large imports or risky edits, even while PostgreSQL persistence is available.'}
-          </p>
-        </div>
+    <div className="max-w-5xl space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">
+          Import / Export Configuration
+        </h1>
+        <p className="text-sm text-muted-foreground">
+          Create durable JSON backups and restore runtime configuration safely.
+        </p>
       </div>
 
+      <Alert variant={isMemoryOnly ? 'warning' : 'default'}>
+        <Info className="size-4" />
+        <AlertTitle>Durability</AlertTitle>
+        <AlertDescription>
+          {isMemoryOnly
+            ? 'The server is currently running without active database persistence. Export a JSON backup after important changes, because imports and editor updates only live in memory until you persist them again.'
+            : 'JSON exports are still the fastest rollback point before large imports or risky edits, even while PostgreSQL persistence is available.'}
+        </AlertDescription>
+      </Alert>
+
       {error && (
-        <div className="alert alert-error">
-          <span>{error}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setError(null)}>
-            ✕
-          </button>
-        </div>
+        <Alert variant="destructive">
+          <AlertTitle>Operation failed</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{error}</span>
+            <Button variant="ghost" size="icon" onClick={() => setError(null)}>
+              <X />
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
       {success && (
-        <div className="alert alert-success">
-          <span>{success}</span>
-          <button className="btn btn-sm btn-ghost" onClick={() => setSuccess(null)}>
-            ✕
-          </button>
-        </div>
+        <Alert>
+          <AlertTitle>Done</AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-3">
+            <span>{success}</span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSuccess(null)}
+            >
+              <X />
+            </Button>
+          </AlertDescription>
+        </Alert>
       )}
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid gap-5 md:grid-cols-2">
         {/* Export */}
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title">Export Configuration</h2>
-            <p className="text-sm opacity-70">
-              Download a JSON backup of all integrations, groups, scenes, and routines.
+        <Card>
+          <CardHeader>
+            <CardTitle>Export Configuration</CardTitle>
+            <CardDescription>
+              Download a JSON backup of all integrations, groups, scenes, and
+              routines.
               {isMemoryOnly
                 ? ' This file is the durable copy of your current runtime state while the server stays memory-only.'
                 : ' Keep one before major changes so you can roll the config back quickly.'}
-            </p>
-            <div className="card-actions mt-4">
-              <button
-                className="btn btn-primary"
-                onClick={handleExport}
-                disabled={exporting}
-              >
-                {exporting ? (
-                  <>
-                    <span className="loading loading-spinner loading-sm"></span>
-                    Exporting...
-                  </>
-                ) : (
-                  'Download Backup'
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
+            </CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button
+              onClick={handleExport}
+              disabled={exporting}
+              className="w-full sm:w-auto"
+            >
+              <Download />
+              {exporting ? 'Exporting…' : 'Download Backup'}
+            </Button>
+          </CardFooter>
+        </Card>
 
         {/* Import */}
-        <div className="card bg-base-200 shadow-xl">
-          <div className="card-body">
-            <h2 className="card-title">Import Configuration</h2>
-            <p className="text-sm opacity-70">
-              Upload a JSON configuration file. Existing items with matching IDs will
-              be updated.
+        <Card>
+          <CardHeader>
+            <CardTitle>Import Configuration</CardTitle>
+            <CardDescription>
+              Upload a JSON configuration file. Existing items with matching IDs
+              will be updated.
               {isMemoryOnly
                 ? ' Importing updates the live runtime immediately, so export again afterward if you need the result to survive a restart before persistence is back.'
                 : ' Imports still apply immediately and then persist to PostgreSQL.'}
-            </p>
-            <div className="card-actions mt-4">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".json"
-                className="file-input file-input-bordered w-full max-w-xs"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleImport(file);
-                }}
-                disabled={importing}
-              />
-              {importing && (
-                <span className="loading loading-spinner loading-sm"></span>
-              )}
-            </div>
-          </div>
-        </div>
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="flex w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleImport(file);
+              }}
+              disabled={importing}
+            />
+            {importing && (
+              <p className="mt-3 flex items-center gap-2 text-sm text-muted-foreground">
+                <Upload className="size-4 animate-pulse" /> Importing…
+              </p>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="alert alert-info">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          fill="none"
-          viewBox="0 0 24 24"
-          className="stroke-current shrink-0 w-6 h-6"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          ></path>
-        </svg>
-        <div>
-          <h3 className="font-bold">Configuration Hot-Reload</h3>
-          <div className="text-sm">
-            Changes made through these editors are applied immediately without restarting
-            the server.
-          </div>
-        </div>
-      </div>
+      <Alert>
+        <Info className="size-4" />
+        <AlertTitle>Configuration Hot-Reload</AlertTitle>
+        <AlertDescription>
+          Changes made through these editors are applied immediately without
+          restarting the server.
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

@@ -1,12 +1,3 @@
-import {
-  Button,
-  Checkbox,
-  Input,
-  Modal,
-  Range,
-  Tabs,
-  Toggle,
-} from 'react-daisyui';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
@@ -38,8 +29,18 @@ import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { DeviceKey } from '@/bindings/DeviceKey';
 import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
-import clsx from 'clsx';
 import { useToggle } from 'usehooks-ts';
+import { Button } from '@/ui/primitives/button';
+import { Checkbox } from '@/ui/primitives/checkbox';
+import { Input } from '@/ui/primitives/input';
+import { Switch } from '@/ui/primitives/switch';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { ScrollArea } from '@/ui/primitives/scroll-area';
+import { cn } from '@/lib/cn';
+
+const rangeClassName =
+  'h-2 w-full cursor-pointer appearance-none rounded-full bg-secondary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
@@ -129,9 +130,9 @@ const ColorWheelTab = ({
           className="mx-auto"
         />
       </div>
-      <Range
-        className="w-full"
-        size="lg"
+      <input
+        type="range"
+        className={rangeClassName}
         onChange={handleBrightnessChange}
         onTouchEnd={handleChangeComplete}
         onMouseUp={handleChangeComplete}
@@ -226,9 +227,9 @@ const SwatchesTab = ({
           className="flex-1"
         />
       </div>
-      <Range
-        className="mt-6 w-full"
-        size="lg"
+      <input
+        type="range"
+        className={cn(rangeClassName, 'mt-6')}
         onChange={handleBrightnessChange}
         onTouchEnd={handleChangeComplete}
         onMouseUp={handleChangeComplete}
@@ -395,9 +396,9 @@ const SlidersTab = ({
     <>
       Hue:
       <div className="flex items-center">
-        <Range
-          className="w-full"
-          size="lg"
+        <input
+          type="range"
+          className={rangeClassName}
           onChange={handleHueChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
@@ -417,9 +418,9 @@ const SlidersTab = ({
       </div>
       Saturation:
       <div className="flex items-center">
-        <Range
-          className="w-full"
-          size="lg"
+        <input
+          type="range"
+          className={rangeClassName}
           onChange={handleSatChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
@@ -439,9 +440,9 @@ const SlidersTab = ({
       </div>
       Brightness:
       <div className="flex items-center">
-        <Range
-          className="w-full"
-          size="lg"
+        <input
+          type="range"
+          className={rangeClassName}
           onChange={handleBriChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
@@ -621,10 +622,12 @@ const ImageTab = ({
     <>
       <div ref={pastedImageContainer} className="min-h-0 w-full flex-1 pb-4" />
       <div className="flex w-full justify-center gap-4">
-        <Button startIcon={<Clipboard />} onClick={handlePasteClick}>
+        <Button onClick={handlePasteClick}>
+          <Clipboard />
           Paste image
         </Button>
-        <Button startIcon={<Dices />} onClick={handleApplyToDevices}>
+        <Button onClick={handleApplyToDevices}>
+          <Dices />
           Apply colors
         </Button>
       </div>
@@ -637,9 +640,9 @@ const ImageTab = ({
       <div className="flex flex-nowrap gap-4">
         <div>
           Saturation:
-          <Range
-            className="mt-2"
-            size="lg"
+          <input
+            type="range"
+            className={cn(rangeClassName, 'mt-2')}
             onChange={handleSaturationChange}
             min={0}
             max={100}
@@ -648,9 +651,9 @@ const ImageTab = ({
         </div>
         <div>
           Brightness:
-          <Range
-            className="mt-2"
-            size="lg"
+          <input
+            type="range"
+            className={cn(rangeClassName, 'mt-2')}
             onChange={handleBrightnessChange}
             min={0}
             max={100}
@@ -711,31 +714,24 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
 
       {showSettings ? (
         <div className="flex gap-3">
-          <Button
-            className="flex-1"
-            onClick={toggleShowAll}
-            endIcon={<Checkbox checked={showAll} onChange={console.log} />}
-          >
+          <Button className="flex-1" onClick={toggleShowAll}>
             Show all scenes
+            <Checkbox checked={showAll} tabIndex={-1} aria-hidden />
           </Button>
 
-          <Button
-            className="flex-1"
-            onClick={togglePersist}
-            endIcon={
-              <Checkbox checked={persistEnabled} onChange={console.log} />
-            }
-          >
+          <Button className="flex-1" onClick={togglePersist}>
             Autosave scene state
+            <Checkbox checked={persistEnabled} tabIndex={-1} aria-hidden />
           </Button>
         </div>
       ) : (
         <Button
           className="absolute bottom-0 right-0 px-2"
-          color="ghost"
+          variant="ghost"
           onClick={toggleShowSettings}
-          startIcon={<Settings />}
-        />
+        >
+          <Settings />
+        </Button>
       )}
     </>
   );
@@ -863,94 +859,120 @@ export const ColorPickerModal = () => {
     setDeviceModalOpen(false);
   }, [setDeviceModalOpen]);
 
-  const [tab, setTab] = useState(0);
+  const [tab, setTab] = useState('wheel');
   return (
-    <Modal.Legacy
-      responsive
+    <ResponsiveOverlay
       open={deviceModalOpen}
-      onClickBackdrop={closeDeviceModal}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) {
+          closeDeviceModal();
+        }
+      }}
+      title={deviceModalTitle ?? 'Device controls'}
+      description={
+        persistEnabled
+          ? 'Scene autosave is enabled for this selection.'
+          : `${deviceModalState.length} selected ${
+              deviceModalState.length === 1 ? 'device' : 'devices'
+            }.`
+      }
+      className="max-w-3xl"
     >
-      <Modal.Header className="flex items-center justify-between font-bold">
-        <Toggle
-          checked={deviceModalPower ?? false}
-          onChange={() => partialSetDevicePower(!deviceModalPower)}
-          size="lg"
-        />
-        <div
-          className={clsx(
-            'mx-4 text-center',
-            persistEnabled && 'text-secondary',
-          )}
-        >
-          {deviceModalTitle}
+      <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3">
+          <div>
+            <div className="text-sm font-medium">Power</div>
+            <div className="text-xs text-muted-foreground">
+              Toggle all selected controllable devices.
+            </div>
+          </div>
+          <Switch
+            checked={deviceModalPower ?? false}
+            onCheckedChange={() => partialSetDevicePower(!deviceModalPower)}
+          />
         </div>
-        <Button onClick={closeDeviceModal} variant="outline">
-          <X />
-        </Button>
-      </Modal.Header>
 
-      <Modal.Body>
-        <Tabs
-          className="mb-3 flex-nowrap overflow-x-auto pb-3"
-          variant="bordered"
-          size="lg"
-        >
-          <Tabs.Tab active={tab === 0} onClick={() => setTab(0)}>
-            Wheel
-          </Tabs.Tab>
-          <Tabs.Tab active={tab === 1} onClick={() => setTab(1)}>
-            Swatches
-          </Tabs.Tab>
-          <Tabs.Tab active={tab === 2} onClick={() => setTab(2)}>
-            Image
-          </Tabs.Tab>
-          <Tabs.Tab active={tab === 3} onClick={() => setTab(3)}>
-            Sliders
-          </Tabs.Tab>
-          <Tabs.Tab active={tab === 4} onClick={() => setTab(4)}>
-            Scenes
-          </Tabs.Tab>
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto">
+            <TabsTrigger value="wheel" className="shrink-0">
+              Wheel
+            </TabsTrigger>
+            <TabsTrigger value="swatches" className="shrink-0">
+              Swatches
+            </TabsTrigger>
+            <TabsTrigger value="image" className="shrink-0">
+              Image
+            </TabsTrigger>
+            <TabsTrigger value="sliders" className="shrink-0">
+              Sliders
+            </TabsTrigger>
+            <TabsTrigger value="scenes" className="shrink-0">
+              Scenes
+            </TabsTrigger>
+          </TabsList>
+
+          <ScrollArea className="h-112 rounded-2xl border border-border/60 p-4">
+            <TabsContent
+              value="wheel"
+              className="m-0 flex h-104 flex-col justify-center"
+            >
+              <ColorWheelTab
+                color={deviceModalColor ?? black}
+                brightness={deviceModalBrightness ?? 1}
+                onChange={throttledSetDeviceColor}
+                onChangeComplete={throttledSetDeviceColor}
+                open={deviceModalOpen}
+              />
+            </TabsContent>
+            <TabsContent
+              value="swatches"
+              className="m-0 flex h-104 flex-col justify-center"
+            >
+              <SwatchesTab
+                color={deviceModalColor ?? black}
+                brightness={deviceModalBrightness ?? 1}
+                onChange={throttledSetDeviceColor}
+                onChangeComplete={throttledSetDeviceColor}
+                open={deviceModalOpen}
+              />
+            </TabsContent>
+            <TabsContent
+              value="image"
+              className="m-0 flex h-104 flex-col justify-center"
+            >
+              <ImageTab
+                color={deviceModalColor ?? black}
+                brightness={deviceModalBrightness ?? 1}
+                onChange={throttledSetDeviceColor}
+                open={deviceModalOpen}
+                deviceKeys={deviceModalState}
+              />
+            </TabsContent>
+            <TabsContent
+              value="sliders"
+              className="m-0 flex h-104 flex-col justify-center gap-3"
+            >
+              <SlidersTab
+                color={deviceModalColor ?? black}
+                brightness={deviceModalBrightness ?? 1}
+                onChange={throttledSetDeviceColor}
+                onChangeComplete={throttledSetDeviceColor}
+                open={deviceModalOpen}
+              />
+            </TabsContent>
+            <TabsContent value="scenes" className="m-0 h-104">
+              <ScenesTab deviceKeys={deviceModalState} />
+            </TabsContent>
+          </ScrollArea>
         </Tabs>
-        <div className="flex h-96 flex-col justify-center">
-          {tab === 0 && (
-            <ColorWheelTab
-              color={deviceModalColor ?? black}
-              brightness={deviceModalBrightness ?? 1}
-              onChange={throttledSetDeviceColor}
-              onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen}
-            />
-          )}
-          {tab === 1 && (
-            <SwatchesTab
-              color={deviceModalColor ?? black}
-              brightness={deviceModalBrightness ?? 1}
-              onChange={throttledSetDeviceColor}
-              onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen}
-            />
-          )}
-          {tab === 2 && (
-            <ImageTab
-              color={deviceModalColor ?? black}
-              brightness={deviceModalBrightness ?? 1}
-              onChange={throttledSetDeviceColor}
-              open={deviceModalOpen}
-              deviceKeys={deviceModalState}
-            />
-          )}
-          {tab === 3 && (
-            <SlidersTab
-              color={deviceModalColor ?? black}
-              brightness={deviceModalBrightness ?? 1}
-              onChange={throttledSetDeviceColor}
-              onChangeComplete={throttledSetDeviceColor}
-              open={deviceModalOpen}
-            />
-          )}
-          {tab === 4 && <ScenesTab deviceKeys={deviceModalState} />}
+
+        <div className="flex justify-end">
+          <Button variant="outline" onClick={closeDeviceModal}>
+            <X />
+            Close
+          </Button>
         </div>
-      </Modal.Body>
-    </Modal.Legacy>
+      </div>
+    </ResponsiveOverlay>
   );
 };
