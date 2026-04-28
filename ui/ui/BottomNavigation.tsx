@@ -1,10 +1,10 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, List, Map, Settings, Cog } from 'lucide-react';
+import { Cog, LayoutDashboard, List, Map } from 'lucide-react';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { Button } from '@/ui/primitives/button';
 import { cn } from '@/lib/cn';
 
-type Route = 'Dashboard' | 'Floorplan' | 'Groups' | 'Config' | 'Settings';
+type Route = 'Dashboard' | 'Floorplan' | 'Groups' | 'Config';
 
 const getRoute = (pathname: string | null): Route => {
   if (pathname === '/' || pathname === '/dashboard') {
@@ -18,7 +18,7 @@ const getRoute = (pathname: string | null): Route => {
   } else if (pathname?.startsWith('/config')) {
     return 'Config';
   } else if (pathname === '/settings') {
-    return 'Settings';
+    return 'Config';
   } else {
     return 'Dashboard';
   }
@@ -44,17 +44,11 @@ export const HomectlBottomNavigation = () => {
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Groups', icon: List },
     { route: 'Config' as const, to: '/config', label: 'Config', icon: Cog },
-    {
-      route: 'Settings' as const,
-      to: '/settings',
-      label: 'Settings',
-      icon: Settings,
-    },
   ];
 
   return (
-    <div className="z-30 shrink-0 border-t border-border/60 bg-background/85 px-2 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] pt-1.5 shadow-[0_-12px_35px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-backdrop-filter:bg-background/75">
-      <nav aria-label="Primary navigation" className="grid grid-cols-5 gap-1">
+    <div className="z-30 shrink-0 border-t border-border/60 bg-background/85 px-2 pb-[calc(env(safe-area-inset-bottom)+0.5rem)] pt-2 shadow-[0_-12px_35px_rgba(15,23,42,0.08)] backdrop-blur-xl supports-backdrop-filter:bg-background/75">
+      <nav aria-label="Primary navigation" className="grid grid-cols-4 gap-1.5">
         {items.map((item) => {
           const Icon = item.icon;
           const active = route === item.route;
@@ -65,13 +59,15 @@ export const HomectlBottomNavigation = () => {
               asChild
               variant={active ? 'secondary' : 'ghost'}
               className={cn(
-                'h-12 flex-col gap-1 rounded-2xl px-1 text-[0.68rem] font-medium',
+                'h-14 min-w-0 flex-col gap-1.5 rounded-2xl px-1 py-1.5 text-[0.7rem] font-medium leading-tight',
                 active && 'text-foreground shadow-sm',
               )}
             >
               <Link to={item.to} aria-current={active ? 'page' : undefined}>
                 <Icon className="size-4" />
-                <span className="truncate">{item.label}</span>
+                <span className="max-w-full truncate leading-tight">
+                  {item.label}
+                </span>
               </Link>
             </Button>
           );

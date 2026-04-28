@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 
+import { ConfigPageHeader } from '../page-header';
 import {
   useDashboardLayouts,
   useDashboardWidgets,
@@ -192,17 +193,13 @@ export default function DashboardConfigPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Dashboard Configuration
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Compose mobile-first dashboards from reusable widgets and layouts.
-          </p>
-        </div>
-        <Button onClick={() => setShowAddLayout(true)}>Add Layout</Button>
-      </div>
+      <ConfigPageHeader
+        title="Dashboard Configuration"
+        description="Compose mobile-first dashboards from reusable widgets and layouts."
+        actions={
+          <Button onClick={() => setShowAddLayout(true)}>Add Layout</Button>
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <Card>

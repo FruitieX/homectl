@@ -11,6 +11,7 @@ import {
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useDevicesState } from '@/hooks/websocket';
+import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import {
   getDefaultDeviceLabel,
@@ -1029,15 +1030,17 @@ export default function DevicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-bold">Devices</h1>
-        <p className="max-w-3xl text-sm text-muted-foreground">
-          Configure user-facing device labels, inspect live runtime state, and
-          trigger fake sensor updates without opening the floorplan. Active
-          scenes and scene-derived state sources are shown for controllable
-          devices whenever the runtime exposes them.
-        </p>
-      </div>
+      <ConfigPageHeader
+        title="Devices"
+        description={
+          <>
+            Configure user-facing device labels, inspect live runtime state, and
+            trigger fake sensor updates without opening the floorplan. Active
+            scenes and scene-derived state sources are shown for controllable
+            devices whenever the runtime exposes them.
+          </>
+        }
+      />
 
       {error && (
         <Alert variant="warning">

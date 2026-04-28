@@ -1,7 +1,7 @@
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useDeviceState, useWebsocket } from '@/hooks/websocket';
 import { produce } from 'immer';
-import { Car, Edit, LampCeiling, X } from 'lucide-react';
+import { Car, Edit, LampCeiling } from 'lucide-react';
 import { useTimeout, useToggle } from 'usehooks-ts';
 import Viewport from '../map/Viewport';
 import { useSelectedDevices } from '@/hooks/selectedDevices';
@@ -178,16 +178,13 @@ export const ControlsCard = () => {
         className="max-w-6xl"
       >
         <div className="space-y-3 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex items-center justify-end gap-2">
-            {selectedDevices.length > 0 && (
+          {selectedDevices.length > 0 && (
+            <div className="flex items-center justify-end gap-2">
               <Button variant="ghost" size="icon" onClick={editSelectedDevices}>
                 <Edit />
               </Button>
-            )}
-            <Button onClick={toggleMapVisible} variant="outline" size="icon">
-              <X />
-            </Button>
-          </div>
+            </div>
+          )}
           <div className="relative h-[70dvh] overflow-hidden rounded-3xl border border-border bg-background">
             {mapVisible && <Viewport />}
           </div>

@@ -14,6 +14,7 @@ import {
 } from '@/lib/deviceLabel';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { ConfigPageHeader } from '../page-header';
 import {
   ConfigField,
   ConfigFormActions,
@@ -114,15 +115,11 @@ export default function GroupsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Groups</h1>
-          <p className="text-sm text-muted-foreground">
-            Organize devices and nested groups into controllable targets.
-          </p>
-        </div>
-        <Button onClick={() => setShowCreate(true)}>Add Group</Button>
-      </div>
+      <ConfigPageHeader
+        title="Groups"
+        description="Organize devices and nested groups into controllable targets."
+        actions={<Button onClick={() => setShowCreate(true)}>Add Group</Button>}
+      />
 
       <ConfigListSearchBar
         filteredCount={visibleGroups.length}

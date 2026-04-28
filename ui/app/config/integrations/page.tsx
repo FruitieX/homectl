@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { type Integration, useIntegrations } from '@/hooks/useConfig';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { ConfigPageHeader } from '../page-header';
 import {
   ConfigField,
   ConfigFormActions,
@@ -82,15 +83,13 @@ export default function IntegrationsPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
-          <p className="text-sm text-muted-foreground">
-            Connect plugins, schedules, and virtual devices to the runtime.
-          </p>
-        </div>
-        <Button onClick={() => setShowCreate(true)}>Add Integration</Button>
-      </div>
+      <ConfigPageHeader
+        title="Integrations"
+        description="Connect plugins, schedules, and virtual devices to the runtime."
+        actions={
+          <Button onClick={() => setShowCreate(true)}>Add Integration</Button>
+        }
+      />
 
       <ConfigListSearchBar
         filteredCount={visibleIntegrations.length}

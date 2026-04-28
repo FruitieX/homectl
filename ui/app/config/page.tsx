@@ -6,6 +6,7 @@ import {
   matchesConfigSectionSearch,
   type ConfigSection,
 } from './sections';
+import { ConfigPageHeader } from './page-header';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -34,13 +35,11 @@ export default function ConfigPage() {
   return (
     <div className="space-y-6">
       <div className="space-y-3">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Config hub</h1>
-          <p className="text-sm text-muted-foreground">
-            Search or browse all configuration domains from one mobile-friendly
-            hub.
-          </p>
-        </div>
+        <ConfigPageHeader
+          backTo={null}
+          title="Config hub"
+          description="Search or browse all configuration domains from one mobile-friendly hub."
+        />
         <Input
           value={search}
           onChange={(event) => setSearch(event.target.value)}

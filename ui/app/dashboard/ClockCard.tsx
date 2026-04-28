@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
-import { X, Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import useIdle from '@/hooks/useIdle';
 import { useAppConfig } from '@/hooks/appConfig';
@@ -309,7 +309,7 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
           onClick={toggleDetailsModal}
         >
           <CardContent className="flex w-full flex-col items-center justify-center px-4 py-5">
-            <span className="font-mono text-[clamp(1.75rem,8vw,3.5rem)] leading-none tracking-tight">
+            <span className="font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
               {time !== null && (
                 <>
                   {time.getHours().toString().padStart(2, '0')}:
@@ -341,12 +341,6 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
         className="max-w-3xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex justify-end">
-            <Button onClick={toggleDetailsModal} variant="outline" size="icon">
-              <X />
-            </Button>
-          </div>
-
           <div className="flex flex-col gap-4">
             {error && (
               <Alert variant="destructive">

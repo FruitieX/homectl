@@ -42,7 +42,7 @@ export function DialogContent({
       >
         {children}
         {showClose && (
-          <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-2 text-muted-foreground opacity-80 transition-opacity hover:bg-muted hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none">
+          <DialogPrimitive.Close className="absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none">
             <X className="size-4" />
             <span className="sr-only">Close</span>
           </DialogPrimitive.Close>
@@ -54,7 +54,7 @@ export function DialogContent({
 
 export function DialogHeader({ className, ...props }: ComponentProps<'div'>) {
   return (
-    <div className={cn('flex flex-col gap-1.5 pr-10', className)} {...props} />
+    <div className={cn('flex flex-col gap-1.5 pr-12', className)} {...props} />
   );
 }
 

@@ -3,6 +3,7 @@ import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { useEffect, useState } from 'react';
 
 const appConfigAtom = atom<Config | null>(null);
+const APP_CONFIG_PATH = '/api/config';
 
 type ConfigResponse = Partial<Config> & {
   ws_endpoint?: string;
@@ -15,20 +16,58 @@ type ConfigResponse = Partial<Config> & {
   calendar_ics_url?: string;
 };
 
-function normalizeConfig(config: ConfigResponse): Config {
+function firstNonEmptyString(...values: unknown[]) {
+  for (const value of values) {
+    if (typeof value !== 'string') {
+      continue;
+    }
+
+    const trimmedValue = value.trim();
+    if (trimmedValue !== '') {
+      return trimmedValue;
+    }
+  }
+}
+
+function normalizeBaseUrl(baseUrl: string | undefined) {
+  return baseUrl?.replace(/\/+$/, '') ?? '';
+}
+
+function resolveApiUrl(apiEndpoint: string, path: string) {
+  if (!apiEndpoint) {
+    return path;
+  }
+
+  return `${apiEndpoint}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function normalizeConfig(
+  config: ConfigResponse,
+  fallbackApiEndpoint: string,
+): Config {
   return {
     wsEndpoint:
-      config.wsEndpoint ??
-      config.ws_endpoint ??
+      firstNonEmptyString(config.wsEndpoint, config.ws_endpoint) ??
       `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}/ws`,
-    apiEndpoint: config.apiEndpoint ?? config.api_endpoint ?? '',
-    weatherApiUrl: config.weatherApiUrl ?? config.weather_api_url ?? '',
-    trainApiUrl: config.trainApiUrl ?? config.train_api_url ?? '',
-    influxUrl: config.influxUrl ?? config.influx_url ?? '',
-    influxToken: config.influxToken ?? config.influx_token ?? '',
+    apiEndpoint: normalizeBaseUrl(
+      firstNonEmptyString(
+        config.apiEndpoint,
+        config.api_endpoint,
+        fallbackApiEndpoint,
+      ),
+    ),
+    weatherApiUrl:
+      firstNonEmptyString(config.weatherApiUrl, config.weather_api_url) ?? '',
+    trainApiUrl:
+      firstNonEmptyString(config.trainApiUrl, config.train_api_url) ?? '',
+    influxUrl: firstNonEmptyString(config.influxUrl, config.influx_url) ?? '',
+    influxToken:
+      firstNonEmptyString(config.influxToken, config.influx_token) ?? '',
     calendarApiUrl:
-      config.calendarApiUrl ?? config.calendar_api_url ?? '/api/calendar',
-    calendarIcsUrl: config.calendarIcsUrl ?? config.calendar_ics_url ?? '',
+      firstNonEmptyString(config.calendarApiUrl, config.calendar_api_url) ??
+      '/api/calendar',
+    calendarIcsUrl:
+      firstNonEmptyString(config.calendarIcsUrl, config.calendar_ics_url) ?? '',
   };
 }
 
@@ -37,10 +76,14 @@ export const useProvideAppConfig = () => {
   const setConfig = useSetAtom(appConfigAtom);
 
   useEffect(() => {
+    const apiEndpoint = normalizeBaseUrl(
+      firstNonEmptyString(import.meta.env.API_ENDPOINT),
+    );
+
     const performFetch = async () => {
-      const res = await fetch('/api/config');
+      const res = await fetch(resolveApiUrl(apiEndpoint, APP_CONFIG_PATH));
       const json = (await res.json()) as ConfigResponse;
-      setConfig(normalizeConfig(json));
+      setConfig(normalizeConfig(json, apiEndpoint));
       setLoaded(true);
     };
 

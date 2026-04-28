@@ -3,6 +3,7 @@ import {
   ConfigExport,
   useRuntimeStatus,
 } from '@/hooks/useConfig';
+import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -77,14 +78,10 @@ export default function ImportExportPage() {
 
   return (
     <div className="max-w-5xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">
-          Import / Export Configuration
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Create durable JSON backups and restore runtime configuration safely.
-        </p>
-      </div>
+      <ConfigPageHeader
+        title="Import / Export Configuration"
+        description="Create durable JSON backups and restore runtime configuration safely."
+      />
 
       <Alert variant={isMemoryOnly ? 'warning' : 'default'}>
         <Info className="size-4" />

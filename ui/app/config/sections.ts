@@ -64,9 +64,18 @@ export const configSections = [
   {
     href: '/config/settings',
     label: 'Settings',
-    description: 'Core server settings such as warmup and runtime behavior.',
+    description:
+      'Appearance, core server settings, warmup, and runtime behavior.',
     group: 'Operations',
-    keywords: ['server', 'core', 'warmup', 'runtime'],
+    keywords: [
+      'appearance',
+      'theme',
+      'display',
+      'server',
+      'core',
+      'warmup',
+      'runtime',
+    ],
   },
   {
     href: '/config/logs',
@@ -91,10 +100,6 @@ export const configSections = [
     keywords: ['toml', 'legacy', 'migration', 'database'],
   },
 ] satisfies ConfigSection[];
-
-export function getActiveConfigSection(pathname: string) {
-  return configSections.find((section) => pathname.startsWith(section.href));
-}
 
 export function matchesConfigSectionSearch(
   section: ConfigSection,

@@ -1,12 +1,15 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Save, Server, Wifi } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { Monitor, Moon, Save, Server, Sun, Wifi } from 'lucide-react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { useAppConfig } from '@/hooks/appConfig';
+import { useTheme, type ThemeMode } from '@/hooks/theme';
+import { cn } from '@/lib/cn';
+import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -53,6 +56,16 @@ const defaultValues: CoreConfigFormValues = {
   warmupTimeSeconds: 1,
 };
 
+const themeOptions: {
+  value: ThemeMode;
+  label: string;
+  icon: ReactNode;
+}[] = [
+  { value: 'light', label: 'Light', icon: <Sun className="size-5" /> },
+  { value: 'dark', label: 'Dark', icon: <Moon className="size-5" /> },
+  { value: 'auto', label: 'Auto', icon: <Monitor className="size-5" /> },
+];
+
 function normalizeCoreConfig(
   value: CoreConfigApiResponse | null | undefined,
 ): CoreConfigFormValues {
@@ -94,8 +107,10 @@ async function updateCoreConfig(
 }
 
 export default function SettingsPage() {
-  const { apiEndpoint } = useAppConfig();
-  const [settingsTab, setSettingsTab] = useState<'core' | 'info'>('core');
+  const { apiEndpoint, wsEndpoint } = useAppConfig();
+  const [settingsTab, setSettingsTab] = useState<
+    'appearance' | 'core' | 'info'
+  >('appearance');
   const form = useForm<CoreConfigFormValues>({
     resolver: zodResolver(coreConfigFormSchema),
     defaultValues,
@@ -131,42 +146,12 @@ export default function SettingsPage() {
   };
 
   const changeSettingsTab = (value: string) => {
-    if (value === 'core' || value === 'info') {
+    if (value === 'appearance' || value === 'core' || value === 'info') {
       setSettingsTab(value);
     }
   };
 
-  if (query.isLoading) {
-    return (
-      <div className="grid max-w-3xl gap-4">
-        <Skeleton className="h-20" />
-        <Skeleton className="h-44" />
-        <Skeleton className="h-80" />
-      </div>
-    );
-  }
-
-  if (query.error && !query.data) {
-    return (
-      <Alert variant="destructive" className="max-w-3xl">
-        <AlertTitle>Could not load settings</AlertTitle>
-        <AlertDescription className="mt-2 flex flex-col gap-3">
-          <span>
-            {query.error instanceof Error
-              ? query.error.message
-              : 'Failed to connect to server'}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => void query.refetch()}
-          >
-            Retry
-          </Button>
-        </AlertDescription>
-      </Alert>
-    );
-  }
+  const displayApiEndpoint = `${apiEndpoint}/api/v1`;
 
   return (
     <Form {...form}>
@@ -174,26 +159,22 @@ export default function SettingsPage() {
         className="max-w-3xl space-y-5"
         onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
       >
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">
-              Server Settings
-            </h1>
-            <p className="text-sm text-muted-foreground">
-              Tune startup behavior and inspect server endpoints.
-            </p>
-          </div>
-          <Button
-            type="submit"
-            disabled={!form.formState.isDirty || mutation.isPending}
-            className="w-full sm:w-auto"
-          >
-            <Save />
-            {mutation.isPending ? 'Saving…' : 'Save changes'}
-          </Button>
-        </div>
+        <ConfigPageHeader
+          title="Settings"
+          description="Personalize the app shell, tune startup behavior, and inspect server endpoints."
+          actions={
+            <Button
+              type="submit"
+              disabled={!form.formState.isDirty || mutation.isPending}
+              className="w-full sm:w-auto"
+            >
+              <Save />
+              {mutation.isPending ? 'Saving…' : 'Save changes'}
+            </Button>
+          }
+        />
 
-        {query.error && (
+        {query.error && query.data && (
           <Alert variant="warning">
             <AlertTitle>Settings may be stale</AlertTitle>
             <AlertDescription>
@@ -205,56 +186,86 @@ export default function SettingsPage() {
         )}
 
         <Tabs value={settingsTab} onValueChange={changeSettingsTab}>
-          <TabsList className="grid h-auto w-full grid-cols-2">
+          <TabsList className="grid h-auto w-full grid-cols-3">
+            <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="core">Core</TabsTrigger>
             <TabsTrigger value="info">Info</TabsTrigger>
           </TabsList>
 
+          <TabsContent value="appearance" className="mt-4">
+            <AppearanceSettingsCard />
+          </TabsContent>
+
           <TabsContent value="core" className="mt-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Core Settings</CardTitle>
-                <CardDescription>
-                  Controls how long homectl waits before automation routines
-                  begin.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <FormField
-                  control={form.control}
-                  name="warmupTimeSeconds"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Warmup Time (seconds)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          min={0}
-                          max={60}
-                          inputMode="numeric"
-                          value={field.value}
-                          onBlur={field.onBlur}
-                          onChange={(event) =>
-                            field.onChange(
-                              Number.isNaN(event.target.valueAsNumber)
-                                ? 0
-                                : event.target.valueAsNumber,
-                            )
-                          }
-                          name={field.name}
-                          ref={field.ref}
-                        />
-                      </FormControl>
-                      <FormDescription>
-                        Increase this if devices are not ready when routines
-                        first run.
-                      </FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </CardContent>
-            </Card>
+            {query.isLoading && !query.data ? (
+              <div className="grid gap-4">
+                <Skeleton className="h-44" />
+              </div>
+            ) : query.error && !query.data ? (
+              <Alert variant="destructive">
+                <AlertTitle>Could not load server settings</AlertTitle>
+                <AlertDescription className="mt-2 flex flex-col gap-3">
+                  <span>
+                    {query.error instanceof Error
+                      ? query.error.message
+                      : 'Failed to connect to server'}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void query.refetch()}
+                  >
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>Core Settings</CardTitle>
+                  <CardDescription>
+                    Controls how long homectl waits before automation routines
+                    begin.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <FormField
+                    control={form.control}
+                    name="warmupTimeSeconds"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Warmup Time (seconds)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={60}
+                            inputMode="numeric"
+                            value={field.value}
+                            onBlur={field.onBlur}
+                            onChange={(event) =>
+                              field.onChange(
+                                Number.isNaN(event.target.valueAsNumber)
+                                  ? 0
+                                  : event.target.valueAsNumber,
+                              )
+                            }
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Increase this if devices are not ready when routines
+                          first run.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="info" className="mt-4">
@@ -272,7 +283,7 @@ export default function SettingsPage() {
                     API Endpoint:
                   </span>
                   <code className="rounded-md bg-muted px-1.5 py-0.5">
-                    /api/v1
+                    {displayApiEndpoint}
                   </code>
                 </p>
                 <p className="flex items-center gap-2">
@@ -281,12 +292,8 @@ export default function SettingsPage() {
                     WebSocket:
                   </span>
                   <code className="rounded-md bg-muted px-1.5 py-0.5">
-                    /api/v1/ws
+                    {wsEndpoint}
                   </code>
-                </p>
-                <p>
-                  Dashboard source settings now live on each configurable widget
-                  instance in Config → Dashboard.
                 </p>
               </CardContent>
             </Card>
@@ -294,5 +301,46 @@ export default function SettingsPage() {
         </Tabs>
       </form>
     </Form>
+  );
+}
+
+function AppearanceSettingsCard() {
+  const [themeMode, setThemeMode] = useTheme();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Appearance</CardTitle>
+        <CardDescription>
+          Choose a theme or let homectl follow the system preference.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted p-1">
+            {themeOptions.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                variant={themeMode === option.value ? 'default' : 'ghost'}
+                className={cn(
+                  'h-16 flex-col rounded-xl text-xs sm:h-11 sm:flex-row sm:text-sm',
+                  themeMode === option.value && 'shadow-sm',
+                )}
+                onClick={() => setThemeMode(option.value)}
+              >
+                {option.icon}
+                <span>{option.label}</span>
+              </Button>
+            ))}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            {themeMode === 'auto'
+              ? 'Theme follows your system preference.'
+              : `Using ${themeMode} theme.`}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

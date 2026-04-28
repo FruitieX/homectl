@@ -11,6 +11,7 @@ import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { useMemo, useState } from 'react';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import { useDevicesState, useRoutineStatuses } from '@/hooks/websocket';
+import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
@@ -113,10 +114,12 @@ export default function RoutinesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-bold">Routines</h1>
-        <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
-      </div>
+      <ConfigPageHeader
+        title="Routines"
+        actions={
+          <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
+        }
+      />
 
       <ConfigListSearchBar
         filteredCount={visibleRoutines.length}

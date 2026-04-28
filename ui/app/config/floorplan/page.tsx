@@ -7,6 +7,7 @@ import {
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useCallback, useState, useRef, useEffect } from 'react';
+import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { Device } from '@/bindings/Device';
@@ -454,66 +455,61 @@ export default function FloorplanPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Floorplan Editor
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Manage floorplan canvases, background images, device placements, and
-            group masks.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant={hasChanges ? 'secondary' : 'default'}
-            onClick={handleSave}
-            disabled={loading || floorplanLoading || !selectedFloorplanId}
-          >
-            {loading ? (
-              <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-            ) : null}
-            Save Floorplan
-          </Button>
-          <Button
-            variant="outline"
-            disabled={loading || floorplanLoading || !selectedFloorplanId}
-            onClick={handleExport}
-          >
-            Export JSON
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className={
-              loading || floorplanLoading || !selectedFloorplanId
-                ? 'pointer-events-none opacity-50'
-                : undefined
-            }
-          >
-            <label>
-              Import JSON
-              <input
-                type="file"
-                accept=".json"
-                className="hidden"
-                disabled={loading || floorplanLoading || !selectedFloorplanId}
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleImport(file);
-                }}
-              />
-            </label>
-          </Button>
-          <Button
-            variant="ghost"
-            disabled={loading || floorplanLoading || !selectedFloorplanId}
-            onClick={() => setGrid(createEmptyGrid())}
-          >
-            Reset
-          </Button>
-        </div>
-      </div>
+      <ConfigPageHeader
+        title="Floorplan Editor"
+        description="Manage floorplan canvases, background images, device placements, and group masks."
+        actions={
+          <>
+            <Button
+              variant={hasChanges ? 'secondary' : 'default'}
+              onClick={handleSave}
+              disabled={loading || floorplanLoading || !selectedFloorplanId}
+            >
+              {loading ? (
+                <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              ) : null}
+              Save Floorplan
+            </Button>
+            <Button
+              variant="outline"
+              disabled={loading || floorplanLoading || !selectedFloorplanId}
+              onClick={handleExport}
+            >
+              Export JSON
+            </Button>
+            <Button
+              asChild
+              variant="outline"
+              className={
+                loading || floorplanLoading || !selectedFloorplanId
+                  ? 'pointer-events-none opacity-50'
+                  : undefined
+              }
+            >
+              <label>
+                Import JSON
+                <input
+                  type="file"
+                  accept=".json"
+                  className="hidden"
+                  disabled={loading || floorplanLoading || !selectedFloorplanId}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImport(file);
+                  }}
+                />
+              </label>
+            </Button>
+            <Button
+              variant="ghost"
+              disabled={loading || floorplanLoading || !selectedFloorplanId}
+              onClick={() => setGrid(createEmptyGrid())}
+            >
+              Reset
+            </Button>
+          </>
+        }
+      />
 
       {error && (
         <Alert variant="destructive">

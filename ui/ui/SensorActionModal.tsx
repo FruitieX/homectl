@@ -1,7 +1,6 @@
 import { Device } from '@/bindings/Device';
 import { getDeviceKey } from '@/lib/device';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
-import { Button } from '@/ui/primitives/button';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
 
@@ -49,12 +48,6 @@ export const SensorActionModal = ({
     >
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
         <SensorActionPanel device={device} sensorConfig={sensorConfig} />
-
-        <div className="flex justify-end">
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        </div>
       </div>
     </ResponsiveOverlay>
   );

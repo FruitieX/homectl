@@ -1,6 +1,5 @@
-import { useTimeout, useToggle } from 'usehooks-ts';
+import { useTimeout } from 'usehooks-ts';
 import {
-  X,
   Thermometer,
   Droplets,
   TrendingUp,
@@ -176,8 +175,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
 };
 
 export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
-  const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
-    useToggle(false);
+  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
   const [activeSensorId, setActiveSensorId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'individual' | 'combined'>(
     'individual',
@@ -704,20 +702,11 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                 )}
               </div>
             </div>
-            <div className="flex gap-2">
-              {viewMode === 'individual' && (
-                <Button size="sm" variant="ghost" onClick={handleViewAllClick}>
-                  View All
-                </Button>
-              )}
-              <Button
-                onClick={toggleDetailsModal}
-                variant="outline"
-                size="icon"
-              >
-                <X />
+            {viewMode === 'individual' && (
+              <Button size="sm" variant="ghost" onClick={handleViewAllClick}>
+                View All
               </Button>
-            </div>
+            )}
           </div>
 
           <div className="relative flex flex-col gap-4">

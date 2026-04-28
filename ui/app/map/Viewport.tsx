@@ -245,57 +245,29 @@ export const Viewport = () => {
     toggleGroupDevices(groupId);
   };
 
-  const handleRendererModeChange = (value: string) => {
-    const nextMode: RendererMode = value === 'classic' ? 'classic' : 'webgl';
-    setRendererMode(nextMode);
-
-    if (nextMode === 'webgl') {
-      setPixiFallbackReason(null);
-    }
-  };
-
   return (
     <div ref={containerRef} className="absolute left-0 top-0 h-full w-full">
       {floorplans.length > 0 && (
-        <div className="absolute left-3 right-3 top-[calc(env(safe-area-inset-top)+0.75rem)] z-10 rounded-3xl border border-border/70 bg-card/90 p-3 text-card-foreground shadow-xl backdrop-blur-xl sm:left-4 sm:right-auto sm:w-md">
-          <div className="grid gap-3 sm:grid-cols-[1fr_9rem]">
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Floorplan
-              </Label>
-              <Select
-                value={selectedFloorplanId ?? ''}
-                onValueChange={(value) => setSelectedFloorplanId(value || null)}
-              >
-                <SelectTrigger className="h-9 rounded-2xl bg-background/80">
-                  <SelectValue placeholder="Choose floorplan" />
-                </SelectTrigger>
-                <SelectContent>
-                  {floorplans.map((floorplan) => (
-                    <SelectItem key={floorplan.id} value={floorplan.id}>
-                      {floorplan.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                Renderer
-              </Label>
-              <Select
-                value={rendererMode}
-                onValueChange={handleRendererModeChange}
-              >
-                <SelectTrigger className="h-9 rounded-2xl bg-background/80">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="webgl">WebGL</SelectItem>
-                  <SelectItem value="classic">Classic</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <div className="absolute bottom-3 left-3 right-3 z-10 rounded-3xl border border-border/70 bg-card/90 p-3 text-card-foreground shadow-xl backdrop-blur-xl sm:bottom-4 sm:left-auto sm:right-4 sm:w-80">
+          <div className="space-y-1.5">
+            <Label className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+              Floorplan
+            </Label>
+            <Select
+              value={selectedFloorplanId ?? ''}
+              onValueChange={(value) => setSelectedFloorplanId(value || null)}
+            >
+              <SelectTrigger className="h-9 rounded-2xl bg-background/80">
+                <SelectValue placeholder="Choose floorplan" />
+              </SelectTrigger>
+              <SelectContent>
+                {floorplans.map((floorplan) => (
+                  <SelectItem key={floorplan.id} value={floorplan.id}>
+                    {floorplan.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           {pixiFallbackReason && (
             <p className="mt-2 text-xs text-muted-foreground">

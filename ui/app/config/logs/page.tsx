@@ -1,4 +1,5 @@
 import { LogLevel, UiLogEntry, useLogs } from '@/hooks/useConfig';
+import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -91,27 +92,23 @@ export default function LogsPage() {
 
   return (
     <div className="max-w-6xl space-y-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Server Logs</h1>
-          <p className="text-sm text-muted-foreground">
-            Recent runtime logs from the server process. This view
-            auto-refreshes every 5 seconds.
-          </p>
-        </div>
-
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="text-xs text-muted-foreground">
-            {lastUpdated
-              ? `Last updated ${formatTimestamp(lastUpdated)}`
-              : 'Waiting for first update'}
+      <ConfigPageHeader
+        title="Server Logs"
+        description="Recent runtime logs from the server process. This view auto-refreshes every 5 seconds."
+        actions={
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="text-xs text-muted-foreground">
+              {lastUpdated
+                ? `Last updated ${formatTimestamp(lastUpdated)}`
+                : 'Waiting for first update'}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => void refetch()}>
+              <RefreshCw />
+              Refresh Now
+            </Button>
           </div>
-          <Button variant="outline" size="sm" onClick={() => void refetch()}>
-            <RefreshCw />
-            Refresh Now
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
       {error && (
         <Alert variant="warning">

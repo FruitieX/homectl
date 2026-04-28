@@ -1,6 +1,5 @@
 import { Fragment, useEffect, useState, useRef, useMemo } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
-import { X } from 'lucide-react';
 import clsx from 'clsx';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
 import useIdle from '@/hooks/useIdle';
@@ -387,11 +386,6 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex items-center justify-end">
-            <Button onClick={toggleDetailsModal} variant="outline" size="icon">
-              <X />
-            </Button>
-          </div>
           <Tabs
             value={String(activeTab)}
             onValueChange={(value) => setActiveTab(Number(value))}

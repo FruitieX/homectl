@@ -159,7 +159,7 @@ export default function Page() {
 
   if (dashboardLoading) {
     return (
-      <div className="mx-2 overflow-y-auto py-2 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
+      <div className="mx-2 min-h-0 flex-1 overflow-y-auto py-2">
         <DashboardLoadingGrid />
       </div>
     );
@@ -188,7 +188,7 @@ export default function Page() {
   }
 
   return (
-    <div className="mx-2 space-y-3 overflow-y-auto py-2 pb-[calc(env(safe-area-inset-bottom)+5rem)]">
+    <div className="mx-2 min-h-0 flex-1 space-y-3 overflow-y-auto py-2">
       {layouts.length > 1 ? (
         <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card/80 p-2">
           <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">

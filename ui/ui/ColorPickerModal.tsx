@@ -21,7 +21,7 @@ import {
   useScenesState,
   useWebsocket,
 } from '@/hooks/websocket';
-import { Clipboard, X, Dices, Settings } from 'lucide-react';
+import { Clipboard, Dices, Settings } from 'lucide-react';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
 import { excludeUndefined } from 'utils/excludeUndefined';
@@ -965,13 +965,6 @@ export const ColorPickerModal = () => {
             </TabsContent>
           </ScrollArea>
         </Tabs>
-
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={closeDeviceModal}>
-            <X />
-            Close
-          </Button>
-        </div>
       </div>
     </ResponsiveOverlay>
   );

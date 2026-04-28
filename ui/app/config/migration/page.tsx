@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, Info, Upload, X } from 'lucide-react';
 
 import { useAppConfig } from '@/hooks/appConfig';
 import { cn } from '@/lib/cn';
+import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -358,12 +359,10 @@ export default function MigrationPage() {
 
   return (
     <div className="max-w-6xl space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">TOML Migration</h1>
-        <p className="text-sm text-muted-foreground">
-          Import legacy Settings.toml sections in controlled passes.
-        </p>
-      </div>
+      <ConfigPageHeader
+        title="TOML Migration"
+        description="Import legacy Settings.toml sections in controlled passes."
+      />
 
       <Alert variant="warning">
         <AlertTriangle className="size-4" />

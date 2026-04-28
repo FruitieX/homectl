@@ -1,5 +1,4 @@
 import { useRuntimeStatus } from '@/hooks/useConfig';
-import { getActiveConfigSection } from './sections';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import { motion, useReducedMotion } from 'framer-motion';
@@ -13,31 +12,9 @@ export default function ConfigLayout({
   const pathname = useLocation().pathname;
   const { data: runtimeStatus } = useRuntimeStatus(5000);
   const reduceMotion = useReducedMotion();
-  const activeSection = getActiveConfigSection(pathname);
-  const isHub = pathname === '/config';
 
   return (
     <div className="flex h-full flex-col bg-background">
-      <div className="border-b border-border/60 bg-background/90 px-4 py-3 backdrop-blur-xl">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold tracking-tight">
-              Configuration
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              {activeSection && !isHub
-                ? `${activeSection.label}: ${activeSection.description}`
-                : 'Search integrations, automations, layouts, and runtime settings.'}
-            </p>
-          </div>
-          <Button asChild variant={isHub ? 'secondary' : 'outline'} size="sm">
-            <Link to="/config" aria-current={isHub ? 'page' : undefined}>
-              Config hub
-            </Link>
-          </Button>
-        </div>
-      </div>
-
       {runtimeStatus?.memory_only_mode && (
         <Alert variant="warning" className="mx-4 mt-4 shadow-sm">
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">

@@ -1,4 +1,5 @@
 import { Drawer as DrawerPrimitive } from 'vaul';
+import { X } from 'lucide-react';
 import { type ComponentProps } from 'react';
 
 import { cn } from '@/lib/cn';
@@ -39,6 +40,10 @@ export function DrawerContent({
         {...props}
       >
         <div className="mx-auto mt-3 h-1.5 w-12 rounded-full bg-muted-foreground/30" />
+        <DrawerPrimitive.Close className="absolute right-4 top-4 inline-flex size-10 items-center justify-center rounded-full border border-border bg-background/90 text-foreground shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none">
+          <X className="size-4" />
+          <span className="sr-only">Close</span>
+        </DrawerPrimitive.Close>
         {children}
       </DrawerPrimitive.Content>
     </DrawerPortal>
@@ -47,7 +52,10 @@ export function DrawerContent({
 
 export function DrawerHeader({ className, ...props }: ComponentProps<'div'>) {
   return (
-    <div className={cn('grid gap-1.5 px-5 pb-3 pt-5', className)} {...props} />
+    <div
+      className={cn('grid gap-1.5 px-5 pb-3 pr-16 pt-5', className)}
+      {...props}
+    />
   );
 }
 

@@ -10,6 +10,7 @@ import { useAppConfig } from '@/hooks/appConfig';
 import { useMemo, useState } from 'react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
+import { ConfigPageHeader } from '../page-header';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -195,15 +196,11 @@ export default function ScenesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Scenes</h1>
-          <p className="text-sm text-muted-foreground">
-            Compose scripted and linked scene presets for devices and groups.
-          </p>
-        </div>
-        <Button onClick={() => setShowCreate(true)}>Add Scene</Button>
-      </div>
+      <ConfigPageHeader
+        title="Scenes"
+        description="Compose scripted and linked scene presets for devices and groups."
+        actions={<Button onClick={() => setShowCreate(true)}>Add Scene</Button>}
+      />
 
       {activationError && (
         <Alert variant="warning">
