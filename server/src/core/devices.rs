@@ -124,6 +124,38 @@ fn build_spatial_rollout_plan(
     })
 }
 
+fn sort_devices_by_spatial_rollout_source(
+    devices: &mut [Device],
+    source_device_key: &DeviceKey,
+    positions: &BTreeMap<String, DevicePositionRow>,
+) -> bool {
+    let Some(source_position) = positions.get(&source_device_key.to_string()) else {
+        return false;
+    };
+
+    devices.sort_by(|left, right| {
+        let left_key = left.get_device_key();
+        let right_key = right.get_device_key();
+        let left_distance = positions
+            .get(&left_key.to_string())
+            .map(|position| compute_distance(source_position, position));
+        let right_distance = positions
+            .get(&right_key.to_string())
+            .map(|position| compute_distance(source_position, position));
+
+        match (left_distance, right_distance) {
+            (Some(left_distance), Some(right_distance)) => left_distance
+                .total_cmp(&right_distance)
+                .then_with(|| left_key.cmp(&right_key)),
+            (Some(_), None) => std::cmp::Ordering::Less,
+            (None, Some(_)) => std::cmp::Ordering::Greater,
+            (None, None) => left_key.cmp(&right_key),
+        }
+    });
+
+    true
+}
+
 #[derive(Clone)]
 pub struct Devices {
     event_tx: TxEventChannel,
@@ -274,15 +306,37 @@ impl Devices {
 
     /// Recomputes scene state for all devices and updates both internal and
     /// external state accordingly
-    pub fn invalidate(&mut self, invalidated_scenes: &HashSet<SceneId>, scenes: &Scenes) {
+    pub fn invalidate(
+        &mut self,
+        invalidated_device_key: &DeviceKey,
+        invalidated_scenes: &HashSet<SceneId>,
+        scenes: &Scenes,
+        device_positions: &[DevicePositionRow],
+    ) {
+        let positions = device_positions
+            .iter()
+            .cloned()
+            .map(|row| (row.device_key.clone(), row))
+            .collect::<BTreeMap<String, DevicePositionRow>>();
+
         for scene_id in invalidated_scenes {
-            let invalidated_devices: Vec<Device> = self
+            let mut invalidated_devices: Vec<Device> = self
                 .state
                 .0
                 .values()
                 .filter(|d| d.get_scene_id().as_ref() == Some(scene_id))
                 .map(|d| d.set_scene(Some(scene_id), scenes, self))
                 .collect();
+
+            if !sort_devices_by_spatial_rollout_source(
+                &mut invalidated_devices,
+                invalidated_device_key,
+                &positions,
+            ) {
+                trace!(
+                    "Linked-state invalidation source {invalidated_device_key} has no saved floorplan position; using default invalidation order"
+                );
+            }
 
             for device in invalidated_devices {
                 self.set_state(&device, false, false);
@@ -759,7 +813,9 @@ impl Devices {
 
 #[cfg(test)]
 mod tests {
-    use super::{build_spatial_rollout_plan, SpatialRolloutPlan};
+    use super::{
+        build_spatial_rollout_plan, sort_devices_by_spatial_rollout_source, SpatialRolloutPlan,
+    };
     use super::{ActivateSceneRequest, Devices};
     use crate::core::{groups::Groups, scenes::Scenes};
     use crate::db::config_queries::DevicePositionRow;
@@ -956,6 +1012,36 @@ mod tests {
                 delayed_device_keys: Vec::new(),
             })
         );
+    }
+
+    #[test]
+    fn spatial_invalidation_order_prefers_nearest_positioned_targets() {
+        let source = DeviceKey::new(
+            IntegrationId::from("circadian".to_string()),
+            DeviceId::new("color"),
+        );
+        let near = managed_controllable_device("near", "Near");
+        let far = managed_controllable_device("far", "Far");
+        let missing = managed_controllable_device("missing", "Missing");
+        let positions = BTreeMap::from([
+            position(&source, 0.0, 0.0),
+            position(&near.get_device_key(), 1.0, 0.0),
+            position(&far.get_device_key(), 3.0, 0.0),
+        ]);
+        let mut devices = vec![far, missing, near];
+
+        assert!(sort_devices_by_spatial_rollout_source(
+            &mut devices,
+            &source,
+            &positions,
+        ));
+
+        let ordered_keys = devices
+            .iter()
+            .map(|device| device.get_device_key().to_string())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ordered_keys, vec!["mqtt/near", "mqtt/far", "mqtt/missing"]);
     }
 
     #[tokio::test]

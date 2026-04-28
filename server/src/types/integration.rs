@@ -3,8 +3,9 @@ use crate::utils::cli::Cli;
 use super::{device::Device, event::TxEventChannel};
 use async_trait::async_trait;
 use color_eyre::Result;
+use eyre::Context;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, convert::Infallible, str::FromStr};
+use std::{collections::HashMap, convert::Infallible, str::FromStr, time::Duration};
 use ts_rs::TS;
 
 macro_attr! {
@@ -31,6 +32,88 @@ pub struct IntegrationConfig {
 }
 
 pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct IntegrationConfigSchema {
+    pub plugin: String,
+    pub name: String,
+    pub description: String,
+    pub fields: Vec<IntegrationConfigFieldSchema>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct IntegrationConfigFieldSchema {
+    /// Dot-separated config path, for example
+    /// `outbound_device_updates.min_interval_ms`.
+    pub key: String,
+    pub label: String,
+    pub kind: IntegrationConfigFieldKind,
+    pub required: bool,
+    pub description: Option<String>,
+    pub placeholder: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub options: Vec<IntegrationConfigFieldOption>,
+    pub default_value: Option<serde_json::Value>,
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub step: Option<f64>,
+    pub help_text: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum IntegrationConfigFieldKind {
+    Text,
+    Password,
+    Number,
+    Boolean,
+    Select,
+    Color,
+    Json,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+pub struct IntegrationConfigFieldOption {
+    pub label: String,
+    pub value: serde_json::Value,
+    pub description: Option<String>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize, Serialize, Eq, PartialEq)]
+pub struct OutboundDeviceUpdatePolicy {
+    /// Minimum spacing between two outbound device state updates for one
+    /// integration actor. A value of 0 keeps the legacy immediate behavior.
+    #[serde(default)]
+    pub min_interval_ms: u64,
+}
+
+impl OutboundDeviceUpdatePolicy {
+    const CONFIG_KEY: &'static str = "outbound_device_updates";
+
+    pub fn from_config(config: &serde_json::Value) -> Result<Self> {
+        let Some(value) = config
+            .get(Self::CONFIG_KEY)
+            .filter(|value| !value.is_null())
+        else {
+            return Ok(Self::default());
+        };
+
+        serde_json::from_value(value.clone()).wrap_err_with(|| {
+            format!(
+                "Failed to deserialize {} integration config",
+                Self::CONFIG_KEY
+            )
+        })
+    }
+
+    pub fn min_interval(&self) -> Option<Duration> {
+        if self.min_interval_ms == 0 {
+            None
+        } else {
+            Some(Duration::from_millis(self.min_interval_ms))
+        }
+    }
+}
 
 macro_attr! {
     #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]

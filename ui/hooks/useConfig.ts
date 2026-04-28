@@ -1,4 +1,5 @@
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
+import { type JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { useAppConfig } from './appConfig';
@@ -9,6 +10,43 @@ export interface Integration {
   plugin: string;
   config: Record<string, unknown>;
   enabled: boolean;
+}
+
+export type IntegrationConfigFieldKind =
+  | 'text'
+  | 'password'
+  | 'number'
+  | 'boolean'
+  | 'select'
+  | 'color'
+  | 'json';
+
+export interface IntegrationConfigFieldOption {
+  label: string;
+  value: JsonValue;
+  description?: string | null;
+}
+
+export interface IntegrationConfigFieldSchema {
+  key: string;
+  label: string;
+  kind: IntegrationConfigFieldKind;
+  required: boolean;
+  description?: string | null;
+  placeholder?: string | null;
+  options?: IntegrationConfigFieldOption[];
+  default_value?: JsonValue | null;
+  min?: number | null;
+  max?: number | null;
+  step?: number | null;
+  help_text?: string | null;
+}
+
+export interface IntegrationConfigSchema {
+  plugin: string;
+  name: string;
+  description: string;
+  fields: IntegrationConfigFieldSchema[];
 }
 
 export interface Group {
@@ -249,6 +287,34 @@ function useConfigApi<T>(endpoint: string) {
 // Specialized hooks for each config type
 export function useIntegrations() {
   return useConfigApi<Integration>('integrations');
+}
+
+export function useIntegrationConfigSchemas() {
+  const { apiEndpoint } = useAppConfig();
+  const baseUrl = `${apiEndpoint}/api/v1/config`;
+  const endpoint = 'integration-schemas';
+  const queryKey = ['config', baseUrl, endpoint] as const;
+
+  const query = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const response = await fetch(`${baseUrl}/${endpoint}`);
+      const result = await readApiResponse<IntegrationConfigSchema[]>(
+        response,
+        'Failed to fetch integration config schemas',
+      );
+      return result.data ?? [];
+    },
+  });
+
+  const error = query.error instanceof Error ? query.error.message : null;
+
+  return {
+    data: query.data ?? [],
+    loading: query.isLoading,
+    error,
+    refetch: query.refetch,
+  };
 }
 
 export function useGroups() {

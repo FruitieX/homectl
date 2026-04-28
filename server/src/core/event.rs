@@ -242,8 +242,14 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 &state.devices,
                 &state.groups,
             );
+            let device_positions = state.effective_device_positions();
 
-            state.devices.invalidate(&invalidated_scenes, &state.scenes);
+            state.devices.invalidate(
+                device_key,
+                &invalidated_scenes,
+                &state.scenes,
+                &device_positions,
+            );
 
             state
                 .rules
