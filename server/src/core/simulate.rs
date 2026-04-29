@@ -5,25 +5,22 @@ use crate::api::config::{parse_config_backup, ParsedConfigBackup};
 use crate::db::config_queries::{
     self, ConfigExport, GroupRow, IntegrationRow, RoutineRow, SceneRow,
 };
+use crate::db::schema::{
+    CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides, Floorplans,
+    GroupDevices, GroupLinks, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
+    Scenes, WidgetSettings,
+};
 use color_eyre::Result;
 use eyre::eyre;
+use sea_orm::sea_query::{Alias, Expr, Order, Query};
+use sea_orm::{ConnectionTrait, Database, QueryResult, Statement, StatementBuilder};
+use serde::de::DeserializeOwned;
 use serde_json::json;
-use sqlx::PgPool;
-use sqlx::SqlitePool;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-type LegacyFloorplanRow = (
-    Option<Vec<u8>>,
-    Option<String>,
-    Option<i32>,
-    Option<i32>,
-    Option<String>,
-);
-type DashboardWidgetDbRow = (i32, i32, String, String, i32, i32, i32, i32, i32);
-
-/// Load config for simulation from a legacy SQLite DB file when available, or
-/// from the optional JSON backup config file otherwise.
+/// Load config for simulation from a source database when available, or from the
+/// optional JSON backup config file otherwise.
 pub async fn prepare_simulation_config(
     source_db: Option<&str>,
     config_path: Option<&str>,
@@ -87,175 +84,141 @@ pub async fn prepare_simulation_config(
     Ok(config_export)
 }
 
-/// Open a source SQLite DB file with a temporary pool and export its full config.
+/// Open a source SQLite DB file with a temporary SeaORM connection and export
+/// its full config. Current-schema databases share the same export path as the
+/// runtime DB; older SQLite snapshots fall back to a legacy query-builder reader.
 async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
-    let url = format!("sqlite:{}?mode=ro", db_path.display());
-    let pool = SqlitePool::connect(&url).await?;
+    let db = Database::connect(sqlite_readonly_url(db_path)).await?;
 
-    // Read integrations
-    let int_rows: Vec<(String, String, String, bool)> =
-        sqlx::query_as("SELECT id, plugin, config, enabled FROM integrations ORDER BY id")
-            .fetch_all(&pool)
-            .await?;
-    let integrations: Vec<IntegrationRow> = int_rows
-        .into_iter()
-        .map(|(id, plugin, config, enabled)| IntegrationRow {
-            id,
-            plugin,
-            config: serde_json::from_str(&config).unwrap_or_default(),
-            enabled,
-        })
-        .collect();
-
-    // Read core config
-    let core_row: Option<(i32,)> =
-        sqlx::query_as("SELECT warmup_time_seconds FROM core_config WHERE id = 1")
-            .fetch_optional(&pool)
-            .await?;
-    let core = config_queries::CoreConfigRow {
-        warmup_time_seconds: core_row.map(|(w,)| w).unwrap_or(1),
-    };
-
-    // Read groups
-    let group_rows: Vec<(String, String, bool)> =
-        sqlx::query_as("SELECT id, name, hidden FROM groups ORDER BY name")
-            .fetch_all(&pool)
-            .await?;
-    let mut groups = Vec::new();
-    for (id, name, hidden) in group_rows {
-        let devices: Vec<(String, String)> = sqlx::query_as(
-            "SELECT integration_id, COALESCE(device_id, device_name) AS device_id FROM group_devices WHERE group_id = ?",
-        )
-        .bind(&id)
-        .fetch_all(&pool)
-        .await?;
-        let linked: Vec<(String,)> =
-            sqlx::query_as("SELECT linked_group_id FROM group_links WHERE group_id = ?")
-                .bind(&id)
-                .fetch_all(&pool)
-                .await?;
-        groups.push(GroupRow {
-            id,
-            name,
-            hidden,
-            devices: devices
-                .into_iter()
-                .map(|(iid, did)| config_queries::GroupDeviceRow {
-                    integration_id: iid,
-                    device_id: did,
-                })
-                .collect(),
-            linked_groups: linked.into_iter().map(|(g,)| g).collect(),
-        });
-    }
-
-    // Read scenes
-    let scene_rows: Vec<(String, String, bool, Option<String>)> =
-        sqlx::query_as("SELECT id, name, hidden, script FROM scenes ORDER BY name")
-            .fetch_all(&pool)
-            .await?;
-    let mut scenes = Vec::new();
-    for (id, name, hidden, script) in scene_rows {
-        let ds: Vec<(String, String)> =
-            sqlx::query_as("SELECT device_key, config FROM scene_device_states WHERE scene_id = ?")
-                .bind(&id)
-                .fetch_all(&pool)
-                .await?;
-        let gs: Vec<(String, String)> =
-            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = ?")
-                .bind(&id)
-                .fetch_all(&pool)
-                .await?;
-        scenes.push(SceneRow {
-            id,
-            name,
-            hidden,
-            script,
-            device_states: ds
-                .into_iter()
-                .map(|(k, v)| (k, serde_json::from_str(&v).unwrap_or_default()))
-                .collect(),
-            group_states: gs
-                .into_iter()
-                .map(|(k, v)| (k, serde_json::from_str(&v).unwrap_or_default()))
-                .collect(),
-        });
-    }
-
-    // Read routines
-    let routine_rows: Vec<(String, String, bool, String, String)> =
-        sqlx::query_as("SELECT id, name, enabled, rules, actions FROM routines ORDER BY name")
-            .fetch_all(&pool)
-            .await?;
-    let routines: Vec<RoutineRow> = routine_rows
-        .into_iter()
-        .map(|(id, name, enabled, rules, actions)| RoutineRow {
-            id,
-            name,
-            enabled,
-            rules: serde_json::from_str(&rules).unwrap_or_default(),
-            actions: serde_json::from_str(&actions).unwrap_or_default(),
-        })
-        .collect();
-
-    // Read floorplans. Prefer the new multi-floorplan table, but fall back to the
-    // legacy single-row table so simulation still works against older DBs.
-    let mut floorplans: Vec<config_queries::FloorplanExportRow> = match sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<Vec<u8>>,
-            Option<String>,
-            Option<i32>,
-            Option<i32>,
-            Option<String>,
-        ),
-    >(
-        "SELECT id, name, image_data, image_mime_type, width, height, grid_data \
-         FROM floorplans ORDER BY sort_order, name",
-    )
-    .fetch_all(&pool)
-    .await
-    {
-        Ok(rows) => rows
-            .into_iter()
-            .map(
-                |(id, name, image_data, image_mime_type, width, height, grid_data)| {
-                    config_queries::FloorplanExportRow {
-                        id,
-                        name,
-                        image_data,
-                        image_mime_type,
-                        width,
-                        height,
-                        grid_data,
-                    }
-                },
-            )
-            .collect(),
-        Err(_) => {
-            let legacy_floorplan: Option<LegacyFloorplanRow> = sqlx::query_as(
-                "SELECT image_data, image_mime_type, width, height, grid_data FROM floorplan LIMIT 1",
-            )
-            .fetch_optional(&pool)
-            .await?;
-
-            legacy_floorplan
-                .map(|(image_data, image_mime_type, width, height, grid_data)| {
-                    vec![config_queries::FloorplanExportRow {
-                        id: "default".to_string(),
-                        name: "Main floorplan".to_string(),
-                        image_data,
-                        image_mime_type,
-                        width,
-                        height,
-                        grid_data,
-                    }]
-                })
-                .unwrap_or_default()
+    match config_queries::db_export_config_from_connection(&db).await {
+        Ok(export) => Ok(normalize_source_export(export)),
+        Err(error) => {
+            warn!(
+                "Failed to read SQLite source using current schema, trying legacy schema fallback: {error}"
+            );
+            export_from_legacy_sqlite_source_db(&db).await
         }
-    };
+    }
+}
+
+async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExport> {
+    let db = Database::connect(database_url).await?;
+    let export = config_queries::db_export_config_from_connection(&db).await?;
+    Ok(normalize_source_export(export))
+}
+
+async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Result<ConfigExport> {
+    let integrations = all(
+        db,
+        Query::select()
+            .columns([
+                Integrations::Id,
+                Integrations::Plugin,
+                Integrations::Config,
+                Integrations::Enabled,
+            ])
+            .from(Integrations::Table)
+            .order_by(Integrations::Id, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(integration_from_row)
+    .collect::<Result<Vec<_>>>()?;
+
+    let core = one(
+        db,
+        Query::select()
+            .column(CoreConfig::WarmupTimeSeconds)
+            .from(CoreConfig::Table)
+            .and_where(Expr::col(CoreConfig::Id).eq(1))
+            .to_owned(),
+    )
+    .await?
+    .map(|row| config_queries::CoreConfigRow {
+        warmup_time_seconds: get_i32_or_default(&row, "warmup_time_seconds", 1),
+    })
+    .unwrap_or_default();
+
+    let group_rows = all(
+        db,
+        Query::select()
+            .columns([Groups::Id, Groups::Name, Groups::Hidden])
+            .from(Groups::Table)
+            .order_by(Groups::Name, Order::Asc)
+            .to_owned(),
+    )
+    .await?;
+    let mut groups = Vec::new();
+    for row in group_rows {
+        let id: String = row.try_get("", "id")?;
+        groups.push(GroupRow {
+            name: row.try_get("", "name")?,
+            hidden: get_bool_or_default(&row, "hidden", false),
+            devices: legacy_group_devices(db, &id).await?,
+            linked_groups: legacy_group_links(db, &id).await?,
+            id,
+        });
+    }
+
+    let scene_rows = all(
+        db,
+        Query::select()
+            .columns([Scenes::Id, Scenes::Name, Scenes::Hidden, Scenes::Script])
+            .from(Scenes::Table)
+            .order_by(Scenes::Name, Order::Asc)
+            .to_owned(),
+    )
+    .await?;
+    let mut scenes = Vec::new();
+    for row in scene_rows {
+        let id: String = row.try_get("", "id")?;
+        scenes.push(SceneRow {
+            name: row.try_get("", "name")?,
+            hidden: get_bool_or_default(&row, "hidden", false),
+            script: row.try_get("", "script")?,
+            device_states: scene_state_map(
+                db,
+                SceneDeviceStates::Table,
+                SceneDeviceStates::SceneId,
+                SceneDeviceStates::DeviceKey,
+                "device_key",
+                &id,
+            )
+            .await?,
+            group_states: scene_state_map(
+                db,
+                SceneGroupStates::Table,
+                SceneGroupStates::SceneId,
+                SceneGroupStates::GroupId,
+                "group_id",
+                &id,
+            )
+            .await?,
+            id,
+        });
+    }
+
+    let routines = all(
+        db,
+        Query::select()
+            .columns([
+                Routines::Id,
+                Routines::Name,
+                Routines::Enabled,
+                Routines::Rules,
+                Routines::Actions,
+            ])
+            .from(Routines::Table)
+            .order_by(Routines::Name, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(routine_from_row)
+    .collect::<Result<Vec<_>>>()?;
+
+    let mut floorplans = legacy_floorplans(db).await?;
     floorplans.retain(|floorplan| !is_empty_default_floorplan_stub(floorplan));
     let floorplan = floorplans
         .iter()
@@ -267,76 +230,38 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
             height: floorplan.height,
         });
 
-    let display_override_rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT device_key, display_name FROM device_display_overrides ORDER BY device_key",
+    let device_display_overrides = optional_all(
+        db,
+        Query::select()
+            .columns([
+                DeviceDisplayOverrides::DeviceKey,
+                DeviceDisplayOverrides::DisplayName,
+            ])
+            .from(DeviceDisplayOverrides::Table)
+            .order_by(DeviceDisplayOverrides::DeviceKey, Order::Asc)
+            .to_owned(),
+        "device display overrides",
     )
-    .fetch_all(&pool)
-    .await?;
-    let device_display_overrides = display_override_rows
-        .into_iter()
-        .map(
-            |(device_key, display_name)| config_queries::DeviceDisplayNameRow {
-                device_key,
-                display_name,
-            },
-        )
-        .collect();
+    .await?
+    .into_iter()
+    .map(device_display_override_from_row)
+    .collect::<Result<Vec<_>>>()?;
 
-    // Read dashboard layouts + widgets
-    let layout_rows: Vec<(i32, String, bool)> =
-        sqlx::query_as("SELECT id, name, is_default FROM dashboard_layouts ORDER BY id")
-            .fetch_all(&pool)
-            .await?;
-    let mut dashboard_widgets = Vec::new();
-    let mut dashboard_layouts = Vec::new();
-    for (id, name, is_default) in layout_rows {
-        dashboard_layouts.push(config_queries::DashboardLayoutRow {
-            id,
-            name,
-            is_default,
-        });
-        let widgets: Vec<DashboardWidgetDbRow> = sqlx::query_as(
-            "SELECT id, layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order \
-             FROM dashboard_widgets WHERE layout_id = ? ORDER BY sort_order",
-        )
-        .bind(id)
-        .fetch_all(&pool)
-        .await?;
-        for (wid, lid, wtype, wconfig, gx, gy, gw, gh, so) in widgets {
-            dashboard_widgets.push(config_queries::DashboardWidgetRow {
-                id: wid,
-                layout_id: lid,
-                widget_type: wtype,
-                config: serde_json::from_str(&wconfig).unwrap_or_default(),
-                grid_x: gx,
-                grid_y: gy,
-                grid_w: gw,
-                grid_h: gh,
-                sort_order: so,
-            });
-        }
-    }
+    let (dashboard_layouts, dashboard_widgets) = legacy_dashboard(db).await?;
 
-    let widget_settings = match sqlx::query_as::<_, (String, String)>(
-        "SELECT key, config FROM widget_settings ORDER BY key",
+    let widget_settings = optional_all(
+        db,
+        Query::select()
+            .columns([WidgetSettings::Key, WidgetSettings::Config])
+            .from(WidgetSettings::Table)
+            .order_by(WidgetSettings::Key, Order::Asc)
+            .to_owned(),
+        "widget settings",
     )
-    .fetch_all(&pool)
-    .await
-    {
-        Ok(rows) => rows
-            .into_iter()
-            .map(|(key, config)| config_queries::WidgetSettingRow {
-                key,
-                config: serde_json::from_str(&config).unwrap_or_default(),
-            })
-            .collect(),
-        Err(error) => {
-            warn!("Failed to read widget settings from sqlite source database: {error}");
-            Vec::new()
-        }
-    };
-
-    pool.close().await;
+    .await?
+    .into_iter()
+    .map(widget_setting_from_row)
+    .collect::<Result<Vec<_>>>()?;
 
     Ok(ConfigExport {
         version: 1,
@@ -356,276 +281,198 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
     })
 }
 
-async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExport> {
-    let pool = PgPool::connect(database_url).await?;
+async fn legacy_group_devices<C: ConnectionTrait>(
+    db: &C,
+    group_id: &str,
+) -> Result<Vec<config_queries::GroupDeviceRow>> {
+    let current_query = Query::select()
+        .columns([GroupDevices::IntegrationId, GroupDevices::DeviceId])
+        .from(GroupDevices::Table)
+        .and_where(Expr::col(GroupDevices::GroupId).eq(group_id))
+        .order_by(GroupDevices::SortOrder, Order::Asc)
+        .to_owned();
 
-    let int_rows: Vec<(String, String, String, bool)> =
-        sqlx::query_as("SELECT id, plugin, config, enabled FROM integrations ORDER BY id")
-            .fetch_all(&pool)
-            .await?;
-    let integrations: Vec<IntegrationRow> = int_rows
-        .into_iter()
-        .map(|(id, plugin, config, enabled)| IntegrationRow {
-            id,
-            plugin,
-            config: serde_json::from_str(&config).unwrap_or_default(),
-            enabled,
-        })
-        .collect();
-
-    let core_row: Option<(i32,)> =
-        sqlx::query_as("SELECT warmup_time_seconds FROM core_config WHERE id = 1")
-            .fetch_optional(&pool)
-            .await?;
-    let core = config_queries::CoreConfigRow {
-        warmup_time_seconds: core_row.map(|(w,)| w).unwrap_or(1),
-    };
-
-    let group_rows: Vec<(String, String, bool)> =
-        sqlx::query_as("SELECT id, name, hidden FROM groups ORDER BY name")
-            .fetch_all(&pool)
-            .await?;
-    let mut groups = Vec::new();
-    for (id, name, hidden) in group_rows {
-        let devices: Vec<(String, String)> = sqlx::query_as(
-            "SELECT integration_id, device_id FROM group_devices WHERE group_id = $1 ORDER BY sort_order",
-        )
-        .bind(&id)
-        .fetch_all(&pool)
-        .await?;
-        let linked: Vec<(String,)> = sqlx::query_as(
-            "SELECT child_group_id FROM group_links WHERE parent_group_id = $1 ORDER BY sort_order",
-        )
-        .bind(&id)
-        .fetch_all(&pool)
-        .await?;
-        groups.push(GroupRow {
-            id,
-            name,
-            hidden,
-            devices: devices
-                .into_iter()
-                .map(|(iid, did)| config_queries::GroupDeviceRow {
-                    integration_id: iid,
-                    device_id: did,
-                })
-                .collect(),
-            linked_groups: linked.into_iter().map(|(g,)| g).collect(),
-        });
-    }
-
-    let scene_rows: Vec<(String, String, bool, Option<String>)> =
-        sqlx::query_as("SELECT id, name, hidden, script FROM scenes ORDER BY name")
-            .fetch_all(&pool)
-            .await?;
-    let mut scenes = Vec::new();
-    for (id, name, hidden, script) in scene_rows {
-        let ds: Vec<(String, String)> = sqlx::query_as(
-            "SELECT device_key, config FROM scene_device_states WHERE scene_id = $1",
-        )
-        .bind(&id)
-        .fetch_all(&pool)
-        .await?;
-        let gs: Vec<(String, String)> =
-            sqlx::query_as("SELECT group_id, config FROM scene_group_states WHERE scene_id = $1")
-                .bind(&id)
-                .fetch_all(&pool)
-                .await?;
-        scenes.push(SceneRow {
-            id,
-            name,
-            hidden,
-            script,
-            device_states: ds
-                .into_iter()
-                .map(|(k, v)| (k, serde_json::from_str(&v).unwrap_or_default()))
-                .collect(),
-            group_states: gs
-                .into_iter()
-                .map(|(k, v)| (k, serde_json::from_str(&v).unwrap_or_default()))
-                .collect(),
-        });
-    }
-
-    let routine_rows: Vec<(String, String, bool, String, String)> =
-        sqlx::query_as("SELECT id, name, enabled, rules, actions FROM routines ORDER BY name")
-            .fetch_all(&pool)
-            .await?;
-    let routines: Vec<RoutineRow> = routine_rows
-        .into_iter()
-        .map(|(id, name, enabled, rules, actions)| RoutineRow {
-            id,
-            name,
-            enabled,
-            rules: serde_json::from_str(&rules).unwrap_or_default(),
-            actions: serde_json::from_str(&actions).unwrap_or_default(),
-        })
-        .collect();
-
-    let mut floorplans: Vec<config_queries::FloorplanExportRow> = sqlx::query_as::<
-        _,
-        (
-            String,
-            String,
-            Option<Vec<u8>>,
-            Option<String>,
-            Option<i32>,
-            Option<i32>,
-            Option<String>,
-        ),
-    >(
-        "SELECT id, name, image_data, image_mime_type, width, height, grid_data \
-         FROM floorplans ORDER BY sort_order, name",
-    )
-    .fetch_all(&pool)
-    .await?
-    .into_iter()
-    .map(
-        |(id, name, image_data, image_mime_type, width, height, grid_data)| {
-            config_queries::FloorplanExportRow {
-                id,
-                name,
-                image_data,
-                image_mime_type,
-                width,
-                height,
-                grid_data,
-            }
-        },
-    )
-    .collect();
-    floorplans.retain(|floorplan| !is_empty_default_floorplan_stub(floorplan));
-    let floorplan = floorplans
-        .iter()
-        .find(|floorplan| floorplan.id == "default")
-        .map(|floorplan| config_queries::FloorplanRow {
-            image_data: floorplan.image_data.clone(),
-            image_mime_type: floorplan.image_mime_type.clone(),
-            width: floorplan.width,
-            height: floorplan.height,
-        });
-
-    let group_position_rows: Vec<(String, f32, f32, f32, f32, i32)> = sqlx::query_as(
-        "SELECT group_id, x, y, width, height, z_index FROM group_positions ORDER BY group_id",
-    )
-    .fetch_all(&pool)
-    .await?;
-    let group_positions = group_position_rows
-        .into_iter()
-        .map(
-            |(group_id, x, y, width, height, z_index)| config_queries::GroupPositionRow {
-                group_id,
-                x,
-                y,
-                width,
-                height,
-                z_index,
-            },
-        )
-        .collect();
-
-    let display_override_rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT device_key, display_name FROM device_display_overrides ORDER BY device_key",
-    )
-    .fetch_all(&pool)
-    .await?;
-    let device_display_overrides = display_override_rows
-        .into_iter()
-        .map(
-            |(device_key, display_name)| config_queries::DeviceDisplayNameRow {
-                device_key,
-                display_name,
-            },
-        )
-        .collect();
-
-    let device_sensor_config_rows: Vec<(String, String, String)> = sqlx::query_as(
-        "SELECT device_ref, interaction_kind, config_json FROM device_sensor_configs ORDER BY device_ref",
-    )
-    .fetch_all(&pool)
-    .await?;
-    let device_sensor_configs = device_sensor_config_rows
-        .into_iter()
-        .map(
-            |(device_ref, interaction_kind, config_json)| config_queries::DeviceSensorConfigRow {
-                device_ref,
-                interaction_kind,
-                config: serde_json::from_str(&config_json).unwrap_or_default(),
-            },
-        )
-        .collect();
-
-    let layout_rows: Vec<(i32, String, bool)> =
-        sqlx::query_as("SELECT id, name, is_default FROM dashboard_layouts ORDER BY id")
-            .fetch_all(&pool)
-            .await?;
-    let mut dashboard_widgets = Vec::new();
-    let mut dashboard_layouts = Vec::new();
-    for (id, name, is_default) in layout_rows {
-        dashboard_layouts.push(config_queries::DashboardLayoutRow {
-            id,
-            name,
-            is_default,
-        });
-        let widgets: Vec<DashboardWidgetDbRow> = sqlx::query_as(
-            "SELECT id, layout_id, widget_type, config, grid_x, grid_y, grid_w, grid_h, sort_order \
-             FROM dashboard_widgets WHERE layout_id = $1 ORDER BY sort_order",
-        )
-        .bind(id)
-        .fetch_all(&pool)
-        .await?;
-        for (wid, lid, wtype, wconfig, gx, gy, gw, gh, so) in widgets {
-            dashboard_widgets.push(config_queries::DashboardWidgetRow {
-                id: wid,
-                layout_id: lid,
-                widget_type: wtype,
-                config: serde_json::from_str(&wconfig).unwrap_or_default(),
-                grid_x: gx,
-                grid_y: gy,
-                grid_w: gw,
-                grid_h: gh,
-                sort_order: so,
-            });
-        }
-    }
-
-    let widget_settings = match sqlx::query_as::<_, (String, String)>(
-        "SELECT key, config FROM widget_settings ORDER BY key",
-    )
-    .fetch_all(&pool)
-    .await
-    {
+    match all(db, current_query).await {
         Ok(rows) => rows
             .into_iter()
-            .map(|(key, config)| config_queries::WidgetSettingRow {
-                key,
-                config: serde_json::from_str(&config).unwrap_or_default(),
-            })
-            .collect(),
-        Err(error) => {
-            warn!("Failed to read widget settings from postgres source database: {error}");
-            Vec::new()
-        }
-    };
+            .map(group_device_from_current_row)
+            .collect::<Result<Vec<_>>>(),
+        Err(_) => all(
+            db,
+            Query::select()
+                .column(GroupDevices::IntegrationId)
+                .column(Alias::new("device_name"))
+                .from(GroupDevices::Table)
+                .and_where(Expr::col(GroupDevices::GroupId).eq(group_id))
+                .to_owned(),
+        )
+        .await?
+        .into_iter()
+        .map(group_device_from_legacy_row)
+        .collect::<Result<Vec<_>>>(),
+    }
+}
 
-    pool.close().await;
+async fn legacy_group_links<C: ConnectionTrait>(db: &C, group_id: &str) -> Result<Vec<String>> {
+    let current_query = Query::select()
+        .column(GroupLinks::ChildGroupId)
+        .from(GroupLinks::Table)
+        .and_where(Expr::col(GroupLinks::ParentGroupId).eq(group_id))
+        .order_by(GroupLinks::SortOrder, Order::Asc)
+        .to_owned();
 
-    Ok(ConfigExport {
-        version: 1,
-        core,
-        integrations,
-        groups,
-        scenes,
-        routines,
-        floorplan,
-        floorplans,
-        group_positions,
-        device_display_overrides,
-        device_sensor_configs,
-        widget_settings,
-        dashboard_layouts,
-        dashboard_widgets,
+    match all(db, current_query).await {
+        Ok(rows) => rows
+            .into_iter()
+            .map(|row| Ok(row.try_get("", "child_group_id")?))
+            .collect::<Result<Vec<_>>>(),
+        Err(_) => all(
+            db,
+            Query::select()
+                .column(Alias::new("linked_group_id"))
+                .from(GroupLinks::Table)
+                .and_where(Expr::col(Alias::new("group_id")).eq(group_id))
+                .to_owned(),
+        )
+        .await?
+        .into_iter()
+        .map(|row| Ok(row.try_get("", "linked_group_id")?))
+        .collect::<Result<Vec<_>>>(),
+    }
+}
+
+async fn scene_state_map<C, T, S, K>(
+    db: &C,
+    table: T,
+    scene_id_col: S,
+    key_col: K,
+    key_name: &str,
+    scene_id: &str,
+) -> Result<HashMap<String, serde_json::Value>>
+where
+    C: ConnectionTrait,
+    T: sea_orm::sea_query::IntoTableRef,
+    S: sea_orm::sea_query::IntoColumnRef,
+    K: sea_orm::sea_query::IntoColumnRef,
+{
+    all(
+        db,
+        Query::select()
+            .column(key_col)
+            .column(Alias::new("config"))
+            .from(table)
+            .and_where(Expr::col(scene_id_col).eq(scene_id))
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(|row| {
+        let key: String = row.try_get("", key_name)?;
+        let config: String = row.try_get("", "config")?;
+        Ok((key, parse_json_or_default(&config)))
     })
+    .collect()
+}
+
+async fn legacy_floorplans<C: ConnectionTrait>(
+    db: &C,
+) -> Result<Vec<config_queries::FloorplanExportRow>> {
+    let current_query = Query::select()
+        .columns([
+            Floorplans::Id,
+            Floorplans::Name,
+            Floorplans::ImageData,
+            Floorplans::ImageMimeType,
+            Floorplans::Width,
+            Floorplans::Height,
+            Floorplans::GridData,
+        ])
+        .from(Floorplans::Table)
+        .order_by(Floorplans::SortOrder, Order::Asc)
+        .order_by(Floorplans::Name, Order::Asc)
+        .to_owned();
+
+    match all(db, current_query).await {
+        Ok(rows) => rows
+            .into_iter()
+            .map(floorplan_export_from_row)
+            .collect::<Result<Vec<_>>>(),
+        Err(_) => Ok(one(
+            db,
+            Query::select()
+                .columns([
+                    Floorplans::ImageData,
+                    Floorplans::ImageMimeType,
+                    Floorplans::Width,
+                    Floorplans::Height,
+                    Floorplans::GridData,
+                ])
+                .from(Alias::new("floorplan"))
+                .limit(1)
+                .to_owned(),
+        )
+        .await?
+        .map(floorplan_export_from_legacy_row)
+        .transpose()?
+        .map(|floorplan| vec![floorplan])
+        .unwrap_or_default()),
+    }
+}
+
+async fn legacy_dashboard<C: ConnectionTrait>(
+    db: &C,
+) -> Result<(
+    Vec<config_queries::DashboardLayoutRow>,
+    Vec<config_queries::DashboardWidgetRow>,
+)> {
+    let layout_rows = optional_all(
+        db,
+        Query::select()
+            .columns([
+                DashboardLayouts::Id,
+                DashboardLayouts::Name,
+                DashboardLayouts::IsDefault,
+            ])
+            .from(DashboardLayouts::Table)
+            .order_by(DashboardLayouts::Id, Order::Asc)
+            .to_owned(),
+        "dashboard layouts",
+    )
+    .await?;
+
+    let mut dashboard_layouts = Vec::new();
+    let mut dashboard_widgets = Vec::new();
+    for row in layout_rows {
+        let layout = dashboard_layout_from_row(row)?;
+        let widgets = optional_all(
+            db,
+            Query::select()
+                .columns([
+                    DashboardWidgets::Id,
+                    DashboardWidgets::LayoutId,
+                    DashboardWidgets::WidgetType,
+                    DashboardWidgets::Config,
+                    DashboardWidgets::GridX,
+                    DashboardWidgets::GridY,
+                    DashboardWidgets::GridW,
+                    DashboardWidgets::GridH,
+                    DashboardWidgets::SortOrder,
+                ])
+                .from(DashboardWidgets::Table)
+                .and_where(Expr::col(DashboardWidgets::LayoutId).eq(layout.id))
+                .order_by(DashboardWidgets::SortOrder, Order::Asc)
+                .to_owned(),
+            "dashboard widgets",
+        )
+        .await?
+        .into_iter()
+        .map(dashboard_widget_from_row)
+        .collect::<Result<Vec<_>>>()?;
+        dashboard_widgets.extend(widgets);
+        dashboard_layouts.push(layout);
+    }
+
+    Ok((dashboard_layouts, dashboard_widgets))
 }
 
 /// Parse a JSON export backup config file into a ConfigExport.
@@ -689,6 +536,13 @@ fn config_export_has_data(config: &ConfigExport) -> bool {
         || !config.dashboard_widgets.is_empty()
 }
 
+fn normalize_source_export(mut export: ConfigExport) -> ConfigExport {
+    export
+        .floorplans
+        .retain(|floorplan| !is_empty_default_floorplan_stub(floorplan));
+    export
+}
+
 fn is_empty_default_floorplan_stub(floorplan: &config_queries::FloorplanExportRow) -> bool {
     floorplan.id == "default"
         && floorplan.name == "Main floorplan"
@@ -697,6 +551,171 @@ fn is_empty_default_floorplan_stub(floorplan: &config_queries::FloorplanExportRo
         && floorplan.width.is_none()
         && floorplan.height.is_none()
         && floorplan.grid_data.is_none()
+}
+
+fn sqlite_readonly_url(path: &Path) -> String {
+    format!("sqlite://{}?mode=ro", path.display())
+}
+
+fn statement<C, S>(db: &C, builder: S) -> Statement
+where
+    C: ConnectionTrait,
+    S: StatementBuilder,
+{
+    db.get_database_backend().build(&builder)
+}
+
+async fn all<C, S>(db: &C, builder: S) -> Result<Vec<QueryResult>>
+where
+    C: ConnectionTrait,
+    S: StatementBuilder,
+{
+    Ok(db.query_all(statement(db, builder)).await?)
+}
+
+async fn optional_all<C, S>(db: &C, builder: S, description: &str) -> Result<Vec<QueryResult>>
+where
+    C: ConnectionTrait,
+    S: StatementBuilder,
+{
+    match all(db, builder).await {
+        Ok(rows) => Ok(rows),
+        Err(error) => {
+            warn!("Failed to read {description} from source database: {error}");
+            Ok(Vec::new())
+        }
+    }
+}
+
+async fn one<C, S>(db: &C, builder: S) -> Result<Option<QueryResult>>
+where
+    C: ConnectionTrait,
+    S: StatementBuilder,
+{
+    Ok(db.query_one(statement(db, builder)).await?)
+}
+
+fn integration_from_row(row: QueryResult) -> Result<IntegrationRow> {
+    let config: String = row.try_get("", "config")?;
+    Ok(IntegrationRow {
+        id: row.try_get("", "id")?,
+        plugin: row.try_get("", "plugin")?,
+        config: parse_json_or_default(&config),
+        enabled: get_bool_or_default(&row, "enabled", true),
+    })
+}
+
+fn group_device_from_current_row(row: QueryResult) -> Result<config_queries::GroupDeviceRow> {
+    Ok(config_queries::GroupDeviceRow {
+        integration_id: row.try_get("", "integration_id")?,
+        device_id: row.try_get("", "device_id")?,
+    })
+}
+
+fn group_device_from_legacy_row(row: QueryResult) -> Result<config_queries::GroupDeviceRow> {
+    Ok(config_queries::GroupDeviceRow {
+        integration_id: row.try_get("", "integration_id")?,
+        device_id: row.try_get("", "device_name")?,
+    })
+}
+
+fn routine_from_row(row: QueryResult) -> Result<RoutineRow> {
+    let rules: String = row.try_get("", "rules")?;
+    let actions: String = row.try_get("", "actions")?;
+    Ok(RoutineRow {
+        id: row.try_get("", "id")?,
+        name: row.try_get("", "name")?,
+        enabled: get_bool_or_default(&row, "enabled", true),
+        rules: parse_json_or_default(&rules),
+        actions: parse_json_or_default(&actions),
+    })
+}
+
+fn floorplan_export_from_row(row: QueryResult) -> Result<config_queries::FloorplanExportRow> {
+    Ok(config_queries::FloorplanExportRow {
+        id: row.try_get("", "id")?,
+        name: row.try_get("", "name")?,
+        image_data: row.try_get("", "image_data")?,
+        image_mime_type: row.try_get("", "image_mime_type")?,
+        width: row.try_get("", "width")?,
+        height: row.try_get("", "height")?,
+        grid_data: row.try_get("", "grid_data")?,
+    })
+}
+
+fn floorplan_export_from_legacy_row(
+    row: QueryResult,
+) -> Result<config_queries::FloorplanExportRow> {
+    Ok(config_queries::FloorplanExportRow {
+        id: "default".to_string(),
+        name: "Main floorplan".to_string(),
+        image_data: row.try_get("", "image_data")?,
+        image_mime_type: row.try_get("", "image_mime_type")?,
+        width: row.try_get("", "width")?,
+        height: row.try_get("", "height")?,
+        grid_data: row.try_get("", "grid_data")?,
+    })
+}
+
+fn device_display_override_from_row(
+    row: QueryResult,
+) -> Result<config_queries::DeviceDisplayNameRow> {
+    Ok(config_queries::DeviceDisplayNameRow {
+        device_key: row.try_get("", "device_key")?,
+        display_name: row.try_get("", "display_name")?,
+    })
+}
+
+fn dashboard_layout_from_row(row: QueryResult) -> Result<config_queries::DashboardLayoutRow> {
+    Ok(config_queries::DashboardLayoutRow {
+        id: row.try_get("", "id")?,
+        name: row.try_get("", "name")?,
+        is_default: get_bool_or_default(&row, "is_default", false),
+    })
+}
+
+fn dashboard_widget_from_row(row: QueryResult) -> Result<config_queries::DashboardWidgetRow> {
+    let config: String = row.try_get("", "config")?;
+    Ok(config_queries::DashboardWidgetRow {
+        id: row.try_get("", "id")?,
+        layout_id: row.try_get("", "layout_id")?,
+        widget_type: row.try_get("", "widget_type")?,
+        config: parse_json_or_default(&config),
+        grid_x: row.try_get("", "grid_x")?,
+        grid_y: row.try_get("", "grid_y")?,
+        grid_w: row.try_get("", "grid_w")?,
+        grid_h: row.try_get("", "grid_h")?,
+        sort_order: get_i32_or_default(&row, "sort_order", 0),
+    })
+}
+
+fn widget_setting_from_row(row: QueryResult) -> Result<config_queries::WidgetSettingRow> {
+    let config: String = row.try_get("", "config")?;
+    Ok(config_queries::WidgetSettingRow {
+        key: row.try_get("", "key")?,
+        config: parse_json_or_default(&config),
+    })
+}
+
+fn parse_json_or_default<T>(json: &str) -> T
+where
+    T: DeserializeOwned + Default,
+{
+    serde_json::from_str(json).unwrap_or_default()
+}
+
+fn get_bool_or_default(row: &QueryResult, column: &str, default: bool) -> bool {
+    row.try_get::<Option<bool>>("", column)
+        .ok()
+        .flatten()
+        .unwrap_or(default)
+}
+
+fn get_i32_or_default(row: &QueryResult, column: &str, default: i32) -> i32 {
+    row.try_get::<Option<i32>>("", column)
+        .ok()
+        .flatten()
+        .unwrap_or(default)
 }
 
 /// Rewrite all MQTT integrations in the simulation snapshot as dummy equivalents.

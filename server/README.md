@@ -20,10 +20,12 @@ trying out other alternatives for now.
 
 You should now have a demo/dummy homectl environment running.
 
-By default, homectl reads `Settings.toml` from the current working directory
-and starts from that config in memory.
+By default, homectl creates or opens `homectl.db` in the current working
+directory and stores configuration there using SQLite. On first startup with an
+empty database, a JSON export passed with `--config` can seed the database;
+otherwise homectl starts with an empty runtime snapshot.
 
-To enable persistent storage, point homectl at PostgreSQL:
+To use another supported database target, set `DATABASE_URL`:
 
 ```
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
@@ -31,8 +33,9 @@ RUST_LOG=homectl_server=info cargo run
 ```
 
 If the database named in `DATABASE_URL` does not exist yet, homectl creates it
-automatically before running migrations as long as the configured PostgreSQL
-role has permission to create databases.
+automatically before running migrations. For PostgreSQL, the configured role
+must have permission to create databases. For SQLite, homectl creates the file
+and missing parent directories before opening it.
 
 If persistence is unavailable at startup, you can still boot the server from a
 JSON export backup or legacy TOML config:
@@ -41,12 +44,12 @@ JSON export backup or legacy TOML config:
 RUST_LOG=homectl_server=info cargo run -- --config ./config-backup.json
 ```
 
-When the database cannot be opened, homectl falls back to the backup config or
-an empty runtime snapshot and continues in memory-only mode. If a configured
-PostgreSQL database comes back later, homectl reconnects in the background and
-seeds an empty database from the live in-memory snapshot. Manual PostgreSQL
-config edits are only picked up on startup; while the server is running,
-config changes are expected to go through homectl itself.
+When an explicitly configured database cannot be opened, homectl falls back to
+the backup config or an empty runtime snapshot and continues in memory-only
+mode. If a configured database comes back later, homectl reconnects in the
+background and seeds an empty database from the live in-memory snapshot.
+Manual database config edits are only picked up on startup; while the server is
+running, config changes are expected to go through homectl itself.
 
 To control your home automation systems, edit `Settings.toml` or start from a
 JSON export created via `/api/v1/config/export`. See below sections for
@@ -129,8 +132,9 @@ and also other similar solutions to homectl:
 
 ### CLI flags and environment variables (optional)
 
-- `DATABASE_URL` or `--database-url`: Optional PostgreSQL connection string used
-  for persistence.
+- `DATABASE_URL` or `--database-url`: Optional database connection string used
+  for persistence. PostgreSQL and SQLite URLs are supported. If omitted,
+  homectl uses `./homectl.db` in the current working directory.
 - `CONFIG_FILE` or `--config`: Path to a JSON backup export or legacy TOML
   config file. Used to seed an empty database and as a startup fallback when
   the database is unavailable.
@@ -141,18 +145,21 @@ and also other similar solutions to homectl:
 ### Persistence behavior
 
 - No external database service is required. If `DATABASE_URL` is unset,
-  homectl starts directly from `--config` or an empty in-memory runtime.
-- If PostgreSQL is configured and the target database does not exist yet,
-  homectl creates it automatically before running migrations.
-- If PostgreSQL is configured but unavailable and `--config` is provided,
+  homectl creates or opens `./homectl.db` as a SQLite database.
+- If the default SQLite database is empty and `--config` is provided, homectl
+  seeds it from that JSON export backup before starting the runtime.
+- If `DATABASE_URL` is configured and the target database does not exist yet,
+  homectl creates it automatically before running migrations for supported
+  backends.
+- If an explicitly configured database is unavailable and `--config` is provided,
   homectl still starts from that JSON or TOML snapshot and keeps config changes
   in memory until persistence returns.
-- If PostgreSQL reconnects later and the database is empty, homectl backfills it
+- If the configured database reconnects later and is empty, homectl backfills it
   from the live in-memory runtime snapshot.
-- If PostgreSQL reconnects later and already contains config, homectl keeps the
-  current in-memory runtime until restart instead of live-reloading database
-  edits.
-- Manual PostgreSQL config edits should be done while homectl is stopped, then
+- If the configured database reconnects later and already contains config,
+  homectl keeps the current in-memory runtime until restart instead of
+  live-reloading database edits.
+- Manual database config edits should be done while homectl is stopped, then
   applied by restarting the server.
 - `/api/v1/config/export` returns a JSON backup that can be reused with
   `--config` on a later startup.

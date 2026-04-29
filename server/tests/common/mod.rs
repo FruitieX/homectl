@@ -26,10 +26,11 @@ pub struct TestServer {
     pub config_path: PathBuf,
     /// Base URL for API calls
     pub base_url: String,
+    /// Whether Drop should remove temp_dir.
+    cleanup_temp_dir: bool,
 }
 
 /// Configuration for creating a test server
-#[derive(Default)]
 pub struct TestServerConfig {
     /// Additional configuration options to append to Settings.toml
     pub extra_config: Option<String>,
@@ -37,10 +38,28 @@ pub struct TestServerConfig {
     pub config_content: Option<String>,
     /// Backup config file name used when writing config_content
     pub config_file_name: Option<String>,
-    /// Optional PostgreSQL connection string to pass via --database-url
+    /// Optional database connection string to pass via --database-url
     pub database_url: Option<String>,
+    /// Optional working directory. When omitted, a unique temporary directory is created.
+    pub working_dir: Option<PathBuf>,
+    /// Whether the working directory should be deleted when the server handle is dropped.
+    pub cleanup_working_dir: bool,
     /// If set, start in simulation mode using this TOML config file path
     pub simulate_config: Option<PathBuf>,
+}
+
+impl Default for TestServerConfig {
+    fn default() -> Self {
+        Self {
+            extra_config: None,
+            config_content: None,
+            config_file_name: None,
+            database_url: None,
+            working_dir: None,
+            cleanup_working_dir: true,
+            simulate_config: None,
+        }
+    }
 }
 
 impl TestServer {
@@ -56,8 +75,10 @@ impl TestServer {
         let use_config_file = config.config_content.is_some() || config.extra_config.is_some();
 
         // Create temporary directory
-        let temp_dir = std::env::temp_dir().join(format!("homectl_test_{}_{}", pid, instance_id));
-        if temp_dir.exists() {
+        let temp_dir = config.working_dir.clone().unwrap_or_else(|| {
+            std::env::temp_dir().join(format!("homectl_test_{}_{}", pid, instance_id))
+        });
+        if config.working_dir.is_none() && temp_dir.exists() {
             if let Err(e) = std::fs::remove_dir_all(&temp_dir) {
                 eprintln!("[test] Warning: failed to clear existing temp dir: {}", e);
             }
@@ -186,6 +207,7 @@ impl TestServer {
                 temp_dir,
                 config_path,
                 base_url: final_base_url,
+                cleanup_temp_dir: config.cleanup_working_dir,
             })
         } else {
             let _ = std::fs::remove_dir_all(&temp_dir);
@@ -268,7 +290,7 @@ fn wait_for_ready(
 impl Drop for TestServer {
     fn drop(&mut self) {
         self.stop();
-        if self.temp_dir.exists() {
+        if self.cleanup_temp_dir && self.temp_dir.exists() {
             let _ = std::fs::remove_dir_all(&self.temp_dir);
         }
     }

@@ -12,15 +12,15 @@ See [server/README.md](server/README.md) for detailed usage, configuration, and 
 
 Key technologies:
 - Rust (edition 2021)
-- warp, tokio, sqlx, mqtt, etc.
-- Optional PostgreSQL persistence with DB-optional startup from JSON backup, legacy TOML, or an empty in-memory runtime
+- warp, tokio, SeaORM, mqtt, etc.
+- SQLite persistence by default (`./homectl.db`), optional PostgreSQL persistence, and fallback startup from JSON backup, legacy TOML, or an empty in-memory runtime
 
 Build & run (development):
 ```
 cd server
 cargo run
 
-# optional: use PostgreSQL persistence
+# optional: use another supported database target instead of ./homectl.db
 DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo run
 
 # optional: bootstrap from a JSON export or legacy TOML backup
@@ -28,8 +28,9 @@ cargo run -- --config ./config-backup.json
 ```
 
 If the database named in `DATABASE_URL` does not exist yet, the server creates
-it automatically before running migrations when the configured PostgreSQL role
-has permission to create databases.
+it automatically before running migrations for supported backends. PostgreSQL
+requires a role with permission to create databases; SQLite creates the file and
+missing parent directories automatically.
 
 ### UI (Vite + React Router)
 See [ui/README.md](ui/README.md) for UI specific documentation.

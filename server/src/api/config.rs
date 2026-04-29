@@ -1271,7 +1271,7 @@ fn runtime_status_routes(
 }
 
 async fn get_runtime_status() -> Result<impl Reply, warp::Rejection> {
-    let persistence_available = db::get_db_connection().is_ok();
+    let persistence_available = db::is_db_connected();
     Ok(ApiResponse::success(RuntimeStatusResponse {
         persistence_available,
         memory_only_mode: !persistence_available,

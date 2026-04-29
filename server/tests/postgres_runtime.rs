@@ -2,11 +2,13 @@ mod common;
 
 use common::{TestServer, TestServerConfig};
 use homectl_server::core::simulate::prepare_simulation_config;
+use homectl_server::db::schema::{CoreConfig, Floorplans};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
+use sea_orm::sea_query::{Expr, Query};
+use sea_orm::{ConnectionTrait, Database, Statement, StatementBuilder};
 use serde_json::Value;
 use sqlx::migrate::MigrateDatabase;
-use sqlx::postgres::PgPoolOptions;
 use std::net::TcpListener;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -60,21 +62,31 @@ fn floorplan_exists_in_postgres(database_url: &str, floorplan_id: &str) -> bool 
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime should start");
 
     runtime.block_on(async {
-        let pool = PgPoolOptions::new()
-            .connect(database_url)
+        let db = Database::connect(database_url)
             .await
             .expect("should connect to postgres");
 
-        let exists =
-            sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM floorplans WHERE id = $1)")
-                .bind(floorplan_id)
-                .fetch_one(&pool)
-                .await
-                .expect("should query floorplans from postgres");
-
-        pool.close().await;
-        exists
+        db.query_one(statement(
+            &db,
+            Query::select()
+                .expr(Expr::value(1))
+                .from(Floorplans::Table)
+                .and_where(Expr::col(Floorplans::Id).eq(floorplan_id))
+                .limit(1)
+                .to_owned(),
+        ))
+        .await
+        .expect("should query floorplans from postgres")
+        .is_some()
     })
+}
+
+fn statement<C, S>(db: &C, builder: S) -> Statement
+where
+    C: ConnectionTrait,
+    S: StatementBuilder,
+{
+    db.get_database_backend().build(&builder)
 }
 
 fn database_exists(database_url: &str) -> bool {
@@ -260,16 +272,19 @@ fn postgres_runtime_ignores_external_config_changes_while_running() {
 
     let runtime = tokio::runtime::Runtime::new().expect("tokio runtime should start");
     runtime.block_on(async {
-        let pool = PgPoolOptions::new()
-            .connect(&database_url)
+        let db = Database::connect(database_url.as_str())
             .await
             .expect("should connect to postgres");
 
-        sqlx::query(
-            "UPDATE core_config SET warmup_time_seconds = $1, updated_at = CURRENT_TIMESTAMP WHERE id = 1",
-        )
-        .bind(42_i32)
-        .execute(&pool)
+        db.execute(statement(
+            &db,
+            Query::update()
+                .table(CoreConfig::Table)
+                .value(CoreConfig::WarmupTimeSeconds, Expr::value(42_i32))
+                .value(CoreConfig::UpdatedAt, Expr::current_timestamp())
+                .and_where(Expr::col(CoreConfig::Id).eq(1))
+                .to_owned(),
+        ))
         .await
         .expect("should update core config directly in postgres");
     });

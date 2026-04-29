@@ -27,8 +27,7 @@ fn create_device(
     scene_id: Option<&str>,
     power: bool,
     brightness: f32,
-    color_h: u64,
-    color_s: f32,
+    color: (u64, f32),
 ) -> Device {
     Device::new(
         IntegrationId::from(integration_id.to_string()),
@@ -47,8 +46,8 @@ fn create_device(
                 power,
                 brightness: Some(OrderedFloat(brightness)),
                 color: Some(DeviceColor::Hs(Hs {
-                    h: color_h,
-                    s: OrderedFloat(color_s),
+                    h: color.0,
+                    s: OrderedFloat(color.1),
                 })),
                 transition: None,
             },
@@ -70,8 +69,7 @@ fn test_is_state_eq_compares_scene_id() {
         Some("dark"),
         true,
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     let device_b = create_device(
@@ -81,8 +79,7 @@ fn test_is_state_eq_compares_scene_id() {
         Some("normal"),
         true,
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     // Same device with same scene should be equal
@@ -98,7 +95,7 @@ fn test_is_state_eq_compares_scene_id() {
     );
 
     // Create device with no scene
-    let device_c = create_device("test", "lamp1", "Test Lamp", None, true, 0.25, 25, 0.95);
+    let device_c = create_device("test", "lamp1", "Test Lamp", None, true, 0.25, (25, 0.95));
 
     // Device with scene vs without scene should not be equal
     assert!(
@@ -107,7 +104,7 @@ fn test_is_state_eq_compares_scene_id() {
     );
 
     // Two devices with no scene but same visual state should be equal
-    let device_d = create_device("test", "lamp1", "Test Lamp", None, true, 0.25, 25, 0.95);
+    let device_d = create_device("test", "lamp1", "Test Lamp", None, true, 0.25, (25, 0.95));
     assert!(
         device_c.is_state_eq(&device_d),
         "Devices with no scene and same visual state should be equal"
@@ -125,8 +122,7 @@ fn test_scene_id_comparison_basic() {
         Some("dark"),
         true,
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     // Same visual appearance, but "normal" scene
@@ -137,8 +133,7 @@ fn test_scene_id_comparison_basic() {
         Some("normal"),
         true,
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     // These should NOT be equal since scene_id differs
@@ -165,12 +160,11 @@ fn test_manual_device_adjustment() {
         Some("dark"),
         true,
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     // Device with no scene (as if manually adjusted via API)
-    let manual_device = create_device("test", "lamp1", "Test Lamp", None, true, 0.25, 25, 0.95);
+    let manual_device = create_device("test", "lamp1", "Test Lamp", None, true, 0.25, (25, 0.95));
 
     // They should not be equal since one has scene and other doesn't
     assert!(
@@ -189,8 +183,7 @@ fn test_visual_state_change_detected() {
         Some("dark"),
         true,
         0.25, // brightness 25%
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     let device_b = create_device(
@@ -200,8 +193,7 @@ fn test_visual_state_change_detected() {
         Some("dark"), // same scene
         true,
         0.50, // brightness 50% - different!
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     // Same scene but different brightness - should NOT be equal
@@ -221,8 +213,7 @@ fn test_power_state_change_detected() {
         Some("dark"),
         true, // power on
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     let device_off = create_device(
@@ -232,8 +223,7 @@ fn test_power_state_change_detected() {
         Some("dark"), // same scene
         false,        // power off
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
 
     // Same scene but different power state - should NOT be equal
@@ -252,8 +242,7 @@ fn test_state_source_change_detected() {
         Some("dark"),
         true,
         0.25,
-        25,
-        0.95,
+        (25, 0.95),
     );
     let mut linked_device = direct_device.clone();
 

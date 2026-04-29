@@ -19,7 +19,7 @@ The server unifies home automation systems from different brands by assuming con
 - **Language**: Rust (edition 2021)
 - **Web Framework**: warp
 - **Async Runtime**: tokio
-- **Database**: Optional PostgreSQL via sqlx, with DB-optional startup from JSON backup, legacy TOML, or an empty in-memory runtime
+- **Database**: SeaORM query builders/migrations with default SQLite (`./homectl.db`), optional PostgreSQL, and fallback startup from JSON backup, legacy TOML, or an empty in-memory runtime
 - **Messaging**: MQTT (via rumqttc)
 - **Configuration**: TOML (via config + toml crates)
 - **TypeScript Bindings**: ts-rs (generates TypeScript types from Rust structs)
@@ -44,11 +44,11 @@ The server unifies home automation systems from different brands by assuming con
 │   │   ├── main.rs        # Application entry point
 │   │   ├── api/           # HTTP/WebSocket API routes
 │   │   ├── core/          # Core automation logic
-│   │   ├── db/            # Database layer (optional PostgreSQL persistence and config export/import)
+│   │   ├── db/            # SeaORM database layer (default SQLite, optional PostgreSQL, config export/import)
 │   │   ├── integrations/  # Home automation system integrations
 │   │   ├── types/         # Shared type definitions
 │   │   └── utils/         # Utility modules
-│   ├── migrations/        # SQL migrations (sqlx)
+│   ├── migrations/        # Legacy SQL migrations retained for reference
 │   ├── Settings.toml      # Runtime configuration
 │   └── Cargo.toml
 ├── ui/                     # Vite frontend
@@ -206,8 +206,8 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
 
 ## Environment Variables
 
-- `DB_PATH` – SQLite database path (defaults to `homectl.db`)
-- `DB_JOURNAL_MODE` – SQLite journal mode for file-backed databases
+- `DATABASE_URL` – Optional database connection string used for persistence
+  (SQLite and PostgreSQL are supported; defaults to `./homectl.db` SQLite)
 - `CONFIG_FILE` – JSON export backup or legacy TOML file used for seeding and fallback startup
 - `RUST_LOG` – Logging level (e.g., `homectl_server=info`)
 

@@ -10,7 +10,8 @@ pub struct Cli {
     #[arg(long, env = "PORT", default_value_t = 45289)]
     pub port: u16,
 
-    /// Optional PostgreSQL connection string for persistent storage.
+    /// Optional database connection string for persistent storage.
+    /// Uses ./homectl.db SQLite storage when omitted.
     #[arg(long, env = "DATABASE_URL")]
     pub database_url: Option<String>,
 

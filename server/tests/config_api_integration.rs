@@ -5,7 +5,7 @@ use reqwest::blocking::{Client, Response};
 use reqwest::StatusCode;
 use serde_json::{json, Value};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 fn blank_backup_config() -> Value {
     json!({
@@ -470,8 +470,8 @@ fn config_export_import_roundtrip_preserves_config() {
     let server = TestServer::new().expect("Failed to start test server");
     let runtime_status = get_json(&server.base_url, "/api/v1/config/runtime-status");
     assert_eq!(runtime_status["success"], true);
-    assert_eq!(runtime_status["data"]["persistence_available"], false);
-    assert_eq!(runtime_status["data"]["memory_only_mode"], true);
+    assert_eq!(runtime_status["data"]["persistence_available"], true);
+    assert_eq!(runtime_status["data"]["memory_only_mode"], false);
 
     let import_payload = sample_config_export();
 
@@ -489,7 +489,7 @@ fn config_export_import_roundtrip_preserves_config() {
 }
 
 #[test]
-fn config_api_starts_from_json_backup_without_database() {
+fn config_api_starts_from_json_backup_with_default_sqlite_database() {
     let backup_config = sample_config_export();
     let server = TestServer::with_config(TestServerConfig {
         config_content: Some(backup_config.to_string()),
@@ -505,8 +505,8 @@ fn config_api_starts_from_json_backup_without_database() {
 
     let runtime_status = get_json(&server.base_url, "/api/v1/config/runtime-status");
     assert_eq!(runtime_status["success"], true);
-    assert_eq!(runtime_status["data"]["persistence_available"], false);
-    assert_eq!(runtime_status["data"]["memory_only_mode"], true);
+    assert_eq!(runtime_status["data"]["persistence_available"], true);
+    assert_eq!(runtime_status["data"]["memory_only_mode"], false);
 
     let export_result = get_json(&server.base_url, "/api/v1/config/export");
     assert_eq!(export_result["success"], true);
@@ -540,6 +540,135 @@ fn config_api_starts_from_json_backup_without_database() {
         .any(|floorplan| {
             floorplan["id"] == "memory-only" && floorplan["name"] == "Memory Only"
         }));
+}
+
+#[test]
+fn default_sqlite_database_persists_config_across_restarts() {
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "homectl_default_sqlite_{}_{}",
+        std::process::id(),
+        unique_id
+    ));
+
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir).expect("old sqlite test dir should be removable");
+    }
+    std::fs::create_dir_all(&temp_dir).expect("sqlite test dir should be created");
+
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to start default sqlite test server");
+
+    assert!(
+        temp_dir.join("homectl.db").exists(),
+        "default SQLite database should be created in the server working directory"
+    );
+
+    let create_response = post_json(
+        &server.base_url,
+        "/api/v1/config/floorplans",
+        &json!({
+            "id": "persisted-sqlite",
+            "name": "Persisted SQLite"
+        }),
+    );
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    server.stop();
+    drop(server);
+
+    let server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to restart default sqlite test server");
+
+    let floorplans = get_json(&server.base_url, "/api/v1/config/floorplans");
+    assert_eq!(floorplans["success"], true);
+    assert!(floorplans["data"]
+        .as_array()
+        .expect("floorplans should be an array")
+        .iter()
+        .any(|floorplan| {
+            floorplan["id"] == "persisted-sqlite" && floorplan["name"] == "Persisted SQLite"
+        }));
+
+    drop(server);
+    std::fs::remove_dir_all(&temp_dir).expect("sqlite test dir should be removable");
+}
+
+#[test]
+fn explicit_sqlite_database_url_creates_database_and_persists_config() {
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "homectl_explicit_sqlite_{}_{}",
+        std::process::id(),
+        unique_id
+    ));
+    let database_path = temp_dir.join("nested").join("custom.db");
+    let database_url = format!("sqlite://{}", database_path.display());
+
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir).expect("old sqlite test dir should be removable");
+    }
+
+    let mut server = TestServer::with_config(TestServerConfig {
+        database_url: Some(database_url.clone()),
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to start explicit sqlite test server");
+
+    assert!(
+        database_path.exists(),
+        "explicit SQLite DATABASE_URL should create the database file"
+    );
+
+    let create_response = post_json(
+        &server.base_url,
+        "/api/v1/config/floorplans",
+        &json!({
+            "id": "explicit-sqlite",
+            "name": "Explicit SQLite"
+        }),
+    );
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+
+    server.stop();
+    drop(server);
+
+    let server = TestServer::with_config(TestServerConfig {
+        database_url: Some(database_url),
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to restart explicit sqlite test server");
+
+    let floorplans = get_json(&server.base_url, "/api/v1/config/floorplans");
+    assert_eq!(floorplans["success"], true);
+    assert!(floorplans["data"]
+        .as_array()
+        .expect("floorplans should be an array")
+        .iter()
+        .any(|floorplan| {
+            floorplan["id"] == "explicit-sqlite" && floorplan["name"] == "Explicit SQLite"
+        }));
+
+    drop(server);
+    std::fs::remove_dir_all(&temp_dir).expect("sqlite test dir should be removable");
 }
 
 #[test]

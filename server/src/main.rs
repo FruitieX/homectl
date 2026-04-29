@@ -17,8 +17,8 @@ use homectl_server::core::{
     ui::Ui,
 };
 use homectl_server::db::{
-    actions, config_queries, connect_configured_database, init_db, is_db_configured,
-    is_db_connected,
+    actions, config_queries, connect_configured_database, init_db, is_db_connected,
+    is_db_reconnect_configured,
 };
 use homectl_server::types::event::{mk_event_channel, Event};
 use homectl_server::types::scene::SceneOverridesConfig;
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
 }
 
-/// Normal server startup: optional Postgres persistence plus backup-config fallback.
+/// Normal server startup: database persistence plus backup-config fallback.
 async fn run_server(cli: &Cli) -> Result<(), Box<dyn Error>> {
     let runtime_config = match init_db(cli.database_url.as_deref()).await {
         Ok(true) => {
@@ -259,7 +259,7 @@ async fn run_event_loop(
         port,
     )?;
 
-    if cli.database_url.is_some() {
+    if is_db_reconnect_configured() {
         start_database_reconnect_loop(state_handle.clone());
     }
 
@@ -291,7 +291,7 @@ async fn run_event_loop(
 
 fn start_database_reconnect_loop(state_handle: StateHandle) {
     tokio::spawn(async move {
-        if !is_db_configured() || is_db_connected() {
+        if !is_db_reconnect_configured() || is_db_connected() {
             return;
         }
 
@@ -302,7 +302,7 @@ fn start_database_reconnect_loop(state_handle: StateHandle) {
         loop {
             interval.tick().await;
 
-            if !is_db_configured() {
+            if !is_db_reconnect_configured() {
                 break;
             }
 
@@ -312,9 +312,7 @@ fn start_database_reconnect_loop(state_handle: StateHandle) {
 
             match connect_configured_database().await {
                 Ok(true) => {
-                    info!(
-                        "Connected to configured PostgreSQL database in background reconnect loop"
-                    );
+                    info!("Connected to configured database in background reconnect loop");
 
                     if let Err(error) = synchronize_reconnected_database(&state_handle).await {
                         warn!("Failed to synchronize runtime snapshot after database reconnect: {error}");
@@ -326,9 +324,7 @@ fn start_database_reconnect_loop(state_handle: StateHandle) {
                 Err(error) => {
                     let error_message = error.to_string();
                     if last_connection_error.as_deref() != Some(error_message.as_str()) {
-                        warn!(
-                            "Configured PostgreSQL database is still unavailable: {error_message}"
-                        );
+                        warn!("Configured database is still unavailable: {error_message}");
                         last_connection_error = Some(error_message);
                     }
                 }
@@ -340,7 +336,7 @@ fn start_database_reconnect_loop(state_handle: StateHandle) {
 async fn synchronize_reconnected_database(state_handle: &StateHandle) -> Result<()> {
     if config_queries::db_has_config().await? {
         info!(
-            "Configured PostgreSQL database became available with existing config; keeping the current runtime snapshot until restart"
+            "Configured database became available with existing config; keeping the current runtime snapshot until restart"
         );
     } else {
         persist_runtime_snapshot(state_handle).await?;
