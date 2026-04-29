@@ -8,7 +8,6 @@ on:
       - 'ui/**'
       - 'Dockerfile'
       - '.dockerignore'
-      - 'prod-config.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/server-ci.yml'
@@ -18,7 +17,6 @@ on:
       - 'ui/**'
       - 'Dockerfile'
       - '.dockerignore'
-      - 'prod-config.toml'
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/server-ci.yml'
@@ -110,6 +108,7 @@ jobs:
             type=sha
 
       - name: Build (and push)
+        id: build
         uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6
         with:
           context: .
@@ -120,3 +119,16 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Deploy to homelab
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.HOMELAB_DISPATCH_TOKEN }}
+          repository: FruitieX/homelab
+          event-type: image-update
+          client-payload: |
+            {
+              "image": "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}",
+              "digest": "${{ steps.build.outputs.digest }}"
+            }

@@ -44,8 +44,8 @@ pnpm dev
 
 ## CI/CD
 Root GitHub Workflows:
-- `server-ci.yml` – Lints/tests/builds and publishes the server image (`ghcr.io/<owner>/<repo>-server`).
-- `ui-ci.yml` – Builds and publishes the UI image (`ghcr.io/<owner>/<repo>-ui`).
+- `server-ci.yml` – Lints/tests/builds and publishes the unified image (`ghcr.io/<owner>/<repo>`), then dispatches a homelab image update from `main`.
+- `ui-ci.yml` – Lints/typechecks/builds the UI bundle.
 - `release-please.yml` – Uses manifest mode to create independent releases for `server` and `ui`.
 
 Legacy per-package workflow placeholders have been removed; CI lives in the root workflow directory.
