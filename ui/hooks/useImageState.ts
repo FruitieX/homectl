@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+const imageCache = new Map<string, HTMLImageElement>();
+
 /**
  * Load an HTMLImageElement for a given URL and expose it via React state, so
  * consumers re-render when the image finishes loading or when the URL changes.
@@ -20,28 +22,42 @@ export const useImageState = (
       return;
     }
 
+    const cachedImage = imageCache.get(src);
+    if (cachedImage?.complete && cachedImage.naturalWidth > 0) {
+      setImage(cachedImage);
+      return;
+    }
+
     // Reset while the new URL is loading so stale images do not leak through.
     setImage(undefined);
 
-    const img = new Image();
+    const img = cachedImage ?? new Image();
+    if (!cachedImage) {
+      imageCache.set(src, img);
+    }
     let cancelled = false;
 
-    img.onload = () => {
+    const handleLoad = () => {
       if (!cancelled) {
         setImage(img);
       }
     };
-    img.onerror = () => {
+    const handleError = () => {
       if (!cancelled) {
         setImage(undefined);
       }
     };
-    img.src = src;
+
+    img.addEventListener('load', handleLoad);
+    img.addEventListener('error', handleError);
+    if (!cachedImage) {
+      img.src = src;
+    }
 
     return () => {
       cancelled = true;
-      img.onload = null;
-      img.onerror = null;
+      img.removeEventListener('load', handleLoad);
+      img.removeEventListener('error', handleError);
     };
   }, [src]);
 

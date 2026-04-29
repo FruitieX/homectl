@@ -1,11 +1,11 @@
 import { type Device } from '@/bindings/Device';
 import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
-import { getBrightness, getColor, getPower } from '@/lib/colors';
+import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
 import {
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
-} from '@/ui/FloorplanBackground';
+} from '@/lib/floorplan-metrics';
 import { type FloorplanGrid, type TileType } from '@/ui/FloorplanGridEditor';
 
 export interface FloorplanSceneTile {
@@ -37,6 +37,7 @@ export interface FloorplanSceneSensor {
   x: number;
   y: number;
   scale: number;
+  color?: readonly [number, number, number];
   label: string;
   statusLabel?: string;
 }
@@ -49,6 +50,7 @@ export interface FloorplanSceneGroupMask {
 }
 
 export interface FloorplanScene {
+  layoutKey: string;
   width: number;
   height: number;
   backgroundImage?: HTMLImageElement;
@@ -66,6 +68,14 @@ interface BuildFloorplanSceneInput {
   devices: Device[];
   groups: FlattenedGroupsConfig;
   displayNames?: Record<string, string>;
+  deviceVisualOverrides?: Record<string, DeviceVisualOverride>;
+  includeGroups?: boolean;
+}
+
+interface DeviceVisualOverride {
+  brightness?: number;
+  color?: readonly [number, number, number];
+  power?: boolean;
 }
 
 interface Segment {
@@ -73,17 +83,42 @@ interface Segment {
   b: FloorplanScenePoint;
 }
 
-const visibilityCircleSampleCount = 144;
+interface StaticFloorplanScene {
+  key: string;
+  width: number;
+  height: number;
+  tileWidth: number;
+  tileHeight: number;
+  positions: Record<string, FloorplanScenePoint>;
+  blockers: Segment[];
+  tiles: FloorplanSceneTile[];
+  visibilityPolygons: Map<string, FloorplanScenePoint[] | null>;
+}
 
-function colorToRgbTuple(device: Device): readonly [number, number, number] {
-  const rgb = getColor(device.data).rgb().array();
-  return [rgb[0] ?? 0, rgb[1] ?? 0, rgb[2] ?? 0];
+const visibilityCircleSampleCount = 144;
+const maxLightRadiusBase = 300;
+const staticSceneCache = new WeakMap<
+  FloorplanGrid,
+  Map<string, StaticFloorplanScene>
+>();
+
+function colorToRgbTuple(
+  device: Device,
+  override?: DeviceVisualOverride,
+): readonly [number, number, number] {
+  if (override?.color) {
+    return override.color;
+  }
+
+  const rgb = getResolvedDeviceColorState(device.data)?.color.rgb().array();
+  return [rgb?.[0] ?? 0, rgb?.[1] ?? 0, rgb?.[2] ?? 0];
 }
 
 function buildTiles(
   grid: FloorplanGrid | null,
   tileWidth: number,
   tileHeight: number,
+  includeFloorTiles: boolean,
 ) {
   if (!grid) {
     return [];
@@ -94,6 +129,14 @@ function buildTiles(
   for (let y = 0; y < grid.height; y += 1) {
     for (let x = 0; x < grid.width; x += 1) {
       const type = grid.tiles[y]?.[x] ?? 'floor';
+      if (type === 'empty') {
+        continue;
+      }
+
+      if (type === 'floor' && !includeFloorTiles) {
+        continue;
+      }
+
       tiles.push({
         x: x * tileWidth,
         y: y * tileHeight,
@@ -115,6 +158,38 @@ function subtract(left: FloorplanScenePoint, right: FloorplanScenePoint) {
   return { x: left.x - right.x, y: left.y - right.y };
 }
 
+function isWallTile(grid: FloorplanGrid, x: number, y: number) {
+  return grid.tiles[y]?.[x] === 'wall';
+}
+
+function addMergedRange(
+  rangesByLine: Map<number, Array<{ start: number; end: number }>>,
+  line: number,
+  start: number,
+  end: number,
+) {
+  const ranges = rangesByLine.get(line) ?? [];
+  ranges.push({ start: Math.min(start, end), end: Math.max(start, end) });
+  rangesByLine.set(line, ranges);
+}
+
+function mergeRanges(ranges: Array<{ start: number; end: number }>) {
+  const sorted = [...ranges].sort((left, right) => left.start - right.start);
+  const merged: Array<{ start: number; end: number }> = [];
+
+  for (const range of sorted) {
+    const previous = merged[merged.length - 1];
+    if (previous && range.start <= previous.end + 0.000001) {
+      previous.end = Math.max(previous.end, range.end);
+      continue;
+    }
+
+    merged.push({ ...range });
+  }
+
+  return merged;
+}
+
 function buildBlockingSegments(
   grid: FloorplanGrid | null,
   tileWidth: number,
@@ -124,11 +199,12 @@ function buildBlockingSegments(
     return [];
   }
 
-  const segments: Segment[] = [];
+  const horizontalEdges = new Map<number, Array<{ start: number; end: number }>>();
+  const verticalEdges = new Map<number, Array<{ start: number; end: number }>>();
 
   for (let y = 0; y < grid.height; y += 1) {
     for (let x = 0; x < grid.width; x += 1) {
-      if ((grid.tiles[y]?.[x] ?? 'floor') !== 'wall') {
+      if (!isWallTile(grid, x, y)) {
         continue;
       }
 
@@ -137,12 +213,38 @@ function buildBlockingSegments(
       const right = left + tileWidth;
       const bottom = top + tileHeight;
 
-      segments.push(
-        { a: { x: left, y: top }, b: { x: right, y: top } },
-        { a: { x: right, y: top }, b: { x: right, y: bottom } },
-        { a: { x: right, y: bottom }, b: { x: left, y: bottom } },
-        { a: { x: left, y: bottom }, b: { x: left, y: top } },
-      );
+      if (y === 0 || !isWallTile(grid, x, y - 1)) {
+        addMergedRange(horizontalEdges, top, left, right);
+      }
+      if (x === grid.width - 1 || !isWallTile(grid, x + 1, y)) {
+        addMergedRange(verticalEdges, right, top, bottom);
+      }
+      if (y === grid.height - 1 || !isWallTile(grid, x, y + 1)) {
+        addMergedRange(horizontalEdges, bottom, left, right);
+      }
+      if (x === 0 || !isWallTile(grid, x - 1, y)) {
+        addMergedRange(verticalEdges, left, top, bottom);
+      }
+    }
+  }
+
+  const segments: Segment[] = [];
+
+  for (const [y, ranges] of horizontalEdges) {
+    for (const range of mergeRanges(ranges)) {
+      segments.push({
+        a: { x: range.start, y },
+        b: { x: range.end, y },
+      });
+    }
+  }
+
+  for (const [x, ranges] of verticalEdges) {
+    for (const range of mergeRanges(ranges)) {
+      segments.push({
+        a: { x, y: range.start },
+        b: { x, y: range.end },
+      });
     }
   }
 
@@ -263,20 +365,103 @@ function getSensorStatusLabel(device: Device) {
   return undefined;
 }
 
+function getStaticSceneCacheKey(
+  grid: FloorplanGrid,
+  image: HTMLImageElement | undefined,
+) {
+  const imageWidth = image?.width ?? 0;
+  const imageHeight = image?.height ?? 0;
+  return [
+    grid.width,
+    grid.height,
+    grid.tileSize,
+    grid.deviceScale,
+    grid.devices.length,
+    Object.keys(grid.groups).length,
+    image ? 'image' : 'grid',
+    imageWidth,
+    imageHeight,
+  ].join(':');
+}
+
+function buildStaticFloorplanScene(
+  grid: FloorplanGrid | null,
+  image: HTMLImageElement | undefined,
+): StaticFloorplanScene {
+  const metrics = getFloorplanRenderMetrics(grid, image);
+
+  if (!grid) {
+    return {
+      key: `empty:${metrics.width}:${metrics.height}`,
+      width: metrics.width,
+      height: metrics.height,
+      tileWidth: metrics.tileWidth,
+      tileHeight: metrics.tileHeight,
+      positions: {},
+      blockers: [],
+      tiles: [],
+      visibilityPolygons: new Map(),
+    };
+  }
+
+  const cacheKey = getStaticSceneCacheKey(grid, image);
+  const cachedByKey = staticSceneCache.get(grid);
+  const cached = cachedByKey?.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const staticScene: StaticFloorplanScene = {
+    key: cacheKey,
+    width: metrics.width,
+    height: metrics.height,
+    tileWidth: metrics.tileWidth,
+    tileHeight: metrics.tileHeight,
+    positions: getFloorplanDevicePositions(grid, metrics),
+    blockers: buildBlockingSegments(
+      grid,
+      metrics.tileWidth,
+      metrics.tileHeight,
+    ),
+    tiles: buildTiles(grid, metrics.tileWidth, metrics.tileHeight, !image),
+    visibilityPolygons: new Map(),
+  };
+
+  const nextCachedByKey = cachedByKey ?? new Map<string, StaticFloorplanScene>();
+  nextCachedByKey.set(cacheKey, staticScene);
+  staticSceneCache.set(grid, nextCachedByKey);
+
+  return staticScene;
+}
+
+function getCachedVisibilityPolygon(
+  staticScene: StaticFloorplanScene,
+  deviceKey: string,
+  origin: FloorplanScenePoint,
+  radius: number,
+) {
+  const cacheKey = `${deviceKey}:${radius}`;
+  if (!staticScene.visibilityPolygons.has(cacheKey)) {
+    staticScene.visibilityPolygons.set(
+      cacheKey,
+      buildVisibilityPolygon(origin, radius, staticScene.blockers) ?? null,
+    );
+  }
+
+  return staticScene.visibilityPolygons.get(cacheKey) ?? undefined;
+}
+
 export function buildFloorplanScene({
   grid,
   image,
   devices,
   groups,
   displayNames,
+  deviceVisualOverrides,
+  includeGroups = true,
 }: BuildFloorplanSceneInput): FloorplanScene {
-  const metrics = getFloorplanRenderMetrics(grid, image);
-  const positions = getFloorplanDevicePositions(grid, metrics);
-  const blockers = buildBlockingSegments(
-    grid,
-    metrics.tileWidth,
-    metrics.tileHeight,
-  );
+  const staticScene = buildStaticFloorplanScene(grid, image);
+  const positions = staticScene.positions;
   const deviceScale = grid?.deviceScale ?? 1;
   const lights: FloorplanSceneLight[] = [];
   const sensors: FloorplanSceneSensor[] = [];
@@ -289,8 +474,11 @@ export function buildFloorplanScene({
       continue;
     }
 
+    const override = deviceVisualOverrides?.[deviceKey];
+
     if ('Controllable' in device.data) {
-      const brightness = getBrightness(device.data);
+      const resolved = getResolvedDeviceColorState(device.data);
+      const brightness = override?.brightness ?? resolved?.brightness ?? 0;
       const radius = (100 + 200 * brightness) * deviceScale;
       lights.push({
         deviceKey,
@@ -298,9 +486,14 @@ export function buildFloorplanScene({
         y: position.y,
         radius,
         intensity: brightness,
-        power: getPower(device.data),
-        color: colorToRgbTuple(device),
-        visibilityPolygon: buildVisibilityPolygon(position, radius, blockers),
+        power: override?.power ?? resolved?.power ?? false,
+        color: colorToRgbTuple(device, override),
+        visibilityPolygon: getCachedVisibilityPolygon(
+          staticScene,
+          deviceKey,
+          position,
+          maxLightRadiusBase * deviceScale,
+        ),
       });
       continue;
     }
@@ -311,13 +504,14 @@ export function buildFloorplanScene({
         x: position.x,
         y: position.y,
         scale: deviceScale,
+        ...(override?.color ? { color: override.color } : {}),
         label: (displayNames?.[deviceKey] ?? device.name.trim()) || device.id,
         statusLabel: getSensorStatusLabel(device),
       });
     }
   }
 
-  const groupMasks = grid?.groups ?? {};
+  const groupMasks = includeGroups ? (grid?.groups ?? {}) : {};
   const sceneGroups: FloorplanSceneGroupMask[] = Object.entries(groupMasks)
     .filter(
       ([groupId, cells]) =>
@@ -331,12 +525,13 @@ export function buildFloorplanScene({
     }));
 
   return {
-    width: metrics.width,
-    height: metrics.height,
+    layoutKey: staticScene.key,
+    width: staticScene.width,
+    height: staticScene.height,
     ...(image ? { backgroundImage: image } : {}),
-    tileWidth: metrics.tileWidth,
-    tileHeight: metrics.tileHeight,
-    tiles: buildTiles(grid, metrics.tileWidth, metrics.tileHeight),
+    tileWidth: staticScene.tileWidth,
+    tileHeight: staticScene.tileHeight,
+    tiles: staticScene.tiles,
     lights,
     sensors,
     groups: sceneGroups,

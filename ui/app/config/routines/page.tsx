@@ -374,10 +374,7 @@ function RoutineCard({
         </TabsContent>
 
         <TabsContent value="rules" className="mt-4">
-          <ConfigFormSection
-            title="Rules"
-            description="All rules must match before routine actions run."
-          >
+          <ConfigFormSection aria-label="Routine rules">
             <RuleBuilder
               rules={rules}
               devices={devices}
@@ -389,10 +386,7 @@ function RoutineCard({
         </TabsContent>
 
         <TabsContent value="actions" className="mt-4">
-          <ConfigFormSection
-            title="Actions"
-            description="Actions run in order when all routine rules match."
-          >
+          <ConfigFormSection aria-label="Routine actions">
             <ActionBuilder
               actions={actions}
               devices={devices}

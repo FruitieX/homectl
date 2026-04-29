@@ -203,6 +203,63 @@ export const useWebsocket = (): WebSocket | null => {
 export const useDevicesState = (): DevicesState | null =>
   useAtomValue(devicesAtom);
 
+function areDeviceSelectionsEqual(
+  left: DevicesState | null,
+  right: DevicesState | null,
+) {
+  if (left === right) {
+    return true;
+  }
+
+  if (left === null || right === null) {
+    return false;
+  }
+
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  if (leftKeys.length !== rightKeys.length) {
+    return false;
+  }
+
+  for (const key of leftKeys) {
+    if (left[key] !== right[key]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export const useDevicesByKeysState = (
+  deviceKeys: readonly string[],
+): DevicesState | null => {
+  const deviceKeysKey = deviceKeys.join('\0');
+  const selectedDevicesAtom = useMemo(() => {
+    const selectedKeys = deviceKeysKey ? deviceKeysKey.split('\0') : [];
+    return selectAtom(
+      devicesAtom,
+      (devices) => {
+        if (devices === null) {
+          return null;
+        }
+
+        const selectedDevices: DevicesState = {};
+        for (const deviceKey of selectedKeys) {
+          const device = devices[deviceKey];
+          if (device !== undefined) {
+            selectedDevices[deviceKey] = device;
+          }
+        }
+
+        return selectedDevices;
+      },
+      areDeviceSelectionsEqual,
+    );
+  }, [deviceKeysKey]);
+
+  return useAtomValue(selectedDevicesAtom);
+};
+
 export const useDeviceState = (
   deviceKey: string | undefined,
 ): Device | undefined => {

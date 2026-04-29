@@ -18,6 +18,9 @@ import {
 interface PixiFloorplanRendererProps {
   scene: FloorplanScene;
   selectedDeviceKeys?: readonly string[];
+  interactive?: boolean;
+  fitPadding?: number;
+  renderLabels?: boolean;
   onDevicePress?: (deviceKey: string) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
   onSensorPress?: (deviceKey: string) => void;
@@ -74,12 +77,63 @@ interface RendererQuality {
   resolutionCap: number;
 }
 
+interface LightRenderEntry {
+  sprite: Sprite;
+  mask: Graphics | null;
+  visibilityPolygon?: FloorplanScenePoint[];
+}
+
+interface SensorLabelRenderEntry {
+  container: Container;
+  label: Text;
+  status: Text | null;
+}
+
+interface GroupRenderEntry {
+  drawKey: string;
+  graphics: Graphics;
+}
+
+interface SceneRenderState {
+  backgroundLayer: Container;
+  groupLayer: Container;
+  tileLayer: Container;
+  lightLayer: Container;
+  markerLayer: Container;
+  labelLayer: Container;
+  backgroundSprite: Sprite | null;
+  backgroundImage?: HTMLImageElement;
+  tileGraphics: Graphics;
+  tileSource: readonly FloorplanSceneTile[] | null;
+  groupEntries: Map<string, GroupRenderEntry>;
+  lightEntries: Map<string, LightRenderEntry>;
+  lightMarkerEntries: Map<string, Graphics>;
+  labelTextureScale: number;
+  sensorMarkerEntries: Map<string, Graphics>;
+  sensorLabelEntries: Map<string, SensorLabelRenderEntry>;
+}
+
 const emptySelection: readonly string[] = [];
 const longPressDelayMs = 500;
 const tapMoveTolerancePx = 8;
 const minScale = 0.08;
 const maxScale = 8;
+const labelTextureScaleStep = 0.25;
 const lightGradientTextureCache = new Map<number, Texture>();
+const objectIdentityCache = new WeakMap<object, number>();
+let nextObjectIdentity = 1;
+
+function getObjectIdentity(value: object) {
+  const cachedIdentity = objectIdentityCache.get(value);
+  if (cachedIdentity !== undefined) {
+    return cachedIdentity;
+  }
+
+  const identity = nextObjectIdentity;
+  nextObjectIdentity += 1;
+  objectIdentityCache.set(value, identity);
+  return identity;
+}
 
 function getRendererQuality(): RendererQuality {
   const memory =
@@ -199,6 +253,8 @@ function getGroupColor(groupId: string) {
 
 function getTileColor(tile: FloorplanSceneTile) {
   switch (tile.type) {
+    case 'empty':
+      return 0x000000;
     case 'wall':
       return 0x334155;
     case 'door':
@@ -210,11 +266,20 @@ function getTileColor(tile: FloorplanSceneTile) {
   }
 }
 
-function destroyChildren(container: Container) {
-  const children = container.removeChildren();
-  for (const child of children) {
-    child.destroy({ children: true });
-  }
+function getLabelTextureScale(viewScale: number) {
+  return Math.min(
+    maxScale,
+    Math.max(
+      1,
+      Math.ceil(viewScale / labelTextureScaleStep) * labelTextureScaleStep,
+    ),
+  );
+}
+
+function destroyDisplayObject(
+  displayObject: Container | Graphics | Sprite | Text,
+) {
+  displayObject.destroy({ children: true });
 }
 
 function getLightGradientTexture(size: number) {
@@ -277,153 +342,479 @@ function createVisibilityMask(light: FloorplanScene['lights'][number]) {
   return mask;
 }
 
-function renderScene(
-  world: Container,
-  scene: FloorplanScene,
-  selectedDeviceKeys: readonly string[],
-  quality: RendererQuality,
-) {
-  destroyChildren(world);
-  const selectedSet = new Set(selectedDeviceKeys);
+function createSceneRenderState(world: Container): SceneRenderState {
+  const backgroundLayer = new Container();
+  const groupLayer = new Container();
+  const tileLayer = new Container();
+  const lightLayer = new Container();
+  const markerLayer = new Container();
+  const labelLayer = new Container();
+  const tileGraphics = new Graphics();
 
-  if (scene.backgroundImage) {
-    const background = new Sprite(Texture.from(scene.backgroundImage));
-    background.width = scene.width;
-    background.height = scene.height;
-    world.addChild(background);
-  }
+  tileLayer.addChild(tileGraphics);
+  world.addChild(
+    backgroundLayer,
+    groupLayer,
+    tileLayer,
+    lightLayer,
+    markerLayer,
+    labelLayer,
+  );
 
-  const groups = new Graphics();
-  for (const group of scene.groups) {
-    const selected = group.deviceKeys.some((deviceKey) =>
-      selectedSet.has(deviceKey),
-    );
-    const color = getGroupColor(group.groupId);
-    const alpha = selected ? 0.34 : 0.16;
+  return {
+    backgroundLayer,
+    groupLayer,
+    tileLayer,
+    lightLayer,
+    markerLayer,
+    labelLayer,
+    backgroundSprite: null,
+    tileGraphics,
+    tileSource: null,
+    groupEntries: new Map(),
+    lightEntries: new Map(),
+    lightMarkerEntries: new Map(),
+    labelTextureScale: 1,
+    sensorMarkerEntries: new Map(),
+    sensorLabelEntries: new Map(),
+  };
+}
 
-    for (const cell of group.cells) {
-      groups
-        .rect(
-          cell.x * scene.tileWidth,
-          cell.y * scene.tileHeight,
-          scene.tileWidth,
-          scene.tileHeight,
-        )
-        .fill({ color, alpha });
+function syncBackground(renderState: SceneRenderState, scene: FloorplanScene) {
+  if (!scene.backgroundImage) {
+    if (renderState.backgroundSprite) {
+      renderState.backgroundLayer.removeChild(renderState.backgroundSprite);
+      destroyDisplayObject(renderState.backgroundSprite);
+      renderState.backgroundSprite = null;
+      renderState.backgroundImage = undefined;
     }
+    return;
   }
-  world.addChild(groups);
 
-  const tiles = new Graphics();
+  if (
+    !renderState.backgroundSprite ||
+    renderState.backgroundImage !== scene.backgroundImage
+  ) {
+    if (renderState.backgroundSprite) {
+      renderState.backgroundLayer.removeChild(renderState.backgroundSprite);
+      destroyDisplayObject(renderState.backgroundSprite);
+    }
+
+    renderState.backgroundSprite = new Sprite(Texture.from(scene.backgroundImage));
+    renderState.backgroundLayer.addChild(renderState.backgroundSprite);
+    renderState.backgroundImage = scene.backgroundImage;
+  }
+
+  renderState.backgroundSprite.width = scene.width;
+  renderState.backgroundSprite.height = scene.height;
+}
+
+function syncTiles(renderState: SceneRenderState, scene: FloorplanScene) {
+  if (renderState.tileSource === scene.tiles) {
+    return;
+  }
+
+  renderState.tileSource = scene.tiles;
+  renderState.tileGraphics.clear();
+
   for (const tile of scene.tiles) {
-    tiles.rect(tile.x, tile.y, tile.width, tile.height).fill({
+    renderState.tileGraphics.rect(tile.x, tile.y, tile.width, tile.height).fill({
       color: getTileColor(tile),
       alpha:
         tile.type === 'floor' ? (scene.backgroundImage ? 0.05 : 0.18) : 0.9,
     });
   }
-  world.addChild(tiles);
+}
 
-  const lights = new Container();
-  for (const light of scene.lights) {
-    if (!light.power || light.intensity <= 0) {
+function drawGroupMask(
+  graphics: Graphics,
+  group: FloorplanScene['groups'][number],
+  scene: FloorplanScene,
+  selected: boolean,
+) {
+  const color = getGroupColor(group.groupId);
+  const alpha = selected ? 0.34 : 0.16;
+
+  graphics.clear();
+  for (const cell of group.cells) {
+    graphics
+      .rect(
+        cell.x * scene.tileWidth,
+        cell.y * scene.tileHeight,
+        scene.tileWidth,
+        scene.tileHeight,
+      )
+      .fill({ color, alpha });
+  }
+}
+
+function getGroupDrawKey(
+  group: FloorplanScene['groups'][number],
+  scene: FloorplanScene,
+  selectedSet: ReadonlySet<string>,
+) {
+  const selected = group.deviceKeys.some((deviceKey) => selectedSet.has(deviceKey));
+  return `${scene.layoutKey}:${getObjectIdentity(group.cells)}:${scene.tileWidth}:${scene.tileHeight}:${selected}`;
+}
+
+function syncGroups(
+  renderState: SceneRenderState,
+  scene: FloorplanScene,
+  selectedSet: ReadonlySet<string>,
+) {
+  const seenGroupIds = new Set<string>();
+
+  for (const group of scene.groups) {
+    seenGroupIds.add(group.groupId);
+    let entry = renderState.groupEntries.get(group.groupId);
+    if (!entry) {
+      entry = { drawKey: '', graphics: new Graphics() };
+      renderState.groupEntries.set(group.groupId, entry);
+      renderState.groupLayer.addChild(entry.graphics);
+    }
+
+    const drawKey = getGroupDrawKey(group, scene, selectedSet);
+    if (entry.drawKey !== drawKey) {
+      entry.drawKey = drawKey;
+      drawGroupMask(
+        entry.graphics,
+        group,
+        scene,
+        group.deviceKeys.some((deviceKey) => selectedSet.has(deviceKey)),
+      );
+    }
+  }
+
+  for (const [groupId, entry] of renderState.groupEntries) {
+    if (seenGroupIds.has(groupId)) {
       continue;
     }
 
-    const lightSprite = new Sprite(
-      getLightGradientTexture(quality.lightTextureSize),
-    );
-    lightSprite.anchor.set(0.5);
-    lightSprite.position.set(light.x, light.y);
-    lightSprite.width = light.radius * 2;
-    lightSprite.height = light.radius * 2;
-    lightSprite.tint = toneMapLightColor(light.color, light.intensity);
-    lightSprite.alpha = getLightAlpha(light.intensity);
-
-    if (light.visibilityPolygon && light.visibilityPolygon.length >= 3) {
-      const mask = createVisibilityMask(light);
-      lightSprite.mask = mask;
-      lights.addChild(lightSprite, mask);
-    } else {
-      lights.addChild(lightSprite);
-    }
+    renderState.groupLayer.removeChild(entry.graphics);
+    destroyDisplayObject(entry.graphics);
+    renderState.groupEntries.delete(groupId);
   }
-  world.addChild(lights);
+}
 
-  const devices = new Graphics();
-  for (const light of scene.lights) {
-    const selected = selectedSet.has(light.deviceKey);
-    devices
-      .circle(light.x, light.y, 18)
-      .fill({ color: rgbToHex(light.color), alpha: light.power ? 1 : 0.35 })
-      .stroke({
-        color: selected ? 0xffffff : 0x0f172a,
-        width: selected ? 5 : 3,
-        alpha: 0.95,
-      });
-
-    if (selected) {
-      devices
-        .moveTo(light.x - 8, light.y)
-        .lineTo(light.x - 2, light.y + 7)
-        .lineTo(light.x + 10, light.y - 9)
-        .stroke({ color: 0xffffff, width: 4, alpha: 1 });
-    }
-  }
-
-  for (const sensor of scene.sensors) {
-    devices
-      .regularPoly(sensor.x, sensor.y, 16 * sensor.scale, 3)
-      .fill({ color: 0x38bdf8, alpha: 0.95 })
-      .stroke({ color: 0x0f172a, width: 2, alpha: 0.9 });
-  }
-  world.addChild(devices);
-
-  if (!quality.renderLabels) {
+function syncLightMask(
+  renderState: SceneRenderState,
+  entry: LightRenderEntry,
+  light: FloorplanScene['lights'][number],
+) {
+  if (entry.visibilityPolygon === light.visibilityPolygon) {
     return;
   }
 
-  const labels = new Container();
+  if (entry.mask) {
+    renderState.lightLayer.removeChild(entry.mask);
+    destroyDisplayObject(entry.mask);
+    entry.mask = null;
+  }
+
+  entry.visibilityPolygon = light.visibilityPolygon;
+  if (light.visibilityPolygon && light.visibilityPolygon.length >= 3) {
+    entry.mask = createVisibilityMask(light);
+    entry.sprite.mask = entry.mask;
+    renderState.lightLayer.addChild(entry.mask);
+  } else {
+    entry.sprite.mask = null;
+  }
+}
+
+function syncLights(
+  renderState: SceneRenderState,
+  scene: FloorplanScene,
+  quality: RendererQuality,
+) {
+  const seenDeviceKeys = new Set<string>();
+  const texture = getLightGradientTexture(quality.lightTextureSize);
+
+  for (const light of scene.lights) {
+    seenDeviceKeys.add(light.deviceKey);
+    let entry = renderState.lightEntries.get(light.deviceKey);
+    if (!entry) {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5);
+      renderState.lightLayer.addChild(sprite);
+      entry = { sprite, mask: null };
+      renderState.lightEntries.set(light.deviceKey, entry);
+    } else if (entry.sprite.texture !== texture) {
+      entry.sprite.texture = texture;
+    }
+
+    entry.sprite.visible = light.power && light.intensity > 0;
+    entry.sprite.position.set(light.x, light.y);
+    entry.sprite.width = light.radius * 2;
+    entry.sprite.height = light.radius * 2;
+    entry.sprite.tint = toneMapLightColor(light.color, light.intensity);
+    entry.sprite.alpha = getLightAlpha(light.intensity);
+    syncLightMask(renderState, entry, light);
+  }
+
+  for (const [deviceKey, entry] of renderState.lightEntries) {
+    if (seenDeviceKeys.has(deviceKey)) {
+      continue;
+    }
+
+    renderState.lightLayer.removeChild(entry.sprite);
+    destroyDisplayObject(entry.sprite);
+    if (entry.mask) {
+      renderState.lightLayer.removeChild(entry.mask);
+      destroyDisplayObject(entry.mask);
+    }
+    renderState.lightEntries.delete(deviceKey);
+  }
+}
+
+function drawLightMarker(
+  graphics: Graphics,
+  light: FloorplanScene['lights'][number],
+  selected: boolean,
+) {
+  graphics.clear();
+  graphics
+    .circle(light.x, light.y, 18)
+    .fill({ color: rgbToHex(light.color), alpha: light.power ? 1 : 0.35 })
+    .stroke({
+      color: selected ? 0xffffff : 0x0f172a,
+      width: selected ? 5 : 3,
+      alpha: 0.95,
+    });
+
+  if (selected) {
+    graphics
+      .moveTo(light.x - 8, light.y)
+      .lineTo(light.x - 2, light.y + 7)
+      .lineTo(light.x + 10, light.y - 9)
+      .stroke({ color: 0xffffff, width: 4, alpha: 1 });
+  }
+}
+
+function drawSensorMarker(
+  graphics: Graphics,
+  sensor: FloorplanScene['sensors'][number],
+) {
+  graphics.clear();
+  graphics
+    .regularPoly(sensor.x, sensor.y, 16 * sensor.scale, 3)
+    .fill({ color: sensor.color ? rgbToHex(sensor.color) : 0x38bdf8, alpha: 0.95 })
+    .stroke({ color: 0x0f172a, width: 2, alpha: 0.9 });
+}
+
+function syncMarkers(
+  renderState: SceneRenderState,
+  scene: FloorplanScene,
+  selectedSet: ReadonlySet<string>,
+) {
+  const seenLightKeys = new Set<string>();
+  const seenSensorKeys = new Set<string>();
+
+  for (const light of scene.lights) {
+    seenLightKeys.add(light.deviceKey);
+    let graphics = renderState.lightMarkerEntries.get(light.deviceKey);
+    if (!graphics) {
+      graphics = new Graphics();
+      renderState.lightMarkerEntries.set(light.deviceKey, graphics);
+      renderState.markerLayer.addChild(graphics);
+    }
+
+    drawLightMarker(graphics, light, selectedSet.has(light.deviceKey));
+  }
+
   for (const sensor of scene.sensors) {
-    const label = new Text({
-      text: sensor.label,
+    seenSensorKeys.add(sensor.deviceKey);
+    let graphics = renderState.sensorMarkerEntries.get(sensor.deviceKey);
+    if (!graphics) {
+      graphics = new Graphics();
+      renderState.sensorMarkerEntries.set(sensor.deviceKey, graphics);
+      renderState.markerLayer.addChild(graphics);
+    }
+
+    drawSensorMarker(graphics, sensor);
+  }
+
+  for (const [deviceKey, graphics] of renderState.lightMarkerEntries) {
+    if (seenLightKeys.has(deviceKey)) {
+      continue;
+    }
+
+    renderState.markerLayer.removeChild(graphics);
+    destroyDisplayObject(graphics);
+    renderState.lightMarkerEntries.delete(deviceKey);
+  }
+
+  for (const [deviceKey, graphics] of renderState.sensorMarkerEntries) {
+    if (seenSensorKeys.has(deviceKey)) {
+      continue;
+    }
+
+    renderState.markerLayer.removeChild(graphics);
+    destroyDisplayObject(graphics);
+    renderState.sensorMarkerEntries.delete(deviceKey);
+  }
+}
+
+function createSensorLabel(
+  sensor: FloorplanScene['sensors'][number],
+  textureScale: number,
+) {
+  const container = new Container();
+  const label = new Text({
+    text: sensor.label,
+    style: {
+      align: 'center',
+      fill: 0xe5e7eb,
+      fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
+      fontSize: 11 * sensor.scale * textureScale,
+      fontWeight: '700',
+      stroke: { color: 0x0f172a, width: 3 * textureScale },
+    },
+  });
+  label.anchor.set(0.5, 0);
+  label.scale.set(1 / textureScale);
+  container.addChild(label);
+
+  return { container, label, status: null } satisfies SensorLabelRenderEntry;
+}
+
+function syncSensorLabel(
+  entry: SensorLabelRenderEntry,
+  sensor: FloorplanScene['sensors'][number],
+  textureScale: number,
+) {
+  entry.label.text = sensor.label;
+  entry.label.style.fontSize = 11 * sensor.scale * textureScale;
+  entry.label.style.stroke = { color: 0x0f172a, width: 3 * textureScale };
+  entry.label.scale.set(1 / textureScale);
+  entry.label.position.set(sensor.x, sensor.y + 22 * sensor.scale);
+
+  if (!sensor.statusLabel) {
+    if (entry.status) {
+      entry.container.removeChild(entry.status);
+      destroyDisplayObject(entry.status);
+      entry.status = null;
+    }
+    return;
+  }
+
+  if (!entry.status) {
+    entry.status = new Text({
+      text: sensor.statusLabel,
       style: {
         align: 'center',
-        fill: 0xe5e7eb,
+        fill: 0xffffff,
         fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-        fontSize: 11 * sensor.scale,
-        fontWeight: '700',
-        stroke: { color: 0x0f172a, width: 3 },
+        fontSize: 9 * sensor.scale * textureScale,
+        fontWeight: '800',
       },
     });
-    label.anchor.set(0.5, 0);
-    label.position.set(sensor.x, sensor.y + 22 * sensor.scale);
-    labels.addChild(label);
+    entry.status.anchor.set(0.5);
+    entry.container.addChild(entry.status);
+  }
 
-    if (sensor.statusLabel) {
-      const status = new Text({
-        text: sensor.statusLabel,
-        style: {
-          align: 'center',
-          fill: 0xffffff,
-          fontFamily: 'Inter, ui-sans-serif, system-ui, sans-serif',
-          fontSize: 9 * sensor.scale,
-          fontWeight: '800',
-        },
-      });
-      status.anchor.set(0.5);
-      status.position.set(sensor.x, sensor.y);
-      labels.addChild(status);
+  entry.status.text = sensor.statusLabel;
+  entry.status.style.fontSize = 9 * sensor.scale * textureScale;
+  entry.status.scale.set(1 / textureScale);
+  entry.status.position.set(sensor.x, sensor.y);
+}
+
+function syncSensorLabels(
+  renderState: SceneRenderState,
+  scene: FloorplanScene,
+  renderLabels: boolean,
+  viewScale: number,
+) {
+  if (!renderLabels) {
+    for (const entry of renderState.sensorLabelEntries.values()) {
+      renderState.labelLayer.removeChild(entry.container);
+      destroyDisplayObject(entry.container);
+    }
+    renderState.sensorLabelEntries.clear();
+    return;
+  }
+
+  const textureScale = getLabelTextureScale(viewScale);
+  renderState.labelTextureScale = textureScale;
+  const seenDeviceKeys = new Set<string>();
+
+  for (const sensor of scene.sensors) {
+    seenDeviceKeys.add(sensor.deviceKey);
+    let entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
+    if (!entry) {
+      entry = createSensorLabel(sensor, textureScale);
+      renderState.sensorLabelEntries.set(sensor.deviceKey, entry);
+      renderState.labelLayer.addChild(entry.container);
+    }
+
+    syncSensorLabel(entry, sensor, textureScale);
+  }
+
+  for (const [deviceKey, entry] of renderState.sensorLabelEntries) {
+    if (seenDeviceKeys.has(deviceKey)) {
+      continue;
+    }
+
+    renderState.labelLayer.removeChild(entry.container);
+    destroyDisplayObject(entry.container);
+    renderState.sensorLabelEntries.delete(deviceKey);
+  }
+}
+
+function syncLabelTextureScale(
+  renderState: SceneRenderState | null,
+  scene: FloorplanScene,
+  renderLabels: boolean,
+  viewScale: number,
+) {
+  if (!renderState || !renderLabels) {
+    return;
+  }
+
+  const textureScale = getLabelTextureScale(viewScale);
+  if (renderState.labelTextureScale === textureScale) {
+    return;
+  }
+
+  renderState.labelTextureScale = textureScale;
+  for (const sensor of scene.sensors) {
+    const entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
+    if (entry) {
+      syncSensorLabel(entry, sensor, textureScale);
     }
   }
-  world.addChild(labels);
+}
+
+function syncScene(
+  renderState: SceneRenderState,
+  scene: FloorplanScene,
+  selectedDeviceKeys: readonly string[],
+  quality: RendererQuality,
+  renderLabels: boolean,
+  viewScale: number,
+) {
+  const selectedSet = new Set(selectedDeviceKeys);
+  syncBackground(renderState, scene);
+  syncGroups(renderState, scene, selectedSet);
+  syncTiles(renderState, scene);
+  syncLights(renderState, scene, quality);
+  syncMarkers(renderState, scene, selectedSet);
+  syncSensorLabels(
+    renderState,
+    scene,
+    quality.renderLabels && renderLabels,
+    viewScale,
+  );
 }
 
 function clampScale(scale: number) {
   return Math.min(maxScale, Math.max(minScale, scale));
 }
 
-function getFitTransform(container: HTMLDivElement, scene: FloorplanScene) {
+function getFitTransform(
+  container: HTMLDivElement,
+  scene: FloorplanScene,
+  fitPadding: number,
+) {
   const width = container.clientWidth;
   const height = container.clientHeight;
 
@@ -432,7 +823,7 @@ function getFitTransform(container: HTMLDivElement, scene: FloorplanScene) {
   }
 
   const scale = clampScale(
-    0.86 * Math.min(width / scene.width, height / scene.height),
+    fitPadding * Math.min(width / scene.width, height / scene.height),
   );
 
   return {
@@ -595,17 +986,20 @@ function getApplicationCanvas(app: Application) {
 
 function destroyApplication(app: Application) {
   try {
-    app.destroy(true, { children: true, texture: true });
+    app.stop();
+    app.destroy(true, { children: true, texture: false, textureSource: false });
   } catch {
     // Pixi can throw when a WebGL context is lost before initialization has
-    // produced a renderer. At that point the parent view will fall back to the
-    // classic renderer, so cleanup should stay best-effort.
+    // produced a renderer. At that point cleanup should stay best-effort.
   }
 }
 
 export function PixiFloorplanRenderer({
   scene,
   selectedDeviceKeys,
+  interactive = true,
+  fitPadding = 0.86,
+  renderLabels = true,
   onDevicePress,
   onDeviceLongPress,
   onSensorPress,
@@ -617,9 +1011,12 @@ export function PixiFloorplanRenderer({
   const containerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const worldRef = useRef<Container | null>(null);
+  const renderStateRef = useRef<SceneRenderState | null>(null);
   const latestSceneRef = useRef(scene);
   const selectedKeys = selectedDeviceKeys ?? emptySelection;
   const latestSelectedKeysRef = useRef(selectedKeys);
+  const fitPaddingRef = useRef(fitPadding);
+  const renderLabelsRef = useRef(renderLabels);
   const handlersRef = useRef<RendererHandlers>({
     onDevicePress,
     onDeviceLongPress,
@@ -643,6 +1040,13 @@ export function PixiFloorplanRenderer({
   function setView(nextView: ViewTransform) {
     viewRef.current = nextView;
     applyView(worldRef.current, nextView);
+    syncLabelTextureScale(
+      renderStateRef.current,
+      latestSceneRef.current,
+      (qualityRef.current ?? getRendererQuality()).renderLabels &&
+        renderLabelsRef.current,
+      nextView.scale,
+    );
   }
 
   function clearActiveLongPress() {
@@ -664,13 +1068,17 @@ export function PixiFloorplanRenderer({
       onGroupLongPress,
       onUnavailable,
     };
+    fitPaddingRef.current = fitPadding;
+    renderLabelsRef.current = renderLabels;
   }, [
+    fitPadding,
     onDevicePress,
     onDeviceLongPress,
     onGroupLongPress,
     onGroupPress,
     onSensorPress,
     onUnavailable,
+    renderLabels,
   ]);
 
   useEffect(() => {
@@ -687,7 +1095,13 @@ export function PixiFloorplanRenderer({
     appRef.current = app;
 
     fitSceneRef.current = () => {
-      setView(getFitTransform(container, latestSceneRef.current));
+      setView(
+        getFitTransform(
+          container,
+          latestSceneRef.current,
+          fitPaddingRef.current,
+        ),
+      );
     };
 
     const handleContextLost = (event: Event) => {
@@ -831,15 +1245,17 @@ export function PixiFloorplanRenderer({
       );
     };
 
-    container.addEventListener('pointerdown', handlePointerDown, {
-      passive: false,
-    });
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    window.addEventListener('pointermove', handlePointerMove, {
-      passive: false,
-    });
-    window.addEventListener('pointerup', handlePointerUp);
-    window.addEventListener('pointercancel', handlePointerUp);
+    if (interactive) {
+      container.addEventListener('pointerdown', handlePointerDown, {
+        passive: false,
+      });
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      window.addEventListener('pointermove', handlePointerMove, {
+        passive: false,
+      });
+      window.addEventListener('pointerup', handlePointerUp);
+      window.addEventListener('pointercancel', handlePointerUp);
+    }
 
     void app
       .init({
@@ -867,15 +1283,19 @@ export function PixiFloorplanRenderer({
         }
 
         worldRef.current = world;
+        const renderState = createSceneRenderState(world);
+        renderStateRef.current = renderState;
         app.stage.addChild(world);
         container.appendChild(canvas);
         canvas.addEventListener('webglcontextlost', handleContextLost);
         fitSceneRef.current();
-        renderScene(
-          world,
+        syncScene(
+          renderState,
           latestSceneRef.current,
           latestSelectedKeysRef.current,
           qualityRef.current ?? getRendererQuality(),
+          renderLabelsRef.current,
+          viewRef.current.scale,
         );
 
         resizeObserver = new ResizeObserver(() => {
@@ -895,11 +1315,13 @@ export function PixiFloorplanRenderer({
       disposed = true;
       clearActiveLongPress();
       resizeObserver?.disconnect();
-      container.removeEventListener('pointerdown', handlePointerDown);
-      container.removeEventListener('wheel', handleWheel);
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      window.removeEventListener('pointercancel', handlePointerUp);
+      if (interactive) {
+        container.removeEventListener('pointerdown', handlePointerDown);
+        container.removeEventListener('wheel', handleWheel);
+        window.removeEventListener('pointermove', handlePointerMove);
+        window.removeEventListener('pointerup', handlePointerUp);
+        window.removeEventListener('pointercancel', handlePointerUp);
+      }
       const canvas = getApplicationCanvas(app);
       canvas?.removeEventListener('webglcontextlost', handleContextLost);
       canvas?.remove();
@@ -908,26 +1330,29 @@ export function PixiFloorplanRenderer({
       pinchRef.current = null;
       appRef.current = null;
       worldRef.current = null;
+      renderStateRef.current = null;
       destroyApplication(app);
     };
-  }, []);
+  }, [interactive]);
 
   useEffect(() => {
     latestSceneRef.current = scene;
     latestSelectedKeysRef.current = selectedKeys;
 
-    const world = worldRef.current;
-    if (!world) {
+    const renderState = renderStateRef.current;
+    if (!renderState) {
       return;
     }
 
-    renderScene(
-      world,
+    syncScene(
+      renderState,
       scene,
       selectedKeys,
       qualityRef.current ?? getRendererQuality(),
+      renderLabelsRef.current,
+      viewRef.current.scale,
     );
-  }, [scene, selectedKeys]);
+  }, [renderLabels, scene, selectedKeys]);
 
   useEffect(() => {
     if (!worldRef.current) {
@@ -936,7 +1361,7 @@ export function PixiFloorplanRenderer({
 
     hasInteractedRef.current = false;
     fitSceneRef.current();
-  }, [scene.height, scene.width]);
+  }, [fitPadding, scene.height, scene.width]);
 
   return (
     <div

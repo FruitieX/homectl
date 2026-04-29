@@ -3,7 +3,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 
 type EditorMode = 'tiles' | 'devices' | 'groups';
-type TileType = 'floor' | 'wall' | 'door' | 'window';
+type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
 const checkboxClassName =
   'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';

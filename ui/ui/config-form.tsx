@@ -10,10 +10,12 @@ export function ConfigFormSection({
   children,
   ...props
 }: ComponentProps<'section'> & {
-  title: ReactNode;
+  title?: ReactNode;
   description?: ReactNode;
   actions?: ReactNode;
 }) {
+  const hasHeader = Boolean(title || description || actions);
+
   return (
     <section
       className={cn(
@@ -22,19 +24,23 @@ export function ConfigFormSection({
       )}
       {...props}
     >
-      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="space-y-1">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
-            {title}
-          </h3>
-          {description ? (
-            <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
+      {hasHeader ? (
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-1">
+            {title ? (
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+                {title}
+              </h3>
+            ) : null}
+            {description ? (
+              <p className="max-w-3xl text-sm leading-6 text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+          </div>
+          {actions ? <div className="shrink-0">{actions}</div> : null}
         </div>
-        {actions ? <div className="shrink-0">{actions}</div> : null}
-      </div>
+      ) : null}
       <div className="space-y-4">{children}</div>
     </section>
   );

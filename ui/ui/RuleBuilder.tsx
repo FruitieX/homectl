@@ -1058,7 +1058,8 @@ export function RuleEditor({
           <Button
             variant="ghost"
             size="sm"
-            className="text-destructive hover:text-destructive"
+            className="text-white hover:text-white"
+            aria-label="Remove rule"
             onClick={onRemove}
           >
             ✕

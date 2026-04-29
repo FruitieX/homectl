@@ -7,7 +7,7 @@ import {
   getFloorplanCellIndex,
   getFloorplanDevicePositions,
   getFloorplanRenderMetrics,
-} from '@/ui/FloorplanBackground';
+} from '@/lib/floorplan-metrics';
 import {
   useCallback,
   useEffect,
@@ -31,7 +31,7 @@ const selectClassName =
 const checkboxClassName =
   'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
-export type TileType = 'floor' | 'wall' | 'door' | 'window';
+export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
 export interface DevicePosition {
   deviceKey: string;
@@ -82,6 +82,7 @@ interface FloorplanGridEditorProps {
 }
 
 const tileColors: Record<TileType, string> = {
+  empty: 'rgba(15, 23, 42, 0.08)',
   floor: '#e5e7eb', // gray-200
   wall: '#374151', // gray-700
   door: '#92400e', // amber-800
@@ -89,6 +90,7 @@ const tileColors: Record<TileType, string> = {
 };
 
 const tileLabels: Record<TileType, string> = {
+  empty: 'Empty',
   floor: 'Floor',
   wall: 'Wall',
   door: 'Door',
@@ -517,7 +519,8 @@ const getFloorplanContentBounds = (
 
   for (let y = 0; y < sourceGrid.height; y += 1) {
     for (let x = 0; x < sourceGrid.width; x += 1) {
-      if ((sourceGrid.tiles[y]?.[x] ?? 'floor') !== 'floor') {
+      const tile = sourceGrid.tiles[y]?.[x] ?? 'floor';
+      if (tile !== 'floor' && tile !== 'empty') {
         includePoint(x, y);
       }
     }
@@ -911,6 +914,10 @@ export function FloorplanGridEditor({
         const row = rowBounds[y];
         for (let x = 0; x < width; x++) {
           const tile = tiles[y]?.[x] || 'floor';
+          if (tile === 'empty') {
+            continue;
+          }
+
           if (overlayMode && tile === 'floor') {
             continue;
           }
@@ -1035,12 +1042,18 @@ export function FloorplanGridEditor({
       ctx.lineWidth = Math.max(1, 2 * deviceScale);
       ctx.stroke();
 
-      ctx.fillStyle = '#000';
       ctx.font = `${labelFontSize}px sans-serif`;
       ctx.textAlign = 'center';
       const labelY = position.y + scaledRadius + 12 * deviceScale;
       if (labelY < canvasHeight) {
-        ctx.fillText(device.deviceName.slice(0, 10), position.x, labelY);
+        const deviceLabel = device.deviceName.slice(0, 10);
+        ctx.lineJoin = 'round';
+        ctx.miterLimit = 2;
+        ctx.lineWidth = Math.max(2, 3 * deviceScale);
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.95)';
+        ctx.strokeText(deviceLabel, position.x, labelY);
+        ctx.fillStyle = '#000';
+        ctx.fillText(deviceLabel, position.x, labelY);
       }
     });
   }, [
@@ -1993,6 +2006,7 @@ export function deserializeGrid(json: string): FloorplanGrid | null {
             return tile === 'wall' ||
               tile === 'door' ||
               tile === 'window' ||
+              tile === 'empty' ||
               tile === 'floor'
               ? tile
               : 'floor';

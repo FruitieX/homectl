@@ -728,7 +728,8 @@ function CycleScenesEditor({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="ml-auto text-destructive hover:text-destructive"
+                  className="ml-auto text-white hover:text-white"
+                  aria-label="Remove scene"
                   onClick={() => handleRemoveScene(index)}
                 >
                   ✕
@@ -1105,7 +1106,8 @@ export function ActionEditor({
           <Button
             variant="ghost"
             size="sm"
-            className="text-destructive hover:text-destructive"
+            className="text-white hover:text-white"
+            aria-label="Remove action"
             onClick={onRemove}
           >
             ✕

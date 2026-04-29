@@ -1,30 +1,19 @@
-import { useDevicesState, useGroupsState } from '@/hooks/websocket';
+import { useDevicesByKeysState, useGroupsState } from '@/hooks/websocket';
 import {
   useDeviceDisplayNames,
   useDeviceSensorConfigs,
   useFloorplans,
 } from '@/hooks/useConfig';
-import { Stage, Layer } from 'react-konva';
 import { useImageState } from '@/hooks/useImageState';
 import { Device } from '@/bindings/Device';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useResizeObserver } from 'usehooks-ts';
+import { useMemo, useState } from 'react';
 import { getDeviceKey } from '@/lib/device';
-import { ViewportDevice } from '@/ui/ViewportDevice';
-import { ViewportSensor } from '@/ui/ViewportSensor';
-import { konvaStageMultiTouchScale } from '@/lib/konvaStageMultiTouchScale';
 import {
   useSelectedDevices,
   useToggleSelectedDevice,
 } from '@/hooks/selectedDevices';
-import { ViewportGroup } from '@/ui/ViewportGroup';
 import { SensorActionModal } from '@/ui/SensorActionModal';
 import { useStoredFloorplan } from '@/hooks/useStoredFloorplan';
-import {
-  FloorplanBackground,
-  getFloorplanDevicePositions,
-  getFloorplanRenderMetrics,
-} from '@/ui/FloorplanBackground';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { getSensorConfigRef } from '@/lib/sensorInteraction';
 import { excludeUndefined } from 'utils/excludeUndefined';
@@ -40,13 +29,7 @@ import {
   SelectValue,
 } from '@/ui/primitives/select';
 
-const scalePaddingFactor = 0.6;
-const fallbackFloorplanWidth = 1500;
-const fallbackFloorplanHeight = 1200;
-type RendererMode = 'webgl' | 'classic';
-
 export const Viewport = () => {
-  const liveDevices = useDevicesState();
   const liveGroups = useGroupsState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const { data: deviceSensorConfigs } = useDeviceSensorConfigs();
@@ -54,30 +37,36 @@ export const Viewport = () => {
   const [selectedFloorplanId, setSelectedFloorplanId] = useState<string | null>(
     null,
   );
-  const [rendererMode, setRendererMode] = useState<RendererMode>('webgl');
   const [pixiFallbackReason, setPixiFallbackReason] = useState<string | null>(
     null,
   );
+  const effectiveSelectedFloorplanId =
+    floorplans.length === 0
+      ? null
+      : selectedFloorplanId &&
+          floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)
+        ? selectedFloorplanId
+        : (floorplans[0]?.id ?? null);
   const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(
-    selectedFloorplanId ?? undefined,
+    effectiveSelectedFloorplanId ?? undefined,
   );
   const floorplanImage = useImageState(imageUrl);
+  const placedDeviceKeys = useMemo(
+    () => floorplanGrid?.devices.map((device) => device.deviceKey) ?? [],
+    [floorplanGrid],
+  );
+  const liveDevices = useDevicesByKeysState(placedDeviceKeys);
 
   const allDevices: Device[] = Object.values(
     excludeUndefined(liveDevices ?? undefined),
   );
-  const controllableDevices = useMemo(
-    () => allDevices.filter((d) => 'Controllable' in d.data),
-    [allDevices],
-  );
-  const sensorDevices = useMemo(
-    () => allDevices.filter((d) => 'Sensor' in d.data),
-    [allDevices],
-  );
   const groups = excludeUndefined(liveGroups ?? undefined);
-  const groupMasks = floorplanGrid?.groups ?? {};
-  const deviceDisplayNameMap = Object.fromEntries(
-    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+  const deviceDisplayNameMap = useMemo(
+    () =>
+      Object.fromEntries(
+        deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+      ),
+    [deviceDisplayNames],
   );
   const floorplanScene = buildFloorplanScene({
     grid: floorplanGrid,
@@ -86,104 +75,18 @@ export const Viewport = () => {
     groups,
     displayNames: deviceDisplayNameMap,
   });
-  const deviceSensorConfigMap = Object.fromEntries(
-    deviceSensorConfigs.map((row) => [row.device_ref, row]),
+  const deviceSensorConfigMap = useMemo(
+    () =>
+      Object.fromEntries(
+        deviceSensorConfigs.map((row) => [row.device_ref, row]),
+      ),
+    [deviceSensorConfigs],
   );
-
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { width, height } = useResizeObserver({
-    // @ts-expect-error: I'm literally doing what the docs say
-    ref: containerRef,
-  });
-
-  const touchRegistersAsTap = useRef(true);
-  const deviceTouchTimer = useRef<NodeJS.Timeout | null>(null);
   const [selectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (floorplans.length === 0) {
-      setSelectedFloorplanId(null);
-      return;
-    }
-
-    if (
-      !selectedFloorplanId ||
-      !floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)
-    ) {
-      setSelectedFloorplanId(floorplans[0].id);
-    }
-  }, [floorplans, selectedFloorplanId]);
-
-  const onDragStart = useCallback(() => {
-    if (deviceTouchTimer.current !== null) {
-      clearTimeout(deviceTouchTimer.current);
-      deviceTouchTimer.current = null;
-    }
-
-    touchRegistersAsTap.current = false;
-  }, []);
-
-  const [initialScale, setInitialScale] = useState<
-    { x: number; y: number } | undefined
-  >();
-
-  useEffect(() => {
-    if (width && height) {
-      const metrics = getFloorplanRenderMetrics(floorplanGrid, floorplanImage);
-      const floorplanWidth = metrics.width || fallbackFloorplanWidth;
-      const floorplanHeight = metrics.height || fallbackFloorplanHeight;
-      const scale =
-        scalePaddingFactor *
-        Math.min(width / floorplanWidth, height / floorplanHeight);
-      setInitialScale({ x: scale, y: scale });
-    }
-  }, [floorplanGrid, floorplanImage, width, height]);
-
-  const floorplanMetrics = useMemo(
-    () => getFloorplanRenderMetrics(floorplanGrid, floorplanImage),
-    [floorplanGrid, floorplanImage],
-  );
-
-  const floorplanWidth = floorplanMetrics.width || fallbackFloorplanWidth;
-  const floorplanHeight = floorplanMetrics.height || fallbackFloorplanHeight;
-  const floorplanDeviceScale = floorplanGrid?.deviceScale ?? 1;
-  const floorplanDevicePositions = useMemo(
-    () => getFloorplanDevicePositions(floorplanGrid, floorplanMetrics),
-    [floorplanGrid, floorplanMetrics],
-  );
-
-  const getViewportDevicePlacement = useCallback(
-    (deviceKey: string) => {
-      const floorplanPosition = floorplanDevicePositions[deviceKey];
-      if (!floorplanPosition) {
-        return null;
-      }
-
-      return {
-        position: floorplanPosition,
-        scale: floorplanDeviceScale,
-      };
-    },
-    [floorplanDevicePositions, floorplanDeviceScale],
-  );
-
-  const sortedGroups = Object.entries(groups)
-    .filter(
-      ([groupId, group]) =>
-        !group.hidden && (groupMasks[groupId]?.length ?? 0) > 0,
-    )
-    .sort(([leftId, leftGroup], [rightId, rightGroup]) => {
-      const sizeDelta =
-        (groupMasks[rightId]?.length ?? 0) - (groupMasks[leftId]?.length ?? 0);
-      if (sizeDelta !== 0) {
-        return sizeDelta;
-      }
-      return leftGroup.name.localeCompare(rightGroup.name);
-    });
 
   const activeSensor =
     activeSensorKey === null
@@ -193,7 +96,7 @@ export const Viewport = () => {
         ) ?? null);
 
   const webglRendererActive =
-    rendererMode === 'webgl' &&
+    pixiFallbackReason === null &&
     floorplanScene.width > 0 &&
     floorplanScene.height > 0;
 
@@ -246,7 +149,7 @@ export const Viewport = () => {
   };
 
   return (
-    <div ref={containerRef} className="absolute left-0 top-0 h-full w-full">
+    <div className="absolute left-0 top-0 h-full w-full">
       {floorplans.length > 0 && (
         <div className="absolute bottom-3 left-3 right-3 z-10 rounded-3xl border border-border/70 bg-card/90 p-3 text-card-foreground shadow-xl backdrop-blur-xl sm:bottom-4 sm:left-auto sm:right-4 sm:w-80">
           <div className="space-y-1.5">
@@ -254,8 +157,11 @@ export const Viewport = () => {
               Floorplan
             </Label>
             <Select
-              value={selectedFloorplanId ?? ''}
-              onValueChange={(value) => setSelectedFloorplanId(value || null)}
+              value={effectiveSelectedFloorplanId ?? ''}
+              onValueChange={(value) => {
+                setSelectedFloorplanId(value || null);
+                setPixiFallbackReason(null);
+              }}
             >
               <SelectTrigger className="h-9 rounded-2xl bg-background/80">
                 <SelectValue placeholder="Choose floorplan" />
@@ -279,7 +185,7 @@ export const Viewport = () => {
 
       {webglRendererActive ? (
         <PixiFloorplanRenderer
-          key={selectedFloorplanId ?? 'default'}
+          key={effectiveSelectedFloorplanId ?? 'default'}
           scene={floorplanScene}
           selectedDeviceKeys={selectedDevices}
           onDevicePress={handlePixiDevicePress}
@@ -289,88 +195,14 @@ export const Viewport = () => {
           onGroupLongPress={toggleGroupDevices}
           onUnavailable={() => {
             setPixiFallbackReason(
-              'WebGL renderer unavailable; using classic renderer.',
+              'WebGL renderer unavailable; floorplan rendering is disabled on this device.',
             );
-            setRendererMode('classic');
           }}
         />
-      ) : initialScale && height && width ? (
-        <Stage
-          width={width}
-          height={height}
-          scale={initialScale}
-          offsetX={floorplanWidth / 2 + (width * -0.5) / initialScale.y}
-          offsetY={floorplanHeight / 2 + (height * -0.5) / initialScale.y}
-          draggable
-          onDragStart={onDragStart}
-          ref={(stage) => {
-            if (stage !== null) {
-              konvaStageMultiTouchScale(stage, onDragStart);
-            }
-          }}
-        >
-          <Layer name="bottom-layer" />
-          <Layer>
-            <FloorplanBackground grid={floorplanGrid} image={floorplanImage} />
-
-            {sortedGroups.map(([groupId, group]) => {
-              return (
-                <ViewportGroup
-                  key={groupId}
-                  groupId={groupId}
-                  group={group}
-                  cells={groupMasks[groupId] ?? []}
-                  tileWidth={floorplanMetrics.tileWidth}
-                  tileHeight={floorplanMetrics.tileHeight}
-                  touchRegistersAsTap={touchRegistersAsTap}
-                  deviceTouchTimer={deviceTouchTimer}
-                />
-              );
-            })}
-
-            {controllableDevices.map((device) => {
-              const placement = getViewportDevicePlacement(
-                getDeviceKey(device),
-              );
-              if (!placement) return null;
-              return (
-                <ViewportDevice
-                  key={getDeviceKey(device)}
-                  device={device}
-                  position={placement.position}
-                  scale={placement.scale}
-                  touchRegistersAsTap={touchRegistersAsTap}
-                  deviceTouchTimer={deviceTouchTimer}
-                  selected={
-                    selectedDevices.find(
-                      (deviceKey) => deviceKey === getDeviceKey(device),
-                    ) !== undefined
-                  }
-                  interactive
-                />
-              );
-            })}
-
-            {sensorDevices.map((device) => {
-              const placement = getViewportDevicePlacement(
-                getDeviceKey(device),
-              );
-              if (!placement) return null;
-              return (
-                <ViewportSensor
-                  key={getDeviceKey(device)}
-                  device={device}
-                  label={getDeviceDisplayLabel(device, deviceDisplayNameMap)}
-                  position={placement.position}
-                  scale={placement.scale}
-                  onOpenActions={(sensor) =>
-                    setActiveSensorKey(getDeviceKey(sensor))
-                  }
-                />
-              );
-            })}
-          </Layer>
-        </Stage>
+      ) : pixiFallbackReason ? (
+        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+          {pixiFallbackReason}
+        </div>
       ) : null}
 
       <SensorActionModal
