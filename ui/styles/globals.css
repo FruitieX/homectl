@@ -60,6 +60,25 @@ layer(base);
   }
 }
 
+@layer utilities {
+  .content-visibility-row {
+    contain-intrinsic-size: auto 4.5rem;
+    content-visibility: auto;
+  }
+
+  .content-visibility-card {
+    contain-intrinsic-size: auto 7rem;
+    content-visibility: auto;
+  }
+}
+
+.homectl-disable-backdrop-blur *,
+.homectl-disable-backdrop-blur *::before,
+.homectl-disable-backdrop-blur *::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+}
+
 :root {
   color-scheme: light;
   --background: 210 40% 98%;

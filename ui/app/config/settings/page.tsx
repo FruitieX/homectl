@@ -8,6 +8,7 @@ import { z } from 'zod';
 
 import { useAppConfig } from '@/hooks/appConfig';
 import { useTheme, type ThemeMode } from '@/hooks/theme';
+import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { cn } from '@/lib/cn';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
@@ -30,6 +31,7 @@ import {
 } from '@/ui/primitives/form';
 import { Input } from '@/ui/primitives/input';
 import { Skeleton } from '@/ui/primitives/skeleton';
+import { Switch } from '@/ui/primitives/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 
 const coreConfigFormSchema = z.object({
@@ -306,6 +308,8 @@ export default function SettingsPage() {
 
 function AppearanceSettingsCard() {
   const [themeMode, setThemeMode] = useTheme();
+  const [blurEffectsEnabled, setBlurEffectsEnabled] =
+    useBackdropBlurEffects();
 
   return (
     <Card>
@@ -339,6 +343,24 @@ function AppearanceSettingsCard() {
               ? 'Theme follows your system preference.'
               : `Using ${themeMode} theme.`}
           </p>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                Blur effects
+              </span>
+              <span className="block text-xs leading-5 text-muted-foreground">
+                Store this setting in this browser only. Disable it on slower
+                dashboard clients to make overlay and sticky-element scrolling
+                cheaper.
+              </span>
+            </span>
+            <Switch
+              type="button"
+              checked={blurEffectsEnabled}
+              onCheckedChange={setBlurEffectsEnabled}
+              aria-label="Enable blur effects"
+            />
+          </div>
         </div>
       </CardContent>
     </Card>

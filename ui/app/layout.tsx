@@ -18,6 +18,18 @@ const themeScript = `
 })();
 `;
 
+const visualEffectsScript = `
+(function() {
+  try {
+    const stored = localStorage.getItem('homectl-backdrop-blur-effects');
+    const enabled = stored === null ? true : JSON.parse(stored) !== false;
+    document.documentElement.classList.toggle('homectl-disable-backdrop-blur', !enabled);
+  } catch (e) {
+    document.documentElement.classList.remove('homectl-disable-backdrop-blur');
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: {
@@ -27,6 +39,7 @@ export default function RootLayout({
     <html suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: visualEffectsScript }} />
         <meta
           name="viewport"
           content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover"

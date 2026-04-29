@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import { Calendar, Clock } from 'lucide-react';
 import clsx from 'clsx';
@@ -32,6 +32,14 @@ type CalendarResponse = {
   events: CalendarEvent[];
 };
 
+type CalendarEventStatus = 'current' | 'upcoming' | 'past';
+
+type CalendarEventView = {
+  event: CalendarEvent;
+  status: CalendarEventStatus;
+  timeDisplay: ReactNode;
+};
+
 const fetchCalendar = async (
   calendarUrl: string,
 ): Promise<CalendarResponse> => {
@@ -43,9 +51,327 @@ const fetchCalendar = async (
   return json;
 };
 
+const getNextMinuteDelay = (date: Date) => {
+  return Math.max(
+    1000,
+    60 * 1000 - date.getSeconds() * 1000 - date.getMilliseconds(),
+  );
+};
+
+const getNextClockDelay = (date: Date, showSeconds: boolean) => {
+  if (!showSeconds) {
+    return getNextMinuteDelay(date);
+  }
+
+  return Math.max(250, 1000 - date.getMilliseconds());
+};
+
+const formatTime = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+};
+
+const formatDateTime = (dateString: string, showDate: boolean = false) => {
+  const date = new Date(dateString);
+
+  const timeStr = date.toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  if (showDate) {
+    const dateStr = date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    });
+
+    return (
+      <>
+        <span className="font-bold">{dateStr}</span> {timeStr}
+      </>
+    );
+  }
+
+  return timeStr;
+};
+
+const formatDateOnly = (dateString: string) => {
+  const date = new Date(dateString);
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+};
+
+const isMultiDayEvent = (event: CalendarEvent) => {
+  const start = new Date(event.start);
+  const end = new Date(event.end);
+
+  if (event.isAllDay) {
+    const startDate = new Date(
+      start.getFullYear(),
+      start.getMonth(),
+      start.getDate(),
+    );
+    const endDate = new Date(
+      end.getFullYear(),
+      end.getMonth(),
+      end.getDate(),
+    );
+    const diffInDays =
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
+    return diffInDays > 1;
+  }
+
+  return start.toDateString() !== end.toDateString();
+};
+
+const formatEventTimeDisplay = (event: CalendarEvent) => {
+  const isMultiDay = isMultiDayEvent(event);
+
+  if (event.isAllDay) {
+    if (isMultiDay) {
+      const startDate = formatDateOnly(event.start);
+      const endDate = formatDateOnly(event.end);
+      return (
+        <>
+          <span className="font-bold">{startDate}</span> -{' '}
+          <span className="font-bold">{endDate}</span>
+        </>
+      );
+    }
+    return 'All day';
+  }
+
+  if (isMultiDay) {
+    const startDateTime = formatDateTime(event.start, true);
+    const endDateTime = formatDateTime(event.end, true);
+    return (
+      <>
+        {startDateTime} - {endDateTime}
+      </>
+    );
+  }
+
+  return `${formatTime(event.start)} - ${formatTime(event.end)}`;
+};
+
+const getNextEvent = (events: CalendarEvent[], now: Date) => {
+  return events.find((event) => {
+    const eventStart = new Date(event.start);
+    return eventStart > now;
+  });
+};
+
+const getCurrentEvent = (events: CalendarEvent[], now: Date) => {
+  return events
+    .filter((event) => !event.isAllDay)
+    .find((event) => {
+      const eventStart = new Date(event.start);
+      const eventEnd = new Date(event.end);
+      return eventStart <= now && eventEnd > now;
+    });
+};
+
+const getCurrentAllDayEvent = (events: CalendarEvent[], now: Date) => {
+  return events
+    .filter((event) => event.isAllDay)
+    .find((event) => {
+      const eventStart = new Date(event.start);
+      const eventEnd = new Date(event.end);
+      return eventStart <= now && eventEnd > now;
+    });
+};
+
+const getEventStatus = (
+  event: CalendarEvent,
+  now: Date,
+): CalendarEventStatus => {
+  const eventStart = new Date(event.start);
+  const eventEnd = new Date(event.end);
+
+  if (eventStart <= now && eventEnd > now) {
+    return 'current';
+  }
+
+  if (eventEnd < now) {
+    return 'past';
+  }
+
+  return 'upcoming';
+};
+
+const buildEventViews = (events: CalendarEvent[], now: Date) => {
+  return events.map((event) => ({
+    event,
+    status: getEventStatus(event, now),
+    timeDisplay: formatEventTimeDisplay(event),
+  }));
+};
+
+function useMinuteNow(enabled: boolean) {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const scheduleNextTick = () => {
+      const nextNow = new Date();
+      setNow(nextNow);
+      timeoutId = setTimeout(scheduleNextTick, getNextMinuteDelay(nextNow));
+    };
+
+    scheduleNextTick();
+    return () => clearTimeout(timeoutId);
+  }, [enabled]);
+
+  return now;
+}
+
+function LiveClockDisplay({
+  showSeconds,
+  showDate,
+}: {
+  showSeconds: boolean;
+  showDate: boolean;
+}) {
+  const [time, setTime] = useState(() => new Date());
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const scheduleNextTick = () => {
+      const nextTime = new Date();
+      setTime(nextTime);
+      timeoutId = setTimeout(
+        scheduleNextTick,
+        getNextClockDelay(nextTime, showSeconds),
+      );
+    };
+
+    scheduleNextTick();
+    return () => clearTimeout(timeoutId);
+  }, [showSeconds]);
+
+  return (
+    <>
+      <span className="font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
+        {time.getHours().toString().padStart(2, '0')}:
+        {time.getMinutes().toString().padStart(2, '0')}
+        {showSeconds
+          ? `:${time.getSeconds().toString().padStart(2, '0')}`
+          : ''}
+      </span>
+      {showDate ? (
+        <span className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          {time.toLocaleDateString(undefined, {
+            weekday: 'short',
+            month: 'short',
+            day: 'numeric',
+          })}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function CalendarSummary({
+  showCalendar,
+  error,
+  calendar,
+  now,
+}: {
+  showCalendar: boolean;
+  error: string | null;
+  calendar: CalendarResponse | null;
+  now: Date;
+}) {
+  if (!showCalendar || error || !calendar) return null;
+
+  const events = calendar.events;
+  const currentEvent = getCurrentEvent(events, now);
+  const currentAllDayEvent = getCurrentAllDayEvent(events, now);
+  const nextEvent = getNextEvent(events, now);
+
+  if (events.length === 0) return null;
+
+  const displayEvent = currentEvent || nextEvent || currentAllDayEvent;
+  if (!displayEvent) return null;
+
+  return (
+    <div className="mt-3 w-full border-t border-border/60 pt-3 text-center">
+      <div className="mb-1 flex items-center justify-center gap-1">
+        <Calendar className="size-3" />
+        {currentEvent && <Badge>Now</Badge>}
+        {!currentEvent && nextEvent && (
+          <Badge variant="secondary">Upcoming</Badge>
+        )}
+        {!currentEvent && !nextEvent && currentAllDayEvent && (
+          <Badge>All day</Badge>
+        )}
+      </div>
+      <div className="max-w-full truncate text-xs font-medium">
+        {displayEvent.summary}
+      </div>
+      <div className="flex min-w-0 items-center justify-center gap-1 text-xs text-muted-foreground">
+        <Clock className="size-3 shrink-0" />
+        <div className="max-w-full truncate">
+          {formatEventTimeDisplay(displayEvent)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CalendarEventCard({ view }: { view: CalendarEventView }) {
+  const { event, status, timeDisplay } = view;
+  const isCurrentEvent = status === 'current';
+  const isPastEvent = status === 'past';
+  const isUpcomingEvent = status === 'upcoming';
+
+  return (
+    <Card
+      className={clsx(
+        'content-visibility-card',
+        isCurrentEvent && 'ring-2 ring-primary',
+        isPastEvent && 'opacity-60',
+      )}
+    >
+      <CardContent className="flex items-start gap-3 p-4">
+        <div className="shrink-0">
+          {isCurrentEvent && <Badge>Now</Badge>}
+          {isUpcomingEvent && <Badge variant="secondary">Upcoming</Badge>}
+          {isPastEvent && <Badge variant="outline">Past</Badge>}
+        </div>
+        <div className="flex-1">
+          <h3 className="mb-1 text-lg font-semibold">{event.summary}</h3>
+          <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
+            <Clock className="size-4" />
+            <span>{timeDisplay}</span>
+          </div>
+          {event.location && (
+            <div className="mb-2 text-sm text-muted-foreground">
+              📍 {event.location}
+            </div>
+          )}
+          {event.description && (
+            <div className="mt-2 text-sm text-muted-foreground">
+              {event.description}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { apiEndpoint } = useAppConfig();
-  const [time, setTime] = useState<Date | null>(null);
   const [calendar, setCalendar] = useState<CalendarResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const showSeconds = getDashboardWidgetOptionBoolean(
@@ -74,14 +400,10 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   const isIdle = useIdle();
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
-
-  useEffect(() => {
-    setTime(new Date());
-  }, []);
-
-  useInterval(async () => {
-    setTime(new Date());
-  }, 1000);
+  const calendarNow = useMinuteNow(showCalendar || detailsModalOpen);
+  const eventViews = detailsModalOpen && calendar
+    ? buildEventViews(calendar.events, calendarNow)
+    : [];
 
   useEffect(() => {
     let isSubscribed = true;
@@ -130,176 +452,6 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
     detailsModalOpen && isIdle ? 10 * 1000 : null,
   );
 
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-  };
-
-  const formatDateTime = (dateString: string, showDate: boolean = false) => {
-    const date = new Date(dateString);
-
-    const timeStr = date.toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-
-    if (showDate) {
-      const dateStr = date.toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-      });
-
-      return (
-        <>
-          <span className="font-bold">{dateStr}</span> {timeStr}
-        </>
-      );
-    } else {
-      return timeStr;
-    }
-  };
-
-  const formatDateOnly = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-    });
-  };
-
-  const isMultiDayEvent = (event: CalendarEvent) => {
-    const start = new Date(event.start);
-    const end = new Date(event.end);
-
-    // For all-day events, check if it's more than one day
-    if (event.isAllDay) {
-      const startDate = new Date(
-        start.getFullYear(),
-        start.getMonth(),
-        start.getDate(),
-      );
-      const endDate = new Date(
-        end.getFullYear(),
-        end.getMonth(),
-        end.getDate(),
-      );
-      const diffInDays =
-        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-      return diffInDays > 1;
-    }
-
-    return start.toDateString() !== end.toDateString();
-  };
-
-  const formatEventTimeDisplay = (event: CalendarEvent) => {
-    const isMultiDay = isMultiDayEvent(event);
-
-    if (event.isAllDay) {
-      if (isMultiDay) {
-        const startDate = formatDateOnly(event.start);
-        const endDate = formatDateOnly(event.end);
-        return (
-          <>
-            <span className="font-bold">{startDate}</span> -{' '}
-            <span className="font-bold">{endDate}</span>
-          </>
-        );
-      }
-      return 'All day';
-    }
-
-    if (isMultiDay) {
-      const startDateTime = formatDateTime(event.start, true);
-      const endDateTime = formatDateTime(event.end, true);
-      return (
-        <>
-          {startDateTime} - {endDateTime}
-        </>
-      );
-    }
-
-    return `${formatTime(event.start)} - ${formatTime(event.end)}`;
-  };
-
-  const getEventDuration = (event: CalendarEvent) => {
-    const start = new Date(event.start);
-    const end = new Date(event.end);
-    return end.getTime() - start.getTime();
-  };
-
-  const getNextEvent = (events: CalendarEvent[]) => {
-    const now = new Date();
-    return events.find((event) => {
-      const eventStart = new Date(event.start);
-      return eventStart > now;
-    });
-  };
-
-  const getCurrentEvent = (events: CalendarEvent[]) => {
-    const now = new Date();
-    return events
-      .filter((event) => !event.isAllDay)
-      .find((event) => {
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
-        return eventStart <= now && eventEnd > now;
-      });
-  };
-
-  const getCurrentAllDayEvent = (events: CalendarEvent[]) => {
-    const now = new Date();
-    return events
-      .filter((event) => event.isAllDay)
-      .find((event) => {
-        const eventStart = new Date(event.start);
-        const eventEnd = new Date(event.end);
-        return eventStart <= now && eventEnd > now;
-      });
-  };
-
-  const renderCalendarInfo = () => {
-    if (!showCalendar || error || !calendar) return null;
-
-    const events = calendar.events;
-    const currentEvent = getCurrentEvent(events);
-    const currentAllDayEvent = getCurrentAllDayEvent(events);
-    const nextEvent = getNextEvent(events);
-
-    if (events.length === 0) return null;
-
-    const displayEvent = currentEvent || nextEvent || currentAllDayEvent;
-    if (!displayEvent) return null;
-
-    return (
-      <div className="mt-3 w-full border-t border-border/60 pt-3 text-center">
-        <div className="mb-1 flex items-center justify-center gap-1">
-          <Calendar className="size-3" />
-          {currentEvent && <Badge>Now</Badge>}
-          {!currentEvent && nextEvent && (
-            <Badge variant="secondary">Upcoming</Badge>
-          )}
-          {!currentEvent && !nextEvent && currentAllDayEvent && (
-            <Badge>All day</Badge>
-          )}
-        </div>
-        <div className="max-w-full truncate text-xs font-medium">
-          {displayEvent.summary}
-        </div>
-        <div className="flex min-w-0 items-center justify-center gap-1 text-xs text-muted-foreground">
-          <Clock className="size-3 shrink-0" />
-          <div className="max-w-full truncate">
-            {formatEventTimeDisplay(displayEvent)}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   return (
     <>
       <Card className="col-span-2 overflow-hidden">
@@ -309,27 +461,13 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
           onClick={toggleDetailsModal}
         >
           <CardContent className="flex w-full flex-col items-center justify-center px-4 py-5">
-            <span className="font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
-              {time !== null && (
-                <>
-                  {time.getHours().toString().padStart(2, '0')}:
-                  {time.getMinutes().toString().padStart(2, '0')}
-                  {showSeconds
-                    ? `:${time.getSeconds().toString().padStart(2, '0')}`
-                    : ''}
-                </>
-              )}
-            </span>
-            {showDate && time ? (
-              <span className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                {time.toLocaleDateString(undefined, {
-                  weekday: 'short',
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </span>
-            ) : null}
-            {renderCalendarInfo()}
+            <LiveClockDisplay showSeconds={showSeconds} showDate={showDate} />
+            <CalendarSummary
+              showCalendar={showCalendar}
+              error={error}
+              calendar={calendar}
+              now={calendarNow}
+            />
           </CardContent>
         </Button>
       </Card>
@@ -353,54 +491,9 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
                 title="No events scheduled for today"
               />
             )}
-            {calendar &&
-              calendar.events.map((event, index) => {
-                const now = new Date();
-                const eventStart = new Date(event.start);
-                const eventEnd = new Date(event.end);
-                const isCurrentEvent = eventStart <= now && eventEnd > now;
-                const isPastEvent = eventEnd < now;
-                const isUpcomingEvent = eventStart > now;
-
-                return (
-                  <Card
-                    key={event.id}
-                    className={clsx(
-                      isCurrentEvent && 'ring-2 ring-primary',
-                      isPastEvent && 'opacity-60',
-                    )}
-                  >
-                    <CardContent className="flex items-start gap-3 p-4">
-                      <div className="shrink-0">
-                        {isCurrentEvent && <Badge>Now</Badge>}
-                        {isUpcomingEvent && (
-                          <Badge variant="secondary">Upcoming</Badge>
-                        )}
-                        {isPastEvent && <Badge variant="outline">Past</Badge>}
-                      </div>
-                      <div className="flex-1">
-                        <h3 className="font-semibold text-lg mb-1">
-                          {event.summary}
-                        </h3>
-                        <div className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="w-4 h-4" />
-                          <span>{formatEventTimeDisplay(event)}</span>
-                        </div>
-                        {event.location && (
-                          <div className="mb-2 text-sm text-muted-foreground">
-                            📍 {event.location}
-                          </div>
-                        )}
-                        {event.description && (
-                          <div className="mt-2 text-sm text-muted-foreground">
-                            {event.description}
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+            {eventViews.map((view) => (
+              <CalendarEventCard key={view.event.id} view={view} />
+            ))}
           </div>
         </div>
       </ResponsiveOverlay>

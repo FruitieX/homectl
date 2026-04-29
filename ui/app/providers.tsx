@@ -6,6 +6,7 @@ import { HomectlBottomNavigation } from '@/ui/BottomNavigation';
 import { Navbar } from '@/ui/Navbar';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useApplyTheme } from '@/hooks/theme';
+import { useApplyBackdropBlurEffects } from '@/hooks/visualEffects';
 import { createHomectlQueryClient } from '@/lib/query-client';
 import { Toaster } from '@/ui/primitives/toaster';
 import { TooltipProvider } from '@/ui/primitives/tooltip';
@@ -57,6 +58,7 @@ export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {
 export const Layout = ({ children }: { children: ReactNode }) => {
   useProvideWebsocketState();
   useApplyTheme();
+  useApplyBackdropBlurEffects();
 
   // Reload app at 4am
   useEffect(() => {
