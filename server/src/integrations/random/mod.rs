@@ -88,8 +88,8 @@ impl Integration for Random {
         Ok(())
     }
 
-    // stop is needed so we can stop the interval tick that 
-    // is created by start. 
+    // stop is needed so we can stop the interval tick that
+    // is created by start.
     async fn stop(&mut self) -> Result<()> {
         if let Some(handle) = &self.handle {
             handle.abort();
@@ -97,7 +97,6 @@ impl Integration for Random {
 
         Ok(())
     }
-
 }
 
 fn get_random_color(random: &Random) -> DeviceColor {
@@ -122,7 +121,13 @@ fn get_random_brightness(random: &Random) -> f32 {
 }
 
 async fn poll_sensor(random: Random) {
-    let poll_rate = Duration::from_millis(random.config.strobe_interval.unwrap_or(1000).clamp(20, 10000));
+    let poll_rate = Duration::from_millis(
+        random
+            .config
+            .strobe_interval
+            .unwrap_or(1000)
+            .clamp(20, 10000),
+    );
     let mut interval = time::interval(poll_rate);
 
     loop {

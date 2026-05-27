@@ -953,6 +953,8 @@ mod tests {
                 "device_name",
                 "min_brightness",
                 "max_brightness",
+                "min_saturation",
+                "max_saturation",
                 "transition",
                 "strobe_interval",
                 "outbound_device_updates.min_interval_ms",
