@@ -596,13 +596,63 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
             "random",
             "Random",
             "Expose a virtual color sensor that emits a random color every second.",
-            vec![text_config_field(
-                "device_name",
-                "Device name",
-                true,
-                "Display name for the virtual random color device.",
-                Some("Random colors"),
-            )],
+            vec![
+                text_config_field(
+                    "device_name",
+                    "Device name",
+                    true,
+                    "Display name for the virtual random color device.",
+                    Some("Random colors"),
+                ),
+                number_config_field(
+                    "min_brightness",
+                    "Minimum brightness",
+                    false,
+                    "Lower bound for random brightness values from 0 to 1.",
+                    (Some(0.0), Some(1.0), Some(0.1)),
+                    Some("0.4"),
+                ),
+                number_config_field(
+                    "max_brightness",
+                    "Maximum brightness",
+                    false,
+                    "Upper bound for random brightness values from 0 to 1.",
+                    (Some(0.0), Some(1.0), Some(0.1)),
+                    Some("0.8"),
+                ),
+                number_config_field(
+                    "min_saturation",
+                    "Minimum saturation",
+                    false,
+                    "Lower bound for random saturation values from 0 to 1.",
+                    (Some(0.0), Some(1.0), Some(0.1)),
+                    Some("0.4"),
+                ),
+                number_config_field(
+                    "max_saturation",
+                    "Maximum saturation",
+                    false,
+                    "Upper bound for random saturation values from 0 to 1.",
+                    (Some(0.0), Some(1.0), Some(0.1)),
+                    Some("0.7"),
+                ),
+                number_config_field(
+                    "transition",
+                    "Transition",
+                    false,
+                    "Transition duration in seconds applied to each random color update.",
+                    (Some(0.0), Some(10.0), Some(0.1)),
+                    Some("0.6"),
+                ),
+                number_config_field(
+                    "strobe_interval",
+                    "Strobe interval",
+                    false,
+                    "Polling interval in milliseconds between random color updates.",
+                    (Some(20.0), None, Some(100.0)),
+                    Some("1000"),
+                ),
+            ],
         )),
         _ => None,
     }
@@ -886,5 +936,29 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(color_fields, vec!["day_color", "night_color"]);
+    }
+
+    #[test]
+    fn random_schema_exposes_random_config_fields() {
+        let schema = integration_config_schema("random").expect("random schema should exist");
+        let keys = schema
+            .fields
+            .iter()
+            .map(|field| field.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            keys,
+            vec![
+                "device_name",
+                "min_brightness",
+                "max_brightness",
+                "min_saturation",
+                "max_saturation",
+                "transition",
+                "strobe_interval",
+                "outbound_device_updates.min_interval_ms",
+            ]
+        );
     }
 }
