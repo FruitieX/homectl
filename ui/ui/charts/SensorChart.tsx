@@ -460,11 +460,11 @@ const SensorChartComponent: React.FC<SensorChartProps> = ({
 
   // Memoize scales
   const { xScale, tempScale, humidityScale } = useMemo(() => {
-    const xScale = scaleTime<number>({
+    const xScale = scaleTime({
       range: [0, innerWidth],
       domain: [
-        Math.min(...data.map((d) => d.time.getTime())),
-        Math.max(...data.map((d) => d.time.getTime())),
+        new Date(Math.min(...data.map((d) => d.time.getTime()))),
+        new Date(Math.max(...data.map((d) => d.time.getTime()))),
       ],
     });
 
@@ -524,7 +524,7 @@ const SensorChartComponent: React.FC<SensorChartProps> = ({
 
   const getDataPointPosition = useMemo(
     () => (datum: SensorDataPoint) => {
-      const x = xScale(datum.time.getTime()) ?? 0;
+      const x = xScale(datum.time) ?? 0;
       let y = 0;
 
       // Use temperature scale if available, otherwise humidity scale

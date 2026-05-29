@@ -105,6 +105,15 @@ const fetchWeather = async (weatherUrl: string): Promise<WeatherResponse> => {
   return json;
 };
 
+const parseTime = (timeStr: string | Date): Date => {
+  if (timeStr instanceof Date) return timeStr;
+  let parsedStr = timeStr;
+  if (typeof timeStr === 'string' && !timeStr.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(timeStr)) {
+    parsedStr = `${timeStr}Z`;
+  }
+  return new Date(parsedStr);
+};
+
 const roundToHour = (date: Date) => {
   const hourInMilliseconds = 60 * 60 * 1000;
   return new Date(
@@ -116,7 +125,7 @@ const getCurrentAndFutureSeries = (weather: WeatherResponse | null) => {
   const currentHour = roundToHour(new Date());
   return (
     weather?.properties.timeseries.filter((series) => {
-      return new Date(series.time) >= currentHour;
+      return parseTime(series.time) >= currentHour;
     }) ?? []
   );
 };
@@ -128,7 +137,7 @@ const buildDailyData = (
   const dailyGroups = new Map<string, WeatherTimeSeries[]>();
 
   currentAndFutureSeries.forEach((series) => {
-    const dateKey = new Date(series.time).toDateString();
+    const dateKey = parseTime(series.time).toDateString();
     const existing = dailyGroups.get(dateKey);
     if (existing) {
       existing.push(series);
@@ -146,7 +155,7 @@ const buildDailyData = (
       let bestNoonDistance = 24;
 
       for (const dataPoint of dayDataPoints) {
-        const hour = new Date(dataPoint.time).getHours();
+        const hour = parseTime(dataPoint.time).getHours();
         const noonDistance = Math.abs(hour - 12);
         const hasNext12Hours =
           !!dataPoint.data.next_12_hours?.summary?.symbol_code;
@@ -196,13 +205,13 @@ const buildChartSeries = (
   const now = new Date();
   const cutoff = new Date(now.getTime() + forecastDays * 24 * 60 * 60 * 1000);
   return currentAndFutureSeries.filter((series) => {
-    return new Date(series.time) <= cutoff;
+    return parseTime(series.time) <= cutoff;
   });
 };
 
 const buildTemperatureChartData = (chartSeries: WeatherTimeSeries[]) => {
   return chartSeries.map((series) => ({
-    time: new Date(series.time),
+    time: parseTime(series.time),
     temp: series.data.instant.details.air_temperature,
     temp_percentile_10:
       series.data.instant.details.air_temperature_percentile_10,
@@ -213,7 +222,7 @@ const buildTemperatureChartData = (chartSeries: WeatherTimeSeries[]) => {
 
 const buildPrecipitationChartData = (chartSeries: WeatherTimeSeries[]) => {
   return chartSeries.map((series) => ({
-    time: new Date(series.time),
+    time: parseTime(series.time),
     precipitation_amount:
       series.data.next_1_hours?.details?.precipitation_amount ||
       series.data.next_6_hours?.details?.precipitation_amount ||
@@ -235,7 +244,7 @@ const buildPrecipitationChartData = (chartSeries: WeatherTimeSeries[]) => {
 
 const buildWindChartData = (chartSeries: WeatherTimeSeries[]) => {
   return chartSeries.map((series) => ({
-    time: new Date(series.time),
+    time: parseTime(series.time),
     wind_speed: series.data.instant.details.wind_speed,
     wind_speed_of_gust: series.data.instant.details.wind_speed_of_gust,
     wind_speed_percentile_10:
@@ -408,9 +417,9 @@ function WeatherHourlyPanel({
       {hourlyData.map((series, index) => {
         const rainProbability =
           series.data.next_1_hours?.details?.probability_of_precipitation || 0;
-        const currentDate = new Date(series.time);
+        const currentDate = parseTime(series.time);
         const prevDate =
-          index > 0 ? new Date(hourlyData[index - 1].time) : null;
+          index > 0 ? parseTime(hourlyData[index - 1].time) : null;
         const isNewDay =
           index === 0 ||
           (prevDate && currentDate.getDate() !== prevDate.getDate());
@@ -418,15 +427,16 @@ function WeatherHourlyPanel({
         return (
           <Fragment key={currentDate.toISOString()}>
             {index === 0 && (
-              <div className="sticky top-0 z-20 flex flex-row rounded-2xl border border-border bg-popover/95 px-3 py-2 text-base shadow-sm backdrop-blur">
-                <span className="w-24 text-sm text-muted-foreground">
+              <div className="sticky top-0 z-20 flex flex-row items-center rounded-2xl border border-border bg-popover/95 px-3 py-2 text-base shadow-sm backdrop-blur gap-2">
+                <span className="w-16 md:w-24 text-sm text-muted-foreground flex-shrink-0">
                   Time
                 </span>
                 <span className="text-sm text-muted-foreground">
                   Forecast
                 </span>
                 <span className="flex-1 text-right text-sm text-muted-foreground">
-                  Rain probability
+                  <span className="hidden sm:inline">Rain probability</span>
+                  <span className="inline sm:hidden">Rain %</span>
                 </span>
               </div>
             )}
@@ -446,8 +456,8 @@ function WeatherHourlyPanel({
               </div>
             )}
 
-            <div className="content-visibility-row flex flex-row items-center">
-              <div className="flex w-24 flex-col items-start text-2xl">
+            <div className="content-visibility-row flex flex-row items-center gap-2">
+              <div className="flex w-16 md:w-24 flex-col items-start text-xl md:text-2xl flex-shrink-0">
                 <span>
                   {currentDate.toLocaleTimeString('fi-FI', {
                     hour: '2-digit',
@@ -459,7 +469,7 @@ function WeatherHourlyPanel({
               <span className="flex-1" />
               <span
                 className={clsx(
-                  'flex items-center',
+                  'flex items-center text-sm md:text-base font-medium whitespace-nowrap',
                   rainProbability > 20
                     ? rainProbability > 50
                       ? 'text-red-500'
@@ -493,7 +503,7 @@ function WeatherLongTermPanel({
 
   return (
     <>
-      <div className="flex w-full flex-row gap-2">
+      <div className="flex w-full flex-row gap-2 overflow-x-auto pb-2 scrollbar-none">
         {dailyData.map((dayData) => {
           const today = new Date();
           const isToday =
@@ -502,16 +512,16 @@ function WeatherLongTermPanel({
           return (
             <div
               key={dayData.date.toISOString()}
-              className="flex-1 rounded-2xl border border-border bg-muted/50 p-3 text-center"
+              className="flex-1 min-w-[76px] rounded-2xl border border-border bg-muted/50 p-2 md:p-3 text-center flex-shrink-0"
             >
-              <div className="mb-2 text-sm font-semibold">
+              <div className="mb-2 text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
                 {isToday
                   ? 'Today'
                   : dayData.date.toLocaleDateString('en-US', {
                       weekday: 'short',
                     })}
               </div>
-              <div className="mb-2 text-xs text-muted-foreground">
+              <div className="mb-2 text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
                 {dayData.date.toLocaleDateString('en-FI', {
                   month: 'short',
                   day: 'numeric',
@@ -608,33 +618,41 @@ const renderWeatherDetail = (
     <div
       className={clsx(
         'flex items-center justify-center',
-        horizontal ? 'flex-col' : 'gap-3',
+        horizontal ? 'flex-col gap-1' : 'gap-2 md:gap-3',
       )}
     >
       <img
-        className="size-16"
+        className={clsx(
+          horizontal ? 'size-16' : 'size-12 md:size-16 flex-shrink-0',
+        )}
         src={`/weathericons/${series.data.next_1_hours?.summary?.symbol_code || series.data.next_6_hours?.summary?.symbol_code || 'clearsky_day'}.svg`}
-        width={64}
-        height={64}
+        width={horizontal ? 64 : 48}
+        height={horizontal ? 64 : 48}
         decoding="async"
         alt="Weather icon"
       />
-      <div className={clsx('flex flex-col', horizontal ? 'items-center' : '')}>
-        <span className="whitespace-nowrap text-2xl">
+      <div className={clsx('flex flex-col min-w-0', horizontal ? 'items-center' : '')}>
+        <span className={clsx(
+          'whitespace-nowrap font-semibold',
+          horizontal ? 'text-2xl' : 'text-lg md:text-2xl'
+        )}>
           {overrideTemp !== undefined
             ? overrideTemp
             : Math.round(series.data.instant.details.air_temperature)}{' '}
           °C
         </span>
-        <span className="flex gap-2">
-          <span className="text-sm text-muted-foreground">
+        <span className={clsx(
+          'flex',
+          horizontal ? 'gap-2' : 'flex-wrap gap-x-2 gap-y-0.5 text-xs md:text-sm'
+        )}>
+          <span className="text-muted-foreground whitespace-nowrap">
             {Math.round(series.data.instant.details.wind_speed)} m/s
           </span>
           {series.data.instant.details.ultraviolet_index_clear_sky !==
             undefined && (
             <span
               className={clsx(
-                'text-sm text-muted-foreground',
+                'whitespace-nowrap',
                 getUvIndexColor(
                   series.data.instant.details.ultraviolet_index_clear_sky,
                 ),

@@ -488,11 +488,11 @@ const CombinedSensorsChartComponent: React.FC<CombinedSensorsChartProps> = ({
 
   // Memoize scales
   const { xScale, yScale } = useMemo(() => {
-    const xScale = scaleTime<number>({
+    const xScale = scaleTime({
       range: [0, innerWidth],
       domain: [
-        Math.min(...data.map((d) => d.time.getTime())),
-        Math.max(...data.map((d) => d.time.getTime())),
+        new Date(Math.min(...data.map((d) => d.time.getTime()))),
+        new Date(Math.max(...data.map((d) => d.time.getTime()))),
       ],
     });
 
@@ -552,7 +552,7 @@ const CombinedSensorsChartComponent: React.FC<CombinedSensorsChartProps> = ({
 
   const getDataPointPosition = useMemo(
     () => (datum: CombinedDataPoint) => {
-      const x = xScale(datum.time.getTime()) ?? 0;
+      const x = xScale(datum.time) ?? 0;
       let y = innerHeight / 2; // Default to center
 
       if (

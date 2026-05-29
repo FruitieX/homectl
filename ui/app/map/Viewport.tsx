@@ -1,4 +1,9 @@
-import { useDevicesByKeysState, useGroupsState } from '@/hooks/websocket';
+import {
+  useDevicesByKeysState,
+  useDevicesState,
+  useGroupsState,
+  useScenesState,
+} from '@/hooks/websocket';
 import {
   useDeviceDisplayNames,
   useDeviceSensorConfigs,
@@ -20,6 +25,11 @@ import { excludeUndefined } from 'utils/excludeUndefined';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
 import { PixiFloorplanRenderer } from '@/ui/floorplan';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
+import { FloorplanControlPanel } from '@/ui/FloorplanControlPanel';
+import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
+import { getColor } from '@/lib/colors';
+import { type DevicesState } from '@/bindings/DevicesState';
+import { type FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
 import { Label } from '@/ui/primitives/label';
 import {
   Select,
@@ -29,8 +39,33 @@ import {
   SelectValue,
 } from '@/ui/primitives/select';
 
+function isDevicePersistEnabled(
+  devices: DevicesState | null,
+  scenes: FlattenedScenesConfig | null,
+  deviceKey: string,
+) {
+  const device = devices?.[deviceKey];
+  if (!device || !('Controllable' in device.data)) {
+    return false;
+  }
+
+  const sceneId = device.data.Controllable.scene_id;
+  if (!sceneId) {
+    return false;
+  }
+
+  const scene = scenes?.[sceneId];
+  if (!scene) {
+    return false;
+  }
+
+  return scene.active_overrides.includes(deviceKey);
+}
+
 export const Viewport = () => {
+  const devicesState = useDevicesState();
   const liveGroups = useGroupsState();
+  const scenes = useScenesState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const { data: deviceSensorConfigs } = useDeviceSensorConfigs();
   const { data: floorplans } = useFloorplans();
@@ -40,6 +75,7 @@ export const Viewport = () => {
   const [pixiFallbackReason, setPixiFallbackReason] = useState<string | null>(
     null,
   );
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const effectiveSelectedFloorplanId =
     floorplans.length === 0
       ? null
@@ -56,10 +92,15 @@ export const Viewport = () => {
     [floorplanGrid],
   );
   const liveDevices = useDevicesByKeysState(placedDeviceKeys);
+  const selectedFloorplanName =
+    floorplans.find(
+      (floorplan) => floorplan.id === effectiveSelectedFloorplanId,
+    )?.name ?? undefined;
 
   const allDevices: Device[] = Object.values(
     excludeUndefined(liveDevices ?? undefined),
   );
+  const allRuntimeDevices = excludeUndefined(devicesState ?? undefined);
   const groups = excludeUndefined(liveGroups ?? undefined);
   const deviceDisplayNameMap = useMemo(
     () =>
@@ -82,8 +123,9 @@ export const Viewport = () => {
       ),
     [deviceSensorConfigs],
   );
-  const [selectedDevices] = useSelectedDevices();
+  const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
+  const setDeviceState = useSetDeviceState();
   const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
     useDeviceModalState();
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
@@ -107,6 +149,26 @@ export const Viewport = () => {
 
     setDeviceModalState(deviceKeys);
     setDeviceModalOpen(true);
+  };
+
+  const setDevicesPower = (deviceKeys: string[], power: boolean) => {
+    for (const deviceKey of deviceKeys) {
+      const device = devicesState?.[deviceKey];
+      if (!device || !('Controllable' in device.data)) {
+        continue;
+      }
+
+      const state = device.data.Controllable.state;
+
+      setDeviceState(
+        device,
+        isDevicePersistEnabled(devicesState, scenes, deviceKey),
+        power,
+        state.color ? getColor(device.data) : undefined,
+        state.brightness ?? (power ? 1 : undefined),
+        0.25,
+      );
+    }
   };
 
   const toggleGroupDevices = (groupId: string) => {
@@ -141,7 +203,7 @@ export const Viewport = () => {
     }
 
     if (selectedDevices.length === 0) {
-      openDeviceModal(group.device_keys);
+      setActiveGroupId(groupId);
       return;
     }
 
@@ -181,6 +243,25 @@ export const Viewport = () => {
             </p>
           )}
         </div>
+      )}
+
+      {floorplans.length > 0 && (
+        <FloorplanControlPanel
+          floorplanName={selectedFloorplanName}
+          placedDevices={allDevices}
+          devicesByKey={allRuntimeDevices}
+          groups={groups}
+          selectedDeviceKeys={selectedDevices}
+          activeGroupId={activeGroupId}
+          displayNames={deviceDisplayNameMap}
+          onClearSelection={() => setSelectedDevices([])}
+          onCloseGroup={() => setActiveGroupId(null)}
+          onOpenDetailedControls={(deviceKeys) => {
+            setActiveGroupId(null);
+            openDeviceModal(deviceKeys);
+          }}
+          onSetPower={setDevicesPower}
+        />
       )}
 
       {webglRendererActive ? (

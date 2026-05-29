@@ -11,7 +11,10 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use crate::core::state::StateHandle;
-use crate::core::{integrations::integration_config_schemas, logs::recent_logs};
+use crate::core::{
+    integrations::integration_config_schemas, logs::recent_logs,
+    routine_history::recent_routine_history,
+};
 use crate::db::{
     self,
     actions::{db_delete_device, db_update_device},
@@ -1168,6 +1171,7 @@ pub fn config(
         core_routes(snapshot, handle)
             .or(runtime_status_routes())
             .or(logs_routes())
+            .or(routine_history_routes())
             .or(device_display_name_routes(snapshot, handle))
             .or(device_sensor_config_routes(snapshot, handle))
             .or(device_config_routes(handle))
@@ -1197,6 +1201,18 @@ fn logs_routes() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rej
 
 async fn list_logs() -> Result<impl Reply, warp::Rejection> {
     Ok(ApiResponse::success(recent_logs()))
+}
+
+fn routine_history_routes(
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("routine-history")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(list_routine_history)
+}
+
+async fn list_routine_history() -> Result<impl Reply, warp::Rejection> {
+    Ok(ApiResponse::success(recent_routine_history()))
 }
 
 fn core_routes(

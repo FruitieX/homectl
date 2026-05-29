@@ -47,6 +47,14 @@ export const configSections = [
     keywords: ['rules', 'actions', 'automation', 'trigger', 'override'],
   },
   {
+    href: '/config/routine-history',
+    label: 'Routine History',
+    description:
+      'Recent routine activations, manual triggers, source devices, and rule traces.',
+    group: 'Automation',
+    keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
+  },
+  {
     href: '/config/dashboard',
     label: 'Dashboard',
     description: 'Layouts, widgets, cards, and dashboard composition.',

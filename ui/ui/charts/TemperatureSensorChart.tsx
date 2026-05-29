@@ -318,11 +318,11 @@ const TemperatureSensorChartComponent: React.FC<
 
   // Memoize scales
   const { xScale, yScale } = useMemo(() => {
-    const xScale = scaleTime<number>({
+    const xScale = scaleTime({
       range: [0, innerWidth],
       domain: [
-        Math.min(...data.map((d) => d.time.getTime())),
-        Math.max(...data.map((d) => d.time.getTime())),
+        new Date(Math.min(...data.map((d) => d.time.getTime()))),
+        new Date(Math.max(...data.map((d) => d.time.getTime()))),
       ],
     });
 
@@ -363,7 +363,7 @@ const TemperatureSensorChartComponent: React.FC<
 
   const getDataPointPosition = useMemo(
     () => (datum: TemperatureData) => {
-      const x = xScale(datum.time.getTime()) ?? 0;
+      const x = xScale(datum.time) ?? 0;
       const y = yScale(datum.temp) ?? 0;
       return { x, y };
     },

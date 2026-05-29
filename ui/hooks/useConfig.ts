@@ -1,4 +1,5 @@
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
+import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import { type JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
@@ -136,6 +137,19 @@ export interface UiLogEntry {
   level: LogLevel;
   target: string;
   message: string;
+}
+
+export type RoutineHistoryTriggerKind = 'rule_match' | 'force_trigger';
+
+export interface RoutineHistoryEntry {
+  id: string;
+  timestamp: string;
+  routine_id: string;
+  routine_name: string;
+  trigger_kind: RoutineHistoryTriggerKind;
+  event_source_device_key?: string | null;
+  action_count: number;
+  status?: RoutineRuntimeStatus | null;
 }
 
 export interface RuntimeStatus {
@@ -438,6 +452,58 @@ export function useLogs(pollIntervalMs = 5000) {
   }, [fetchLogs, pollIntervalMs]);
 
   return { data, loading, error, refetch: fetchLogs, lastUpdated };
+}
+
+export function useRoutineHistory(pollIntervalMs = 5000) {
+  const { apiEndpoint } = useAppConfig();
+  const [data, setData] = useState<RoutineHistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+
+  const baseUrl = `${apiEndpoint}/api/v1/config`;
+
+  const fetchHistory = useCallback(
+    async (background = false) => {
+      if (!background) {
+        setLoading(true);
+      }
+
+      try {
+        const response = await fetch(`${baseUrl}/routine-history`);
+        const result = await readApiResponse<RoutineHistoryEntry[]>(
+          response,
+          'Failed to fetch routine history',
+        );
+        setData(result.data ?? []);
+        setError(null);
+        setLastUpdated(new Date().toISOString());
+      } catch (nextError) {
+        setError(
+          nextError instanceof Error ? nextError.message : 'Unknown error',
+        );
+      } finally {
+        if (!background) {
+          setLoading(false);
+        }
+      }
+    },
+    [baseUrl],
+  );
+
+  useEffect(() => {
+    void fetchHistory();
+
+    const intervalId = window.setInterval(() => {
+      void fetchHistory(true);
+    }, pollIntervalMs);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [fetchHistory, pollIntervalMs]);
+
+  return { data, loading, error, refetch: fetchHistory, lastUpdated };
 }
 
 export function useRuntimeStatus(pollIntervalMs = 5000) {

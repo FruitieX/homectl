@@ -314,19 +314,25 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     "Optional MQTT password.",
                     None,
                 ),
-                text_config_field(
-                    "topic",
-                    "State topic",
-                    true,
-                    "Topic to subscribe to for device state messages.",
-                    Some("home/+/example/{id}"),
+                with_help_text(
+                    text_config_field(
+                        "topic",
+                        "State topic",
+                        true,
+                        "Topic to subscribe to for device state messages.",
+                        Some("home/+/example/{id}"),
+                    ),
+                    "Use `{id}` where the device id appears in the MQTT topic. Wildcards such as `+` are accepted for subscriptions; homectl extracts the id from the matching topic segment.",
                 ),
-                text_config_field(
-                    "topic_set",
-                    "Command topic",
-                    true,
-                    "Topic used when publishing device state commands.",
-                    Some("home/lights/example/{id}/set"),
+                with_help_text(
+                    text_config_field(
+                        "topic_set",
+                        "Command topic",
+                        true,
+                        "Topic used when publishing device state commands.",
+                        Some("home/lights/example/{id}/set"),
+                    ),
+                    "This topic is used for outbound commands. Include the same `{id}` placeholder unless every device should receive commands on one shared topic.",
                 ),
                 select_config_field(
                     "managed",
@@ -352,12 +358,15 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                         ),
                     ],
                 ),
-                text_config_field(
-                    "id_field",
-                    "ID field",
-                    false,
-                    "JSON pointer to the device id in incoming payloads.",
-                    Some("/id"),
+                with_help_text(
+                    text_config_field(
+                        "id_field",
+                        "ID field",
+                        false,
+                        "JSON pointer to the device id in incoming payloads.",
+                        Some("/id"),
+                    ),
+                    "JSON pointers start with `/` and follow RFC 6901. For `{ \"device\": { \"id\": \"kitchen\" } }`, use `/device/id`.",
                 ),
                 text_config_field(
                     "name_field",
@@ -408,12 +417,15 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     "Two-number JSON array describing the source brightness range.",
                     Some(json!([0, 255])),
                 ),
-                json_config_field(
-                    "sensor_value_fields",
-                    "Sensor value fields",
-                    false,
-                    "JSON array of pointers to sensor values in incoming payloads.",
-                    Some(json!(["/temperature", "/humidity"])),
+                with_help_text(
+                    json_config_field(
+                        "sensor_value_fields",
+                        "Sensor value fields",
+                        false,
+                        "JSON array of pointers to sensor values in incoming payloads.",
+                        Some(json!(["/temperature", "/humidity"])),
+                    ),
+                    "List every numeric or boolean sensor value to keep. Example: `[\"/temperature\", \"/humidity\", \"/occupancy\"]`.",
                 ),
                 text_config_field(
                     "transition_field",
@@ -544,19 +556,22 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
             "cron",
             "Cron",
             "Expose schedule devices that trigger actions from cron expressions.",
-            vec![json_config_field(
-                "schedules",
-                "Schedules",
-                true,
-                "JSON object mapping schedule ids to name, cron expression, action, and optional initial enabled state.",
-                Some(json!({
-                    "bedtime": {
-                        "name": "Bedtime",
-                        "schedule": "0 22 * * *",
-                        "init_enabled": true,
-                        "action": { "ActivateScene": { "scene_id": "night" } }
-                    }
-                })),
+            vec![with_help_text(
+                json_config_field(
+                    "schedules",
+                    "Schedules",
+                    true,
+                    "JSON object mapping schedule ids to name, cron expression, action, and optional initial enabled state.",
+                    Some(json!({
+                        "bedtime": {
+                            "name": "Bedtime",
+                            "schedule": "0 22 * * *",
+                            "init_enabled": true,
+                            "action": { "ActivateScene": { "scene_id": "night" } }
+                        }
+                    })),
+                ),
+                "Cron syntax is `second minute hour day-of-month month day-of-week`. Keep ids stable because routines and actions may reference the generated schedule devices.",
             )],
         )),
         "timer" => Some(schema(
@@ -575,21 +590,24 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
             "dummy",
             "Dummy",
             "Create in-memory devices for development and testing without physical hardware.",
-            vec![json_config_field(
-                "devices",
-                "Devices",
-                true,
-                "JSON object mapping device ids to a name and optional initial state.",
-                Some(json!({
-                    "1": {
-                        "name": "Kitchen ceiling light",
-                        "init_state": {
-                            "Controllable": {
-                                "state": { "power": true }
+            vec![with_help_text(
+                json_config_field(
+                    "devices",
+                    "Devices",
+                    true,
+                    "JSON object mapping device ids to a name and optional initial state.",
+                    Some(json!({
+                        "1": {
+                            "name": "Kitchen ceiling light",
+                            "init_state": {
+                                "Controllable": {
+                                    "state": { "power": true }
+                                }
                             }
                         }
-                    }
-                })),
+                    })),
+                ),
+                "Use dummy devices to prototype groups, scenes, and routines before connecting real hardware. Device ids become `integration_id/device_id` keys.",
             )],
         )),
         "random" => Some(schema(
@@ -830,6 +848,14 @@ fn color_config_field(
             description,
         )
     }
+}
+
+fn with_help_text(
+    mut field: IntegrationConfigFieldSchema,
+    help_text: &str,
+) -> IntegrationConfigFieldSchema {
+    field.help_text = Some(help_text.to_string());
+    field
 }
 
 fn outbound_device_update_field() -> IntegrationConfigFieldSchema {

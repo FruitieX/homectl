@@ -16,9 +16,12 @@ trying out other alternatives for now.
 
 - Install the Rust toolchain using [`rustup`](https://rustup.rs/)
 - Clone this repository
-- From `server/`, run `RUST_LOG=homectl_server=info cargo run`
+- From `server/`, run `cargo run`
 
 You should now have a demo/dummy homectl environment running.
+
+homectl enables `warn,homectl_server=info` logging by default. Override it
+with `RUST_LOG` if you want quieter or more verbose output.
 
 By default, homectl creates or opens `homectl.db` in the current working
 directory and stores configuration there using SQLite. On first startup with an
@@ -28,8 +31,7 @@ otherwise homectl starts with an empty runtime snapshot.
 To use another supported database target, set `DATABASE_URL`:
 
 ```
-DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres \
-RUST_LOG=homectl_server=info cargo run
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres cargo run
 ```
 
 If the database named in `DATABASE_URL` does not exist yet, homectl creates it
@@ -41,7 +43,7 @@ If persistence is unavailable at startup, you can still boot the server from a
 JSON export backup or legacy TOML config:
 
 ```
-RUST_LOG=homectl_server=info cargo run -- --config ./config-backup.json
+cargo run -- --config ./config-backup.json
 ```
 
 When an explicitly configured database cannot be opened, homectl falls back to
@@ -54,6 +56,41 @@ running, config changes are expected to go through homectl itself.
 To control your home automation systems, edit `Settings.toml` or start from a
 JSON export created via `/api/v1/config/export`. See below sections for
 configuration instructions and examples.
+
+### Container image
+
+CI publishes a runtime image to `ghcr.io/fruitiex/homectl` with tags such as
+`main`, semver releases, and `sha-<commit>`.
+
+Run the container locally:
+
+```
+docker run --rm -p 45289:45289 ghcr.io/fruitiex/homectl:main
+```
+
+The container listens on port `45289` and emits homectl info logs by default.
+Use `RUST_LOG` if you want a different filter.
+
+To persist the default SQLite database at `/app/homectl.db`, mount a named
+volume at `/app`:
+
+```
+docker run --rm \
+  -p 45289:45289 \
+  -v homectl-data:/app \
+  ghcr.io/fruitiex/homectl:main
+```
+
+For bind mounts, prefer a dedicated data directory so you do not shadow the
+bundled UI files under `/app/ui/dist`:
+
+```
+docker run --rm \
+  -p 45289:45289 \
+  -e DATABASE_URL=sqlite:///app/data/homectl.db?mode=rwc \
+  -v "$(pwd)/homectl-data:/app/data" \
+  ghcr.io/fruitiex/homectl:main
+```
 
 ### Health checks
 

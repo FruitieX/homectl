@@ -22,7 +22,7 @@ use std::{
     sync::Arc,
 };
 
-use super::{devices::Devices, groups::Groups, scripting::ScriptEngine};
+use super::{devices::Devices, groups::Groups, routine_history, scripting::ScriptEngine};
 
 const TRIGGERING_DEVICE_ROLLOUT_SOURCE: &str = "__homectl_runtime__/triggering_device";
 
@@ -295,6 +295,13 @@ impl Routines {
             routine_actions.len(),
         );
 
+        routine_history::record_force_trigger(
+            routine_id,
+            &routine.name,
+            routine_actions.len(),
+            self.runtime_statuses.0.get(routine_id),
+        );
+
         for action in routine_actions {
             self.event_tx.send(Event::Action(action.clone()));
         }
@@ -319,6 +326,13 @@ impl Routines {
                     routine.name,
                     routine.actions.len(),
                     ctx.event_source,
+                );
+                routine_history::record_rule_match(
+                    &routine_id,
+                    &routine.name,
+                    ctx.event_source,
+                    routine.actions.len(),
+                    &status,
                 );
                 triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
                     expand_action_source_context(action, ctx.event_source, ctx.groups)

@@ -15,6 +15,16 @@ Key technologies:
 - warp, tokio, SeaORM, mqtt, etc.
 - SQLite persistence by default (`./homectl.db`), optional PostgreSQL persistence, and fallback startup from JSON backup, legacy TOML, or an empty in-memory runtime
 
+Container image:
+```
+docker run --rm -p 45289:45289 ghcr.io/fruitiex/homectl:main
+```
+
+The published image logs homectl startup progress by default. For persistence,
+use a named volume at `/app` or mount a dedicated data directory and point
+`DATABASE_URL` at it. See [server/README.md](server/README.md) for detailed
+container examples.
+
 Build & run (development):
 ```
 cd server

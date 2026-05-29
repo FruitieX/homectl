@@ -9,15 +9,15 @@ use once_cell::sync::Lazy;
 use crate::types::logs::{LogLevel, UiLogEntry};
 
 const MAX_LOG_ENTRIES: usize = 500;
+const DEFAULT_LOG_FILTERS: &str = "warn,homectl_server=info";
 
 static LOG_BUFFER: Lazy<RwLock<VecDeque<UiLogEntry>>> =
     Lazy::new(|| RwLock::new(VecDeque::with_capacity(MAX_LOG_ENTRIES)));
 
 pub fn init_logging() -> Result<(), SetLoggerError> {
     let mut builder = pretty_env_logger::formatted_builder();
-    if let Ok(filters) = std::env::var("RUST_LOG") {
-        builder.parse_filters(&filters);
-    }
+    let env_filters = std::env::var("RUST_LOG").ok();
+    builder.parse_filters(log_filters_from_env_or_default(env_filters.as_deref()));
 
     let env_logger = builder.build();
     let max_level = env_logger.filter();
@@ -30,6 +30,13 @@ pub fn init_logging() -> Result<(), SetLoggerError> {
 
 pub fn recent_logs() -> Vec<UiLogEntry> {
     read_log_buffer().iter().cloned().collect()
+}
+
+fn log_filters_from_env_or_default(env_filters: Option<&str>) -> &str {
+    env_filters
+        .map(str::trim)
+        .filter(|filters| !filters.is_empty())
+        .unwrap_or(DEFAULT_LOG_FILTERS)
 }
 
 struct BufferedLogger {
@@ -94,11 +101,35 @@ fn write_log_buffer() -> RwLockWriteGuard<'static, VecDeque<UiLogEntry>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{map_level, push_log_entry, recent_logs, write_log_buffer, MAX_LOG_ENTRIES};
+    use super::{
+        log_filters_from_env_or_default, map_level, push_log_entry, recent_logs,
+        write_log_buffer, DEFAULT_LOG_FILTERS, MAX_LOG_ENTRIES,
+    };
     use crate::types::logs::{LogLevel, UiLogEntry};
 
     fn clear_logs() {
         write_log_buffer().clear();
+    }
+
+    #[test]
+    fn default_log_filters_enable_homectl_info_logs() {
+        assert_eq!(log_filters_from_env_or_default(None), DEFAULT_LOG_FILTERS);
+    }
+
+    #[test]
+    fn blank_log_filters_fall_back_to_default() {
+        assert_eq!(
+            log_filters_from_env_or_default(Some("   ")),
+            DEFAULT_LOG_FILTERS
+        );
+    }
+
+    #[test]
+    fn explicit_log_filters_override_default() {
+        assert_eq!(
+            log_filters_from_env_or_default(Some("error,sqlx=warn")),
+            "error,sqlx=warn"
+        );
     }
 
     #[test]

@@ -6,6 +6,7 @@ pub mod event;
 pub mod group;
 pub mod integration;
 pub mod logs;
+pub mod routine_history;
 pub mod routine_status;
 pub mod rule;
 pub mod scene;

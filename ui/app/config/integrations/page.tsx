@@ -418,6 +418,84 @@ const getIntegrationSearchValues = (integration: Integration) => [
   integration.config,
 ];
 
+const starterPlugins = ['mqtt', 'dummy', 'circadian', 'cron'];
+
+function getFieldFormatHint(field: IntegrationConfigFieldSchema) {
+  if (field.key === 'day_fade_start' || field.key === 'night_fade_start') {
+    return 'Format: HH:MM in local time, for example 06:00.';
+  }
+
+  if (field.key === 'schedules') {
+    return 'Cron schedules use second, minute, hour, day-of-month, month, and day-of-week fields.';
+  }
+
+  if (field.key.endsWith('_field') || field.key.endsWith('_fields')) {
+    return 'Use JSON pointer syntax such as /state/power or /temperature.';
+  }
+
+  if (field.kind === 'json' && field.default_value !== undefined) {
+    return 'Start from the example JSON if you are unsure about the expected shape.';
+  }
+
+  return null;
+}
+
+function buildFieldDescription(field: IntegrationConfigFieldSchema) {
+  const parts = [field.description, getFieldFormatHint(field)];
+  if (field.required) {
+    parts.push('Required.');
+  }
+
+  return parts.filter(Boolean).join(' ');
+}
+
+function IntegrationGettingStarted({
+  schemas,
+  onSelectPlugin,
+}: {
+  schemas: IntegrationConfigSchema[];
+  onSelectPlugin?: (plugin: string) => void;
+}) {
+  const schemaByPlugin = Object.fromEntries(
+    schemas.map((schema) => [schema.plugin, schema]),
+  );
+
+  return (
+    <Card className="border-primary/20 bg-primary/5">
+      <CardHeader>
+        <CardTitle>Getting started</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-3 text-sm text-muted-foreground">
+        <p>
+          Start with one integration, confirm devices appear, then build groups,
+          scenes, and routines on top. Examples can be copied directly into JSON
+          fields while you experiment.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {starterPlugins.map((plugin) => {
+            const schema = schemaByPlugin[plugin];
+            return (
+              <button
+                key={plugin}
+                type="button"
+                className="rounded-2xl border border-border bg-background/80 p-3 text-left transition hover:border-primary/50 hover:bg-background"
+                onClick={() => onSelectPlugin?.(plugin)}
+              >
+                <div className="font-medium text-foreground">
+                  {schema?.name ?? plugin}
+                </div>
+                <div className="mt-1 text-xs leading-5 text-muted-foreground">
+                  {schema?.description ?? 'Plugin configuration'}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function IntegrationsPage() {
   const {
     data: integrations,
@@ -435,6 +513,7 @@ export default function IntegrationsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [createPlugin, setCreatePlugin] = useState<string | null>(null);
   const editingIntegration = integrations.find(
     (integration) => integration.id === editingId,
   );
@@ -464,19 +543,38 @@ export default function IntegrationsPage() {
         title="Integrations"
         description="Connect plugins, schedules, and virtual devices to the runtime."
         actions={
-          <Button onClick={() => setShowCreate(true)}>Add Integration</Button>
+          <Button
+            onClick={() => {
+              setCreatePlugin(null);
+              setShowCreate(true);
+            }}
+          >
+            Add Integration
+          </Button>
         }
       />
 
-      <ConfigListSearchBar
-        filteredCount={visibleIntegrations.length}
-        onChange={setSearch}
-        placeholder="Search by id, plugin, or config"
-        totalCount={integrations.length}
-        value={search}
-      />
+      {integrations.length === 0 ? (
+        <IntegrationGettingStarted
+          schemas={integrationSchemas}
+          onSelectPlugin={(plugin) => {
+            setCreatePlugin(plugin);
+            setShowCreate(true);
+          }}
+        />
+      ) : null}
 
-      {visibleIntegrations.length === 0 ? (
+      {integrations.length > 0 ? (
+        <ConfigListSearchBar
+          filteredCount={visibleIntegrations.length}
+          onChange={setSearch}
+          placeholder="Search by id, plugin, or config"
+          totalCount={integrations.length}
+          value={search}
+        />
+      ) : null}
+
+      {integrations.length === 0 ? null : visibleIntegrations.length === 0 ? (
         <EmptyState
           title="No integrations match the current search"
           description="Try a different plugin name, id, or configuration value."
@@ -501,12 +599,17 @@ export default function IntegrationsPage() {
       {showCreate && (
         <IntegrationOverlay
           mode="create"
+          initialPlugin={createPlugin ?? undefined}
           schemas={integrationSchemas}
           schemasError={schemasError}
-          onClose={() => setShowCreate(false)}
+          onClose={() => {
+            setShowCreate(false);
+            setCreatePlugin(null);
+          }}
           onSubmit={async (integration) => {
             await create(integration);
             setShowCreate(false);
+            setCreatePlugin(null);
           }}
         />
       )}
@@ -653,9 +756,7 @@ function SchemaConfigField({
   onConfigChange: (config: Record<string, unknown>) => void;
 }) {
   const value = getConfigPathValue(config, field.key);
-  const fieldDescription = field.required
-    ? `${field.description ?? ''} Required.`.trim()
-    : field.description;
+  const fieldDescription = buildFieldDescription(field);
   const updateValue = (nextValue: unknown) => {
     onConfigChange(setConfigPathValue(config, field.key, nextValue));
   };
@@ -1108,10 +1209,11 @@ function JsonConfigField({
 }) {
   const [text, setText] = useState(formatJsonValue(value));
   const [error, setError] = useState<string | null>(null);
-  const placeholder =
-    field.default_value !== undefined && field.default_value !== null
-      ? formatJsonValue(field.default_value)
-      : (field.placeholder ?? undefined);
+  const hasExample =
+    field.default_value !== undefined && field.default_value !== null;
+  const placeholder = hasExample
+    ? formatJsonValue(field.default_value)
+    : (field.placeholder ?? undefined);
 
   const applyText = () => {
     const trimmed = text.trim();
@@ -1138,6 +1240,23 @@ function JsonConfigField({
     onChange(parsed.value);
   };
 
+  const useExample = () => {
+    if (!hasExample) {
+      return;
+    }
+
+    const nextText = formatJsonValue(field.default_value);
+    setText(nextText);
+    setError(null);
+    onChange(field.default_value);
+  };
+
+  const clearValue = () => {
+    setText('');
+    setError(null);
+    onChange(undefined);
+  };
+
   return (
     <div className="space-y-2">
       <Textarea
@@ -1147,6 +1266,32 @@ function JsonConfigField({
         onChange={(event) => setText(event.target.value)}
         onBlur={applyText}
       />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={applyText}>
+          Apply JSON
+        </Button>
+        {hasExample ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={useExample}
+          >
+            Use example
+          </Button>
+        ) : null}
+        {!field.required && text.trim() ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={clearValue}
+          >
+            Clear
+          </Button>
+        ) : null}
+      </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
@@ -1235,6 +1380,7 @@ function missingRequiredFieldLabels(
 function IntegrationOverlay({
   mode,
   integration,
+  initialPlugin,
   schemas,
   schemasError,
   onClose,
@@ -1242,13 +1388,16 @@ function IntegrationOverlay({
 }: {
   mode: 'create' | 'edit';
   integration?: Integration;
+  initialPlugin?: string;
   schemas: IntegrationConfigSchema[];
   schemasError: string | null;
   onClose: () => void;
   onSubmit: (integration: Partial<Integration>) => Promise<void>;
 }) {
   const [id, setId] = useState(integration?.id ?? '');
-  const [plugin, setPlugin] = useState(integration?.plugin ?? '');
+  const [plugin, setPlugin] = useState(
+    integration?.plugin ?? initialPlugin ?? '',
+  );
   const [config, setConfig] = useState<Record<string, unknown>>(
     integration?.config ?? {},
   );
@@ -1353,30 +1502,41 @@ function IntegrationOverlay({
               description="Pick a stable id and plugin type. Existing integration ids and plugins are read-only to avoid breaking references."
             >
               {isCreate ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <ConfigField label="Integration ID">
-                    <Input
-                      value={id}
-                      onChange={(event) => setId(event.target.value)}
-                      placeholder="e.g. my-mqtt"
-                    />
-                  </ConfigField>
+                <>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <ConfigField label="Integration ID">
+                      <Input
+                        value={id}
+                        onChange={(event) => setId(event.target.value)}
+                        placeholder="e.g. my-mqtt"
+                      />
+                    </ConfigField>
 
-                  <ConfigField label="Plugin">
-                    <select
-                      className={selectClassName}
-                      value={plugin}
-                      onChange={(event) => setPlugin(event.target.value)}
-                    >
-                      <option value="">Select plugin...</option>
-                      {pluginOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </ConfigField>
-                </div>
+                    <ConfigField label="Plugin">
+                      <select
+                        className={selectClassName}
+                        value={plugin}
+                        onChange={(event) => setPlugin(event.target.value)}
+                      >
+                        <option value="">Select plugin...</option>
+                        {pluginOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </ConfigField>
+                  </div>
+                  <IntegrationGettingStarted
+                    schemas={schemas}
+                    onSelectPlugin={(nextPlugin) => {
+                      setPlugin(nextPlugin);
+                      if (!id) {
+                        setId(nextPlugin);
+                      }
+                    }}
+                  />
+                </>
               ) : (
                 <ConfigReadOnlyGrid>
                   <ConfigReadOnlyItem
