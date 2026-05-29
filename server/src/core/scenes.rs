@@ -265,7 +265,18 @@ fn find_scenes_common_devices(scene_device_lists: Vec<SceneDeviceList>) -> HashS
     scenes_common_devices
 }
 
-fn normalize_scene_script_color_value(value: serde_json::Value) -> serde_json::Value {
+fn is_legacy_wrapped_color_value(value: &serde_json::Value) -> bool {
+    let serde_json::Value::Object(object) = value else {
+        return false;
+    };
+
+    object.len() == 1
+        && ["Xy", "Hs", "Rgb", "Ct"]
+            .iter()
+            .any(|variant| object.contains_key(*variant))
+}
+
+fn normalize_scene_config_color_value(value: serde_json::Value) -> serde_json::Value {
     let serde_json::Value::Object(mut object) = value else {
         return value;
     };
@@ -281,7 +292,7 @@ fn normalize_scene_script_color_value(value: serde_json::Value) -> serde_json::V
     serde_json::Value::Object(object)
 }
 
-fn normalize_scene_script_config_value(value: serde_json::Value) -> serde_json::Value {
+fn normalize_scene_config_value(value: serde_json::Value) -> serde_json::Value {
     let serde_json::Value::Object(mut object) = value else {
         return value;
     };
@@ -289,7 +300,7 @@ fn normalize_scene_script_config_value(value: serde_json::Value) -> serde_json::
     if let Some(color) = object.remove("color") {
         object.insert(
             "color".to_string(),
-            normalize_scene_script_color_value(color),
+            normalize_scene_config_color_value(color),
         );
     }
 
@@ -304,6 +315,69 @@ fn normalize_scene_script_config_value(value: serde_json::Value) -> serde_json::
     }
 
     serde_json::Value::Object(object)
+}
+
+fn normalize_scene_script_config_value(value: serde_json::Value) -> serde_json::Value {
+    normalize_scene_config_value(value)
+}
+
+fn warn_scene_config_compatibility(
+    scene_id: &str,
+    target_kind: &str,
+    target_id: &str,
+    config_value: &serde_json::Value,
+) {
+    let serde_json::Value::Object(object) = config_value else {
+        return;
+    };
+
+    if object.get("color").map(is_legacy_wrapped_color_value) == Some(true) {
+        warn!(
+            "Scene {scene_id} {target_kind} target {target_id} uses legacy wrapped color config; use untagged color objects like {{\"h\": 30, \"s\": 1.0}}"
+        );
+    }
+
+    if object.contains_key("transition_ms") {
+        warn!(
+            "Scene {scene_id} {target_kind} target {target_id} uses transition_ms, which is ignored by scene configs; use transition instead"
+        );
+    }
+
+    if object.contains_key("integration_id")
+        && object.contains_key("id")
+        && !object.contains_key("device_id")
+        && !object.contains_key("name")
+    {
+        warn!(
+            "Scene {scene_id} {target_kind} target {target_id} uses legacy id field; use device_id instead"
+        );
+    }
+}
+
+fn parse_scene_config_value(
+    scene_id: &str,
+    target_kind: &str,
+    target_id: &str,
+    config_value: &serde_json::Value,
+) -> Option<SceneDeviceConfig> {
+    warn_scene_config_compatibility(scene_id, target_kind, target_id, config_value);
+
+    let normalized_config_value = normalize_scene_config_value(config_value.clone());
+    if normalized_config_value != *config_value {
+        warn!(
+            "Scene {scene_id} {target_kind} target {target_id} uses legacy scene config shape; normalized it while loading"
+        );
+    }
+
+    match serde_json::from_value::<SceneDeviceConfig>(normalized_config_value) {
+        Ok(config) => Some(config),
+        Err(error) => {
+            warn!(
+                "Failed to parse scene {scene_id} {target_kind} config for {target_id}: {error}; config={config_value}"
+            );
+            None
+        }
+    }
 }
 
 /// Finds index of active scene (if any) in given list of scenes.
@@ -476,24 +550,31 @@ impl Scenes {
 
                 for (device_key, config_value) in &scene.device_states {
                     if let Some((integration_id, device_name)) = device_key.split_once('/') {
-                        match serde_json::from_value::<SceneDeviceConfig>(config_value.clone()) {
-                            Ok(config) => {
-                                devices_map
-                                    .entry(integration_id.to_string().into())
-                                    .or_insert_with(BTreeMap::new)
-                                    .insert(device_name.to_string(), config);
-                            }
-                            Err(error) => {
-                                warn!(
-                                    "Failed to parse scene device config for {}: {error}",
-                                    device_key
-                                );
-                            }
+                        if let Some(config) =
+                            parse_scene_config_value(&scene.id, "device", device_key, config_value)
+                        {
+                            devices_map
+                                .entry(integration_id.to_string().into())
+                                .or_insert_with(BTreeMap::new)
+                                .insert(device_name.to_string(), config);
                         }
+                    } else {
+                        warn!(
+                            "Scene {} has invalid device target key {}; expected integration_id/device_id",
+                            scene.id, device_key
+                        );
                     }
                 }
 
-                Some(crate::types::scene::SceneDevicesSearchConfig(devices_map))
+                if devices_map.is_empty() {
+                    warn!(
+                        "Scene {} has device target rows, but none could be parsed; ignoring device targets",
+                        scene.id
+                    );
+                    None
+                } else {
+                    Some(crate::types::scene::SceneDevicesSearchConfig(devices_map))
+                }
             };
 
             let groups = if scene.group_states.is_empty() {
@@ -502,20 +583,22 @@ impl Scenes {
                 let mut groups_map = BTreeMap::new();
 
                 for (group_id, config_value) in &scene.group_states {
-                    match serde_json::from_value::<SceneDeviceConfig>(config_value.clone()) {
-                        Ok(config) => {
-                            groups_map.insert(GroupId(group_id.clone()), config);
-                        }
-                        Err(error) => {
-                            warn!(
-                                "Failed to parse scene group config for {}: {error}",
-                                group_id
-                            );
-                        }
+                    if let Some(config) =
+                        parse_scene_config_value(&scene.id, "group", group_id, config_value)
+                    {
+                        groups_map.insert(GroupId(group_id.clone()), config);
                     }
                 }
 
-                Some(crate::types::scene::SceneGroupsConfig(groups_map))
+                if groups_map.is_empty() {
+                    warn!(
+                        "Scene {} has group target rows, but none could be parsed; ignoring group targets",
+                        scene.id
+                    );
+                    None
+                } else {
+                    Some(crate::types::scene::SceneGroupsConfig(groups_map))
+                }
             };
 
             db_scenes.insert(
@@ -1050,12 +1133,16 @@ impl Scenes {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, str::FromStr};
+    use std::{
+        collections::{BTreeMap, HashMap},
+        str::FromStr,
+    };
 
     use ordered_float::OrderedFloat;
 
     use crate::{
         core::{devices::Devices, groups::Groups},
+        db::config_queries,
         types::{
             color::Capabilities,
             device::{
@@ -1164,6 +1251,81 @@ mod tests {
                 "device_id": "color",
                 "brightness": 0.5
             })
+        );
+    }
+
+    #[test]
+    fn load_config_rows_accepts_legacy_scene_target_shapes() {
+        let scene_id = SceneId::from_str("legacy").unwrap();
+        let mut device_states = HashMap::new();
+        device_states.insert(
+            "test/target".to_string(),
+            json!({
+                "power": true,
+                "brightness": 0.6,
+                "color": {
+                    "Hs": {
+                        "h": 267,
+                        "s": 1.0
+                    }
+                }
+            }),
+        );
+        let mut group_states = HashMap::new();
+        group_states.insert(
+            "all".to_string(),
+            json!({
+                "integration_id": "test",
+                "id": "source",
+                "brightness": 0.5
+            }),
+        );
+
+        let mut scenes = Scenes::new(ScenesConfig::new());
+        scenes.load_config_rows(
+            &[config_queries::SceneRow {
+                id: scene_id.to_string(),
+                name: "Legacy".to_string(),
+                hidden: false,
+                script: None,
+                device_states,
+                group_states,
+            }],
+            Default::default(),
+        );
+
+        let scene = scenes.find_scene(&scene_id).unwrap();
+        let device_config = scene
+            .devices
+            .as_ref()
+            .unwrap()
+            .0
+            .get(&IntegrationId::from_str("test").unwrap())
+            .unwrap()
+            .get("target")
+            .unwrap();
+        let group_config = scene
+            .groups
+            .as_ref()
+            .unwrap()
+            .0
+            .get(&GroupId("all".into()))
+            .unwrap();
+
+        let SceneDeviceConfig::DeviceState(state) = device_config else {
+            panic!("expected device state config");
+        };
+        let SceneDeviceConfig::DeviceLink(link) = group_config else {
+            panic!("expected device link config");
+        };
+
+        assert!(state.color.is_some());
+        assert_eq!(
+            link.device_ref,
+            DeviceRef::new_with_id(
+                IntegrationId::from_str("test").unwrap(),
+                DeviceId::new("source"),
+            )
         );
     }
 

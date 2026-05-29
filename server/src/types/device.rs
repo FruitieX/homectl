@@ -474,10 +474,6 @@ impl Device {
     ) -> Self {
         let mut device = self.clone();
 
-        if !device.is_managed() {
-            return device;
-        }
-
         if let DeviceData::Controllable(ref mut data) = device.data {
             data.scene_id = scene_id.cloned();
             data.state_source = None;

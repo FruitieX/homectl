@@ -724,7 +724,20 @@ impl Devices {
             scene_id = request.scene_id,
         );
 
-        let resolved_devices = self.resolve_scene_devices(&request)?;
+        let Some(resolved_devices) = self.resolve_scene_devices(&request) else {
+            warn!(
+                "Could not resolve scene {scene_id}; scene activation skipped",
+                scene_id = request.scene_id,
+            );
+            return None;
+        };
+
+        if resolved_devices.is_empty() {
+            warn!(
+                "Scene {scene_id} resolved to no target devices; scene activation will not change device state",
+                scene_id = request.scene_id,
+            );
+        }
 
         self.apply_devices_with_rollout(
             resolved_devices,
@@ -1177,6 +1190,66 @@ mod tests {
 
         assert_eq!(data.state.transition, Some(OrderedFloat(1.5)));
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
+    }
+
+    #[tokio::test]
+    async fn activate_scene_applies_to_unmanaged_device() {
+        let (mut devices, _event_rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
+        let target = controllable_device("lamp1", "Lamp 1", None);
+        let target_key = target.get_device_key();
+
+        devices.set_state(&target, true, true);
+
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Focus".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        color: None,
+                        brightness: Some(OrderedFloat(0.7)),
+                        transition: None,
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        let result = devices
+            .activate_scene(ActivateSceneRequest {
+                scene_id: &scene_id,
+                device_keys: &None,
+                group_keys: &None,
+                use_scene_transition: false,
+                transition: &None,
+                rollout: &None,
+                rollout_source_device_key: &None,
+                rollout_duration_ms: &None,
+                device_positions: &[],
+                groups: &groups,
+                scenes: &scenes,
+            })
+            .await;
+
+        assert_eq!(result, Some(true));
+
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+
+        assert_eq!(data.scene_id, Some(scene_id));
+        assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
+        assert_eq!(data.managed, ManageKind::Unmanaged);
     }
 
     #[tokio::test]
