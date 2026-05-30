@@ -326,7 +326,9 @@ fn compile_pattern(pattern: &str, mode: PatternMatchMode) -> Result<Regex> {
 }
 
 fn glob_to_regex(pattern: &str) -> String {
-    let mut regex = String::from("^");
+    // Do not anchor the generated regex by default. Let callers include
+    // explicit start/end anchors or wildcards in the pattern when desired.
+    let mut regex = String::new();
     for character in pattern.chars() {
         match character {
             '*' => regex.push_str(".*"),
@@ -338,6 +340,58 @@ fn glob_to_regex(pattern: &str) -> String {
             other => regex.push(other),
         }
     }
-    regex.push('$');
     regex
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn glob_matches_substring_by_default() {
+        let re = compile_pattern("temp", PatternMatchMode::Glob).unwrap();
+        assert!(re.is_match("my-temp-device"));
+        assert!(re.is_match("temperature"));
+        // spaces in device names should match too
+        assert!(re.is_match("my temp device"));
+        assert!(re.is_match("temp sensor"));
+    }
+
+    #[test]
+    fn glob_wildcards() {
+        let re = compile_pattern("sensor-*", PatternMatchMode::Glob).unwrap();
+        assert!(re.is_match("sensor-1"));
+        // Unanchored patterns match substrings by default
+        assert!(re.is_match("prefix-sensor-1"));
+        assert!(!re.is_match("sensr-1"));
+        // wildcard should also match when device name contains spaces
+        let re2 = compile_pattern("sensor *", PatternMatchMode::Glob).unwrap();
+        assert!(re2.is_match("sensor lamp"));
+        assert!(re2.is_match("prefix sensor lamp"));
+    }
+
+    #[test]
+    fn glob_question_mark() {
+        let re = compile_pattern("dev?ce", PatternMatchMode::Glob).unwrap();
+        assert!(re.is_match("device"));
+        assert!(re.is_match("devXce"));
+        assert!(!re.is_match("devce"));
+        // question mark matches a single character including space
+        let re2 = compile_pattern("dev?ce", PatternMatchMode::Glob).unwrap();
+        assert!(re2.is_match("dev ce"));
+    }
+
+    #[test]
+    fn regex_mode_respects_anchors() {
+        let re = compile_pattern("^sensor-\\d+$", PatternMatchMode::Regex).unwrap();
+        assert!(re.is_match("sensor-123"));
+        assert!(!re.is_match("prefix-sensor-123"));
+        // regex anchors also handle spaces explicitly
+        let re2 = compile_pattern("^living room .+$", PatternMatchMode::Regex).unwrap();
+        assert!(re2.is_match("living room lamp"));
+        assert!(!re2.is_match("my living room lamp"));
+        let re3 = compile_pattern("living room*", PatternMatchMode::Regex).unwrap();
+        assert!(re3.is_match("living room lamp"));
+        assert!(re3.is_match("my living room lamp"));
+    }
 }
