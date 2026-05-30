@@ -769,7 +769,6 @@ async fn create_widget_settings(manager: &SchemaManager<'_>) -> Result<(), DbErr
         .await
 }
 
-
 async fn create_state_logger_events(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     manager
         .create_table(
