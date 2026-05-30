@@ -7,6 +7,7 @@ version = "0.9.5"
 authors = ["Rasmus Lövegren <fruitiex@gmail.com>"]
 edition = "2021"
 default-run = "homectl-server"
+build = "build.rs"
 
 [lib]
 name = "homectl_server"

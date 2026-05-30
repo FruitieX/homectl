@@ -147,6 +147,7 @@ fn wait_for_device_state(
 // ============================================================================
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_server_boots() {
     let server = start_prod_simulation();
 
@@ -178,6 +179,7 @@ fn prod_config_server_boots() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_has_expected_config() {
     let server = start_prod_simulation();
 
@@ -255,6 +257,7 @@ fn prod_config_has_expected_config() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_scene_activation() {
     let server = start_prod_simulation();
 
@@ -302,6 +305,7 @@ fn prod_config_scene_activation() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_night_scene() {
     let server = start_prod_simulation();
 
@@ -348,6 +352,7 @@ fn prod_config_night_scene() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_arrive_home_routine() {
     let server = start_prod_simulation();
 
@@ -383,6 +388,7 @@ fn prod_config_arrive_home_routine() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_leave_home_routine() {
     let server = start_prod_simulation();
 
@@ -419,6 +425,7 @@ fn prod_config_leave_home_routine() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_nightlight_cycle() {
     let server = start_prod_simulation();
 
@@ -464,6 +471,7 @@ fn prod_config_nightlight_cycle() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_staircase_motion_upstairs() {
     let server = start_prod_simulation();
 
@@ -508,6 +516,7 @@ fn prod_config_staircase_motion_upstairs() {
 }
 
 #[test]
+#[cfg_attr(not(has_prod_config), ignore)]
 fn prod_config_group_scoped_activation() {
     let server = start_prod_simulation();
 
