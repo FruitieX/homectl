@@ -12,6 +12,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use color_eyre::{eyre::Context, Result};
 use eyre::eyre;
+use globset::GlobBuilder;
 use jsonptr::PointerBuf;
 use once_cell::sync::OnceCell;
 use regex::Regex;
@@ -53,8 +54,22 @@ enum StateLoggerDatabase {
 pub struct StateLogger {
     id: IntegrationId,
     config: StateLoggerConfig,
-    compiled_pattern: Regex,
+    compiled_pattern: PatternMatcher,
     database: StateLoggerDatabase,
+}
+
+enum PatternMatcher {
+    Regex(Regex),
+    Glob(globset::GlobMatcher),
+}
+
+impl PatternMatcher {
+    fn is_match(&self, text: &str) -> bool {
+        match self {
+            Self::Regex(regex) => regex.is_match(text),
+            Self::Glob(matcher) => matcher.is_match(text),
+        }
+    }
 }
 
 #[async_trait]
@@ -317,31 +332,14 @@ impl StateLogger {
     }
 }
 
-fn compile_pattern(pattern: &str, mode: PatternMatchMode) -> Result<Regex> {
-    let regex = match mode {
-        PatternMatchMode::Regex => pattern.to_string(),
-        PatternMatchMode::Glob => glob_to_regex(pattern),
-    };
-
-    Regex::new(&regex).map_err(Into::into)
-}
-
-fn glob_to_regex(pattern: &str) -> String {
-    // Do not anchor the generated regex by default. Let callers include
-    // explicit start/end anchors or wildcards in the pattern when desired.
-    let mut regex = String::new();
-    for character in pattern.chars() {
-        match character {
-            '*' => regex.push_str(".*"),
-            '?' => regex.push('.'),
-            '.' | '+' | '(' | ')' | '|' | '^' | '$' | '{' | '}' | '[' | ']' | '\\' => {
-                regex.push('\\');
-                regex.push(character);
-            }
-            other => regex.push(other),
+fn compile_pattern(pattern: &str, mode: PatternMatchMode) -> Result<PatternMatcher> {
+    match mode {
+        PatternMatchMode::Regex => Ok(PatternMatcher::Regex(Regex::new(pattern)?)),
+        PatternMatchMode::Glob => {
+            let glob = GlobBuilder::new(&format!("*{pattern}*")).build()?;
+            Ok(PatternMatcher::Glob(glob.compile_matcher()))
         }
     }
-    regex
 }
 
 #[cfg(test)]
@@ -350,49 +348,69 @@ mod tests {
 
     #[test]
     fn glob_matches_substring_by_default() {
-        let re = compile_pattern("temp", PatternMatchMode::Glob).unwrap();
-        assert!(re.is_match("my-temp-device"));
-        assert!(re.is_match("temperature"));
-        // spaces in device names should match too
-        assert!(re.is_match("my temp device"));
-        assert!(re.is_match("temp sensor"));
+        let matcher = compile_pattern("temp", PatternMatchMode::Glob).unwrap();
+
+        assert!(matcher.is_match("my-temp-device"));
+        assert!(matcher.is_match("temperature"));
+        assert!(matcher.is_match("my temp device"));
+        assert!(matcher.is_match("temp sensor"));
+    }
+
+    #[test]
+    fn glob_matches_sensor_names() {
+        let matcher = compile_pattern("sensor-*", PatternMatchMode::Glob).unwrap();
+
+        assert!(matcher.is_match("sensor-123"));
+        assert!(matcher.is_match("prefix-sensor-123"));
+        assert!(!matcher.is_match("sensr-1"));
+    }
+
+    #[test]
+    fn glob_matches_living_room_names() {
+        let matcher = compile_pattern("living room*", PatternMatchMode::Glob).unwrap();
+
+        assert!(matcher.is_match("living room lamp"));
+        assert!(matcher.is_match("my living room lamp"));
+        assert!(!matcher.is_match("livingroom lamp"));
     }
 
     #[test]
     fn glob_wildcards() {
-        let re = compile_pattern("sensor-*", PatternMatchMode::Glob).unwrap();
-        assert!(re.is_match("sensor-1"));
-        // Unanchored patterns match substrings by default
-        assert!(re.is_match("prefix-sensor-1"));
-        assert!(!re.is_match("sensr-1"));
-        // wildcard should also match when device name contains spaces
-        let re2 = compile_pattern("sensor *", PatternMatchMode::Glob).unwrap();
-        assert!(re2.is_match("sensor lamp"));
-        assert!(re2.is_match("prefix sensor lamp"));
+        let matcher = compile_pattern("sensor *", PatternMatchMode::Glob).unwrap();
+
+        assert!(matcher.is_match("sensor lamp"));
+        assert!(matcher.is_match("prefix sensor lamp"));
     }
 
     #[test]
     fn glob_question_mark() {
-        let re = compile_pattern("dev?ce", PatternMatchMode::Glob).unwrap();
-        assert!(re.is_match("device"));
-        assert!(re.is_match("devXce"));
-        assert!(!re.is_match("devce"));
-        // question mark matches a single character including space
-        let re2 = compile_pattern("dev?ce", PatternMatchMode::Glob).unwrap();
-        assert!(re2.is_match("dev ce"));
+        let matcher = compile_pattern("dev?ce", PatternMatchMode::Glob).unwrap();
+
+        assert!(matcher.is_match("device"));
+        assert!(matcher.is_match("devXce"));
+        assert!(!matcher.is_match("devce"));
+        assert!(matcher.is_match("dev ce"));
     }
 
     #[test]
-    fn regex_mode_respects_anchors() {
-        let re = compile_pattern("^sensor-\\d+$", PatternMatchMode::Regex).unwrap();
-        assert!(re.is_match("sensor-123"));
-        assert!(!re.is_match("prefix-sensor-123"));
-        // regex anchors also handle spaces explicitly
-        let re2 = compile_pattern("^living room .+$", PatternMatchMode::Regex).unwrap();
-        assert!(re2.is_match("living room lamp"));
-        assert!(!re2.is_match("my living room lamp"));
-        let re3 = compile_pattern("living room*", PatternMatchMode::Regex).unwrap();
-        assert!(re3.is_match("living room lamp"));
-        assert!(re3.is_match("my living room lamp"));
+    fn regex_matches_sensor_names_with_anchors() {
+        let matcher = compile_pattern("^sensor-\\d+$", PatternMatchMode::Regex).unwrap();
+
+        assert!(matcher.is_match("sensor-123"));
+        assert!(!matcher.is_match("prefix-sensor-123"));
+        assert!(!matcher.is_match("sensr-1"));
+    }
+
+    #[test]
+    fn regex_matches_living_room_names_with_anchors() {
+        let matcher = compile_pattern("^living room .+$", PatternMatchMode::Regex).unwrap();
+
+        assert!(matcher.is_match("living room lamp"));
+        assert!(!matcher.is_match("my living room lamp"));
+        assert!(!matcher.is_match("livingroom lamp"));
+
+        let matcher = compile_pattern("living room*", PatternMatchMode::Regex).unwrap();
+        assert!(matcher.is_match("living room lamp"));
+        assert!(matcher.is_match("my living room lamp"));
     }
 }
