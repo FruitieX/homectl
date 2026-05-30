@@ -162,7 +162,6 @@ async fn run_actor(
     use crate::core::event::handle_event;
 
     while let Some(cmd) = rx.recv().await {
-        let previous_snapshot = app_state.snapshot.load().clone();
         metrics.on_dequeue();
         let kind_idx = metrics::kind_index_for_command(&cmd);
         watchdog_kind.store(kind_idx, Ordering::SeqCst);
@@ -175,6 +174,7 @@ async fn run_actor(
 
         match cmd {
             StateCommand::HandleEvent { event, done } => {
+                let previous_snapshot = app_state.snapshot.load().clone();
                 let kind = event_kind(&event);
                 let handle_started_at = Instant::now();
                 let outcome = handle_event(&mut app_state, &event).await;
@@ -224,6 +224,7 @@ async fn run_actor(
                 }
             }
             StateCommand::Mutate(f) => {
+                let previous_snapshot = app_state.snapshot.load().clone();
                 let mutate_started_at = Instant::now();
                 f(&mut app_state).await;
                 let mutate_elapsed = mutate_started_at.elapsed();
