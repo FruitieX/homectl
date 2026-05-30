@@ -311,6 +311,9 @@ async fn handle_integration_command(
             }
 
             let result = run_lifecycle_command(integration_id, "stop", integration.stop()).await;
+            if result.is_ok() {
+                *registered = false;
+            }
             let _ = done.send(result);
         }
         IntegrationCmd::SetDeviceState { device } => {
