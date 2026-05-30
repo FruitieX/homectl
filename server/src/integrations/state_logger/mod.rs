@@ -74,6 +74,10 @@ impl PatternMatcher {
 
 #[async_trait]
 impl Integration for StateLogger {
+    fn wants_runtime_state_changes(&self) -> bool {
+        true
+    }
+
     fn new(
         id: &IntegrationId,
         config: &serde_json::Value,

@@ -162,7 +162,9 @@ impl Integrations {
         changes: SnapshotChanges,
     ) {
         for handle in self.custom_integrations.values() {
-            handle.runtime_state_changed(previous.clone(), current.clone(), changes);
+            if handle.wants_runtime_state_changes() {
+                handle.runtime_state_changed(previous.clone(), current.clone(), changes);
+            }
         }
     }
 

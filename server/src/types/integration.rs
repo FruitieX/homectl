@@ -157,6 +157,10 @@ pub trait Integration: Send {
         Ok(())
     }
 
+    fn wants_runtime_state_changes(&self) -> bool {
+        false
+    }
+
     async fn on_runtime_state_change(
         &mut self,
         _previous: &RuntimeSnapshot,

@@ -30,6 +30,7 @@ use crate::types::{
 
 const LIFECYCLE_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const DATA_PLANE_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+const INTEGRATION_MAILBOX_CAPACITY: usize = 32;
 
 /// Cheaply cloneable handle for talking to a per-integration actor. The
 /// `module_name` and `config` fields mirror what `LoadedIntegration`
@@ -37,7 +38,8 @@ const DATA_PLANE_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 /// current state without consulting the actor.
 #[derive(Clone)]
 pub struct IntegrationHandle {
-    tx: mpsc::UnboundedSender<IntegrationCmd>,
+    tx: mpsc::Sender<IntegrationCmd>,
+    wants_runtime_state_changes: bool,
     pub module_name: String,
     pub config: serde_json::Value,
 }
@@ -50,7 +52,8 @@ impl IntegrationHandle {
         config: serde_json::Value,
         device_update_policy: OutboundDeviceUpdatePolicy,
     ) -> Self {
-        let (tx, rx) = mpsc::unbounded_channel::<IntegrationCmd>();
+        let wants_runtime_state_changes = integration.wants_runtime_state_changes();
+        let (tx, rx) = mpsc::channel::<IntegrationCmd>(INTEGRATION_MAILBOX_CAPACITY);
         tokio::spawn(run_integration_actor(
             integration_id,
             integration,
@@ -59,9 +62,14 @@ impl IntegrationHandle {
         ));
         IntegrationHandle {
             tx,
+            wants_runtime_state_changes,
             module_name,
             config,
         }
+    }
+
+    pub fn wants_runtime_state_changes(&self) -> bool {
+        self.wants_runtime_state_changes
     }
 
     pub async fn register(&self) -> Result<()> {
@@ -84,6 +92,7 @@ impl IntegrationHandle {
         let (done_tx, done_rx) = oneshot::channel();
         self.tx
             .send(make_cmd(done_tx))
+            .await
             .map_err(|_| eyre!("Integration actor channel closed"))?;
         done_rx
             .await
@@ -93,18 +102,22 @@ impl IntegrationHandle {
     pub fn set_device_state(&self, device: Device) {
         if self
             .tx
-            .send(IntegrationCmd::SetDeviceState {
+            .try_send(IntegrationCmd::SetDeviceState {
                 device: Box::new(device),
             })
             .is_err()
         {
-            warn!("Integration actor channel closed; dropping SetDeviceState");
+            warn!("Integration actor channel closed or full; dropping SetDeviceState");
         }
     }
 
     pub fn run_action(&self, payload: IntegrationActionPayload) {
-        if self.tx.send(IntegrationCmd::RunAction { payload }).is_err() {
-            warn!("Integration actor channel closed; dropping RunAction");
+        if self
+            .tx
+            .try_send(IntegrationCmd::RunAction { payload })
+            .is_err()
+        {
+            warn!("Integration actor channel closed or full; dropping RunAction");
         }
     }
 
@@ -116,14 +129,14 @@ impl IntegrationHandle {
     ) {
         if self
             .tx
-            .send(IntegrationCmd::RuntimeStateChanged {
+            .try_send(IntegrationCmd::RuntimeStateChanged {
                 previous: Box::new(previous),
                 current: Box::new(current),
                 changes,
             })
             .is_err()
         {
-            warn!("Integration actor channel closed; dropping RuntimeStateChanged");
+            warn!("Integration actor channel closed or full; dropping RuntimeStateChanged");
         }
     }
 }
@@ -132,7 +145,7 @@ async fn run_integration_actor(
     integration_id: IntegrationId,
     mut integration: Box<dyn Integration>,
     device_update_policy: OutboundDeviceUpdatePolicy,
-    mut rx: mpsc::UnboundedReceiver<IntegrationCmd>,
+    mut rx: mpsc::Receiver<IntegrationCmd>,
 ) {
     let mut device_updates = DeviceUpdateQueue::new(device_update_policy);
     let mut registered = false;
