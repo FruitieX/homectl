@@ -2,7 +2,7 @@ use crate::db::schema::{
     ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
     DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
     Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
-    StateDeviceEvents, StateLoggerEvents, UiState, WidgetSettings,
+    StateLoggerEvents, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -769,86 +769,6 @@ async fn create_widget_settings(manager: &SchemaManager<'_>) -> Result<(), DbErr
         .await
 }
 
-async fn create_state_device_events(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
-    manager
-        .create_table(
-            Table::create()
-                .table(StateDeviceEvents::Table)
-                .if_not_exists()
-                .col(
-                    ColumnDef::new(StateDeviceEvents::Id)
-                        .integer()
-                        .not_null()
-                        .auto_increment()
-                        .primary_key(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::DeviceKey)
-                        .text()
-                        .not_null(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::IntegrationId)
-                        .text()
-                        .not_null(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::DeviceId)
-                        .text()
-                        .not_null(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::DeviceName)
-                        .text()
-                        .not_null(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::DeviceKind)
-                        .text()
-                        .not_null(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::EventKind)
-                        .text()
-                        .not_null(),
-                )
-                .col(
-                    ColumnDef::new(StateDeviceEvents::DeviceStateJson)
-                        .text()
-                        .not_null(),
-                )
-                .col(ColumnDef::new(StateDeviceEvents::Value).double().null())
-                .col(
-                    ColumnDef::new(StateDeviceEvents::CreatedAt)
-                        .timestamp()
-                        .default(Expr::current_timestamp()),
-                )
-                .to_owned(),
-        )
-        .await?;
-
-    manager
-        .create_index(
-            Index::create()
-                .name("idx_state_device_events_device_key")
-                .table(StateDeviceEvents::Table)
-                .col(StateDeviceEvents::DeviceKey)
-                .if_not_exists()
-                .to_owned(),
-        )
-        .await?;
-
-    manager
-        .create_index(
-            Index::create()
-                .name("idx_state_device_events_created_at")
-                .table(StateDeviceEvents::Table)
-                .col(StateDeviceEvents::CreatedAt)
-                .if_not_exists()
-                .to_owned(),
-        )
-        .await
-}
 
 async fn create_state_logger_events(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     manager
