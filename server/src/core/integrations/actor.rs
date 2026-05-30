@@ -20,6 +20,7 @@ use tokio::{
 };
 
 use super::command::IntegrationCmd;
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::types::{
     device::{Device, DeviceKey},
     integration::{
@@ -106,6 +107,25 @@ impl IntegrationHandle {
             warn!("Integration actor channel closed; dropping RunAction");
         }
     }
+
+    pub fn runtime_state_changed(
+        &self,
+        previous: RuntimeSnapshot,
+        current: RuntimeSnapshot,
+        changes: SnapshotChanges,
+    ) {
+        if self
+            .tx
+            .send(IntegrationCmd::RuntimeStateChanged {
+                previous: Box::new(previous),
+                current: Box::new(current),
+                changes,
+            })
+            .is_err()
+        {
+            warn!("Integration actor channel closed; dropping RuntimeStateChanged");
+        }
+    }
 }
 
 async fn run_integration_actor(
@@ -115,6 +135,7 @@ async fn run_integration_actor(
     mut rx: mpsc::UnboundedReceiver<IntegrationCmd>,
 ) {
     let mut device_updates = DeviceUpdateQueue::new(device_update_policy);
+    let mut registered = false;
     if let Some(min_interval) = device_updates.policy.min_interval() {
         info!(
             "Integration {integration_id} outbound device updates rate-limited to at most one every {:?}",
@@ -153,8 +174,14 @@ async fn run_integration_actor(
             break;
         };
 
-        handle_integration_command(&integration_id, &mut integration, &mut device_updates, cmd)
-            .await;
+        handle_integration_command(
+            &integration_id,
+            &mut integration,
+            &mut device_updates,
+            &mut registered,
+            cmd,
+        )
+        .await;
     }
 
     debug!("Integration actor for {integration_id} exiting (channel closed)");
@@ -259,12 +286,16 @@ async fn handle_integration_command(
     integration_id: &IntegrationId,
     integration: &mut Box<dyn Integration>,
     device_updates: &mut DeviceUpdateQueue,
+    registered: &mut bool,
     cmd: IntegrationCmd,
 ) {
     match cmd {
         IntegrationCmd::Register { done } => {
             let result =
                 run_lifecycle_command(integration_id, "register", integration.register()).await;
+            if result.is_ok() {
+                *registered = true;
+            }
             let _ = done.send(result);
         }
         IntegrationCmd::Start { done } => {
@@ -292,6 +323,25 @@ async fn handle_integration_command(
                 integration_id,
                 "run_integration_action",
                 integration.run_integration_action(&payload),
+            )
+            .await;
+        }
+        IntegrationCmd::RuntimeStateChanged {
+            previous,
+            current,
+            changes,
+        } => {
+            if !*registered {
+                debug!(
+                    "Ignoring runtime-state change for {integration_id} until register completes",
+                );
+                return;
+            }
+
+            run_data_plane_command(
+                integration_id,
+                "on_runtime_state_change",
+                integration.on_runtime_state_change(&previous, &current, changes),
             )
             .await;
         }

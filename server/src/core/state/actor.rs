@@ -162,6 +162,7 @@ async fn run_actor(
     use crate::core::event::handle_event;
 
     while let Some(cmd) = rx.recv().await {
+        let previous_snapshot = app_state.snapshot.load().clone();
         metrics.on_dequeue();
         let kind_idx = metrics::kind_index_for_command(&cmd);
         watchdog_kind.store(kind_idx, Ordering::SeqCst);
@@ -186,6 +187,14 @@ async fn run_actor(
                 let publish_started_at = Instant::now();
                 app_state.publish_snapshot(snapshot_changes);
                 let publish_elapsed = publish_started_at.elapsed();
+
+                let current_snapshot = app_state.snapshot.load().clone();
+
+                app_state.integrations.notify_runtime_state_changed(
+                    &previous_snapshot,
+                    &current_snapshot,
+                    snapshot_changes,
+                );
 
                 let elapsed = started_at.elapsed();
                 let slow = elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS);
@@ -222,6 +231,14 @@ async fn run_actor(
                 let publish_started_at = Instant::now();
                 app_state.publish_snapshot(SnapshotChanges::all());
                 let publish_elapsed = publish_started_at.elapsed();
+
+                let current_snapshot = app_state.snapshot.load().clone();
+
+                app_state.integrations.notify_runtime_state_changed(
+                    &previous_snapshot,
+                    &current_snapshot,
+                    SnapshotChanges::all(),
+                );
 
                 let elapsed = started_at.elapsed();
                 let slow = elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS);

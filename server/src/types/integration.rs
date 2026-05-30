@@ -1,3 +1,4 @@
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::utils::cli::Cli;
 
 use super::{device::Device, event::TxEventChannel};
@@ -153,6 +154,15 @@ pub trait Integration: Send {
         Ok(())
     }
     async fn run_integration_action(&mut self, _payload: &IntegrationActionPayload) -> Result<()> {
+        Ok(())
+    }
+
+    async fn on_runtime_state_change(
+        &mut self,
+        _previous: &RuntimeSnapshot,
+        _current: &RuntimeSnapshot,
+        _changes: SnapshotChanges,
+    ) -> Result<()> {
         Ok(())
     }
 }

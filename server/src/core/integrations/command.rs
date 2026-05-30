@@ -9,6 +9,7 @@
 use color_eyre::Result;
 use tokio::sync::oneshot;
 
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::types::{device::Device, integration::IntegrationActionPayload};
 
 pub enum IntegrationCmd {
@@ -17,4 +18,9 @@ pub enum IntegrationCmd {
     Stop { done: oneshot::Sender<Result<()>> },
     SetDeviceState { device: Box<Device> },
     RunAction { payload: IntegrationActionPayload },
+    RuntimeStateChanged {
+        previous: Box<RuntimeSnapshot>,
+        current: Box<RuntimeSnapshot>,
+        changes: SnapshotChanges,
+    },
 }

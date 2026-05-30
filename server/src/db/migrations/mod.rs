@@ -1,8 +1,8 @@
 use crate::db::schema::{
     ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
     DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
-    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
-    WidgetSettings,
+    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
+    StateDeviceEvents, StateLoggerEvents, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -15,6 +15,8 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(M20260227000000Init),
             Box::new(M20260420000000DashboardWidgetSources),
+            Box::new(M20260527000000StateAuditLog),
+            Box::new(M20260529000000StateLoggerEvents),
         ]
     }
 }
@@ -106,6 +108,60 @@ impl MigrationTrait for M20260420000000DashboardWidgetSources {
             .drop_table(
                 Table::drop()
                     .table(WidgetSettings::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await
+    }
+}
+
+struct M20260527000000StateAuditLog;
+
+impl MigrationName for M20260527000000StateAuditLog {
+    fn name(&self) -> &str {
+        "m20260527000000_state_audit_log"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260527000000StateAuditLog {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        create_state_device_events(manager).await?;
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(StateDeviceEvents::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await
+    }
+}
+
+struct M20260529000000StateLoggerEvents;
+
+impl MigrationName for M20260529000000StateLoggerEvents {
+    fn name(&self) -> &str {
+        "m20260529000000_state_logger_events"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260529000000StateLoggerEvents {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        create_state_logger_events(manager).await?;
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(StateLoggerEvents::Table)
                     .if_exists()
                     .to_owned(),
             )
@@ -736,6 +792,113 @@ async fn create_widget_settings(manager: &SchemaManager<'_>) -> Result<(), DbErr
                         .timestamp()
                         .default(Expr::current_timestamp()),
                 )
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_state_device_events(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(StateDeviceEvents::Table)
+                .if_not_exists()
+                .col(
+                    ColumnDef::new(StateDeviceEvents::Id)
+                        .integer()
+                        .not_null()
+                        .auto_increment()
+                        .primary_key(),
+                )
+                .col(ColumnDef::new(StateDeviceEvents::DeviceKey).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::IntegrationId).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::DeviceId).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::DeviceName).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::DeviceKind).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::EventKind).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::DeviceStateJson).text().not_null())
+                .col(ColumnDef::new(StateDeviceEvents::Value).double().null())
+                .col(
+                    ColumnDef::new(StateDeviceEvents::CreatedAt)
+                        .timestamp()
+                        .default(Expr::current_timestamp()),
+                )
+                .to_owned(),
+        )
+        .await
+        ?;
+
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_state_device_events_device_key")
+                .table(StateDeviceEvents::Table)
+                .col(StateDeviceEvents::DeviceKey)
+                .if_not_exists()
+                .to_owned(),
+        )
+        .await?;
+
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_state_device_events_created_at")
+                .table(StateDeviceEvents::Table)
+                .col(StateDeviceEvents::CreatedAt)
+                .if_not_exists()
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_state_logger_events(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(StateLoggerEvents::Table)
+                .if_not_exists()
+                .col(
+                    ColumnDef::new(StateLoggerEvents::Id)
+                        .integer()
+                        .not_null()
+                        .auto_increment()
+                        .primary_key(),
+                )
+                .col(ColumnDef::new(StateLoggerEvents::DeviceKey).text().not_null())
+                .col(
+                    ColumnDef::new(StateLoggerEvents::CreatedAt)
+                    .timestamp_with_time_zone()
+                        .default(Expr::current_timestamp()),
+                )
+                .col(ColumnDef::new(StateLoggerEvents::IntegrationId).text().not_null())
+                .col(ColumnDef::new(StateLoggerEvents::DeviceId).text().not_null())
+                .col(ColumnDef::new(StateLoggerEvents::DeviceName).text().not_null())
+                .col(ColumnDef::new(StateLoggerEvents::DeviceKind).text().not_null())
+                .col(ColumnDef::new(StateLoggerEvents::EventKind).text().not_null())
+                .col(ColumnDef::new(StateLoggerEvents::DeviceStateJson).text().not_null())
+                .col(ColumnDef::new(StateLoggerEvents::Value).double().null())
+                .to_owned(),
+        )
+        .await?;
+
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_state_logger_events_device_key")
+                .table(StateLoggerEvents::Table)
+                .col(StateLoggerEvents::DeviceKey)
+                .if_not_exists()
+                .to_owned(),
+        )
+        .await?;
+
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_state_logger_events_created_at")
+                .table(StateLoggerEvents::Table)
+                .col(StateLoggerEvents::CreatedAt)
+                .if_not_exists()
                 .to_owned(),
         )
         .await

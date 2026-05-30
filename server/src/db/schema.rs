@@ -180,6 +180,36 @@ pub enum ConfigVersions {
 }
 
 #[derive(Clone, Copy, Iden)]
+pub enum StateDeviceEvents {
+    Table,
+    Id,
+    DeviceKey,
+    IntegrationId,
+    DeviceId,
+    DeviceName,
+    DeviceKind,
+    EventKind,
+    DeviceStateJson,
+    Value,
+    CreatedAt,
+}
+
+#[derive(Clone, Copy, Iden)]
+pub enum StateLoggerEvents {
+    Table,
+    Id,
+    DeviceKey,
+    IntegrationId,
+    DeviceId,
+    DeviceName,
+    DeviceKind,
+    EventKind,
+    DeviceStateJson,
+    Value,
+    CreatedAt,
+}
+
+#[derive(Clone, Copy, Iden)]
 pub enum UiState {
     Table,
     Key,

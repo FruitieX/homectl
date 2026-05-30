@@ -6,7 +6,8 @@ pub use actor::IntegrationHandle;
 use crate::db::config_queries;
 use crate::integrations::cron::Cron;
 use crate::integrations::{
-    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, timer::Timer,
+    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, state_logger::StateLogger,
+    timer::Timer,
 };
 use crate::types::{
     device::Device,
@@ -17,6 +18,7 @@ use crate::types::{
         IntegrationId, OutboundDeviceUpdatePolicy,
     },
 };
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::utils::cli::Cli;
 use color_eyre::Result;
 use eyre::eyre;
@@ -25,7 +27,15 @@ use std::collections::HashMap;
 
 pub type CustomIntegrationsMap = HashMap<IntegrationId, IntegrationHandle>;
 
-const BUILT_IN_PLUGIN_NAMES: [&str; 6] = ["mqtt", "circadian", "cron", "timer", "dummy", "random"];
+const BUILT_IN_PLUGIN_NAMES: [&str; 7] = [
+    "mqtt",
+    "circadian",
+    "cron",
+    "timer",
+    "dummy",
+    "random",
+    "state_logger",
+];
 
 #[derive(Clone)]
 pub struct Integrations {
@@ -135,6 +145,17 @@ impl Integrations {
 
         handle.run_action(payload.clone());
         Ok(())
+    }
+
+    pub fn notify_runtime_state_changed(
+        &self,
+        previous: &RuntimeSnapshot,
+        current: &RuntimeSnapshot,
+        changes: SnapshotChanges,
+    ) {
+        for handle in self.custom_integrations.values() {
+            handle.runtime_state_changed(previous.clone(), current.clone(), changes);
+        }
     }
 
     pub async fn load_config_rows(
@@ -672,6 +693,65 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 ),
             ],
         )),
+        "state_logger" => Some(schema_without_outbound(
+            "state_logger",
+            "State Logger",
+            "Log selected device or sensor state changes from one integration.",
+            vec![
+                text_config_field(
+                    "source_integration_id",
+                    "Source integration ID",
+                    true,
+                    "Only log devices from this integration.",
+                    Some("mqtt"),
+                ),
+                text_config_field(
+                    "device_name_pattern",
+                    "Device name pattern",
+                    true,
+                    "Pattern used to match device names.",
+                    Some("Kitchen *"),
+                ),
+                select_config_field(
+                    "match_mode",
+                    "Pattern match mode",
+                    false,
+                    "How to interpret the device name pattern.",
+                    vec![
+                        option(
+                            "Glob",
+                            json!("glob"),
+                            Some("Supports `*` and `?` wildcards."),
+                        ),
+                        option(
+                            "Regex",
+                            json!("regex"),
+                            Some("Interpret the pattern as a regular expression."),
+                        ),
+                    ],
+                ),
+                with_help_text(
+                    text_config_field(
+                        "value_path",
+                        "Value path",
+                        true,
+                        "JSON pointer evaluated against the serialized device state.",
+                        Some("/value"),
+                    ),
+                    "JSON Pointer syntax. The path is evaluated against the serialized device state, so it should start with /. Use / between keys, for example /value, /state/power or /state/color/h.",
+                ),
+                with_help_text(
+                    text_config_field(
+                        "postgresql_url",
+                        "PostgreSQL URL",
+                        false,
+                        "Optional PostgreSQL connection string for state_logger.",
+                        Some("postgresql://user:password@host:5432/database"),
+                    ),
+                    "Leave this empty to reuse the app's DATABASE_URL connection. If set, state_logger writes to this database instead of the PostgreSQL connection used by HomeCTL. The schema used is `public` and the name of the database is `state_logger_events`.",
+                ),
+            ],
+        )),
         _ => None,
     }
 }
@@ -684,6 +764,20 @@ fn schema(
 ) -> IntegrationConfigSchema {
     fields.push(outbound_device_update_field());
 
+    IntegrationConfigSchema {
+        plugin: plugin.to_string(),
+        name: name.to_string(),
+        description: description.to_string(),
+        fields,
+    }
+}
+
+fn schema_without_outbound(
+    plugin: &str,
+    name: &str,
+    description: &str,
+    fields: Vec<IntegrationConfigFieldSchema>,
+) -> IntegrationConfigSchema {
     IntegrationConfigSchema {
         plugin: plugin.to_string(),
         name: name.to_string(),
@@ -901,6 +995,7 @@ fn load_custom_integration(
     match module_name {
         "circadian" => Ok(Box::new(Circadian::new(id, config, cli, event_tx)?)),
         "random" => Ok(Box::new(Random::new(id, config, cli, event_tx)?)),
+        "state_logger" => Ok(Box::new(StateLogger::new(id, config, cli, event_tx)?)),
         "dummy" => Ok(Box::new(Dummy::new(id, config, cli, event_tx)?)),
         "mqtt" => Ok(Box::new(Mqtt::new(id, config, cli, event_tx)?)),
         "timer" => Ok(Box::new(Timer::new(id, config, cli, event_tx)?)),
@@ -927,6 +1022,10 @@ mod tests {
     #[test]
     fn every_schema_includes_common_outbound_pacing_field() {
         for schema in integration_config_schemas() {
+            if schema.plugin == "state_logger" {
+                continue;
+            }
+
             assert!(
                 schema
                     .fields
@@ -985,6 +1084,41 @@ mod tests {
                 "strobe_interval",
                 "outbound_device_updates.min_interval_ms",
             ]
+        );
+    }
+
+    #[test]
+    fn state_logger_schema_exposes_logger_fields() {
+        let schema = integration_config_schema("state_logger")
+            .expect("state_logger schema should exist");
+        let keys = schema
+            .fields
+            .iter()
+            .map(|field| field.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            keys,
+            vec![
+                "source_integration_id",
+                "device_name_pattern",
+                "match_mode",
+                "postgresql_url",
+                "value_path",
+            ]
+        );
+    }
+
+    #[test]
+    fn state_logger_schema_does_not_include_outbound_pacing_field() {
+        let schema = integration_config_schema("state_logger")
+            .expect("state_logger schema should exist");
+
+        assert!(
+            schema
+                .fields
+                .iter()
+                .all(|field| field.key != "outbound_device_updates.min_interval_ms")
         );
     }
 }
