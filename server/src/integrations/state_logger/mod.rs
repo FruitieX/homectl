@@ -1,3 +1,4 @@
+use crate::core::integrations::PLUGIN_STATE_LOGGER;
 use crate::{
     core::snapshot::{RuntimeSnapshot, SnapshotChanges},
     db::{get_db_connection, schema::StateLoggerEvents},
@@ -246,7 +247,7 @@ async fn insert_state_logger_event_row(
                 device.id.to_string().into(),
                 device.name.clone().into(),
                 device_kind(device).into(),
-                "state_logger".into(),
+                PLUGIN_STATE_LOGGER.into(),
                 device_state_json.into(),
                 value.into(),
                 created_at.into(),

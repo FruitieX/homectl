@@ -20,10 +20,34 @@ const DEFAULT_SQLITE_DATABASE_FILE: &str = "homectl.db";
 // and harmless in usernames, while still percent-encoding characters
 // such as '@', '/', '?', '#', ':', whitespace, and other punctuation.
 const POSTGRES_USERINFO_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
-    .add(b' ')  .add(b'!')  .add(b'"') .add(b'#')  .add(b'$')  .add(b'%')  .add(b'&')
-    .add(b'\'') .add(b'(')  .add(b')')  .add(b'*')  .add(b'+')  .add(b',')  .add(b'/')
-    .add(b':')  .add(b';')  .add(b'<')  .add(b'=')  .add(b'>')  .add(b'?')  .add(b'@')
-    .add(b'[')  .add(b'\\') .add(b']')  .add(b'^')  .add(b'`')  .add(b'{')  .add(b'|')
+    .add(b' ')
+    .add(b'!')
+    .add(b'"')
+    .add(b'#')
+    .add(b'$')
+    .add(b'%')
+    .add(b'&')
+    .add(b'\'')
+    .add(b'(')
+    .add(b')')
+    .add(b'*')
+    .add(b'+')
+    .add(b',')
+    .add(b'/')
+    .add(b':')
+    .add(b';')
+    .add(b'<')
+    .add(b'=')
+    .add(b'>')
+    .add(b'?')
+    .add(b'@')
+    .add(b'[')
+    .add(b'\\')
+    .add(b']')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
     .add(b'}');
 
 static DB_CONNECTION: OnceCell<DatabaseConnection> = OnceCell::new();
@@ -112,7 +136,10 @@ async fn connect_database(target: &DatabaseTarget) -> Result<bool> {
 
     ensure_database_exists(target).await?;
 
-    info!("Connecting to database at {}...", redact_postgres_password(&target.url));
+    info!(
+        "Connecting to database at {}...",
+        redact_postgres_password(&target.url)
+    );
     let mut options = ConnectOptions::new(target.url.clone());
     options.acquire_timeout(Duration::from_secs(2));
 
@@ -354,8 +381,7 @@ fn redact_postgres_password(database_url: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize_postgres_database_url,
-        normalize_postgres_userinfo_component,
+        normalize_postgres_database_url, normalize_postgres_userinfo_component,
         redact_postgres_password,
     };
 

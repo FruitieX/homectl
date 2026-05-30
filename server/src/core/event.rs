@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 use color_eyre::Result;
 
 use crate::db::actions::{db_store_scene_overrides, db_store_ui_state};
+use crate::db::config_queries;
 use crate::types::{
     action::Action,
     device::{Device, DeviceKey, DevicesState},
@@ -17,8 +18,6 @@ use crate::types::{
     },
     ui::UiActionDescriptor,
 };
-
-use crate::db::config_queries;
 
 use super::devices::ActivateSceneRequest;
 use super::snapshot::SnapshotChanges;
@@ -559,6 +558,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
 #[cfg(test)]
 mod tests {
     use super::{handle_event, DeferredEventWork};
+    use crate::core::integrations::PLUGIN_MQTT;
     use crate::core::{
         devices::Devices,
         groups::Groups,
@@ -696,7 +696,7 @@ mod tests {
     async fn set_external_state_is_deferred() {
         let (mut state, _event_rx) = test_state();
         let device = Device::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new("lamp1"),
             "Lamp 1".to_string(),
             DeviceData::Controllable(ControllableDevice::new(

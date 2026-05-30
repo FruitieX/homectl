@@ -832,6 +832,7 @@ mod tests {
     use super::{
         evaluate_raw_rule_match, expand_action_source_context, Routines, RuleEvaluationContext,
     };
+    use crate::core::integrations::PLUGIN_MQTT;
     use crate::core::{devices::Devices, groups::Groups};
     use crate::types::action::{Action, Actions};
     use crate::types::device::{Device, DeviceData, DeviceId, DeviceKey, DeviceRef, SensorDevice};
@@ -859,7 +860,7 @@ mod tests {
 
     fn sensor_device(raw: serde_json::Value) -> Device {
         Device::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new("sensor"),
             "Sensor".to_string(),
             DeviceData::Sensor(SensorDevice::Text {
@@ -876,7 +877,7 @@ mod tests {
             value,
             trigger_mode: TriggerMode::Pulse,
             device_ref: DeviceRef::new_with_id(
-                IntegrationId::from("mqtt".to_string()),
+                IntegrationId::from(PLUGIN_MQTT.to_string()),
                 DeviceId::new("sensor"),
             ),
         }
@@ -904,7 +905,7 @@ mod tests {
 
     fn sensor_key() -> DeviceKey {
         DeviceKey::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new("sensor"),
         )
     }
@@ -940,7 +941,7 @@ mod tests {
             value: Some(json!("^button_(press|hold)$")),
             trigger_mode: TriggerMode::Pulse,
             device_ref: DeviceRef::new_with_id(
-                IntegrationId::from("mqtt".to_string()),
+                IntegrationId::from(PLUGIN_MQTT.to_string()),
                 DeviceId::new("sensor"),
             ),
         };

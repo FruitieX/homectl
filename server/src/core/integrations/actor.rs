@@ -403,6 +403,7 @@ async fn run_data_plane_command<F>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::integrations::PLUGIN_MQTT;
     use crate::types::{
         color::Capabilities,
         device::{ControllableDevice, DeviceData, DeviceId, ManageKind},
@@ -416,7 +417,7 @@ mod tests {
         Device {
             id: DeviceId::new(device_id),
             name: device_id.to_string(),
-            integration_id: IntegrationId::from("mqtt".to_string()),
+            integration_id: IntegrationId::from(PLUGIN_MQTT.to_string()),
             data: DeviceData::Controllable(ControllableDevice::new(
                 None,
                 power,

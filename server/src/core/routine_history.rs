@@ -97,6 +97,7 @@ mod tests {
         recent_routine_history, record_force_trigger, record_rule_match, write_history_buffer,
         MAX_ROUTINE_HISTORY_ENTRIES,
     };
+    use crate::core::integrations::PLUGIN_DUMMY;
     use crate::types::{
         device::{DeviceId, DeviceKey},
         integration::IntegrationId,
@@ -127,7 +128,7 @@ mod tests {
                 &RoutineId(format!("routine-{index}")),
                 "Routine",
                 Some(&DeviceKey::new(
-                    IntegrationId::from("dummy".to_string()),
+                    IntegrationId::from(PLUGIN_DUMMY.to_string()),
                     DeviceId::from(index.to_string()),
                 )),
                 1,

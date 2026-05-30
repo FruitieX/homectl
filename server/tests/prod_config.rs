@@ -249,7 +249,8 @@ fn prod_config_has_expected_config() {
     for integration in int_list {
         let plugin = integration["plugin"].as_str().unwrap();
         assert_ne!(
-            plugin, "mqtt",
+            plugin,
+            homectl_server::core::integrations::PLUGIN_MQTT,
             "MQTT integration '{}' should have been converted to dummy",
             integration["id"]
         );

@@ -293,6 +293,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::core::integrations::PLUGIN_MQTT;
     use jsonptr::PointerBuf;
     use ordered_float::OrderedFloat;
     use serde_json::json;
@@ -304,7 +305,7 @@ mod tests {
         let device = Device {
             id: DeviceId::new("device1"),
             name: "Device 1".to_string(),
-            integration_id: IntegrationId::from_str("mqtt").unwrap(),
+            integration_id: IntegrationId::from_str(PLUGIN_MQTT).unwrap(),
             data: DeviceData::Controllable(ControllableDevice::new(
                 None,
                 true,
@@ -363,7 +364,7 @@ mod tests {
             ..Default::default()
         };
 
-        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let integration_id = IntegrationId::from_str(PLUGIN_MQTT).unwrap();
         let device = mqtt_to_homectl(
             mqtt_json.to_string().as_bytes(),
             "homectl/devices/device1",
@@ -410,7 +411,7 @@ mod tests {
             ..Default::default()
         };
 
-        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let integration_id = IntegrationId::from_str(PLUGIN_MQTT).unwrap();
         let device = mqtt_to_homectl(
             mqtt_json.to_string().as_bytes(),
             "homectl/devices/device1",
@@ -438,7 +439,7 @@ mod tests {
             ..Default::default()
         };
 
-        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let integration_id = IntegrationId::from_str(PLUGIN_MQTT).unwrap();
         let device = mqtt_to_homectl(
             mqtt_json.to_string().as_bytes(),
             "zigbee2mqtt/remote_1",
@@ -474,7 +475,7 @@ mod tests {
             ..Default::default()
         };
 
-        let integration_id = IntegrationId::from_str("mqtt").unwrap();
+        let integration_id = IntegrationId::from_str(PLUGIN_MQTT).unwrap();
         let device = mqtt_to_homectl(
             mqtt_json.to_string().as_bytes(),
             "homectl/devices/device1",
