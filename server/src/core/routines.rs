@@ -73,18 +73,25 @@ fn expand_action_source_context(
         None => Vec::new(),
     };
 
+    // Split the activation arms so the guarded branch only runs when
+    // `include_source_groups` is set, while the fallback branch still handles
+    // rollout-source replacement for actions that do not merge groups.
     match &mut action {
         Action::ActivateScene(ActivateSceneActionDescriptor {
             group_keys,
             include_source_groups,
             rollout_source_device_key,
             ..
-        }) => {
-            if *include_source_groups {
-                merge_source_groups(group_keys, &source_groups);
-                *include_source_groups = false;
-            }
+        }) if *include_source_groups => {
+            merge_source_groups(group_keys, &source_groups);
+            *include_source_groups = false;
 
+            resolve_triggering_device_rollout_source(rollout_source_device_key, event_source);
+        }
+        Action::ActivateScene(ActivateSceneActionDescriptor {
+            rollout_source_device_key,
+            ..
+        }) => {
             resolve_triggering_device_rollout_source(rollout_source_device_key, event_source);
         }
         Action::CycleScenes(CycleScenesDescriptor {
@@ -93,26 +100,28 @@ fn expand_action_source_context(
             rollout_source_device_key,
             scenes,
             ..
-        }) => {
-            if *include_source_groups {
-                merge_source_groups(group_keys, &source_groups);
-                for scene in scenes.iter_mut() {
-                    merge_source_groups(&mut scene.group_keys, &source_groups);
-                }
-                *include_source_groups = false;
+        }) if *include_source_groups => {
+            merge_source_groups(group_keys, &source_groups);
+            for scene in scenes.iter_mut() {
+                merge_source_groups(&mut scene.group_keys, &source_groups);
             }
+            *include_source_groups = false;
 
+            resolve_triggering_device_rollout_source(rollout_source_device_key, event_source);
+        }
+        Action::CycleScenes(CycleScenesDescriptor {
+            rollout_source_device_key,
+            ..
+        }) => {
             resolve_triggering_device_rollout_source(rollout_source_device_key, event_source);
         }
         Action::Dim(DimDescriptor {
             group_keys,
             include_source_groups,
             ..
-        }) => {
-            if *include_source_groups {
-                merge_source_groups(group_keys, &source_groups);
-                *include_source_groups = false;
-            }
+        }) if *include_source_groups => {
+            merge_source_groups(group_keys, &source_groups);
+            *include_source_groups = false;
         }
         _ => {}
     }
