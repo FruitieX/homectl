@@ -14,10 +14,7 @@ pub async fn query(
     token: &str,
     flux: &str,
 ) -> Result<Vec<Value>, String> {
-    let endpoint = format!(
-        "{}/api/v2/query?org=influxdata",
-        url.trim_end_matches('/')
-    );
+    let endpoint = format!("{}/api/v2/query?org=influxdata", url.trim_end_matches('/'));
     let res = http
         .post(endpoint)
         .header("Authorization", format!("Token {token}"))
@@ -74,7 +71,10 @@ fn parse_annotated_csv(body: &str) -> Result<Vec<Value>, String> {
                 continue;
             }
             let raw = values.get(idx).map(String::as_str).unwrap_or("");
-            let dtype = datatypes.get(idx + 1).map(String::as_str).unwrap_or("string");
+            let dtype = datatypes
+                .get(idx + 1)
+                .map(String::as_str)
+                .unwrap_or("string");
             obj.insert(header.clone(), coerce(raw, dtype));
         }
         rows.push(Value::Object(obj));

@@ -13,11 +13,21 @@ use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::types::{device::Device, integration::IntegrationActionPayload};
 
 pub enum IntegrationCmd {
-    Register { done: oneshot::Sender<Result<()>> },
-    Start { done: oneshot::Sender<Result<()>> },
-    Stop { done: oneshot::Sender<Result<()>> },
-    SetDeviceState { device: Box<Device> },
-    RunAction { payload: IntegrationActionPayload },
+    Register {
+        done: oneshot::Sender<Result<()>>,
+    },
+    Start {
+        done: oneshot::Sender<Result<()>>,
+    },
+    Stop {
+        done: oneshot::Sender<Result<()>>,
+    },
+    SetDeviceState {
+        device: Box<Device>,
+    },
+    RunAction {
+        payload: IntegrationActionPayload,
+    },
     RuntimeStateChanged {
         previous: Box<RuntimeSnapshot>,
         current: Box<RuntimeSnapshot>,

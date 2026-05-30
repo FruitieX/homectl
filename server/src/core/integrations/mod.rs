@@ -3,6 +3,7 @@ pub mod command;
 
 pub use actor::IntegrationHandle;
 
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::db::config_queries;
 use crate::integrations::cron::Cron;
 use crate::integrations::{
@@ -18,7 +19,6 @@ use crate::types::{
         IntegrationId, OutboundDeviceUpdatePolicy,
     },
 };
-use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::utils::cli::Cli;
 use color_eyre::Result;
 use eyre::eyre;
@@ -1089,8 +1089,8 @@ mod tests {
 
     #[test]
     fn state_logger_schema_exposes_logger_fields() {
-        let schema = integration_config_schema("state_logger")
-            .expect("state_logger schema should exist");
+        let schema =
+            integration_config_schema("state_logger").expect("state_logger schema should exist");
         let keys = schema
             .fields
             .iter()
@@ -1111,14 +1111,12 @@ mod tests {
 
     #[test]
     fn state_logger_schema_does_not_include_outbound_pacing_field() {
-        let schema = integration_config_schema("state_logger")
-            .expect("state_logger schema should exist");
+        let schema =
+            integration_config_schema("state_logger").expect("state_logger schema should exist");
 
-        assert!(
-            schema
-                .fields
-                .iter()
-                .all(|field| field.key != "outbound_device_updates.min_interval_ms")
-        );
+        assert!(schema
+            .fields
+            .iter()
+            .all(|field| field.key != "outbound_device_updates.min_interval_ms"));
     }
 }

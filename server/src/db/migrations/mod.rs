@@ -810,13 +810,41 @@ async fn create_state_device_events(manager: &SchemaManager<'_>) -> Result<(), D
                         .auto_increment()
                         .primary_key(),
                 )
-                .col(ColumnDef::new(StateDeviceEvents::DeviceKey).text().not_null())
-                .col(ColumnDef::new(StateDeviceEvents::IntegrationId).text().not_null())
-                .col(ColumnDef::new(StateDeviceEvents::DeviceId).text().not_null())
-                .col(ColumnDef::new(StateDeviceEvents::DeviceName).text().not_null())
-                .col(ColumnDef::new(StateDeviceEvents::DeviceKind).text().not_null())
-                .col(ColumnDef::new(StateDeviceEvents::EventKind).text().not_null())
-                .col(ColumnDef::new(StateDeviceEvents::DeviceStateJson).text().not_null())
+                .col(
+                    ColumnDef::new(StateDeviceEvents::DeviceKey)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateDeviceEvents::IntegrationId)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateDeviceEvents::DeviceId)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateDeviceEvents::DeviceName)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateDeviceEvents::DeviceKind)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateDeviceEvents::EventKind)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateDeviceEvents::DeviceStateJson)
+                        .text()
+                        .not_null(),
+                )
                 .col(ColumnDef::new(StateDeviceEvents::Value).double().null())
                 .col(
                     ColumnDef::new(StateDeviceEvents::CreatedAt)
@@ -825,8 +853,7 @@ async fn create_state_device_events(manager: &SchemaManager<'_>) -> Result<(), D
                 )
                 .to_owned(),
         )
-        .await
-        ?;
+        .await?;
 
     manager
         .create_index(
@@ -864,18 +891,46 @@ async fn create_state_logger_events(manager: &SchemaManager<'_>) -> Result<(), D
                         .auto_increment()
                         .primary_key(),
                 )
-                .col(ColumnDef::new(StateLoggerEvents::DeviceKey).text().not_null())
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceKey)
+                        .text()
+                        .not_null(),
+                )
                 .col(
                     ColumnDef::new(StateLoggerEvents::CreatedAt)
-                    .timestamp_with_time_zone()
+                        .timestamp_with_time_zone()
                         .default(Expr::current_timestamp()),
                 )
-                .col(ColumnDef::new(StateLoggerEvents::IntegrationId).text().not_null())
-                .col(ColumnDef::new(StateLoggerEvents::DeviceId).text().not_null())
-                .col(ColumnDef::new(StateLoggerEvents::DeviceName).text().not_null())
-                .col(ColumnDef::new(StateLoggerEvents::DeviceKind).text().not_null())
-                .col(ColumnDef::new(StateLoggerEvents::EventKind).text().not_null())
-                .col(ColumnDef::new(StateLoggerEvents::DeviceStateJson).text().not_null())
+                .col(
+                    ColumnDef::new(StateLoggerEvents::IntegrationId)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceId)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceName)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceKind)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::EventKind)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceStateJson)
+                        .text()
+                        .not_null(),
+                )
                 .col(ColumnDef::new(StateLoggerEvents::Value).double().null())
                 .to_owned(),
         )

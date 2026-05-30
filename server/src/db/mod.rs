@@ -1,7 +1,7 @@
 use color_eyre::Result;
 use eyre::eyre;
-use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use once_cell::sync::OnceCell;
+use percent_encoding::{percent_decode_str, utf8_percent_encode, NON_ALPHANUMERIC};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use sea_orm_migration::MigratorTrait;
 use sqlx::migrate::MigrateDatabase;

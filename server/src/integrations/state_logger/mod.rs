@@ -10,12 +10,14 @@ use crate::{
 use async_trait::async_trait;
 use chrono::Utc;
 use color_eyre::{eyre::Context, Result};
-use once_cell::sync::OnceCell;
 use jsonptr::PointerBuf;
+use once_cell::sync::OnceCell;
 use regex::Regex;
-use serde::{Deserialize, Serialize};
 use sea_orm::sea_query::Query;
-use sea_orm::{ConnectOptions, ConnectionTrait, Database, DatabaseConnection, Statement, StatementBuilder};
+use sea_orm::{
+    ConnectOptions, ConnectionTrait, Database, DatabaseConnection, Statement, StatementBuilder,
+};
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, Eq, PartialEq)]
@@ -26,7 +28,6 @@ enum PatternMatchMode {
     Glob,
     Regex,
 }
-
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct StateLoggerConfig {
@@ -276,9 +277,7 @@ impl StateLogger {
     fn database_source_label(&self) -> &'static str {
         match self.database {
             StateLoggerDatabase::Shared => "HomeCTL shared PG connection",
-            StateLoggerDatabase::Dedicated { .. } => {
-                "state_logger config option `postgresql_url`"
-            }
+            StateLoggerDatabase::Dedicated { .. } => "state_logger config option `postgresql_url`",
         }
     }
 
@@ -300,7 +299,9 @@ impl StateLogger {
                 ensure_state_logger_events_table(&database_connection).await?;
 
                 let _ = connection.set(database_connection);
-                Ok(connection.get().expect("dedicated connection should be set"))
+                Ok(connection
+                    .get()
+                    .expect("dedicated connection should be set"))
             }
         }
     }
