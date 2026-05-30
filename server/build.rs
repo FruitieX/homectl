@@ -11,9 +11,12 @@ fn main() {
     // file exists, enable the `has_prod_config` cfg so tests can be
     // conditionally compiled.
     println!("cargo:rustc-check-cfg=cfg(has_prod_config)");
+    // Only emit the missing-file warning when running `cargo test`.
+    // Cargo sets `PROFILE=test` for test builds.
+    let profile = env::var("PROFILE").unwrap_or_default();
     if prod.exists() {
         println!("cargo:rustc-cfg=has_prod_config");
-    } else {
+    } else if profile == "test" {
         println!("cargo:warning=prod-config.toml not found; prod-config tests will be ignored at compile time");
     }
 }
