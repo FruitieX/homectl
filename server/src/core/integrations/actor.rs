@@ -10,6 +10,7 @@
 use std::{
     collections::{HashMap, VecDeque},
     future::Future,
+    sync::{Arc, atomic::{AtomicUsize, Ordering}},
     time::Duration,
 };
 
@@ -30,7 +31,7 @@ use crate::types::{
 
 const LIFECYCLE_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const DATA_PLANE_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
-const INTEGRATION_MAILBOX_CAPACITY: usize = 32;
+const INTEGRATION_QUEUE_WARNING_LIMIT: usize = 64;
 
 /// Cheaply cloneable handle for talking to a per-integration actor. The
 /// `module_name` and `config` fields mirror what `LoadedIntegration`
@@ -38,7 +39,8 @@ const INTEGRATION_MAILBOX_CAPACITY: usize = 32;
 /// current state without consulting the actor.
 #[derive(Clone)]
 pub struct IntegrationHandle {
-    tx: mpsc::Sender<IntegrationCmd>,
+    tx: mpsc::UnboundedSender<IntegrationCmd>,
+    pending: Arc<AtomicUsize>,
     wants_runtime_state_changes: bool,
     pub module_name: String,
     pub config: serde_json::Value,
@@ -53,15 +55,18 @@ impl IntegrationHandle {
         device_update_policy: OutboundDeviceUpdatePolicy,
     ) -> Self {
         let wants_runtime_state_changes = integration.wants_runtime_state_changes();
-        let (tx, rx) = mpsc::channel::<IntegrationCmd>(INTEGRATION_MAILBOX_CAPACITY);
+        let pending = Arc::new(AtomicUsize::new(0));
+        let (tx, rx) = mpsc::unbounded_channel::<IntegrationCmd>();
         tokio::spawn(run_integration_actor(
             integration_id,
             integration,
             device_update_policy,
             rx,
+            pending.clone(),
         ));
         IntegrationHandle {
             tx,
+            pending,
             wants_runtime_state_changes,
             module_name,
             config,
@@ -90,34 +95,63 @@ impl IntegrationHandle {
         F: FnOnce(oneshot::Sender<Result<()>>) -> IntegrationCmd,
     {
         let (done_tx, done_rx) = oneshot::channel();
-        self.tx
-            .send(make_cmd(done_tx))
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        if self.tx.send(make_cmd(done_tx)).is_err() {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            return Err(eyre!("Integration actor channel closed"));
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
+        }
+
+        let result = done_rx
             .await
-            .map_err(|_| eyre!("Integration actor channel closed"))?;
-        done_rx
-            .await
-            .map_err(|_| eyre!("Integration actor dropped lifecycle command"))?
+            .map_err(|_| eyre!("Integration actor dropped lifecycle command"))?;
+        result
     }
 
     pub fn set_device_state(&self, device: Device) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
         if self
             .tx
-            .try_send(IntegrationCmd::SetDeviceState {
+            .send(IntegrationCmd::SetDeviceState {
                 device: Box::new(device),
             })
             .is_err()
         {
-            warn!("Integration actor channel closed or full; dropping SetDeviceState");
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            warn!("Integration actor channel closed; dropping SetDeviceState");
+            return;
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
         }
     }
 
     pub fn run_action(&self, payload: IntegrationActionPayload) {
-        if self
-            .tx
-            .try_send(IntegrationCmd::RunAction { payload })
-            .is_err()
-        {
-            warn!("Integration actor channel closed or full; dropping RunAction");
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        if self.tx.send(IntegrationCmd::RunAction { payload }).is_err() {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            warn!("Integration actor channel closed; dropping RunAction");
+            return;
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
         }
     }
 
@@ -127,25 +161,38 @@ impl IntegrationHandle {
         current: RuntimeSnapshot,
         changes: SnapshotChanges,
     ) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
         if self
             .tx
-            .try_send(IntegrationCmd::RuntimeStateChanged {
+            .send(IntegrationCmd::RuntimeStateChanged {
                 previous: Box::new(previous),
                 current: Box::new(current),
                 changes,
             })
             .is_err()
         {
-            warn!("Integration actor channel closed or full; dropping RuntimeStateChanged");
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            warn!("Integration actor channel closed; dropping RuntimeStateChanged");
+            return;
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
         }
     }
 }
+
 
 async fn run_integration_actor(
     integration_id: IntegrationId,
     mut integration: Box<dyn Integration>,
     device_update_policy: OutboundDeviceUpdatePolicy,
-    mut rx: mpsc::Receiver<IntegrationCmd>,
+    mut rx: mpsc::UnboundedReceiver<IntegrationCmd>,
+    pending: Arc<AtomicUsize>,
 ) {
     let mut device_updates = DeviceUpdateQueue::new(device_update_policy);
     let mut registered = false;
@@ -186,6 +233,10 @@ async fn run_integration_actor(
             }
             break;
         };
+
+        // decrement the outstanding counter for this message now that
+        // we've received it from the queue
+        pending.fetch_sub(1, Ordering::SeqCst);
 
         handle_integration_command(
             &integration_id,
