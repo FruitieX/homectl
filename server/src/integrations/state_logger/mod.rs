@@ -10,6 +10,7 @@ use crate::{
 use async_trait::async_trait;
 use chrono::Utc;
 use color_eyre::{eyre::Context, Result};
+use eyre::eyre;
 use jsonptr::PointerBuf;
 use once_cell::sync::OnceCell;
 use regex::Regex;
@@ -44,7 +45,7 @@ enum StateLoggerDatabase {
     Shared,
     Dedicated {
         postgres_url: String,
-        connection: OnceCell<DatabaseConnection>,
+        connection: OnceCell<Result<DatabaseConnection, String>>,
     },
 }
 
@@ -98,21 +99,12 @@ impl Integration for StateLogger {
     }
 
     async fn register(&mut self) -> Result<()> {
-        match self.ensure_database_connection().await {
-            Ok(_) => {
-                info!(
-                    "state_logger[{logger_id}] PostgreSQL connection established using {source}",
-                    logger_id = self.id,
-                    source = self.database_source_label(),
-                );
-            }
-            Err(error) => {
-                error!(
-                    "state_logger[{logger_id}] PostgreSQL connection could not be made using {source}: {error}",
-                    logger_id = self.id,
-                    source = self.database_source_label(),
-                );
-            }
+        if self.ensure_database_connection().await.is_ok() {
+            info!(
+                "state_logger[{logger_id}] PostgreSQL connection established using {source}",
+                logger_id = self.id,
+                source = self.database_source_label(),
+            );
         }
 
         Ok(())
@@ -134,14 +126,7 @@ impl Integration for StateLogger {
 
         let db = match self.ensure_database_connection().await {
             Ok(db) => db,
-            Err(error) => {
-                warn!(
-                    "state_logger[{logger_id}] skipping event write because PostgreSQL connection could not be used via {source}: {error}",
-                    logger_id = self.id,
-                    source = self.database_source_label(),
-                );
-                return Ok(());
-            }
+            Err(_) => return Ok(()),
         };
 
         let previous_devices = &previous.devices.0;
@@ -288,63 +273,47 @@ impl StateLogger {
                 postgres_url,
                 connection,
             } => {
-                if let Some(connection) = connection.get() {
-                    return Ok(connection);
+                if let Some(connection_result) = connection.get() {
+                    return connection_result
+                        .as_ref()
+                        .map_err(|error| eyre!(error.clone()));
                 }
 
                 let mut options = ConnectOptions::new(postgres_url.clone());
                 options.acquire_timeout(Duration::from_secs(2));
 
-                let database_connection = Database::connect(options).await?;
-                ensure_state_logger_events_table(&database_connection).await?;
+                let result: Result<DatabaseConnection, String> = async {
+                    let database_connection = Database::connect(options).await?;
+                    // Ensure the state_logger_events table exists in the dedicated
+                    // database by running only the StateLoggerEvents migration.
+                    crate::db::migrations::ensure_state_logger_events_on_connection(
+                        &database_connection,
+                    )
+                    .await?;
 
-                let _ = connection.set(database_connection);
-                Ok(connection
+                    Ok(database_connection)
+                }
+                .await
+                .map_err(|error: color_eyre::Report| error.to_string());
+
+                if let Err(error) = &result {
+                    warn!(
+                        "state_logger[{logger_id}] PostgreSQL connection could not be made using {source}: {error}",
+                        logger_id = self.id,
+                        source = self.database_source_label(),
+                    );
+                }
+
+                let _ = connection.set(result);
+
+                connection
                     .get()
-                    .expect("dedicated connection should be set"))
+                    .expect("dedicated connection result should be set")
+                    .as_ref()
+                    .map_err(|error| eyre!(error.clone()))
             }
         }
     }
-}
-
-async fn ensure_state_logger_events_table(db: &DatabaseConnection) -> Result<()> {
-    let backend = db.get_database_backend();
-    if !matches!(backend, sea_orm::DbBackend::Postgres) {
-        return Ok(());
-    }
-
-    db.execute(Statement::from_string(
-        backend,
-        r#"CREATE TABLE IF NOT EXISTS state_logger_events (
-            id SERIAL PRIMARY KEY,
-            device_key TEXT NOT NULL,
-            integration_id TEXT NOT NULL,
-            device_id TEXT NOT NULL,
-            device_name TEXT NOT NULL,
-            device_kind TEXT NOT NULL,
-            event_kind TEXT NOT NULL,
-            device_state_json TEXT NOT NULL,
-            value DOUBLE PRECISION NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )"#,
-    ))
-    .await?;
-
-    db.execute(Statement::from_string(
-        backend,
-        r#"CREATE INDEX IF NOT EXISTS idx_state_logger_events_device_key
-            ON state_logger_events (device_key)"#,
-    ))
-    .await?;
-
-    db.execute(Statement::from_string(
-        backend,
-        r#"CREATE INDEX IF NOT EXISTS idx_state_logger_events_created_at
-            ON state_logger_events (created_at)"#,
-    ))
-    .await?;
-
-    Ok(())
 }
 
 fn compile_pattern(pattern: &str, mode: PatternMatchMode) -> Result<Regex> {

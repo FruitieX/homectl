@@ -732,16 +732,6 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 ),
                 with_help_text(
                     text_config_field(
-                        "value_path",
-                        "Value path",
-                        true,
-                        "JSON pointer evaluated against the serialized device state.",
-                        Some("/value"),
-                    ),
-                    "JSON Pointer syntax. The path is evaluated against the serialized device state, so it should start with /. Use / between keys, for example /value, /state/power or /state/color/h.",
-                ),
-                with_help_text(
-                    text_config_field(
                         "postgresql_url",
                         "PostgreSQL URL",
                         false,
@@ -749,6 +739,16 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                         Some("postgresql://user:password@host:5432/database"),
                     ),
                     "Leave this empty to reuse the app's DATABASE_URL connection. If set, state_logger writes to this database instead of the PostgreSQL connection used by HomeCTL. The schema used is `public` and the name of the database is `state_logger_events`.",
+                ),
+                with_help_text(
+                    text_config_field(
+                        "value_path",
+                        "Value path",
+                        true,
+                        "JSON pointer evaluated against the serialized device state.",
+                        Some("/value"),
+                    ),
+                    "JSON Pointer syntax. The path is evaluated against the serialized device state, so it should start with /. Use / between keys, for example /value, /state/power or /state/color/h.",
                 ),
             ],
         )),

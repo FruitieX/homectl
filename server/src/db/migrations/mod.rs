@@ -4,7 +4,9 @@ use crate::db::schema::{
     Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
     StateLoggerEvents, UiState, WidgetSettings,
 };
+use log::info;
 use sea_orm::sea_query::{Expr, OnConflict};
+use sea_orm::{ConnectionTrait, Statement};
 use sea_orm_migration::prelude::*;
 
 pub struct Migrator;
@@ -139,6 +141,44 @@ impl MigrationTrait for M20260529000000StateLoggerEvents {
             )
             .await
     }
+}
+
+// Apply only the state_logger events migration against a specific connection.
+// This is used by integrations that create their own dedicated DB connection
+// so they can ensure the `state_logger_events` table exists without running
+// the full migrator.
+pub async fn ensure_state_logger_events_on_connection(
+    conn: &sea_orm::DatabaseConnection,
+) -> Result<(), DbErr> {
+    let backend = conn.get_database_backend();
+
+    // Check whether the table already exists on this connection.
+    let exists = match backend {
+        sea_orm::DbBackend::Postgres => {
+            let sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='state_logger_events' LIMIT 1";
+            conn.query_one(Statement::from_string(backend, sql.to_string()))
+                .await?
+                .is_some()
+        }
+        sea_orm::DbBackend::Sqlite => {
+            let sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='state_logger_events' LIMIT 1";
+            conn.query_one(Statement::from_string(backend, sql.to_string()))
+                .await?
+                .is_some()
+        }
+        _ => false,
+    };
+
+    if exists {
+        info!("state_logger: state_logger_events table already exists on dedicated DB; skipping migration");
+        return Ok(());
+    }
+
+    let manager = SchemaManager::new(conn);
+    create_state_logger_events(&manager).await?;
+    info!("state_logger: created state_logger_events table on dedicated DB");
+
+    Ok(())
 }
 
 async fn create_devices(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
