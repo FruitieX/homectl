@@ -10,7 +10,10 @@
 use std::{
     collections::{HashMap, VecDeque},
     future::Future,
-    sync::{Arc, atomic::{AtomicUsize, Ordering}},
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -185,7 +188,6 @@ impl IntegrationHandle {
         }
     }
 }
-
 
 async fn run_integration_actor(
     integration_id: IntegrationId,
