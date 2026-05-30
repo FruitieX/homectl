@@ -15,7 +15,6 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(M20260227000000Init),
             Box::new(M20260420000000DashboardWidgetSources),
-            Box::new(M20260527000000StateAuditLog),
             Box::new(M20260529000000StateLoggerEvents),
         ]
     }
@@ -108,33 +107,6 @@ impl MigrationTrait for M20260420000000DashboardWidgetSources {
             .drop_table(
                 Table::drop()
                     .table(WidgetSettings::Table)
-                    .if_exists()
-                    .to_owned(),
-            )
-            .await
-    }
-}
-
-struct M20260527000000StateAuditLog;
-
-impl MigrationName for M20260527000000StateAuditLog {
-    fn name(&self) -> &str {
-        "m20260527000000_state_audit_log"
-    }
-}
-
-#[async_trait::async_trait]
-impl MigrationTrait for M20260527000000StateAuditLog {
-    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        create_state_device_events(manager).await?;
-        Ok(())
-    }
-
-    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
-        manager
-            .drop_table(
-                Table::drop()
-                    .table(StateDeviceEvents::Table)
                     .if_exists()
                     .to_owned(),
             )
