@@ -166,10 +166,12 @@ impl Integration for StateLogger {
                 continue;
             }
 
-            let current_value = select_value(current_device, &self.config.value_path);
-            let previous_value = previous_devices
-                .get(device_key)
-                .and_then(|device| select_value(device, &self.config.value_path));
+            let current_state = current_device.get_value();
+            let current_value = select_value(&current_state, &self.config.value_path);
+            let previous_value = previous_devices.get(device_key).and_then(|device| {
+                let previous_state = device.get_value();
+                select_value(&previous_state, &self.config.value_path)
+            });
 
             if previous_value == current_value {
                 debug!(
@@ -189,8 +191,13 @@ impl Integration for StateLogger {
                 value_path = self.config.value_path,
             );
 
-            if let Err(error) =
-                insert_state_logger_event_row(db, current_device, current_value).await
+            if let Err(error) = insert_state_logger_event_row(
+                db,
+                current_device,
+                current_state.to_string(),
+                current_value,
+            )
+            .await
             {
                 warn!(
                     "state_logger[{logger_id}] failed to write event row for {device_key}: {error}",
@@ -203,8 +210,8 @@ impl Integration for StateLogger {
     }
 }
 
-fn select_value(device: &Device, path: &PointerBuf) -> Option<serde_json::Value> {
-    path.as_ref().resolve(&device.get_value()).ok().cloned()
+fn select_value(device_state: &serde_json::Value, path: &PointerBuf) -> Option<serde_json::Value> {
+    path.as_ref().resolve(device_state).ok().cloned()
 }
 
 fn to_numeric_value(value: Option<&serde_json::Value>) -> Option<f64> {
@@ -235,9 +242,9 @@ fn device_kind(device: &Device) -> &'static str {
 async fn insert_state_logger_event_row(
     db: &DatabaseConnection,
     device: &Device,
+    device_state_json: String,
     selected_value: Option<serde_json::Value>,
 ) -> Result<()> {
-    let device_state_json = device.get_value().to_string();
     let value = to_numeric_value(selected_value.as_ref());
     let created_at = Utc::now();
 
