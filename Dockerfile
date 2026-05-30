@@ -5,7 +5,8 @@ RUN corepack enable
 
 WORKDIR /app/ui
 
-COPY ui/package.json ui/pnpm-lock.yaml ./
+COPY ui/package.json ui/pnpm-lock.yaml ui/pnpm-workspace.yaml ./
+RUN corepack prepare pnpm@11.5.0 --activate
 RUN pnpm install --frozen-lockfile
 
 COPY ui ./
