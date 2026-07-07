@@ -28,8 +28,6 @@ import {
 
 const selectClassName =
   'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
-const checkboxClassName =
-  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 export type TileType = 'empty' | 'floor' | 'wall' | 'door' | 'window';
 
@@ -48,6 +46,8 @@ export interface GridPoint {
 type HorizontalResizeDirection = 'left' | 'right';
 
 type VerticalResizeDirection = 'top' | 'bottom';
+
+type DrawShape = 'freehand' | 'line' | 'rectangle';
 
 type ResizeOffsets = {
   x: number;
@@ -95,6 +95,12 @@ const tileLabels: Record<TileType, string> = {
   wall: 'Wall',
   door: 'Door',
   window: 'Window',
+};
+
+const drawShapeLabels: Record<DrawShape, string> = {
+  freehand: 'Freehand',
+  line: 'Straight',
+  rectangle: 'Rectangle',
 };
 
 const defaultFloorplanDeviceScale = 1;
@@ -258,6 +264,38 @@ const getLinePoints = (start: GridPoint, end: GridPoint): GridPoint[] => {
       currentY += stepY;
     }
   }
+};
+
+const getRectanglePoints = (start: GridPoint, end: GridPoint): GridPoint[] => {
+  const points: GridPoint[] = [];
+  const minX = Math.min(start.x, end.x);
+  const maxX = Math.max(start.x, end.x);
+  const minY = Math.min(start.y, end.y);
+  const maxY = Math.max(start.y, end.y);
+
+  for (let y = minY; y <= maxY; y += 1) {
+    for (let x = minX; x <= maxX; x += 1) {
+      points.push({ x, y });
+    }
+  }
+
+  return points;
+};
+
+const getDragShapePoints = (
+  drawShape: DrawShape,
+  start: GridPoint,
+  current: GridPoint,
+): GridPoint[] => {
+  if (drawShape === 'line') {
+    return getLinePoints(start, current);
+  }
+
+  if (drawShape === 'rectangle') {
+    return getRectanglePoints(start, current);
+  }
+
+  return [current];
 };
 
 const applyTilePoints = (
@@ -621,7 +659,7 @@ type ActiveOperation =
       startCell: GridPoint;
       lastCell: GridPoint;
       tile: TileType;
-      straightLine: boolean;
+      drawShape: DrawShape;
       historyRecorded: boolean;
       lastCellKey: string;
     }
@@ -632,7 +670,7 @@ type ActiveOperation =
       lastCell: GridPoint;
       groupId: string;
       paintMode: GroupPaintMode;
-      straightLine: boolean;
+      drawShape: DrawShape;
       historyRecorded: boolean;
       lastCellKey: string;
     }
@@ -671,7 +709,7 @@ export function FloorplanGridEditor({
   const [groupPaintMode, setGroupPaintMode] = useState<GroupPaintMode>('paint');
   const [isPainting, setIsPainting] = useState(false);
   const [draggingDevice, setDraggingDevice] = useState<string | null>(null);
-  const [straightLineMode, setStraightLineMode] = useState(false);
+  const [drawShape, setDrawShape] = useState<DrawShape>('freehand');
   const [undoStack, setUndoStack] = useState<FloorplanGrid[]>([]);
   const [showGrid, setShowGrid] = useState(true);
   const [gridOpacity, setGridOpacity] = useState(0.5);
@@ -1128,7 +1166,7 @@ export function FloorplanGridEditor({
     );
 
     const currentGrid = cloneGrid(gridRef.current);
-    const straightLine = straightLineMode;
+    const currentDrawShape = drawShape;
     const currentLineAnchor = lineAnchorRef.current;
 
     if (mode === 'tiles') {
@@ -1154,7 +1192,7 @@ export function FloorplanGridEditor({
         startCell: coords,
         lastCell: coords,
         tile,
-        straightLine,
+        drawShape: currentDrawShape,
         historyRecorded: nextGrid !== null,
         lastCellKey: getCellKey(coords.x, coords.y),
       };
@@ -1197,7 +1235,7 @@ export function FloorplanGridEditor({
         lastCell: coords,
         groupId: selectedGroup,
         paintMode,
-        straightLine,
+        drawShape: currentDrawShape,
         historyRecorded: nextGrid !== null,
         lastCellKey: getCellKey(coords.x, coords.y),
       };
@@ -1264,12 +1302,15 @@ export function FloorplanGridEditor({
     }
 
     if (activeOperation.kind === 'tiles' && isPainting) {
-      const points = activeOperation.straightLine
-        ? getLinePoints(activeOperation.startCell, coords)
-        : [coords];
-      const sourceGrid = activeOperation.straightLine
-        ? activeOperation.baseGrid
-        : gridRef.current;
+      const points = getDragShapePoints(
+        activeOperation.drawShape,
+        activeOperation.startCell,
+        coords,
+      );
+      const sourceGrid =
+        activeOperation.drawShape === 'freehand'
+          ? gridRef.current
+          : activeOperation.baseGrid;
       const nextGrid = applyTilePoints(
         sourceGrid,
         points,
@@ -1295,12 +1336,15 @@ export function FloorplanGridEditor({
       };
       updateGrid(nextGrid);
     } else if (activeOperation.kind === 'groups' && isPainting) {
-      const points = activeOperation.straightLine
-        ? getLinePoints(activeOperation.startCell, coords)
-        : [coords];
-      const sourceGrid = activeOperation.straightLine
-        ? activeOperation.baseGrid
-        : gridRef.current;
+      const points = getDragShapePoints(
+        activeOperation.drawShape,
+        activeOperation.startCell,
+        coords,
+      );
+      const sourceGrid =
+        activeOperation.drawShape === 'freehand'
+          ? gridRef.current
+          : activeOperation.baseGrid;
       const nextGrid = applyGroupPoints(
         sourceGrid,
         activeOperation.groupId,
@@ -1495,6 +1539,24 @@ export function FloorplanGridEditor({
       return normalizedDeviceSearch.length === 0 && deviceGroupFilter === 'all';
     })
     .sort((left, right) => left.deviceName.localeCompare(right.deviceName));
+  const drawShapeControl = (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-sm font-medium">Drag shape</span>
+      <div className="flex rounded-xl bg-muted p-1">
+        {(Object.keys(drawShapeLabels) as DrawShape[]).map((shape) => (
+          <Button
+            key={shape}
+            variant={drawShape === shape ? 'default' : 'ghost'}
+            size="sm"
+            onClick={() => setDrawShape(shape)}
+            type="button"
+          >
+            {drawShapeLabels[shape]}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-4">
@@ -1620,15 +1682,7 @@ export function FloorplanGridEditor({
               </div>
             </div>
 
-            <label className="flex cursor-pointer items-center gap-2">
-              <span className="text-sm font-medium">Straight drag mode</span>
-              <input
-                type="checkbox"
-                className={checkboxClassName}
-                checked={straightLineMode}
-                onChange={(e) => setStraightLineMode(e.target.checked)}
-              />
-            </label>
+            {drawShapeControl}
 
             <div className="flex flex-wrap items-center gap-1">
               <span className="text-sm text-muted-foreground">Fill all:</span>
@@ -1647,7 +1701,9 @@ export function FloorplanGridEditor({
 
           <div className="text-sm text-muted-foreground">
             Left click paints, right click temporarily erases back to floor, and
-            Shift now previews a line from the last clicked cell to the cursor.
+            drag shape controls whether dragging draws freehand, straight lines,
+            or filled rectangles. Shift previews a line from the last clicked
+            cell to the cursor.
             {lineAnchor?.mode === 'tiles'
               ? ` Hold Shift to preview from ${lineAnchor.cell.x + 1}, ${lineAnchor.cell.y + 1}, then Shift-click to draw the line.`
               : ' Click a cell to set the anchor, then hold Shift and click another cell to connect them.'}
@@ -1658,7 +1714,8 @@ export function FloorplanGridEditor({
       {mode === 'groups' && (
         <div className="space-y-3">
           <div className="text-sm text-muted-foreground">
-            Select a group, then click and drag to paint its area. Right click
+            Select a group, then click and drag to paint its area. Choose
+            Rectangle drag shape to fill room-like areas quickly. Right click
             temporarily erases, and holding Shift previews a line from the last
             clicked cell.
             {lineAnchor?.mode === 'groups'
@@ -1701,15 +1758,7 @@ export function FloorplanGridEditor({
               </Button>
             </div>
 
-            <label className="flex cursor-pointer items-center gap-2">
-              <span className="text-sm font-medium">Straight drag mode</span>
-              <input
-                type="checkbox"
-                className={checkboxClassName}
-                checked={straightLineMode}
-                onChange={(e) => setStraightLineMode(e.target.checked)}
-              />
-            </label>
+            {drawShapeControl}
 
             <Button
               variant="ghost"
