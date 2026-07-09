@@ -830,6 +830,7 @@ mod tests {
         build_spatial_rollout_plan, sort_devices_by_spatial_rollout_source, SpatialRolloutPlan,
     };
     use super::{ActivateSceneRequest, Devices};
+    use crate::core::integrations::{PLUGIN_CIRCADIAN, PLUGIN_DUMMY, PLUGIN_MQTT};
     use crate::core::{groups::Groups, scenes::Scenes};
     use crate::db::config_queries::DevicePositionRow;
     use crate::types::color::Capabilities;
@@ -848,7 +849,10 @@ mod tests {
     use std::{collections::BTreeMap, str::FromStr};
 
     fn device_key(id: &str) -> DeviceKey {
-        DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
+        DeviceKey::new(
+            IntegrationId::from(PLUGIN_DUMMY.to_string()),
+            DeviceId::new(id),
+        )
     }
 
     fn test_cli() -> Cli {
@@ -883,7 +887,7 @@ mod tests {
 
     fn managed_controllable_device(id: &str, name: &str) -> Device {
         Device::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new(id),
             name.to_string(),
             DeviceData::Controllable(ControllableDevice::new(
@@ -901,7 +905,7 @@ mod tests {
 
     fn placeholder_sensor(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
         Device::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new(id),
             name.to_string(),
             DeviceData::Sensor(SensorDevice::unknown_placeholder()),
@@ -911,7 +915,7 @@ mod tests {
 
     fn boolean_sensor(id: &str, name: &str, value: bool, raw: Option<serde_json::Value>) -> Device {
         Device::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new(id),
             name.to_string(),
             DeviceData::Sensor(SensorDevice::Boolean { value }),
@@ -921,7 +925,7 @@ mod tests {
 
     fn controllable_device(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
         Device::new(
-            IntegrationId::from("mqtt".to_string()),
+            IntegrationId::from(PLUGIN_MQTT.to_string()),
             DeviceId::new(id),
             name.to_string(),
             DeviceData::Controllable(ControllableDevice::new(
@@ -1030,7 +1034,7 @@ mod tests {
     #[test]
     fn spatial_invalidation_order_prefers_nearest_positioned_targets() {
         let source = DeviceKey::new(
-            IntegrationId::from("circadian".to_string()),
+            IntegrationId::from(PLUGIN_CIRCADIAN.to_string()),
             DeviceId::new("color"),
         );
         let near = managed_controllable_device("near", "Near");

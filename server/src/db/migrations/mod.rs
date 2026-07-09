@@ -1,10 +1,12 @@
 use crate::db::schema::{
     ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
     DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
-    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
-    WidgetSettings,
+    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
+    StateLoggerEvents, UiState, WidgetSettings,
 };
+use log::info;
 use sea_orm::sea_query::{Expr, OnConflict};
+use sea_orm::{ConnectionTrait, Statement};
 use sea_orm_migration::prelude::*;
 
 pub struct Migrator;
@@ -15,6 +17,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(M20260227000000Init),
             Box::new(M20260420000000DashboardWidgetSources),
+            Box::new(M20260529000000StateLoggerEvents),
         ]
     }
 }
@@ -111,6 +114,71 @@ impl MigrationTrait for M20260420000000DashboardWidgetSources {
             )
             .await
     }
+}
+
+struct M20260529000000StateLoggerEvents;
+
+impl MigrationName for M20260529000000StateLoggerEvents {
+    fn name(&self) -> &str {
+        "m20260529000000_state_logger_events"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260529000000StateLoggerEvents {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        create_state_logger_events(manager).await?;
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(StateLoggerEvents::Table)
+                    .if_exists()
+                    .to_owned(),
+            )
+            .await
+    }
+}
+
+// Apply only the state_logger events migration against a specific connection.
+// This is used by integrations that create their own dedicated DB connection
+// so they can ensure the `state_logger_events` table exists without running
+// the full migrator.
+pub async fn ensure_state_logger_events_on_connection(
+    conn: &sea_orm::DatabaseConnection,
+) -> Result<(), DbErr> {
+    let backend = conn.get_database_backend();
+
+    // Check whether the table already exists on this connection.
+    let exists = match backend {
+        sea_orm::DbBackend::Postgres => {
+            let sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name='state_logger_events' LIMIT 1";
+            conn.query_one(Statement::from_string(backend, sql.to_string()))
+                .await?
+                .is_some()
+        }
+        sea_orm::DbBackend::Sqlite => {
+            let sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='state_logger_events' LIMIT 1";
+            conn.query_one(Statement::from_string(backend, sql.to_string()))
+                .await?
+                .is_some()
+        }
+        _ => false,
+    };
+
+    if exists {
+        info!("state_logger: state_logger_events table already exists on dedicated DB; skipping migration");
+        return Ok(());
+    }
+
+    let manager = SchemaManager::new(conn);
+    create_state_logger_events(&manager).await?;
+    info!("state_logger: created state_logger_events table on dedicated DB");
+
+    Ok(())
 }
 
 async fn create_devices(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
@@ -736,6 +804,87 @@ async fn create_widget_settings(manager: &SchemaManager<'_>) -> Result<(), DbErr
                         .timestamp()
                         .default(Expr::current_timestamp()),
                 )
+                .to_owned(),
+        )
+        .await
+}
+
+async fn create_state_logger_events(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
+    manager
+        .create_table(
+            Table::create()
+                .table(StateLoggerEvents::Table)
+                .if_not_exists()
+                .col(
+                    ColumnDef::new(StateLoggerEvents::Id)
+                        .integer()
+                        .not_null()
+                        .auto_increment()
+                        .primary_key(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceKey)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::CreatedAt)
+                        .timestamp_with_time_zone()
+                        .default(Expr::current_timestamp()),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::IntegrationId)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceId)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceName)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceKind)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::EventKind)
+                        .text()
+                        .not_null(),
+                )
+                .col(
+                    ColumnDef::new(StateLoggerEvents::DeviceStateJson)
+                        .text()
+                        .not_null(),
+                )
+                .col(ColumnDef::new(StateLoggerEvents::Value).double().null())
+                .to_owned(),
+        )
+        .await?;
+
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_state_logger_events_device_key")
+                .table(StateLoggerEvents::Table)
+                .col(StateLoggerEvents::DeviceKey)
+                .if_not_exists()
+                .to_owned(),
+        )
+        .await?;
+
+    manager
+        .create_index(
+            Index::create()
+                .name("idx_state_logger_events_created_at")
+                .table(StateLoggerEvents::Table)
+                .col(StateLoggerEvents::CreatedAt)
+                .if_not_exists()
                 .to_owned(),
         )
         .await

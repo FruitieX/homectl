@@ -3,4 +3,5 @@ pub mod cron;
 pub mod dummy;
 pub mod mqtt;
 pub mod random;
+pub mod state_logger;
 pub mod timer;

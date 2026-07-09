@@ -10,6 +10,10 @@
 use std::{
     collections::{HashMap, VecDeque},
     future::Future,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::Duration,
 };
 
@@ -20,6 +24,7 @@ use tokio::{
 };
 
 use super::command::IntegrationCmd;
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::types::{
     device::{Device, DeviceKey},
     integration::{
@@ -29,6 +34,7 @@ use crate::types::{
 
 const LIFECYCLE_COMMAND_TIMEOUT: Duration = Duration::from_secs(30);
 const DATA_PLANE_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
+const INTEGRATION_QUEUE_WARNING_LIMIT: usize = 64;
 
 /// Cheaply cloneable handle for talking to a per-integration actor. The
 /// `module_name` and `config` fields mirror what `LoadedIntegration`
@@ -37,6 +43,8 @@ const DATA_PLANE_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 #[derive(Clone)]
 pub struct IntegrationHandle {
     tx: mpsc::UnboundedSender<IntegrationCmd>,
+    pending: Arc<AtomicUsize>,
+    wants_runtime_state_changes: bool,
     pub module_name: String,
     pub config: serde_json::Value,
 }
@@ -49,18 +57,27 @@ impl IntegrationHandle {
         config: serde_json::Value,
         device_update_policy: OutboundDeviceUpdatePolicy,
     ) -> Self {
+        let wants_runtime_state_changes = integration.wants_runtime_state_changes();
+        let pending = Arc::new(AtomicUsize::new(0));
         let (tx, rx) = mpsc::unbounded_channel::<IntegrationCmd>();
         tokio::spawn(run_integration_actor(
             integration_id,
             integration,
             device_update_policy,
             rx,
+            pending.clone(),
         ));
         IntegrationHandle {
             tx,
+            pending,
+            wants_runtime_state_changes,
             module_name,
             config,
         }
+    }
+
+    pub fn wants_runtime_state_changes(&self) -> bool {
+        self.wants_runtime_state_changes
     }
 
     pub async fn register(&self) -> Result<()> {
@@ -81,15 +98,28 @@ impl IntegrationHandle {
         F: FnOnce(oneshot::Sender<Result<()>>) -> IntegrationCmd,
     {
         let (done_tx, done_rx) = oneshot::channel();
-        self.tx
-            .send(make_cmd(done_tx))
-            .map_err(|_| eyre!("Integration actor channel closed"))?;
-        done_rx
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        if self.tx.send(make_cmd(done_tx)).is_err() {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            return Err(eyre!("Integration actor channel closed"));
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
+        }
+
+        let result = done_rx
             .await
-            .map_err(|_| eyre!("Integration actor dropped lifecycle command"))?
+            .map_err(|_| eyre!("Integration actor dropped lifecycle command"))?;
+        result
     }
 
     pub fn set_device_state(&self, device: Device) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
         if self
             .tx
             .send(IntegrationCmd::SetDeviceState {
@@ -97,13 +127,64 @@ impl IntegrationHandle {
             })
             .is_err()
         {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
             warn!("Integration actor channel closed; dropping SetDeviceState");
+            return;
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
         }
     }
 
     pub fn run_action(&self, payload: IntegrationActionPayload) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
         if self.tx.send(IntegrationCmd::RunAction { payload }).is_err() {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
             warn!("Integration actor channel closed; dropping RunAction");
+            return;
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
+        }
+    }
+
+    pub fn runtime_state_changed(
+        &self,
+        previous: RuntimeSnapshot,
+        current: RuntimeSnapshot,
+        changes: SnapshotChanges,
+    ) {
+        self.pending.fetch_add(1, Ordering::SeqCst);
+        if self
+            .tx
+            .send(IntegrationCmd::RuntimeStateChanged {
+                previous: Box::new(previous),
+                current: Box::new(current),
+                changes,
+            })
+            .is_err()
+        {
+            self.pending.fetch_sub(1, Ordering::SeqCst);
+            warn!("Integration actor channel closed; dropping RuntimeStateChanged");
+            return;
+        }
+
+        let curr = self.pending.load(Ordering::SeqCst);
+        if curr >= INTEGRATION_QUEUE_WARNING_LIMIT {
+            warn!(
+                "Integration actor queue for {} has {curr} messages",
+                self.module_name
+            );
         }
     }
 }
@@ -113,8 +194,10 @@ async fn run_integration_actor(
     mut integration: Box<dyn Integration>,
     device_update_policy: OutboundDeviceUpdatePolicy,
     mut rx: mpsc::UnboundedReceiver<IntegrationCmd>,
+    pending: Arc<AtomicUsize>,
 ) {
     let mut device_updates = DeviceUpdateQueue::new(device_update_policy);
+    let mut registered = false;
     if let Some(min_interval) = device_updates.policy.min_interval() {
         info!(
             "Integration {integration_id} outbound device updates rate-limited to at most one every {:?}",
@@ -153,8 +236,18 @@ async fn run_integration_actor(
             break;
         };
 
-        handle_integration_command(&integration_id, &mut integration, &mut device_updates, cmd)
-            .await;
+        // decrement the outstanding counter for this message now that
+        // we've received it from the queue
+        pending.fetch_sub(1, Ordering::SeqCst);
+
+        handle_integration_command(
+            &integration_id,
+            &mut integration,
+            &mut device_updates,
+            &mut registered,
+            cmd,
+        )
+        .await;
     }
 
     debug!("Integration actor for {integration_id} exiting (channel closed)");
@@ -259,12 +352,16 @@ async fn handle_integration_command(
     integration_id: &IntegrationId,
     integration: &mut Box<dyn Integration>,
     device_updates: &mut DeviceUpdateQueue,
+    registered: &mut bool,
     cmd: IntegrationCmd,
 ) {
     match cmd {
         IntegrationCmd::Register { done } => {
             let result =
                 run_lifecycle_command(integration_id, "register", integration.register()).await;
+            if result.is_ok() {
+                *registered = true;
+            }
             let _ = done.send(result);
         }
         IntegrationCmd::Start { done } => {
@@ -280,6 +377,9 @@ async fn handle_integration_command(
             }
 
             let result = run_lifecycle_command(integration_id, "stop", integration.stop()).await;
+            if result.is_ok() {
+                *registered = false;
+            }
             let _ = done.send(result);
         }
         IntegrationCmd::SetDeviceState { device } => {
@@ -292,6 +392,25 @@ async fn handle_integration_command(
                 integration_id,
                 "run_integration_action",
                 integration.run_integration_action(&payload),
+            )
+            .await;
+        }
+        IntegrationCmd::RuntimeStateChanged {
+            previous,
+            current,
+            changes,
+        } => {
+            if !*registered {
+                debug!(
+                    "Ignoring runtime-state change for {integration_id} until register completes",
+                );
+                return;
+            }
+
+            run_data_plane_command(
+                integration_id,
+                "on_runtime_state_change",
+                integration.on_runtime_state_change(&previous, &current, changes),
             )
             .await;
         }
@@ -350,6 +469,7 @@ async fn run_data_plane_command<F>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::integrations::PLUGIN_MQTT;
     use crate::types::{
         color::Capabilities,
         device::{ControllableDevice, DeviceData, DeviceId, ManageKind},
@@ -363,7 +483,7 @@ mod tests {
         Device {
             id: DeviceId::new(device_id),
             name: device_id.to_string(),
-            integration_id: IntegrationId::from("mqtt".to_string()),
+            integration_id: IntegrationId::from(PLUGIN_MQTT.to_string()),
             data: DeviceData::Controllable(ControllableDevice::new(
                 None,
                 power,

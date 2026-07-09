@@ -19,6 +19,8 @@ use serde_json::json;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+use crate::core::integrations::{PLUGIN_DUMMY, PLUGIN_MQTT};
+
 /// Load config for simulation from a source database when available, or from the
 /// optional JSON backup config file otherwise.
 pub async fn prepare_simulation_config(
@@ -725,7 +727,7 @@ pub fn convert_mqtt_to_dummy(config: &mut ConfigExport) -> Result<()> {
     let mqtt_ids: Vec<String> = config
         .integrations
         .iter()
-        .filter(|i| i.plugin == "mqtt")
+        .filter(|i| i.plugin == PLUGIN_MQTT)
         .map(|i| i.id.clone())
         .collect();
 
@@ -789,7 +791,7 @@ pub fn convert_mqtt_to_dummy(config: &mut ConfigExport) -> Result<()> {
         let dummy_config = json!({ "devices": devices });
         let row = IntegrationRow {
             id: mqtt_id.to_string(),
-            plugin: "dummy".to_string(),
+            plugin: PLUGIN_DUMMY.to_string(),
             config: dummy_config,
             enabled: true,
         };
@@ -935,6 +937,7 @@ fn collect_device_refs_from_rules(
 #[cfg(test)]
 mod tests {
     use super::export_from_config_file;
+    use crate::core::integrations::PLUGIN_DUMMY;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -984,7 +987,7 @@ mod tests {
 
         assert_eq!(config.core.warmup_time_seconds, 3);
         assert_eq!(config.integrations.len(), 1);
-        assert_eq!(config.integrations[0].plugin, "dummy");
+        assert_eq!(config.integrations[0].plugin, PLUGIN_DUMMY);
 
         fs::remove_file(path).expect("temp config file should be removed");
     }

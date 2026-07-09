@@ -404,8 +404,8 @@ fn find_active_scene_index(
             // then check if any of them have this scene active.
             // Offline devices are skipped (ignored) rather than causing detection to fail.
             let result = scene_devices_config
-                .iter()
-                .filter_map(|(device_key, _)| {
+                .keys()
+                .filter_map(|device_key| {
                     // only consider devices which are common across all cycled scenes
                     if !scenes_common_devices.contains(device_key) {
                         return None;

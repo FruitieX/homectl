@@ -1,6 +1,7 @@
 use color_eyre::Result;
 use eyre::eyre;
 use once_cell::sync::OnceCell;
+use percent_encoding::{percent_decode_str, utf8_percent_encode};
 use sea_orm::{ConnectOptions, Database, DatabaseConnection};
 use sea_orm_migration::MigratorTrait;
 use sqlx::migrate::MigrateDatabase;
@@ -13,6 +14,41 @@ pub mod migrations;
 pub mod schema;
 
 const DEFAULT_SQLITE_DATABASE_FILE: &str = "homectl.db";
+// Encode punctuation that can break URL parsing, but preserve RFC3986
+// unreserved characters: ALPHA / DIGIT / '-' / '.' / '_' / '~'.
+// This avoids re-encoding characters like '.' and '-' which are common
+// and harmless in usernames, while still percent-encoding characters
+// such as '@', '/', '?', '#', ':', whitespace, and other punctuation.
+const POSTGRES_USERINFO_ENCODE_SET: &percent_encoding::AsciiSet = &percent_encoding::CONTROLS
+    .add(b' ')
+    .add(b'!')
+    .add(b'"')
+    .add(b'#')
+    .add(b'$')
+    .add(b'%')
+    .add(b'&')
+    .add(b'\'')
+    .add(b'(')
+    .add(b')')
+    .add(b'*')
+    .add(b'+')
+    .add(b',')
+    .add(b'/')
+    .add(b':')
+    .add(b';')
+    .add(b'<')
+    .add(b'=')
+    .add(b'>')
+    .add(b'?')
+    .add(b'@')
+    .add(b'[')
+    .add(b'\\')
+    .add(b']')
+    .add(b'^')
+    .add(b'`')
+    .add(b'{')
+    .add(b'|')
+    .add(b'}');
 
 static DB_CONNECTION: OnceCell<DatabaseConnection> = OnceCell::new();
 static DATABASE_TARGET: OnceCell<DatabaseTarget> = OnceCell::new();
@@ -100,7 +136,10 @@ async fn connect_database(target: &DatabaseTarget) -> Result<bool> {
 
     ensure_database_exists(target).await?;
 
-    info!("Connecting to database at {}...", target.url);
+    info!(
+        "Connecting to database at {}...",
+        redact_postgres_password(&target.url)
+    );
     let mut options = ConnectOptions::new(target.url.clone());
     options.acquire_timeout(Duration::from_secs(2));
 
@@ -122,13 +161,15 @@ async fn ensure_database_exists(target: &DatabaseTarget) -> Result<()> {
 }
 
 async fn ensure_postgres_database_exists(database_url: &str) -> Result<()> {
-    if Postgres::database_exists(database_url).await? {
+    let database_url = normalize_postgres_database_url(database_url);
+
+    if Postgres::database_exists(&database_url).await? {
         return Ok(());
     }
 
     info!("Creating PostgreSQL database referenced by DATABASE_URL...");
 
-    match Postgres::create_database(database_url).await {
+    match Postgres::create_database(&database_url).await {
         Ok(()) => Ok(()),
         Err(error) if is_duplicate_database_error(&error) => Ok(()),
         Err(error) => Err(error.into()),
@@ -189,7 +230,7 @@ impl DatabaseTarget {
     fn explicit(database_url: &str) -> Result<Self> {
         let backend = DatabaseBackendKind::from_url(database_url)?;
         let url = match backend {
-            DatabaseBackendKind::Postgres => database_url.to_string(),
+            DatabaseBackendKind::Postgres => normalize_postgres_database_url(database_url),
             DatabaseBackendKind::Sqlite => normalize_sqlite_database_url(database_url),
         };
 
@@ -260,4 +301,156 @@ fn is_sqlite_memory_url(database_url: &str) -> bool {
     database_url == "sqlite::memory:"
         || database_url.starts_with("sqlite://:memory:")
         || database_url.contains("mode=memory")
+}
+
+fn normalize_postgres_database_url(database_url: &str) -> String {
+    let Some((scheme, rest)) = database_url.split_once("://") else {
+        return database_url.to_string();
+    };
+
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+
+    let Some(at_index) = authority.rfind('@') else {
+        return database_url.to_string();
+    };
+
+    let (userinfo, host) = authority.split_at(at_index);
+    let host = &host[1..];
+
+    let (username, password) = match userinfo.split_once(':') {
+        Some((username, password)) => (username, Some(password)),
+        None => (userinfo, None),
+    };
+
+    let username = normalize_postgres_userinfo_component(username);
+    let password = password.map(normalize_postgres_userinfo_component);
+
+    let mut normalized = format!("{scheme}://{username}");
+    if let Some(password) = password {
+        normalized.push(':');
+        normalized.push_str(&password);
+    }
+    normalized.push('@');
+    normalized.push_str(host);
+    normalized.push_str(tail);
+    normalized
+}
+
+fn normalize_postgres_userinfo_component(component: &str) -> String {
+    match percent_decode_str(component).decode_utf8() {
+        Ok(decoded) => utf8_percent_encode(&decoded, POSTGRES_USERINFO_ENCODE_SET).to_string(),
+        // If the userinfo component contains invalid percent-encoding or invalid
+        // UTF-8, avoid silently replacing bytes with U+FFFD; fall back to returning
+        // the original component unchanged so we don't corrupt credentials.
+        Err(_) => component.to_string(),
+    }
+}
+
+fn redact_postgres_password(database_url: &str) -> String {
+    let Some((scheme, rest)) = database_url.split_once("://") else {
+        return database_url.to_string();
+    };
+
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let (authority, tail) = rest.split_at(authority_end);
+
+    let Some(at_index) = authority.rfind('@') else {
+        return database_url.to_string();
+    };
+
+    let (userinfo, host) = authority.split_at(at_index);
+    let host = &host[1..];
+
+    let (username, password) = match userinfo.split_once(':') {
+        Some((username, password)) => (username, Some(password)),
+        None => (userinfo, None),
+    };
+
+    let mut result = format!("{scheme}://{username}");
+    if password.is_some() {
+        result.push(':');
+        result.push_str("<redacted>");
+    }
+    result.push('@');
+    result.push_str(host);
+    result.push_str(tail);
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        normalize_postgres_database_url, normalize_postgres_userinfo_component,
+        redact_postgres_password,
+    };
+
+    #[test]
+    fn normalizes_raw_postgres_credentials() {
+        let url = "postgres://user:pa(ss)w@rd@localhost:5432/postgres";
+
+        assert_eq!(
+            normalize_postgres_database_url(url),
+            "postgres://user:pa%28ss%29w%40rd@localhost:5432/postgres"
+        );
+    }
+
+    #[test]
+    fn preserves_already_encoded_postgres_credentials() {
+        let url = "postgres://user:pa%28ss%29w%40rd@localhost:5432/postgres";
+
+        assert_eq!(
+            normalize_postgres_database_url(url),
+            "postgres://user:pa%28ss%29w%40rd@localhost:5432/postgres"
+        );
+    }
+
+    #[test]
+    fn normalizes_individual_userinfo_component() {
+        assert_eq!(
+            normalize_postgres_userinfo_component("pa(ss)w@rd"),
+            "pa%28ss%29w%40rd"
+        );
+    }
+
+    #[test]
+    fn normalizes_punctuation_heavy_postgres_credentials() {
+        let url = "postgres://foo.bar-baz:pa(ss)w@rd&1*2@127.0.0.1:5432/homectl";
+
+        assert_eq!(
+            normalize_postgres_database_url(url),
+            "postgres://foo.bar-baz:pa%28ss%29w%40rd%261%2A2@127.0.0.1:5432/homectl"
+        );
+    }
+
+    #[test]
+    fn redacts_password_when_logging() {
+        let url = "postgres://user:pa%28ss%29w%40rd@localhost:5432/postgres";
+        let redacted = redact_postgres_password(url);
+        assert!(redacted.contains("<redacted>"));
+        assert!(redacted.contains(":<redacted>@"));
+        assert!(!redacted.contains("pa%28ss%29w%40rd"));
+    }
+
+    #[test]
+    fn does_not_insert_redaction_when_no_password() {
+        let url = "postgres://user@localhost:5432/postgres";
+        let redacted = redact_postgres_password(url);
+        assert!(!redacted.contains("<redacted>"));
+        assert_eq!(redacted, url);
+    }
+
+    #[test]
+    fn leaves_sqlite_urls_untouched() {
+        let url = "sqlite://./homectl.db?mode=rwc";
+        let redacted = redact_postgres_password(url);
+        assert_eq!(redacted, url);
+    }
+
+    #[test]
+    fn leaves_urls_without_userinfo_untouched() {
+        let url = "postgres://localhost:5432/postgres";
+        let redacted = redact_postgres_password(url);
+        assert_eq!(redacted, url);
+    }
 }

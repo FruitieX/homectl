@@ -174,6 +174,7 @@ async fn run_actor(
 
         match cmd {
             StateCommand::HandleEvent { event, done } => {
+                let previous_snapshot = app_state.snapshot.load().clone();
                 let kind = event_kind(&event);
                 let handle_started_at = Instant::now();
                 let outcome = handle_event(&mut app_state, &event).await;
@@ -186,6 +187,14 @@ async fn run_actor(
                 let publish_started_at = Instant::now();
                 app_state.publish_snapshot(snapshot_changes);
                 let publish_elapsed = publish_started_at.elapsed();
+
+                let current_snapshot = app_state.snapshot.load().clone();
+
+                app_state.integrations.notify_runtime_state_changed(
+                    &previous_snapshot,
+                    &current_snapshot,
+                    snapshot_changes,
+                );
 
                 let elapsed = started_at.elapsed();
                 let slow = elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS);
@@ -215,6 +224,7 @@ async fn run_actor(
                 }
             }
             StateCommand::Mutate(f) => {
+                let previous_snapshot = app_state.snapshot.load().clone();
                 let mutate_started_at = Instant::now();
                 f(&mut app_state).await;
                 let mutate_elapsed = mutate_started_at.elapsed();
@@ -222,6 +232,14 @@ async fn run_actor(
                 let publish_started_at = Instant::now();
                 app_state.publish_snapshot(SnapshotChanges::all());
                 let publish_elapsed = publish_started_at.elapsed();
+
+                let current_snapshot = app_state.snapshot.load().clone();
+
+                app_state.integrations.notify_runtime_state_changed(
+                    &previous_snapshot,
+                    &current_snapshot,
+                    SnapshotChanges::all(),
+                );
 
                 let elapsed = started_at.elapsed();
                 let slow = elapsed > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS);

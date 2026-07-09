@@ -42,6 +42,7 @@ use percent_encoding::percent_decode_str;
 use serde::{Deserialize, Serialize};
 use warp::{http::StatusCode, Filter, Reply};
 
+use crate::core::integrations::PLUGIN_MQTT;
 use crate::core::snapshot::SnapshotHandle;
 
 use super::{
@@ -3791,7 +3792,7 @@ fn derive_migrated_mqtt_sensor_devices(config: &ConfigExport) -> Vec<Device> {
     let mqtt_integration_ids = config
         .integrations
         .iter()
-        .filter(|integration| integration.plugin == "mqtt")
+        .filter(|integration| integration.plugin == PLUGIN_MQTT)
         .map(|integration| IntegrationId::from(integration.id.clone()))
         .collect::<HashSet<_>>();
 
@@ -3959,6 +3960,7 @@ async fn migrate_apply(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::integrations::PLUGIN_DUMMY;
     use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
 
@@ -3970,7 +3972,7 @@ mod tests {
             "integrations": [
                 {
                     "id": "dummy",
-                    "plugin": "dummy",
+                    "plugin": PLUGIN_DUMMY,
                     "config": { "devices": {} },
                     "enabled": true
                 }
@@ -4047,7 +4049,7 @@ devices = [
         let preview = MigratePreviewResult {
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
-                plugin: "mqtt".to_string(),
+                plugin: PLUGIN_MQTT.to_string(),
                 config: serde_json::json!({}),
                 enabled: true,
             }],
@@ -4128,7 +4130,7 @@ devices = [
         let preview = MigratePreviewResult {
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
-                plugin: "mqtt".to_string(),
+                plugin: PLUGIN_MQTT.to_string(),
                 config: serde_json::json!({}),
                 enabled: true,
             }],
@@ -4197,7 +4199,7 @@ devices = [
         let preview = MigratePreviewResult {
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
-                plugin: "mqtt".to_string(),
+                plugin: PLUGIN_MQTT.to_string(),
                 config: serde_json::json!({}),
                 enabled: true,
             }],
@@ -4276,7 +4278,7 @@ devices = [
             },
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
-                plugin: "mqtt".to_string(),
+                plugin: PLUGIN_MQTT.to_string(),
                 config: serde_json::json!({ "host": "broker" }),
                 enabled: true,
             }],
@@ -4336,7 +4338,7 @@ devices = [
         let preview = MigratePreviewResult {
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
-                plugin: "mqtt".to_string(),
+                plugin: PLUGIN_MQTT.to_string(),
                 config: serde_json::json!({}),
                 enabled: true,
             }],
@@ -4371,7 +4373,7 @@ devices = [
         let preview = MigratePreviewResult {
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
-                plugin: "mqtt".to_string(),
+                plugin: PLUGIN_MQTT.to_string(),
                 config: serde_json::json!({}),
                 enabled: true,
             }],

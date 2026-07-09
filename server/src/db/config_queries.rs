@@ -50,7 +50,11 @@ pub struct SceneRow {
     pub name: String,
     pub hidden: bool,
     pub script: Option<String>,
+    // Need these so that one can create an empty scene
+    // and then populate these later when configuring.
+    #[serde(default)]
     pub device_states: HashMap<String, serde_json::Value>,
+    #[serde(default)]
     pub group_states: HashMap<String, serde_json::Value>,
 }
 

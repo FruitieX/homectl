@@ -109,10 +109,5 @@
     "vite": "8.0.8"
   },
   "version": "1.0.0",
-  "pnpm": {
-    "overrides": {
-      "@types/react": "19.2.7",
-      "@types/react-dom": "19.2.3"
-    }
-  }
+  "packageManager": "pnpm@11.5.0"
 }

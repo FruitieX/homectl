@@ -3,10 +3,12 @@ pub mod command;
 
 pub use actor::IntegrationHandle;
 
+use crate::core::snapshot::{RuntimeSnapshot, SnapshotChanges};
 use crate::db::config_queries;
 use crate::integrations::cron::Cron;
 use crate::integrations::{
-    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, timer::Timer,
+    circadian::Circadian, dummy::Dummy, mqtt::Mqtt, random::Random, state_logger::StateLogger,
+    timer::Timer,
 };
 use crate::types::{
     device::Device,
@@ -25,7 +27,23 @@ use std::collections::HashMap;
 
 pub type CustomIntegrationsMap = HashMap<IntegrationId, IntegrationHandle>;
 
-const BUILT_IN_PLUGIN_NAMES: [&str; 6] = ["mqtt", "circadian", "cron", "timer", "dummy", "random"];
+pub const PLUGIN_MQTT: &str = "mqtt";
+pub const PLUGIN_CIRCADIAN: &str = "circadian";
+pub const PLUGIN_CRON: &str = "cron";
+pub const PLUGIN_TIMER: &str = "timer";
+pub const PLUGIN_DUMMY: &str = "dummy";
+pub const PLUGIN_RANDOM: &str = "random";
+pub const PLUGIN_STATE_LOGGER: &str = "state_logger";
+
+const BUILT_IN_PLUGIN_NAMES: [&str; 7] = [
+    PLUGIN_MQTT,
+    PLUGIN_CIRCADIAN,
+    PLUGIN_CRON,
+    PLUGIN_TIMER,
+    PLUGIN_DUMMY,
+    PLUGIN_RANDOM,
+    PLUGIN_STATE_LOGGER,
+];
 
 #[derive(Clone)]
 pub struct Integrations {
@@ -135,6 +153,19 @@ impl Integrations {
 
         handle.run_action(payload.clone());
         Ok(())
+    }
+
+    pub fn notify_runtime_state_changed(
+        &self,
+        previous: &RuntimeSnapshot,
+        current: &RuntimeSnapshot,
+        changes: SnapshotChanges,
+    ) {
+        for handle in self.custom_integrations.values() {
+            if handle.wants_runtime_state_changes() {
+                handle.runtime_state_changed(previous.clone(), current.clone(), changes);
+            }
+        }
     }
 
     pub async fn load_config_rows(
@@ -280,8 +311,8 @@ pub fn integration_config_schemas() -> Vec<IntegrationConfigSchema> {
 
 fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
     match plugin {
-        "mqtt" => Some(schema(
-            "mqtt",
+        PLUGIN_MQTT => Some(schema(
+            PLUGIN_MQTT,
             "MQTT",
             "Connect devices through MQTT topics, including Zigbee2MQTT-style bridges.",
             vec![
@@ -478,8 +509,8 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 ),
             ],
         )),
-        "circadian" => Some(schema(
-            "circadian",
+        PLUGIN_CIRCADIAN => Some(schema(
+            PLUGIN_CIRCADIAN,
             "Circadian",
             "Expose a virtual color sensor that follows a day/night color schedule.",
             vec![
@@ -552,8 +583,8 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 ),
             ],
         )),
-        "cron" => Some(schema(
-            "cron",
+        PLUGIN_CRON => Some(schema(
+            PLUGIN_CRON,
             "Cron",
             "Expose schedule devices that trigger actions from cron expressions.",
             vec![with_help_text(
@@ -574,8 +605,8 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 "Cron syntax is `second minute hour day-of-month month day-of-week`. Keep ids stable because routines and actions may reference the generated schedule devices.",
             )],
         )),
-        "timer" => Some(schema(
-            "timer",
+        PLUGIN_TIMER => Some(schema(
+            PLUGIN_TIMER,
             "Timer",
             "Expose a virtual timer sensor that can be started by integration actions.",
             vec![text_config_field(
@@ -586,8 +617,8 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 Some("Timer"),
             )],
         )),
-        "dummy" => Some(schema(
-            "dummy",
+        PLUGIN_DUMMY => Some(schema(
+            PLUGIN_DUMMY,
             "Dummy",
             "Create in-memory devices for development and testing without physical hardware.",
             vec![with_help_text(
@@ -610,8 +641,8 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 "Use dummy devices to prototype groups, scenes, and routines before connecting real hardware. Device ids become `integration_id/device_id` keys.",
             )],
         )),
-        "random" => Some(schema(
-            "random",
+        PLUGIN_RANDOM => Some(schema(
+            PLUGIN_RANDOM,
             "Random",
             "Expose a virtual color sensor that emits a random color every second.",
             vec![
@@ -672,6 +703,65 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 ),
             ],
         )),
+        PLUGIN_STATE_LOGGER => Some(schema_without_outbound(
+            PLUGIN_STATE_LOGGER,
+            "State Logger",
+            "Log selected device or sensor state changes from one integration.",
+            vec![
+                text_config_field(
+                    "source_integration_id",
+                    "Source integration ID",
+                    true,
+                    "Only log devices from this integration.",
+                    Some(PLUGIN_MQTT),
+                ),
+                text_config_field(
+                    "device_name_pattern",
+                    "Device name pattern",
+                    true,
+                    "Pattern used to match device names.",
+                    Some("Kitchen *"),
+                ),
+                select_config_field(
+                    "match_mode",
+                    "Pattern match mode",
+                    false,
+                    "How to interpret the device name pattern.",
+                    vec![
+                        option(
+                            "Glob",
+                            json!("glob"),
+                            Some("Supports `*` and `?` wildcards."),
+                        ),
+                        option(
+                            "Regex",
+                            json!("regex"),
+                            Some("Interpret the pattern as a regular expression."),
+                        ),
+                    ],
+                ),
+                with_help_text(
+                    text_config_field(
+                        "postgresql_url",
+                        "PostgreSQL URL",
+                        false,
+                        "Optional PostgreSQL connection string for state_logger.",
+                        Some("postgresql://user:password@host:5432/database"),
+                    ),
+                    "Leave this empty to reuse the app's DATABASE_URL connection. If set, state_logger writes to this database instead of the PostgreSQL connection used by HomeCTL. The schema used is `public` and the name of the database is `state_logger_events`.",
+                ),
+                with_help_text(
+                    text_config_field(
+                        "value_path",
+                        "Value path",
+                        true,
+                        "JSON pointer evaluated against the serialized device state.",
+                        Some("/value"),
+                    ),
+                    "JSON Pointer syntax. The path is evaluated against the serialized device state, so it should start with /. Use / between keys, for example /value, /state/power or /state/color/h.",
+                ),
+            ],
+        )),
         _ => None,
     }
 }
@@ -684,6 +774,20 @@ fn schema(
 ) -> IntegrationConfigSchema {
     fields.push(outbound_device_update_field());
 
+    IntegrationConfigSchema {
+        plugin: plugin.to_string(),
+        name: name.to_string(),
+        description: description.to_string(),
+        fields,
+    }
+}
+
+fn schema_without_outbound(
+    plugin: &str,
+    name: &str,
+    description: &str,
+    fields: Vec<IntegrationConfigFieldSchema>,
+) -> IntegrationConfigSchema {
     IntegrationConfigSchema {
         plugin: plugin.to_string(),
         name: name.to_string(),
@@ -899,12 +1003,13 @@ fn load_custom_integration(
     event_tx: TxEventChannel,
 ) -> Result<Box<dyn Integration>> {
     match module_name {
-        "circadian" => Ok(Box::new(Circadian::new(id, config, cli, event_tx)?)),
-        "random" => Ok(Box::new(Random::new(id, config, cli, event_tx)?)),
-        "dummy" => Ok(Box::new(Dummy::new(id, config, cli, event_tx)?)),
-        "mqtt" => Ok(Box::new(Mqtt::new(id, config, cli, event_tx)?)),
-        "timer" => Ok(Box::new(Timer::new(id, config, cli, event_tx)?)),
-        "cron" => Ok(Box::new(Cron::new(id, config, cli, event_tx)?)),
+        PLUGIN_CIRCADIAN => Ok(Box::new(Circadian::new(id, config, cli, event_tx)?)),
+        PLUGIN_RANDOM => Ok(Box::new(Random::new(id, config, cli, event_tx)?)),
+        PLUGIN_STATE_LOGGER => Ok(Box::new(StateLogger::new(id, config, cli, event_tx)?)),
+        PLUGIN_DUMMY => Ok(Box::new(Dummy::new(id, config, cli, event_tx)?)),
+        PLUGIN_MQTT => Ok(Box::new(Mqtt::new(id, config, cli, event_tx)?)),
+        PLUGIN_TIMER => Ok(Box::new(Timer::new(id, config, cli, event_tx)?)),
+        PLUGIN_CRON => Ok(Box::new(Cron::new(id, config, cli, event_tx)?)),
         _ => Err(eyre!("Unknown module name: {module_name}")),
     }
 }
@@ -927,6 +1032,10 @@ mod tests {
     #[test]
     fn every_schema_includes_common_outbound_pacing_field() {
         for schema in integration_config_schemas() {
+            if schema.plugin == PLUGIN_STATE_LOGGER {
+                continue;
+            }
+
             assert!(
                 schema
                     .fields
@@ -940,7 +1049,7 @@ mod tests {
 
     #[test]
     fn mqtt_schema_exposes_core_required_fields() {
-        let schema = integration_config_schema("mqtt").expect("mqtt schema should exist");
+        let schema = integration_config_schema(PLUGIN_MQTT).expect("mqtt schema should exist");
         let required_fields = schema
             .fields
             .iter()
@@ -953,7 +1062,8 @@ mod tests {
 
     #[test]
     fn circadian_schema_uses_color_fields() {
-        let schema = integration_config_schema("circadian").expect("circadian schema should exist");
+        let schema =
+            integration_config_schema(PLUGIN_CIRCADIAN).expect("circadian schema should exist");
         let color_fields = schema
             .fields
             .iter()
@@ -966,7 +1076,7 @@ mod tests {
 
     #[test]
     fn random_schema_exposes_random_config_fields() {
-        let schema = integration_config_schema("random").expect("random schema should exist");
+        let schema = integration_config_schema(PLUGIN_RANDOM).expect("random schema should exist");
         let keys = schema
             .fields
             .iter()
@@ -986,5 +1096,38 @@ mod tests {
                 "outbound_device_updates.min_interval_ms",
             ]
         );
+    }
+
+    #[test]
+    fn state_logger_schema_exposes_logger_fields() {
+        let schema = integration_config_schema(PLUGIN_STATE_LOGGER)
+            .expect("state_logger schema should exist");
+        let keys = schema
+            .fields
+            .iter()
+            .map(|field| field.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            keys,
+            vec![
+                "source_integration_id",
+                "device_name_pattern",
+                "match_mode",
+                "postgresql_url",
+                "value_path",
+            ]
+        );
+    }
+
+    #[test]
+    fn state_logger_schema_does_not_include_outbound_pacing_field() {
+        let schema = integration_config_schema(PLUGIN_STATE_LOGGER)
+            .expect("state_logger schema should exist");
+
+        assert!(schema
+            .fields
+            .iter()
+            .all(|field| field.key != "outbound_device_updates.min_interval_ms"));
     }
 }
