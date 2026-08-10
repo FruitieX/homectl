@@ -14,7 +14,7 @@
       "matchManagers": [
         "cargo"
       ],
-      "matchPaths": [
+      "matchFileNames": [
         "server/**"
       ]
     },
@@ -22,7 +22,7 @@
       "matchManagers": [
         "npm"
       ],
-      "matchPaths": [
+      "matchFileNames": [
         "ui/**"
       ]
     }
