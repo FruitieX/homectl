@@ -1,7 +1,7 @@
 FROM node:22.20.0-alpine@sha256:dbcedd8aeab47fbc0f4dd4bffa55b7c3c729a707875968d467aaaea42d6225af AS ui-builder
 
 RUN apk add --no-cache pango-dev g++ make jpeg-dev giflib-dev librsvg-dev
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@10.18.0 --activate
 
 WORKDIR /app/ui
 
