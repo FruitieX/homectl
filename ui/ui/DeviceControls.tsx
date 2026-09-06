@@ -92,7 +92,13 @@ export function DeviceRow({
   );
 }
 
-export function DeviceQuickControls({ devices }: { devices: Device[] }) {
+export function DeviceQuickControls({
+  devices,
+  compact = false,
+}: {
+  devices: Device[];
+  compact?: boolean;
+}) {
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
   const [draft, setDraft] = useState<number | null>(null);
@@ -124,7 +130,13 @@ export function DeviceQuickControls({ devices }: { devices: Device[] }) {
     ) : null;
   const brightness = draft ?? Math.round((values[0] ?? 0) * 100);
   return (
-    <div className="space-y-4 rounded-xl border border-border bg-card p-4">
+    <div
+      className={
+        compact
+          ? 'space-y-2'
+          : 'space-y-4 rounded-xl border border-border bg-card p-4'
+      }
+    >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-muted-foreground">
           {controllable.length === 1
@@ -159,7 +171,7 @@ export function DeviceQuickControls({ devices }: { devices: Device[] }) {
           {readonlyCount} read-only devices excluded from controls.
         </p>
       )}
-      {dimmable.length > 0 && (
+      {!compact && dimmable.length > 0 && (
         <div>
           <div className="mb-1 flex items-center justify-between text-sm">
             <span>Brightness</span>

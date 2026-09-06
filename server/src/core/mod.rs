@@ -1,4 +1,5 @@
 pub mod config;
+pub mod config_diagnostics;
 pub mod devices;
 pub mod event;
 pub mod groups;

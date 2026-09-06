@@ -1,5 +1,6 @@
 pub mod action;
 pub mod color;
+pub mod config_diagnostics;
 pub mod device;
 pub mod dim;
 pub mod event;

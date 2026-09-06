@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import {
   useGroups,
@@ -118,7 +119,8 @@ export default function ScenesPage() {
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [showCreate, setShowCreate] = useState(false);
   const { devicesState: devices } = useDevicesApi();
   const deviceOptions = useMemo(

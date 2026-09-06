@@ -1220,6 +1220,7 @@ pub fn config(
     warp::path("config").and(
         core_routes(snapshot, handle)
             .or(runtime_status_routes())
+            .or(diagnostics_routes(snapshot))
             .or(logs_routes())
             .or(routine_history_routes())
             .or(device_display_name_routes(snapshot, handle))
@@ -4676,4 +4677,17 @@ devices = [
             })
         );
     }
+}
+
+fn diagnostics_routes(
+    snapshot: &SnapshotHandle,
+) -> impl Filter<Extract = (impl Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("diagnostics")
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .map(|snapshot: SnapshotHandle| {
+            ApiResponse::success(crate::core::config_diagnostics::inspect_config(
+                &snapshot.load(),
+            ))
+        })
 }

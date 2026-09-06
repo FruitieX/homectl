@@ -19,6 +19,16 @@ Deployment order: backend first, then UI. The backend retains legacy WebSocket e
 
 This is the first pass, not completion of the whole roadmap. Legacy event writes and other configuration domains still need migration to the shared result contract. Revision conflict detection, multi-browser configuration invalidation, command idempotency, hardware delivery tracking, transactional cross-entity renames, a configuration inspector, queue policies, and automation templates remain future work. Reload recovery is best effort; it cannot undo external effects already emitted by a failing integration. No production configuration was changed.
 
+## Implementation progress — configuration checks and scene access
+
+Added a read-only `GET /api/v1/config/diagnostics` endpoint and **Settings → Configuration check**. The inspector reads one immutable runtime snapshot without executing scripts, dispatching events, or writing configuration. It reports missing group/device/scene references, cyclic nested groups, malformed scene links, empty groups/targets, read-only scene targets, and unresolved current scene assignments. Availability-dependent checks are deferred during warmup. Issues have stable identifiers and deterministic ordering; warnings appear first, with intentional configurations separated into a “For review” filter. Review links open the matching group, scene, or device settings filtered by ID.
+
+Room pages now put scenes before devices on mobile, show scenes in two columns, support scene search, and allow scenes to be pinned locally in the browser. Repeated activation instructions, per-scene edit buttons, and large scene previews have been removed from the everyday list; room pages provide a single Manage scenes link. Scene actions are restricted to matching writable devices in the current selection. Room overview cards retain on/off controls without repeating the full brightness panel on every card.
+
+Validation: 175 server unit tests passed, including group-cycle membership, warmup suppression, missing references, malformed-link handling, stable issue output, and read-only/stale-assignment inspection. Generated bindings, Clippy with warnings denied, UI type-check/lint/build, and fixture-only production-browser tests passed. Browser checks covered pin persistence, ordering, search, selection scope, read-only exclusion, mobile layout, editor links, filters, warmup, empty results, and an older-backend error. All browser API and WebSocket traffic was intercepted with fixtures; no homectl API calls or physical light changes were made after the user's explicit restriction.
+
+Limits: this first inspector does not evaluate scripts or routine behavior, prove linked-scene cycles, check hardware reachability, or apply repairs. Pins are browser-local preferences, not shared home configuration. Separating physical rooms from other collections still needs an explicit configuration model; existing groups have not been guessed or reclassified. Scene activation still uses the legacy event path; runtime/delivery acknowledgments for scene commands remain a separate follow-up.
+
 ## Observations from the running instance
 
 - 75 devices: 52 controllable and 23 sensors.

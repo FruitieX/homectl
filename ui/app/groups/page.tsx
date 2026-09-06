@@ -112,7 +112,7 @@ export default function Page() {
                       <span className="truncate">{group.name}</span>
                       <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
                     </Link>
-                    <DeviceQuickControls devices={roomDevices} />
+                    <DeviceQuickControls devices={roomDevices} compact />
                     <p className="text-sm text-muted-foreground">
                       {roomDevices.length} devices
                       {roomDevices.length !== group.device_keys.length

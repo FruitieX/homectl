@@ -8,6 +8,21 @@ export type ConfigSection = {
 
 export const configSections = [
   {
+    href: '/config/diagnostics',
+    label: 'Configuration check',
+    description:
+      'Find missing references, group loops, and unresolved scene assignments.',
+    group: 'Operations',
+    keywords: [
+      'diagnostics',
+      'issues',
+      'broken',
+      'references',
+      'checks',
+      'warnings',
+    ],
+  },
+  {
     href: '/config/integrations',
     label: 'Integrations',
     description:

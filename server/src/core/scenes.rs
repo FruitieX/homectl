@@ -292,7 +292,7 @@ fn normalize_scene_config_color_value(value: serde_json::Value) -> serde_json::V
     serde_json::Value::Object(object)
 }
 
-fn normalize_scene_config_value(value: serde_json::Value) -> serde_json::Value {
+pub(crate) fn normalize_scene_config_value(value: serde_json::Value) -> serde_json::Value {
     let serde_json::Value::Object(mut object) = value else {
         return value;
     };

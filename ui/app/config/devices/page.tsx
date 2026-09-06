@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { Device } from '@/bindings/Device';
 import { DeviceColor } from '@/bindings/DeviceColor';
 import { DeviceStateSource } from '@/bindings/DeviceStateSource';
@@ -531,7 +532,10 @@ export default function DevicesPage() {
   } = useDeviceSensorConfigs();
   const { replace: replaceConfigDevice, remove: removeConfigDevice } =
     useConfigDevices();
-  const [deviceSearch, setDeviceSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [deviceSearch, setDeviceSearch] = useState(
+    () => searchParams.get('q') ?? '',
+  );
   const [deviceTypeFilter, setDeviceTypeFilter] =
     useState<DeviceTypeFilter>('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');

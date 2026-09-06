@@ -45,41 +45,46 @@ export default function RoomPage() {
     <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
       <div className="mx-auto grid max-w-6xl gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="space-y-5">
-          <DeviceQuickControls key={id} devices={selected} />
-          <section className="space-y-3">
-            <h2 className="text-base font-semibold">Devices</h2>
-            {group.device_keys.map((key) => {
-              const device = devices[key];
-              if (!device)
-                return (
-                  <p
-                    key={key}
-                    className="break-words rounded-xl border border-border p-4 text-sm text-muted-foreground"
-                  >
-                    {names[key] ?? key} · Unavailable
-                  </p>
-                );
-              return 'Controllable' in device.data ? (
-                <DeviceRow key={key} device={device} displayNames={names} />
-              ) : (
-                <SensorRow key={key} device={device} displayNames={names} />
-              );
-            })}
-            {selected.length === 0 && group.device_keys.length === 0 && (
-              <EmptyState
-                title="No devices in this room"
-                action={
-                  <Button asChild variant="outline">
-                    <Link to="/config/groups">Manage groups</Link>
-                  </Button>
-                }
-              />
-            )}
+          <section className="min-w-0 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base font-semibold">Scenes</h2>
+              <Button asChild variant="ghost" size="sm">
+                <Link to="/config/scenes">Manage scenes</Link>
+              </Button>
+            </div>
+            <SceneList deviceKeys={group.device_keys} compact />
           </section>
+          <DeviceQuickControls key={id} devices={selected} />
         </div>
-        <section className="min-w-0 space-y-3">
-          <h2 className="text-base font-semibold">Scenes</h2>
-          <SceneList deviceKeys={group.device_keys} compact />
+        <section className="space-y-3">
+          <h2 className="text-base font-semibold">Devices</h2>
+          {group.device_keys.map((key) => {
+            const device = devices[key];
+            if (!device)
+              return (
+                <p
+                  key={key}
+                  className="break-words rounded-xl border border-border p-4 text-sm text-muted-foreground"
+                >
+                  {names[key] ?? key} · Unavailable
+                </p>
+              );
+            return 'Controllable' in device.data ? (
+              <DeviceRow key={key} device={device} displayNames={names} />
+            ) : (
+              <SensorRow key={key} device={device} displayNames={names} />
+            );
+          })}
+          {selected.length === 0 && group.device_keys.length === 0 && (
+            <EmptyState
+              title="No devices in this room"
+              action={
+                <Button asChild variant="outline">
+                  <Link to="/config/groups">Manage groups</Link>
+                </Button>
+              }
+            />
+          )}
         </section>
       </div>
     </div>

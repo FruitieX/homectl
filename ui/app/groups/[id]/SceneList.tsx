@@ -1,64 +1,86 @@
-import { useConnectionStatus } from '@/hooks/websocket';
-import { Button } from '@/ui/primitives/button';
-import { Pencil } from 'lucide-react';
+import { useState } from 'react';
+import { useAtom } from 'jotai';
+import { atomWithStorage } from 'jotai/utils';
+import { Check, Star } from 'lucide-react';
 import {
+  useConnectionStatus,
   useDevicesState,
   useScenesState,
   useWebsocket,
 } from '@/hooks/websocket';
-import { Device } from '@/bindings/Device';
-import { getDeviceKey } from '@/lib/device';
-import { SceneId } from '@/bindings/SceneId';
-import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useSceneModalState } from '@/hooks/sceneModalState';
-import { excludeUndefined } from 'utils/excludeUndefined';
-import Preview from '../Preview';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
 import { cn } from '@/lib/cn';
-import { Card, CardContent } from '@/ui/primitives/card';
-import { EmptyState } from '@/ui/primitives/empty-state';
+import type { WebSocketRequest } from '@/bindings/WebSocketRequest';
+import { toast } from 'sonner';
 
+const pinnedScenesAtom = atomWithStorage<string[]>(
+  'homectl-pinned-scenes',
+  [],
+  undefined,
+  { getOnInit: true },
+);
 type Props = { deviceKeys: string[]; showAll?: boolean; compact?: boolean };
-export const SceneList = (props: Props) => {
+
+export function SceneList({ deviceKeys, showAll, compact }: Props) {
   const ws = useWebsocket();
   const connected = useConnectionStatus() === 'connected';
-  const liveScenes = useScenesState();
-  const liveDevices = useDevicesState();
-
-  const { setOpen: setSceneModalOpen, setState: setSceneModalState } =
-    useSceneModalState();
-
-  const scenes = excludeUndefined(liveScenes ?? undefined);
-
-  if (!scenes) return null;
-
-  const filteredScenes = Object.entries(scenes).filter(([, scene]) => {
-    if (!props.showAll && scene.hidden) return false;
-    if (props.showAll) return true;
-
-    const devices = scene.devices;
-    if (
-      props.deviceKeys.find((deviceKey) =>
-        Object.keys(devices).includes(deviceKey),
-      )
-    ) {
-      return true;
-    } else {
-      return false;
-    }
-  });
-
-  filteredScenes.sort((a, b) => a[1].name.localeCompare(b[1].name));
-
-  const devices: Device[] = Object.values(
-    excludeUndefined(liveDevices ?? undefined),
+  const scenes = useScenesState();
+  const devices = useDevicesState();
+  const modal = useSceneModalState();
+  const [search, setSearch] = useState('');
+  const [storedPins, setPins] = useAtom(pinnedScenesAtom);
+  const pins = Array.isArray(storedPins)
+    ? storedPins.filter((id) => typeof id === 'string')
+    : [];
+  const selected = new Set(deviceKeys);
+  const eligible = Object.entries(scenes ?? {})
+    .flatMap(([id, scene]) => {
+      if (!scene || (!showAll && scene.hidden)) return [];
+      const targets = Object.keys(scene.devices).filter(
+        (key) =>
+          selected.has(key) &&
+          devices?.[key] &&
+          !isDeviceReadOnly(devices[key]!),
+      );
+      if (!showAll && targets.length === 0) return [];
+      return [
+        {
+          id,
+          scene,
+          targets,
+          active:
+            targets.length > 0 &&
+            targets.every((key) => {
+              const device = devices?.[key];
+              return (
+                device &&
+                'Controllable' in device.data &&
+                device.data.Controllable.scene_id === id
+              );
+            }),
+        },
+      ];
+    })
+    .sort(
+      (a, b) =>
+        Number(pins.includes(b.id)) - Number(pins.includes(a.id)) ||
+        a.scene.name.localeCompare(b.scene.name),
+    );
+  const visible = eligible.filter(({ scene }) =>
+    scene.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   );
 
-  const handleSceneClick = (sceneId: SceneId) => () => {
-    const msg: WebSocketRequest = {
+  function activate(sceneId: string, targets: string[]) {
+    if (!ws || ws.readyState !== WebSocket.OPEN || targets.length === 0) return;
+    const request: WebSocketRequest = {
       EventMessage: {
         Action: {
           action: 'ActivateScene',
-          device_keys: props.deviceKeys,
+          scene_id: sceneId,
+          device_keys: targets,
           group_keys: null,
           mirror_from_group: null,
           include_source_groups: false,
@@ -67,106 +89,103 @@ export const SceneList = (props: Props) => {
           rollout: null,
           rollout_source_device_key: null,
           rollout_duration_ms: null,
-          scene_id: sceneId,
         },
       },
     };
+    try {
+      ws.send(JSON.stringify(request));
+    } catch {
+      toast.error('Could not send the scene change.');
+    }
+  }
 
-    const data = JSON.stringify(msg);
-    if (ws?.readyState === WebSocket.OPEN) ws.send(data);
-  };
-
-  const openSceneModal =
-    (sceneId: SceneId) => (e: React.MouseEvent<HTMLButtonElement>) => {
-      e.preventDefault();
-      setSceneModalState(sceneId);
-      setSceneModalOpen(true);
-    };
-
+  if (!scenes || !devices)
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Loading scenes…
+      </p>
+    );
   return (
-    <div className={props.compact ? 'space-y-2' : 'flex-1 overflow-y-auto'}>
-      {filteredScenes.length === 0 ? (
-        <EmptyState
-          title="No matching scenes"
-          description="Scenes targeting this selection will appear here."
-          className="m-3"
+    <div
+      className={compact ? 'space-y-3' : 'flex-1 space-y-3 overflow-y-auto p-3'}
+    >
+      {(eligible.length > 6 || search) && (
+        <Input
+          aria-label="Search scenes"
+          placeholder="Search scenes…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
         />
+      )}
+      {visible.length === 0 ? (
+        <p className="py-3 text-sm text-muted-foreground">
+          {search
+            ? 'No scenes match your search.'
+            : 'No scenes target controllable devices in this selection.'}
+        </p>
       ) : (
-        <div className={props.compact ? 'grid gap-2' : 'grid gap-3 p-3'}>
-          {filteredScenes.map(([sceneId, scene]) => {
-            const previewDevices = Object.entries(
-              excludeUndefined(scene.devices),
-            ).flatMap(([id, state]) => {
-              const origDevice = devices.find(
-                (device) => getDeviceKey(device) === id,
-              );
-
-              if (!origDevice) return [];
-              if (!props.deviceKeys?.includes(getDeviceKey(origDevice)))
-                return [];
-
-              const device = JSON.parse(JSON.stringify(origDevice)) as Device;
-              if ('Controllable' in device.data) {
-                device.data.Controllable.state = state;
-              }
-
-              return [device];
-            });
-
-            const active =
-              previewDevices.length !== 0 &&
-              previewDevices.every((device) => {
-                if ('Controllable' in device.data) {
-                  return device.data.Controllable.scene_id === sceneId;
+        <div className="grid grid-cols-2 gap-2">
+          {visible.map(({ id, scene, targets, active }) => (
+            <div
+              key={id}
+              className={cn(
+                'flex min-w-0 items-center rounded-xl border border-border bg-card transition-colors',
+                active && 'border-primary bg-primary/10',
+              )}
+            >
+              <button
+                className="flex min-h-20 min-w-0 flex-1 items-center gap-2 rounded-xl p-3 text-left hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                aria-label={`Activate ${scene.name}`}
+                title={scene.name}
+                aria-pressed={active}
+                disabled={!connected || targets.length === 0}
+                onClick={() => activate(id, targets)}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  modal.setState(id);
+                  modal.setOpen(true);
+                }}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="line-clamp-2 break-words font-medium">
+                    {scene.name}
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {active
+                      ? 'Active'
+                      : `${targets.length} ${targets.length === 1 ? 'device' : 'devices'}`}
+                  </span>
+                </span>
+                {active && (
+                  <Check aria-hidden className="size-4 shrink-0 text-primary" />
+                )}
+              </button>
+              <Button
+                className="mr-1 shrink-0"
+                size="icon"
+                variant="ghost"
+                aria-label={`${pins.includes(id) ? 'Unpin' : 'Pin'} ${scene.name}`}
+                aria-pressed={pins.includes(id)}
+                onClick={() =>
+                  setPins(
+                    pins.includes(id)
+                      ? pins.filter((pin) => pin !== id)
+                      : [...pins, id],
+                  )
                 }
-
-                return false;
-              });
-
-            return (
-              <div key={sceneId} className="flex items-center gap-2">
-                <button
-                  onClick={handleSceneClick(sceneId)}
-                  onContextMenu={openSceneModal(sceneId)}
-                  disabled={!connected}
-                  className="min-w-0 flex-1 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-                >
-                  <Card
-                    className={cn(
-                      'overflow-hidden transition-colors hover:bg-accent/50',
-                      active && 'border-primary bg-primary/10',
-                    )}
-                  >
-                    <CardContent className="flex items-center gap-3 p-3">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="truncate font-semibold tracking-tight">
-                          {scene.name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {active ? 'Active' : 'Activate for this selection'}
-                        </p>
-                      </div>
-                      {!props.compact && (
-                        <div className="h-24 w-28 shrink-0 overflow-hidden rounded-2xl bg-muted">
-                          <Preview devices={previewDevices} />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                </button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label={`Edit ${scene.name}`}
-                  onClick={openSceneModal(sceneId)}
-                >
-                  <Pencil />
-                </Button>
-              </div>
-            );
-          })}
+              >
+                <Star
+                  className={
+                    pins.includes(id)
+                      ? 'fill-current text-primary'
+                      : 'text-muted-foreground'
+                  }
+                />
+              </Button>
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
-};
+}

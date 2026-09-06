@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useState } from 'react';
 
 import { type Device } from '@/bindings/Device';
@@ -81,7 +82,8 @@ export default function GroupsPage() {
   const { devices: allDevices } = useDevicesApi();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [showCreate, setShowCreate] = useState(false);
   const editingGroup = groups.find((group) => group.id === editingId);
   const deviceDisplayNameMap = Object.fromEntries(
