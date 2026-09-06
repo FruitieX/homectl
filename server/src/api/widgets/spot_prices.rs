@@ -8,9 +8,7 @@ use warp::{
     Filter, Reply,
 };
 
-use super::{
-    influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD,
-};
+use super::{influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD};
 
 const QUERY: &str = r#"
           import "date"
@@ -23,10 +21,7 @@ const QUERY: &str = r#"
             |> filter(fn: (r) => r["_measurement"] == "price")
         "#;
 
-pub fn route(
-    snapshot: SnapshotHandle,
-    http: reqwest::Client,
-) -> BoxedFilter<(Response,)> {
+pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "influxdb" / "spot-prices")
         .and(warp::get())
         .and_then(move || {

@@ -102,8 +102,8 @@ fn write_log_buffer() -> RwLockWriteGuard<'static, VecDeque<UiLogEntry>> {
 #[cfg(test)]
 mod tests {
     use super::{
-        log_filters_from_env_or_default, map_level, push_log_entry, recent_logs,
-        write_log_buffer, DEFAULT_LOG_FILTERS, MAX_LOG_ENTRIES,
+        log_filters_from_env_or_default, map_level, push_log_entry, recent_logs, write_log_buffer,
+        DEFAULT_LOG_FILTERS, MAX_LOG_ENTRIES,
     };
     use crate::types::logs::{LogLevel, UiLogEntry};
 

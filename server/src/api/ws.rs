@@ -42,9 +42,7 @@ pub fn ws(
              ws_handle: WebSockets,
              event_tx: TxEventChannel| {
                 // This will call our function if the handshake succeeds.
-                ws.on_upgrade(move |socket| {
-                    user_connected(socket, snapshot, ws_handle, event_tx)
-                })
+                ws.on_upgrade(move |socket| user_connected(socket, snapshot, ws_handle, event_tx))
             },
         )
 }

@@ -181,21 +181,23 @@ fn ui_config_route(snapshot: SnapshotHandle) -> BoxedFilter<(Response,)> {
         .and(warp::get())
         .and(warp::header::optional::<String>("host"))
         .and(warp::header::optional::<String>("x-forwarded-proto"))
-        .and_then(move |host: Option<String>, forwarded_proto: Option<String>| {
-            let snapshot = snapshot.clone();
-            async move {
-                let widget_settings = snapshot.load().runtime_config.widget_settings.clone();
+        .and_then(
+            move |host: Option<String>, forwarded_proto: Option<String>| {
+                let snapshot = snapshot.clone();
+                async move {
+                    let widget_settings = snapshot.load().runtime_config.widget_settings.clone();
 
-                Ok::<_, warp::Rejection>(
-                    warp::reply::json(&UiConfigResponse::from_request(
-                        host.as_deref(),
-                        forwarded_proto.as_deref(),
-                        &widget_settings,
-                    ))
-                    .into_response(),
-                )
-            }
-        })
+                    Ok::<_, warp::Rejection>(
+                        warp::reply::json(&UiConfigResponse::from_request(
+                            host.as_deref(),
+                            forwarded_proto.as_deref(),
+                            &widget_settings,
+                        ))
+                        .into_response(),
+                    )
+                }
+            },
+        )
         .boxed()
 }
 
