@@ -1,3 +1,4 @@
+import { toast } from 'sonner';
 import { Device } from '@/bindings/Device';
 import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { useWebsocket } from '@/hooks/websocket';
@@ -50,7 +51,15 @@ export const useSetDeviceState = () => {
           },
         },
       };
-      ws?.send(JSON.stringify(msg));
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        toast.error('Not connected. Try again when the connection returns.');
+        return;
+      }
+      try {
+        ws.send(JSON.stringify(msg));
+      } catch {
+        toast.error('Could not send the device change. Try again.');
+      }
     },
     [ws],
   );

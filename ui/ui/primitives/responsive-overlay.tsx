@@ -53,9 +53,12 @@ export function ResponsiveOverlay({
 
   if (isDesktop) {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open} onOpenChange={onOpenChange} modal={!isSidePanel}>
         <DialogContent
           showOverlay={!isSidePanel}
+          onInteractOutside={
+            isSidePanel ? (event) => event.preventDefault() : undefined
+          }
           className={cn(
             contentClassName,
             isSidePanel &&

@@ -69,7 +69,7 @@ export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {
             <div>
               <div className="font-semibold tracking-[-0.03em]">homectl</div>
               <div className="text-xs text-muted-foreground">
-                Home intelligence, local first.
+                Home automation
               </div>
             </div>
           </div>
@@ -80,7 +80,7 @@ export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {
               </div>
               <div>
                 <h1 className="text-2xl font-semibold tracking-[-0.045em]">
-                  The house is out of reach
+                  Cannot connect to homectl
                 </h1>
                 <p className="mt-2 text-sm leading-6 text-muted-foreground">
                   The interface could not contact the homectl server. Your
@@ -103,7 +103,7 @@ export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {
                   <span className="relative inline-flex size-3 rounded-full bg-primary" />
                 </span>
                 <span className="text-sm font-medium text-muted-foreground">
-                  Waking your home…
+                  Connecting…
                 </span>
               </div>
               <div className="h-1 overflow-hidden rounded-full bg-muted">

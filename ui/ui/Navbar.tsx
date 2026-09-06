@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, useMatch } from 'react-router-dom';
 import { useConnectionStatus, useGroupsState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
@@ -23,6 +23,7 @@ export const Navbar = () => {
 
   const pathname = useLocation().pathname;
   const groups = useGroupsState();
+  const groupMatch = useMatch('/groups/:id');
 
   let title = 'homectl';
   let back: string | null = null;
@@ -36,14 +37,14 @@ export const Navbar = () => {
   } else if (pathname === '/settings') {
     title = 'Settings';
   } else if (pathname?.startsWith('/groups/')) {
-    const groupId = pathname.split('/')[2];
+    const groupId = groupMatch?.params.id ?? '';
     const group = (groups ?? {})[groupId];
     const groupName = group?.name ?? '...';
 
-    title = `Scenes for ${groupName}`;
+    title = groupName;
     back = '/groups';
   } else if (pathname?.startsWith('/config')) {
-    title = 'Studio';
+    title = 'Settings';
   }
 
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
@@ -51,8 +52,7 @@ export const Navbar = () => {
     setState: setDeviceModalState,
     setOpen: setDeviceModalOpen,
     setPresentation: setDeviceModalPresentation,
-  } =
-    useDeviceModalState();
+  } = useDeviceModalState();
 
   const { setOpen: setSaveSceneModalOpen } = useSaveSceneModalState();
 
@@ -64,7 +64,12 @@ export const Navbar = () => {
     setDeviceModalState(selectedDevices);
     setDeviceModalPresentation('dialog');
     setDeviceModalOpen(true);
-  }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
+  }, [
+    selectedDevices,
+    setDeviceModalOpen,
+    setDeviceModalState,
+    setDeviceModalPresentation,
+  ]);
 
   const saveScene = useCallback(() => {
     setSaveSceneModalOpen(true);
@@ -113,7 +118,7 @@ export const Navbar = () => {
   }
 
   return (
-    <header className="relative z-20 flex h-[4.5rem] shrink-0 items-center gap-1 border-b border-border/40 bg-background/60 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-2xl supports-backdrop-filter:bg-background/55 sm:px-5 lg:h-[5.25rem] lg:px-8">
+    <header className="relative z-20 flex h-16 shrink-0 items-center gap-1 border-b border-border/40 bg-background px-3 pt-[env(safe-area-inset-top)]  sm:px-5 lg:h-16 lg:px-8">
       {back !== null && (
         <Button
           aria-label="Go back"
@@ -126,22 +131,9 @@ export const Navbar = () => {
       )}
       {selectedDevices.length === 0 || title !== 'Floorplan' ? (
         <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
-          <div className="lg:hidden">
-            <div className="text-[0.62rem] font-bold uppercase tracking-[0.22em] text-primary">
-              homectl
-            </div>
-            <h1 className="truncate text-lg font-semibold tracking-[-0.035em] text-foreground">
-              {title}
-            </h1>
-          </div>
-          <div className="hidden min-w-0 lg:block">
-            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              homectl / {title}
-            </div>
-            <div className="mt-0.5 text-sm text-muted-foreground">
-              Your home, quietly under control.
-            </div>
-          </div>
+          <h1 className="truncate text-xl font-semibold text-foreground">
+            {title}
+          </h1>
         </div>
       ) : (
         <>

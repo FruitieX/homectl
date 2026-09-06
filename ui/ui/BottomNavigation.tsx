@@ -43,11 +43,11 @@ export const HomectlBottomNavigation = () => {
     },
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Studio', icon: Cog },
+    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
   ];
 
   return (
-    <div className="z-30 shrink-0 border-t border-border/50 bg-background/78 px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5 shadow-[0_-18px_45px_rgba(12,18,18,0.08)] backdrop-blur-2xl supports-backdrop-filter:bg-background/70 lg:hidden">
+    <div className="z-30 shrink-0 border-t border-border/50 bg-background px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5    lg:hidden">
       <nav aria-label="Primary navigation" className="grid grid-cols-4 gap-1.5">
         {items.map((item) => {
           const Icon = item.icon;
@@ -88,11 +88,11 @@ export const HomectlNavigationRail = () => {
     { route: 'Dashboard' as const, to: '/', label: 'Home', icon: House },
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Studio', icon: Cog },
+    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
   ];
 
   return (
-    <aside className="relative z-30 hidden w-24 shrink-0 flex-col items-center border-r border-border/45 bg-background/72 px-3 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-2xl lg:flex">
+    <aside className="relative z-30 hidden w-24 shrink-0 flex-col items-center border-r border-border/45 bg-background px-3 pb-4 pt-[calc(env(safe-area-inset-top)+1rem)]  lg:flex">
       <Link
         to="/"
         aria-label="homectl home"
@@ -128,7 +128,6 @@ export const HomectlNavigationRail = () => {
           );
         })}
       </nav>
-      <div className="mt-4 size-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.8)]" />
     </aside>
   );
 };

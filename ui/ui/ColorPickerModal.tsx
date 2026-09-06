@@ -1,3 +1,7 @@
+import { useDeviceDisplayNames } from '@/hooks/useConfig';
+import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import { DeviceQuickControls } from '@/ui/DeviceControls';
+import { useConnectionStatus } from '@/hooks/websocket';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
@@ -33,7 +37,6 @@ import { useToggle } from 'usehooks-ts';
 import { Button } from '@/ui/primitives/button';
 import { Checkbox } from '@/ui/primitives/checkbox';
 import { Input } from '@/ui/primitives/input';
-import { Switch } from '@/ui/primitives/switch';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { ScrollArea } from '@/ui/primitives/scroll-area';
@@ -685,7 +688,6 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
   const ws = useWebsocket();
   const devices = useDevicesState();
   const scenes = useScenesState();
-  console.log(props.deviceKeys);
   const persistEnabled = props.deviceKeys.every((deviceKey) => {
     return isDevicePersistEnabled(devices, scenes, deviceKey);
   });
@@ -710,7 +712,7 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
 
   return (
     <>
-      <SceneList deviceKeys={props.deviceKeys} showAll={showAll} />
+      <SceneList deviceKeys={props.deviceKeys} showAll={showAll} compact />
 
       {showSettings ? (
         <div className="flex gap-3">
@@ -726,11 +728,12 @@ const ScenesTab = (props: { deviceKeys: string[] }) => {
         </div>
       ) : (
         <Button
-          className="absolute bottom-0 right-0 px-2"
+          className="mt-2 px-2"
+          aria-label="Scene settings"
           variant="ghost"
           onClick={toggleShowSettings}
         >
-          <Settings />
+          <Settings /> Scene settings
         </Button>
       )}
     </>
@@ -752,7 +755,25 @@ export const ColorPickerModal = () => {
   const scenes = useScenesState();
   const groups = useGroupsState();
 
+  const { data: nameOverrides } = useDeviceDisplayNames();
+  const displayNames = Object.fromEntries(
+    nameOverrides.map((row) => [row.device_key, row.display_name]),
+  );
   const firstDevice = devices?.[deviceModalState[0]];
+  const connected = useConnectionStatus() === 'connected';
+  const selected = deviceModalState.flatMap((key) =>
+    devices?.[key] ? [devices[key]!] : [],
+  );
+  const colorDevices = selected.filter((device) => {
+    if (!('Controllable' in device.data)) return false;
+    const capabilities = device.data.Controllable.capabilities;
+    return (
+      capabilities.hs ||
+      capabilities.xy ||
+      capabilities.rgb ||
+      capabilities.ct !== null
+    );
+  });
   const groupConfigs = excludeUndefined(groups ?? undefined);
 
   const selectedDevicesSet = new Set(deviceModalState);
@@ -772,15 +793,15 @@ export const ColorPickerModal = () => {
   } else {
     deviceModalTitle =
       deviceModalState.length === 1
-        ? firstDevice?.name
+        ? firstDevice
+          ? getDeviceDisplayLabel(firstDevice, displayNames)
+          : 'Unavailable device'
         : `${deviceModalState.length} devices`;
   }
   const deviceModalColor =
     firstDevice?.data === undefined ? null : getColor(firstDevice.data);
   const deviceModalBrightness =
     firstDevice?.data === undefined ? null : getBrightness(firstDevice.data);
-  const deviceModalPower =
-    firstDevice?.data === undefined ? null : getPower(firstDevice.data);
 
   const setDeviceState = useSetDeviceState();
 
@@ -790,7 +811,14 @@ export const ColorPickerModal = () => {
         deviceModalState.forEach((deviceKey) => {
           const match = devices?.[deviceKey];
 
-          if (match) {
+          if (
+            match &&
+            'Controllable' in match.data &&
+            (match.data.Controllable.capabilities.hs ||
+              match.data.Controllable.capabilities.xy ||
+              match.data.Controllable.capabilities.rgb ||
+              match.data.Controllable.capabilities.ct !== null)
+          ) {
             const persistEnabled = isDevicePersistEnabled(
               devices,
               scenes,
@@ -809,41 +837,6 @@ export const ColorPickerModal = () => {
       }
     },
     [deviceModalState, devices, scenes, setDeviceState],
-  );
-
-  const partialSetDevicePower = useCallback(
-    (power: boolean) => {
-      if (deviceModalState !== null) {
-        deviceModalState.forEach((deviceKey) => {
-          const match = devices?.[deviceKey];
-
-          if (match) {
-            const persistEnabled = isDevicePersistEnabled(
-              devices,
-              scenes,
-              deviceKey,
-            );
-
-            setDeviceState(
-              match,
-              persistEnabled,
-              power,
-              deviceModalColor ?? undefined,
-              deviceModalBrightness ?? undefined,
-              0.25,
-            );
-          }
-        });
-      }
-    },
-    [
-      deviceModalBrightness,
-      deviceModalColor,
-      deviceModalState,
-      devices,
-      scenes,
-      setDeviceState,
-    ],
   );
 
   const throttledSetDeviceColor = useThrottleCallback(
@@ -881,92 +874,92 @@ export const ColorPickerModal = () => {
       desktopPresentation={deviceModalPresentation}
     >
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3">
-          <div>
-            <div className="text-sm font-medium">Power</div>
-            <div className="text-xs text-muted-foreground">
-              Toggle all selected controllable devices.
-            </div>
-          </div>
-          <Switch
-            checked={deviceModalPower ?? false}
-            onCheckedChange={() => partialSetDevicePower(!deviceModalPower)}
-          />
-        </div>
+        <DeviceQuickControls
+          key={deviceModalState.join(',')}
+          devices={selected}
+        />
+        <ScenesTab deviceKeys={deviceModalState} />
+        {colorDevices.length > 0 && (
+          <details className="rounded-xl border border-border p-4">
+            <summary className="cursor-pointer py-2 text-sm font-medium">
+              Color options
+            </summary>
+            {colorDevices.length !== selected.length && (
+              <p className="my-2 text-sm text-muted-foreground">
+                Color changes apply to {colorDevices.length} compatible devices.
+              </p>
+            )}
+            <fieldset disabled={!connected} className="mt-3 min-w-0">
+              <Tabs value={tab} onValueChange={setTab}>
+                <TabsList className="mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto">
+                  <TabsTrigger value="wheel" className="shrink-0">
+                    Wheel
+                  </TabsTrigger>
+                  <TabsTrigger value="swatches" className="shrink-0">
+                    Swatches
+                  </TabsTrigger>
+                  <TabsTrigger value="image" className="shrink-0">
+                    Image
+                  </TabsTrigger>
+                  <TabsTrigger value="sliders" className="shrink-0">
+                    Sliders
+                  </TabsTrigger>
+                </TabsList>
 
-        <Tabs value={tab} onValueChange={setTab}>
-          <TabsList className="mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto">
-            <TabsTrigger value="wheel" className="shrink-0">
-              Wheel
-            </TabsTrigger>
-            <TabsTrigger value="swatches" className="shrink-0">
-              Swatches
-            </TabsTrigger>
-            <TabsTrigger value="image" className="shrink-0">
-              Image
-            </TabsTrigger>
-            <TabsTrigger value="sliders" className="shrink-0">
-              Sliders
-            </TabsTrigger>
-            <TabsTrigger value="scenes" className="shrink-0">
-              Scenes
-            </TabsTrigger>
-          </TabsList>
-
-          <ScrollArea className="h-112 rounded-2xl border border-border/60 p-4">
-            <TabsContent
-              value="wheel"
-              className="m-0 flex h-104 flex-col justify-center"
-            >
-              <ColorWheelTab
-                color={deviceModalColor ?? black}
-                brightness={deviceModalBrightness ?? 1}
-                onChange={throttledSetDeviceColor}
-                onChangeComplete={throttledSetDeviceColor}
-                open={deviceModalOpen}
-              />
-            </TabsContent>
-            <TabsContent
-              value="swatches"
-              className="m-0 flex h-104 flex-col justify-center"
-            >
-              <SwatchesTab
-                color={deviceModalColor ?? black}
-                brightness={deviceModalBrightness ?? 1}
-                onChange={throttledSetDeviceColor}
-                onChangeComplete={throttledSetDeviceColor}
-                open={deviceModalOpen}
-              />
-            </TabsContent>
-            <TabsContent
-              value="image"
-              className="m-0 flex h-104 flex-col justify-center"
-            >
-              <ImageTab
-                color={deviceModalColor ?? black}
-                brightness={deviceModalBrightness ?? 1}
-                onChange={throttledSetDeviceColor}
-                open={deviceModalOpen}
-                deviceKeys={deviceModalState}
-              />
-            </TabsContent>
-            <TabsContent
-              value="sliders"
-              className="m-0 flex h-104 flex-col justify-center gap-3"
-            >
-              <SlidersTab
-                color={deviceModalColor ?? black}
-                brightness={deviceModalBrightness ?? 1}
-                onChange={throttledSetDeviceColor}
-                onChangeComplete={throttledSetDeviceColor}
-                open={deviceModalOpen}
-              />
-            </TabsContent>
-            <TabsContent value="scenes" className="m-0 h-104">
-              <ScenesTab deviceKeys={deviceModalState} />
-            </TabsContent>
-          </ScrollArea>
-        </Tabs>
+                <ScrollArea className="h-112 rounded-2xl border border-border/60 p-4">
+                  <TabsContent
+                    value="wheel"
+                    className="m-0 flex h-104 flex-col justify-center"
+                  >
+                    <ColorWheelTab
+                      color={deviceModalColor ?? black}
+                      brightness={deviceModalBrightness ?? 1}
+                      onChange={throttledSetDeviceColor}
+                      onChangeComplete={throttledSetDeviceColor}
+                      open={deviceModalOpen}
+                    />
+                  </TabsContent>
+                  <TabsContent
+                    value="swatches"
+                    className="m-0 flex h-104 flex-col justify-center"
+                  >
+                    <SwatchesTab
+                      color={deviceModalColor ?? black}
+                      brightness={deviceModalBrightness ?? 1}
+                      onChange={throttledSetDeviceColor}
+                      onChangeComplete={throttledSetDeviceColor}
+                      open={deviceModalOpen}
+                    />
+                  </TabsContent>
+                  <TabsContent
+                    value="image"
+                    className="m-0 flex h-104 flex-col justify-center"
+                  >
+                    <ImageTab
+                      color={deviceModalColor ?? black}
+                      brightness={deviceModalBrightness ?? 1}
+                      onChange={throttledSetDeviceColor}
+                      open={deviceModalOpen}
+                      deviceKeys={deviceModalState}
+                    />
+                  </TabsContent>
+                  <TabsContent
+                    value="sliders"
+                    className="m-0 flex h-104 flex-col justify-center gap-3"
+                  >
+                    <SlidersTab
+                      color={deviceModalColor ?? black}
+                      brightness={deviceModalBrightness ?? 1}
+                      onChange={throttledSetDeviceColor}
+                      onChangeComplete={throttledSetDeviceColor}
+                      open={deviceModalOpen}
+                    />
+                  </TabsContent>
+                </ScrollArea>
+              </Tabs>
+            </fieldset>
+          </details>
+        )}
       </div>
     </ResponsiveOverlay>
   );

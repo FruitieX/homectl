@@ -65,40 +65,6 @@
   color: hsl(var(--foreground));
 }
 
-.app-ambient::before,
-.app-ambient::after {
-  content: '';
-  position: absolute;
-  pointer-events: none;
-  border-radius: 9999px;
-  filter: blur(1px);
-  opacity: 0.7;
-}
-
-.app-ambient::before {
-  width: min(58rem, 80vw);
-  height: min(58rem, 80vw);
-  right: -25rem;
-  top: -32rem;
-  background: radial-gradient(
-    circle,
-    hsl(var(--primary) / 0.13) 0%,
-    transparent 67%
-  );
-}
-
-.app-ambient::after {
-  width: min(48rem, 70vw);
-  height: min(48rem, 70vw);
-  left: -26rem;
-  bottom: -32rem;
-  background: radial-gradient(
-    circle,
-    hsl(var(--chart-2) / 0.08) 0%,
-    transparent 70%
-  );
-}
-
 @layer utilities {
   .content-visibility-row {
     contain-intrinsic-size: auto 4.5rem;
@@ -146,18 +112,18 @@
   --chart-5: 4 72% 56%;
   --success: 155 55% 39%;
   --warning: 35 88% 52%;
-  --radius: 1rem;
+  --radius: 0.75rem;
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-top: env(safe-area-inset-top, 0px);
 }
 
 .dark {
   color-scheme: dark;
-  --background: 158 24% 6%;
+  --background: 160 5% 7%;
   --foreground: 45 24% 92%;
-  --card: 158 20% 9%;
+  --card: 160 5% 10%;
   --card-foreground: 45 24% 92%;
-  --popover: 158 20% 9%;
+  --popover: 160 5% 10%;
   --popover-foreground: 45 24% 92%;
   --primary: 151 55% 55%;
   --primary-foreground: 159 32% 8%;

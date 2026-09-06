@@ -1,182 +1,197 @@
-import { type Device } from '@/bindings/Device';
-import { type FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
-import { type GroupId } from '@/bindings/GroupId';
-import {
-  useConnectionStatus,
-  useDevicesState,
-  useGroupsState,
-} from '@/hooks/websocket';
-import { getColor, getPower } from '@/lib/colors';
-import { getDeviceKey } from '@/lib/device';
-import { EmptyState } from '@/ui/primitives/empty-state';
-import { ArrowUpRight, LampDesk, Layers3, Radio, WifiOff } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { excludeUndefined } from 'utils/excludeUndefined';
-
-import Preview from './Preview';
-
-function isControllable(device: Device) {
-  return 'Controllable' in device.data;
-}
+import { ChevronRight, Search } from 'lucide-react';
+import { useDevicesState, useGroupsState } from '@/hooks/websocket';
+import { useDeviceDisplayNames } from '@/hooks/useConfig';
+import { getDeviceKey } from '@/lib/device';
+import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import { getPower } from '@/lib/colors';
+import { DeviceRow, DeviceQuickControls } from '@/ui/DeviceControls';
+import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
+import { EmptyState } from '@/ui/primitives/empty-state';
+import type { Device } from '@/bindings/Device';
 
 export default function Page() {
-  const liveGroups = useGroupsState();
-  const liveDevices = useDevicesState();
-  const connectionStatus = useConnectionStatus();
-
-  const groups: [GroupId, FlattenedGroupConfig][] = Object.entries(
-    excludeUndefined(liveGroups ?? undefined),
+  const groups = useGroupsState();
+  const state = useDevicesState();
+  const { data: overrides } = useDeviceDisplayNames();
+  const names = useMemo(
+    () =>
+      Object.fromEntries(
+        overrides.map((row) => [row.device_key, row.display_name]),
+      ),
+    [overrides],
   );
-  const filteredGroups = groups
-    .filter(([, group]) => !group.hidden)
-    .sort((left, right) => left[1].name.localeCompare(right[1].name));
-  const devices: Device[] = Object.values(
-    excludeUndefined(liveDevices ?? undefined),
+  const [search, setSearch] = useState('');
+  const [view, setView] = useState<'rooms' | 'devices'>('rooms');
+  const [onOnly, setOnOnly] = useState(false);
+  const devices = Object.values(state ?? {}).filter(
+    (device): device is Device => Boolean(device),
   );
-  const activeDevices = devices.filter(
-    (device) => isControllable(device) && getPower(device.data),
+  const query = search.trim().toLocaleLowerCase();
+  const visibleGroups = Object.entries(groups ?? {}).filter(
+    ([, group]) =>
+      group && !group.hidden && group.name.toLocaleLowerCase().includes(query),
   );
-
+  const matchingDevices = devices.filter(
+    (device) =>
+      getDeviceDisplayLabel(device, names)
+        .toLocaleLowerCase()
+        .includes(query) &&
+      (!onOnly || getPower(device.data)),
+  );
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+5rem)] sm:px-5 lg:px-8 lg:py-6">
-      <div className="mx-auto max-w-[100rem] space-y-7">
-        <section className="relative overflow-hidden rounded-[2rem] border border-border/45 bg-card/72 p-5 shadow-[0_24px_80px_rgba(18,31,25,0.07)] sm:p-7">
-          <div className="pointer-events-none absolute -right-20 -top-24 size-72 rounded-full bg-primary/10 blur-3xl" />
-          <div className="relative flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2 text-[0.66rem] font-bold uppercase tracking-[0.18em] text-primary">
-                {connectionStatus === 'connected' ? (
-                  <Radio className="size-3.5" />
-                ) : (
-                  <WifiOff className="size-3.5 text-amber-500" />
-                )}
-                Live spaces
-              </div>
-              <h1 className="mt-3 text-[clamp(2.25rem,6vw,4.5rem)] font-semibold leading-none tracking-[-0.07em]">
-                Your rooms.
-              </h1>
-              <p className="mt-4 max-w-xl text-sm leading-6 text-muted-foreground sm:text-base">
-                Every space at a glance, with its current light and device
-                state—not just a list of names.
-              </p>
-            </div>
-            <div className="flex gap-2.5">
-              <SummaryMetric
-                icon={Layers3}
-                value={filteredGroups.length}
-                label="spaces"
-              />
-              <SummaryMetric
-                icon={LampDesk}
-                value={activeDevices.length}
-                label="active"
-              />
-            </div>
+    <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+      <div className="mx-auto max-w-6xl space-y-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex gap-1" aria-label="Browse">
+            <Button
+              variant={view === 'rooms' ? 'secondary' : 'ghost'}
+              aria-pressed={view === 'rooms'}
+              onClick={() => setView('rooms')}
+            >
+              Rooms
+            </Button>
+            <Button
+              variant={view === 'devices' ? 'secondary' : 'ghost'}
+              aria-pressed={view === 'devices'}
+              onClick={() => setView('devices')}
+            >
+              All devices
+            </Button>
           </div>
-        </section>
-
-        {filteredGroups.length === 0 ? (
-          <EmptyState
-            title="No visible rooms"
-            description="Visible groups become rich room surfaces here. Create one in Studio → Groups."
-          />
+          <div className="relative min-w-48 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              aria-label="Search rooms or devices"
+              placeholder={
+                view === 'rooms' ? 'Search rooms…' : 'Search devices…'
+              }
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+          </div>
+          <Button
+            variant={onOnly ? 'secondary' : 'outline'}
+            aria-pressed={onOnly}
+            onClick={() => setOnOnly(!onOnly)}
+          >
+            On only
+          </Button>
+        </div>
+        {!state || !groups ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading devices…
+          </p>
+        ) : view === 'rooms' ? (
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {visibleGroups
+              .filter(
+                ([, group]) =>
+                  !onOnly ||
+                  group!.device_keys.some(
+                    (key) => state[key] && getPower(state[key]!.data),
+                  ),
+              )
+              .map(([id, group]) => {
+                if (!group) return null;
+                const roomDevices = group.device_keys.flatMap((key) =>
+                  state[key] ? [state[key]!] : [],
+                );
+                return (
+                  <section
+                    key={id}
+                    className="space-y-3 rounded-xl border border-border bg-card p-4"
+                  >
+                    <Link
+                      to={`/groups/${encodeURIComponent(id)}`}
+                      className="flex min-h-11 items-center justify-between gap-3 rounded-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className="truncate">{group.name}</span>
+                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                    </Link>
+                    <DeviceQuickControls devices={roomDevices} />
+                    <p className="text-sm text-muted-foreground">
+                      {roomDevices.length} devices
+                      {roomDevices.length !== group.device_keys.length
+                        ? ` · ${group.device_keys.length - roomDevices.length} unavailable`
+                        : ''}
+                    </p>
+                  </section>
+                );
+              })}
+            {visibleGroups.filter(
+              ([, group]) =>
+                !onOnly ||
+                group!.device_keys.some(
+                  (key) => state[key] && getPower(state[key]!.data),
+                ),
+            ).length === 0 && (
+              <EmptyState
+                title="No matching rooms"
+                description="Try another search or filter, or create a group in Settings."
+                action={
+                  <Button asChild variant="outline">
+                    <Link to="/config/groups">Manage groups</Link>
+                  </Button>
+                }
+              />
+            )}
+          </div>
         ) : (
-          <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {filteredGroups.map(([groupId, group]) => {
-              const groupDeviceKeys = new Set(group.device_keys);
-              const roomDevices = devices.filter((device) =>
-                groupDeviceKeys.has(getDeviceKey(device)),
-              );
-              const controllable = roomDevices.filter(isControllable);
-              const powered = controllable.filter((device) =>
-                getPower(device.data),
-              );
-              const sensorCount = roomDevices.length - controllable.length;
-              const activeColor = powered[0]
-                ? getColor(powered[0].data).hex()
-                : '#5e9e7d';
-
-              return (
-                <Link
-                  key={groupId}
-                  to={`/groups/${groupId}`}
-                  className="group relative min-h-64 overflow-hidden rounded-[2rem] border border-border/45 bg-card/72 p-4 shadow-sm transition duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-[0_24px_70px_rgba(18,31,25,0.13)]"
-                >
-                  <div
-                    className="absolute inset-0 opacity-75 transition duration-500 group-hover:opacity-100"
-                    style={{
-                      background: `radial-gradient(circle at 78% 18%, ${activeColor}38, transparent 48%)`,
-                    }}
-                  />
-                  <div className="relative flex h-full flex-col">
-                    <div className="flex items-center justify-between">
-                      <span
-                        className="size-2.5 rounded-full shadow-[0_0_18px_currentColor]"
-                        style={{
-                          color: activeColor,
-                          backgroundColor: powered.length
-                            ? activeColor
-                            : 'hsl(var(--muted-foreground) / 0.3)',
-                        }}
-                      />
-                      <ArrowUpRight className="size-5 text-muted-foreground transition group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-primary" />
-                    </div>
-
-                    <div className="my-4 min-h-28 flex-1 overflow-hidden rounded-[1.45rem] border border-white/5 bg-background/25">
-                      <Preview devices={roomDevices} />
-                    </div>
-
-                    <div className="flex items-end justify-between gap-3">
-                      <div className="min-w-0">
-                        <h2 className="truncate text-xl font-semibold tracking-[-0.045em]">
-                          {group.name}
-                        </h2>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {powered.length > 0
-                            ? `${powered.length} active`
-                            : 'All quiet'}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 gap-1.5 text-[0.62rem] font-bold uppercase tracking-wider text-muted-foreground">
-                        <span className="rounded-full bg-muted/60 px-2.5 py-1.5">
-                          {controllable.length} control
-                        </span>
-                        {sensorCount > 0 ? (
-                          <span className="rounded-full bg-muted/60 px-2.5 py-1.5">
-                            {sensorCount} sense
-                          </span>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </section>
+          <div className="grid gap-3 md:grid-cols-2">
+            {matchingDevices.map((device) =>
+              'Controllable' in device.data ? (
+                <DeviceRow
+                  key={getDeviceKey(device)}
+                  device={device}
+                  displayNames={names}
+                />
+              ) : (
+                <SensorRow
+                  key={getDeviceKey(device)}
+                  device={device}
+                  displayNames={names}
+                />
+              ),
+            )}
+            {matchingDevices.length === 0 && (
+              <EmptyState
+                title="No matching devices"
+                description="Try another search or clear the On only filter."
+              />
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
 
-function SummaryMetric({
-  icon: Icon,
-  value,
-  label,
+export function SensorRow({
+  device,
+  displayNames,
 }: {
-  icon: typeof Layers3;
-  value: number;
-  label: string;
+  device: Device;
+  displayNames: Record<string, string>;
 }) {
+  const sensor = 'Sensor' in device.data ? device.data.Sensor : null;
+  const value =
+    sensor && 'value' in sensor
+      ? String(sensor.value)
+      : getPower(device.data)
+        ? 'On'
+        : 'Off';
   return (
-    <div className="min-w-24 rounded-[1.35rem] border border-border/45 bg-background/35 p-3.5 backdrop-blur-sm">
-      <Icon className="mb-4 size-4 text-primary" />
-      <div className="text-2xl font-semibold leading-none tracking-[-0.06em] tabular-nums">
+    <div className="flex min-h-20 min-w-0 items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+      <span className="min-w-0 break-words text-sm font-medium">
+        {getDeviceDisplayLabel(device, displayNames)}
+      </span>
+      <span className="max-w-[50%] break-words text-sm text-muted-foreground">
         {value}
-      </div>
-      <div className="mt-1 text-[0.62rem] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-        {label}
-      </div>
+      </span>
     </div>
   );
 }

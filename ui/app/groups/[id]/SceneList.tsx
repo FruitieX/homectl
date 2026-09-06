@@ -1,3 +1,6 @@
+import { useConnectionStatus } from '@/hooks/websocket';
+import { Button } from '@/ui/primitives/button';
+import { Pencil } from 'lucide-react';
 import {
   useDevicesState,
   useScenesState,
@@ -14,9 +17,10 @@ import { cn } from '@/lib/cn';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 
-type Props = { deviceKeys: string[]; showAll?: boolean };
+type Props = { deviceKeys: string[]; showAll?: boolean; compact?: boolean };
 export const SceneList = (props: Props) => {
   const ws = useWebsocket();
+  const connected = useConnectionStatus() === 'connected';
   const liveScenes = useScenesState();
   const liveDevices = useDevicesState();
 
@@ -28,6 +32,7 @@ export const SceneList = (props: Props) => {
   if (!scenes) return null;
 
   const filteredScenes = Object.entries(scenes).filter(([, scene]) => {
+    if (!props.showAll && scene.hidden) return false;
     if (props.showAll) return true;
 
     const devices = scene.devices;
@@ -68,7 +73,7 @@ export const SceneList = (props: Props) => {
     };
 
     const data = JSON.stringify(msg);
-    ws?.send(data);
+    if (ws?.readyState === WebSocket.OPEN) ws.send(data);
   };
 
   const openSceneModal =
@@ -79,7 +84,7 @@ export const SceneList = (props: Props) => {
     };
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className={props.compact ? 'space-y-2' : 'flex-1 overflow-y-auto'}>
       {filteredScenes.length === 0 ? (
         <EmptyState
           title="No matching scenes"
@@ -87,7 +92,7 @@ export const SceneList = (props: Props) => {
           className="m-3"
         />
       ) : (
-        <div className="grid gap-3 p-3">
+        <div className={props.compact ? 'grid gap-2' : 'grid gap-3 p-3'}>
           {filteredScenes.map(([sceneId, scene]) => {
             const previewDevices = Object.entries(
               excludeUndefined(scene.devices),
@@ -119,34 +124,45 @@ export const SceneList = (props: Props) => {
               });
 
             return (
-              <button
-                key={sceneId}
-                onClick={handleSceneClick(sceneId)}
-                onContextMenu={openSceneModal(sceneId)}
-                className="text-left"
-              >
-                <Card
-                  className={cn(
-                    'overflow-hidden transition-colors hover:bg-accent/50',
-                    active && 'border-primary bg-primary/10',
-                  )}
+              <div key={sceneId} className="flex items-center gap-2">
+                <button
+                  onClick={handleSceneClick(sceneId)}
+                  onContextMenu={openSceneModal(sceneId)}
+                  disabled={!connected}
+                  className="min-w-0 flex-1 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
                 >
-                  <CardContent className="flex items-center gap-3 p-3">
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate font-semibold tracking-tight">
-                        {scene.name}
-                      </h3>
-                      <p className="text-sm text-muted-foreground">
-                        {active ? 'Active' : 'Tap to activate'} · long-press or
-                        right-click to edit
-                      </p>
-                    </div>
-                    <div className="h-24 w-28 shrink-0 overflow-hidden rounded-2xl bg-muted">
-                      <Preview devices={previewDevices} />
-                    </div>
-                  </CardContent>
-                </Card>
-              </button>
+                  <Card
+                    className={cn(
+                      'overflow-hidden transition-colors hover:bg-accent/50',
+                      active && 'border-primary bg-primary/10',
+                    )}
+                  >
+                    <CardContent className="flex items-center gap-3 p-3">
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-semibold tracking-tight">
+                          {scene.name}
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {active ? 'Active' : 'Activate for this selection'}
+                        </p>
+                      </div>
+                      {!props.compact && (
+                        <div className="h-24 w-28 shrink-0 overflow-hidden rounded-2xl bg-muted">
+                          <Preview devices={previewDevices} />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`Edit ${scene.name}`}
+                  onClick={openSceneModal(sceneId)}
+                >
+                  <Pencil />
+                </Button>
+              </div>
             );
           })}
         </div>

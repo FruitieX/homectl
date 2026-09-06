@@ -1,5 +1,5 @@
-import { KeyboardEvent as ReactKeyboardEvent, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useState } from 'react';
 
 import {
   configSections,
@@ -7,15 +7,6 @@ import {
   type ConfigSection,
 } from './sections';
 import { ConfigPageHeader } from './page-header';
-import { Badge } from '@/ui/primitives/badge';
-import { Button } from '@/ui/primitives/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 
@@ -37,8 +28,8 @@ export default function ConfigPage() {
       <div className="space-y-3">
         <ConfigPageHeader
           backTo={null}
-          title="Config hub"
-          description="Search or browse all configuration domains from one mobile-friendly hub."
+          title="Settings"
+          description="Manage devices, automations, and appearance."
         />
         <Input
           value={search}
@@ -70,7 +61,6 @@ export default function ConfigPage() {
                   <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                     {group}
                   </h2>
-                  <Badge variant="outline">{groupSections.length}</Badge>
                 </div>
                 <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                   {groupSections.map((section) => (
@@ -87,56 +77,15 @@ export default function ConfigPage() {
 }
 
 function ConfigSectionCard({ section }: { section: ConfigSection }) {
-  const navigate = useNavigate();
-
-  const openSection = () => {
-    navigate(section.href);
-  };
-
-  const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) {
-      return;
-    }
-
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      openSection();
-    }
-  };
-
   return (
-    <Card
-      role="link"
-      tabIndex={0}
-      onClick={openSection}
-      onKeyDown={handleCardKeyDown}
-      className="h-full cursor-pointer transition-colors hover:border-primary/50 hover:bg-accent/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    <Link
+      to={section.href}
+      className="block rounded-xl border border-border bg-card p-4 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <CardTitle>{section.label}</CardTitle>
-          <Badge variant="secondary">{section.group}</Badge>
-        </div>
-        <CardDescription>{section.description}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-1">
-          {section.keywords.slice(0, 3).map((keyword) => (
-            <Badge key={keyword} variant="muted">
-              {keyword}
-            </Badge>
-          ))}
-        </div>
-        <Button
-          size="sm"
-          onClick={(event) => {
-            event.stopPropagation();
-            openSection();
-          }}
-        >
-          Open
-        </Button>
-      </CardContent>
-    </Card>
+      <div className="text-sm font-semibold">{section.label}</div>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {section.description}
+      </p>
+    </Link>
   );
 }

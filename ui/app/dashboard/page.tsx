@@ -191,12 +191,12 @@ export default function Page() {
             title="Your dashboard is empty"
             description={
               hasConfiguredLayout
-                ? `The ${activeLayout.name} layout is empty. Add widgets in Studio → Dashboard to make it your own.`
-                : 'Create a layout and add widgets in Studio → Dashboard to make this space your own.'
+                ? `The ${activeLayout.name} layout is empty. Add widgets in Settings → Dashboard to make it your own.`
+                : 'Create a layout and add widgets in Settings → Dashboard to make this space your own.'
             }
             action={
               <Button asChild>
-                <Link to="/config/dashboard">Open dashboard studio</Link>
+                <Link to="/config/dashboard">Edit dashboard</Link>
               </Button>
             }
           />
@@ -209,7 +209,10 @@ export default function Page() {
     <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
       <div className="mx-auto max-w-[100rem] space-y-8">
         <section>
-          <div className="mb-3 flex justify-end px-1">
+          <div className="mb-3 flex items-center justify-end gap-3 px-1">
+            <Button asChild variant="ghost">
+              <Link to="/config/dashboard">Edit dashboard</Link>
+            </Button>
             {layouts.length > 1 ? (
               <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-border/50 bg-card/55 p-1.5 backdrop-blur-xl">
                 <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">

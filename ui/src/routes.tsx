@@ -1,9 +1,8 @@
 import { Layout } from '../app/providers';
 import ConfigLayout from '../app/config/layout';
 
-import { useGroupsState } from '@/hooks/websocket';
 import { Suspense, lazy, type ReactNode } from 'react';
-import { Outlet, createBrowserRouter, useParams } from 'react-router-dom';
+import { Outlet, createBrowserRouter } from 'react-router-dom';
 import { Navigate } from 'react-router-dom';
 
 const DashboardPage = lazy(() => import('../app/dashboard/page'));
@@ -26,14 +25,10 @@ const ConfigRoutineHistoryPage = lazy(
 const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
 const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
 const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
+const RoomPage = lazy(() => import('../app/groups/RoomPage'));
 const GroupsPage = lazy(() => import('../app/groups/page'));
 const MapPage = lazy(() => import('../app/map/page'));
 const SettingsPage = lazy(() => import('../app/settings/page'));
-const SceneList = lazy(() =>
-  import('../app/groups/[id]/SceneList').then(({ SceneList }) => ({
-    default: SceneList,
-  })),
-);
 
 function RouteLoading() {
   return (
@@ -63,18 +58,6 @@ function ConfigRouteLayout() {
   );
 }
 
-function GroupScenesRoute() {
-  const { id } = useParams();
-  const groups = useGroupsState();
-  const groupDevices = id ? groups?.[id]?.device_keys : undefined;
-
-  if (!groupDevices) {
-    return null;
-  }
-
-  return <SceneList deviceKeys={groupDevices} />;
-}
-
 export const router = createBrowserRouter([
   {
     path: '/',
@@ -94,7 +77,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'groups/:id',
-        element: withSuspense(<GroupScenesRoute />),
+        element: withSuspense(<RoomPage />),
       },
       {
         path: 'map',

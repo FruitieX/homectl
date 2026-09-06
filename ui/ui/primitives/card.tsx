@@ -6,7 +6,7 @@ export function Card({ className, ...props }: ComponentProps<'div'>) {
   return (
     <div
       className={cn(
-        'rounded-3xl border border-border/70 bg-card text-card-foreground shadow-sm',
+        'rounded-xl border border-border bg-card text-card-foreground',
         className,
       )}
       {...props}
@@ -16,7 +16,7 @@ export function Card({ className, ...props }: ComponentProps<'div'>) {
 
 export function CardHeader({ className, ...props }: ComponentProps<'div'>) {
   return (
-    <div className={cn('flex flex-col gap-1.5 p-5', className)} {...props} />
+    <div className={cn('flex flex-col gap-1.5 p-4', className)} {...props} />
   );
 }
 
@@ -39,11 +39,11 @@ export function CardDescription({ className, ...props }: ComponentProps<'p'>) {
 }
 
 export function CardContent({ className, ...props }: ComponentProps<'div'>) {
-  return <div className={cn('p-5 pt-0', className)} {...props} />;
+  return <div className={cn('p-4 pt-0', className)} {...props} />;
 }
 
 export function CardFooter({ className, ...props }: ComponentProps<'div'>) {
   return (
-    <div className={cn('flex items-center p-5 pt-0', className)} {...props} />
+    <div className={cn('flex items-center p-4 pt-0', className)} {...props} />
   );
 }
