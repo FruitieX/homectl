@@ -30,6 +30,8 @@ import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
 import { getColor } from '@/lib/colors';
 import { type DevicesState } from '@/bindings/DevicesState';
 import { type FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
+import { cn } from '@/lib/cn';
+import { Activity, Layers3, Lightbulb } from 'lucide-react';
 import { Label } from '@/ui/primitives/label';
 import {
   Select,
@@ -62,6 +64,8 @@ function isDevicePersistEnabled(
   return scene.active_overrides.includes(deviceKey);
 }
 
+type FloorplanMode = 'all' | 'lights' | 'sensors';
+
 export const Viewport = () => {
   const devicesState = useDevicesState();
   const liveGroups = useGroupsState();
@@ -76,6 +80,7 @@ export const Viewport = () => {
     null,
   );
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [floorplanMode, setFloorplanMode] = useState<FloorplanMode>('all');
   const effectiveSelectedFloorplanId =
     floorplans.length === 0
       ? null
@@ -100,6 +105,15 @@ export const Viewport = () => {
   const allDevices: Device[] = Object.values(
     excludeUndefined(liveDevices ?? undefined),
   );
+  const visibleDevices = useMemo(() => {
+    if (floorplanMode === 'lights') {
+      return allDevices.filter((device) => 'Controllable' in device.data);
+    }
+    if (floorplanMode === 'sensors') {
+      return allDevices.filter((device) => 'Sensor' in device.data);
+    }
+    return allDevices;
+  }, [allDevices, floorplanMode]);
   const allRuntimeDevices = excludeUndefined(devicesState ?? undefined);
   const groups = excludeUndefined(liveGroups ?? undefined);
   const deviceDisplayNameMap = useMemo(
@@ -112,7 +126,7 @@ export const Viewport = () => {
   const floorplanScene = buildFloorplanScene({
     grid: floorplanGrid,
     image: floorplanImage,
-    devices: allDevices,
+    devices: visibleDevices,
     groups,
     displayNames: deviceDisplayNameMap,
   });
@@ -246,9 +260,32 @@ export const Viewport = () => {
       )}
 
       {floorplans.length > 0 && (
+        <div className="pointer-events-auto absolute right-3 top-3 z-10 flex items-center gap-1 rounded-2xl border border-border/60 bg-card/88 p-1 shadow-xl backdrop-blur-xl sm:right-4 sm:top-4">
+          <ModeButton
+            active={floorplanMode === 'all'}
+            label="All"
+            icon={Layers3}
+            onClick={() => setFloorplanMode('all')}
+          />
+          <ModeButton
+            active={floorplanMode === 'lights'}
+            label="Lights"
+            icon={Lightbulb}
+            onClick={() => setFloorplanMode('lights')}
+          />
+          <ModeButton
+            active={floorplanMode === 'sensors'}
+            label="Sensors"
+            icon={Activity}
+            onClick={() => setFloorplanMode('sensors')}
+          />
+        </div>
+      )}
+
+      {floorplans.length > 0 && (
         <FloorplanControlPanel
           floorplanName={selectedFloorplanName}
-          placedDevices={allDevices}
+          placedDevices={visibleDevices}
           devicesByKey={allRuntimeDevices}
           groups={groups}
           selectedDeviceKeys={selectedDevices}
@@ -306,3 +343,31 @@ export const Viewport = () => {
 };
 
 export default Viewport;
+
+function ModeButton({
+  active,
+  label,
+  icon: Icon,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  icon: typeof Layers3;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={`Show ${label.toLowerCase()}`}
+      onClick={onClick}
+      className={cn(
+        'flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold text-muted-foreground transition-colors',
+        active && 'bg-primary text-primary-foreground shadow-sm',
+      )}
+    >
+      <Icon className="size-3.5" />
+      <span className="hidden sm:inline">{label}</span>
+    </button>
+  );
+}

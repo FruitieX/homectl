@@ -6,6 +6,7 @@ import type { Device } from "./Device";
 import type { DeviceKey } from "./DeviceKey";
 import type { DimDescriptor } from "./DimDescriptor";
 import type { ForceTriggerRoutineDescriptor } from "./ForceTriggerRoutineDescriptor";
+import type { RandomizeColorActionDescriptor } from "./RandomizeColorActionDescriptor";
 import type { UiActionDescriptor } from "./UiActionDescriptor";
 
-export type Action = { "action": "ActivateScene" } & ActivateSceneActionDescriptor | { "action": "CycleScenes" } & CycleScenesDescriptor | { "action": "Custom" } & CustomActionDescriptor | { "action": "Dim" } & DimDescriptor | { "action": "ForceTriggerRoutine" } & ForceTriggerRoutineDescriptor | { "action": "SetDeviceState" } & Device | { "action": "ToggleDeviceOverride", device_keys: Array<DeviceKey>, override_state: boolean, } | { "action": "Ui" } & UiActionDescriptor;
+export type Action = { "action": "ActivateScene" } & ActivateSceneActionDescriptor | { "action": "CycleScenes" } & CycleScenesDescriptor | { "action": "Custom" } & CustomActionDescriptor | { "action": "Dim" } & DimDescriptor | { "action": "ForceTriggerRoutine" } & ForceTriggerRoutineDescriptor | { "action": "SetDeviceState" } & Device | { "action": "RandomizeColor" } & RandomizeColorActionDescriptor | { "action": "ToggleDeviceOverride", device_keys: Array<DeviceKey>, override_state: boolean, } | { "action": "Ui" } & UiActionDescriptor;

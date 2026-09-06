@@ -1,9 +1,18 @@
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
+import {
+  X,
+  Edit,
+  ChevronLeft,
+  Save,
+  Expand,
+  Shrink,
+  Radio,
+  WifiOff,
+} from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useGroupsState } from '@/hooks/websocket';
+import { useConnectionStatus, useGroupsState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
@@ -19,11 +28,11 @@ export const Navbar = () => {
   let back: string | null = null;
 
   if (pathname === '/' || pathname === '/dashboard') {
-    title = 'Dashboard';
+    title = 'Home';
   } else if (pathname === '/map') {
     title = 'Floorplan';
   } else if (pathname === '/groups') {
-    title = 'Groups';
+    title = 'Rooms';
   } else if (pathname === '/settings') {
     title = 'Settings';
   } else if (pathname?.startsWith('/groups/')) {
@@ -33,6 +42,8 @@ export const Navbar = () => {
 
     title = `Scenes for ${groupName}`;
     back = '/groups';
+  } else if (pathname?.startsWith('/config')) {
+    title = 'Studio';
   }
 
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
@@ -80,6 +91,8 @@ export const Navbar = () => {
   }, [isFullscreen, setIsFullscreen]);
 
   const isIdle = useIdle();
+  const connectionStatus = useConnectionStatus();
+  const connected = connectionStatus === 'connected';
 
   if (isFullscreen) {
     return isIdle ? null : (
@@ -95,7 +108,7 @@ export const Navbar = () => {
   }
 
   return (
-    <header className="z-10 flex h-14 shrink-0 items-center gap-1 border-b border-border/50 bg-background/80 px-2 pt-[env(safe-area-inset-top)] shadow-sm backdrop-blur-xl supports-backdrop-filter:bg-background/70">
+    <header className="relative z-20 flex h-[4.5rem] shrink-0 items-center gap-1 border-b border-border/40 bg-background/60 px-3 pt-[env(safe-area-inset-top)] backdrop-blur-2xl supports-backdrop-filter:bg-background/55 sm:px-5 lg:h-[5.25rem] lg:px-8">
       {back !== null && (
         <Button
           aria-label="Go back"
@@ -107,10 +120,23 @@ export const Navbar = () => {
         </Button>
       )}
       {selectedDevices.length === 0 || title !== 'Floorplan' ? (
-        <div className="flex min-w-0 flex-1 items-center px-2">
-          <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
-            {title}
-          </h1>
+        <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
+          <div className="lg:hidden">
+            <div className="text-[0.62rem] font-bold uppercase tracking-[0.22em] text-primary">
+              homectl
+            </div>
+            <h1 className="truncate text-lg font-semibold tracking-[-0.035em] text-foreground">
+              {title}
+            </h1>
+          </div>
+          <div className="hidden min-w-0 lg:block">
+            <div className="text-[0.68rem] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+              homectl / {title}
+            </div>
+            <div className="mt-0.5 text-sm text-muted-foreground">
+              Your home, quietly under control.
+            </div>
+          </div>
         </div>
       ) : (
         <>
@@ -146,7 +172,18 @@ export const Navbar = () => {
           </Button>
         </>
       )}
-      {title === 'Dashboard' && (
+      <div
+        className="mr-1 hidden items-center gap-2 rounded-full border border-border/55 bg-card/55 px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm sm:flex"
+        role="status"
+      >
+        {connected ? (
+          <Radio className="size-3.5 text-emerald-500" />
+        ) : (
+          <WifiOff className="size-3.5 text-amber-500" />
+        )}
+        <span>{connected ? 'Live' : 'Reconnecting'}</span>
+      </div>
+      {title === 'Home' && (
         <>
           <Button
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
