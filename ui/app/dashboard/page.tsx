@@ -26,13 +26,14 @@ import { SensorsCard } from './SensorsCard';
 import { SpotPriceCard } from './SpotPriceCard';
 import { TrainScheduleCard } from './TrainScheduleCard';
 import { WeatherCard } from './WeatherCard';
+import { HomeOverview } from './HomeOverview';
 
 function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
   switch (widget.widget_type) {
     case 'clock':
       return <ClockCard widget={widget} />;
     case 'controls':
-      return <ControlsCard />;
+      return <ControlsCard widget={widget} />;
     case 'sensors':
       return <SensorsCard widget={widget} />;
     case 'spot_price':
@@ -159,73 +160,99 @@ export default function Page() {
 
   if (dashboardLoading) {
     return (
-      <div className="mx-2 min-h-0 flex-1 overflow-y-auto py-2">
-        <DashboardLoadingGrid />
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+        <div className="mx-auto max-w-[100rem] space-y-8">
+          <HomeOverview />
+          <DashboardLoadingGrid />
+        </div>
       </div>
     );
   }
 
   if (dashboardError) {
     return (
-      <div className="mx-2 py-3">
-        <Alert variant="destructive">
-          <AlertTitle>Dashboard configuration failed to load</AlertTitle>
-          <AlertDescription>{dashboardError}</AlertDescription>
-        </Alert>
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+        <div className="mx-auto max-w-[100rem] space-y-6">
+          <HomeOverview />
+          <Alert variant="destructive">
+            <AlertTitle>Dashboard configuration failed to load</AlertTitle>
+            <AlertDescription>{dashboardError}</AlertDescription>
+          </Alert>
+        </div>
       </div>
     );
   }
 
   if (hasConfiguredLayout && renderedWidgets.length === 0) {
     return (
-      <div className="mx-2 py-3">
-        <EmptyState
-          title="No dashboard widgets configured"
-          description={`The ${activeLayout.name} layout is empty. Add widgets in Config → Dashboard.`}
-        />
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+        <div className="mx-auto max-w-[100rem] space-y-8">
+          <HomeOverview />
+          <EmptyState
+            title="Your canvas is ready"
+            description={`The ${activeLayout.name} layout is empty. Add widgets in Studio → Dashboard.`}
+          />
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-2 min-h-0 flex-1 space-y-3 overflow-y-auto py-2">
-      {layouts.length > 1 ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-card/80 p-2">
-          <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Layout
-          </span>
-          {layouts.map((layout) => (
-            <Button
-              key={layout.id}
-              size="sm"
-              variant={activeLayout?.id === layout.id ? 'default' : 'ghost'}
-              onClick={() => setSelectedLayoutId(layout.id)}
-            >
-              {layout.name}
-              {layout.is_default ? (
-                <Badge variant="secondary">Default</Badge>
-              ) : null}
-            </Button>
-          ))}
-        </div>
-      ) : null}
-
-      <div
-        className="grid auto-rows-[minmax(9rem,auto)] grid-cols-4 gap-3 min-[37.5rem]:grid-cols-6 lg:grid-cols-8"
-        title={DASHBOARD_GRID_HELP}
-      >
-        {renderedWidgets.map((widget) => (
-          <div
-            key={widget.id}
-            className={cn(
-              'min-w-0 *:h-full',
-              getDashboardWidgetSpanClass(widget.width),
-            )}
-            style={getDashboardWidgetRowSpanStyle(widget.height)}
-          >
-            <DashboardWidgetCard widget={widget} />
+    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+      <div className="mx-auto max-w-[100rem] space-y-8">
+        <HomeOverview />
+        <section>
+          <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-1">
+            <div>
+              <div className="text-[0.62rem] font-bold uppercase tracking-[0.2em] text-primary">
+                Your canvas
+              </div>
+              <h2 className="mt-1 text-xl font-semibold tracking-[-0.045em]">
+                Live intelligence
+              </h2>
+            </div>
+            {layouts.length > 1 ? (
+              <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-border/50 bg-card/55 p-1.5 backdrop-blur-xl">
+                <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Layout
+                </span>
+                {layouts.map((layout) => (
+                  <Button
+                    key={layout.id}
+                    size="sm"
+                    variant={
+                      activeLayout?.id === layout.id ? 'default' : 'ghost'
+                    }
+                    onClick={() => setSelectedLayoutId(layout.id)}
+                  >
+                    {layout.name}
+                    {layout.is_default ? (
+                      <Badge variant="secondary">Default</Badge>
+                    ) : null}
+                  </Button>
+                ))}
+              </div>
+            ) : null}
           </div>
-        ))}
+
+          <div
+            className="grid auto-rows-[minmax(9rem,auto)] grid-cols-4 gap-3 min-[37.5rem]:grid-cols-6 lg:grid-cols-8"
+            title={DASHBOARD_GRID_HELP}
+          >
+            {renderedWidgets.map((widget) => (
+              <div
+                key={widget.id}
+                className={cn(
+                  'min-w-0 *:h-full',
+                  getDashboardWidgetSpanClass(widget.width),
+                )}
+                style={getDashboardWidgetRowSpanStyle(widget.height)}
+              >
+                <DashboardWidgetCard widget={widget} />
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

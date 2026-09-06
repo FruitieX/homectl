@@ -594,6 +594,28 @@ function WidgetOptionFields({
     );
   }
 
+  if (widgetType === 'controls') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Group id"
+          value={getString('groupId')}
+          placeholder="living_room"
+          onChange={(value) => onChange('groupId', value)}
+        />
+        <OptionCsvField
+          label="Specific device keys"
+          value={options.deviceKeys}
+          onChange={(value) => onChange('deviceKeys', value)}
+        />
+        <ConfigHelpPanel>
+          Specific device keys override the group. Leave both empty to show the
+          first six controllable devices.
+        </ConfigHelpPanel>
+      </div>
+    );
+  }
+
   if (widgetType === 'train_schedule') {
     return (
       <div className="grid gap-4 md:grid-cols-2">

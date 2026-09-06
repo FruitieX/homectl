@@ -1,6 +1,6 @@
 import { Config } from '@/types/appConfig';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 const appConfigAtom = atom<Config | null>(null);
 const APP_CONFIG_PATH = '/api/config';
@@ -73,6 +73,8 @@ function normalizeConfig(
 
 export const useProvideAppConfig = () => {
   const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const setConfig = useSetAtom(appConfigAtom);
 
   useEffect(() => {
@@ -82,15 +84,30 @@ export const useProvideAppConfig = () => {
 
     const performFetch = async () => {
       const res = await fetch(resolveApiUrl(apiEndpoint, APP_CONFIG_PATH));
+      if (!res.ok) {
+        throw new Error(`Server responded with ${res.status}`);
+      }
       const json = (await res.json()) as ConfigResponse;
       setConfig(normalizeConfig(json, apiEndpoint));
+      setError(null);
       setLoaded(true);
     };
 
-    performFetch().catch(console.error);
-  }, [setConfig]);
+    setError(null);
+    performFetch().catch((cause: unknown) => {
+      console.error(cause);
+      setError(
+        cause instanceof Error ? cause.message : 'Could not reach homectl',
+      );
+    });
+  }, [attempt, setConfig]);
 
-  return loaded;
+  const retry = useCallback(() => {
+    setLoaded(false);
+    setAttempt((current) => current + 1);
+  }, []);
+
+  return { loaded, error, retry };
 };
 
 export const useAppConfig = (): Config => {

@@ -181,7 +181,7 @@ export const widgetRegistry: Record<
   controls: {
     name: 'Controls',
     description: 'Quick control buttons for scenes and devices',
-    defaultOptions: { groupId: null },
+    defaultOptions: { groupId: null, deviceKeys: [] },
   },
   spot_price: {
     name: 'Spot Price',

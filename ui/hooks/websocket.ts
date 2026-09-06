@@ -45,6 +45,12 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
   };
 });
 const websocketAtom = atom<WebSocket | null>(null);
+export type ConnectionStatus =
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'disconnected';
+const connectionStatusAtom = atom<ConnectionStatus>('connecting');
 
 function applyDevicesPatch(
   current: DevicesState | null,
@@ -75,6 +81,7 @@ export const useProvideWebsocketState = () => {
   const setRoutineStatuses = useSetAtom(routineStatusesStateAtom);
   const setUiState = useSetAtom(websocketUiStateAtom);
   const setWebsocket = useSetAtom(websocketAtom);
+  const setConnectionStatus = useSetAtom(connectionStatusAtom);
 
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
@@ -102,6 +109,7 @@ export const useProvideWebsocketState = () => {
         maxDelayMs,
       );
       reconnectAttempts.current += 1;
+      setConnectionStatus('reconnecting');
 
       clearReconnectTimeout();
       reconnectTimeout.current = setTimeout(connect, delayMs);
@@ -112,12 +120,16 @@ export const useProvideWebsocketState = () => {
         return;
       }
 
+      setConnectionStatus(
+        reconnectAttempts.current > 0 ? 'reconnecting' : 'connecting',
+      );
       console.log('Opening ws connection...');
 
       ws = new WebSocket(wsEndpoint);
 
       ws.onopen = () => {
         reconnectAttempts.current = 0;
+        setConnectionStatus('connected');
       };
 
       ws.onmessage = function incoming(data) {
@@ -163,6 +175,10 @@ export const useProvideWebsocketState = () => {
         scheduleReconnect();
       };
 
+      ws.onerror = () => {
+        setConnectionStatus('reconnecting');
+      };
+
       setWebsocket(ws);
     }
 
@@ -172,6 +188,7 @@ export const useProvideWebsocketState = () => {
       disposed = true;
       clearReconnectTimeout();
       setWebsocket(null);
+      setConnectionStatus('disconnected');
 
       if (ws !== null) {
         console.log('Closing ws connection');
@@ -186,6 +203,7 @@ export const useProvideWebsocketState = () => {
     setScenes,
     setUiState,
     setWebsocket,
+    setConnectionStatus,
     wsEndpoint,
   ]);
 };
@@ -199,6 +217,9 @@ export const useWebsocket = (): WebSocket | null => {
   const state = useAtomValue(websocketAtom);
   return state;
 };
+
+export const useConnectionStatus = (): ConnectionStatus =>
+  useAtomValue(connectionStatusAtom);
 
 export const useDevicesState = (): DevicesState | null =>
   useAtomValue(devicesAtom);
