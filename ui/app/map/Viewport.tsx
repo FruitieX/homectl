@@ -140,7 +140,11 @@ export const Viewport = () => {
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
   const setDeviceState = useSetDeviceState();
-  const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
+  const {
+    setState: setDeviceModalState,
+    setOpen: setDeviceModalOpen,
+    setPresentation: setDeviceModalPresentation,
+  } =
     useDeviceModalState();
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
 
@@ -162,6 +166,7 @@ export const Viewport = () => {
     }
 
     setDeviceModalState(deviceKeys);
+    setDeviceModalPresentation('sidepanel');
     setDeviceModalOpen(true);
   };
 

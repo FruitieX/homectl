@@ -745,6 +745,7 @@ export const ColorPickerModal = () => {
     state: deviceModalState,
     open: deviceModalOpen,
     setOpen: setDeviceModalOpen,
+    presentation: deviceModalPresentation,
   } = useDeviceModalState();
 
   const devices = useDevicesState();
@@ -877,6 +878,7 @@ export const ColorPickerModal = () => {
             }.`
       }
       className="max-w-3xl"
+      desktopPresentation={deviceModalPresentation}
     >
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-border bg-card p-3">

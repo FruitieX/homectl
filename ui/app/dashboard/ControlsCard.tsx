@@ -25,7 +25,11 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const groups = useGroupsState();
   const connectionStatus = useConnectionStatus();
   const setDeviceState = useSetDeviceState();
-  const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
+  const {
+    setState: setDeviceModalState,
+    setOpen: setDeviceModalOpen,
+    setPresentation: setDeviceModalPresentation,
+  } =
     useDeviceModalState();
   const carHeaterModal = useCarHeaterModalOpenState();
   const groupId = getDashboardWidgetOptionString(widget, 'groupId', '');
@@ -57,6 +61,7 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
       return;
     }
     setDeviceModalState([deviceKey]);
+    setDeviceModalPresentation('dialog');
     setDeviceModalOpen(true);
   };
 

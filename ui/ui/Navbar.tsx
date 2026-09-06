@@ -47,7 +47,11 @@ export const Navbar = () => {
   }
 
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
-  const { setState: setDeviceModalState, setOpen: setDeviceModalOpen } =
+  const {
+    setState: setDeviceModalState,
+    setOpen: setDeviceModalOpen,
+    setPresentation: setDeviceModalPresentation,
+  } =
     useDeviceModalState();
 
   const { setOpen: setSaveSceneModalOpen } = useSaveSceneModalState();
@@ -58,6 +62,7 @@ export const Navbar = () => {
 
   const editSelectedDevices = useCallback(() => {
     setDeviceModalState(selectedDevices);
+    setDeviceModalPresentation('dialog');
     setDeviceModalOpen(true);
   }, [selectedDevices, setDeviceModalOpen, setDeviceModalState]);
 

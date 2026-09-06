@@ -25,6 +25,7 @@ interface ResponsiveOverlayProps {
   children: ReactNode;
   className?: string;
   presentation?: 'default' | 'fullscreen';
+  desktopPresentation?: 'dialog' | 'sidepanel';
 }
 
 export function ResponsiveOverlay({
@@ -35,6 +36,7 @@ export function ResponsiveOverlay({
   children,
   className,
   presentation = 'default',
+  desktopPresentation = 'dialog',
 }: ResponsiveOverlayProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
   const isFullscreen = presentation === 'fullscreen';
@@ -47,11 +49,19 @@ export function ResponsiveOverlay({
     'min-h-0 overflow-y-auto overscroll-contain',
     isFullscreen && 'flex flex-col',
   );
+  const isSidePanel = isDesktop && desktopPresentation === 'sidepanel';
 
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className={contentClassName}>
+        <DialogContent
+          showOverlay={!isSidePanel}
+          className={cn(
+            contentClassName,
+            isSidePanel &&
+              'left-auto right-0 top-0 h-dvh max-h-dvh w-[min(32rem,calc(100vw-1rem))] max-w-none translate-x-0 translate-y-0 rounded-l-3xl rounded-r-none p-5 sm:p-6',
+          )}
+        >
           <DialogHeader className={isFullscreen ? 'shrink-0' : undefined}>
             <DialogTitle>{title}</DialogTitle>
             {description && (
