@@ -1,9 +1,9 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 
 import {
   DashboardWidget,
   getDashboardWidgetOptionString,
-  defaultDashboardWidgets,
   useDashboardLayouts,
   useDashboardWidgets,
 } from '@/hooks/useDashboard';
@@ -26,7 +26,6 @@ import { SensorsCard } from './SensorsCard';
 import { SpotPriceCard } from './SpotPriceCard';
 import { TrainScheduleCard } from './TrainScheduleCard';
 import { WeatherCard } from './WeatherCard';
-import { HomeOverview } from './HomeOverview';
 
 function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
   switch (widget.widget_type) {
@@ -154,15 +153,14 @@ export default function Page() {
     layoutsLoading || (hasConfiguredLayout && widgetsLoading);
   const dashboardError = layoutsError ?? widgetsError;
 
-  const renderedWidgets = [
-    ...(hasConfiguredLayout ? widgets : defaultDashboardWidgets),
-  ].sort((left, right) => left.position - right.position);
+  const renderedWidgets = [...(hasConfiguredLayout ? widgets : [])].sort(
+    (left, right) => left.position - right.position,
+  );
 
   if (dashboardLoading) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[100rem] space-y-8">
-          <HomeOverview />
           <DashboardLoadingGrid />
         </div>
       </div>
@@ -173,7 +171,6 @@ export default function Page() {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[100rem] space-y-6">
-          <HomeOverview />
           <Alert variant="destructive">
             <AlertTitle>Dashboard configuration failed to load</AlertTitle>
             <AlertDescription>{dashboardError}</AlertDescription>
@@ -183,14 +180,22 @@ export default function Page() {
     );
   }
 
-  if (hasConfiguredLayout && renderedWidgets.length === 0) {
+  if (!hasConfiguredLayout || renderedWidgets.length === 0) {
     return (
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[100rem] space-y-8">
-          <HomeOverview />
           <EmptyState
-            title="Your canvas is ready"
-            description={`The ${activeLayout.name} layout is empty. Add widgets in Studio → Dashboard.`}
+            title="Your dashboard is empty"
+            description={
+              hasConfiguredLayout
+                ? `The ${activeLayout.name} layout is empty. Add widgets in Studio → Dashboard to make it your own.`
+                : 'Create a layout and add widgets in Studio → Dashboard to make this space your own.'
+            }
+            action={
+              <Button asChild>
+                <Link to="/config/dashboard">Open dashboard studio</Link>
+              </Button>
+            }
           />
         </div>
       </div>
@@ -200,17 +205,8 @@ export default function Page() {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
       <div className="mx-auto max-w-[100rem] space-y-8">
-        <HomeOverview />
         <section>
-          <div className="mb-3 flex flex-wrap items-end justify-between gap-3 px-1">
-            <div>
-              <div className="text-[0.62rem] font-bold uppercase tracking-[0.2em] text-primary">
-                Your canvas
-              </div>
-              <h2 className="mt-1 text-xl font-semibold tracking-[-0.045em]">
-                Live intelligence
-              </h2>
-            </div>
+          <div className="mb-3 flex justify-end px-1">
             {layouts.length > 1 ? (
               <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-border/50 bg-card/55 p-1.5 backdrop-blur-xl">
                 <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
