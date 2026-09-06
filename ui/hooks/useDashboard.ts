@@ -3,6 +3,7 @@ import { useAppConfig } from './appConfig';
 
 // Widget type definitions
 export type WidgetType =
+  | 'home_overview'
   | 'clock'
   | 'weather'
   | 'sensors'
@@ -137,6 +138,11 @@ export const widgetRegistry: Record<
   WidgetType,
   { name: string; description: string; defaultOptions: Record<string, unknown> }
 > = {
+  home_overview: {
+    name: 'Home overview',
+    description: 'Summary, scenes, and room status cards from the home view',
+    defaultOptions: {},
+  },
   clock: {
     name: 'Clock',
     description: 'Displays current time and date',

@@ -378,12 +378,8 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
         return false;
     }
 
-    // If both lights are turned off, state matches
-    if !device.state.power && !expected.power {
-        return true;
-    }
-
-    // If one state has color and the other doesn't, states don't match
+    // Keep comparing color while off as well. Color changes are meaningful for
+    // the next power-on and one-shot color actions rely on them being applied.
     if device.state.color.is_some() != expected.color.is_some() {
         return false;
     }

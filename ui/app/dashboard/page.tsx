@@ -26,9 +26,12 @@ import { SensorsCard } from './SensorsCard';
 import { SpotPriceCard } from './SpotPriceCard';
 import { TrainScheduleCard } from './TrainScheduleCard';
 import { WeatherCard } from './WeatherCard';
+import { HomeOverview } from './HomeOverview';
 
 function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
   switch (widget.widget_type) {
+    case 'home_overview':
+      return <HomeOverview />;
     case 'clock':
       return <ClockCard widget={widget} />;
     case 'controls':
