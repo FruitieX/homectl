@@ -1,3 +1,7 @@
+import {
+  disconnectDeviceCommands,
+  receiveDeviceCommandResult,
+} from '@/lib/deviceCommands';
 import { DevicesPatch } from '@/bindings/DevicesPatch';
 import { DevicesState } from '@/bindings/DevicesState';
 import { Device } from '@/bindings/Device';
@@ -141,7 +145,9 @@ export const useProvideWebsocketState = () => {
           return;
         }
 
-        if ('Command' in msg && msg.Command === 'reload') {
+        if ('DeviceCommandResult' in msg) {
+          receiveDeviceCommandResult(ws!, msg.DeviceCommandResult);
+        } else if ('Command' in msg && msg.Command === 'reload') {
           window.location.reload();
         } else if ('State' in msg) {
           setDevices(msg.State.devices);
@@ -171,6 +177,7 @@ export const useProvideWebsocketState = () => {
       };
 
       ws.onclose = () => {
+        if (ws) disconnectDeviceCommands(ws);
         setWebsocket(null);
         scheduleReconnect();
       };
@@ -192,6 +199,7 @@ export const useProvideWebsocketState = () => {
 
       if (ws !== null) {
         console.log('Closing ws connection');
+        disconnectDeviceCommands(ws);
         ws.onclose = null;
         ws.close();
       }

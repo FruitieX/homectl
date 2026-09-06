@@ -7,6 +7,10 @@ use ts_rs::TS;
 #[derive(TS, Clone, Debug, Default, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct Capabilities {
+    /// Explicit dimming support. Legacy integrations are normalized at ingestion.
+    /// Set false to override color-based legacy inference for switches/heaters.
+    #[serde(default)]
+    pub brightness: Option<bool>,
     /// XY color space (0.0 - 1.0)
     #[serde(default)]
     pub xy: bool,
@@ -54,7 +58,13 @@ impl Capabilities {
             }
         };
 
-        Capabilities { xy, hs, rgb, ct }
+        Capabilities {
+            xy,
+            hs,
+            rgb,
+            ct,
+            brightness: Some(true),
+        }
     }
 
     pub fn is_supported(&self, color: &DeviceColor) -> bool {

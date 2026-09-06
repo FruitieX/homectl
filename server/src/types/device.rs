@@ -207,9 +207,16 @@ impl ControllableDevice {
         brightness: Option<f32>,
         color: Option<DeviceColor>,
         transition: Option<f32>,
-        capabilities: Capabilities,
+        mut capabilities: Capabilities,
         managed: ManageKind,
     ) -> ControllableDevice {
+        capabilities.brightness.get_or_insert(
+            brightness.is_some()
+                || capabilities.xy
+                || capabilities.hs
+                || capabilities.rgb
+                || capabilities.ct.is_some(),
+        );
         ControllableDevice {
             scene_id: scene,
             state_source: None,

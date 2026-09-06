@@ -187,79 +187,86 @@ impl Integrations {
         &mut self,
         integrations: &[config_queries::IntegrationRow],
     ) -> Result<Vec<IntegrationId>> {
-        let mut removed_ids = Vec::new();
-
         let desired: HashMap<IntegrationId, _> = integrations
             .iter()
             .filter(|row| row.enabled)
-            .cloned()
             .map(|row| (IntegrationId::from(row.id.clone()), row))
             .collect();
 
-        let current_ids: Vec<IntegrationId> = self.custom_integrations.keys().cloned().collect();
-        for id in &current_ids {
-            if !desired.contains_key(id) {
-                if let Some(handle) = self.custom_integrations.remove(id) {
-                    info!("Stopping removed integration {}", id);
-                    if let Err(e) = handle.stop().await {
-                        warn!("Error stopping integration {}: {e}", id);
-                    }
-                    removed_ids.push(id.clone());
-                    // Dropping the handle here closes this clone's
-                    // sender; the actor task exits once the last
-                    // sender (held by the state actor's copy of the
-                    // map) is also dropped after commit.
-                    drop(handle);
-                }
-            }
-        }
-
+        // Construct every replacement before stopping any working integration.
+        // Invalid configuration must not tear down the existing runtime.
+        let mut replacements = HashMap::new();
         for (id, row) in &desired {
-            if let Some(existing) = self.custom_integrations.get(id) {
-                if existing.module_name != row.plugin || existing.config != row.config {
-                    info!("Restarting modified integration {}", id);
-                    if let Some(handle) = self.custom_integrations.remove(id) {
-                        if let Err(e) = handle.stop().await {
-                            warn!("Error stopping integration {}: {e}", id);
-                        }
-                        drop(handle);
-                    }
-
-                    match self
-                        .load_integration(&row.plugin, id, &row.config, &self.cli.clone())
-                        .await
-                    {
-                        Ok(()) => {
-                            if let Some(handle) = self.custom_integrations.get(id) {
-                                let _ = handle.register().await;
-                                let _ = handle.start().await;
-                            }
-                            info!("Restarted integration {} (plugin: {})", id, row.plugin);
-                        }
-                        Err(e) => {
-                            error!("Failed to restart integration {}: {e}", id);
-                        }
-                    }
-                }
-            } else {
-                match self
-                    .load_integration(&row.plugin, id, &row.config, &self.cli.clone())
-                    .await
-                {
-                    Ok(()) => {
-                        if let Some(handle) = self.custom_integrations.get(id) {
-                            let _ = handle.register().await;
-                            let _ = handle.start().await;
-                        }
-                        info!("Added integration {} (plugin: {})", id, row.plugin);
-                    }
-                    Err(e) => {
-                        error!("Failed to add integration {}: {e}", id);
-                    }
-                }
+            let changed = self
+                .custom_integrations
+                .get(id)
+                .map(|old| old.module_name != row.plugin || old.config != row.config)
+                .unwrap_or(true);
+            if changed {
+                let integration = load_custom_integration(
+                    &row.plugin,
+                    id,
+                    &row.config,
+                    &self.cli,
+                    self.event_tx.clone(),
+                )?;
+                let policy = OutboundDeviceUpdatePolicy::from_config(&row.config)?;
+                replacements.insert(
+                    id.clone(),
+                    IntegrationHandle::new(
+                        integration,
+                        id.clone(),
+                        row.plugin.clone(),
+                        row.config.clone(),
+                        policy,
+                    ),
+                );
             }
         }
 
+        let mut stopped = Vec::new();
+        let mut started = Vec::new();
+        let apply: Result<()> = async {
+            for (id, old) in &self.custom_integrations {
+                if !desired.contains_key(id) || replacements.contains_key(id) {
+                    // Include the current handle in recovery even when stop times out.
+                    stopped.push(old.clone());
+                    old.stop().await?;
+                }
+            }
+            for replacement in replacements.values() {
+                started.push(replacement.clone());
+                replacement.register().await?;
+                replacement.start().await?;
+            }
+            Ok(())
+        }
+        .await;
+        if let Err(error) = apply {
+            for replacement in started {
+                let _ = replacement.stop().await;
+            }
+            let mut recovery_errors = Vec::new();
+            for old in stopped {
+                if let Err(recovery) = old.start().await {
+                    recovery_errors.push(recovery.to_string());
+                }
+            }
+            if !recovery_errors.is_empty() {
+                return Err(eyre!("Integration reload failed: {error}; restoring previous integrations also failed: {}", recovery_errors.join("; ")));
+            }
+            return Err(error);
+        }
+
+        let removed_ids = self
+            .custom_integrations
+            .keys()
+            .filter(|id| !desired.contains_key(*id))
+            .cloned()
+            .collect();
+        self.custom_integrations
+            .retain(|id, _| desired.contains_key(id));
+        self.custom_integrations.extend(replacements);
         Ok(removed_ids)
     }
 
@@ -912,6 +919,86 @@ fn load_custom_integration(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn invalid_reload_preserves_existing_integration() {
+        let (mut state, _rx) = crate::core::event::tests::test_state();
+        let original = config_queries::IntegrationRow {
+            id: "timer".into(),
+            plugin: "timer".into(),
+            config: json!({"device_name": "Original timer"}),
+            enabled: true,
+        };
+        state
+            .integrations
+            .reload_config_rows(std::slice::from_ref(&original))
+            .await
+            .unwrap();
+        let invalid = config_queries::IntegrationRow {
+            config: json!({"device_name": 123}),
+            ..original.clone()
+        };
+        assert!(state
+            .integrations
+            .reload_config_rows(&[invalid])
+            .await
+            .is_err());
+        let current = state
+            .integrations
+            .custom_integrations
+            .get(&IntegrationId::from("timer".to_string()))
+            .unwrap();
+        assert_eq!(current.config, original.config);
+        current.register().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn reload_stop_failure_restarts_previous_integration_and_returns_error() {
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        struct StopFailure(Arc<AtomicUsize>);
+        #[async_trait::async_trait]
+        impl Integration for StopFailure {
+            fn new(
+                _: &IntegrationId,
+                _: &serde_json::Value,
+                _: &Cli,
+                _: TxEventChannel,
+            ) -> Result<Self> {
+                unreachable!()
+            }
+            async fn start(&mut self) -> Result<()> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+            async fn stop(&mut self) -> Result<()> {
+                Err(eyre!("stop failed"))
+            }
+        }
+        let (mut state, _rx) = crate::core::event::tests::test_state();
+        let starts = Arc::new(AtomicUsize::new(0));
+        let id = IntegrationId::from("existing".to_string());
+        state.integrations.custom_integrations.insert(
+            id.clone(),
+            IntegrationHandle::new(
+                Box::new(StopFailure(starts.clone())),
+                id.clone(),
+                "test".into(),
+                json!({}),
+                Default::default(),
+            ),
+        );
+        let error = state
+            .integrations
+            .reload_config_rows(&[])
+            .await
+            .unwrap_err();
+        assert!(error.to_string().contains("stop failed"));
+        assert_eq!(starts.load(Ordering::SeqCst), 1);
+        assert!(state.integrations.custom_integrations.contains_key(&id));
+    }
 
     #[test]
     fn schemas_cover_all_builtin_plugins() {

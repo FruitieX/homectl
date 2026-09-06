@@ -1,3 +1,5 @@
+import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
+import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { useRef, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Info, Upload, X } from 'lucide-react';
 
@@ -52,6 +54,7 @@ type MigrationApplyResult = {
 };
 
 type ApiResult<T> = {
+  write?: ConfigWriteStatus;
   success: boolean;
   data?: T;
   error?: string;
@@ -185,6 +188,7 @@ async function readApiResult<T>(response: Response, fallbackMessage: string) {
 }
 
 export default function MigrationPage() {
+  const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -321,6 +325,7 @@ export default function MigrationPage() {
     );
 
     if (result.success && result.data) {
+      recordWrite('Configuration migration', result.write);
       setSuccess(formatMigrationSuccess(result.data, selection));
       setValidationErrors([]);
       setPreview(null);

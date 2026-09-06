@@ -1,68 +1,46 @@
 import { toast } from 'sonner';
-import { Device } from '@/bindings/Device';
-import { WebSocketRequest } from '@/bindings/WebSocketRequest';
+import type { Device } from '@/bindings/Device';
 import { useWebsocket } from '@/hooks/websocket';
 import Color from 'color';
-import { produce } from 'immer';
 import { useCallback } from 'react';
+import { getDeviceKey } from '@/lib/device';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { sendDeviceCommand } from '@/lib/deviceCommands';
 
 export const useSetDeviceState = () => {
   const ws = useWebsocket();
-  const setDeviceColor = useCallback(
+  return useCallback(
     (
-      clickedDevice: Device,
-      persistEnabled: boolean,
+      device: Device,
+      preserveScene: boolean,
       power: boolean,
       color?: Color,
       brightness?: number,
       transition?: number,
     ) => {
-      const device = produce(clickedDevice, (draft) => {
-        if ('Controllable' in draft.data) {
-          if (!persistEnabled) {
-            draft.data.Controllable.scene_id = null;
-          }
-          draft.data.Controllable.state.power = power;
-
-          if (color !== undefined) {
-            const hsv = color.hsv();
-            draft.data.Controllable.state.color = {
-              h: Math.round(hsv.hue()),
-              s: hsv.saturationv() / 100,
-            };
-          }
-
-          if (brightness !== undefined) {
-            draft.data.Controllable.state.brightness = brightness;
-          }
-
-          if (transition !== undefined) {
-            draft.data.Controllable.state.transition = transition;
-          }
-        }
-      });
-
-      const msg: WebSocketRequest = {
-        EventMessage: {
-          SetInternalState: {
-            device,
-            skip_external_update: false,
-            skip_db_update: null,
-          },
-        },
-      };
+      if (isDeviceReadOnly(device)) {
+        toast.error('This device is read-only.');
+        return;
+      }
       if (!ws || ws.readyState !== WebSocket.OPEN) {
         toast.error('Not connected. Try again when the connection returns.');
         return;
       }
-      try {
-        ws.send(JSON.stringify(msg));
-      } catch {
-        toast.error('Could not send the device change. Try again.');
-      }
+      const hsv = color?.hsv();
+      void sendDeviceCommand(ws, {
+        request_id: crypto.randomUUID(),
+        device_key: getDeviceKey(device),
+        power,
+        preserve_scene: preserveScene,
+        brightness: brightness ?? null,
+        transition: transition ?? null,
+        color: hsv
+          ? { h: Math.round(hsv.hue()), s: hsv.saturationv() / 100 }
+          : null,
+      }).catch((error: Error) =>
+        toast.error(error.message, { id: 'device-command-error' }),
+      );
     },
     [ws],
   );
-
-  return setDeviceColor;
 };

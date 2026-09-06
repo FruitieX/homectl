@@ -30,6 +30,7 @@ pub const KIND_LABELS: &[&str] = &[
     "HandleEvent:DbDeleteScene",
     "HandleEvent:Action",
     "Mutate",
+    "ControlDevice",
 ];
 
 pub const KIND_MUTATE: usize = 10;
@@ -153,6 +154,7 @@ pub fn kind_index_for_command(cmd: &StateCommand) -> usize {
     match cmd {
         StateCommand::HandleEvent { event, .. } => event_kind_index(event),
         StateCommand::Mutate(_) => KIND_MUTATE,
+        StateCommand::ControlDevice { .. } => 11,
     }
 }
 

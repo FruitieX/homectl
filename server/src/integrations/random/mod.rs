@@ -36,7 +36,7 @@ pub struct Random {
     id: IntegrationId,
     config: RandomConfig,
     event_tx: TxEventChannel,
-    handle: Option<tokio::task::JoinHandle<()>>,
+    tasks: tokio::task::JoinSet<()>,
 }
 
 impl Clone for Random {
@@ -45,7 +45,7 @@ impl Clone for Random {
             id: self.id.clone(),
             config: self.config.clone(),
             event_tx: self.event_tx.clone(),
-            handle: None,
+            tasks: tokio::task::JoinSet::new(),
         }
     }
 }
@@ -65,7 +65,7 @@ impl Integration for Random {
             id: id.clone(),
             config,
             event_tx,
-            handle: None,
+            tasks: tokio::task::JoinSet::new(),
         })
     }
 
@@ -78,12 +78,12 @@ impl Integration for Random {
     }
 
     async fn start(&mut self) -> Result<()> {
+        self.stop().await?;
         let random = self.clone();
 
         // FIXME: can we restructure the integrations / devices systems such
         // that polling is not needed here?
-        // store the join handle in self
-        self.handle = Some(tokio::spawn(async { poll_sensor(random).await }));
+        self.tasks.spawn(async { poll_sensor(random).await });
 
         Ok(())
     }
@@ -91,9 +91,7 @@ impl Integration for Random {
     // stop is needed so we can stop the interval tick that
     // is created by start.
     async fn stop(&mut self) -> Result<()> {
-        if let Some(handle) = &self.handle {
-            handle.abort();
-        }
+        self.tasks.shutdown().await;
 
         Ok(())
     }

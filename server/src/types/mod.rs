@@ -12,3 +12,7 @@ pub mod rule;
 pub mod scene;
 pub mod ui;
 pub mod websockets;
+
+pub mod config_write;
+
+pub mod device_command;

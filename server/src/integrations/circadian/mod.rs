@@ -34,13 +34,13 @@ pub struct CircadianConfig {
     night_brightness: Option<f32>,
 }
 
-#[derive(Clone)]
 pub struct Circadian {
     id: IntegrationId,
     config: CircadianConfig,
     event_tx: TxEventChannel,
     converted_day_color: DeviceColor,
     converted_night_color: DeviceColor,
+    tasks: tokio::task::JoinSet<()>,
 }
 
 #[async_trait]
@@ -60,6 +60,7 @@ impl Integration for Circadian {
             event_tx,
             converted_day_color: config.day_color,
             converted_night_color: config.night_color,
+            tasks: tokio::task::JoinSet::new(),
         })
     }
 
@@ -72,12 +73,24 @@ impl Integration for Circadian {
     }
 
     async fn start(&mut self) -> Result<()> {
-        let circadian = self.clone();
+        self.stop().await?;
+        let circadian = Circadian {
+            id: self.id.clone(),
+            config: self.config.clone(),
+            event_tx: self.event_tx.clone(),
+            converted_day_color: self.converted_day_color.clone(),
+            converted_night_color: self.converted_night_color.clone(),
+            tasks: tokio::task::JoinSet::new(),
+        };
 
         // FIXME: can we restructure the integrations / devices systems such
         // that polling is not needed here?
-        tokio::spawn(async { poll_sensor(circadian).await });
+        self.tasks.spawn(async { poll_sensor(circadian).await });
 
+        Ok(())
+    }
+    async fn stop(&mut self) -> Result<()> {
+        self.tasks.shutdown().await;
         Ok(())
     }
 }

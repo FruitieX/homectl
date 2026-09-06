@@ -19,7 +19,6 @@ use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::Deserialize;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::task;
 
 use crate::integrations::mqtt::utils::mqtt_to_homectl;
 
@@ -63,6 +62,7 @@ pub struct Mqtt {
     config: MqttConfig,
     cli: Cli,
     client: Option<AsyncClient>,
+    tasks: tokio::task::JoinSet<()>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -88,10 +88,12 @@ impl Integration for Mqtt {
             cli: cli.clone(),
             event_tx,
             client: None,
+            tasks: tokio::task::JoinSet::new(),
         })
     }
 
     async fn start(&mut self) -> Result<()> {
+        self.stop().await?;
         let random_string: String = rand::thread_rng()
             .sample_iter(&Alphanumeric)
             .take(8)
@@ -118,7 +120,7 @@ impl Integration for Mqtt {
         let event_tx = self.event_tx.clone();
         let config = Arc::new(self.config.clone());
 
-        task::spawn(async move {
+        self.tasks.spawn(async move {
             loop {
                 let notification = eventloop.poll().await;
 
@@ -162,6 +164,12 @@ impl Integration for Mqtt {
 
         Ok(())
     }
+    async fn stop(&mut self) -> Result<()> {
+        self.tasks.shutdown().await;
+        self.client = None;
+        Ok(())
+    }
+
     async fn set_integration_device_state(&mut self, device: &Device) -> Result<()> {
         let client = self.client.as_ref().ok_or_else(|| {
             eyre!("MQTT client is not initialized; start phase has not completed")

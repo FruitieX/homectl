@@ -569,7 +569,9 @@ impl AppState {
         integrations: Integrations,
         removed_ids: Vec<IntegrationId>,
     ) {
-        self.runtime_config = runtime_config;
+        // Only replace the integration domain: unrelated actor writes may have
+        // happened while lifecycle work ran outside this task.
+        self.runtime_config.integrations = runtime_config.integrations;
         self.integrations = integrations;
         let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
 

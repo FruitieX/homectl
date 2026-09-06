@@ -446,6 +446,7 @@ mod groups_runtime_tests {
                 scene_id: scene_id.map(|s| SceneId::from_str(s).unwrap()),
                 state_source: None,
                 capabilities: Capabilities {
+                    brightness: Some(true),
                     xy: false,
                     hs: true,
                     rgb: false,

@@ -12,7 +12,7 @@ use eyre::Context;
 use serde::Deserialize;
 use serde_json::json;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio::task::JoinHandle;
+use tokio::task::JoinSet;
 use tokio::time;
 
 #[derive(Clone, Debug, Deserialize)]
@@ -24,7 +24,7 @@ pub struct Timer {
     id: IntegrationId,
     config: TimerConfig,
     event_tx: TxEventChannel,
-    timer_task: Option<JoinHandle<()>>,
+    tasks: JoinSet<()>,
 }
 
 #[async_trait]
@@ -42,7 +42,7 @@ impl Integration for Timer {
             id: id.clone(),
             config,
             event_tx,
-            timer_task: None,
+            tasks: JoinSet::new(),
         })
     }
 
@@ -59,6 +59,7 @@ impl Integration for Timer {
         let timeout_ms: u64 = payload.parse()?;
         let started_at = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
+        self.stop().await?;
         let device = mk_timer_device(
             &self.id,
             &self.config,
@@ -72,7 +73,7 @@ impl Integration for Timer {
         let sender = self.event_tx.clone();
         let id = self.id.clone();
         let config = self.config.clone();
-        let timer_task = tokio::spawn(async move {
+        self.tasks.spawn(async move {
             let sleep_duration = Duration::from_millis(timeout_ms);
             time::sleep(sleep_duration).await;
 
@@ -80,12 +81,10 @@ impl Integration for Timer {
             sender.send(Event::ExternalStateUpdate { device });
         });
 
-        if let Some(timer_task) = self.timer_task.take() {
-            timer_task.abort();
-        }
-
-        self.timer_task = Some(timer_task);
-
+        Ok(())
+    }
+    async fn stop(&mut self) -> Result<()> {
+        self.tasks.shutdown().await;
         Ok(())
     }
 }
@@ -107,5 +106,60 @@ fn mk_timer_device(
         raw: Some(
             json!({ "timeout_ms": timeout_ms, "started_at": started_at.map(|t| t.as_millis()) }),
         ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn stop_cancels_timer_expiration() {
+        let (state, mut rx) = crate::core::event::tests::test_state();
+        let mut timer = Timer {
+            id: IntegrationId::from("timer".to_string()),
+            config: TimerConfig {
+                device_name: "Timer".into(),
+            },
+            event_tx: state.event_tx.clone(),
+            tasks: JoinSet::new(),
+        };
+        timer
+            .run_integration_action(&IntegrationActionPayload::from("20".to_string()))
+            .await
+            .unwrap();
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            Event::ExternalStateUpdate { .. }
+        ));
+        timer.stop().await.unwrap();
+        assert!(
+            tokio::time::timeout(Duration::from_millis(60), rx.recv())
+                .await
+                .is_err(),
+            "stopped timer emitted an expiration"
+        );
+    }
+
+    #[tokio::test]
+    async fn dropping_timer_cancels_expiration() {
+        let (state, mut rx) = crate::core::event::tests::test_state();
+        let mut timer = Timer {
+            id: IntegrationId::from("timer".to_string()),
+            config: TimerConfig {
+                device_name: "Timer".into(),
+            },
+            event_tx: state.event_tx.clone(),
+            tasks: JoinSet::new(),
+        };
+        timer
+            .run_integration_action(&IntegrationActionPayload::from("20".to_string()))
+            .await
+            .unwrap();
+        rx.recv().await.unwrap();
+        drop(timer);
+        assert!(tokio::time::timeout(Duration::from_millis(60), rx.recv())
+            .await
+            .is_err());
     }
 }

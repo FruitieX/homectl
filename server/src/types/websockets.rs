@@ -14,7 +14,8 @@ use super::{
 #[derive(TS, Deserialize, Serialize, Debug)]
 #[ts(export)]
 pub enum WebSocketRequest {
-    EventMessage(Event),
+    DeviceCommand(super::device_command::DeviceCommand),
+    EventMessage(Box<Event>),
 }
 
 #[derive(TS, Deserialize, Serialize, Debug)]
@@ -52,6 +53,7 @@ pub struct StatePatch {
 #[derive(TS, Deserialize, Serialize, Debug)]
 #[ts(export)]
 pub enum WebSocketResponse {
+    DeviceCommandResult(super::device_command::DeviceCommandResult),
     State(StateUpdate),
     Patch(StatePatch),
 }

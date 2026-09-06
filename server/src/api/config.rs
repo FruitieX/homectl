@@ -62,6 +62,8 @@ struct ApiResponse<T> {
     success: bool,
     data: Option<T>,
     error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    write: Option<crate::types::config_write::ConfigWriteStatus>,
 }
 
 #[derive(Serialize)]
@@ -174,6 +176,7 @@ impl<T: Serialize> ApiResponse<T> {
                 success: true,
                 data: Some(data),
                 error: None,
+                write: None,
             }),
             StatusCode::OK,
         )
@@ -185,41 +188,89 @@ impl<T: Serialize> ApiResponse<T> {
                 success: true,
                 data: Some(data),
                 error: None,
+                write: None,
             }),
             StatusCode::CREATED,
         )
     }
 }
 
+/// Serialize configuration writes through persistence without blocking the state actor.
+async fn config_write_lock(
+    handle: &StateHandle,
+) -> color_eyre::Result<tokio::sync::OwnedMutexGuard<()>> {
+    let lock = handle
+        .mutate(|state| Box::pin(async move { state.runtime_apply_lock.clone() }))
+        .await?;
+    Ok(lock.lock_owned().await)
+}
+
+fn actor_unavailable() -> warp::reply::WithStatus<warp::reply::Json> {
+    error_response(
+        "State actor unavailable; configuration was not applied",
+        StatusCode::SERVICE_UNAVAILABLE,
+    )
+}
+
+fn config_write_response<T: Serialize, P>(
+    data: T,
+    result: color_eyre::Result<P>,
+    database_available: bool,
+    status: StatusCode,
+) -> warp::reply::WithStatus<warp::reply::Json> {
+    use crate::types::config_write::{ConfigWriteStatus, PersistenceStatus};
+    let (persistence, warning) = match result {
+        Ok(_) => (PersistenceStatus::Persisted, None),
+        Err(error) => {
+            warn!("Configuration applied in memory but persistence failed: {error:#}");
+            if database_available {
+                (PersistenceStatus::Failed, Some("Applied to the running home, but saving to the database failed. Retry saving or export a backup before restarting.".to_string()))
+            } else {
+                (PersistenceStatus::MemoryOnly, Some("Applied in memory only. Export a backup before restarting to keep this change.".to_string()))
+            }
+        }
+    };
+    warp::reply::with_status(
+        warp::reply::json(&ApiResponse {
+            success: true,
+            data: Some(data),
+            error: None,
+            write: Some(ConfigWriteStatus {
+                applied: true,
+                persistence,
+                warning,
+            }),
+        }),
+        status,
+    )
+}
+
 async fn apply_runtime_integrations_change<F>(
     handle: &StateHandle,
+    _guard: &tokio::sync::OwnedMutexGuard<()>,
     mutate_config: F,
 ) -> color_eyre::Result<bool>
 where
     F: FnOnce(&mut ConfigExport) -> bool,
 {
-    let (apply_lock, mut runtime_config, mut integrations) = handle
+    // Read after acquiring the write lock. Never prepare from an old snapshot
+    // while another integration change is still in flight.
+    let (mut runtime_config, mut integrations) = handle
         .mutate(|state| {
             Box::pin(async move {
                 (
-                    state.runtime_apply_lock.clone(),
                     state.get_runtime_config().clone(),
                     state.integrations.clone(),
                 )
             })
         })
         .await?;
-
-    let _apply_guard = apply_lock.lock().await;
-
     if !mutate_config(&mut runtime_config) {
         return Ok(false);
     }
-
     let removed_ids = integrations
         .reload_config_rows(&runtime_config.integrations)
         .await?;
-
     handle
         .mutate(move |state| {
             Box::pin(async move {
@@ -233,14 +284,11 @@ where
 async fn apply_runtime_config_snapshot(
     handle: &StateHandle,
     runtime_config: ConfigExport,
+    _guard: &tokio::sync::OwnedMutexGuard<()>,
 ) -> color_eyre::Result<()> {
-    let (apply_lock, mut integrations) = handle
-        .mutate(|state| {
-            Box::pin(async move { (state.runtime_apply_lock.clone(), state.integrations.clone()) })
-        })
+    let mut integrations = handle
+        .mutate(|state| Box::pin(async move { state.integrations.clone() }))
         .await?;
-
-    let _apply_guard = apply_lock.lock().await;
 
     let removed_ids = integrations
         .reload_config_rows(&runtime_config.integrations)
@@ -262,6 +310,7 @@ fn error_response(msg: &str, status: StatusCode) -> warp::reply::WithStatus<warp
             success: false,
             data: None,
             error: Some(msg.to_string()),
+            write: None,
         }),
         status,
     )
@@ -1786,7 +1835,12 @@ async fn create_integration(
     integration: IntegrationRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    if let Err(e) = apply_runtime_integrations_change(&handle, |config| {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    if let Err(e) = apply_runtime_integrations_change(&handle, &_write_guard, |config| {
         if let Some(existing) = config
             .integrations
             .iter_mut()
@@ -1803,14 +1857,20 @@ async fn create_integration(
     })
     .await
     {
-        warn!("Failed to apply runtime integrations: {e}");
+        return Ok(error_response(
+            &format!("Integration change failed: {e}"),
+            StatusCode::BAD_REQUEST,
+        ));
     }
 
-    if let Err(e) = config_queries::db_upsert_integration(&integration).await {
-        warn!("Failed to persist integration config: {e}");
-    }
-
-    Ok(ApiResponse::created(integration))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_integration(&integration).await;
+    Ok(config_write_response(
+        integration,
+        persistence,
+        database_available,
+        StatusCode::CREATED,
+    ))
 }
 
 async fn update_integration(
@@ -1818,9 +1878,14 @@ async fn update_integration(
     mut integration: IntegrationRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     integration.id = id;
 
-    if let Err(e) = apply_runtime_integrations_change(&handle, |config| {
+    if let Err(e) = apply_runtime_integrations_change(&handle, &_write_guard, |config| {
         if let Some(existing) = config
             .integrations
             .iter_mut()
@@ -1837,22 +1902,34 @@ async fn update_integration(
     })
     .await
     {
-        warn!("Failed to apply runtime integrations: {e}");
+        return Ok(error_response(
+            &format!("Integration change failed: {e}"),
+            StatusCode::BAD_REQUEST,
+        ));
     }
 
-    if let Err(e) = config_queries::db_upsert_integration(&integration).await {
-        warn!("Failed to persist integration config update: {e}");
-    }
-
-    Ok(ApiResponse::success(integration))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_integration(&integration).await;
+    Ok(config_write_response(
+        integration,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_integration(
     id: String,
-    snapshot: SnapshotHandle,
+    _snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let existed = snapshot
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    let existed = handle
+        .snapshot
         .load()
         .runtime_config
         .integrations
@@ -1862,7 +1939,7 @@ async fn delete_integration(
     let deleted = if !existed {
         false
     } else {
-        match apply_runtime_integrations_change(&handle, |config| {
+        match apply_runtime_integrations_change(&handle, &_write_guard, |config| {
             let len_before = config.integrations.len();
             config
                 .integrations
@@ -1873,8 +1950,10 @@ async fn delete_integration(
         {
             Ok(deleted) => deleted,
             Err(e) => {
-                warn!("Failed to apply runtime integrations: {e}");
-                true
+                return Ok(error_response(
+                    &format!("Integration change failed: {e}"),
+                    StatusCode::BAD_REQUEST,
+                ));
             }
         }
     };
@@ -1883,11 +1962,14 @@ async fn delete_integration(
         return Ok(not_found("Integration"));
     }
 
-    if let Err(e) = config_queries::db_delete_integration(&id).await {
-        warn!("Failed to persist integration deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_integration(&id).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
@@ -1960,21 +2042,33 @@ async fn get_group(id: String, snapshot: SnapshotHandle) -> Result<impl Reply, w
 }
 
 async fn create_group(group: GroupRow, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let group_for_state = group.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_group(group_for_state);
                 state.apply_runtime_groups();
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_group(&group).await {
-        warn!("Failed to persist group config: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::created(group))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_group(&group).await;
+    Ok(config_write_response(
+        group,
+        persistence,
+        database_available,
+        StatusCode::CREATED,
+    ))
 }
 
 async fn update_group(
@@ -1982,26 +2076,43 @@ async fn update_group(
     mut group: GroupRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     group.id = id;
 
     let group_for_state = group.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_group(group_for_state);
                 state.apply_runtime_groups();
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_group(&group).await {
-        warn!("Failed to persist group config update: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::success(group))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_group(&group).await;
+    Ok(config_write_response(
+        group,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_group(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let id_for_state = id.clone();
     let deleted = handle
         .mutate(move |state| {
@@ -2013,18 +2124,24 @@ async fn delete_group(id: String, handle: StateHandle) -> Result<impl Reply, war
                 deleted
             })
         })
-        .await
-        .unwrap_or(false);
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
     if !deleted {
         return Ok(not_found("Group"));
     }
 
-    if let Err(e) = config_queries::db_delete_group(&id).await {
-        warn!("Failed to persist group deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_group(&id).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
@@ -2087,21 +2204,33 @@ async fn get_scene(id: String, snapshot: SnapshotHandle) -> Result<impl Reply, w
 }
 
 async fn create_scene(scene: SceneRow, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let scene_for_state = scene.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_scene(scene_for_state);
                 state.apply_runtime_scenes();
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
-        warn!("Failed to persist scene config: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::created(scene))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_config_scene(&scene).await;
+    Ok(config_write_response(
+        scene,
+        persistence,
+        database_available,
+        StatusCode::CREATED,
+    ))
 }
 
 async fn update_scene(
@@ -2109,26 +2238,43 @@ async fn update_scene(
     mut scene: SceneRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     scene.id = id;
 
     let scene_for_state = scene.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_scene(scene_for_state);
                 state.apply_runtime_scenes();
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_config_scene(&scene).await {
-        warn!("Failed to persist scene config update: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::success(scene))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_config_scene(&scene).await;
+    Ok(config_write_response(
+        scene,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_scene(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let id_for_state = id.clone();
     let deleted = handle
         .mutate(move |state| {
@@ -2140,18 +2286,24 @@ async fn delete_scene(id: String, handle: StateHandle) -> Result<impl Reply, war
                 deleted
             })
         })
-        .await
-        .unwrap_or(false);
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
     if !deleted {
         return Ok(not_found("Scene"));
     }
 
-    if let Err(e) = config_queries::db_delete_config_scene(&id).await {
-        warn!("Failed to persist scene deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_config_scene(&id).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
@@ -2217,25 +2369,37 @@ async fn create_routine(
     routine: RoutineRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     if let Err(error) = validate_routine_actions(&routine.actions) {
         return Ok(error_response(&error, StatusCode::BAD_REQUEST));
     }
 
     let routine_for_state = routine.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_routine(routine_for_state);
                 state.apply_runtime_routines();
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_routine(&routine).await {
-        warn!("Failed to persist routine config: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::created(routine))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_routine(&routine).await;
+    Ok(config_write_response(
+        routine,
+        persistence,
+        database_available,
+        StatusCode::CREATED,
+    ))
 }
 
 async fn update_routine(
@@ -2243,6 +2407,11 @@ async fn update_routine(
     mut routine: RoutineRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     if let Err(error) = validate_routine_actions(&routine.actions) {
         return Ok(error_response(&error, StatusCode::BAD_REQUEST));
     }
@@ -2338,25 +2507,31 @@ async fn update_routine(
 
     routine.id = next_id.clone();
 
-    for changed_routine in &changed_routines {
-        if let Err(error) = config_queries::db_upsert_routine(changed_routine).await {
-            warn!(
-                "Failed to persist routine config update for '{}': {error}",
-                changed_routine.id
-            );
+    let database_available = db::is_db_connected();
+    let persistence = async {
+        for changed_routine in &changed_routines {
+            config_queries::db_upsert_routine(changed_routine).await?;
         }
-    }
-
-    if renamed {
-        if let Err(error) = config_queries::db_delete_routine(&id).await {
-            warn!("Failed to delete old routine config '{}': {error}", id);
+        if renamed {
+            config_queries::db_delete_routine(&id).await?;
         }
+        color_eyre::Result::<()>::Ok(())
     }
-
-    Ok(ApiResponse::success(routine))
+    .await;
+    Ok(config_write_response(
+        routine,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_routine(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let id_for_state = id.clone();
     let deleted = handle
         .mutate(move |state| {
@@ -2368,18 +2543,24 @@ async fn delete_routine(id: String, handle: StateHandle) -> Result<impl Reply, w
                 deleted
             })
         })
-        .await
-        .unwrap_or(false);
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
     if !deleted {
         return Ok(not_found("Routine"));
     }
 
-    if let Err(e) = config_queries::db_delete_routine(&id).await {
-        warn!("Failed to persist routine deletion: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_routine(&id).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
@@ -3067,6 +3248,10 @@ async fn import_config(
     config: ConfigExport,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     // Optionally save version before import
     if query.save_version {
         if let Err(e) = config_queries::db_save_config_version(&config, Some("Before import")).await
@@ -3075,15 +3260,21 @@ async fn import_config(
         }
     }
 
-    if let Err(e) = apply_runtime_config_snapshot(&handle, config.clone()).await {
-        warn!("Failed to apply imported config to runtime state: {e}");
+    if let Err(e) = apply_runtime_config_snapshot(&handle, config.clone(), &write_guard).await {
+        return Ok(error_response(
+            &format!("Import was not applied: {e}"),
+            StatusCode::BAD_REQUEST,
+        ));
     }
 
-    if let Err(e) = config_queries::db_import_config(&config).await {
-        warn!("Failed to persist imported config: {e}");
-    }
-
-    Ok(ApiResponse::success(()))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_import_config(&config).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
@@ -3918,6 +4109,10 @@ async fn migrate_apply(
     snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let (preview, selection) = request.into_parts();
     if !selection.has_any() {
         return Ok(error_response(
@@ -3946,15 +4141,23 @@ async fn migrate_apply(
         routines: preview.routines.len(),
     };
 
-    if let Err(e) = apply_runtime_config_snapshot(&handle, merged_config.clone()).await {
-        warn!("Failed to apply migrated config to runtime state: {e}");
+    if let Err(e) =
+        apply_runtime_config_snapshot(&handle, merged_config.clone(), &write_guard).await
+    {
+        return Ok(error_response(
+            &format!("Migration was not applied: {e}"),
+            StatusCode::BAD_REQUEST,
+        ));
     }
 
-    if let Err(e) = apply_migration(&merged_config).await {
-        warn!("Failed to persist migrated config: {e}");
-    }
-
-    Ok(ApiResponse::success(counts))
+    let database_available = db::is_db_connected();
+    let persistence = apply_migration(&merged_config).await;
+    Ok(config_write_response(
+        counts,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 #[cfg(test)]
@@ -3962,6 +4165,40 @@ mod tests {
     use super::*;
     use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
+
+    #[tokio::test]
+    async fn config_write_reports_durability_separately_from_runtime_success() {
+        for (available, succeeds, expected) in [
+            (true, true, "persisted"),
+            (false, false, "memory_only"),
+            (true, false, "failed"),
+        ] {
+            let result = if succeeds {
+                Ok(())
+            } else {
+                Err(eyre::eyre!("test database failure"))
+            };
+            let response =
+                config_write_response((), result, available, StatusCode::OK).into_response();
+            let body = warp::hyper::body::to_bytes(response.into_body())
+                .await
+                .unwrap();
+            let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(json["success"], true);
+            assert_eq!(json["write"]["applied"], true);
+            assert_eq!(json["write"]["persistence"], expected);
+            assert_eq!(json["write"]["warning"].is_null(), succeeds);
+        }
+    }
+
+    #[tokio::test]
+    async fn integration_commit_preserves_changes_made_during_reload() {
+        let (mut state, _) = crate::core::event::tests::test_state();
+        let stale = state.runtime_config.clone();
+        state.runtime_config.core.warmup_time_seconds = 123;
+        state.commit_runtime_integrations_update(stale, state.integrations.clone(), vec![]);
+        assert_eq!(state.runtime_config.core.warmup_time_seconds, 123);
+    }
 
     #[test]
     fn parse_config_backup_accepts_json_export() {

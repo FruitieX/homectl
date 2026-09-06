@@ -1,3 +1,4 @@
+import { useConfigWriteWarnings } from '@/hooks/configWriteStatus';
 import { useRuntimeStatus } from '@/hooks/useConfig';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
@@ -10,6 +11,7 @@ export default function ConfigLayout({
   children: React.ReactNode;
 }) {
   const pathname = useLocation().pathname;
+  const writeWarnings = useConfigWriteWarnings();
   const { data: runtimeStatus } = useRuntimeStatus(5000);
   const reduceMotion = useReducedMotion();
 
@@ -37,6 +39,21 @@ export default function ConfigLayout({
         </Alert>
       )}
 
+      {Object.entries(writeWarnings).length > 0 && (
+        <Alert variant="warning" className="mx-4 mt-4 w-auto shrink-0">
+          <AlertTitle>Changes not saved to the database</AlertTitle>
+          <AlertDescription className="space-y-2">
+            {Object.entries(writeWarnings).map(([key, warning]) => (
+              <p key={key}>
+                <strong>{key}</strong>: {warning}
+              </p>
+            ))}
+            <Button asChild variant="outline" size="sm">
+              <Link to="/config/import-export">Export backup</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
       {/* Content area */}
       <motion.div
         key={pathname}

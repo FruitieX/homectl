@@ -1,3 +1,4 @@
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { DeviceQuickControls } from '@/ui/DeviceControls';
@@ -765,7 +766,8 @@ export const ColorPickerModal = () => {
     devices?.[key] ? [devices[key]!] : [],
   );
   const colorDevices = selected.filter((device) => {
-    if (!('Controllable' in device.data)) return false;
+    if (!('Controllable' in device.data) || isDeviceReadOnly(device))
+      return false;
     const capabilities = device.data.Controllable.capabilities;
     return (
       capabilities.hs ||
@@ -814,6 +816,7 @@ export const ColorPickerModal = () => {
           if (
             match &&
             'Controllable' in match.data &&
+            !isDeviceReadOnly(match) &&
             (match.data.Controllable.capabilities.hs ||
               match.data.Controllable.capabilities.xy ||
               match.data.Controllable.capabilities.rgb ||

@@ -51,6 +51,23 @@ pub struct StateHandle {
 }
 
 impl StateHandle {
+    pub async fn control_device(
+        &self,
+        command: crate::types::device_command::DeviceCommand,
+    ) -> Result<crate::types::device_command::DeviceCommandResult> {
+        let (done, reply) = tokio::sync::oneshot::channel();
+        self.metrics.on_enqueue();
+        self.tx
+            .send(StateCommand::ControlDevice { command, done })
+            .map_err(|_| {
+                self.metrics.on_dequeue();
+                color_eyre::eyre::eyre!("State actor unavailable")
+            })?;
+        reply
+            .await
+            .map_err(|_| color_eyre::eyre::eyre!("State actor dropped the command result"))
+    }
+
     /// Fire-and-forget dispatch of an event to the actor. The caller does
     /// not wait for the mutation to complete.
     pub fn send_event(&self, event: Event) {
@@ -213,6 +230,38 @@ async fn run_actor(
                 if let Some(done) = done {
                     let _ = done.send(());
                 }
+            }
+            StateCommand::ControlDevice { command, done } => {
+                let result = match crate::core::device_commands::prepare_device_command(
+                    &app_state, &command,
+                ) {
+                    Err(error) => Err(error),
+                    Ok(event) => match handle_event(&mut app_state, &event).await {
+                        Err(error) => {
+                            app_state.publish_snapshot(SnapshotChanges::all());
+                            Err(error.to_string())
+                        }
+                        Ok(outcome) => {
+                            app_state.publish_snapshot(outcome.snapshot_changes());
+                            for work in outcome.into_deferred_work() {
+                                if deferred_work_tx.send(work).is_err() {
+                                    warn!("Deferred event worker channel closed");
+                                }
+                            }
+                            Ok(())
+                        }
+                    },
+                };
+                metrics.record(
+                    kind_idx,
+                    started_at.elapsed().as_millis() as u64,
+                    started_at.elapsed() > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS),
+                );
+                let _ = done.send(crate::types::device_command::DeviceCommandResult {
+                    request_id: command.request_id,
+                    applied: result.is_ok(),
+                    error: result.err(),
+                });
             }
             StateCommand::Mutate(f) => {
                 let mutate_started_at = Instant::now();

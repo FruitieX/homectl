@@ -476,9 +476,30 @@ impl Devices {
     pub fn set_state(&mut self, device: &Device, skip_external_update: bool, skip_db_update: bool) {
         let device_key = device.get_device_key();
 
+        let mut normalized = device.clone();
+        if let DeviceData::Controllable(ref mut data) = normalized.data {
+            let supported = data.state.brightness.is_some()
+                || data.capabilities.xy
+                || data.capabilities.hs
+                || data.capabilities.rgb
+                || data.capabilities.ct.is_some();
+            data.capabilities.brightness.get_or_insert(supported);
+        }
+        let device = &normalized;
         let old = self.get_device(&device_key);
 
-        let state_eq = old.map(|d| d.is_state_eq(device)).unwrap_or_default();
+        let state_eq = old
+            .map(|old| {
+                let metadata_eq = old.name == device.name
+                    && match (&old.data, &device.data) {
+                        (DeviceData::Controllable(old), DeviceData::Controllable(new)) => {
+                            old.capabilities == new.capabilities && old.managed == new.managed
+                        }
+                        _ => true,
+                    };
+                metadata_eq && old.is_state_eq(device)
+            })
+            .unwrap_or_default();
 
         // For sensors, we always emit the event even if state is equal.
         // This is needed for pulse mode routines that trigger on every update,

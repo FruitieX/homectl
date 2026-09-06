@@ -1,6 +1,7 @@
-use super::with_snapshot;
+use super::{with_handle, with_snapshot};
 use crate::core::snapshot::SnapshotHandle;
 use crate::core::state::send_state_ws_from_snapshot;
+use crate::core::state::StateHandle;
 use crate::core::websockets::WebSockets;
 use crate::types::event::TxEventChannel;
 use crate::types::websockets::WebSocketRequest;
@@ -27,6 +28,7 @@ fn with_event_tx(
 
 pub fn ws(
     snapshot: &SnapshotHandle,
+    handle: &StateHandle,
     ws_handle: WebSockets,
     event_tx: TxEventChannel,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
@@ -34,15 +36,19 @@ pub fn ws(
         // The `ws()` filter will prepare the Websocket handshake.
         .and(warp::ws())
         .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
         .and(with_ws(ws_handle))
         .and(with_event_tx(event_tx))
         .map(
             |ws: warp::ws::Ws,
              snapshot: SnapshotHandle,
+             handle: StateHandle,
              ws_handle: WebSockets,
              event_tx: TxEventChannel| {
                 // This will call our function if the handshake succeeds.
-                ws.on_upgrade(move |socket| user_connected(socket, snapshot, ws_handle, event_tx))
+                ws.on_upgrade(move |socket| {
+                    user_connected(socket, snapshot, handle, ws_handle, event_tx)
+                })
             },
         )
 }
@@ -51,6 +57,7 @@ pub fn ws(
 async fn user_connected(
     ws: WebSocket,
     snapshot: SnapshotHandle,
+    handle: StateHandle,
     ws_handle: WebSockets,
     event_tx: TxEventChannel,
 ) {
@@ -98,8 +105,19 @@ async fn user_connected(
             let msg = serde_json::from_str::<WebSocketRequest>(json);
 
             match msg {
+                Ok(WebSocketRequest::DeviceCommand(command)) => {
+                    let result = super::device_commands::dispatch(command, &handle).await;
+                    ws_handle
+                        .send(
+                            Some(my_id),
+                            &crate::types::websockets::WebSocketResponse::DeviceCommandResult(
+                                result,
+                            ),
+                        )
+                        .await;
+                }
                 Ok(WebSocketRequest::EventMessage(event)) => {
-                    event_tx.send(event);
+                    event_tx.send(*event);
                 }
                 Err(e) => warn!("Error while deserializing websocket message: {e}"),
             }

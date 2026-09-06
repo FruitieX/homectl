@@ -23,6 +23,7 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         manifest_dir.join("../ui/bindings"),
     ] {
         Action::export_all_to(&output_dir)?;
+        homectl_server::types::config_write::ConfigWriteStatus::export_all_to(&output_dir)?;
         Device::export_all_to(&output_dir)?;
         DevicesState::export_all_to(&output_dir)?;
         FlattenedDimConfig::export_all_to(&output_dir)?;

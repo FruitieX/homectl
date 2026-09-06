@@ -1,3 +1,7 @@
+import {
+  isDeviceReadOnly,
+  supportsDeviceBrightness,
+} from '@/lib/deviceCapabilities';
 import { useCarHeaterModalOpenState } from '@/hooks/carHeaterModalState';
 import { useState } from 'react';
 import { Lightbulb, Power, SlidersHorizontal } from 'lucide-react';
@@ -16,7 +20,7 @@ export function useLiveDeviceControls() {
   const setState = useSetDeviceState();
   const scenes = useScenesState();
   return (device: Device, power: boolean, brightness?: number) => {
-    if (!('Controllable' in device.data)) return;
+    if (!('Controllable' in device.data) || isDeviceReadOnly(device)) return;
     const sceneId = device.data.Controllable.scene_id;
     const persist = Boolean(
       sceneId &&
@@ -64,6 +68,7 @@ export function DeviceRow({
         <span className="min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{label}</span>
           <span className="block text-sm text-muted-foreground">
+            {isDeviceReadOnly(device) ? 'Read-only · ' : ''}
             {active
               ? state.brightness === null
                 ? 'On'
@@ -78,7 +83,7 @@ export function DeviceRow({
         size="icon"
         aria-label={`Turn ${label} ${active ? 'off' : 'on'}`}
         aria-pressed={active}
-        disabled={!connected}
+        disabled={!connected || isDeviceReadOnly(device)}
         onClick={() => setState(device, !active)}
       >
         <Power />
@@ -91,24 +96,32 @@ export function DeviceQuickControls({ devices }: { devices: Device[] }) {
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
   const [draft, setDraft] = useState<number | null>(null);
-  const controllable = devices.filter(
+  const allControllable = devices.filter(
     (device) => 'Controllable' in device.data,
   );
-  // The API has no dimmable capability flag: only expose brightness where
-  // the integration supplies a brightness value.
-  const dimmable = controllable.filter(
+  const controllable = allControllable.filter(
+    (device) => !isDeviceReadOnly(device),
+  );
+  const readonlyCount = allControllable.length - controllable.length;
+  const dimmable = controllable.filter(supportsDeviceBrightness);
+  const brightnessUnset = dimmable.every(
     (device) =>
       'Controllable' in device.data &&
-      device.data.Controllable.state.brightness !== null,
+      device.data.Controllable.state.brightness === null,
   );
   const values = dimmable.map((device) =>
     'Controllable' in device.data
-      ? device.data.Controllable.state.brightness!
+      ? (device.data.Controllable.state.brightness ?? 1)
       : 0,
   );
   const mixed = values.some((value) => value !== values[0]);
   const onCount = controllable.filter((device) => getPower(device.data)).length;
-  if (controllable.length === 0) return null;
+  if (controllable.length === 0)
+    return readonlyCount > 0 ? (
+      <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
+        Read-only devices. Live controls are unavailable.
+      </p>
+    ) : null;
   const brightness = draft ?? Math.round((values[0] ?? 0) * 100);
   return (
     <div className="space-y-4 rounded-xl border border-border bg-card p-4">
@@ -141,12 +154,21 @@ export function DeviceQuickControls({ devices }: { devices: Device[] }) {
           </Button>
         </div>
       </div>
+      {readonlyCount > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {readonlyCount} read-only devices excluded from controls.
+        </p>
+      )}
       {dimmable.length > 0 && (
         <div>
           <div className="mb-1 flex items-center justify-between text-sm">
             <span>Brightness</span>
             <span className="tabular-nums text-muted-foreground">
-              {mixed && draft === null ? 'Mixed' : `${brightness}%`}
+              {draft === null && brightnessUnset
+                ? 'Not set'
+                : mixed && draft === null
+                  ? 'Mixed'
+                  : `${brightness}%`}
             </span>
           </div>
           <Slider

@@ -1,3 +1,5 @@
+import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
+import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import { type JsonValue } from '@/bindings/serde_json/JsonValue';
@@ -184,6 +186,7 @@ export interface ConfigExport {
 }
 
 type ApiResponse<T> = {
+  write?: ConfigWriteStatus;
   success: boolean;
   data?: T;
   error?: string | null;
@@ -208,6 +211,7 @@ async function readApiResponse<T>(response: Response, fallbackMessage: string) {
 
 // Generic fetch hook for config API
 function useConfigApi<T>(endpoint: string) {
+  const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
   const queryClient = useQueryClient();
 
@@ -231,6 +235,10 @@ function useConfigApi<T>(endpoint: string) {
         body: JSON.stringify(item),
       });
       const result = await readApiResponse<T>(response, 'Failed to create');
+      recordWrite(
+        `${endpoint}/${(item as { id?: string }).id ?? 'new'}`,
+        result.write,
+      );
       return result.data;
     },
     onSuccess: () => {
@@ -249,6 +257,7 @@ function useConfigApi<T>(endpoint: string) {
         },
       );
       const result = await readApiResponse<T>(response, 'Failed to update');
+      recordWrite(`${endpoint}/${id}`, result.write);
       return result.data;
     },
     onSuccess: () => {
@@ -268,6 +277,7 @@ function useConfigApi<T>(endpoint: string) {
         response,
         'Failed to delete',
       );
+      recordWrite(`${endpoint}/${id}`, result.write);
       if (!result.success) {
         throw new Error(result.error || 'Failed to delete');
       }
@@ -563,6 +573,7 @@ export function useRuntimeStatus(pollIntervalMs = 5000) {
 
 // Export/Import hooks
 export function useConfigExport() {
+  const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
   const baseUrl = `${apiEndpoint}/api/v1/config`;
 
@@ -586,8 +597,9 @@ export function useConfigExport() {
       if (!result.success) {
         throw new Error(result.error || 'Failed to import');
       }
+      recordWrite('Configuration import', result.write);
     },
-    [baseUrl],
+    [baseUrl, recordWrite],
   );
 
   return { exportConfig, importConfig };

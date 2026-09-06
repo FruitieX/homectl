@@ -37,6 +37,7 @@ pub struct Cron {
     event_tx: TxEventChannel,
     config: CronConfig,
     devices: Arc<RwLock<HashMap<DeviceId, Device>>>,
+    tasks: tokio::task::JoinSet<()>,
 }
 
 #[async_trait]
@@ -50,11 +51,16 @@ impl Integration for Cron {
         let config: CronConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Cron integration")?;
 
+        for schedule in config.schedules.values() {
+            croner::Cron::new(&schedule.schedule).parse()?;
+        }
+
         Ok(Cron {
             id: id.clone(),
             config,
             event_tx,
             devices: Default::default(),
+            tasks: tokio::task::JoinSet::new(),
         })
     }
 
@@ -88,6 +94,7 @@ impl Integration for Cron {
     }
 
     async fn start(&mut self) -> Result<()> {
+        self.stop().await?;
         for (id, config) in &self.config.schedules {
             let devices = self.devices.clone();
             let event_tx = self.event_tx.clone();
@@ -96,7 +103,7 @@ impl Integration for Cron {
 
             let cron = croner::Cron::new(&config.schedule).parse()?;
 
-            tokio::spawn(async move {
+            self.tasks.spawn(async move {
                 loop {
                     let next = match cron.find_next_occurrence(&Local::now(), false) {
                         Ok(next) => next,
@@ -132,6 +139,11 @@ impl Integration for Cron {
             });
         }
 
+        Ok(())
+    }
+
+    async fn stop(&mut self) -> Result<()> {
+        self.tasks.shutdown().await;
         Ok(())
     }
 

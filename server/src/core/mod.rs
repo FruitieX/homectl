@@ -13,3 +13,5 @@ pub mod snapshot;
 pub mod state;
 pub mod ui;
 pub mod websockets;
+
+pub mod device_commands;

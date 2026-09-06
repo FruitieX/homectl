@@ -8,6 +8,7 @@ use serde::Serialize;
 
 mod actions;
 pub mod config;
+pub mod device_commands;
 mod devices;
 mod health;
 mod widgets;
@@ -124,13 +125,14 @@ pub fn init_api(
         .and(warp::path("v1"))
         .and(
             devices(&snapshot, &handle)
+                .or(device_commands::commands(&handle))
                 .or(actions(event_tx.clone()))
                 .or(config(&snapshot, &handle)),
         )
         .map(Reply::into_response)
         .boxed();
 
-    let ws = ws(&snapshot, ws_handle, event_tx)
+    let ws = ws(&snapshot, &handle, ws_handle, event_tx)
         .map(Reply::into_response)
         .boxed();
     let health = health(&snapshot).map(Reply::into_response).boxed();

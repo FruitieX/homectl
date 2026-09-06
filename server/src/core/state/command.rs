@@ -28,6 +28,10 @@ pub type MutateFn = Box<
 
 /// Top-level command routed to the state actor.
 pub enum StateCommand {
+    ControlDevice {
+        command: crate::types::device_command::DeviceCommand,
+        done: oneshot::Sender<crate::types::device_command::DeviceCommandResult>,
+    },
     /// Forward an integration/user event to the actor. The actor runs the
     /// existing `handle_event` logic against its owned `AppState` and
     /// optionally notifies the sender when the mutation has completed so
@@ -49,6 +53,9 @@ impl std::fmt::Debug for StateCommand {
                 .field("event", event)
                 .field("done", &done.is_some())
                 .finish(),
+            StateCommand::ControlDevice { command, .. } => {
+                f.debug_tuple("ControlDevice").field(command).finish()
+            }
             StateCommand::Mutate(_) => f.debug_tuple("Mutate").finish(),
         }
     }

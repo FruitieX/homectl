@@ -598,7 +598,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::{handle_event, DeferredEventWork};
     use crate::core::{
         devices::Devices,
@@ -655,7 +655,7 @@ mod tests {
         }
     }
 
-    fn test_state() -> (AppState, crate::types::event::RxEventChannel) {
+    pub(crate) fn test_state() -> (AppState, crate::types::event::RxEventChannel) {
         let cli = test_cli();
         let (event_tx, event_rx) = mk_event_channel();
         let runtime_config = empty_runtime_config();

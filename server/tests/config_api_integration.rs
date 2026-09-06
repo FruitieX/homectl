@@ -1819,6 +1819,7 @@ fn migration_apply_allows_preview_with_warnings_by_dropping_invalid_entries() {
         r#"
 [integrations.reload_dummy]
 plugin = "dummy"
+devices = {}
 
 [groups.kitchen]
 name = "Kitchen"
@@ -2193,4 +2194,118 @@ fn config_api_updates_routine_id_and_force_trigger_references() {
         dependent_routine["actions"][0]["routine_id"],
         json!("routine_a_renamed"),
     );
+}
+
+#[test]
+fn config_api_concurrent_integration_writes_preserve_all_changes() {
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(blank_backup_config().to_string()),
+        ..Default::default()
+    })
+    .unwrap();
+    thread::scope(|scope| {
+        for index in 0..8 {
+            let base_url = &server.base_url;
+            scope.spawn(move || {
+                let response = post_json(
+                    base_url,
+                    "/api/v1/config/integrations",
+                    &json!({
+                        "id": format!("concurrent_{index}"), "plugin": "dummy", "enabled": true,
+                        "config": {"devices": {}}
+                    }),
+                );
+                assert_eq!(response.status(), StatusCode::CREATED);
+                let result: Value = response.json().unwrap();
+                assert_eq!(result["write"]["persistence"], "persisted");
+            });
+        }
+    });
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    assert_eq!(export["data"]["integrations"].as_array().unwrap().len(), 8);
+    let invalid = put_json(
+        &server.base_url,
+        "/api/v1/config/integrations/concurrent_0",
+        &json!({
+            "id": "concurrent_0", "plugin": "dummy", "enabled": true, "config": {"devices": 42}
+        }),
+    );
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        get_json(&server.base_url, "/api/v1/config/export")["data"]["integrations"],
+        export["data"]["integrations"]
+    );
+}
+
+#[test]
+fn config_api_memory_only_write_returns_warning_and_applies_change() {
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(blank_backup_config().to_string()),
+        database_url: Some("sqlite:///dev/null/homectl.db".into()),
+        ..Default::default()
+    })
+    .unwrap();
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/config/groups",
+        &json!({
+            "id": "memory", "name": "Memory group", "hidden": false, "devices": [], "linked_groups": []
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::CREATED);
+    let result: Value = response.json().unwrap();
+    assert_eq!(result["write"]["applied"], true);
+    assert_eq!(result["write"]["persistence"], "memory_only");
+    assert!(result["write"]["warning"].is_string());
+    assert_eq!(
+        get_json(&server.base_url, "/api/v1/config/groups")["data"][0]["id"],
+        "memory"
+    );
+}
+
+#[test]
+fn device_command_api_applies_patch_and_rejects_unsupported_controls() {
+    let server = start_reload_test_server();
+    wait_for("command target", || {
+        device_by_name(
+            &get_json(&server.base_url, "/api/v1/devices"),
+            "Reload Light",
+        )
+        .is_some()
+    });
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/commands/device",
+        &json!({
+            "request_id": "power", "device_key": "reload_dummy/light1", "power": true
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let result: Value = response.json().unwrap();
+    assert_eq!(result["request_id"], "power");
+    assert_eq!(result["applied"], true);
+    assert_eq!(
+        device_power(
+            &get_json(&server.base_url, "/api/v1/devices"),
+            "Reload Light"
+        ),
+        Some(true)
+    );
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/commands/device",
+        &json!({
+            "request_id": "dim", "device_key": "reload_dummy/light1", "brightness": 0.5
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.json::<Value>().unwrap()["applied"], false);
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/commands/device",
+        &json!({
+            "request_id": "sensor", "device_key": "reload_dummy/sensor1", "power": true
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
