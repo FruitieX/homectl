@@ -743,6 +743,7 @@ fn rewrite_action(
         }
         Action::Custom(_)
         | Action::ForceTriggerRoutine(_)
+        | Action::RandomizeColor(_)
         | Action::Ui(_)
         | Action::EvalExpr(_) => RewriteStatus::Unchanged,
     }

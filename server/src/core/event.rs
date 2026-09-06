@@ -1,3 +1,4 @@
+use rand::Rng;
 use std::collections::BTreeMap;
 
 use color_eyre::Result;
@@ -5,7 +6,8 @@ use color_eyre::Result;
 use crate::db::actions::{db_store_scene_overrides, db_store_ui_state};
 use crate::types::{
     action::Action,
-    device::{Device, DeviceKey, DevicesState},
+    color::DeviceColor,
+    device::{Device, DeviceData, DeviceKey, DevicesState},
     dim::DimDescriptor,
     event::*,
     group::GroupId,
@@ -505,6 +507,45 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 skip_external_update: None,
                 skip_db_update: None,
             });
+        }
+        Event::Action(Action::RandomizeColor(descriptor)) => {
+            let mut rng = rand::thread_rng();
+            let min_saturation = descriptor.min_saturation.unwrap_or(0.2).clamp(0.0, 1.0);
+            let max_saturation = descriptor.max_saturation.unwrap_or(1.0).clamp(0.0, 1.0);
+            let (min_saturation, max_saturation) = if min_saturation <= max_saturation {
+                (min_saturation, max_saturation)
+            } else {
+                (max_saturation, min_saturation)
+            };
+
+            for device_key in &descriptor.device_keys {
+                let Some(current) = state.devices.get_device(device_key) else {
+                    warn!("Could not randomize unknown device {device_key}");
+                    continue;
+                };
+                let mut device = current.clone();
+                let DeviceData::Controllable(controllable) = &mut device.data else {
+                    warn!("Could not randomize non-controllable device {device_key}");
+                    continue;
+                };
+
+                // Clear the active scene so subsequent scene cycling does not
+                // treat this one-off color change as a scene activation.
+                controllable.scene_id = None;
+                controllable.state.color = Some(DeviceColor::new_from_hs(
+                    rng.gen_range(0..360),
+                    rng.gen_range(min_saturation..=max_saturation),
+                ));
+                if descriptor.transition.is_some() {
+                    controllable.state.transition = descriptor.transition;
+                }
+
+                state.event_tx.send(Event::ApplyDeviceState {
+                    device,
+                    skip_external_update: None,
+                    skip_db_update: None,
+                });
+            }
         }
         Event::Action(Action::ToggleDeviceOverride {
             device_keys,

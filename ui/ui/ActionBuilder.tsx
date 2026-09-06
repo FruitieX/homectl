@@ -87,6 +87,14 @@ export interface SetDeviceStateAction {
   data: unknown;
 }
 
+export interface RandomizeColorAction {
+  action: 'RandomizeColor';
+  device_keys: string[];
+  min_saturation?: number;
+  max_saturation?: number;
+  transition?: number;
+}
+
 export interface ToggleDeviceOverrideAction {
   action: 'ToggleDeviceOverride';
   device_keys: string[];
@@ -110,6 +118,7 @@ export type Action =
   | DimAction
   | ForceTriggerRoutineAction
   | SetDeviceStateAction
+  | RandomizeColorAction
   | ToggleDeviceOverrideAction
   | CustomAction
   | UiAction;
@@ -896,6 +905,82 @@ interface ToggleOverrideEditorProps {
   onChange: (action: ToggleDeviceOverrideAction) => void;
 }
 
+interface RandomizeColorEditorProps {
+  action: RandomizeColorAction;
+  devices: DevicesState;
+  onChange: (action: RandomizeColorAction) => void;
+}
+
+function RandomizeColorEditor({
+  action,
+  devices,
+  onChange,
+}: RandomizeColorEditorProps) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <div className={`${fieldClassName} sm:col-span-2`}>
+        <label>
+          <span className={fieldLabelClassName}>Devices</span>
+        </label>
+        <DeviceMultiSelect
+          devices={devices}
+          value={action.device_keys}
+          onChange={(device_keys) => onChange({ ...action, device_keys })}
+        />
+      </div>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Minimum saturation</span>
+        </label>
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          value={action.min_saturation ?? 0.2}
+          onChange={(e) =>
+            onChange({ ...action, min_saturation: Number(e.target.value) })
+          }
+        />
+      </div>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Maximum saturation</span>
+        </label>
+        <Input
+          type="number"
+          min={0}
+          max={1}
+          step={0.05}
+          value={action.max_saturation ?? 1}
+          onChange={(e) =>
+            onChange({ ...action, max_saturation: Number(e.target.value) })
+          }
+        />
+      </div>
+      <div className={fieldClassName}>
+        <label>
+          <span className={fieldLabelClassName}>Transition (seconds)</span>
+        </label>
+        <Input
+          type="number"
+          min={0}
+          max={10}
+          step={0.05}
+          value={action.transition ?? 0.25}
+          onChange={(e) =>
+            onChange({ ...action, transition: Number(e.target.value) })
+          }
+        />
+      </div>
+      <span className={`${helpTextClassName} sm:col-span-2`}>
+        Each selected device gets one random hue and saturation update. The
+        active scene is cleared for the affected device.
+      </span>
+    </div>
+  );
+}
+
 function ToggleOverrideEditor({
   action,
   devices,
@@ -1076,6 +1161,15 @@ export function ActionEditor({
           data: {},
         });
         break;
+      case 'RandomizeColor':
+        onChange({
+          action: 'RandomizeColor',
+          device_keys: [],
+          min_saturation: 0.2,
+          max_saturation: 1,
+          transition: 0.25,
+        });
+        break;
     }
   };
 
@@ -1100,6 +1194,7 @@ export function ActionEditor({
               <option value="Ui">UI State</option>
               <option value="Dim">Dim</option>
               <option value="SetDeviceState">Set Device State</option>
+              <option value="RandomizeColor">Randomize Color</option>
               <option value="Custom">Custom</option>
             </select>
           </ConfigField>
@@ -1148,6 +1243,13 @@ export function ActionEditor({
         )}
         {actionType === 'Ui' && (
           <UiActionEditor action={action as UiAction} onChange={onChange} />
+        )}
+        {actionType === 'RandomizeColor' && (
+          <RandomizeColorEditor
+            action={action as RandomizeColorAction}
+            devices={devices}
+            onChange={onChange}
+          />
         )}
         {['Dim', 'SetDeviceState', 'Custom'].includes(actionType) && (
           <JsonActionEditor action={action} onChange={onChange} />
