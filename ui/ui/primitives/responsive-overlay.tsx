@@ -47,7 +47,7 @@ export function ResponsiveOverlay({
     isFullscreen && 'h-[min(86dvh,56rem)] max-w-6xl',
   );
   const bodyClassName = cn(
-    'min-h-0 overflow-y-auto overscroll-contain',
+    'min-h-0 min-w-0 overflow-x-hidden overflow-y-auto overscroll-contain',
     isFullscreen && 'flex flex-col',
   );
   const isSidePanel = isDesktop && desktopPresentation === 'sidepanel';
@@ -95,11 +95,19 @@ export function ResponsiveOverlay({
           className,
         )}
       >
-        <DrawerHeader className={isFullscreen ? 'shrink-0' : undefined}>
+        <DrawerHeader className="shrink-0">
           <DrawerTitle>{title}</DrawerTitle>
           {description && <DrawerDescription>{description}</DrawerDescription>}
         </DrawerHeader>
-        <div className={cn(bodyClassName, 'flex-1')}>{children}</div>
+        <div
+          data-vaul-no-drag
+          className={cn(
+            bodyClassName,
+            'flex-1 pb-[env(safe-area-inset-bottom)] touch-pan-y',
+          )}
+        >
+          {children}
+        </div>
       </DrawerContent>
     </Drawer>
   );

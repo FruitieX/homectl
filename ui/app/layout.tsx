@@ -49,8 +49,6 @@ export default function RootLayout({
       </head>
       <body
         className="flex flex-col overflow-hidden bg-background text-foreground antialiased"
-        // Disables scrolling on iOS Safari
-        style={{ touchAction: 'none' }}
       >
         <Providers>
           <ProvideAppConfig>

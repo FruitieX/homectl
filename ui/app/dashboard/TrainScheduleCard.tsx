@@ -157,7 +157,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={() => setDetailsOpen(true)}
         >
-          <CardContent className="w-full p-4 sm:p-5">
+          <CardContent className="w-full p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<TrainFront />}
               label="Next departures"

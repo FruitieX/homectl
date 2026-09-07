@@ -1,4 +1,8 @@
 import { useEffect, useState } from 'react';
+import {
+  useDashboardSpacing,
+  type DashboardSpacing,
+} from '@/hooks/dashboardSpacing';
 
 import { ConfigPageHeader } from '../page-header';
 import {
@@ -155,6 +159,7 @@ function OptionCsvField({
 }
 
 export default function DashboardConfigPage() {
+  const [spacing, setSpacing] = useDashboardSpacing();
   const {
     layouts,
     loading: layoutsLoading,
@@ -201,6 +206,22 @@ export default function DashboardConfigPage() {
         }
       />
 
+      <ConfigField
+        label="Spacing on this screen"
+        description="Saved in this browser. Compact fits more widgets on an info display."
+      >
+        <select
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+          value={spacing}
+          onChange={(event) =>
+            setSpacing(event.target.value as DashboardSpacing)
+          }
+        >
+          <option value="compact">Compact</option>
+          <option value="balanced">Balanced</option>
+          <option value="spacious">Spacious</option>
+        </select>
+      </ConfigField>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <Card>
           <CardHeader>

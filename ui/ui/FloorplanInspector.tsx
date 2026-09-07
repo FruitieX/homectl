@@ -51,7 +51,7 @@ export function FloorplanInspector({
         </Button>
       </div>
       <div
-        className={`${expanded ? 'h-[52dvh]' : 'h-40'} min-h-0 overflow-y-auto overscroll-contain md:h-auto md:flex-1 md:px-4 md:pb-4`}
+        className={`${expanded ? 'h-[60dvh]' : 'h-[min(34dvh,19rem)]'} min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] md:h-auto md:flex-1 md:px-4 md:pb-4`}
       >
         {children}
       </div>

@@ -317,9 +317,9 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="flex w-full flex-col p-4 sm:p-5">
+          <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading icon={<CloudSun />} label="Weather" detail />
-            <div className="flex flex-1 items-center justify-center py-3">
+            <div className="flex flex-1 items-center justify-center py-[var(--widget-inner-y,0.75rem)]">
               {renderWeatherDetail(
                 currentAndFutureSeries[0],
                 true,
@@ -357,8 +357,9 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             onValueChange={(value) => setActiveTab(Number(value))}
           >
             <TabsList className="h-11 w-full justify-start overflow-x-auto rounded-2xl bg-muted/60 p-1.5">
-              <TabsTrigger value="0">Hourly ({forecastHours}h)</TabsTrigger>
-              <TabsTrigger value="1">Long-term ({forecastDays}d)</TabsTrigger>
+              <TabsTrigger value="0">Table</TabsTrigger>
+              <TabsTrigger value="1">Hourly charts</TabsTrigger>
+              <TabsTrigger value="2">Long-term</TabsTrigger>
             </TabsList>
           </Tabs>
 
@@ -369,6 +370,17 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             {activeTab === 0 && <WeatherHourlyPanel hourlyData={hourlyData} />}
 
             {activeTab === 1 && (
+              <WeatherLongTermPanel
+                currentAndFutureSeries={currentAndFutureSeries.filter(
+                  (series) =>
+                    series.data.next_1_hours !== undefined &&
+                    parseTime(series.time).getTime() < now + 72 * 3600000,
+                )}
+                forecastDays={3}
+                showDaily={false}
+              />
+            )}
+            {activeTab === 2 && (
               <WeatherLongTermPanel
                 currentAndFutureSeries={currentAndFutureSeries}
                 forecastDays={forecastDays}
@@ -462,9 +474,11 @@ function WeatherHourlyPanel({
 function WeatherLongTermPanel({
   currentAndFutureSeries,
   forecastDays,
+  showDaily = true,
 }: {
   currentAndFutureSeries: WeatherTimeSeries[];
   forecastDays: number;
+  showDaily?: boolean;
 }) {
   const dailyData = buildDailyData(currentAndFutureSeries, forecastDays);
   const chartSeries = buildChartSeries(currentAndFutureSeries, forecastDays);
@@ -474,47 +488,50 @@ function WeatherLongTermPanel({
 
   return (
     <>
-      <div className="flex w-full flex-row gap-2 overflow-x-auto pb-2 scrollbar-none">
-        {dailyData.map((dayData) => {
-          const today = new Date();
-          const isToday = dayData.date.toDateString() === today.toDateString();
+      {showDaily && (
+        <div className="flex w-full flex-row gap-2 overflow-x-auto pb-2 scrollbar-none">
+          {dailyData.map((dayData) => {
+            const today = new Date();
+            const isToday =
+              dayData.date.toDateString() === today.toDateString();
 
-          return (
-            <div
-              key={dayData.date.toISOString()}
-              className="flex-1 min-w-[76px] rounded-2xl border border-border bg-muted/50 p-2 md:p-3 text-center flex-shrink-0"
-            >
-              <div className="mb-2 text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
-                {isToday
-                  ? 'Today'
-                  : dayData.date.toLocaleDateString('en-US', {
-                      weekday: 'short',
-                    })}
+            return (
+              <div
+                key={dayData.date.toISOString()}
+                className="flex-1 min-w-[76px] rounded-2xl border border-border bg-muted/50 p-2 md:p-3 text-center flex-shrink-0"
+              >
+                <div className="mb-2 text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
+                  {isToday
+                    ? 'Today'
+                    : dayData.date.toLocaleDateString('en-US', {
+                        weekday: 'short',
+                      })}
+                </div>
+                <div className="mb-2 text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
+                  {dayData.date.toLocaleDateString('en-FI', {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </div>
+                <img
+                  className="mx-auto mb-2 size-12"
+                  src={`/weathericons/${dayData.symbolCode}.svg`}
+                  width={48}
+                  height={48}
+                  decoding="async"
+                  alt="Weather icon"
+                />
+                <div className="text-lg font-bold">
+                  {Math.round(dayData.maxTemp)}°
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {Math.round(dayData.minTemp)}°
+                </div>
               </div>
-              <div className="mb-2 text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-                {dayData.date.toLocaleDateString('en-FI', {
-                  month: 'short',
-                  day: 'numeric',
-                })}
-              </div>
-              <img
-                className="mx-auto mb-2 size-12"
-                src={`/weathericons/${dayData.symbolCode}.svg`}
-                width={48}
-                height={48}
-                decoding="async"
-                alt="Weather icon"
-              />
-              <div className="text-lg font-bold">
-                {Math.round(dayData.maxTemp)}°
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {Math.round(dayData.minTemp)}°
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Temperature</h3>

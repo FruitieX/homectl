@@ -396,10 +396,9 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
   const calendarNow = useMinuteNow(showCalendar || detailsModalOpen);
-  const eventViews =
-    detailsModalOpen && calendar
-      ? buildEventViews(calendar.events, calendarNow)
-      : [];
+  const eventViews = calendar
+    ? buildEventViews(calendar.events, calendarNow)
+    : [];
 
   useEffect(() => {
     let isSubscribed = true;
@@ -456,9 +455,9 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="flex w-full flex-col p-4 sm:p-5">
+          <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading icon={<Clock />} label="Now" detail />
-            <div className="flex flex-1 flex-col items-center justify-center py-4">
+            <div className="flex flex-1 flex-col items-center justify-center py-[var(--widget-inner-y,1rem)]">
               <LiveClockDisplay showSeconds={showSeconds} showDate={showDate} />
               <CalendarSummary
                 showCalendar={showCalendar}
@@ -475,7 +474,7 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
         onOpenChange={setDetailsModalOpen}
         title="Today's agenda"
         description="Upcoming and in-progress calendar events."
-        className="max-w-3xl"
+        className="h-[min(70dvh,36rem)] max-w-3xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
           <div className="flex flex-col gap-3">

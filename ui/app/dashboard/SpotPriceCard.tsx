@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
 import { Zap } from 'lucide-react';
 import { useTimeout } from 'usehooks-ts';
 
@@ -20,6 +21,7 @@ const formatPrice = (value: number | undefined) =>
   value === undefined ? '—' : `${value.toFixed(2)} c/kWh`;
 
 export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const [spacing] = useDashboardSpacing();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const isIdle = useIdle();
   const priceQuery = useSpotPriceResource(
@@ -55,9 +57,9 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard className="col-span-4 min-h-60">
+      <WidgetCard className="col-span-4">
         <div className="h-full w-full rounded-[inherit] text-left">
-          <CardContent className="flex w-full flex-col p-4 sm:p-5">
+          <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
             <button
               type="button"
               aria-label="Open electricity price details"
@@ -87,7 +89,9 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               </div>
             </div>
             <ResponsiveChart
-              height={215}
+              height={
+                spacing === 'compact' ? 155 : spacing === 'spacious' ? 215 : 180
+              }
               className="mt-1 min-w-0 overflow-hidden"
             >
               {({ width, height }) => (

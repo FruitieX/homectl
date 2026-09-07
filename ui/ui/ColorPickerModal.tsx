@@ -858,6 +858,12 @@ export const ColorPickerModal = () => {
   }, [setDeviceModalOpen]);
 
   const [tab, setTab] = useState('wheel');
+  const [floorplanSection, setFloorplanSection] = useState('controls');
+  const inFloorplan = deviceModalPresentation === 'floorplan';
+  const section =
+    floorplanSection === 'color' && colorDevices.length === 0
+      ? 'controls'
+      : floorplanSection;
   return (
     <ResponsiveOverlay
       open={deviceModalOpen}
@@ -880,7 +886,6 @@ export const ColorPickerModal = () => {
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
         {deviceModalPresentation === 'floorplan' && (
           <label className="block space-y-1 text-xs text-muted-foreground">
-            <span>Control selection</span>
             <select
               aria-label="Control selection"
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
@@ -922,19 +927,40 @@ export const ColorPickerModal = () => {
             </select>
           </label>
         )}
-        {deviceModalPresentation === 'floorplan' && (
+        {inFloorplan && (
+          <Tabs value={section} onValueChange={setFloorplanSection}>
+            <TabsList className="grid w-full grid-cols-3">
+              <TabsTrigger value="controls">Controls</TabsTrigger>
+              <TabsTrigger value="scenes">Scenes</TabsTrigger>
+              <TabsTrigger value="color" disabled={colorDevices.length === 0}>
+                Color
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        )}
+        {(!inFloorplan || section === 'controls') && (
+          <DeviceQuickControls
+            key={deviceModalState.join(',')}
+            devices={selected}
+          />
+        )}
+        {(!inFloorplan || section === 'scenes') && (
           <ScenesTab deviceKeys={deviceModalState} />
         )}
-        <DeviceQuickControls
-          key={deviceModalState.join(',')}
-          devices={selected}
-        />
-        {deviceModalPresentation !== 'floorplan' && (
-          <ScenesTab deviceKeys={deviceModalState} />
-        )}
-        {colorDevices.length > 0 && (
-          <details className="rounded-xl border border-border p-4">
-            <summary className="cursor-pointer py-2 text-sm font-medium">
+        {colorDevices.length > 0 && (!inFloorplan || section === 'color') && (
+          <details
+            open={inFloorplan ? true : undefined}
+            className={
+              inFloorplan ? 'min-w-0' : 'rounded-xl border border-border p-4'
+            }
+          >
+            <summary
+              className={
+                inFloorplan
+                  ? 'hidden'
+                  : 'cursor-pointer py-2 text-sm font-medium'
+              }
+            >
               Color options
             </summary>
             {colorDevices.length !== selected.length && (

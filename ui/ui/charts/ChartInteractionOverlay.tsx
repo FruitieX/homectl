@@ -48,6 +48,7 @@ export const ChartInteractionOverlay = <T,>({
           handleMouseMove(event, findDataPoint, getDataPointPosition)
         }
         onMouseLeave={hideTooltip}
+        onMouseUp={hideTooltip}
         onTouchStart={(event) =>
           handleTouch(event, findDataPoint, getDataPointPosition)
         }
@@ -56,7 +57,7 @@ export const ChartInteractionOverlay = <T,>({
         }
         onTouchEnd={hideTooltip}
         onTouchCancel={hideTooltip}
-        style={{ cursor: 'pointer' }}
+        style={{ cursor: 'pointer', touchAction: 'pan-y' }}
       />
     </g>
   );

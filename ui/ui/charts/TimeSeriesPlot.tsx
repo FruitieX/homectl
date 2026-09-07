@@ -49,6 +49,7 @@ export function TimeSeriesPlot({
   showNow?: boolean;
 }) {
   const id = useId();
+  const [keyboardInspect, setKeyboardInspect] = useState(false);
   const [active, setActive] = useState<number | null>(null);
   const [hidden, setHidden] = useState<string[]>([]);
   const clean = useMemo(
@@ -68,7 +69,7 @@ export function TimeSeriesPlot({
     right = 12,
     top = 16,
     bottom = 30;
-  const svgHeight = Math.max(70, height - 66);
+  const svgHeight = Math.max(70, height - 32);
   const plotWidth = Math.max(1, width - left - right),
     plotHeight = Math.max(1, svgHeight - top - bottom);
   const minTime = times[0] ?? Date.now();
@@ -113,9 +114,25 @@ export function TimeSeriesPlot({
         );
   const format = (value: number) =>
     value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  const inspect = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (times.length === 0) return;
+    const box = event.currentTarget.getBoundingClientRect();
+    const time = x
+      .invert(((event.clientX - box.left) * width) / box.width)
+      .getTime();
+    let nearestIndex = 0;
+    times.forEach((t, i) => {
+      if (Math.abs(t - time) < Math.abs(times[nearestIndex] - time))
+        nearestIndex = i;
+    });
+    setActive(nearestIndex);
+  };
   return (
-    <div className="text-foreground" style={{ width, height }}>
-      <div className="flex h-7 items-center gap-3 overflow-x-auto text-xs">
+    <div
+      className="relative min-w-0 overflow-hidden text-foreground"
+      style={{ width, height }}
+    >
+      <div className="flex h-8 min-w-0 items-center gap-3 overflow-x-auto px-3 text-xs">
         {clean.map((s, index) => (
           <button
             key={s.name}
@@ -157,8 +174,30 @@ export function TimeSeriesPlot({
                 })
                 .join(', ')}`
         }
-        className="touch-pan-y focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+        className={`touch-pan-y outline-none rounded-lg ${keyboardInspect ? 'ring-2 ring-inset ring-ring' : ''}`}
+        onBlur={() => {
+          setActive(null);
+          setKeyboardInspect(false);
+        }}
+        onPointerDown={(event) => {
+          setKeyboardInspect(false);
+          if (event.pointerType === 'mouse') event.preventDefault();
+          else event.currentTarget.setPointerCapture(event.pointerId);
+          inspect(event);
+        }}
+        onPointerUp={() => setActive(null)}
+        onPointerCancel={() => setActive(null)}
+        onLostPointerCapture={() => setActive(null)}
+        onPointerLeave={() => setActive(null)}
         onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.stopPropagation();
+            setActive(null);
+            setKeyboardInspect(false);
+            return;
+          }
+          if (['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key))
+            setKeyboardInspect(true);
           if (times.length === 0) return;
           if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
             event.preventDefault();
@@ -182,17 +221,8 @@ export function TimeSeriesPlot({
           }
         }}
         onPointerMove={(event) => {
-          if (times.length === 0) return;
-          const box = event.currentTarget.getBoundingClientRect();
-          const time = x
-            .invert(((event.clientX - box.left) * width) / box.width)
-            .getTime();
-          let nearestIndex = 0;
-          times.forEach((t, i) => {
-            if (Math.abs(t - time) < Math.abs(times[nearestIndex] - time))
-              nearestIndex = i;
-          });
-          setActive(nearestIndex);
+          if (event.pointerType === 'mouse' || event.buttons !== 0)
+            inspect(event);
         }}
       >
         <defs>
@@ -354,29 +384,29 @@ export function TimeSeriesPlot({
           </text>
         )}
       </svg>
-      <div
-        className="h-9 overflow-x-auto whitespace-nowrap text-xs text-muted-foreground"
-        aria-live="polite"
-      >
-        {selectedTime !== null ? (
-          <>
-            <span className="mr-3">{timeLabel(selectedTime)}</span>
-            {visible.map((s) => {
-              const p = nearest(s);
-              return (
-                <span className="mr-3 text-foreground" key={s.name}>
-                  {s.name}:{' '}
-                  {p
-                    ? `${format(p.value)} ${unit}${p.high !== undefined ? ` · ${s.bars ? 'possible' : 'range'} ${p.low !== undefined && !s.bars ? `${format(p.low)}–` : ''}${format(p.high)} ${unit}` : ''}${p.end !== undefined && s.bars && unit.includes('period') ? ` over ${(p.end - p.time) / 3600000} h` : ''}`
-                    : '—'}
-                </span>
-              );
-            })}
-          </>
-        ) : (
-          <span>Point or use arrow keys to inspect</span>
-        )}
-      </div>
+      {selectedTime !== null && (
+        <div
+          className="pointer-events-none absolute inset-x-3 bottom-1 min-w-0 rounded-lg bg-popover/95 px-2 py-1.5 text-xs text-popover-foreground shadow-sm break-words whitespace-normal"
+          aria-live="polite"
+        >
+          {selectedTime !== null ? (
+            <>
+              <span className="mr-3">{timeLabel(selectedTime)}</span>
+              {visible.map((s) => {
+                const p = nearest(s);
+                return (
+                  <span className="mr-3 text-foreground" key={s.name}>
+                    {s.name}:{' '}
+                    {p
+                      ? `${format(p.value)} ${unit}${p.high !== undefined ? ` · ${s.bars ? 'possible' : 'range'} ${p.low !== undefined && !s.bars ? `${format(p.low)}–` : ''}${format(p.high)} ${unit}` : ''}${p.end !== undefined && s.bars && unit.includes('period') ? ` over ${(p.end - p.time) / 3600000} h` : ''}`
+                      : '—'}
+                  </span>
+                );
+              })}
+            </>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

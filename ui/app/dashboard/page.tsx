@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import {
+  useDashboardSpacing,
+  dashboardSpacingStyles,
+} from '@/hooks/dashboardSpacing';
 import { Link } from 'react-router-dom';
 
 import {
@@ -135,6 +139,9 @@ function DashboardLoadingGrid() {
 }
 
 export default function Page() {
+  const [storedSpacing] = useDashboardSpacing();
+  const spacing =
+    storedSpacing in dashboardSpacingStyles ? storedSpacing : 'balanced';
   const [isFullscreen] = useIsFullscreen();
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const {
@@ -209,7 +216,11 @@ export default function Page() {
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+    <div
+      data-dashboard-spacing={spacing}
+      style={dashboardSpacingStyles[spacing]}
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-8 lg:py-6"
+    >
       <div className="mx-auto max-w-[100rem] space-y-8">
         <section>
           {layouts.length > 1 ? (
@@ -237,7 +248,7 @@ export default function Page() {
             </div>
           ) : null}
 
-          <div className="grid auto-rows-[minmax(9rem,auto)] grid-cols-4 gap-3 min-[37.5rem]:grid-cols-6 lg:grid-cols-8">
+          <div className="grid auto-rows-[minmax(var(--dashboard-row),auto)] grid-cols-4 gap-[var(--dashboard-gap)] min-[37.5rem]:grid-cols-6 lg:grid-cols-8">
             {renderedWidgets.map((widget) => (
               <div
                 key={widget.id}

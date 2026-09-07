@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
 import { useInterval, useTimeout } from 'usehooks-ts';
 import { Activity, Droplets, Thermometer } from 'lucide-react';
 import { useSensorData, useTempSensorsResource } from '@/hooks/influxdb';
@@ -38,6 +39,7 @@ const trendLabel = (trend: SensorTrend) =>
     unknown: 'Not enough recent data',
   })[trend];
 export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const [spacing] = useDashboardSpacing();
   const [open, setOpen] = useState(false),
     [activeId, setActiveId] = useState<string>('all'),
     [filter, setFilter] = useState('all');
@@ -102,7 +104,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   };
   return (
     <>
-      <WidgetCard className="p-4 sm:p-5">
+      <WidgetCard className="p-[var(--widget-padding,1rem)]">
         <div className="mb-3 flex items-center gap-2">
           <WidgetHeading icon={<Activity />} label="Climate sensors" />
           <Button size="sm" variant="ghost" onClick={() => show('all')}>
@@ -112,7 +114,9 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
         <div
           className={
             getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
-              ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
+              ? spacing === 'compact'
+                ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-5'
+                : 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
               : 'flex gap-2 overflow-x-auto pb-1'
           }
         >
@@ -124,7 +128,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                 type="button"
                 key={sensor.device_id}
                 onClick={() => show(sensor.device_id)}
-                className="min-w-28 rounded-xl border border-border/50 p-3 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-w-0 rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)] text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="mb-2 truncate text-xs font-medium">
                   {sensor.device_name}
@@ -291,11 +295,6 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
               </ResponsiveChart>
             </DetailPanel>
           ))}
-          <p className="text-xs text-muted-foreground">
-            Trends use recent samples over at least 30 minutes and ignore
-            isolated spikes. Gaps and stale readings are not classified as
-            steady.
-          </p>
         </div>
       </ResponsiveOverlay>
     </>
