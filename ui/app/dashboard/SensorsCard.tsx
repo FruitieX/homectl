@@ -6,6 +6,7 @@ import {
   TrendingDown,
   Minus,
   ChevronLeft,
+  Activity,
 } from 'lucide-react';
 import { useSensorData } from '@/hooks/influxdb';
 import { SensorChart } from '@/ui/charts/SensorChart';
@@ -34,8 +35,9 @@ import {
   getDashboardWidgetOptionStringArray,
 } from '@/hooks/useDashboard';
 import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
+import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { WidgetCard, WidgetHeading } from './WidgetChrome';
 
 interface SensorReading {
   time: Date;
@@ -82,25 +84,22 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
   return (
     <Button
       variant="ghost"
-      className="h-auto min-h-20 min-w-24 max-w-36 flex-1 basis-28 p-2"
+      className="h-auto min-h-24 min-w-28 max-w-40 flex-1 basis-32 rounded-2xl border border-border/40 bg-background/45 p-3 hover:border-primary/25 hover:bg-background/80"
       onClick={onClick}
     >
       <div
         className={clsx(
-          'flex flex-col items-center gap-2 w-full',
+          'flex w-full flex-col items-start gap-2',
           bothOffline && 'text-stone-500',
         )}
       >
         {/* Sensor name */}
-        <div
-          className="text-xs font-medium truncate w-full text-center"
-          title={sensor.device_name}
-        >
+        <div className="w-full truncate text-left text-xs font-semibold">
           {sensor.device_name}
         </div>
 
         {/* Values */}
-        <div className="flex flex-col gap-1 text-xs">
+        <div className="flex flex-col gap-1.5 text-sm">
           {/* Temperature */}
           <div className="flex items-center gap-1">
             <Thermometer
@@ -116,7 +115,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
             />
             {typeof sensor.latest_temp === 'number' && !tempOffline ? (
               <div className="flex items-center gap-1">
-                <span className="font-mono">
+                <span className="font-medium tabular-nums">
                   {sensor.latest_temp.toFixed(1)}°C
                 </span>
                 {tempStats && (
@@ -150,7 +149,7 @@ const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
             />
             {typeof sensor.latest_humidity === 'number' && !humidityOffline ? (
               <div className="flex items-center gap-1">
-                <span className="font-mono">
+                <span className="font-medium tabular-nums">
                   {sensor.latest_humidity.toFixed(1)}%
                 </span>
                 {humidityStats && (
@@ -232,6 +231,12 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
     prioritySensorIds:
       prioritySensorIds.length > 0 ? prioritySensorIds : undefined,
   });
+  const previewSensors = useMemo(() => {
+    const prioritySensors = sensorData.filter((sensor) => sensor.is_priority);
+    return prioritySensors.length > 0
+      ? prioritySensors
+      : sensorData.slice(0, 5);
+  }, [sensorData]);
 
   // Reset scroll position to x=0 when user becomes idle
   useEffect(() => {
@@ -461,27 +466,45 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card className="col-span-4 overflow-hidden">
-        <CardContent className="flex h-full items-center p-3">
+      <WidgetCard className="col-span-4">
+        <CardContent className="flex h-full flex-col p-4 sm:p-5">
+          <WidgetHeading
+            icon={<Activity />}
+            label="Climate sensors"
+            className="mb-3"
+          />
           <div
             ref={scrollContainerRef}
             className={clsx(
               'flex w-full items-center gap-2',
               wrapPreview
-                ? 'flex-wrap justify-center overflow-hidden'
+                ? 'flex-wrap overflow-hidden'
                 : 'h-full overflow-x-auto',
             )}
           >
-            {sensorData.map((sensor) => (
+            {previewSensors.map((sensor) => (
               <SensorCard
                 key={sensor.device_id}
                 sensor={sensor}
                 onClick={() => handleSensorClick(sensor.device_id)}
               />
             ))}
+            {sensorData.length > previewSensors.length ? (
+              <Button
+                variant="ghost"
+                className="h-24 min-w-28 flex-1 basis-28 rounded-2xl border border-dashed border-border/70 text-muted-foreground"
+                onClick={() => {
+                  setSensorFilter('indoor');
+                  setViewMode('combined');
+                  setDetailsModalOpen(true);
+                }}
+              >
+                +{sensorData.length - previewSensors.length} more
+              </Button>
+            ) : null}
           </div>
         </CardContent>
-      </Card>
+      </WidgetCard>
 
       <ResponsiveOverlay
         open={detailsModalOpen}
@@ -499,23 +522,24 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex items-center justify-between font-bold">
+          <div className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/25 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-2">
               {viewMode === 'combined' && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={handleBackToIndividual}
-                  className="p-1"
+                  className="px-2"
                 >
                   <ChevronLeft size={20} />
+                  Back
                 </Button>
               )}
               <div>
                 {viewMode === 'individual' ? (
                   <>
                     <h3 className="text-lg">{activeSensor?.device_name}</h3>
-                    <div className="flex gap-4 mt-2 text-sm font-normal">
+                    <div className="mt-2 flex flex-wrap gap-4 text-sm font-normal">
                       {typeof activeSensor?.latest_temp === 'number' &&
                         !isOffline(activeSensor.latest_temp_time) && (
                           <div className="flex items-center gap-1">
@@ -574,8 +598,8 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                     <h3 className="text-lg">
                       {/* Filter Controls */}
                       {viewMode === 'combined' && (
-                        <div className="flex justify-center gap-2 relative z-10 pt-4">
-                          <div className="flex rounded-2xl bg-muted p-1">
+                        <div className="relative z-10 flex gap-2">
+                          <div className="flex rounded-xl bg-muted p-1">
                             <Button
                               size="sm"
                               variant={
@@ -598,7 +622,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                         </div>
                       )}
                     </h3>
-                    <div className="flex gap-4 mt-2 text-sm font-normal">
+                    <div className="mt-3 flex flex-wrap gap-4 text-sm font-normal">
                       <div className="flex items-center gap-1">
                         <Thermometer size={16} />
                         <span>
@@ -704,7 +728,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
             </div>
             {viewMode === 'individual' && (
               <Button size="sm" variant="ghost" onClick={handleViewAllClick}>
-                View All
+                Compare sensors
               </Button>
             )}
           </div>
@@ -714,14 +738,14 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
               <>
                 {/* Individual sensor statistics */}
                 {(tempStats || humidityStats) && (
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                     {tempStats && (
-                      <div className="rounded-2xl border border-border bg-muted/40 p-3">
-                        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
+                        <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                           <Thermometer size={16} />
                           Temperature
                         </h4>
-                        <div className="space-y-1 text-xs">
+                        <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span>Current:</span>
                             <span
@@ -783,12 +807,12 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                     )}
 
                     {humidityStats && (
-                      <div className="rounded-2xl border border-border bg-muted/40 p-3">
-                        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+                      <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
+                        <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                           <Droplets size={16} />
                           Humidity
                         </h4>
-                        <div className="space-y-1 text-xs">
+                        <div className="space-y-2 text-sm">
                           <div className="flex justify-between">
                             <span>Current:</span>
                             <span
@@ -857,7 +881,10 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
 
                 {/* Individual sensor chart */}
                 {individualChartData.length > 0 ? (
-                  <ResponsiveChart height={350} className="rounded-lg">
+                  <ResponsiveChart
+                    height={350}
+                    className="overflow-hidden rounded-2xl border border-border/50 bg-muted/20"
+                  >
                     {({ width, height }) => (
                       <SensorChart
                         data={individualChartData}
@@ -870,7 +897,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                     )}
                   </ResponsiveChart>
                 ) : (
-                  <div className="p-8 text-stone-500 text-center">
+                  <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground">
                     <div className="text-4xl mb-2">📡</div>
                     <div>Sensor offline</div>
                     <div className="text-sm mt-1 text-stone-600">
@@ -882,15 +909,15 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
             ) : (
               <>
                 {/* Combined sensors statistics */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {overallStats.temp && (
-                    <div className="rounded-2xl border border-border bg-muted/40 p-3">
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2 justify-center">
+                    <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
+                      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                         <Thermometer size={16} />
                         {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
                         Temperature
                       </h4>
-                      <div className="space-y-1 text-xs">
+                      <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span>
                             Min ({overallStats.temp.minSensor?.deviceName}):
@@ -962,13 +989,13 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                     </div>
                   )}
                   {overallStats.humidity && (
-                    <div className="rounded-2xl border border-border bg-muted/40 p-3">
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-2 justify-center">
+                    <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
+                      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
                         <Droplets size={16} />
                         {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
                         Humidity
                       </h4>
-                      <div className="space-y-1 text-xs">
+                      <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span>
                             Min ({overallStats.humidity.minSensor?.deviceName}):

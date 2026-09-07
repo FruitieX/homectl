@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
-import { Calendar, Clock } from 'lucide-react';
+import { Calendar, Clock, MapPin } from 'lucide-react';
 import clsx from 'clsx';
 import useIdle from '@/hooks/useIdle';
 import { useAppConfig } from '@/hooks/appConfig';
@@ -17,6 +17,7 @@ import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { WidgetCard, WidgetHeading } from './WidgetChrome';
 
 type CalendarEvent = {
   id: string;
@@ -118,11 +119,7 @@ const isMultiDayEvent = (event: CalendarEvent) => {
       start.getMonth(),
       start.getDate(),
     );
-    const endDate = new Date(
-      end.getFullYear(),
-      end.getMonth(),
-      end.getDate(),
-    );
+    const endDate = new Date(end.getFullYear(), end.getMonth(), end.getDate());
     const diffInDays =
       (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
     return diffInDays > 1;
@@ -263,9 +260,7 @@ function LiveClockDisplay({
       <span className="font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
         {time.getHours().toString().padStart(2, '0')}:
         {time.getMinutes().toString().padStart(2, '0')}
-        {showSeconds
-          ? `:${time.getSeconds().toString().padStart(2, '0')}`
-          : ''}
+        {showSeconds ? `:${time.getSeconds().toString().padStart(2, '0')}` : ''}
       </span>
       {showDate ? (
         <span className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -304,7 +299,7 @@ function CalendarSummary({
   if (!displayEvent) return null;
 
   return (
-    <div className="mt-3 w-full border-t border-border/60 pt-3 text-center">
+    <div className="mt-4 w-full border-t border-border/50 pt-3 text-left">
       <div className="mb-1 flex items-center justify-center gap-1">
         <Calendar className="size-3" />
         {currentEvent && <Badge>Now</Badge>}
@@ -315,7 +310,7 @@ function CalendarSummary({
           <Badge>All day</Badge>
         )}
       </div>
-      <div className="max-w-full truncate text-xs font-medium">
+      <div className="max-w-full truncate text-sm font-medium">
         {displayEvent.summary}
       </div>
       <div className="flex min-w-0 items-center justify-center gap-1 text-xs text-muted-foreground">
@@ -355,8 +350,8 @@ function CalendarEventCard({ view }: { view: CalendarEventView }) {
             <span>{timeDisplay}</span>
           </div>
           {event.location && (
-            <div className="mb-2 text-sm text-muted-foreground">
-              📍 {event.location}
+            <div className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+              <MapPin className="size-4" /> {event.location}
             </div>
           )}
           {event.description && (
@@ -401,9 +396,10 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
   const calendarNow = useMinuteNow(showCalendar || detailsModalOpen);
-  const eventViews = detailsModalOpen && calendar
-    ? buildEventViews(calendar.events, calendarNow)
-    : [];
+  const eventViews =
+    detailsModalOpen && calendar
+      ? buildEventViews(calendar.events, calendarNow)
+      : [];
 
   useEffect(() => {
     let isSubscribed = true;
@@ -454,23 +450,26 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card className="col-span-2 overflow-hidden">
+      <WidgetCard className="col-span-2">
         <Button
           variant="ghost"
-          className="h-full w-full"
+          className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="flex w-full flex-col items-center justify-center px-4 py-5">
-            <LiveClockDisplay showSeconds={showSeconds} showDate={showDate} />
-            <CalendarSummary
-              showCalendar={showCalendar}
-              error={error}
-              calendar={calendar}
-              now={calendarNow}
-            />
+          <CardContent className="flex w-full flex-col p-4 sm:p-5">
+            <WidgetHeading icon={<Clock />} label="Now" detail />
+            <div className="flex flex-1 flex-col items-center justify-center py-4">
+              <LiveClockDisplay showSeconds={showSeconds} showDate={showDate} />
+              <CalendarSummary
+                showCalendar={showCalendar}
+                error={error}
+                calendar={calendar}
+                now={calendarNow}
+              />
+            </div>
           </CardContent>
         </Button>
-      </Card>
+      </WidgetCard>
       <ResponsiveOverlay
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
@@ -479,7 +478,7 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
         className="max-w-3xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-3">
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>

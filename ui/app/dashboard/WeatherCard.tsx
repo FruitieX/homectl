@@ -15,9 +15,11 @@ import { getUvIndexColor } from '@/lib/uvIndex';
 import { WeatherChart } from '@/ui/charts/WeatherChart';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
+import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { CloudSun } from 'lucide-react';
+import { WidgetCard, WidgetHeading } from './WidgetChrome';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -108,7 +110,11 @@ const fetchWeather = async (weatherUrl: string): Promise<WeatherResponse> => {
 const parseTime = (timeStr: string | Date): Date => {
   if (timeStr instanceof Date) return timeStr;
   let parsedStr = timeStr;
-  if (typeof timeStr === 'string' && !timeStr.endsWith('Z') && !/[+-]\d{2}:\d{2}$/.test(timeStr)) {
+  if (
+    typeof timeStr === 'string' &&
+    !timeStr.endsWith('Z') &&
+    !/[+-]\d{2}:\d{2}$/.test(timeStr)
+  ) {
     parsedStr = `${timeStr}Z`;
   }
   return new Date(parsedStr);
@@ -355,21 +361,26 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <Card className="col-span-1 overflow-hidden">
+      <WidgetCard className="col-span-1">
         <Button
           variant="ghost"
-          className="h-full w-full"
+          className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="p-5">
-            {renderWeatherDetail(
-              currentAndFutureSeries[0],
-              true,
-              latestFrontyardTemp ? Math.round(latestFrontyardTemp) : undefined,
-            )}
+          <CardContent className="flex w-full flex-col p-4 sm:p-5">
+            <WidgetHeading icon={<CloudSun />} label="Weather" detail />
+            <div className="flex flex-1 items-center justify-center py-3">
+              {renderWeatherDetail(
+                currentAndFutureSeries[0],
+                true,
+                latestFrontyardTemp
+                  ? Math.round(latestFrontyardTemp)
+                  : undefined,
+              )}
+            </div>
           </CardContent>
         </Button>
-      </Card>
+      </WidgetCard>
       <ResponsiveOverlay
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
@@ -382,7 +393,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             value={String(activeTab)}
             onValueChange={(value) => setActiveTab(Number(value))}
           >
-            <TabsList className="w-full justify-start overflow-x-auto">
+            <TabsList className="h-11 w-full justify-start overflow-x-auto rounded-2xl bg-muted/60 p-1.5">
               <TabsTrigger value="0">Hourly ({forecastHours}h)</TabsTrigger>
               <TabsTrigger value="1">Long-term ({forecastDays}d)</TabsTrigger>
             </TabsList>
@@ -427,13 +438,11 @@ function WeatherHourlyPanel({
         return (
           <Fragment key={currentDate.toISOString()}>
             {index === 0 && (
-              <div className="sticky top-0 z-20 flex flex-row items-center rounded-2xl border border-border bg-popover/95 px-3 py-2 text-base shadow-sm backdrop-blur gap-2">
+              <div className="sticky top-0 z-20 flex flex-row items-center gap-2 rounded-2xl border border-border/60 bg-popover/95 px-4 py-3 text-base shadow-sm backdrop-blur">
                 <span className="w-16 md:w-24 text-sm text-muted-foreground flex-shrink-0">
                   Time
                 </span>
-                <span className="text-sm text-muted-foreground">
-                  Forecast
-                </span>
+                <span className="text-sm text-muted-foreground">Forecast</span>
                 <span className="flex-1 text-right text-sm text-muted-foreground">
                   <span className="hidden sm:inline">Rain probability</span>
                   <span className="inline sm:hidden">Rain %</span>
@@ -456,7 +465,7 @@ function WeatherHourlyPanel({
               </div>
             )}
 
-            <div className="content-visibility-row flex flex-row items-center gap-2">
+            <div className="content-visibility-row flex flex-row items-center gap-3 rounded-2xl px-3 py-2 transition-colors hover:bg-muted/45">
               <div className="flex w-16 md:w-24 flex-col items-start text-xl md:text-2xl flex-shrink-0">
                 <span>
                   {currentDate.toLocaleTimeString('fi-FI', {
@@ -476,7 +485,6 @@ function WeatherHourlyPanel({
                       : 'text-yellow-500'
                     : 'text-green-500',
                 )}
-                title={`${Math.round(rainProbability)}% chance of precipitation in the next hour`}
               >
                 {Math.round(rainProbability)} %
               </span>
@@ -506,8 +514,7 @@ function WeatherLongTermPanel({
       <div className="flex w-full flex-row gap-2 overflow-x-auto pb-2 scrollbar-none">
         {dailyData.map((dayData) => {
           const today = new Date();
-          const isToday =
-            dayData.date.toDateString() === today.toDateString();
+          const isToday = dayData.date.toDateString() === today.toDateString();
 
           return (
             <div
@@ -631,20 +638,31 @@ const renderWeatherDetail = (
         decoding="async"
         alt="Weather icon"
       />
-      <div className={clsx('flex flex-col min-w-0', horizontal ? 'items-center' : '')}>
-        <span className={clsx(
-          'whitespace-nowrap font-semibold',
-          horizontal ? 'text-2xl' : 'text-lg md:text-2xl'
-        )}>
+      <div
+        className={clsx(
+          'flex flex-col min-w-0',
+          horizontal ? 'items-center' : '',
+        )}
+      >
+        <span
+          className={clsx(
+            'whitespace-nowrap font-semibold',
+            horizontal ? 'text-2xl' : 'text-lg md:text-2xl',
+          )}
+        >
           {overrideTemp !== undefined
             ? overrideTemp
             : Math.round(series.data.instant.details.air_temperature)}{' '}
           °C
         </span>
-        <span className={clsx(
-          'flex',
-          horizontal ? 'gap-2' : 'flex-wrap gap-x-2 gap-y-0.5 text-xs md:text-sm'
-        )}>
+        <span
+          className={clsx(
+            'flex',
+            horizontal
+              ? 'gap-2'
+              : 'flex-wrap gap-x-2 gap-y-0.5 text-xs md:text-sm',
+          )}
+        >
           <span className="text-muted-foreground whitespace-nowrap">
             {Math.round(series.data.instant.details.wind_speed)} m/s
           </span>
