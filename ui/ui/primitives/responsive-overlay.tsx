@@ -1,5 +1,6 @@
 import { useMediaQuery } from 'usehooks-ts';
 import { type ReactNode } from 'react';
+import { FloorplanInspector } from '@/ui/FloorplanInspector';
 
 import { cn } from '@/lib/cn';
 import {
@@ -25,7 +26,7 @@ interface ResponsiveOverlayProps {
   children: ReactNode;
   className?: string;
   presentation?: 'default' | 'fullscreen';
-  desktopPresentation?: 'dialog' | 'sidepanel';
+  desktopPresentation?: 'dialog' | 'sidepanel' | 'floorplan';
 }
 
 export function ResponsiveOverlay({
@@ -50,6 +51,14 @@ export function ResponsiveOverlay({
     isFullscreen && 'flex flex-col',
   );
   const isSidePanel = isDesktop && desktopPresentation === 'sidepanel';
+
+  if (desktopPresentation === 'floorplan') {
+    return open ? (
+      <FloorplanInspector title={title} onClose={() => onOpenChange(false)}>
+        {children}
+      </FloorplanInspector>
+    ) : null;
+  }
 
   if (isDesktop) {
     return (

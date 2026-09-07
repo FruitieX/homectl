@@ -10,6 +10,7 @@ type Props = {
   label?: string;
   open: boolean;
   onClose: () => void;
+  presentation?: 'default' | 'floorplan';
 };
 
 export const SensorActionModal = ({
@@ -18,6 +19,7 @@ export const SensorActionModal = ({
   label,
   open,
   onClose,
+  presentation = 'default',
 }: Props) => {
   if (!open || !device) {
     return null;
@@ -28,6 +30,9 @@ export const SensorActionModal = ({
 
   return (
     <ResponsiveOverlay
+      desktopPresentation={
+        presentation === 'floorplan' ? 'floorplan' : 'dialog'
+      }
       open={open}
       onOpenChange={(nextOpen) => {
         if (!nextOpen) {
@@ -47,6 +52,11 @@ export const SensorActionModal = ({
       className="max-w-2xl"
     >
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+        {presentation === 'floorplan' && (
+          <p className="text-sm text-muted-foreground">
+            These controls simulate sensor events.
+          </p>
+        )}
         <SensorActionPanel device={device} sensorConfig={sensorConfig} />
       </div>
     </ResponsiveOverlay>

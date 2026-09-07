@@ -20,6 +20,7 @@ interface PixiFloorplanRendererProps {
   selectedDeviceKeys?: readonly string[];
   interactive?: boolean;
   fitPadding?: number;
+  fitOnResize?: boolean;
   renderLabels?: boolean;
   onDevicePress?: (deviceKey: string) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
@@ -400,7 +401,9 @@ function syncBackground(renderState: SceneRenderState, scene: FloorplanScene) {
       destroyDisplayObject(renderState.backgroundSprite);
     }
 
-    renderState.backgroundSprite = new Sprite(Texture.from(scene.backgroundImage));
+    renderState.backgroundSprite = new Sprite(
+      Texture.from(scene.backgroundImage),
+    );
     renderState.backgroundLayer.addChild(renderState.backgroundSprite);
     renderState.backgroundImage = scene.backgroundImage;
   }
@@ -418,11 +421,13 @@ function syncTiles(renderState: SceneRenderState, scene: FloorplanScene) {
   renderState.tileGraphics.clear();
 
   for (const tile of scene.tiles) {
-    renderState.tileGraphics.rect(tile.x, tile.y, tile.width, tile.height).fill({
-      color: getTileColor(tile),
-      alpha:
-        tile.type === 'floor' ? (scene.backgroundImage ? 0.05 : 0.18) : 0.9,
-    });
+    renderState.tileGraphics
+      .rect(tile.x, tile.y, tile.width, tile.height)
+      .fill({
+        color: getTileColor(tile),
+        alpha:
+          tile.type === 'floor' ? (scene.backgroundImage ? 0.05 : 0.18) : 0.9,
+      });
   }
 }
 
@@ -453,7 +458,9 @@ function getGroupDrawKey(
   scene: FloorplanScene,
   selectedSet: ReadonlySet<string>,
 ) {
-  const selected = group.deviceKeys.some((deviceKey) => selectedSet.has(deviceKey));
+  const selected = group.deviceKeys.some((deviceKey) =>
+    selectedSet.has(deviceKey),
+  );
   return `${scene.layoutKey}:${getObjectIdentity(group.cells)}:${scene.tileWidth}:${scene.tileHeight}:${selected}`;
 }
 
@@ -597,7 +604,10 @@ function drawSensorMarker(
   graphics.clear();
   graphics
     .regularPoly(sensor.x, sensor.y, 16 * sensor.scale, 3)
-    .fill({ color: sensor.color ? rgbToHex(sensor.color) : 0x38bdf8, alpha: 0.95 })
+    .fill({
+      color: sensor.color ? rgbToHex(sensor.color) : 0x38bdf8,
+      alpha: 0.95,
+    })
     .stroke({ color: 0x0f172a, width: 2, alpha: 0.9 });
 }
 
@@ -999,6 +1009,7 @@ export function PixiFloorplanRenderer({
   selectedDeviceKeys,
   interactive = true,
   fitPadding = 0.86,
+  fitOnResize = false,
   renderLabels = true,
   onDevicePress,
   onDeviceLongPress,
@@ -1299,7 +1310,8 @@ export function PixiFloorplanRenderer({
         );
 
         resizeObserver = new ResizeObserver(() => {
-          if (!hasInteractedRef.current) {
+          app.resize();
+          if (fitOnResize || !hasInteractedRef.current) {
             fitSceneRef.current();
           }
         });
@@ -1333,7 +1345,7 @@ export function PixiFloorplanRenderer({
       renderStateRef.current = null;
       destroyApplication(app);
     };
-  }, [interactive]);
+  }, [interactive, fitOnResize]);
 
   useEffect(() => {
     latestSceneRef.current = scene;

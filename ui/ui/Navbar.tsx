@@ -1,10 +1,7 @@
-import { useSelectedDevices } from '@/hooks/selectedDevices';
-import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
+import { Edit, ChevronLeft, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
-import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
 import { useGroupsState } from '@/hooks/websocket';
-import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
 import { Button } from '@/ui/primitives/button';
@@ -37,34 +34,6 @@ export const Navbar = () => {
   } else if (pathname?.startsWith('/config')) {
     title = 'Settings';
   }
-
-  const [selectedDevices, setSelectedDevices] = useSelectedDevices();
-  const {
-    setState: setDeviceModalState,
-    setOpen: setDeviceModalOpen,
-    setPresentation: setDeviceModalPresentation,
-  } = useDeviceModalState();
-
-  const { setOpen: setSaveSceneModalOpen } = useSaveSceneModalState();
-
-  const clearSelectedDevices = useCallback(() => {
-    setSelectedDevices([]);
-  }, [setSelectedDevices]);
-
-  const editSelectedDevices = useCallback(() => {
-    setDeviceModalState(selectedDevices);
-    setDeviceModalPresentation('dialog');
-    setDeviceModalOpen(true);
-  }, [
-    selectedDevices,
-    setDeviceModalOpen,
-    setDeviceModalState,
-    setDeviceModalPresentation,
-  ]);
-
-  const saveScene = useCallback(() => {
-    setSaveSceneModalOpen(true);
-  }, [setSaveSceneModalOpen]);
 
   const navigateBack = useCallback(() => {
     if (back) {
@@ -119,45 +88,16 @@ export const Navbar = () => {
           <ChevronLeft />
         </Button>
       )}
-      {selectedDevices.length === 0 || title !== 'Floorplan' ? (
-        <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
-          <h1 className="truncate text-xl font-semibold text-foreground">
-            {title}
-          </h1>
-        </div>
-      ) : (
-        <>
-          <Button
-            aria-label="Clear selected devices"
-            variant="ghost"
-            size="icon"
-            onClick={clearSelectedDevices}
-          >
-            <X />
-          </Button>
-          <div className="flex min-w-0 flex-1 items-center px-2">
-            <h1 className="truncate text-lg font-semibold tracking-tight text-foreground">
-              {selectedDevices.length}{' '}
-              {selectedDevices.length === 1 ? 'device' : 'devices'}
-            </h1>
-          </div>
-          <Button
-            aria-label="Save selected devices as scene"
-            variant="ghost"
-            size="icon"
-            onClick={saveScene}
-          >
-            <Save />
-          </Button>
-          <Button
-            aria-label="Edit selected devices"
-            variant="ghost"
-            size="icon"
-            onClick={editSelectedDevices}
-          >
-            <Edit />
-          </Button>
-        </>
+      <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
+        <h1 className="truncate text-xl font-semibold text-foreground">
+          {title}
+        </h1>
+      </div>
+      {pathname === '/map' && (
+        <div
+          id="floorplan-toolbar"
+          className="flex min-w-0 items-center gap-1"
+        />
       )}
       {title === 'Home' && (
         <>

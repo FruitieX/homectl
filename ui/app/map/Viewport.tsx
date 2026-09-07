@@ -1,8 +1,10 @@
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { SlidersHorizontal } from 'lucide-react';
 import {
   useDevicesByKeysState,
   useDevicesState,
   useGroupsState,
-  useScenesState,
 } from '@/hooks/websocket';
 import {
   useDeviceDisplayNames,
@@ -10,29 +12,25 @@ import {
   useFloorplans,
 } from '@/hooks/useConfig';
 import { useImageState } from '@/hooks/useImageState';
-import { Device } from '@/bindings/Device';
-import { useMemo, useState } from 'react';
-import { getDeviceKey } from '@/lib/device';
 import {
   useSelectedDevices,
   useToggleSelectedDevice,
 } from '@/hooks/selectedDevices';
-import { SensorActionModal } from '@/ui/SensorActionModal';
 import { useStoredFloorplan } from '@/hooks/useStoredFloorplan';
+import { useDeviceModalState } from '@/hooks/deviceModalState';
+import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { getSensorConfigRef } from '@/lib/sensorInteraction';
 import { excludeUndefined } from 'utils/excludeUndefined';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
 import { PixiFloorplanRenderer } from '@/ui/floorplan';
-import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { FloorplanControlPanel } from '@/ui/FloorplanControlPanel';
-import { useSetDeviceState } from '@/hooks/useSetDeviceColor';
-import { getColor } from '@/lib/colors';
-import { type DevicesState } from '@/bindings/DevicesState';
-import { type FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
-import { cn } from '@/lib/cn';
-import { Activity, Layers3, Lightbulb } from 'lucide-react';
-import { Label } from '@/ui/primitives/label';
+import { SensorActionModal } from '@/ui/SensorActionModal';
+import { Button } from '@/ui/primitives/button';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/ui/primitives/popover';
 import {
   Select,
   SelectContent,
@@ -41,35 +39,11 @@ import {
   SelectValue,
 } from '@/ui/primitives/select';
 
-function isDevicePersistEnabled(
-  devices: DevicesState | null,
-  scenes: FlattenedScenesConfig | null,
-  deviceKey: string,
-) {
-  const device = devices?.[deviceKey];
-  if (!device || !('Controllable' in device.data)) {
-    return false;
-  }
-
-  const sceneId = device.data.Controllable.scene_id;
-  if (!sceneId) {
-    return false;
-  }
-
-  const scene = scenes?.[sceneId];
-  if (!scene) {
-    return false;
-  }
-
-  return scene.active_overrides.includes(deviceKey);
-}
-
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
 export const Viewport = () => {
   const devicesState = useDevicesState();
   const liveGroups = useGroupsState();
-  const scenes = useScenesState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const { data: deviceSensorConfigs } = useDeviceSensorConfigs();
   const { data: floorplans } = useFloorplans();
@@ -79,15 +53,26 @@ export const Viewport = () => {
   const [pixiFallbackReason, setPixiFallbackReason] = useState<string | null>(
     null,
   );
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [floorplanMode, setFloorplanMode] = useState<FloorplanMode>('all');
+  const [selecting, setSelecting] = useState(false);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
+  const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const [selectedDevices, setSelectedDevices] = useSelectedDevices();
+  const toggleSelectedDevice = useToggleSelectedDevice();
+  const { setOpen: setSaveSceneOpen } = useSaveSceneModalState();
+  const {
+    open: deviceOpen,
+    presentation,
+    setState: setDeviceModalState,
+    setOpen: setDeviceModalOpen,
+    setPresentation,
+  } = useDeviceModalState();
+
   const effectiveSelectedFloorplanId =
-    floorplans.length === 0
-      ? null
-      : selectedFloorplanId &&
-          floorplans.some((floorplan) => floorplan.id === selectedFloorplanId)
-        ? selectedFloorplanId
-        : (floorplans[0]?.id ?? null);
+    floorplans.find((floorplan) => floorplan.id === selectedFloorplanId)?.id ??
+    floorplans[0]?.id ??
+    null;
   const { grid: floorplanGrid, imageUrl } = useStoredFloorplan(
     effectiveSelectedFloorplanId ?? undefined,
   );
@@ -97,24 +82,14 @@ export const Viewport = () => {
     [floorplanGrid],
   );
   const liveDevices = useDevicesByKeysState(placedDeviceKeys);
-  const selectedFloorplanName =
-    floorplans.find(
-      (floorplan) => floorplan.id === effectiveSelectedFloorplanId,
-    )?.name ?? undefined;
-
-  const allDevices: Device[] = Object.values(
-    excludeUndefined(liveDevices ?? undefined),
+  const allDevices = Object.values(excludeUndefined(liveDevices ?? undefined));
+  const visibleDevices = allDevices.filter((device) =>
+    floorplanMode === 'lights'
+      ? 'Controllable' in device.data
+      : floorplanMode === 'sensors'
+        ? 'Sensor' in device.data
+        : true,
   );
-  const visibleDevices = useMemo(() => {
-    if (floorplanMode === 'lights') {
-      return allDevices.filter((device) => 'Controllable' in device.data);
-    }
-    if (floorplanMode === 'sensors') {
-      return allDevices.filter((device) => 'Sensor' in device.data);
-    }
-    return allDevices;
-  }, [allDevices, floorplanMode]);
-  const allRuntimeDevices = excludeUndefined(devicesState ?? undefined);
   const groups = excludeUndefined(liveGroups ?? undefined);
   const deviceDisplayNameMap = useMemo(
     () =>
@@ -123,13 +98,6 @@ export const Viewport = () => {
       ),
     [deviceDisplayNames],
   );
-  const floorplanScene = buildFloorplanScene({
-    grid: floorplanGrid,
-    image: floorplanImage,
-    devices: visibleDevices,
-    groups,
-    displayNames: deviceDisplayNameMap,
-  });
   const deviceSensorConfigMap = useMemo(
     () =>
       Object.fromEntries(
@@ -137,197 +105,249 @@ export const Viewport = () => {
       ),
     [deviceSensorConfigs],
   );
-  const [selectedDevices, setSelectedDevices] = useSelectedDevices();
-  const toggleSelectedDevice = useToggleSelectedDevice();
-  const setDeviceState = useSetDeviceState();
-  const {
-    setState: setDeviceModalState,
-    setOpen: setDeviceModalOpen,
-    setPresentation: setDeviceModalPresentation,
-  } =
-    useDeviceModalState();
-  const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
+  const floorplanScene = buildFloorplanScene({
+    grid: floorplanGrid,
+    image: floorplanImage,
+    devices: visibleDevices,
+    groups,
+    displayNames: deviceDisplayNameMap,
+  });
+  const activeSensor = activeSensorKey
+    ? (devicesState?.[activeSensorKey] ?? null)
+    : null;
+  const inspectorOpen =
+    (deviceOpen && presentation === 'floorplan') || activeSensor !== null;
 
-  const activeSensor =
-    activeSensorKey === null
-      ? null
-      : (allDevices.find(
-          (device) => getDeviceKey(device) === activeSensorKey,
-        ) ?? null);
+  useEffect(() => {
+    setToolbar(document.getElementById('floorplan-toolbar'));
+    return () => {
+      setDeviceModalOpen(false);
+      setSelectedDevices([]);
+    };
+  }, [setDeviceModalOpen, setSelectedDevices]);
 
-  const webglRendererActive =
-    pixiFallbackReason === null &&
-    floorplanScene.width > 0 &&
-    floorplanScene.height > 0;
+  // Selection changes update the existing inspector instead of opening another panel.
+  useEffect(() => {
+    if (!selecting) return;
+    setDeviceModalState(selectedDevices);
+    setPresentation('floorplan');
+    setDeviceModalOpen(selectedDevices.length > 0);
+  }, [
+    selecting,
+    selectedDevices,
+    setDeviceModalState,
+    setPresentation,
+    setDeviceModalOpen,
+  ]);
 
-  const openDeviceModal = (deviceKeys: string[]) => {
-    if (deviceKeys.length === 0) {
-      return;
-    }
-
-    setDeviceModalState(deviceKeys);
-    setDeviceModalPresentation('sidepanel');
+  const openDevice = (keys: string[]) => {
+    if (keys.length === 0) return;
+    setActiveSensorKey(null);
+    setDeviceModalState(keys);
+    setPresentation('floorplan');
     setDeviceModalOpen(true);
   };
-
-  const setDevicesPower = (deviceKeys: string[], power: boolean) => {
-    for (const deviceKey of deviceKeys) {
-      const device = devicesState?.[deviceKey];
-      if (!device || !('Controllable' in device.data)) {
-        continue;
-      }
-
-      const state = device.data.Controllable.state;
-
-      setDeviceState(
-        device,
-        isDevicePersistEnabled(devicesState, scenes, deviceKey),
-        power,
-        state.color ? getColor(device.data) : undefined,
-        state.brightness ?? (power ? 1 : undefined),
-        0.25,
-      );
-    }
+  const clearSelection = () => {
+    setSelecting(false);
+    setSelectedDevices([]);
+    setDeviceModalOpen(false);
   };
-
-  const toggleGroupDevices = (groupId: string) => {
-    const group = groups[groupId];
-    if (!group) {
-      return;
-    }
-
-    const selectedGroupDevices = selectedDevices.filter((deviceKey) =>
-      group.device_keys.includes(deviceKey),
+  const toggleGroup = (groupId: string) => {
+    const keys = groups[groupId]?.device_keys ?? [];
+    const remove = keys.some((key) => selectedDevices.includes(key));
+    setSelectedDevices(
+      remove
+        ? selectedDevices.filter((key) => !keys.includes(key))
+        : [...new Set([...selectedDevices, ...keys])],
     );
-    const isSelected = selectedGroupDevices.length > 0;
-
-    for (const deviceKey of group.device_keys) {
-      toggleSelectedDevice(deviceKey, isSelected);
-    }
-  };
-
-  const handlePixiDevicePress = (deviceKey: string) => {
-    if (selectedDevices.length === 0) {
-      openDeviceModal([deviceKey]);
-      return;
-    }
-
-    toggleSelectedDevice(deviceKey);
-  };
-
-  const handlePixiGroupPress = (groupId: string) => {
-    const group = groups[groupId];
-    if (!group) {
-      return;
-    }
-
-    if (selectedDevices.length === 0) {
-      setActiveGroupId(groupId);
-      return;
-    }
-
-    toggleGroupDevices(groupId);
   };
 
   return (
-    <div className="absolute left-0 top-0 h-full w-full">
-      {floorplans.length > 0 && (
-        <div className="absolute bottom-3 left-3 right-3 z-10 rounded-3xl border border-border/70 bg-card/90 p-3 text-card-foreground shadow-xl backdrop-blur-xl sm:bottom-4 sm:left-auto sm:right-4 sm:w-80">
-          <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              Floorplan
-            </Label>
-            <Select
-              value={effectiveSelectedFloorplanId ?? ''}
-              onValueChange={(value) => {
-                setSelectedFloorplanId(value || null);
-                setPixiFallbackReason(null);
-              }}
-            >
-              <SelectTrigger className="h-9 rounded-2xl bg-background/80">
-                <SelectValue placeholder="Choose floorplan" />
-              </SelectTrigger>
-              <SelectContent>
-                {floorplans.map((floorplan) => (
-                  <SelectItem key={floorplan.id} value={floorplan.id}>
-                    {floorplan.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {toolbar &&
+        floorplans.length > 0 &&
+        createPortal(
+          <>
+            {floorplans.length > 1 && (
+              <Select
+                value={effectiveSelectedFloorplanId ?? ''}
+                onValueChange={(id) => {
+                  clearSelection();
+                  setActiveSensorKey(null);
+                  setSelectedFloorplanId(id);
+                  setPixiFallbackReason(null);
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Floorplan"
+                  className="h-9 max-w-36 border-0 bg-transparent sm:max-w-56"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {floorplans.map((floorplan) => (
+                    <SelectItem key={floorplan.id} value={floorplan.id}>
+                      {floorplan.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Popover open={viewOpen} onOpenChange={setViewOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  aria-label="Floorplan view options"
+                >
+                  <SlidersHorizontal />
+                  View
+                  {floorplanMode !== 'all' ? (
+                    <span className="size-1.5 rounded-full bg-primary" />
+                  ) : null}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="space-y-4">
+                <div
+                  role="group"
+                  aria-label="Visible devices"
+                  className="flex gap-1"
+                >
+                  {(['all', 'lights', 'sensors'] as const).map((mode) => (
+                    <Button
+                      key={mode}
+                      size="sm"
+                      variant={mode === floorplanMode ? 'secondary' : 'ghost'}
+                      aria-pressed={mode === floorplanMode}
+                      onClick={() => {
+                        setFloorplanMode(mode);
+                        setViewOpen(false);
+                      }}
+                    >
+                      {mode === 'all'
+                        ? 'All'
+                        : mode === 'lights'
+                          ? 'Lights'
+                          : 'Sensors'}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => {
+                    if (selecting) clearSelection();
+                    else {
+                      setSelecting(true);
+                      setActiveSensorKey(null);
+                    }
+                    setViewOpen(false);
+                  }}
+                >
+                  {selecting ? 'Finish selecting' : 'Select devices'}
+                </Button>
+                <details className="text-sm">
+                  <summary className="cursor-pointer py-1 font-medium">
+                    Map help
+                  </summary>
+                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                    Tap a device or group to open controls. Drag to pan and
+                    pinch to zoom. Long-press a device or group to start
+                    selecting several devices.
+                  </p>
+                </details>
+              </PopoverContent>
+            </Popover>
+          </>,
+          toolbar,
+        )}
+
+      <div className="relative min-h-0 min-w-0 flex-1">
+        {pixiFallbackReason === null &&
+        floorplanScene.width > 0 &&
+        floorplanScene.height > 0 ? (
+          <PixiFloorplanRenderer
+            key={effectiveSelectedFloorplanId ?? 'default'}
+            scene={floorplanScene}
+            fitOnResize
+            selectedDeviceKeys={selectedDevices}
+            onDevicePress={(key) =>
+              selecting ? toggleSelectedDevice(key) : openDevice([key])
+            }
+            onDeviceLongPress={(key) => {
+              setSelecting(true);
+              setActiveSensorKey(null);
+              toggleSelectedDevice(key);
+            }}
+            onSensorPress={(key) => {
+              if (selecting) {
+                toggleSelectedDevice(key);
+                return;
+              }
+              setDeviceModalOpen(false);
+              setActiveSensorKey(key);
+            }}
+            onGroupPress={(id) =>
+              selecting
+                ? toggleGroup(id)
+                : openDevice(groups[id]?.device_keys ?? [])
+            }
+            onGroupLongPress={(id) => {
+              setSelecting(true);
+              setActiveSensorKey(null);
+              toggleGroup(id);
+            }}
+            onUnavailable={() =>
+              setPixiFallbackReason(
+                'The floorplan could not be displayed. Try a browser with WebGL support.',
+              )
+            }
+          />
+        ) : pixiFallbackReason ? (
+          <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
+            {pixiFallbackReason}
           </div>
-          {pixiFallbackReason && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              {pixiFallbackReason}
-            </p>
-          )}
-        </div>
-      )}
+        ) : null}
+      </div>
 
-      {floorplans.length > 0 && (
-        <div className="pointer-events-auto absolute right-3 top-3 z-10 flex items-center gap-1 rounded-2xl border border-border/60 bg-card/88 p-1 shadow-xl backdrop-blur-xl sm:right-4 sm:top-4">
-          <ModeButton
-            active={floorplanMode === 'all'}
-            label="All"
-            icon={Layers3}
-            onClick={() => setFloorplanMode('all')}
-          />
-          <ModeButton
-            active={floorplanMode === 'lights'}
-            label="Lights"
-            icon={Lightbulb}
-            onClick={() => setFloorplanMode('lights')}
-          />
-          <ModeButton
-            active={floorplanMode === 'sensors'}
-            label="Sensors"
-            icon={Activity}
-            onClick={() => setFloorplanMode('sensors')}
-          />
-        </div>
-      )}
-
-      {floorplans.length > 0 && (
-        <FloorplanControlPanel
-          floorplanName={selectedFloorplanName}
-          placedDevices={visibleDevices}
-          devicesByKey={allRuntimeDevices}
-          groups={groups}
-          selectedDeviceKeys={selectedDevices}
-          activeGroupId={activeGroupId}
-          displayNames={deviceDisplayNameMap}
-          onClearSelection={() => setSelectedDevices([])}
-          onCloseGroup={() => setActiveGroupId(null)}
-          onOpenDetailedControls={(deviceKeys) => {
-            setActiveGroupId(null);
-            openDeviceModal(deviceKeys);
-          }}
-          onSetPower={setDevicesPower}
+      <div
+        className={
+          inspectorOpen || selecting
+            ? 'flex shrink-0 flex-col md:w-80 lg:w-96'
+            : 'contents'
+        }
+      >
+        {selecting && (
+          <div className="flex shrink-0 items-center gap-2 border-t border-border bg-background px-3 py-2 md:border-l md:border-t-0">
+            <span className="min-w-0 flex-1 text-sm">
+              {selectedDevices.length > 0
+                ? `${selectedDevices.length} selected`
+                : 'Tap devices to select'}
+            </span>
+            {selectedDevices.length > 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setDeviceModalOpen(false);
+                  setSaveSceneOpen(true);
+                }}
+              >
+                Save scene
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" onClick={clearSelection}>
+              Done
+            </Button>
+          </div>
+        )}
+        <div
+          id="floorplan-inspector"
+          className={
+            inspectorOpen ? 'min-h-0 md:flex-1 [&>section]:md:h-full' : 'hidden'
+          }
         />
-      )}
-
-      {webglRendererActive ? (
-        <PixiFloorplanRenderer
-          key={effectiveSelectedFloorplanId ?? 'default'}
-          scene={floorplanScene}
-          selectedDeviceKeys={selectedDevices}
-          onDevicePress={handlePixiDevicePress}
-          onDeviceLongPress={toggleSelectedDevice}
-          onSensorPress={setActiveSensorKey}
-          onGroupPress={handlePixiGroupPress}
-          onGroupLongPress={toggleGroupDevices}
-          onUnavailable={() => {
-            setPixiFallbackReason(
-              'WebGL renderer unavailable; floorplan rendering is disabled on this device.',
-            );
-          }}
-        />
-      ) : pixiFallbackReason ? (
-        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-sm text-muted-foreground">
-          {pixiFallbackReason}
-        </div>
-      ) : null}
-
+      </div>
       <SensorActionModal
         device={activeSensor}
         sensorConfig={
@@ -342,37 +362,10 @@ export const Viewport = () => {
         }
         open={activeSensor !== null}
         onClose={() => setActiveSensorKey(null)}
+        presentation="floorplan"
       />
     </div>
   );
 };
 
 export default Viewport;
-
-function ModeButton({
-  active,
-  label,
-  icon: Icon,
-  onClick,
-}: {
-  active: boolean;
-  label: string;
-  icon: typeof Layers3;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      aria-label={`Show ${label.toLowerCase()}`}
-      onClick={onClick}
-      className={cn(
-        'flex h-9 items-center gap-1.5 rounded-xl px-2.5 text-xs font-semibold text-muted-foreground transition-colors',
-        active && 'bg-primary text-primary-foreground shadow-sm',
-      )}
-    >
-      <Icon className="size-3.5" />
-      <span className="hidden sm:inline">{label}</span>
-    </button>
-  );
-}
