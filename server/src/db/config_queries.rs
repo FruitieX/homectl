@@ -381,8 +381,10 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
 }
 
 pub async fn db_update_core_config(config: &CoreConfigRow) -> Result<()> {
-    let db = get_db_connection()?;
+    update_core_config_on(get_db_connection()?, config).await
+}
 
+async fn update_core_config_on<C: ConnectionTrait>(db: &C, config: &CoreConfigRow) -> Result<()> {
     execute(
         db,
         Query::update()
@@ -397,6 +399,28 @@ pub async fn db_update_core_config(config: &CoreConfigRow) -> Result<()> {
     )
     .await?;
 
+    Ok(())
+}
+
+/// Keep core settings and the service settings submitted with them atomic.
+pub async fn db_update_core_settings(
+    config: &CoreConfigRow,
+    settings: &[WidgetSettingRow],
+) -> Result<()> {
+    update_core_settings_on(get_db_connection()?, config, settings).await
+}
+
+async fn update_core_settings_on<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    config: &CoreConfigRow,
+    settings: &[WidgetSettingRow],
+) -> Result<()> {
+    let txn = db.begin().await?;
+    update_core_config_on(&txn, config).await?;
+    for setting in settings {
+        upsert_widget_setting_on(&txn, setting).await?;
+    }
+    txn.commit().await?;
     Ok(())
 }
 
@@ -734,7 +758,10 @@ pub async fn db_get_routine(id: &str) -> Result<Option<RoutineRow>> {
 }
 
 pub async fn db_upsert_routine(routine: &RoutineRow) -> Result<()> {
-    let db = get_db_connection()?;
+    upsert_routine_on(get_db_connection()?, routine).await
+}
+
+async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> Result<()> {
     let rules = serde_json::to_string(&routine.rules)?;
     let actions = serde_json::to_string(&routine.actions)?;
 
@@ -771,6 +798,32 @@ pub async fn db_upsert_routine(routine: &RoutineRow) -> Result<()> {
     )
     .await?;
 
+    Ok(())
+}
+
+/// Persist the actor-owned routine collection atomically. Re-saving after a
+/// failed rename also repairs references and removes the old persisted ID.
+pub async fn db_replace_routines(routines: &[RoutineRow]) -> Result<()> {
+    replace_routines_on(get_db_connection()?, routines).await
+}
+
+async fn replace_routines_on<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    routines: &[RoutineRow],
+) -> Result<()> {
+    let txn = db.begin().await?;
+    let mut delete = Query::delete();
+    delete.from_table(Routines::Table);
+    if !routines.is_empty() {
+        delete.and_where(
+            Expr::col(Routines::Id).is_not_in(routines.iter().map(|row| row.id.clone())),
+        );
+    }
+    execute(&txn, delete.to_owned()).await?;
+    for routine in routines {
+        upsert_routine_on(&txn, routine).await?;
+    }
+    txn.commit().await?;
     Ok(())
 }
 
@@ -2366,4 +2419,124 @@ fn is_empty_default_floorplan_stub(floorplan: &FloorplanExportRow) -> bool {
         && floorplan.width.is_none()
         && floorplan.height.is_none()
         && floorplan.grid_data.is_none()
+}
+
+#[cfg(test)]
+mod consistency_tests {
+    use super::*;
+    use sea_orm::{Database, DatabaseConnection, DbBackend};
+    use sea_orm_migration::MigratorTrait;
+    use serde_json::json;
+
+    async fn database() -> DatabaseConnection {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        crate::db::migrations::Migrator::up(&db, None)
+            .await
+            .unwrap();
+        db
+    }
+    fn routine(id: &str, target: &str) -> RoutineRow {
+        RoutineRow {
+            id: id.into(),
+            name: id.into(),
+            enabled: true,
+            rules: json!([]),
+            actions: json!([{"action":"ForceTriggerRoutine", "routine_id":target}]),
+        }
+    }
+    async fn sql(db: &DatabaseConnection, statement: &str) {
+        db.execute(Statement::from_string(DbBackend::Sqlite, statement))
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn routine_rename_failure_rolls_back_new_row_and_references() {
+        let db = database().await;
+        upsert_routine_on(&db, &routine("old", "old"))
+            .await
+            .unwrap();
+        upsert_routine_on(&db, &routine("caller", "old"))
+            .await
+            .unwrap();
+        sql(&db, "CREATE TRIGGER reject_caller BEFORE INSERT ON routines WHEN NEW.id = 'caller' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END").await;
+        assert!(
+            replace_routines_on(&db, &[routine("new", "new"), routine("caller", "new")],)
+                .await
+                .is_err()
+        );
+        let export = db_export_config_from_connection(&db).await.unwrap();
+        assert!(export.routines.iter().any(|row| row.id == "old"));
+        assert!(!export.routines.iter().any(|row| row.id == "new"));
+        assert_eq!(
+            export
+                .routines
+                .iter()
+                .find(|row| row.id == "caller")
+                .unwrap()
+                .actions,
+            routine("caller", "old").actions
+        );
+        sql(&db, "DROP TRIGGER reject_caller").await;
+        replace_routines_on(&db, &[routine("new", "new"), routine("caller", "new")])
+            .await
+            .unwrap();
+        let export = db_export_config_from_connection(&db).await.unwrap();
+        assert!(!export.routines.iter().any(|row| row.id == "old"));
+        assert_eq!(export.routines.len(), 2);
+        assert_eq!(
+            export
+                .routines
+                .iter()
+                .find(|row| row.id == "caller")
+                .unwrap()
+                .actions,
+            routine("caller", "new").actions
+        );
+    }
+
+    #[tokio::test]
+    async fn service_setting_failure_rolls_back_core_and_prior_settings() {
+        let db = database().await;
+        let before = db_export_config_from_connection(&db).await.unwrap();
+        sql(&db, "CREATE TRIGGER reject_setting BEFORE INSERT ON widget_settings WHEN NEW.key = 'blocked' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END").await;
+        let settings = [
+            WidgetSettingRow {
+                key: "first".into(),
+                config: json!({"url":"fixture"}),
+            },
+            WidgetSettingRow {
+                key: "blocked".into(),
+                config: json!({}),
+            },
+        ];
+        assert!(update_core_settings_on(
+            &db,
+            &CoreConfigRow {
+                warmup_time_seconds: 123
+            },
+            &settings
+        )
+        .await
+        .is_err());
+        let after = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(
+            after.core.warmup_time_seconds,
+            before.core.warmup_time_seconds
+        );
+        assert!(!after.widget_settings.iter().any(|row| row.key == "first"));
+        sql(&db, "DROP TRIGGER reject_setting").await;
+        update_core_settings_on(
+            &db,
+            &CoreConfigRow {
+                warmup_time_seconds: 123,
+            },
+            &settings,
+        )
+        .await
+        .unwrap();
+        let after = db_export_config_from_connection(&db).await.unwrap();
+        assert_eq!(after.core.warmup_time_seconds, 123);
+        assert!(after.widget_settings.iter().any(|row| row.key == "first"));
+    }
 }

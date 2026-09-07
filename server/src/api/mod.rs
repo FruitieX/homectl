@@ -1,3 +1,4 @@
+pub mod scene_commands;
 use std::{env, path::PathBuf};
 
 use crate::core::snapshot::SnapshotHandle;
@@ -126,6 +127,7 @@ pub fn init_api(
         .and(
             devices(&snapshot, &handle)
                 .or(device_commands::commands(&handle))
+                .or(scene_commands::commands(&handle))
                 .or(actions(event_tx.clone()))
                 .or(config(&snapshot, &handle)),
         )

@@ -15,6 +15,7 @@ use super::{
 #[ts(export)]
 pub enum WebSocketRequest {
     DeviceCommand(super::device_command::DeviceCommand),
+    SceneCommand(super::scene_command::SceneCommand),
     EventMessage(Box<Event>),
 }
 
@@ -54,6 +55,7 @@ pub struct StatePatch {
 #[ts(export)]
 pub enum WebSocketResponse {
     DeviceCommandResult(super::device_command::DeviceCommandResult),
+    SceneCommandResult(super::scene_command::SceneCommandResult),
     State(StateUpdate),
     Patch(StatePatch),
 }

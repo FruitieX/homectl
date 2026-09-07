@@ -1,3 +1,4 @@
+import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Provider as JotaiProvider } from 'jotai';
 import { QueryClientProvider } from '@tanstack/react-query';
 import {
@@ -63,8 +64,8 @@ export const ProvideAppConfig = ({ children }: { children: ReactNode }) => {
       <div className="app-ambient relative grid min-h-dvh flex-1 place-items-center overflow-hidden bg-background p-6 text-foreground">
         <div className="relative z-10 w-full max-w-md rounded-[2rem] border border-border/60 bg-card/70 p-7 shadow-2xl backdrop-blur-2xl sm:p-9">
           <div className="mb-8 flex items-center gap-3">
-            <div className="grid size-12 place-items-center rounded-2xl bg-primary font-black tracking-[-0.08em] text-primary-foreground shadow-[0_12px_35px_hsl(var(--primary)/0.25)]">
-              hc
+            <div className="grid size-12 place-items-center rounded-2xl text-foreground">
+              <HomectlLogo className="size-8" />
             </div>
             <div>
               <div className="font-semibold tracking-[-0.03em]">homectl</div>

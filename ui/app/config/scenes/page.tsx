@@ -1,3 +1,4 @@
+import type { SceneCommand } from '@/bindings/SceneCommand';
 import { useSearchParams } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import {
@@ -68,44 +69,37 @@ const getSceneSearchValues = (scene: Scene) => [
   Object.keys(scene.group_states ?? {}),
 ];
 
-function getSceneActivationErrorMessage(responseBody: string, sceneId: string) {
-  if (!responseBody.trim()) {
-    return `Failed to activate scene "${sceneId}".`;
-  }
-
-  try {
-    const parsed = JSON.parse(responseBody) as unknown;
-    if (
-      parsed &&
-      typeof parsed === 'object' &&
-      'error' in parsed &&
-      typeof parsed.error === 'string'
-    ) {
-      return parsed.error;
-    }
-  } catch {
-    return responseBody;
-  }
-
-  return responseBody;
-}
-
 async function triggerScene(apiEndpoint: string, sceneId: string) {
-  const response = await fetch(`${apiEndpoint}/api/v1/actions/trigger`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      action: 'ActivateScene',
-      scene_id: sceneId,
-    }),
-  });
-
-  if (response.ok) {
-    return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(`${apiEndpoint}/api/v1/commands/scene`, {
+      method: 'POST',
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        request_id: crypto.randomUUID(),
+        scene_id: sceneId,
+        device_keys: null,
+        group_keys: null,
+        use_scene_transition: false,
+        transition: null,
+      } satisfies SceneCommand),
+    });
+    if (response.status === 404)
+      throw new Error('Scene controls need the updated backend.');
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result?.applied)
+      throw new Error(result?.error || 'The scene change was rejected.');
+  } catch (error) {
+    if (controller.signal.aborted)
+      throw new Error(
+        'No runtime confirmation received. Check device states before trying again.',
+      );
+    throw error;
+  } finally {
+    clearTimeout(timeout);
   }
-
-  const responseBody = await response.text();
-  throw new Error(getSceneActivationErrorMessage(responseBody, sceneId));
 }
 
 export default function ScenesPage() {
@@ -177,7 +171,7 @@ export default function ScenesPage() {
       setActivatingSceneId(null);
     }
 
-    setActivationNotice(`Activated scene "${scene.name}".`);
+    setActivationNotice(`Applied scene "${scene.name}" to runtime state.`);
   };
 
   if (loading) {
@@ -204,7 +198,7 @@ export default function ScenesPage() {
         actions={<Button onClick={() => setShowCreate(true)}>Add Scene</Button>}
       />
 
-      {activationError && (
+      {activationError && openId === null && (
         <Alert variant="warning">
           <AlertDescription className="flex items-center justify-between gap-3">
             <span>{activationError}</span>
@@ -219,7 +213,7 @@ export default function ScenesPage() {
         </Alert>
       )}
 
-      {activationNotice && (
+      {activationNotice && openId === null && (
         <Alert>
           <AlertDescription className="flex items-center justify-between gap-3">
             <span>{activationNotice}</span>
@@ -259,9 +253,15 @@ export default function ScenesPage() {
                 deviceOptions={deviceOptions}
                 groupOptions={groupOptions}
                 isActivating={activatingSceneId === scene.id}
+                activationError={openId === scene.id ? activationError : null}
+                activationNotice={openId === scene.id ? activationNotice : null}
                 isEditing={editingId === scene.id}
                 isOpen={openId === scene.id}
-                onOpen={() => setOpenId(scene.id)}
+                onOpen={() => {
+                  setActivationError(null);
+                  setActivationNotice(null);
+                  setOpenId(scene.id);
+                }}
                 onClose={() => {
                   setOpenId((current) =>
                     current === scene.id ? null : current,
@@ -723,6 +723,8 @@ function SceneCard({
   deviceOptions,
   groupOptions,
   isActivating,
+  activationError,
+  activationNotice,
   isEditing,
   isOpen,
   onActivate,
@@ -739,6 +741,8 @@ function SceneCard({
   deviceOptions: SceneTargetOption[];
   groupOptions: SceneTargetOption[];
   isActivating: boolean;
+  activationError: string | null;
+  activationNotice: string | null;
   isEditing: boolean;
   isOpen: boolean;
   onActivate: () => void;
@@ -794,6 +798,16 @@ function SceneCard({
 
   const viewContent = (
     <div className="space-y-6">
+      {activationError && (
+        <Alert variant="destructive">
+          <AlertDescription>{activationError}</AlertDescription>
+        </Alert>
+      )}
+      {activationNotice && (
+        <Alert>
+          <AlertDescription>{activationNotice}</AlertDescription>
+        </Alert>
+      )}
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="text-base font-semibold">Script</h3>

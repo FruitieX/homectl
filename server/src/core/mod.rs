@@ -7,6 +7,7 @@ pub mod integrations;
 pub mod logs;
 pub mod routine_history;
 pub mod routines;
+pub mod scene_commands;
 pub mod scenes;
 pub mod scripting;
 pub mod simulate;

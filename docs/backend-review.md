@@ -27,7 +27,19 @@ Room pages now put scenes before devices on mobile, show scenes in two columns, 
 
 Validation: 175 server unit tests passed, including group-cycle membership, warmup suppression, missing references, malformed-link handling, stable issue output, and read-only/stale-assignment inspection. Generated bindings, Clippy with warnings denied, UI type-check/lint/build, and fixture-only production-browser tests passed. Browser checks covered pin persistence, ordering, search, selection scope, read-only exclusion, mobile layout, editor links, filters, warmup, empty results, and an older-backend error. All browser API and WebSocket traffic was intercepted with fixtures; no homectl API calls or physical light changes were made after the user's explicit restriction.
 
-Limits: this first inspector does not evaluate scripts or routine behavior, prove linked-scene cycles, check hardware reachability, or apply repairs. Pins are browser-local preferences, not shared home configuration. Separating physical rooms from other collections still needs an explicit configuration model; existing groups have not been guessed or reclassified. Scene activation still uses the legacy event path; runtime/delivery acknowledgments for scene commands remain a separate follow-up.
+Limits: this first inspector does not evaluate scripts or routine behavior, prove linked-scene cycles, check hardware reachability, or apply repairs. Pins are browser-local preferences, not shared home configuration. Separating physical rooms from other collections still needs an explicit configuration model; existing groups have not been guessed or reclassified. Scene activation used the legacy event path at this stage; runtime acknowledgments are implemented in the next pass below.
+
+## Implementation progress — save consistency and scene commands
+
+Core settings accept partial updates, preserving omitted service settings and credentials. Core and service settings persist in one transaction. Routine updates persist the complete current routine collection atomically, so retrying a failed rename repairs the old database ID and references. Device label and sensor configuration writes also report persistence outcomes. Settings warnings remain visible until a successful save.
+
+Typed HTTP and WebSocket scene commands validate the complete selection before changing runtime state, reject invalid or empty selections, and acknowledge after snapshot publication. Room controls show pending state and errors; the scene editor displays activation failures inside its dialog. Replies confirm runtime application, not hardware delivery. Timeouts and disconnects do not replay commands.
+
+The dashboard header now groups editing and fullscreen controls, removes the healthy connection badge, and hides editing entirely in fullscreen. A single-layout dashboard no longer reserves a toolbar row, and widgets no longer inherit the grid-help tooltip. Navigation uses an SVG rendition of the existing house logo.
+
+Validation: 184 server unit tests passed, including isolated SQLite rollback/retry and scene validation/snapshot tests. Binding generation, Clippy with warnings denied, UI type checking, lint, and production build passed. Browser fixtures cover scene correlation, rejection, timeout, disconnect, no replay, editor errors, and persistence warning recovery. No homectl API calls or physical light changes were made.
+
+Remaining limits include physical-delivery acknowledgments, revisioned synchronization, and the broader execution/configuration refactors below.
 
 ## Observations from the running instance
 

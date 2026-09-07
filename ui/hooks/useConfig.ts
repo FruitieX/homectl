@@ -257,7 +257,11 @@ function useConfigApi<T>(endpoint: string) {
         },
       );
       const result = await readApiResponse<T>(response, 'Failed to update');
-      recordWrite(`${endpoint}/${id}`, result.write);
+      recordWrite(
+        `${endpoint}/${id}`,
+        result.write,
+        endpoint === 'routines' ? 'routines/' : undefined,
+      );
       return result.data;
     },
     onSuccess: () => {

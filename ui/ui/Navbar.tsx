@@ -1,18 +1,9 @@
 import { useSelectedDevices } from '@/hooks/selectedDevices';
-import {
-  X,
-  Edit,
-  ChevronLeft,
-  Save,
-  Expand,
-  Shrink,
-  Radio,
-  WifiOff,
-} from 'lucide-react';
+import { X, Edit, ChevronLeft, Save, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
-import { useLocation, useNavigate, useMatch } from 'react-router-dom';
-import { useConnectionStatus, useGroupsState } from '@/hooks/websocket';
+import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
+import { useGroupsState } from '@/hooks/websocket';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
@@ -101,12 +92,11 @@ export const Navbar = () => {
   }, [isFullscreen, setIsFullscreen]);
 
   const isIdle = useIdle();
-  const connectionStatus = useConnectionStatus();
-  const connected = connectionStatus === 'connected';
 
   if (isFullscreen) {
     return isIdle ? null : (
       <Button
+        aria-label="Exit fullscreen"
         className="absolute right-2 top-[calc(env(safe-area-inset-top)+0.75rem)] z-10 opacity-30 backdrop-blur"
         variant="ghost"
         size="icon"
@@ -169,19 +159,13 @@ export const Navbar = () => {
           </Button>
         </>
       )}
-      <div
-        className="mr-1 hidden items-center gap-2 rounded-full border border-border/55 bg-card/55 px-3 py-2 text-xs font-medium text-muted-foreground shadow-sm sm:flex"
-        role="status"
-      >
-        {connected ? (
-          <Radio className="size-3.5 text-emerald-500" />
-        ) : (
-          <WifiOff className="size-3.5 text-amber-500" />
-        )}
-        <span>{connected ? 'Live' : 'Reconnecting'}</span>
-      </div>
       {title === 'Home' && (
         <>
+          <Button asChild variant="ghost" size="icon">
+            <Link to="/config/dashboard" aria-label="Edit dashboard">
+              <Edit />
+            </Link>
+          </Button>
           <Button
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
             variant="ghost"

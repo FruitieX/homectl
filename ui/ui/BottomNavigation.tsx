@@ -1,3 +1,4 @@
+import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Link, useLocation } from 'react-router-dom';
 import { Cog, House, Layers3, Map } from 'lucide-react';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
@@ -96,9 +97,9 @@ export const HomectlNavigationRail = () => {
       <Link
         to="/"
         aria-label="homectl home"
-        className="mb-10 grid size-12 place-items-center rounded-[1.15rem] bg-primary text-lg font-black tracking-[-0.08em] text-primary-foreground shadow-[0_12px_35px_hsl(var(--primary)/0.24)]"
+        className="mb-10 grid size-12 place-items-center rounded-2xl text-foreground"
       >
-        hc
+        <HomectlLogo className="size-8" />
       </Link>
       <nav
         aria-label="Primary navigation"

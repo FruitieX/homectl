@@ -1,3 +1,4 @@
+import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Monitor, Moon, Save, Server, Sun, Wifi } from 'lucide-react';
@@ -46,6 +47,13 @@ const coreConfigApiResponseSchema = z
   .passthrough();
 
 const coreConfigEnvelopeSchema = z.object({
+  write: z
+    .object({
+      applied: z.boolean(),
+      persistence: z.enum(['persisted', 'memory_only', 'failed']),
+      warning: z.string().nullable(),
+    })
+    .optional(),
   success: z.boolean(),
   data: coreConfigApiResponseSchema.nullish(),
   error: z.string().nullish(),
@@ -105,10 +113,11 @@ async function updateCoreConfig(
     throw new Error(result.error || 'Failed to save settings');
   }
 
-  return normalizeCoreConfig(result.data);
+  return { values: normalizeCoreConfig(result.data), write: result.write };
 }
 
 export default function SettingsPage() {
+  const recordWrite = useRecordConfigWrite();
   const { apiEndpoint, wsEndpoint } = useAppConfig();
   const [settingsTab, setSettingsTab] = useState<
     'appearance' | 'core' | 'info'
@@ -126,9 +135,13 @@ export default function SettingsPage() {
   const mutation = useMutation({
     mutationFn: (values: CoreConfigFormValues) =>
       updateCoreConfig(apiEndpoint, values),
-    onSuccess: (values) => {
+    onSuccess: ({ values, write }) => {
       form.reset(values);
-      toast.success('Settings saved');
+      recordWrite('Core settings', write);
+      if (write?.persistence === 'persisted') toast.success('Settings saved');
+      else if (write)
+        toast.warning(write.warning ?? 'Settings applied in memory only.');
+      else toast.success('Settings applied');
     },
     onError: (error) => {
       toast.error(
@@ -308,8 +321,7 @@ export default function SettingsPage() {
 
 function AppearanceSettingsCard() {
   const [themeMode, setThemeMode] = useTheme();
-  const [blurEffectsEnabled, setBlurEffectsEnabled] =
-    useBackdropBlurEffects();
+  const [blurEffectsEnabled, setBlurEffectsEnabled] = useBackdropBlurEffects();
 
   return (
     <Card>

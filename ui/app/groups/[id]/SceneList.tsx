@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 import { Check, Star } from 'lucide-react';
@@ -13,7 +13,7 @@ import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { cn } from '@/lib/cn';
-import type { WebSocketRequest } from '@/bindings/WebSocketRequest';
+import { sendSceneCommand } from '@/lib/deviceCommands';
 import { toast } from 'sonner';
 
 const pinnedScenesAtom = atomWithStorage<string[]>(
@@ -31,6 +31,8 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
   const devices = useDevicesState();
   const modal = useSceneModalState();
   const [search, setSearch] = useState('');
+  const [pendingScene, setPendingScene] = useState<string | null>(null);
+  const sending = useRef(false);
   const [storedPins, setPins] = useAtom(pinnedScenesAtom);
   const pins = Array.isArray(storedPins)
     ? storedPins.filter((id) => typeof id === 'string')
@@ -73,29 +75,33 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
     scene.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()),
   );
 
-  function activate(sceneId: string, targets: string[]) {
-    if (!ws || ws.readyState !== WebSocket.OPEN || targets.length === 0) return;
-    const request: WebSocketRequest = {
-      EventMessage: {
-        Action: {
-          action: 'ActivateScene',
-          scene_id: sceneId,
-          device_keys: targets,
-          group_keys: null,
-          mirror_from_group: null,
-          include_source_groups: false,
-          use_scene_transition: false,
-          transition: null,
-          rollout: null,
-          rollout_source_device_key: null,
-          rollout_duration_ms: null,
-        },
-      },
-    };
+  async function activate(sceneId: string, targets: string[]) {
+    if (
+      !ws ||
+      ws.readyState !== WebSocket.OPEN ||
+      targets.length === 0 ||
+      sending.current
+    )
+      return;
+    sending.current = true;
+    setPendingScene(sceneId);
     try {
-      ws.send(JSON.stringify(request));
-    } catch {
-      toast.error('Could not send the scene change.');
+      await sendSceneCommand(ws, {
+        request_id: crypto.randomUUID(),
+        scene_id: sceneId,
+        device_keys: targets,
+        group_keys: null,
+        use_scene_transition: false,
+        transition: null,
+      });
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : 'Could not apply the scene.',
+        { id: 'scene-command-error' },
+      );
+    } finally {
+      sending.current = false;
+      setPendingScene(null);
     }
   }
 
@@ -138,7 +144,10 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
                 aria-label={`Activate ${scene.name}`}
                 title={scene.name}
                 aria-pressed={active}
-                disabled={!connected || targets.length === 0}
+                disabled={
+                  !connected || pendingScene !== null || targets.length === 0
+                }
+                aria-busy={pendingScene === id}
                 onClick={() => activate(id, targets)}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -151,9 +160,11 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
                     {scene.name}
                   </span>
                   <span className="mt-1 block text-xs text-muted-foreground">
-                    {active
-                      ? 'Active'
-                      : `${targets.length} ${targets.length === 1 ? 'device' : 'devices'}`}
+                    {pendingScene === id
+                      ? 'Applying…'
+                      : active
+                        ? 'Active'
+                        : `${targets.length} ${targets.length === 1 ? 'device' : 'devices'}`}
                   </span>
                 </span>
                 {active && (

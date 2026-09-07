@@ -1,6 +1,7 @@
 import {
   disconnectDeviceCommands,
   receiveDeviceCommandResult,
+  receiveSceneCommandResult,
 } from '@/lib/deviceCommands';
 import { DevicesPatch } from '@/bindings/DevicesPatch';
 import { DevicesState } from '@/bindings/DevicesState';
@@ -147,6 +148,8 @@ export const useProvideWebsocketState = () => {
 
         if ('DeviceCommandResult' in msg) {
           receiveDeviceCommandResult(ws!, msg.DeviceCommandResult);
+        } else if ('SceneCommandResult' in msg) {
+          receiveSceneCommandResult(ws!, msg.SceneCommandResult);
         } else if ('Command' in msg && msg.Command === 'reload') {
           window.location.reload();
         } else if ('State' in msg) {

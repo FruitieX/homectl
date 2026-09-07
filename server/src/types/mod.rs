@@ -11,6 +11,7 @@ pub mod routine_history;
 pub mod routine_status;
 pub mod rule;
 pub mod scene;
+pub mod scene_command;
 pub mod ui;
 pub mod websockets;
 

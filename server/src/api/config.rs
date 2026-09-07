@@ -87,6 +87,68 @@ struct CoreConfigPayload {
     calendar_ics_url: String,
 }
 
+/// Omitted fields preserve stored values and environment fallbacks.
+#[derive(Deserialize, Default)]
+#[serde(deny_unknown_fields)]
+struct CoreConfigPatch {
+    warmup_time_seconds: Option<i32>,
+    weather_api_url: Option<String>,
+    train_api_url: Option<String>,
+    influx_url: Option<String>,
+    influx_token: Option<String>,
+    calendar_ics_url: Option<String>,
+}
+
+impl CoreConfigPatch {
+    fn resolve(
+        self,
+        current: &ConfigExport,
+    ) -> Result<(CoreConfigRow, Vec<config_queries::WidgetSettingRow>), String> {
+        let warmup_time_seconds = self
+            .warmup_time_seconds
+            .unwrap_or(current.core.warmup_time_seconds);
+        if warmup_time_seconds < 0 {
+            return Err("Warmup time cannot be negative".into());
+        }
+        let mut updates = BTreeMap::<String, config_queries::WidgetSettingRow>::new();
+        for (key, field, value) in [
+            (WEATHER_SETTING_KEY, API_URL_FIELD, self.weather_api_url),
+            (
+                TRAIN_SCHEDULE_SETTING_KEY,
+                API_URL_FIELD,
+                self.train_api_url,
+            ),
+            (INFLUXDB_SETTING_KEY, URL_FIELD, self.influx_url),
+            (INFLUXDB_SETTING_KEY, TOKEN_FIELD, self.influx_token),
+            (CALENDAR_SETTING_KEY, ICS_URL_FIELD, self.calendar_ics_url),
+        ] {
+            if let Some(value) = value {
+                let setting = updates.entry(key.into()).or_insert_with(|| {
+                    current
+                        .widget_settings
+                        .iter()
+                        .find(|row| row.key == key)
+                        .cloned()
+                        .unwrap_or(config_queries::WidgetSettingRow {
+                            key: key.into(),
+                            config: serde_json::json!({}),
+                        })
+                });
+                if !setting.config.is_object() {
+                    return Err(format!("Stored settings for {key} must be an object"));
+                }
+                setting.config[field] = serde_json::Value::String(value);
+            }
+        }
+        Ok((
+            CoreConfigRow {
+                warmup_time_seconds,
+            },
+            updates.into_values().collect(),
+        ))
+    }
+}
+
 impl CoreConfigPayload {
     fn from_runtime(config: &ConfigExport) -> Self {
         let settings = &config.widget_settings;
@@ -129,36 +191,6 @@ impl CoreConfigPayload {
             )
             .unwrap_or_default(),
         }
-    }
-
-    fn core_config(&self) -> CoreConfigRow {
-        CoreConfigRow {
-            warmup_time_seconds: self.warmup_time_seconds,
-        }
-    }
-
-    fn widget_settings(&self) -> Vec<config_queries::WidgetSettingRow> {
-        vec![
-            config_queries::WidgetSettingRow {
-                key: WEATHER_SETTING_KEY.to_string(),
-                config: serde_json::json!({ API_URL_FIELD: self.weather_api_url }),
-            },
-            config_queries::WidgetSettingRow {
-                key: TRAIN_SCHEDULE_SETTING_KEY.to_string(),
-                config: serde_json::json!({ API_URL_FIELD: self.train_api_url }),
-            },
-            config_queries::WidgetSettingRow {
-                key: INFLUXDB_SETTING_KEY.to_string(),
-                config: serde_json::json!({
-                    URL_FIELD: self.influx_url,
-                    TOKEN_FIELD: self.influx_token,
-                }),
-            },
-            config_queries::WidgetSettingRow {
-                key: CALENDAR_SETTING_KEY.to_string(),
-                config: serde_json::json!({ ICS_URL_FIELD: self.calendar_ics_url }),
-            },
-        ]
     }
 }
 
@@ -1294,39 +1326,42 @@ async fn get_core_config(snapshot: SnapshotHandle) -> Result<impl Reply, warp::R
 }
 
 async fn update_core_config(
-    config: CoreConfigPayload,
+    patch: CoreConfigPatch,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let core_config = config.core_config();
-    let widget_settings = config.widget_settings();
-
-    let core_for_state = core_config.clone();
-    let widgets_for_state = widget_settings.clone();
-    let _ = handle
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let result = handle
         .mutate(move |state| {
             Box::pin(async move {
-                state.update_core_config(core_for_state);
-                for setting in widgets_for_state {
-                    state.upsert_widget_setting(setting);
+                let (core, widgets) = patch.resolve(&state.runtime_config)?;
+                state.update_core_config(core.clone());
+                for setting in &widgets {
+                    state.upsert_widget_setting(setting.clone());
                 }
+                Ok::<_, String>((
+                    core,
+                    state.runtime_config.widget_settings.clone(),
+                    CoreConfigPayload::from_runtime(&state.runtime_config),
+                ))
             })
         })
         .await;
-
-    if let Err(e) = config_queries::db_update_core_config(&core_config).await {
-        warn!("Failed to persist core config: {e}");
-    }
-
-    for setting in &widget_settings {
-        if let Err(error) = config_queries::db_upsert_widget_setting(setting).await {
-            warn!(
-                "Failed to persist widget setting '{}': {error}",
-                setting.key
-            );
-        }
-    }
-
-    Ok(ApiResponse::success(config))
+    let (core, widgets, response) = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_update_core_settings(&core, &widgets).await;
+    Ok(config_write_response(
+        response,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 fn runtime_status_routes(
@@ -1383,46 +1418,67 @@ async fn upsert_device_display_name(
     mut row: DeviceDisplayNameRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     row.device_key = decode_path_key(device_key);
 
     let row_for_state = row.clone();
-    let _ = handle
+    if handle
         .mutate(move |state| {
             Box::pin(async move {
                 state.upsert_device_display_override(row_for_state);
             })
         })
-        .await;
-
-    if let Err(e) = config_queries::db_upsert_device_display_override(&row).await {
-        warn!("Failed to persist device display name override: {e}");
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
     }
 
-    Ok(ApiResponse::success(row))
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_device_display_override(&row).await;
+
+    Ok(config_write_response(
+        row,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_device_display_name(
     device_key: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let device_key = decode_path_key(device_key);
     let key_for_state = device_key.clone();
     let deleted = handle
         .mutate(move |state| {
             Box::pin(async move { state.delete_device_display_override(&key_for_state) })
         })
-        .await
-        .unwrap_or(false);
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
-    if !deleted {
-        return Ok(not_found("Device display name"));
-    }
+    let _ = deleted; // DELETE is idempotent, including persistence retries.
 
-    if let Err(e) = config_queries::db_delete_device_display_override(&device_key).await {
-        warn!("Failed to persist device display name deletion: {e}");
-    }
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_device_display_override(&device_key).await;
 
-    Ok(ApiResponse::success(()))
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 fn device_sensor_config_routes(
@@ -1685,6 +1741,10 @@ async fn upsert_device_sensor_config(
     mut row: DeviceSensorConfigRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     row.device_ref = decode_path_key(device_ref);
 
     let row_for_state = row.clone();
@@ -1724,35 +1784,48 @@ async fn upsert_device_sensor_config(
         }
     }
 
-    if let Err(e) = config_queries::db_upsert_device_sensor_config(&row).await {
-        warn!("Failed to persist device sensor config: {e}");
-    }
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_device_sensor_config(&row).await;
 
-    Ok(ApiResponse::success(row))
+    Ok(config_write_response(
+        row,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_device_sensor_config(
     device_ref: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
     let device_ref = decode_path_key(device_ref);
     let key_for_state = device_ref.clone();
     let deleted = handle
         .mutate(move |state| {
             Box::pin(async move { state.delete_device_sensor_config(&key_for_state) })
         })
-        .await
-        .unwrap_or(false);
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
 
-    if !deleted {
-        return Ok(not_found("Device sensor config"));
-    }
+    let _ = deleted; // DELETE is idempotent, including persistence retries.
 
-    if let Err(e) = config_queries::db_delete_device_sensor_config(&device_ref).await {
-        warn!("Failed to persist device sensor config deletion: {e}");
-    }
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_device_sensor_config(&device_ref).await;
 
-    Ok(ApiResponse::success(()))
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 // ============================================================================
@@ -2460,21 +2533,17 @@ async fn update_routine(
 
                 state.runtime_config.routines[existing_index] = routine_for_state.clone();
 
-                let mut changed_routines = vec![routine_for_state.clone()];
-
                 if renamed {
                     for existing in &mut state.runtime_config.routines {
                         if existing.id == next_id_for_state {
                             continue;
                         }
 
-                        if rewrite_force_trigger_routine_references(
+                        rewrite_force_trigger_routine_references(
                             &mut existing.actions,
                             &id_for_state,
                             &next_id_for_state,
-                        ) {
-                            changed_routines.push(existing.clone());
-                        }
+                        );
                     }
                 }
 
@@ -2484,12 +2553,12 @@ async fn update_routine(
                     .sort_by(|left, right| left.id.cmp(&right.id));
                 state.apply_runtime_routines();
 
-                UpdateOutcome::Updated(changed_routines)
+                UpdateOutcome::Updated(state.runtime_config.routines.clone())
             })
         })
         .await;
 
-    let changed_routines = match outcome {
+    let routines_to_persist = match outcome {
         Ok(UpdateOutcome::Updated(routines)) => routines,
         Ok(UpdateOutcome::NotFound) => return Ok(not_found("Routine")),
         Ok(UpdateOutcome::Conflict) => {
@@ -2509,16 +2578,7 @@ async fn update_routine(
     routine.id = next_id.clone();
 
     let database_available = db::is_db_connected();
-    let persistence = async {
-        for changed_routine in &changed_routines {
-            config_queries::db_upsert_routine(changed_routine).await?;
-        }
-        if renamed {
-            config_queries::db_delete_routine(&id).await?;
-        }
-        color_eyre::Result::<()>::Ok(())
-    }
-    .await;
+    let persistence = config_queries::db_replace_routines(&routines_to_persist).await;
     Ok(config_write_response(
         routine,
         persistence,
@@ -4166,6 +4226,44 @@ mod tests {
     use super::*;
     use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
+
+    #[test]
+    fn core_patch_preserves_omitted_settings_and_unrelated_fields() {
+        let (state, _rx) = crate::core::event::tests::test_state();
+        let mut config = state.runtime_config;
+        config.widget_settings.push(config_queries::WidgetSettingRow { key: INFLUXDB_SETTING_KEY.into(), config: serde_json::json!({ URL_FIELD: "old-url", TOKEN_FIELD: "keep-token", "other": "keep-other" }) });
+        let (core, updates) = CoreConfigPatch {
+            warmup_time_seconds: Some(9),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .unwrap();
+        assert_eq!(core.warmup_time_seconds, 9);
+        assert!(updates.is_empty());
+        let (_, updates) = CoreConfigPatch {
+            influx_url: Some("new-url".into()),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .unwrap();
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].config[TOKEN_FIELD], "keep-token");
+        assert_eq!(updates[0].config["other"], "keep-other");
+        assert_eq!(updates[0].config[URL_FIELD], "new-url");
+        let (_, updates) = CoreConfigPatch {
+            influx_token: Some(String::new()),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .unwrap();
+        assert_eq!(updates[0].config[TOKEN_FIELD], "");
+        assert!(CoreConfigPatch {
+            warmup_time_seconds: Some(-1),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .is_err());
+    }
 
     #[tokio::test]
     async fn config_write_reports_durability_separately_from_runtime_success() {

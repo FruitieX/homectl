@@ -51,6 +51,23 @@ pub struct StateHandle {
 }
 
 impl StateHandle {
+    pub async fn activate_scene(
+        &self,
+        command: crate::types::scene_command::SceneCommand,
+    ) -> Result<crate::types::scene_command::SceneCommandResult> {
+        let (done, reply) = tokio::sync::oneshot::channel();
+        self.metrics.on_enqueue();
+        self.tx
+            .send(StateCommand::ActivateScene { command, done })
+            .map_err(|_| {
+                self.metrics.on_dequeue();
+                color_eyre::eyre::eyre!("State actor unavailable")
+            })?;
+        reply
+            .await
+            .map_err(|_| color_eyre::eyre::eyre!("State actor dropped the command result"))
+    }
+
     pub async fn control_device(
         &self,
         command: crate::types::device_command::DeviceCommand,
@@ -230,6 +247,28 @@ async fn run_actor(
                 if let Some(done) = done {
                     let _ = done.send(());
                 }
+            }
+            StateCommand::ActivateScene { command, done } => {
+                let result =
+                    crate::core::scene_commands::apply_scene_command(&mut app_state, &command);
+                if result.is_ok() {
+                    app_state.publish_snapshot(SnapshotChanges::devices());
+                }
+                metrics.record(
+                    kind_idx,
+                    started_at.elapsed().as_millis() as u64,
+                    started_at.elapsed() > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS),
+                );
+                let (affected_devices, error) = match result {
+                    Ok(keys) => (keys, None),
+                    Err(error) => (vec![], Some(error)),
+                };
+                let _ = done.send(crate::types::scene_command::SceneCommandResult {
+                    request_id: command.request_id,
+                    applied: error.is_none(),
+                    affected_devices,
+                    error,
+                });
             }
             StateCommand::ControlDevice { command, done } => {
                 let result = match crate::core::device_commands::prepare_device_command(

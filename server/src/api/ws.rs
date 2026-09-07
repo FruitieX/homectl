@@ -105,6 +105,19 @@ async fn user_connected(
             let msg = serde_json::from_str::<WebSocketRequest>(json);
 
             match msg {
+                Ok(WebSocketRequest::SceneCommand(command)) => {
+                    let result = super::scene_commands::dispatch(command, &handle)
+                        .await
+                        .unwrap_or_else(|result| result);
+                    ws_handle
+                        .send(
+                            Some(my_id),
+                            &crate::types::websockets::WebSocketResponse::SceneCommandResult(
+                                result,
+                            ),
+                        )
+                        .await;
+                }
                 Ok(WebSocketRequest::DeviceCommand(command)) => {
                     let result = super::device_commands::dispatch(command, &handle).await;
                     ws_handle

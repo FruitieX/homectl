@@ -8,8 +8,8 @@ import {
   useDashboardWidgets,
 } from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
+import { useIsFullscreen } from '@/hooks/isFullscreen';
 import {
-  DASHBOARD_GRID_HELP,
   getDashboardWidgetRowSpanStyle,
   getDashboardWidgetSpanClass,
 } from '@/lib/dashboard-layout';
@@ -135,6 +135,7 @@ function DashboardLoadingGrid() {
 }
 
 export default function Page() {
+  const [isFullscreen] = useIsFullscreen();
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
   const {
     layouts,
@@ -195,9 +196,11 @@ export default function Page() {
                 : 'Create a layout and add widgets in Settings → Dashboard to make this space your own.'
             }
             action={
-              <Button asChild>
-                <Link to="/config/dashboard">Edit dashboard</Link>
-              </Button>
+              !isFullscreen ? (
+                <Button asChild>
+                  <Link to="/config/dashboard">Edit dashboard</Link>
+                </Button>
+              ) : undefined
             }
           />
         </div>
@@ -209,11 +212,8 @@ export default function Page() {
     <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
       <div className="mx-auto max-w-[100rem] space-y-8">
         <section>
-          <div className="mb-3 flex items-center justify-end gap-3 px-1">
-            <Button asChild variant="ghost">
-              <Link to="/config/dashboard">Edit dashboard</Link>
-            </Button>
-            {layouts.length > 1 ? (
+          {layouts.length > 1 ? (
+            <div className="mb-3 flex items-center justify-end gap-3 px-1">
               <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-border/50 bg-card/55 p-1.5 backdrop-blur-xl">
                 <span className="px-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Layout
@@ -234,13 +234,10 @@ export default function Page() {
                   </Button>
                 ))}
               </div>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
-          <div
-            className="grid auto-rows-[minmax(9rem,auto)] grid-cols-4 gap-3 min-[37.5rem]:grid-cols-6 lg:grid-cols-8"
-            title={DASHBOARD_GRID_HELP}
-          >
+          <div className="grid auto-rows-[minmax(9rem,auto)] grid-cols-4 gap-3 min-[37.5rem]:grid-cols-6 lg:grid-cols-8">
             {renderedWidgets.map((widget) => (
               <div
                 key={widget.id}

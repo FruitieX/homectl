@@ -28,6 +28,10 @@ pub type MutateFn = Box<
 
 /// Top-level command routed to the state actor.
 pub enum StateCommand {
+    ActivateScene {
+        command: crate::types::scene_command::SceneCommand,
+        done: oneshot::Sender<crate::types::scene_command::SceneCommandResult>,
+    },
     ControlDevice {
         command: crate::types::device_command::DeviceCommand,
         done: oneshot::Sender<crate::types::device_command::DeviceCommandResult>,
@@ -48,6 +52,9 @@ pub enum StateCommand {
 impl std::fmt::Debug for StateCommand {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            StateCommand::ActivateScene { command, .. } => {
+                f.debug_tuple("ActivateScene").field(command).finish()
+            }
             StateCommand::HandleEvent { event, done } => f
                 .debug_struct("HandleEvent")
                 .field("event", event)
