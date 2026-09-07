@@ -56,6 +56,7 @@ export const Viewport = () => {
   const [floorplanMode, setFloorplanMode] = useState<FloorplanMode>('all');
   const [selecting, setSelecting] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
+  const [showLabels, setShowLabels] = useState(true);
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
@@ -208,6 +209,66 @@ export const Viewport = () => {
                 </Button>
               </PopoverTrigger>
               <PopoverContent align="end" className="space-y-4">
+                <label className="flex items-center justify-between gap-3 text-sm">
+                  Sensor labels
+                  <input
+                    type="checkbox"
+                    checked={showLabels}
+                    onChange={(event) => setShowLabels(event.target.checked)}
+                  />
+                </label>
+                <label className="block space-y-2 text-sm">
+                  <span>Open device or group</span>
+                  <select
+                    className="h-10 w-full rounded-md border border-input bg-background px-2"
+                    value=""
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setViewOpen(false);
+                      clearSelection();
+                      if (value.startsWith('group:'))
+                        openDevice(groups[value.slice(6)]?.device_keys ?? []);
+                      else {
+                        const key = value.slice(7);
+                        if (
+                          devicesState?.[key] &&
+                          'Sensor' in devicesState[key]!.data
+                        ) {
+                          setActiveSensorKey(key);
+                        } else openDevice([key]);
+                      }
+                    }}
+                  >
+                    <option value="" disabled>
+                      Choose…
+                    </option>
+                    <optgroup label="Groups">
+                      {Object.entries(groups)
+                        .filter(([, group]) =>
+                          group.device_keys.some((key) =>
+                            placedDeviceKeys.includes(key),
+                          ),
+                        )
+                        .map(([id, group]) => (
+                          <option key={id} value={`group:${id}`}>
+                            {group.name ?? id}
+                          </option>
+                        ))}
+                    </optgroup>
+                    <optgroup label="Devices">
+                      {Object.entries(liveDevices ?? {})
+                        .filter(([, device]) => device !== undefined)
+                        .map(([key, device]) => (
+                          <option key={key} value={`device:${key}`}>
+                            {getDeviceDisplayLabel(
+                              device!,
+                              deviceDisplayNameMap,
+                            )}
+                          </option>
+                        ))}
+                    </optgroup>
+                  </select>
+                </label>
                 <div
                   role="group"
                   aria-label="Visible devices"
@@ -270,6 +331,7 @@ export const Viewport = () => {
             key={effectiveSelectedFloorplanId ?? 'default'}
             scene={floorplanScene}
             fitOnResize
+            renderLabels={showLabels}
             selectedDeviceKeys={selectedDevices}
             onDevicePress={(key) =>
               selecting ? toggleSelectedDevice(key) : openDevice([key])

@@ -1,32 +1,8 @@
-import { useTimeout } from 'usehooks-ts';
-import {
-  Thermometer,
-  Droplets,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  ChevronLeft,
-  Activity,
-} from 'lucide-react';
-import { useSensorData } from '@/hooks/influxdb';
-import { SensorChart } from '@/ui/charts/SensorChart';
-import { CombinedSensorsChart } from '@/ui/charts/CombinedSensorsChart';
-import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
-import clsx from 'clsx';
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState } from 'react';
+import { useInterval, useTimeout } from 'usehooks-ts';
+import { Activity, Droplets, Thermometer } from 'lucide-react';
+import { useSensorData, useTempSensorsResource } from '@/hooks/influxdb';
 import useIdle from '@/hooks/useIdle';
-import { getTemperatureColor } from '@/ui/charts/TemperatureSensorChart';
-import { getHumidityColor } from '@/lib/humidityColors';
-import {
-  calculateTemperatureStats,
-  calculateHumidityStats,
-  formatStatValue,
-  getTrendIcon,
-  getTrendColor,
-  isOffline,
-  getOfflineStatus,
-} from '@/lib/sensorStats';
-import Tooltip from '@/ui/Tooltip';
 import {
   type DashboardWidget,
   buildDashboardWidgetProxyPath,
@@ -34,158 +10,41 @@ import {
   getDashboardWidgetOptionString,
   getDashboardWidgetOptionStringArray,
 } from '@/hooks/useDashboard';
+import {
+  calculateTemperatureStats,
+  calculateHumidityStats,
+  isOffline,
+  getTrendIcon,
+  type SensorTrend,
+} from '@/lib/sensorStats';
+import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
+import { TimeSeriesPlot } from '@/ui/charts/TimeSeriesPlot';
 import { Button } from '@/ui/primitives/button';
-import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
-import { WidgetCard, WidgetHeading } from './WidgetChrome';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/ui/primitives/select';
+import { DetailPanel, Metric, WidgetCard, WidgetHeading } from './WidgetChrome';
 
-interface SensorReading {
-  time: Date;
-  value: number;
-  deviceId: string;
-  deviceName: string;
-  color: string;
-}
-
-interface SensorData {
-  device_id: string;
-  device_name: string;
-  latest_temp?: number;
-  latest_humidity?: number;
-  latest_temp_time?: Date;
-  latest_humidity_time?: Date;
-  temp_data: Array<{ time: Date; value: number }>;
-  humidity_data: Array<{ time: Date; value: number }>;
-  is_priority: boolean;
-  is_indoor: boolean;
-  color: string;
-}
-
-interface SensorCardProps {
-  sensor: SensorData;
-  onClick: () => void;
-}
-
-const SensorCard: React.FC<SensorCardProps> = ({ sensor, onClick }) => {
-  const tempOffline = isOffline(sensor.latest_temp_time);
-  const humidityOffline = isOffline(sensor.latest_humidity_time);
-  const bothOffline = tempOffline && humidityOffline;
-
-  const tempStats = useMemo(
-    () => calculateTemperatureStats(sensor.temp_data),
-    [sensor.temp_data],
-  );
-
-  const humidityStats = useMemo(
-    () => calculateHumidityStats(sensor.humidity_data),
-    [sensor.humidity_data],
-  );
-
-  return (
-    <Button
-      variant="ghost"
-      className="h-auto min-h-24 min-w-28 max-w-40 flex-1 basis-32 rounded-2xl border border-border/40 bg-background/45 p-3 hover:border-primary/25 hover:bg-background/80"
-      onClick={onClick}
-    >
-      <div
-        className={clsx(
-          'flex w-full flex-col items-start gap-2',
-          bothOffline && 'text-stone-500',
-        )}
-      >
-        {/* Sensor name */}
-        <div className="w-full truncate text-left text-xs font-semibold">
-          {sensor.device_name}
-        </div>
-
-        {/* Values */}
-        <div className="flex flex-col gap-1.5 text-sm">
-          {/* Temperature */}
-          <div className="flex items-center gap-1">
-            <Thermometer
-              size={12}
-              className={tempOffline ? 'text-stone-400' : undefined}
-              style={{
-                color:
-                  (typeof sensor.latest_temp === 'number' &&
-                    !tempOffline &&
-                    getTemperatureColor(sensor.latest_temp)) ||
-                  undefined,
-              }}
-            />
-            {typeof sensor.latest_temp === 'number' && !tempOffline ? (
-              <div className="flex items-center gap-1">
-                <span className="font-medium tabular-nums">
-                  {sensor.latest_temp.toFixed(1)}°C
-                </span>
-                {tempStats && (
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: getTrendColor(tempStats.trend, true),
-                    }}
-                  >
-                    {getTrendIcon(tempStats.trend)}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <span className="text-stone-500">--</span>
-            )}
-          </div>
-
-          {/* Humidity */}
-          <div className="flex items-center gap-1">
-            <Droplets
-              size={12}
-              className={humidityOffline ? 'text-stone-400' : 'text-purple-500'}
-              style={{
-                color:
-                  (typeof sensor.latest_humidity === 'number' &&
-                    !humidityOffline &&
-                    getHumidityColor(sensor.latest_humidity)) ||
-                  undefined,
-              }}
-            />
-            {typeof sensor.latest_humidity === 'number' && !humidityOffline ? (
-              <div className="flex items-center gap-1">
-                <span className="font-medium tabular-nums">
-                  {sensor.latest_humidity.toFixed(1)}%
-                </span>
-                {humidityStats && (
-                  <span
-                    className="text-xs"
-                    style={{
-                      color: getTrendColor(humidityStats.trend, false),
-                    }}
-                  >
-                    {getTrendIcon(humidityStats.trend)}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <span className="text-stone-500">--</span>
-            )}
-          </div>
-        </div>
-      </div>
-    </Button>
-  );
-};
-
+const trendLabel = (trend: SensorTrend) =>
+  ({
+    up: 'Rising',
+    down: 'Falling',
+    stable: 'Steady',
+    unknown: 'Not enough recent data',
+  })[trend];
 export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
-  const [activeSensorId, setActiveSensorId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'individual' | 'combined'>(
-    'individual',
-  );
-  const [sensorFilter, setSensorFilter] = useState<'indoor' | 'outdoor'>(
-    'indoor',
-  );
-
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
+  const [open, setOpen] = useState(false),
+    [activeId, setActiveId] = useState<string>('all'),
+    [filter, setFilter] = useState('all');
+  const [now, setNow] = useState(Date.now);
+  useInterval(() => setNow(Date.now()), 60000);
   const isIdle = useIdle();
+  useTimeout(() => setOpen(false), open && isIdle ? 10000 : null);
   const sensorIds = getDashboardWidgetOptionStringArray(widget, 'sensorIds');
   const indoorSensorIds = getDashboardWidgetOptionStringArray(
     widget,
@@ -195,971 +54,248 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
     widget,
     'prioritySensorIds',
   );
-  const influxUrl = getDashboardWidgetOptionString(widget, 'influxUrl', '');
-  const influxToken = getDashboardWidgetOptionString(widget, 'influxToken', '');
-  const sensorPath = getDashboardWidgetOptionString(
-    widget,
-    'sensorPath',
-    '/api/influxdb/temp-sensors',
-  );
-  const range = getDashboardWidgetOptionString(widget, 'range', '-6h');
-  const window = getDashboardWidgetOptionString(widget, 'window', '10m');
-  const hasProxyOptions =
-    influxUrl ||
-    influxToken ||
-    sensorIds.length > 0 ||
-    range !== '-6h' ||
-    window !== '10m';
-  const endpointPath = hasProxyOptions
+  const url = getDashboardWidgetOptionString(widget, 'influxUrl', ''),
+    token = getDashboardWidgetOptionString(widget, 'influxToken', '');
+  const range = getDashboardWidgetOptionString(widget, 'range', '-6h'),
+    window = getDashboardWidgetOptionString(widget, 'window', '10m');
+  const custom =
+    url || token || sensorIds.length || range !== '-6h' || window !== '10m';
+  const endpointPath = custom
     ? buildDashboardWidgetProxyPath('/api/influxdb/temp-sensors', {
-        url: influxUrl,
-        token: influxToken,
+        url,
+        token,
         device_ids: sensorIds.join(','),
         range,
         window,
       })
-    : sensorPath;
-  const wrapPreview = getDashboardWidgetOptionBoolean(
-    widget,
-    'wrapPreview',
-    true,
-  );
-  const sensorData = useSensorData({
+    : getDashboardWidgetOptionString(
+        widget,
+        'sensorPath',
+        '/api/influxdb/temp-sensors',
+      );
+  const sensors = useSensorData({
     endpointPath,
     sensorIds,
-    indoorSensorIds: indoorSensorIds.length > 0 ? indoorSensorIds : undefined,
-    prioritySensorIds:
-      prioritySensorIds.length > 0 ? prioritySensorIds : undefined,
+    indoorSensorIds: indoorSensorIds.length ? indoorSensorIds : undefined,
+    prioritySensorIds: prioritySensorIds.length ? prioritySensorIds : undefined,
   });
-  const previewSensors = useMemo(() => {
-    const prioritySensors = sensorData.filter((sensor) => sensor.is_priority);
-    return prioritySensors.length > 0
-      ? prioritySensors
-      : sensorData.slice(0, 5);
-  }, [sensorData]);
-
-  // Reset scroll position to x=0 when user becomes idle
-  useEffect(() => {
-    if (isIdle && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollLeft = 0;
-    }
-  }, [isIdle]);
-
-  // Memoize the chart data transformation for individual sensor
-  const individualChartData = useMemo(() => {
-    if (!activeSensorId) return [];
-
-    const sensor = sensorData.find((s) => s.device_id === activeSensorId);
-    if (!sensor) return [];
-
-    // Combine temperature and humidity data by time
-    const dataMap = new Map();
-
-    sensor.temp_data.forEach(({ time, value }) => {
-      const timeKey = time.getTime();
-      if (!dataMap.has(timeKey)) {
-        dataMap.set(timeKey, { time });
-      }
-      dataMap.get(timeKey).temp = value;
-    });
-
-    sensor.humidity_data.forEach(({ time, value }) => {
-      const timeKey = time.getTime();
-      if (!dataMap.has(timeKey)) {
-        dataMap.set(timeKey, { time });
-      }
-      dataMap.get(timeKey).humidity = value;
-    });
-
-    return Array.from(dataMap.values()).sort(
-      (a, b) => a.time.getTime() - b.time.getTime(),
-    );
-  }, [sensorData, activeSensorId]);
-
-  // Memoize the combined chart data for filtered sensors
-  const combinedChartData = useMemo(() => {
-    const filteredSensors = sensorData.filter((sensor) =>
-      sensorFilter === 'indoor' ? sensor.is_indoor : !sensor.is_indoor,
-    );
-
-    // Filter out sensors with gaps of 1h or more
-    const activeSensors = filteredSensors.filter((sensor) => {
-      const hasRecentTemp =
-        sensor.latest_temp_time &&
-        new Date().getTime() - sensor.latest_temp_time.getTime() <
-          60 * 60 * 1000; // 1 hour
-      const hasRecentHumidity =
-        sensor.latest_humidity_time &&
-        new Date().getTime() - sensor.latest_humidity_time.getTime() <
-          60 * 60 * 1000; // 1 hour
-
-      return hasRecentTemp || hasRecentHumidity;
-    });
-
-    const timeMap = new Map();
-
-    activeSensors.forEach((sensor) => {
-      sensor.temp_data.forEach(({ time, value }) => {
-        const timeKey = time.getTime();
-        if (!timeMap.has(timeKey)) {
-          timeMap.set(timeKey, {
-            time,
-            tempReadings: [],
-            humidityReadings: [],
-          });
-        }
-        const entry = timeMap.get(timeKey);
-        // Deduplicate by device_id to prevent duplicate keys
-        if (
-          !entry.tempReadings.some(
-            (r: SensorReading) => r.deviceId === sensor.device_id,
-          )
-        ) {
-          entry.tempReadings.push({
-            time,
-            value,
-            deviceId: sensor.device_id,
-            deviceName: sensor.device_name,
-            color: sensor.color,
-          });
-        }
-      });
-
-      sensor.humidity_data.forEach(({ time, value }) => {
-        const timeKey = time.getTime();
-        if (!timeMap.has(timeKey)) {
-          timeMap.set(timeKey, {
-            time,
-            tempReadings: [],
-            humidityReadings: [],
-          });
-        }
-        const entry = timeMap.get(timeKey);
-        // Deduplicate by device_id to prevent duplicate keys
-        if (
-          !entry.humidityReadings.some(
-            (r: SensorReading) => r.deviceId === sensor.device_id,
-          )
-        ) {
-          entry.humidityReadings.push({
-            time,
-            value,
-            deviceId: sensor.device_id,
-            deviceName: sensor.device_name,
-            color: sensor.color,
-          });
-        }
-      });
-    });
-
-    return Array.from(timeMap.values()).sort(
-      (a, b) => a.time.getTime() - b.time.getTime(),
-    );
-  }, [sensorData, sensorFilter]);
-
-  const activeSensor = sensorData.find((s) => s.device_id === activeSensorId);
-
-  const tempStats = useMemo(
-    () =>
-      activeSensor ? calculateTemperatureStats(activeSensor.temp_data) : null,
-    [activeSensor],
-  );
-
-  const humidityStats = useMemo(
-    () =>
-      activeSensor ? calculateHumidityStats(activeSensor.humidity_data) : null,
-    [activeSensor],
-  );
-
-  // Calculate overall statistics for filtered sensors using latest data points
-  const overallStats = useMemo(() => {
-    const filteredSensors = sensorData.filter((sensor) =>
-      sensorFilter === 'indoor' ? sensor.is_indoor : !sensor.is_indoor,
-    );
-
-    // Get latest temperature values with sensor info
-    const latestTempData = filteredSensors
-      .filter(
-        (sensor) =>
-          sensor.latest_temp !== undefined &&
-          !isOffline(sensor.latest_temp_time),
-      )
-      .map((sensor) => ({
-        time: sensor.latest_temp_time!,
-        value: sensor.latest_temp!,
-        deviceId: sensor.device_id,
-        deviceName: sensor.device_name,
-      }));
-
-    // Get latest humidity values with sensor info
-    const latestHumidityData = filteredSensors
-      .filter(
-        (sensor) =>
-          sensor.latest_humidity !== undefined &&
-          !isOffline(sensor.latest_humidity_time),
-      )
-      .map((sensor) => ({
-        time: sensor.latest_humidity_time!,
-        value: sensor.latest_humidity!,
-        deviceId: sensor.device_id,
-        deviceName: sensor.device_name,
-      }));
-
-    // Calculate stats with sensor info
-    const tempStats =
-      latestTempData.length > 0
-        ? {
-            ...calculateTemperatureStats(latestTempData),
-            minSensor: latestTempData.reduce((min, curr) =>
-              curr.value < min.value ? curr : min,
-            ),
-            maxSensor: latestTempData.reduce((max, curr) =>
-              curr.value > max.value ? curr : max,
-            ),
-          }
-        : null;
-
-    const humidityStats =
-      latestHumidityData.length > 0
-        ? {
-            ...calculateHumidityStats(latestHumidityData),
-            minSensor: latestHumidityData.reduce((min, curr) =>
-              curr.value < min.value ? curr : min,
-            ),
-            maxSensor: latestHumidityData.reduce((max, curr) =>
-              curr.value > max.value ? curr : max,
-            ),
-          }
-        : null;
-
-    return {
-      temp: tempStats,
-      humidity: humidityStats,
-    };
-  }, [sensorData, sensorFilter]);
-
-  useTimeout(
-    () => {
-      setDetailsModalOpen(false);
-    },
-    detailsModalOpen && isIdle ? 10 * 1000 : null,
-  );
-
-  const handleSensorClick = (sensorId: string) => {
-    setActiveSensorId(sensorId);
-    setViewMode('individual');
-    setDetailsModalOpen(true);
+  const priority = sensors.filter((s) => s.is_priority);
+  const resource = useTempSensorsResource(endpointPath);
+  const preview = (priority.length ? priority : sensors).slice(0, 5);
+  const active = sensors.find((s) => s.device_id === activeId);
+  const chosen = active
+    ? [active]
+    : sensors.filter(
+        (s) =>
+          filter === 'all' ||
+          (filter === 'indoor' ? s.is_indoor : !s.is_indoor),
+      );
+  const temperature = active
+      ? calculateTemperatureStats(active.temp_data, now)
+      : null,
+    humidity = active
+      ? calculateHumidityStats(active.humidity_data, now)
+      : null;
+  const show = (id: string) => {
+    setActiveId(id);
+    setOpen(true);
   };
-
-  const handleViewAllClick = () => {
-    // Set the sensor filter based on the currently active sensor
-    if (activeSensor) {
-      setSensorFilter(activeSensor.is_indoor ? 'indoor' : 'outdoor');
-    }
-    setViewMode('combined');
-    setDetailsModalOpen(true);
-  };
-
-  const handleBackToIndividual = () => {
-    setViewMode('individual');
-  };
-
   return (
     <>
-      <WidgetCard className="col-span-4">
-        <CardContent className="flex h-full flex-col p-4 sm:p-5">
-          <WidgetHeading
-            icon={<Activity />}
-            label="Climate sensors"
-            className="mb-3"
-          />
-          <div
-            ref={scrollContainerRef}
-            className={clsx(
-              'flex w-full items-center gap-2',
-              wrapPreview
-                ? 'flex-wrap overflow-hidden'
-                : 'h-full overflow-x-auto',
-            )}
-          >
-            {previewSensors.map((sensor) => (
-              <SensorCard
+      <WidgetCard className="p-4 sm:p-5">
+        <div className="mb-3 flex items-center gap-2">
+          <WidgetHeading icon={<Activity />} label="Climate sensors" />
+          <Button size="sm" variant="ghost" onClick={() => show('all')}>
+            All
+          </Button>
+        </div>
+        <div
+          className={
+            getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
+              ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
+              : 'flex gap-2 overflow-x-auto pb-1'
+          }
+        >
+          {preview.map((sensor) => {
+            const temp = calculateTemperatureStats(sensor.temp_data, now),
+              hum = calculateHumidityStats(sensor.humidity_data, now);
+            return (
+              <button
+                type="button"
                 key={sensor.device_id}
-                sensor={sensor}
-                onClick={() => handleSensorClick(sensor.device_id)}
-              />
-            ))}
-            {sensorData.length > previewSensors.length ? (
-              <Button
-                variant="ghost"
-                className="h-24 min-w-28 flex-1 basis-28 rounded-2xl border border-dashed border-border/70 text-muted-foreground"
-                onClick={() => {
-                  setSensorFilter('indoor');
-                  setViewMode('combined');
-                  setDetailsModalOpen(true);
-                }}
+                onClick={() => show(sensor.device_id)}
+                className="min-w-28 rounded-xl border border-border/50 p-3 text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                +{sensorData.length - previewSensors.length} more
-              </Button>
-            ) : null}
-          </div>
-        </CardContent>
+                <div className="mb-2 truncate text-xs font-medium">
+                  {sensor.device_name}
+                </div>
+                <div className="flex items-center gap-1.5 text-base tabular-nums">
+                  <Thermometer className="size-3.5 shrink-0 text-muted-foreground" />
+                  {!isOffline(sensor.latest_temp_time, 15, now) &&
+                  sensor.latest_temp !== undefined
+                    ? `${sensor.latest_temp.toFixed(1)}°`
+                    : '—'}
+                  <span
+                    className="text-xs text-muted-foreground"
+                    aria-label={temp ? trendLabel(temp.trend) : undefined}
+                  >
+                    {temp ? getTrendIcon(temp.trend) : null}
+                  </span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 text-sm tabular-nums">
+                  <Droplets className="size-3.5 shrink-0 text-muted-foreground" />
+                  {!isOffline(sensor.latest_humidity_time, 15, now) &&
+                  sensor.latest_humidity !== undefined
+                    ? `${sensor.latest_humidity.toFixed(0)}%`
+                    : '—'}
+                  <span
+                    className="text-xs text-muted-foreground"
+                    aria-label={hum ? trendLabel(hum.trend) : undefined}
+                  >
+                    {hum ? getTrendIcon(hum.trend) : null}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {(resource.isPending ||
+          resource.isError ||
+          resource.rows.length === 0) && (
+          <p role="status" className="pt-3 text-xs text-muted-foreground">
+            {resource.isPending
+              ? 'Loading sensor readings…'
+              : resource.isError
+                ? 'Sensor readings could not be refreshed.'
+                : 'No sensor readings available.'}
+          </p>
+        )}
       </WidgetCard>
-
       <ResponsiveOverlay
-        open={detailsModalOpen}
-        onOpenChange={setDetailsModalOpen}
-        title={
-          viewMode === 'individual'
-            ? (activeSensor?.device_name ?? 'Sensor details')
-            : 'Sensor overview'
-        }
-        description={
-          viewMode === 'individual'
-            ? 'Recent readings, trends, and history for this sensor.'
-            : `Combined ${sensorFilter} sensor readings and trends.`
-        }
+        open={open}
+        onOpenChange={setOpen}
+        title={active?.device_name ?? 'Climate sensors'}
+        description="Sensor history and recent trends."
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex flex-col gap-3 rounded-2xl border border-border/50 bg-muted/25 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-2">
-              {viewMode === 'combined' && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={handleBackToIndividual}
-                  className="px-2"
-                >
-                  <ChevronLeft size={20} />
-                  Back
-                </Button>
-              )}
-              <div>
-                {viewMode === 'individual' ? (
-                  <>
-                    <h3 className="text-lg">{activeSensor?.device_name}</h3>
-                    <div className="mt-2 flex flex-wrap gap-4 text-sm font-normal">
-                      {typeof activeSensor?.latest_temp === 'number' &&
-                        !isOffline(activeSensor.latest_temp_time) && (
-                          <div className="flex items-center gap-1">
-                            <Thermometer size={16} />
-                            <span
-                              style={{
-                                color: getTemperatureColor(
-                                  activeSensor.latest_temp,
-                                ),
-                              }}
-                            >
-                              {activeSensor.latest_temp.toFixed(1)}°C
-                            </span>
-                            {tempStats && (
-                              <span
-                                style={{
-                                  color: getTrendColor(tempStats.trend, true),
-                                }}
-                              >
-                                {getTrendIcon(tempStats.trend)}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      {typeof activeSensor?.latest_humidity === 'number' &&
-                        !isOffline(activeSensor.latest_humidity_time) && (
-                          <div className="flex items-center gap-1">
-                            <Droplets size={16} />
-                            <span
-                              style={{
-                                color: getHumidityColor(
-                                  activeSensor.latest_humidity,
-                                ),
-                              }}
-                            >
-                              {activeSensor.latest_humidity.toFixed(1)}%
-                            </span>
-                            {humidityStats && (
-                              <span
-                                style={{
-                                  color: getTrendColor(
-                                    humidityStats.trend,
-                                    false,
-                                  ),
-                                }}
-                              >
-                                {getTrendIcon(humidityStats.trend)}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <h3 className="text-lg">
-                      {/* Filter Controls */}
-                      {viewMode === 'combined' && (
-                        <div className="relative z-10 flex gap-2">
-                          <div className="flex rounded-xl bg-muted p-1">
-                            <Button
-                              size="sm"
-                              variant={
-                                sensorFilter === 'indoor' ? 'default' : 'ghost'
-                              }
-                              onClick={() => setSensorFilter('indoor')}
-                            >
-                              Indoor sensors
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant={
-                                sensorFilter === 'outdoor' ? 'default' : 'ghost'
-                              }
-                              onClick={() => setSensorFilter('outdoor')}
-                            >
-                              Outdoor sensors
-                            </Button>
-                          </div>
-                        </div>
+          <div className="flex flex-wrap gap-2">
+            <Select value={activeId} onValueChange={setActiveId}>
+              <SelectTrigger aria-label="Sensor" className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Compare sensors</SelectItem>
+                {sensors.map((s) => (
+                  <SelectItem key={s.device_id} value={s.device_id}>
+                    {s.device_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!active && (
+              <Select value={filter} onValueChange={setFilter}>
+                <SelectTrigger aria-label="Sensor location" className="w-36">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All locations</SelectItem>
+                  <SelectItem value="indoor">Indoor</SelectItem>
+                  <SelectItem value="outdoor">Outdoor</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          {active && (
+            <div className="grid grid-cols-2 gap-3">
+              {[
+                {
+                  label: 'Temperature',
+                  stats: temperature,
+                  unit: '°C',
+                  time: active.latest_temp_time,
+                },
+                {
+                  label: 'Humidity',
+                  stats: humidity,
+                  unit: '%',
+                  time: active.latest_humidity_time,
+                },
+              ].map(({ label, stats, unit, time }) => (
+                <DetailPanel key={label}>
+                  <Metric
+                    label={label}
+                    value={
+                      stats && !isOffline(time, 15, now)
+                        ? `${stats.current.toFixed(1)}${unit}`
+                        : 'No recent reading'
+                    }
+                    hint={stats ? trendLabel(stats.trend) : 'No data'}
+                  />
+                  {stats && (
+                    <>
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Range {stats.min.toFixed(1)}–{stats.max.toFixed(1)}
+                        {unit}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Average {stats.avg.toFixed(1)}
+                        {unit}
+                      </p>
+                      {(stats.trend === 'up' || stats.trend === 'down') && (
+                        <p className="mt-1 text-xs">
+                          {stats.slopePerHour > 0 ? '+' : ''}
+                          {stats.slopePerHour.toFixed(2)}
+                          {unit}/h
+                        </p>
                       )}
-                    </h3>
-                    <div className="mt-3 flex flex-wrap gap-4 text-sm font-normal">
-                      <div className="flex items-center gap-1">
-                        <Thermometer size={16} />
-                        <span>
-                          {overallStats.temp ? (
-                            <>
-                              <Tooltip
-                                content={`Min: ${overallStats.temp.minSensor?.deviceName}`}
-                                position="top"
-                              >
-                                <span
-                                  className="cursor-help"
-                                  style={{
-                                    color: getTemperatureColor(
-                                      overallStats.temp.min!,
-                                    ),
-                                  }}
-                                >
-                                  {formatStatValue(
-                                    overallStats.temp.min!,
-                                    '°C',
-                                  )}
-                                </span>
-                              </Tooltip>
-                              {' - '}
-                              <Tooltip
-                                content={`Max: ${overallStats.temp.maxSensor?.deviceName}`}
-                                position="top"
-                              >
-                                <span
-                                  className="cursor-help"
-                                  style={{
-                                    color: getTemperatureColor(
-                                      overallStats.temp.max!,
-                                    ),
-                                  }}
-                                >
-                                  {formatStatValue(
-                                    overallStats.temp.max!,
-                                    '°C',
-                                  )}
-                                </span>
-                              </Tooltip>
-                            </>
-                          ) : (
-                            'No temp data'
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <Droplets size={16} />
-                        <span>
-                          {overallStats.humidity ? (
-                            <>
-                              <Tooltip
-                                content={`Min: ${overallStats.humidity.minSensor?.deviceName}`}
-                                position="top"
-                              >
-                                <span
-                                  className="cursor-help"
-                                  style={{
-                                    color: getHumidityColor(
-                                      overallStats.humidity.min!,
-                                    ),
-                                  }}
-                                >
-                                  {formatStatValue(
-                                    overallStats.humidity.min!,
-                                    '%',
-                                    0,
-                                  )}
-                                </span>
-                              </Tooltip>
-                              {' - '}
-                              <Tooltip
-                                content={`Max: ${overallStats.humidity.maxSensor?.deviceName}`}
-                                position="top"
-                              >
-                                <span
-                                  className="cursor-help"
-                                  style={{
-                                    color: getHumidityColor(
-                                      overallStats.humidity.max!,
-                                    ),
-                                  }}
-                                >
-                                  {formatStatValue(
-                                    overallStats.humidity.max!,
-                                    '%',
-                                    0,
-                                  )}
-                                </span>
-                              </Tooltip>
-                            </>
-                          ) : (
-                            'No humidity data'
-                          )}
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                    </>
+                  )}
+                </DetailPanel>
+              ))}
             </div>
-            {viewMode === 'individual' && (
-              <Button size="sm" variant="ghost" onClick={handleViewAllClick}>
-                Compare sensors
-              </Button>
-            )}
-          </div>
-
-          <div className="relative flex flex-col gap-4">
-            {viewMode === 'individual' ? (
-              <>
-                {/* Individual sensor statistics */}
-                {(tempStats || humidityStats) && (
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    {tempStats && (
-                      <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
-                        <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                          <Thermometer size={16} />
-                          Temperature
-                        </h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span>Current:</span>
-                            <span
-                              className="font-mono"
-                              style={{
-                                color: getTemperatureColor(
-                                  tempStats.current || 0,
-                                ),
-                              }}
-                            >
-                              {formatStatValue(tempStats.current || 0, '°C')}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Min:</span>
-                            <Tooltip
-                              content={`Recorded at ${tempStats.minTime?.toLocaleString()}`}
-                              position="top"
-                            >
-                              <span
-                                className="font-mono cursor-help"
-                                style={{
-                                  color: getTemperatureColor(tempStats.min),
-                                }}
-                              >
-                                {formatStatValue(tempStats.min, '°C')}
-                              </span>
-                            </Tooltip>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Max:</span>
-                            <Tooltip
-                              content={`Recorded at ${tempStats.maxTime?.toLocaleString()}`}
-                              position="top"
-                            >
-                              <span
-                                className="font-mono cursor-help"
-                                style={{
-                                  color: getTemperatureColor(tempStats.max),
-                                }}
-                              >
-                                {formatStatValue(tempStats.max, '°C')}
-                              </span>
-                            </Tooltip>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Average:</span>
-                            <span
-                              className="font-mono"
-                              style={{
-                                color: getTemperatureColor(tempStats.avg),
-                              }}
-                            >
-                              {formatStatValue(tempStats.avg, '°C')}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {humidityStats && (
-                      <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
-                        <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                          <Droplets size={16} />
-                          Humidity
-                        </h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span>Current:</span>
-                            <span
-                              className="font-mono"
-                              style={{
-                                color: getHumidityColor(
-                                  humidityStats.current || 0,
-                                ),
-                              }}
-                            >
-                              {formatStatValue(
-                                humidityStats.current || 0,
-                                '%',
-                                0,
-                              )}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Min:</span>
-                            <Tooltip
-                              content={`Recorded at ${humidityStats.minTime?.toLocaleString()}`}
-                              position="top"
-                            >
-                              <span
-                                className="font-mono cursor-help"
-                                style={{
-                                  color: getHumidityColor(humidityStats.min),
-                                }}
-                              >
-                                {formatStatValue(humidityStats.min, '%', 0)}
-                              </span>
-                            </Tooltip>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Max:</span>
-                            <Tooltip
-                              content={`Recorded at ${humidityStats.maxTime?.toLocaleString()}`}
-                              position="top"
-                            >
-                              <span
-                                className="font-mono cursor-help"
-                                style={{
-                                  color: getHumidityColor(humidityStats.max),
-                                }}
-                              >
-                                {formatStatValue(humidityStats.max, '%', 0)}
-                              </span>
-                            </Tooltip>
-                          </div>
-                          <div className="flex justify-between">
-                            <span>Average:</span>
-                            <span
-                              className="font-mono"
-                              style={{
-                                color: getHumidityColor(humidityStats.avg),
-                              }}
-                            >
-                              {formatStatValue(humidityStats.avg, '%', 0)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
+          )}
+          {(['temperature', 'humidity'] as const).map((metric) => (
+            <DetailPanel key={metric} className="p-2 sm:p-3">
+              <h3 className="px-1 pb-1 text-sm font-medium">
+                {metric === 'temperature' ? 'Temperature (°C)' : 'Humidity (%)'}
+              </h3>
+              <ResponsiveChart height={260}>
+                {({ width, height }) => (
+                  <TimeSeriesPlot
+                    label={`${metric} history`}
+                    unit={metric === 'temperature' ? '°C' : '%'}
+                    width={width}
+                    height={height}
+                    series={chosen
+                      .filter(
+                        (s) =>
+                          (metric === 'temperature'
+                            ? s.temp_data
+                            : s.humidity_data
+                          ).length > 0,
+                      )
+                      .map((s) => ({
+                        name: s.device_name,
+                        gapMs: 3600000,
+                        points: (metric === 'temperature'
+                          ? s.temp_data
+                          : s.humidity_data
+                        ).map((p) => ({
+                          time: p.time.getTime(),
+                          value: p.value,
+                        })),
+                      }))}
+                  />
                 )}
-
-                {/* Individual sensor chart */}
-                {individualChartData.length > 0 ? (
-                  <ResponsiveChart
-                    height={350}
-                    className="overflow-hidden rounded-2xl border border-border/50 bg-muted/20"
-                  >
-                    {({ width, height }) => (
-                      <SensorChart
-                        data={individualChartData}
-                        width={width}
-                        height={height}
-                        animate={true}
-                        showTemperature={!!tempStats}
-                        showHumidity={!!humidityStats}
-                      />
-                    )}
-                  </ResponsiveChart>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground">
-                    <div className="text-4xl mb-2">📡</div>
-                    <div>Sensor offline</div>
-                    <div className="text-sm mt-1 text-stone-600">
-                      No data available
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <>
-                {/* Combined sensors statistics */}
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  {overallStats.temp && (
-                    <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
-                      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                        <Thermometer size={16} />
-                        {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
-                        Temperature
-                      </h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>
-                            Min ({overallStats.temp.minSensor?.deviceName}):
-                          </span>
-                          <Tooltip
-                            content={`Latest reading from ${overallStats.temp.minSensor?.deviceName}`}
-                            position="top"
-                          >
-                            <span
-                              className="font-mono cursor-help"
-                              style={{
-                                color: getTemperatureColor(
-                                  overallStats.temp.min!,
-                                ),
-                              }}
-                            >
-                              {formatStatValue(overallStats.temp.min!, '°C')}
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>
-                            Max ({overallStats.temp.maxSensor?.deviceName}):
-                          </span>
-                          <Tooltip
-                            content={`Latest reading from ${overallStats.temp.maxSensor?.deviceName}`}
-                            position="top"
-                          >
-                            <span
-                              className="font-mono cursor-help"
-                              style={{
-                                color: getTemperatureColor(
-                                  overallStats.temp.max!,
-                                ),
-                              }}
-                            >
-                              {formatStatValue(overallStats.temp.max!, '°C')}
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Average:</span>
-                          <span
-                            className="font-mono"
-                            style={{
-                              color: getTemperatureColor(
-                                overallStats.temp.avg!,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(overallStats.temp.avg!, '°C')}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Sensors:</span>
-                          <span className="font-mono">
-                            {
-                              sensorData.filter(
-                                (s) =>
-                                  s.temp_data.length > 0 &&
-                                  (sensorFilter === 'indoor'
-                                    ? s.is_indoor
-                                    : !s.is_indoor),
-                              ).length
-                            }
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {overallStats.humidity && (
-                    <div className="rounded-2xl border border-border/50 bg-muted/25 p-4">
-                      <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold">
-                        <Droplets size={16} />
-                        {sensorFilter === 'indoor' ? 'Indoor' : 'Outdoor'}{' '}
-                        Humidity
-                      </h4>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                          <span>
-                            Min ({overallStats.humidity.minSensor?.deviceName}):
-                          </span>
-                          <Tooltip
-                            content={`Latest reading from ${overallStats.humidity.minSensor?.deviceName}`}
-                            position="top"
-                          >
-                            <span
-                              className="font-mono cursor-help"
-                              style={{
-                                color: getHumidityColor(
-                                  overallStats.humidity.min!,
-                                ),
-                              }}
-                            >
-                              {formatStatValue(
-                                overallStats.humidity.min!,
-                                '%',
-                                0,
-                              )}
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>
-                            Max ({overallStats.humidity.maxSensor?.deviceName}):
-                          </span>
-                          <Tooltip
-                            content={`Latest reading from ${overallStats.humidity.maxSensor?.deviceName}`}
-                            position="top"
-                          >
-                            <span
-                              className="font-mono cursor-help"
-                              style={{
-                                color: getHumidityColor(
-                                  overallStats.humidity.max!,
-                                ),
-                              }}
-                            >
-                              {formatStatValue(
-                                overallStats.humidity.max!,
-                                '%',
-                                0,
-                              )}
-                            </span>
-                          </Tooltip>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Average:</span>
-                          <span
-                            className="font-mono"
-                            style={{
-                              color: getHumidityColor(
-                                overallStats.humidity.avg!,
-                              ),
-                            }}
-                          >
-                            {formatStatValue(
-                              overallStats.humidity.avg!,
-                              '%',
-                              0,
-                            )}
-                          </span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Sensors:</span>
-                          <span className="font-mono">
-                            {
-                              sensorData.filter(
-                                (s) =>
-                                  s.humidity_data.length > 0 &&
-                                  (sensorFilter === 'indoor'
-                                    ? s.is_indoor
-                                    : !s.is_indoor),
-                              ).length
-                            }
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Temperature Chart */}
-                <div className="space-y-4">
-                  <div>
-                    <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
-                      <Thermometer size={16} />
-                      Temperature
-                    </h5>
-                    {combinedChartData.length > 0 &&
-                    combinedChartData.some((d) => d.tempReadings.length > 0) ? (
-                      <ResponsiveChart height={250} className="rounded-lg">
-                        {({ width, height }) => (
-                          <CombinedSensorsChart
-                            key={`temp-chart-${sensorFilter}`}
-                            data={combinedChartData}
-                            width={width}
-                            height={height}
-                            animate={true}
-                            showTemperature={true}
-                            showHumidity={false}
-                            sensorFilter={sensorFilter}
-                            onSensorFilterChange={setSensorFilter}
-                            chartType="temperature"
-                            chartId="temperature"
-                          />
-                        )}
-                      </ResponsiveChart>
-                    ) : (
-                      <div className="rounded-2xl border border-border bg-muted/40 p-8 text-center text-stone-500">
-                        <div className="text-4xl mb-2">📡</div>
-                        <div>No temperature data</div>
-                        <div className="text-sm mt-1 text-stone-600">
-                          No recent data available from any {sensorFilter}{' '}
-                          sensors
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
-                      <Droplets size={16} />
-                      Humidity
-                    </h5>
-                    {combinedChartData.some(
-                      (d) => d.humidityReadings.length > 0,
-                    ) ? (
-                      <ResponsiveChart height={300} className="rounded-lg">
-                        {({ width, height }) => (
-                          <CombinedSensorsChart
-                            key={`humidity-chart-${sensorFilter}`}
-                            data={combinedChartData}
-                            width={width}
-                            height={height}
-                            animate={true}
-                            showTemperature={false}
-                            showHumidity={true}
-                            sensorFilter={sensorFilter}
-                            onSensorFilterChange={setSensorFilter}
-                            chartType="humidity"
-                            chartId="humidity"
-                          />
-                        )}
-                      </ResponsiveChart>
-                    ) : (
-                      <div className="rounded-2xl border border-border bg-muted/40 p-8 text-center text-stone-500">
-                        <div className="text-4xl mb-2">📡</div>
-                        <div>No humidity data</div>
-                        <div className="text-sm mt-1 text-stone-600">
-                          No recent data available from any {sensorFilter}{' '}
-                          sensors
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* Legends removed as requested */}
-          </div>
+              </ResponsiveChart>
+            </DetailPanel>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Trends use recent samples over at least 30 minutes and ignore
+            isolated spikes. Gaps and stale readings are not classified as
+            steady.
+          </p>
         </div>
       </ResponsiveOverlay>
     </>

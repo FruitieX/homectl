@@ -299,7 +299,7 @@ function CalendarSummary({
   if (!displayEvent) return null;
 
   return (
-    <div className="mt-4 w-full border-t border-border/50 pt-3 text-left">
+    <div className="mt-4 w-full border-t border-border/50 pt-3 text-center">
       <div className="mb-1 flex items-center justify-center gap-1">
         <Calendar className="size-3" />
         {currentEvent && <Badge>Now</Badge>}

@@ -47,6 +47,9 @@ pub struct ActorMetrics {
     pub queue_depth: AtomicUsize,
     /// Peak channel depth observed since the last report.
     pub peak_depth: AtomicUsize,
+    queue_wait_count: AtomicU64,
+    queue_wait_total_ms: AtomicU64,
+    queue_wait_max_ms: AtomicU64,
 }
 
 impl ActorMetrics {
@@ -59,6 +62,9 @@ impl ActorMetrics {
             max_ms: (0..n).map(|_| AtomicU64::new(0)).collect(),
             queue_depth: AtomicUsize::new(0),
             peak_depth: AtomicUsize::new(0),
+            queue_wait_count: AtomicU64::new(0),
+            queue_wait_total_ms: AtomicU64::new(0),
+            queue_wait_max_ms: AtomicU64::new(0),
         })
     }
 
@@ -83,6 +89,14 @@ impl ActorMetrics {
     /// Called by the actor after dequeuing a command.
     pub fn on_dequeue(&self) {
         self.queue_depth.fetch_sub(1, Ordering::Relaxed);
+    }
+
+    pub fn record_queue_wait(&self, milliseconds: u64) {
+        self.queue_wait_count.fetch_add(1, Ordering::Relaxed);
+        self.queue_wait_total_ms
+            .fetch_add(milliseconds, Ordering::Relaxed);
+        self.queue_wait_max_ms
+            .fetch_max(milliseconds, Ordering::Relaxed);
     }
 
     pub fn record(&self, kind_idx: usize, elapsed_ms: u64, slow: bool) {
@@ -118,6 +132,10 @@ pub fn spawn_reporter(metrics: Arc<ActorMetrics>, interval: Duration) {
             ticker.tick().await;
             let peak_depth = metrics.peak_depth.swap(0, Ordering::Relaxed);
             let current_depth = metrics.queue_depth.load(Ordering::Relaxed);
+            let wait_count = metrics.queue_wait_count.swap(0, Ordering::Relaxed);
+            let wait_total = metrics.queue_wait_total_ms.swap(0, Ordering::Relaxed);
+            let wait_max = metrics.queue_wait_max_ms.swap(0, Ordering::Relaxed);
+            let wait_avg = wait_total as f64 / wait_count.max(1) as f64;
 
             let mut lines: Vec<String> = Vec::new();
             for (idx, label) in KIND_LABELS.iter().enumerate() {
@@ -142,7 +160,7 @@ pub fn spawn_reporter(metrics: Arc<ActorMetrics>, interval: Duration) {
             }
 
             debug!(
-                "state actor metrics (window={:?}, queue: current={current_depth} peak={peak_depth}): {}",
+                "state actor metrics (window={:?}, queue: current={current_depth} peak={peak_depth} wait_avg_ms={wait_avg:.1} wait_max_ms={wait_max}): {}",
                 interval,
                 lines.join(" | ")
             );

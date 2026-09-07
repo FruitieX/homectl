@@ -1,5 +1,5 @@
 import clsx from 'clsx';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useInterval, useTimeout } from 'usehooks-ts';
 import { Clock3, TrainFront } from 'lucide-react';
 import useIdle from '@/hooks/useIdle';
@@ -12,30 +12,11 @@ import {
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { Badge } from '@/ui/primitives/badge';
+import { useWidgetResource } from '@/hooks/useWidgetResource';
 import { Button } from '@/ui/primitives/button';
 import { CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
-
-type Trip = {
-  routeShortName: string;
-};
-
-// SCHEDULED
-// The trip information comes from the GTFS feed, i.e. no real-time update has been applied.
-
-// UPDATED
-// The trip information has been updated, but the trip pattern stayed the same as the trip pattern of the scheduled trip.
-
-// CANCELED
-// The trip has been canceled by a real-time update.
-
-// ADDED
-// The trip has been added using a real-time update, i.e. the trip was not present in the GTFS feed.
-
-// MODIFIED
-// The trip information has been updated and resulted in a different trip pattern compared to the trip pattern of the scheduled trip.
 
 type RealtimeState =
   | 'SCHEDULED'
@@ -44,39 +25,11 @@ type RealtimeState =
   | 'ADDED'
   | 'MODIFIED';
 
-type StopTime = {
-  scheduledDeparture: number;
-  realtimeDeparture: number;
-  realtime: boolean;
-  realtimeState: RealtimeState;
-  serviceDay: number;
-  headsign: string;
-  trip: Trip;
-};
-
-type Stop = {
-  name: string;
-  stoptimesWithoutPatterns: StopTime[];
-};
-
-type HslResponse = {
-  data: {
-    stop: Stop;
-  };
-};
-
-const fetchTrainSchedule = async (
-  trainScheduleUrl: string,
-): Promise<Train[]> => {
-  const res = await fetch(trainScheduleUrl);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch train schedule: ${res.status}`);
-  }
-  const trains: Train[] = await res.json();
-  return trains;
-};
-
 type Train = {
+  destination?: string;
+  directionId?: string;
+  departureAt?: number;
+  leaveAt?: number;
   minUntilHomeDeparture: number;
   name: string;
   departureFormatted: string;
@@ -84,16 +37,11 @@ type Train = {
   realtimeState: RealtimeState;
 };
 
-function getSecSinceMidnight(d: Date) {
-  const e = new Date(d);
-  return (d.valueOf() - e.setHours(0, 0, 0, 0)) / 1000;
-}
-
 export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { apiEndpoint } = useAppConfig();
-  const [trains, setTrains] = useState<Train[]>([]);
-  const [error, setError] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [now, setNow] = useState(Date.now);
+  useInterval(() => setNow(Date.now()), 15000);
   const isIdle = useIdle();
   const trainApiUrl = getDashboardWidgetOptionString(widget, 'trainApiUrl', '');
   const stationId = getDashboardWidgetOptionString(
@@ -103,8 +51,12 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   );
   const walkMinutes = getDashboardWidgetOptionNumber(widget, 'walkMinutes', 12);
   const resultLimit = getDashboardWidgetOptionNumber(widget, 'limit', 5);
+  const destination = getDashboardWidgetOptionString(widget, 'destination', '');
+  const directionId = getDashboardWidgetOptionString(widget, 'directionId', '');
   const hasProxyOptions =
     trainApiUrl ||
+    destination ||
+    directionId ||
     stationId !== 'HSL:2131551' ||
     walkMinutes !== 12 ||
     resultLimit !== 5;
@@ -114,6 +66,8 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
         station_id: stationId,
         walk_minutes: walkMinutes,
         limit: resultLimit,
+        destination,
+        direction_id: directionId,
       })
     : getDashboardWidgetOptionString(
         widget,
@@ -125,43 +79,12 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     trainSchedulePath,
   );
 
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const fetchData = async () => {
-      try {
-        const trains = await fetchTrainSchedule(trainScheduleUrl);
-        if (isSubscribed === true) {
-          setTrains(trains);
-          setError(null);
-        }
-      } catch (cause) {
-        if (isSubscribed === true) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : 'Failed to fetch departures',
-          );
-        }
-      }
-    };
-    fetchData();
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [trainScheduleUrl]);
-
-  useInterval(async () => {
-    try {
-      setTrains(await fetchTrainSchedule(trainScheduleUrl));
-      setError(null);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : 'Failed to fetch departures',
-      );
-    }
-  }, 60 * 1000);
+  const query = useWidgetResource<Train[]>(trainScheduleUrl);
+  const trains = (query.data ?? []).filter(
+    (train) =>
+      train.departureAt === undefined || train.departureAt * 1000 >= now,
+  );
+  const error = query.isError ? 'Departures could not be refreshed.' : null;
 
   useTimeout(
     () => setDetailsOpen(false),
@@ -170,35 +93,59 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   const departureRows = (rows: Train[], compact = false) => (
     <div className="divide-y divide-border/45">
-      {(compact ? rows.slice(0, 3) : rows).map((train, index) => (
-        <div
-          key={`${train.name}-${train.departureFormatted}-${index}`}
-          className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
-        >
-          <div className="min-w-0">
-            <div className="truncate font-semibold">{train.name}</div>
-            <div className="text-xs text-muted-foreground">
-              Departure {train.departureFormatted}
-            </div>
-          </div>
-          {train.realtime ? <Badge variant="muted">Realtime</Badge> : <span />}
+      {(compact ? rows.slice(0, 3) : rows).map((train, index) => {
+        const remaining =
+          train.leaveAt === undefined
+            ? train.minUntilHomeDeparture
+            : Math.floor((train.leaveAt * 1000 - now) / 60000);
+        const cancelled = train.realtimeState === 'CANCELED';
+        return (
           <div
-            className={clsx(
-              'min-w-16 rounded-xl px-3 py-2 text-right',
-              train.minUntilHomeDeparture <= 5
-                ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                : 'bg-muted/60',
-            )}
+            key={`${train.name}-${train.departureFormatted}-${index}`}
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
           >
-            <div className="text-lg font-semibold leading-none tabular-nums">
-              {Math.max(0, train.minUntilHomeDeparture)}
+            <div className="min-w-0">
+              <div className="truncate font-semibold">{train.name}</div>
+              <div className="truncate text-sm">
+                {train.destination || 'Destination unavailable'}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Departure {train.departureFormatted}
+              </div>
             </div>
-            <div className="mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
-              min to leave
+            <span className="text-xs text-muted-foreground">
+              {!train.realtime && !cancelled ? 'Scheduled' : ''}
+            </span>
+            <div
+              className={clsx(
+                'min-w-16 rounded-xl px-3 py-2 text-right',
+                remaining <= 5 && !cancelled
+                  ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                  : 'bg-muted/60',
+              )}
+            >
+              <div className="text-lg font-semibold leading-none tabular-nums">
+                {cancelled
+                  ? 'Cancelled'
+                  : remaining < 0
+                    ? 'Too late'
+                    : remaining === 0
+                      ? 'Now'
+                      : remaining}
+              </div>
+              <div className="mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
+                {cancelled
+                  ? 'Do not board'
+                  : remaining < 0
+                    ? 'for the walk'
+                    : remaining === 0
+                      ? 'Leave home'
+                      : 'min to leave'}
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 
@@ -217,9 +164,20 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               detail
             />
             <div className="mt-2">{departureRows(trains, true)}</div>
+            {error && (
+              <p role="status" className="text-sm text-muted-foreground">
+                Departures could not be refreshed
+                {trains.length ? '; showing earlier results.' : '.'}
+              </p>
+            )}
             {trains.length === 0 ? (
               <div className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground">
-                <Clock3 className="size-4" /> No upcoming departures
+                <Clock3 className="size-4" />{' '}
+                {query.isPending
+                  ? 'Loading departures…'
+                  : error
+                    ? 'Departures unavailable'
+                    : 'No matching departures'}
               </div>
             ) : null}
           </CardContent>

@@ -20,6 +20,8 @@ import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { CloudSun } from 'lucide-react';
 import { WidgetCard, WidgetHeading } from './WidgetChrome';
+import { useWidgetResource } from '@/hooks/useWidgetResource';
+import { latestTemperature, precipitationPeriods } from '@/lib/widgetData';
 
 type WeatherTimeSeries = {
   time: Date;
@@ -85,7 +87,6 @@ type DailyWeatherData = {
   minTemp: number;
   maxTemp: number;
   symbolCode: string;
-  precipitation: number;
   representativeDataPoint: WeatherTimeSeries;
 };
 
@@ -96,15 +97,6 @@ type WeatherResponse = {
     };
     timeseries: WeatherTimeSeries[];
   };
-};
-
-const fetchWeather = async (weatherUrl: string): Promise<WeatherResponse> => {
-  const res = await fetch(weatherUrl);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch weather: ${res.status}`);
-  }
-  const json: WeatherResponse = await res.json();
-  return json;
 };
 
 const parseTime = (timeStr: string | Date): Date => {
@@ -123,7 +115,7 @@ const parseTime = (timeStr: string | Date): Date => {
 const roundToHour = (date: Date) => {
   const hourInMilliseconds = 60 * 60 * 1000;
   return new Date(
-    Math.round(date.getTime() / hourInMilliseconds) * hourInMilliseconds,
+    Math.floor(date.getTime() / hourInMilliseconds) * hourInMilliseconds,
   );
 };
 
@@ -186,19 +178,12 @@ const buildDailyData = (
       const temperatures = dayDataPoints.map(
         (dataPoint) => dataPoint.data.instant.details.air_temperature,
       );
-      const precipitationAmounts = dayDataPoints.map(
-        (dataPoint) =>
-          dataPoint.data.next_1_hours?.details?.precipitation_amount ||
-          dataPoint.data.next_6_hours?.details?.precipitation_amount ||
-          0,
-      );
 
       return {
         date,
         minTemp: Math.min(...temperatures),
         maxTemp: Math.max(...temperatures),
         symbolCode,
-        precipitation: Math.max(...precipitationAmounts),
         representativeDataPoint: bestSymbolDataPoint,
       };
     });
@@ -227,25 +212,7 @@ const buildTemperatureChartData = (chartSeries: WeatherTimeSeries[]) => {
 };
 
 const buildPrecipitationChartData = (chartSeries: WeatherTimeSeries[]) => {
-  return chartSeries.map((series) => ({
-    time: parseTime(series.time),
-    precipitation_amount:
-      series.data.next_1_hours?.details?.precipitation_amount ||
-      series.data.next_6_hours?.details?.precipitation_amount ||
-      0,
-    precipitation_amount_max:
-      series.data.next_1_hours?.details?.precipitation_amount_max ||
-      series.data.next_6_hours?.details?.precipitation_amount_max ||
-      0,
-    precipitation_amount_min:
-      series.data.next_1_hours?.details?.precipitation_amount_min ||
-      series.data.next_6_hours?.details?.precipitation_amount_min ||
-      0,
-    probability_of_precipitation:
-      series.data.next_1_hours?.details?.probability_of_precipitation ||
-      series.data.next_6_hours?.details?.probability_of_precipitation ||
-      0,
-  }));
+  return precipitationPeriods(chartSeries);
 };
 
 const buildWindChartData = (chartSeries: WeatherTimeSeries[]) => {
@@ -261,8 +228,9 @@ const buildWindChartData = (chartSeries: WeatherTimeSeries[]) => {
 };
 
 export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
+  const [now, setNow] = useState(Date.now);
+  useInterval(() => setNow(Date.now()), 60000);
   const { apiEndpoint } = useAppConfig();
-  const [weather, setWeather] = useState<WeatherResponse | null>(null);
   const weatherUrlOverride = getDashboardWidgetOptionString(
     widget,
     'weatherUrl',
@@ -305,34 +273,16 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const modalBodyRef = useRef<HTMLDivElement>(null);
 
   const tempSensors = useTempSensorsQuery(sensorPath);
-
-  const latestFrontyardTemp = tempSensors?.findLast(
-    (row) => row.device_id === outdoorSensorId,
-  )?._value;
-
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const fetchData = async () => {
-      const weather = await fetchWeather(weatherUrl);
-      if (isSubscribed === true) {
-        setWeather(weather);
-      }
-    };
-    fetchData();
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [weatherUrl]);
-
-  useInterval(
-    async () => {
-      const weather = await fetchWeather(weatherUrl);
-      setWeather(weather);
-    },
+  const latestFrontyardTemp = latestTemperature(
+    tempSensors,
+    outdoorSensorId,
+    now,
+  );
+  const weatherQuery = useWidgetResource<WeatherResponse>(
+    weatherUrl,
     Math.max(30, refreshSeconds) * 1000,
   );
+  const weather = weatherQuery.data ?? null;
 
   useTimeout(
     () => {
@@ -373,11 +323,24 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               {renderWeatherDetail(
                 currentAndFutureSeries[0],
                 true,
-                latestFrontyardTemp
+                latestFrontyardTemp !== undefined
                   ? Math.round(latestFrontyardTemp)
                   : undefined,
               )}
             </div>
+            {weatherQuery.isError && (
+              <p
+                role="status"
+                className="whitespace-normal text-xs text-muted-foreground"
+              >
+                {weather
+                  ? 'Forecast could not be refreshed.'
+                  : 'Weather unavailable.'}
+              </p>
+            )}
+            {weatherQuery.isPending && (
+              <p className="text-xs text-muted-foreground">Loading weather…</p>
+            )}
           </CardContent>
         </Button>
       </WidgetCard>
@@ -385,7 +348,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
         open={detailsModalOpen}
         onOpenChange={setDetailsModalOpen}
         title="Weather forecast"
-        description="Hourly and five-day forecast details."
+        description={`Hourly and ${forecastDays}-day forecast.`}
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
@@ -548,17 +511,13 @@ function WeatherLongTermPanel({
               <div className="text-sm text-muted-foreground">
                 {Math.round(dayData.minTemp)}°
               </div>
-              <div className="mt-1 text-xs text-sky-500">
-                {dayData.precipitation > 0
-                  ? `${dayData.precipitation.toFixed(1)}mm`
-                  : ''}
-              </div>
             </div>
           );
         })}
       </div>
 
       <div>
+        <h3 className="mb-2 text-sm font-semibold">Temperature</h3>
         <ResponsiveChart
           height={250}
           className="overflow-hidden rounded-2xl bg-muted/40"
@@ -576,6 +535,11 @@ function WeatherLongTermPanel({
       </div>
 
       <div>
+        <h3 className="mb-2 text-sm font-semibold">Precipitation</h3>
+        <p className="mb-2 text-xs text-muted-foreground">
+          Solid bars show expected rain; lighter extensions show the maximum
+          likely amount. Widths represent 1-hour or 6-hour periods.
+        </p>
         <ResponsiveChart
           height={250}
           className="overflow-hidden rounded-2xl bg-muted/40"
@@ -593,6 +557,7 @@ function WeatherLongTermPanel({
       </div>
 
       <div>
+        <h3 className="mb-2 text-sm font-semibold">Wind</h3>
         <ResponsiveChart
           height={250}
           className="overflow-hidden rounded-2xl bg-muted/40"

@@ -635,10 +635,32 @@ function WidgetOptionFields({
           value={getString('stationId', 'HSL:2131551')}
           onChange={(value) => onChange('stationId', value)}
         />
+        <OptionTextField
+          label="Destination contains"
+          value={getString('destination', '')}
+          onChange={(value) => onChange('destination', value)}
+        />
+        <label className="space-y-2 text-sm">
+          <span className="block font-medium">Direction</span>
+          <select
+            className="h-10 w-full rounded-md border border-input bg-background px-3"
+            value={getString('directionId', '')}
+            onChange={(event) => onChange('directionId', event.target.value)}
+          >
+            <option value="">Both directions</option>
+            <option value="0">Direction 0</option>
+            <option value="1">Direction 1</option>
+          </select>
+          <span className="block text-xs text-muted-foreground">
+            Direction numbers vary by route. Use a destination such as Helsinki
+            to filter several routes together.
+          </span>
+        </label>
         <OptionNumberField
           label="Walk minutes"
           value={getNumber('walkMinutes', 12)}
           min={0}
+          max={240}
           onChange={(value) => onChange('walkMinutes', value)}
         />
         <OptionNumberField

@@ -1,5 +1,6 @@
 pub mod config;
 pub mod config_diagnostics;
+pub mod deferred;
 pub mod devices;
 pub mod event;
 pub mod groups;

@@ -177,6 +177,10 @@ export default function RoutinesPage() {
 
       {showCreate && (
         <CreateRoutineModal
+          devices={devices}
+          groups={groups}
+          scenes={sceneList}
+          routines={routines}
           onClose={() => setShowCreate(false)}
           onCreate={async (routine) => {
             await create(routine);
@@ -481,6 +485,19 @@ function RoutineCard({
 
   const viewContent = (
     <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        {!routine.enabled
+          ? 'Disabled: this routine does not evaluate or trigger.'
+          : !runtimeStatus
+            ? 'Waiting for runtime status.'
+            : runtimeStatus.rules.some((rule) => rule.error)
+              ? 'A rule could not be evaluated. See its error below.'
+              : runtimeStatus.will_trigger
+                ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
+                : runtimeStatus.all_conditions_match
+                  ? 'The conditions match; waiting for a matching trigger event.'
+                  : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
+      </p>
       <div className="grid gap-4 xl:grid-cols-2">
         <RoutineRuleList
           rules={routine.rules as Rule[]}
@@ -533,13 +550,26 @@ function RoutineCard({
 function CreateRoutineModal({
   onClose,
   onCreate,
+  devices,
+  groups,
+  scenes,
+  routines,
 }: {
   onClose: () => void;
   onCreate: (routine: Partial<Routine>) => Promise<void>;
+  devices: DevicesState;
+  groups: FlattenedGroupsConfig;
+  scenes: { id: string; name: string }[];
+  routines: Routine[];
 }) {
   const [id, setId] = useState('');
   const [name, setName] = useState('');
-  const [enabled, setEnabled] = useState(true);
+  const [enabled, setEnabled] = useState(false);
+  const [rules, setRules] = useState<Rule[]>([]);
+  const [actions, setActions] = useState<Action[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState(false);
 
   return (
     <ResponsiveOverlay
@@ -551,13 +581,50 @@ function CreateRoutineModal({
       }}
       title="Add Routine"
       description="Create a new automation routine."
-      className="max-w-xl"
+      className="max-w-4xl"
     >
       <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
         <ConfigFormSection
           title="Routine identity"
-          description="Start with a name and id; rules and actions can be added after creation."
+          description="Choose a starting point, edit its rules and actions, then review before saving."
         >
+          <ConfigField label="Start from">
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              defaultValue="blank"
+              onChange={(event) => {
+                setPreview(false);
+                const value = event.target.value;
+                if (value === 'blank') {
+                  setRules([]);
+                  setActions([]);
+                  return;
+                }
+                if (value === 'sensor') {
+                  setRules([{ state: { value: true }, trigger_mode: 'pulse' }]);
+                  setActions([{ action: 'ActivateScene', scene_id: '' }]);
+                  return;
+                }
+                const source = routines.find(
+                  (routine) => routine.id === value.slice(5),
+                );
+                if (source) {
+                  setRules(structuredClone(source.rules) as Rule[]);
+                  setActions(structuredClone(source.actions) as Action[]);
+                }
+              }}
+            >
+              <option value="blank">Blank routine</option>
+              <option value="sensor">Sensor activates a scene</option>
+              <optgroup label="Reuse an existing routine">
+                {routines.map((routine) => (
+                  <option key={routine.id} value={`copy:${routine.id}`}>
+                    {routine.name}
+                  </option>
+                ))}
+              </optgroup>
+            </select>
+          </ConfigField>
           <ConfigField label="Routine ID">
             <Input
               type="text"
@@ -586,15 +653,110 @@ function CreateRoutineModal({
           </ConfigToggleRow>
         </ConfigFormSection>
 
+        <div className="mt-4 space-y-4">
+          {preview ? (
+            <>
+              <RoutineRuleList
+                rules={rules}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                deviceDisplayNameMap={{}}
+              />
+              <RoutineActionList
+                actions={actions}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                routines={routines}
+                deviceDisplayNameMap={{}}
+              />
+              <p className="text-sm text-muted-foreground">
+                {enabled
+                  ? 'This routine will be enabled when saved.'
+                  : 'This routine will be saved disabled.'}
+              </p>
+            </>
+          ) : (
+            <>
+              <RuleBuilder
+                rules={rules}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                onChange={setRules}
+              />
+              <ActionBuilder
+                actions={actions}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                routines={routines}
+                onChange={setActions}
+              />
+            </>
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
         <ConfigFormActions>
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
+          <Button variant="outline" onClick={() => setPreview(!preview)}>
+            {preview ? 'Edit draft' : 'Preview'}
+          </Button>
           <Button
-            disabled={!id || !name}
-            onClick={() =>
-              onCreate({ id, name, enabled, rules: [], actions: [] })
-            }
+            disabled={!id.trim() || !name.trim() || saving || !preview}
+            onClick={async () => {
+              const validation = validateActions(actions);
+              if (validation) {
+                setError(validation);
+                return;
+              }
+              if (
+                actions.some(
+                  (action) =>
+                    action.action === 'ActivateScene' &&
+                    !action.scene_id.trim(),
+                )
+              ) {
+                setError('Choose a scene for each scene activation.');
+                return;
+              }
+              if (
+                rules.some(
+                  (rule) =>
+                    'state' in rule &&
+                    (!rule.integration_id || !rule.device_id),
+                )
+              ) {
+                setError('Choose a device for each sensor rule.');
+                return;
+              }
+              setSaving(true);
+              setError(null);
+              try {
+                await onCreate({
+                  id: id.trim(),
+                  name: name.trim(),
+                  enabled,
+                  rules,
+                  actions,
+                });
+              } catch (error) {
+                setError(
+                  error instanceof Error
+                    ? error.message
+                    : 'Failed to create routine',
+                );
+              } finally {
+                setSaving(false);
+              }
+            }}
           >
             Create
           </Button>

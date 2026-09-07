@@ -20,7 +20,12 @@ var sceneLink = function (config) { return config; };
 /// JavaScript scripting context for evaluating dynamic expressions
 pub struct ScriptEngine {
     context: Context,
+    preparation_error: Option<String>,
 }
+
+const MAX_SCRIPT_BYTES: usize = 64 * 1024;
+const MAX_CONTEXT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_RESULT_BYTES: usize = 1024 * 1024;
 
 impl Default for ScriptEngine {
     fn default() -> Self {
@@ -32,8 +37,34 @@ impl ScriptEngine {
     /// Create a new script engine instance
     pub fn new() -> Self {
         let mut context = Context::default();
+        context
+            .runtime_limits_mut()
+            .set_loop_iteration_limit(10_000);
+        context.runtime_limits_mut().set_recursion_limit(64);
+        context.runtime_limits_mut().set_stack_size_limit(4096);
         let _ = context.eval(Source::from_bytes(SCENE_SCRIPT_HELPERS));
-        ScriptEngine { context }
+        ScriptEngine {
+            context,
+            preparation_error: None,
+        }
+    }
+
+    fn load_context(&mut self, script: &str) {
+        if script.len() > MAX_CONTEXT_BYTES {
+            self.preparation_error = Some("Script context exceeds 8 MiB".into());
+        } else if let Err(error) = self.context.eval(Source::from_bytes(script)) {
+            self.preparation_error = Some(format!("Script context failed: {error}"));
+        }
+    }
+
+    fn validate_input(&self, script: &str) -> Result<()> {
+        if let Some(error) = &self.preparation_error {
+            return Err(eyre::eyre!("{error}"));
+        }
+        if script.len() > MAX_SCRIPT_BYTES {
+            return Err(eyre::eyre!("Script exceeds 64 KiB"));
+        }
+        Ok(())
     }
 
     /// Update the script context with current device states as JSON
@@ -41,7 +72,7 @@ impl ScriptEngine {
         // Convert devices to JSON and parse it into JS
         let devices_json = serde_json::to_string(&devices.0).unwrap_or_else(|_| "{}".to_string());
         let script = format!("var devices = {};", devices_json);
-        let _ = self.context.eval(Source::from_bytes(&script));
+        self.load_context(&script);
     }
 
     /// Update the script context with current group states as JSON
@@ -86,11 +117,12 @@ impl ScriptEngine {
 
         let groups_json = serde_json::to_string(&groups_map).unwrap_or_else(|_| "{}".to_string());
         let script = format!("var groups = {};", groups_json);
-        let _ = self.context.eval(Source::from_bytes(&script));
+        self.load_context(&script);
     }
 
     /// Evaluate a JavaScript expression and return the result as a boolean
     pub fn eval_boolean(&mut self, script: &str) -> Result<bool> {
+        self.validate_input(script)?;
         let result = self
             .context
             .eval(Source::from_bytes(script))
@@ -101,6 +133,7 @@ impl ScriptEngine {
 
     /// Evaluate a JavaScript expression and return the result as a JSON value
     pub fn eval_json(&mut self, script: &str) -> Result<serde_json::Value> {
+        self.validate_input(script)?;
         // Wrap the script to convert result to JSON string
         let wrapped = format!("JSON.stringify({})", script);
         let result = self
@@ -114,6 +147,9 @@ impl ScriptEngine {
             .map(|s| s.to_std_string_escaped())
             .unwrap_or_else(|| "null".to_string());
 
+        if json_str.len() > MAX_RESULT_BYTES {
+            return Err(eyre::eyre!("Script result exceeds 1 MiB"));
+        }
         let value: serde_json::Value = serde_json::from_str(&json_str)?;
         Ok(value)
     }
@@ -158,7 +194,7 @@ impl ScriptEngine {
     pub fn register_global(&mut self, name: &str, value: serde_json::Value) {
         let json_str = serde_json::to_string(&value).unwrap_or_else(|_| "null".to_string());
         let script = format!("var {} = {};", name, json_str);
-        let _ = self.context.eval(Source::from_bytes(&script));
+        self.load_context(&script);
     }
 }
 
@@ -176,6 +212,24 @@ pub fn create_script_engine_with_state(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_unbounded_loops_and_recursion() {
+        assert!(ScriptEngine::new().eval_boolean("while (true) {}").is_err());
+        assert!(ScriptEngine::new()
+            .eval_boolean("function recurse() { return recurse(); } recurse();")
+            .is_err());
+    }
+
+    #[test]
+    fn rejects_oversized_input_and_output() {
+        assert!(ScriptEngine::new()
+            .eval_boolean(&" ".repeat(MAX_SCRIPT_BYTES + 1))
+            .is_err());
+        assert!(ScriptEngine::new()
+            .eval_json("'x'.repeat(1048577)")
+            .is_err());
+    }
 
     #[test]
     fn test_eval_boolean() {

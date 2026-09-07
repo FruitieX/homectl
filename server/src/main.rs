@@ -6,7 +6,6 @@ use homectl_server::api::init_api;
 use homectl_server::core::simulate;
 use homectl_server::core::{
     devices::Devices,
-    event::DeferredEventWork,
     groups::Groups,
     integrations::Integrations,
     logs::init_logging,
@@ -31,11 +30,10 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 const DATABASE_RECONNECT_INTERVAL_SECS: u64 = 2;
-const SLOW_DEFERRED_WORK_WARN_MS: u64 = 1000;
 
 fn default_backup_config_path() -> &'static Path {
     Path::new("Settings.json")
@@ -172,24 +170,7 @@ async fn run_event_loop(
     runtime_config: RuntimeConfigSnapshot,
 ) -> Result<(), Box<dyn Error>> {
     let (event_tx, mut event_rx) = mk_event_channel();
-    let (deferred_work_tx, mut deferred_work_rx) =
-        tokio::sync::mpsc::unbounded_channel::<DeferredEventWork>();
-
-    tokio::spawn(async move {
-        while let Some(work) = deferred_work_rx.recv().await {
-            let started_at = Instant::now();
-            let result = work.execute().await;
-            let elapsed = started_at.elapsed();
-
-            if elapsed > Duration::from_millis(SLOW_DEFERRED_WORK_WARN_MS) {
-                warn!("Deferred event work took {:?}", elapsed);
-            }
-
-            if let Err(err) = result {
-                error!("Error while executing deferred event work:\n    Err:\n    {err:#?}");
-            }
-        }
-    });
+    let deferred_work_tx = homectl_server::core::deferred::spawn_deferred_worker();
 
     let mut integrations = Integrations::new(event_tx.clone(), cli);
     integrations

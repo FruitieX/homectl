@@ -1,7 +1,7 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useInterval } from 'usehooks-ts';
+import { useMemo } from 'react';
 import { useAppConfig } from './appConfig';
 import { resolveDashboardWidgetUrl } from './useDashboard';
+import { useWidgetResource } from './useWidgetResource';
 
 interface SensorRow {
   device_id: string;
@@ -152,54 +152,20 @@ const normalizeSensorRows = (value: unknown): SensorRow[] => {
   });
 };
 
-const fetchSensorRows = async (sensorUrl: string): Promise<SensorRow[]> => {
-  const res = await fetch(sensorUrl);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch temp sensors: ${res.status}`);
-  }
-
-  return normalizeSensorRows(await res.json());
+export const useTempSensorsResource = (
+  endpointPath = '/api/influxdb/temp-sensors',
+) => {
+  const { apiEndpoint } = useAppConfig();
+  const query = useWidgetResource<unknown>(
+    resolveDashboardWidgetUrl(apiEndpoint, endpointPath),
+  );
+  const rows = useMemo(() => normalizeSensorRows(query.data), [query.data]);
+  return { ...query, rows };
 };
 
 export const useTempSensorsQuery = (
   endpointPath = '/api/influxdb/temp-sensors',
-) => {
-  const { apiEndpoint } = useAppConfig();
-  const [tempSensors, setTempSensors] = useState<SensorRow[]>([]);
-  const sensorUrl = resolveDashboardWidgetUrl(apiEndpoint, endpointPath);
-
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const fetchData = async () => {
-      try {
-        const data = await fetchSensorRows(sensorUrl);
-        if (isSubscribed) {
-          setTempSensors(data);
-        }
-      } catch (error) {
-        console.error('Error fetching temp sensors:', error);
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [sensorUrl]);
-
-  useInterval(async () => {
-    try {
-      const data = await fetchSensorRows(sensorUrl);
-      setTempSensors(data);
-    } catch (error) {
-      console.error('Error fetching temp sensors:', error);
-    }
-  }, 60 * 1000);
-
-  return tempSensors;
-};
+) => useTempSensorsResource(endpointPath).rows;
 
 export const useSensorData = (
   optionsOrEndpoint: string | SensorDataOptions = '/api/influxdb/temp-sensors',
@@ -342,53 +308,18 @@ const normalizeSpotPriceRows = (value: unknown): SpotPriceRow[] => {
   });
 };
 
-const fetchSpotPriceRows = async (
-  spotPriceUrl: string,
-): Promise<SpotPriceRow[]> => {
-  const res = await fetch(spotPriceUrl);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch spot prices: ${res.status}`);
-  }
-
-  return normalizeSpotPriceRows(await res.json());
-};
-
 export const useSpotPriceQuery = (
   endpointPath = '/api/influxdb/spot-prices',
 ) => {
+  return useSpotPriceResource(endpointPath).rows;
+};
+
+export const useSpotPriceResource = (
+  endpointPath = '/api/influxdb/spot-prices',
+) => {
   const { apiEndpoint } = useAppConfig();
-  const [spotPrices, setSpotPrices] = useState<SpotPriceRow[]>([]);
   const spotPriceUrl = resolveDashboardWidgetUrl(apiEndpoint, endpointPath);
-
-  useEffect(() => {
-    let isSubscribed = true;
-
-    const fetchData = async () => {
-      try {
-        const data = await fetchSpotPriceRows(spotPriceUrl);
-        if (isSubscribed) {
-          setSpotPrices(data);
-        }
-      } catch (error) {
-        console.error('Error fetching spot prices:', error);
-      }
-    };
-
-    fetchData();
-
-    return () => {
-      isSubscribed = false;
-    };
-  }, [spotPriceUrl]);
-
-  useInterval(async () => {
-    try {
-      const data = await fetchSpotPriceRows(spotPriceUrl);
-      setSpotPrices(data);
-    } catch (error) {
-      console.error('Error fetching spot prices:', error);
-    }
-  }, 60 * 1000);
-
-  return spotPrices;
+  const query = useWidgetResource<unknown>(spotPriceUrl);
+  const rows = useMemo(() => normalizeSpotPriceRows(query.data), [query.data]);
+  return { ...query, rows };
 };

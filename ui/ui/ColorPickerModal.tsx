@@ -750,6 +750,7 @@ export const ColorPickerModal = () => {
     open: deviceModalOpen,
     setOpen: setDeviceModalOpen,
     presentation: deviceModalPresentation,
+    setState: setDeviceModalState,
   } = useDeviceModalState();
 
   const devices = useDevicesState();
@@ -877,11 +878,60 @@ export const ColorPickerModal = () => {
       desktopPresentation={deviceModalPresentation}
     >
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+        {deviceModalPresentation === 'floorplan' && (
+          <label className="block space-y-1 text-xs text-muted-foreground">
+            <span>Control selection</span>
+            <select
+              aria-label="Control selection"
+              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+              value=""
+              onChange={(event) => {
+                const value = event.target.value;
+                setDeviceModalState(
+                  value.startsWith('group:')
+                    ? (groups?.[value.slice(6)]?.device_keys ?? [])
+                    : [value.slice(7)],
+                );
+              }}
+            >
+              <option value="" disabled>
+                {deviceModalState.length === 1
+                  ? 'Choose a group or device'
+                  : 'All selected devices'}
+              </option>
+              {Object.entries(groups ?? {})
+                .filter(([, group]) =>
+                  group?.device_keys.some((key) =>
+                    deviceModalState.includes(key),
+                  ),
+                )
+                .map(([id, group]) => (
+                  <option key={id} value={`group:${id}`}>
+                    {group?.name ?? id}
+                  </option>
+                ))}
+              {deviceModalState.flatMap((key) =>
+                devices?.[key]
+                  ? [
+                      <option key={key} value={`device:${key}`}>
+                        {getDeviceDisplayLabel(devices[key]!, displayNames)}
+                      </option>,
+                    ]
+                  : [],
+              )}
+            </select>
+          </label>
+        )}
+        {deviceModalPresentation === 'floorplan' && (
+          <ScenesTab deviceKeys={deviceModalState} />
+        )}
         <DeviceQuickControls
           key={deviceModalState.join(',')}
           devices={selected}
         />
-        <ScenesTab deviceKeys={deviceModalState} />
+        {deviceModalPresentation !== 'floorplan' && (
+          <ScenesTab deviceKeys={deviceModalState} />
+        )}
         {colorDevices.length > 0 && (
           <details className="rounded-xl border border-border p-4">
             <summary className="cursor-pointer py-2 text-sm font-medium">

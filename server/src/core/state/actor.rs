@@ -45,7 +45,7 @@ pub const STUCK_ABORT_ENV_VAR: &str = "HOMECTL_STATE_ACTOR_ABORT_MS";
 /// latest runtime snapshot.
 #[derive(Clone)]
 pub struct StateHandle {
-    pub tx: mpsc::UnboundedSender<StateCommand>,
+    tx: mpsc::UnboundedSender<(Instant, StateCommand)>,
     pub snapshot: SnapshotHandle,
     metrics: Arc<ActorMetrics>,
 }
@@ -58,7 +58,10 @@ impl StateHandle {
         let (done, reply) = tokio::sync::oneshot::channel();
         self.metrics.on_enqueue();
         self.tx
-            .send(StateCommand::ActivateScene { command, done })
+            .send((
+                Instant::now(),
+                StateCommand::ActivateScene { command, done },
+            ))
             .map_err(|_| {
                 self.metrics.on_dequeue();
                 color_eyre::eyre::eyre!("State actor unavailable")
@@ -75,7 +78,10 @@ impl StateHandle {
         let (done, reply) = tokio::sync::oneshot::channel();
         self.metrics.on_enqueue();
         self.tx
-            .send(StateCommand::ControlDevice { command, done })
+            .send((
+                Instant::now(),
+                StateCommand::ControlDevice { command, done },
+            ))
             .map_err(|_| {
                 self.metrics.on_dequeue();
                 color_eyre::eyre::eyre!("State actor unavailable")
@@ -91,10 +97,13 @@ impl StateHandle {
         self.metrics.on_enqueue();
         if self
             .tx
-            .send(StateCommand::HandleEvent {
-                event: Box::new(event),
-                done: None,
-            })
+            .send((
+                Instant::now(),
+                StateCommand::HandleEvent {
+                    event: Box::new(event),
+                    done: None,
+                },
+            ))
             .is_err()
         {
             self.metrics.on_dequeue();
@@ -125,7 +134,7 @@ impl StateHandle {
             })
         }));
         self.metrics.on_enqueue();
-        self.tx.send(cmd).map_err(|_| {
+        self.tx.send((Instant::now(), cmd)).map_err(|_| {
             self.metrics.on_dequeue();
             eyre!("State actor channel closed")
         })?;
@@ -141,7 +150,7 @@ pub fn spawn_state_actor(
     snapshot: SnapshotHandle,
     deferred_work_tx: mpsc::UnboundedSender<DeferredEventWork>,
 ) -> StateHandle {
-    let (tx, rx) = mpsc::unbounded_channel::<StateCommand>();
+    let (tx, rx) = mpsc::unbounded_channel::<(Instant, StateCommand)>();
     let metrics = ActorMetrics::new();
     let handle = StateHandle {
         tx,
@@ -186,7 +195,7 @@ pub fn spawn_state_actor(
 /// Processing loop for the state actor.
 async fn run_actor(
     mut app_state: AppState,
-    mut rx: mpsc::UnboundedReceiver<StateCommand>,
+    mut rx: mpsc::UnboundedReceiver<(Instant, StateCommand)>,
     deferred_work_tx: mpsc::UnboundedSender<DeferredEventWork>,
     watchdog_epoch: Instant,
     watchdog_start: Arc<AtomicU64>,
@@ -195,9 +204,19 @@ async fn run_actor(
 ) -> Result<()> {
     use crate::core::event::handle_event;
 
-    while let Some(cmd) = rx.recv().await {
+    while let Some((queued_at, cmd)) = rx.recv().await {
         metrics.on_dequeue();
         let kind_idx = metrics::kind_index_for_command(&cmd);
+        let queue_wait = queued_at.elapsed();
+        metrics.record_queue_wait(queue_wait.as_millis() as u64);
+        if queue_wait > Duration::from_millis(SLOW_EVENT_MUTATION_WARN_MS) {
+            warn!(
+                "State actor queue delay: {:?}, kind={}, remaining={}",
+                queue_wait,
+                KIND_LABELS[kind_idx],
+                rx.len()
+            );
+        }
         watchdog_kind.store(kind_idx, Ordering::SeqCst);
         watchdog_start.store(
             Instant::now().duration_since(watchdog_epoch).as_millis() as u64,
