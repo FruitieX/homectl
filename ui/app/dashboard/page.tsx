@@ -170,7 +170,7 @@ export default function Page() {
 
   if (dashboardLoading) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[100rem] space-y-8">
           <DashboardLoadingGrid />
         </div>
@@ -180,7 +180,7 @@ export default function Page() {
 
   if (dashboardError) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6">
         <div className="mx-auto max-w-[100rem] space-y-6">
           <Alert variant="destructive">
             <AlertTitle>Dashboard configuration failed to load</AlertTitle>
@@ -219,7 +219,7 @@ export default function Page() {
     <div
       data-dashboard-spacing={spacing}
       style={dashboardSpacingStyles[spacing]}
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-3 py-3 sm:px-5 lg:px-8 lg:py-6"
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6"
     >
       <div className="mx-auto max-w-[100rem] space-y-8">
         <section>

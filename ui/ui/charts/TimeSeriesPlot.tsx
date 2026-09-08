@@ -88,6 +88,20 @@ export function TimeSeriesPlot({
     minTime + 60000,
     ...points.map((p) => p.end ?? p.time),
   );
+  const dayBands = useMemo(() => {
+    if (points.length === 0) return [];
+    const first = new Date(minTime);
+    first.setHours(0, 0, 0, 0);
+    const bands: { start: number; end: number; index: number }[] = [];
+    for (let start = first.getTime(), index = 0; start < maxTime; index += 1) {
+      const endDate = new Date(start);
+      endDate.setDate(endDate.getDate() + 1);
+      const end = endDate.getTime();
+      bands.push({ start, end, index });
+      start = end;
+    }
+    return bands;
+  }, [maxTime, minTime, points.length]);
   const values = points
     .flatMap((p) => [p.value, p.low ?? p.value, p.high ?? p.value])
     .filter(Number.isFinite);
@@ -296,6 +310,35 @@ export function TimeSeriesPlot({
           </text>
         ))}
         <g clipPath={`url(#${id})`}>
+          {dayBands.map((band) => {
+            const startX = Math.max(left, x(new Date(band.start)));
+            const endX = Math.min(left + plotWidth, x(new Date(band.end)));
+            return (
+              <g key={band.start}>
+                {band.index % 2 === 1 && (
+                  <rect
+                    x={startX}
+                    y={top}
+                    width={Math.max(0, endX - startX)}
+                    height={plotHeight}
+                    className="fill-muted-foreground"
+                    opacity={0.04}
+                  />
+                )}
+                {band.index > 0 && startX <= left + plotWidth && (
+                  <line
+                    x1={startX}
+                    x2={startX}
+                    y1={top}
+                    y2={top + plotHeight}
+                    className="stroke-border"
+                    strokeDasharray="2 4"
+                    opacity={0.3}
+                  />
+                )}
+              </g>
+            );
+          })}
           {visible.map((s) => {
             const color =
               s.className ?? palette[clean.indexOf(s) % palette.length];
