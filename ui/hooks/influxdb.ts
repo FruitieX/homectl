@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useAppConfig } from './appConfig';
 import { resolveDashboardWidgetUrl } from './useDashboard';
 import { useWidgetResource } from './useWidgetResource';
+import { useSensorCatalog } from './sensorCatalog';
 
 interface SensorRow {
   device_id: string;
@@ -30,7 +31,6 @@ interface SensorData {
   latest_humidity_time?: Date;
   temp_data: Array<{ time: Date; value: number }>;
   humidity_data: Array<{ time: Date; value: number }>;
-  is_priority: boolean;
   is_indoor: boolean;
   color: string;
 }
@@ -38,53 +38,11 @@ interface SensorData {
 interface SensorDataOptions {
   endpointPath?: string;
   sensorIds?: string[];
-  indoorSensorIds?: string[];
-  prioritySensorIds?: string[];
 }
 
 const EMPTY_SENSOR_IDS: string[] = [];
 
-// Mapping from device_id to sensor name (duplicated from API route)
-const DEVICE_ID_TO_NAME: Record<string, string> = {
-  D83431306571: 'Bathroom',
-  C76A05062842: 'Bedroom',
-  D83535301C43: 'Upstairs office',
-  D7353530520F: 'Kids room',
-  D63534385106: 'Office',
-  D7353530665A: 'Living room',
-  CE2A82463674: 'Downstairs bathroom',
-  D9353438450D: 'Backyard',
-  D4343037362D: 'Patio',
-  C76A0246647E: 'Car',
-  D83534387029: 'Front yard',
-  C76A03460A73: 'Storage',
-};
-
-const INDOOR_SENSORS = [
-  'D83431306571', // Bathroom
-  'C76A05062842', // Bedroom
-  'D83535301C43', // Upstairs office
-  'D7353530520F', // Kids room
-  'D63534385106', // Office
-  'D7353530665A', // Living room
-  'CE2A82463674', // Downstairs bathroom
-];
-
-const OUTDOOR_SENSORS = [
-  'D9353438450D', // Backyard
-  'D4343037362D', // Patio
-  'C76A0246647E', // Car
-  'D83534387029', // Front yard
-  'C76A03460A73', // Storage
-];
-
-const PRIORITY_SENSORS = [
-  'D4343037362D', // Patio
-  'D7353530665A', // Living room
-  'C76A0246647E', // Car
-  'C76A05062842', // Bedroom
-  'D63534385106', // Office
-];
+export type SensorDataRow = SensorData;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
   return typeof value === 'object' && value !== null;
@@ -176,9 +134,8 @@ export const useSensorData = (
       : optionsOrEndpoint;
   const endpointPath = options.endpointPath ?? '/api/influxdb/temp-sensors';
   const selectedSensorIds = options.sensorIds ?? EMPTY_SENSOR_IDS;
-  const indoorSensorIds = options.indoorSensorIds ?? INDOOR_SENSORS;
-  const prioritySensorIds = options.prioritySensorIds ?? PRIORITY_SENSORS;
   const rawSensorData = useTempSensorsQuery(endpointPath);
+  const catalogQuery = useSensorCatalog();
 
   const sensorData = useMemo(() => {
     const deviceMap = new Map<string, SensorData>();
@@ -202,10 +159,15 @@ export const useSensorData = (
     const discoveredDeviceIds = Array.from(
       new Set(rawSensorData.map((row) => row.device_id)),
     );
+    const catalog = catalogQuery.catalog;
     const configuredDeviceIds =
       selectedSensorIds.length > 0 ? selectedSensorIds : discoveredDeviceIds;
+    const catalogItems = catalog?.sensors ?? [];
+    const catalogNames = new Map(catalogItems.map((sensor) => [sensor.id, sensor.name]));
+    const defaultIndoorIds = catalog?.groups.find((group) => group.id === 'indoor')?.sensorIds ?? [];
+    const effectiveIndoorIds = defaultIndoorIds;
     const knownDeviceIds = Array.from(
-      new Set([...Object.keys(DEVICE_ID_TO_NAME), ...configuredDeviceIds]),
+      new Set([...catalogItems.map((sensor) => sensor.id), ...configuredDeviceIds]),
     );
 
     knownDeviceIds.forEach((deviceId, index) => {
@@ -218,11 +180,10 @@ export const useSensorData = (
 
       deviceMap.set(deviceId, {
         device_id: deviceId,
-        device_name: DEVICE_ID_TO_NAME[deviceId] ?? deviceId,
+        device_name: catalogNames.get(deviceId) ?? deviceId,
         temp_data: [],
         humidity_data: [],
-        is_priority: prioritySensorIds.includes(deviceId),
-        is_indoor: indoorSensorIds.includes(deviceId),
+        is_indoor: effectiveIndoorIds.includes(deviceId),
         color: colors[index % colors.length],
       });
     });
@@ -259,18 +220,15 @@ export const useSensorData = (
       sensor.humidity_data.sort((a, b) => a.time.getTime() - b.time.getTime());
     });
 
-    // Convert to array and sort by priority, then by name
+    // Keep the settings order stable and make the fallback list alphabetical.
     return Array.from(deviceMap.values()).sort((a, b) => {
-      if (a.is_priority && !b.is_priority) return -1;
-      if (!a.is_priority && b.is_priority) return 1;
       return a.device_name.localeCompare(b.device_name);
     });
-  }, [indoorSensorIds, prioritySensorIds, rawSensorData, selectedSensorIds]);
+  }, [catalogQuery.catalog, rawSensorData, selectedSensorIds]);
 
   return sensorData;
 };
 
-export { INDOOR_SENSORS, OUTDOOR_SENSORS };
 
 interface SpotPriceRow {
   _time: Date;

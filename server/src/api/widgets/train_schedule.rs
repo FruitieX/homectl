@@ -61,6 +61,7 @@ struct TrainScheduleQuery {
     limit: Option<usize>,
     destination: Option<String>,
     direction_id: Option<u8>,
+    overdue_minutes: Option<i64>,
 }
 
 fn non_empty(value: Option<String>) -> Option<String> {
@@ -80,6 +81,7 @@ async fn handle(
         .unwrap_or(DEFAULT_WALK_MINUTES)
         .clamp(0, 240);
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, 20);
+    let overdue_minutes = query.overdue_minutes.unwrap_or(0).clamp(0, 60);
     if query.direction_id.is_some_and(|direction| direction > 1) {
         return error(StatusCode::BAD_REQUEST, "Direction must be 0 or 1");
     }
@@ -109,6 +111,7 @@ async fn handle(
             limit,
             non_empty(query.destination).as_deref(),
             query.direction_id,
+            overdue_minutes,
             Utc::now().timestamp(),
         ))
         .into_response(),
@@ -206,6 +209,7 @@ fn transform(
     limit: usize,
     destination: Option<&str>,
     direction_id: Option<u8>,
+    overdue_minutes: i64,
     now: i64,
 ) -> Value {
     let destination = destination.map(str::to_lowercase);
@@ -235,7 +239,7 @@ fn transform(
         let min_until_departure = sec_until_departure.div_euclid(60);
         let min_until_home_departure = min_until_departure - walk_minutes;
 
-        if sec_until_departure < 0 {
+        if sec_until_departure < -overdue_minutes * 60 {
             continue;
         }
 
@@ -286,6 +290,7 @@ mod tests {
             5,
             None,
             None,
+            0,
             86340,
         );
         assert_eq!(result[0]["departureAt"], 86520);
@@ -307,6 +312,7 @@ mod tests {
             Some("HELSINKI"),
             Some(0),
             0,
+            0,
         );
         assert_eq!(result.as_array().unwrap().len(), 1);
         assert_eq!(result[0]["departureAt"], 300);
@@ -320,10 +326,10 @@ mod tests {
         cancelled["realtime"] = json!(true);
         cancelled["realtimeDeparture"] = json!(-1);
         let data = response(vec![departure(0, 100, "Helsinki", "0"), cancelled]);
-        let result = transform(data.clone(), 0, 5, None, None, 200);
+        let result = transform(data.clone(), 0, 5, None, None, 0, 200);
         assert_eq!(result.as_array().unwrap().len(), 1);
         assert_eq!(result[0]["realtimeState"], "CANCELED");
-        assert!(transform(data, 0, 5, None, None, 400)
+        assert!(transform(data, 0, 5, None, None, 0, 400)
             .as_array()
             .unwrap()
             .is_empty());

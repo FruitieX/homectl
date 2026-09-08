@@ -162,7 +162,7 @@ export const widgetRegistry: Record<
       units: 'metric',
       weatherUrl: '',
       weatherPath: '/api/weather',
-      outdoorSensorId: 'D83534387029',
+      outdoorSensorId: '',
       sensorPath: '/api/influxdb/temp-sensors',
       forecastHours: 48,
       forecastDays: 5,
@@ -207,6 +207,7 @@ export const widgetRegistry: Record<
       trainSchedulePath: '/api/train-schedule',
       stationId: 'HSL:2131551',
       walkMinutes: 12,
+      overdueMinutes: 3,
     },
   },
   text: {

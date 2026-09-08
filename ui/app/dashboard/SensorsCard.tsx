@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
 import { useInterval, useTimeout } from 'usehooks-ts';
-import { Activity, Droplets, Thermometer } from 'lucide-react';
+import { Activity } from 'lucide-react';
 import { useSensorData, useTempSensorsResource } from '@/hooks/influxdb';
+import { useSensorCatalog } from '@/hooks/sensorCatalog';
 import useIdle from '@/hooks/useIdle';
 import {
   type DashboardWidget,
@@ -15,7 +16,6 @@ import {
   calculateTemperatureStats,
   calculateHumidityStats,
   isOffline,
-  getTrendIcon,
   type SensorTrend,
 } from '@/lib/sensorStats';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
@@ -30,6 +30,7 @@ import {
   SelectValue,
 } from '@/ui/primitives/select';
 import { DetailPanel, Metric, WidgetCard, WidgetHeading } from './WidgetChrome';
+import { SensorChip } from '@/ui/SensorChip';
 
 const trendLabel = (trend: SensorTrend) =>
   ({
@@ -48,14 +49,8 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const isIdle = useIdle();
   useTimeout(() => setOpen(false), open && isIdle ? 10000 : null);
   const sensorIds = getDashboardWidgetOptionStringArray(widget, 'sensorIds');
-  const indoorSensorIds = getDashboardWidgetOptionStringArray(
-    widget,
-    'indoorSensorIds',
-  );
-  const prioritySensorIds = getDashboardWidgetOptionStringArray(
-    widget,
-    'prioritySensorIds',
-  );
+  const { catalog } = useSensorCatalog();
+  const sensorGroups = catalog?.groups ?? [];
   const url = getDashboardWidgetOptionString(widget, 'influxUrl', ''),
     token = getDashboardWidgetOptionString(widget, 'influxToken', '');
   const range = getDashboardWidgetOptionString(widget, 'range', '-6h'),
@@ -78,19 +73,20 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const sensors = useSensorData({
     endpointPath,
     sensorIds,
-    indoorSensorIds: indoorSensorIds.length ? indoorSensorIds : undefined,
-    prioritySensorIds: prioritySensorIds.length ? prioritySensorIds : undefined,
   });
-  const priority = sensors.filter((s) => s.is_priority);
   const resource = useTempSensorsResource(endpointPath);
-  const preview = (priority.length ? priority : sensors).slice(0, 5);
+  const preview = sensors.slice(0, 5);
   const active = sensors.find((s) => s.device_id === activeId);
   const chosen = active
     ? [active]
     : sensors.filter(
         (s) =>
           filter === 'all' ||
-          (filter === 'indoor' ? s.is_indoor : !s.is_indoor),
+          (filter === 'indoor'
+            ? s.is_indoor
+            : sensorGroups.find((group) => group.id === filter)
+              ? sensorGroups.find((group) => group.id === filter)?.sensorIds.includes(s.device_id)
+              : !s.is_indoor),
       );
   const temperature = active
       ? calculateTemperatureStats(active.temp_data, now)
@@ -120,48 +116,14 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
               : 'flex gap-2 overflow-x-auto pb-1'
           }
         >
-          {preview.map((sensor) => {
-            const temp = calculateTemperatureStats(sensor.temp_data, now),
-              hum = calculateHumidityStats(sensor.humidity_data, now);
-            return (
-              <button
-                type="button"
-                key={sensor.device_id}
-                onClick={() => show(sensor.device_id)}
-                className="min-w-28 rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)] text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                <div className="mb-2 truncate text-xs font-medium">
-                  {sensor.device_name}
-                </div>
-                <div className="flex items-center gap-1.5 text-sm tabular-nums">
-                  <Thermometer className="size-3.5 shrink-0 text-muted-foreground" />
-                  {!isOffline(sensor.latest_temp_time, 15, now) &&
-                  sensor.latest_temp !== undefined
-                    ? `${sensor.latest_temp.toFixed(1)}°`
-                    : '—'}
-                  <span
-                    className="text-xs text-muted-foreground"
-                    aria-label={temp ? trendLabel(temp.trend) : undefined}
-                  >
-                    {temp ? getTrendIcon(temp.trend) : null}
-                  </span>
-                </div>
-                <div className="mt-1 flex items-center gap-1.5 text-sm tabular-nums">
-                  <Droplets className="size-3.5 shrink-0 text-muted-foreground" />
-                  {!isOffline(sensor.latest_humidity_time, 15, now) &&
-                  sensor.latest_humidity !== undefined
-                    ? `${sensor.latest_humidity.toFixed(0)}%`
-                    : '—'}
-                  <span
-                    className="text-xs text-muted-foreground"
-                    aria-label={hum ? trendLabel(hum.trend) : undefined}
-                  >
-                    {hum ? getTrendIcon(hum.trend) : null}
-                  </span>
-                </div>
-              </button>
-            );
-          })}
+          {preview.map((sensor) => (
+            <SensorChip
+              key={sensor.device_id}
+              sensor={sensor}
+              now={now}
+              onOpen={() => show(sensor.device_id)}
+            />
+          ))}
         </div>
         {(resource.isPending ||
           resource.isError ||
@@ -206,6 +168,11 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                   <SelectItem value="all">All locations</SelectItem>
                   <SelectItem value="indoor">Indoor</SelectItem>
                   <SelectItem value="outdoor">Outdoor</SelectItem>
+                  {sensorGroups.map((group) => (
+                    <SelectItem key={group.id} value={group.id}>
+                      {group.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             )}

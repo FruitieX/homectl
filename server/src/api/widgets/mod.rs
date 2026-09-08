@@ -22,6 +22,7 @@ pub(crate) const WEATHER_SETTING_KEY: &str = "weather";
 pub(crate) const TRAIN_SCHEDULE_SETTING_KEY: &str = "train_schedule";
 pub(crate) const CALENDAR_SETTING_KEY: &str = "calendar";
 pub(crate) const INFLUXDB_SETTING_KEY: &str = "influxdb";
+pub(crate) const SENSOR_CATALOG_SETTING_KEY: &str = "sensor_catalog";
 
 pub(crate) const API_URL_FIELD: &str = "apiUrl";
 pub(crate) const URL_FIELD: &str = "url";

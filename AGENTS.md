@@ -201,6 +201,27 @@ Key sections:
 
 See `Settings.toml.example` for comprehensive examples.
 
+### Runtime configuration persistence policy
+
+The database is the canonical store for all user-managed runtime configuration.
+New settings, device metadata, sensor catalogs, sensor groups, widget selections,
+source mappings, scenes, routines, and similar user data must be represented in
+the database and exposed through the API/UI. Do not add new runtime features to
+`Settings.toml`, `Settings.toml.example`, or other configuration text files.
+
+`Settings.toml` is limited to bootstrap/deployment concerns that must exist before
+the database is available. `CONFIG_FILE` JSON exports and legacy TOML are import
+and fallback compatibility inputs; they are not a second ongoing configuration
+store. New database-backed entities may be accepted from an import format only
+when the import immediately persists them to the database and runtime reads come
+from the database snapshot. Every new importable field needs a default-empty
+backward-compatible representation and a round-trip export/import test.
+
+When deciding where a value belongs, ask whether a user can edit it during normal
+operation. If yes, it belongs in the database. Keep secrets out of browser config
+responses and text exports unless the user explicitly requests a secret-inclusive
+backup.
+
 ## TypeScript Bindings
 
 The server uses **ts-rs** to generate TypeScript types from Rust structs. Generated bindings are in `ui/bindings/`. These ensure type safety between backend and frontend.

@@ -2,6 +2,7 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { useInterval, useTimeout, useToggle } from 'usehooks-ts';
 import clsx from 'clsx';
 import { useTempSensorsQuery } from '@/hooks/influxdb';
+import { useSensorCatalog } from '@/hooks/sensorCatalog';
 import useIdle from '@/hooks/useIdle';
 import { useAppConfig } from '@/hooks/appConfig';
 import {
@@ -255,10 +256,10 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
     'refreshSeconds',
     60,
   );
-  const outdoorSensorId = getDashboardWidgetOptionString(
+  const configuredOutdoorSensorId = getDashboardWidgetOptionString(
     widget,
     'outdoorSensorId',
-    'D83534387029',
+    '',
   );
   const sensorPath = getDashboardWidgetOptionString(
     widget,
@@ -273,6 +274,15 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const modalBodyRef = useRef<HTMLDivElement>(null);
 
   const tempSensors = useTempSensorsQuery(sensorPath);
+  const { catalog } = useSensorCatalog();
+  const indoorIds = new Set(
+    catalog?.groups.find((group) => group.id === 'indoor')?.sensorIds ?? [],
+  );
+  const outdoorSensorId =
+    configuredOutdoorSensorId ||
+    catalog?.sensors.find((sensor) => !indoorIds.has(sensor.id))?.id ||
+    tempSensors.find((row) => !indoorIds.has(row.device_id))?.device_id ||
+    '';
   const latestFrontyardTemp = latestTemperature(
     tempSensors,
     outdoorSensorId,

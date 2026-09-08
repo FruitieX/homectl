@@ -3,6 +3,9 @@ import {
   useDashboardSpacing,
   type DashboardSpacing,
 } from '@/hooks/dashboardSpacing';
+import { useSensorData } from '@/hooks/influxdb';
+import { useSensorCatalog } from '@/hooks/sensorCatalog';
+import { SensorChip } from '@/ui/SensorChip';
 
 import { ConfigPageHeader } from '../page-header';
 import {
@@ -155,6 +158,187 @@ function OptionCsvField({
         onChange={(event) => onChange(fromCsv(event.target.value))}
       />
     </ConfigField>
+  );
+}
+
+function SensorVisibilityField({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: string[]) => void;
+}) {
+  const sensors = useSensorData();
+  const { catalog, saveCatalog } = useSensorCatalog();
+  const options = [
+    ...(catalog?.sensors ?? []),
+    ...sensors
+      .filter((sensor) => !(catalog?.sensors ?? []).some((item) => item.id === sensor.device_id))
+      .map((sensor) => ({ id: sensor.device_id, name: sensor.device_name, source: 'influxdb', enabled: true })),
+  ];
+  const configured = Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string')
+    : [];
+  const selected = new Set(
+    configured.length > 0
+      ? configured
+      : options.map((sensor) => sensor.id),
+  );
+
+  const toggle = (id: string, checked: boolean) => {
+    const next = new Set(selected);
+    if (checked) next.add(id);
+    else next.delete(id);
+    onChange(
+      next.size === options.length
+        ? []
+        : options.filter((sensor) => next.has(sensor.id)).map(
+            (sensor) => sensor.id,
+          ),
+    );
+  };
+
+  return (
+    <div className="grid gap-2 md:col-span-2">
+      <span className="text-sm font-medium leading-none text-foreground">Sensors shown</span>
+      <span className="text-xs leading-5 text-muted-foreground">Choose which known sensors appear in this widget. An empty selection means all sensors.</span>
+      <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-3 min-[600px]:grid-cols-4">
+        {sensors
+          .filter((sensor) => options.some((option) => option.id === sensor.device_id))
+          .map((sensor) => (
+            <div key={sensor.device_id} className="space-y-1">
+              <SensorChip
+                sensor={sensor}
+                checked={selected.has(sensor.device_id)}
+                onCheckedChange={(checked) => toggle(sensor.device_id, checked)}
+              />
+              <Input
+                aria-label={`Name for ${sensor.device_name}`}
+                className="h-8 text-xs"
+                defaultValue={options.find((option) => option.id === sensor.device_id)?.name ?? sensor.device_name}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => event.stopPropagation()}
+                onBlur={(event) => {
+                  const name = event.target.value.trim();
+                  if (!name || !catalog) return;
+                  const existing = catalog.sensors.find((item) => item.id === sensor.device_id);
+                  const sensors = existing
+                    ? catalog.sensors.map((item) => item.id === sensor.device_id ? { ...item, name } : item)
+                    : [...catalog.sensors, { id: sensor.device_id, name, source: 'influxdb', enabled: true }];
+                  void saveCatalog({ sensors, groups: catalog.groups });
+                }}
+              />
+            </div>
+          ))}
+      </div>
+    </div>
+  );
+}
+
+function SensorGroupsField() {
+  const sensors = useSensorData();
+  const { catalog, saveCatalog } = useSensorCatalog();
+  const groups: Record<string, string[]> = Object.fromEntries(
+    (catalog?.groups ?? []).map((group) => [group.name, group.sensorIds]),
+  );
+  const [newGroup, setNewGroup] = useState('');
+  const addGroup = () => {
+    const name = newGroup.trim();
+    if (!name || groups[name]) return;
+    const nextGroups = [...(catalog?.groups ?? []), { id: crypto.randomUUID(), name, sensorIds: [] }];
+    void saveCatalog({ sensors: catalog?.sensors ?? [], groups: nextGroups });
+    setNewGroup('');
+  };
+  const updateGroup = (groupId: string, ids: string[]) => {
+    const nextGroups = (catalog?.groups ?? []).map((group) =>
+      group.id === groupId ? { ...group, sensorIds: ids } : group,
+    );
+    void saveCatalog({ sensors: catalog?.sensors ?? [], groups: nextGroups });
+  };
+  const renameGroup = (groupId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed || !catalog) return;
+    void saveCatalog({
+      sensors: catalog.sensors,
+      groups: catalog.groups.map((group) =>
+        group.id === groupId ? { ...group, name: trimmed } : group,
+      ),
+    });
+  };
+
+  return (
+    <div className="grid gap-2 md:col-span-2">
+      <span className="text-sm font-medium leading-none text-foreground">Sensor groups</span>
+      <span className="text-xs leading-5 text-muted-foreground">Create your own groups for filtering the detail view, such as Upstairs or Bedrooms.</span>
+      <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
+        {(catalog?.groups ?? []).map((group) => (
+          <div
+            key={group.id}
+            className="space-y-2 rounded-xl border border-border/70 bg-background p-3"
+          >
+            <div className="flex items-center gap-2">
+              <Input
+                aria-label="Sensor group name"
+                className="h-8 min-w-0 flex-1 text-sm font-medium"
+                defaultValue={group.name}
+                onBlur={(event) => renameGroup(group.id, event.target.value)}
+              />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  void saveCatalog({
+                    sensors: catalog?.sensors ?? [],
+                    groups: (catalog?.groups ?? []).filter((item) => item.id !== group.id),
+                  });
+                }}
+              >
+                Remove
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 gap-2 min-[600px]:grid-cols-4">
+              {sensors.map((sensor) => (
+                <SensorChip
+                  key={sensor.device_id}
+                  sensor={sensor}
+                  checked={group.sensorIds.includes(sensor.device_id)}
+                  onCheckedChange={(checked) =>
+                    updateGroup(
+                      group.id,
+                      checked
+                        ? [...group.sensorIds, sensor.device_id]
+                        : group.sensorIds.filter((id) => id !== sensor.device_id),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Input
+            value={newGroup}
+            placeholder="New group name"
+            onChange={(event) => setNewGroup(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addGroup();
+              }
+            }}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            onClick={addGroup}
+            disabled={!newGroup.trim() || !catalog}
+          >
+            Add group
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -529,7 +713,7 @@ function WidgetOptionFields({
         />
         <OptionTextField
           label="Outdoor temperature sensor id"
-          value={getString('outdoorSensorId', 'D83534387029')}
+          value={getString('outdoorSensorId')}
           onChange={(value) => onChange('outdoorSensorId', value)}
         />
         <OptionTextField
@@ -591,21 +775,11 @@ function WidgetOptionFields({
           value={getString('window', '10m')}
           onChange={(value) => onChange('window', value)}
         />
-        <OptionCsvField
-          label="Sensor ids to query"
+        <SensorVisibilityField
           value={options.sensorIds}
           onChange={(value) => onChange('sensorIds', value)}
         />
-        <OptionCsvField
-          label="Indoor sensor ids"
-          value={options.indoorSensorIds}
-          onChange={(value) => onChange('indoorSensorIds', value)}
-        />
-        <OptionCsvField
-          label="Priority sensor ids"
-          value={options.prioritySensorIds}
-          onChange={(value) => onChange('prioritySensorIds', value)}
-        />
+        <SensorGroupsField />
         <OptionCheckboxField
           label="Wrap preview sensor chips"
           checked={getBoolean('wrapPreview', true)}
@@ -683,6 +857,13 @@ function WidgetOptionFields({
           min={0}
           max={240}
           onChange={(value) => onChange('walkMinutes', value)}
+        />
+        <OptionNumberField
+          label="Show departures overdue by (minutes)"
+          value={getNumber('overdueMinutes', 3)}
+          min={0}
+          max={60}
+          onChange={(value) => onChange('overdueMinutes', value)}
         />
         <OptionNumberField
           label="Result limit"
@@ -885,7 +1066,7 @@ function WidgetOverlay({
       description={
         mode === 'add'
           ? 'Choose a widget preset and customize its layout footprint.'
-          : 'Adjust widget title, size, and JSON options.'
+          : 'Adjust widget settings, layout, and advanced options.'
       }
       presentation="fullscreen"
       className="max-w-2xl"
@@ -895,7 +1076,7 @@ function WidgetOverlay({
           <TabsList className="grid h-auto w-full grid-cols-3">
             <TabsTrigger value="basics">Basics</TabsTrigger>
             <TabsTrigger value="layout">Layout</TabsTrigger>
-            <TabsTrigger value="options">Options</TabsTrigger>
+            <TabsTrigger value="options">Advanced</TabsTrigger>
           </TabsList>
 
           <TabsContent value="basics" className="mt-4 space-y-4">
@@ -944,6 +1125,16 @@ function WidgetOverlay({
                 />
               </ConfigField>
             </ConfigFormSection>
+            <ConfigFormSection
+              title="Widget settings"
+              description="Common options for this widget instance. Use Advanced for raw JSON fields."
+            >
+              <WidgetOptionFields
+                widgetType={widgetType}
+                options={parsedOptions}
+                onChange={setOption}
+              />
+            </ConfigFormSection>
           </TabsContent>
 
           <TabsContent value="layout" className="mt-4">
@@ -983,17 +1174,6 @@ function WidgetOverlay({
           </TabsContent>
 
           <TabsContent value="options" className="mt-4">
-            <ConfigFormSection
-              title="Widget settings"
-              description="Common options for this widget instance. Advanced JSON below stays in sync with these fields."
-              className="mb-4"
-            >
-              <WidgetOptionFields
-                widgetType={widgetType}
-                options={parsedOptions}
-                onChange={setOption}
-              />
-            </ConfigFormSection>
             <ConfigFormSection
               title="Advanced JSON"
               description="Advanced per-widget settings stored as JSON."

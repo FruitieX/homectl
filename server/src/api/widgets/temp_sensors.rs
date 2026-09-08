@@ -11,24 +11,6 @@ use warp::{
 
 use super::{influx, widget_setting_string_or_env, INFLUXDB_SETTING_KEY, TOKEN_FIELD, URL_FIELD};
 
-/// Known temperature/humidity sensor device IDs. The Flux query needs the
-/// explicit list so InfluxDB can filter on them server-side (mirrors what the
-/// previous Next.js handler did).
-const DEVICE_IDS: &[&str] = &[
-    "D83431306571",
-    "C76A05062842",
-    "D83535301C43",
-    "D7353530520F",
-    "D63534385106",
-    "D7353530665A",
-    "CE2A82463674",
-    "D9353438450D",
-    "D4343037362D",
-    "C76A0246647E",
-    "D83534387029",
-    "C76A03460A73",
-];
-
 pub fn route(snapshot: SnapshotHandle, http: reqwest::Client) -> BoxedFilter<(Response,)> {
     warp::path!("api" / "influxdb" / "temp-sensors")
         .and(warp::get())
@@ -78,7 +60,7 @@ fn parse_device_ids(value: Option<String>) -> Vec<String> {
                 .collect::<Vec<_>>()
         })
         .filter(|ids| !ids.is_empty())
-        .unwrap_or_else(|| DEVICE_IDS.iter().map(|id| (*id).to_string()).collect())
+        .unwrap_or_default()
 }
 
 async fn handle(
@@ -167,12 +149,17 @@ fn build_query(device_ids: &[String], range: &str, window: &str) -> String {
         .collect::<Vec<_>>()
         .join(" or ");
 
+    let device_filter = if filters.is_empty() {
+        String::new()
+    } else {
+        format!("            |> filter(fn: (r) => {filters})\n")
+    };
+
     format!(
         r#"
           from(bucket: "home")
                         |> range(start: {range})
-            |> filter(fn: (r) => {filters})
-            |> filter(fn: (r) => r["_field"] == "tempc" or r["_field"] == "hum")
+{device_filter}            |> filter(fn: (r) => r["_field"] == "tempc" or r["_field"] == "hum")
                         |> aggregateWindow(every: {window}, fn: mean, createEmpty: false)
             |> yield(name: "mean")
         "#

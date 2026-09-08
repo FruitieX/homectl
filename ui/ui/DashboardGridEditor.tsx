@@ -38,6 +38,12 @@ const PREVIEW_COLUMN_OPTIONS: PreviewColumnCount[] = [
   DASHBOARD_WIDE_COLUMNS,
 ];
 
+function columnsForViewport(width: number): PreviewColumnCount {
+  if (width < 600) return DASHBOARD_MOBILE_COLUMNS;
+  if (width < 960) return DASHBOARD_COMPACT_COLUMNS;
+  return DASHBOARD_WIDE_COLUMNS;
+}
+
 type GridInteraction =
   | {
       id: string;
@@ -334,8 +340,12 @@ export function DashboardGridEditor({
   onReorderWidgets,
 }: DashboardGridEditorProps) {
   const [previewColumns, setPreviewColumns] = useState<PreviewColumnCount>(
-    DASHBOARD_WIDE_COLUMNS,
+    () =>
+      typeof window === 'undefined'
+        ? DASHBOARD_WIDE_COLUMNS
+        : columnsForViewport(window.innerWidth),
   );
+  const manuallySelectedColumns = useRef(false);
   const [draftWidgets, setDraftWidgets] = useState(() => sortWidgets(widgets));
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(
@@ -349,6 +359,17 @@ export function DashboardGridEditor({
   const dropIndicatorRef = useRef<DropIndicator | null>(null);
   const draftWidgetsRef = useRef(draftWidgets);
   const initialOrderRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    const updateForViewport = () => {
+      if (!manuallySelectedColumns.current) {
+        setPreviewColumns(columnsForViewport(window.innerWidth));
+      }
+    };
+    updateForViewport();
+    window.addEventListener('resize', updateForViewport);
+    return () => window.removeEventListener('resize', updateForViewport);
+  }, []);
 
   useEffect(() => {
     setDraftWidgets(sortWidgets(widgets));
@@ -665,7 +686,10 @@ export function DashboardGridEditor({
               key={columns}
               size="sm"
               variant={previewColumns === columns ? 'default' : 'outline'}
-              onClick={() => setPreviewColumns(columns)}
+              onClick={() => {
+                manuallySelectedColumns.current = true;
+                setPreviewColumns(columns);
+              }}
             >
               {getGridColumnLabel(columns)}
             </Button>

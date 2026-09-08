@@ -47,8 +47,8 @@ use crate::core::snapshot::SnapshotHandle;
 use super::{
     widgets::{
         widget_setting_string_or_env, API_URL_FIELD, CALENDAR_SETTING_KEY, ICS_URL_FIELD,
-        INFLUXDB_SETTING_KEY, TOKEN_FIELD, TRAIN_SCHEDULE_SETTING_KEY, URL_FIELD,
-        WEATHER_SETTING_KEY,
+        INFLUXDB_SETTING_KEY, SENSOR_CATALOG_SETTING_KEY, TOKEN_FIELD, TRAIN_SCHEDULE_SETTING_KEY,
+        URL_FIELD, WEATHER_SETTING_KEY,
     },
     with_handle, with_snapshot,
 };
@@ -1257,6 +1257,7 @@ pub fn config(
             .or(routine_history_routes())
             .or(device_display_name_routes(snapshot, handle))
             .or(device_sensor_config_routes(snapshot, handle))
+            .or(sensor_catalog_routes(snapshot, handle))
             .or(device_config_routes(handle))
             .or(integration_schema_routes())
             .or(integrations_routes(snapshot, handle))
@@ -1274,6 +1275,162 @@ pub fn config(
 // ============================================================================
 // Core Config
 // ============================================================================
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SensorCatalogItem {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "default_sensor_source")]
+    pub source: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SensorCatalogGroup {
+    pub id: String,
+    pub name: String,
+    #[serde(default)]
+    pub sensor_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SensorCatalog {
+    pub sensors: Vec<SensorCatalogItem>,
+    pub groups: Vec<SensorCatalogGroup>,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_sensor_source() -> String {
+    "influxdb".to_string()
+}
+
+fn default_sensor_catalog() -> SensorCatalog {
+    SensorCatalog::default()
+}
+
+fn read_sensor_catalog(settings: &[config_queries::WidgetSettingRow]) -> SensorCatalog {
+    settings
+        .iter()
+        .find(|setting| setting.key == SENSOR_CATALOG_SETTING_KEY)
+        .and_then(|setting| serde_json::from_value(setting.config.clone()).ok())
+        .unwrap_or_else(default_sensor_catalog)
+}
+
+fn sensor_catalog_routes(
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let get = warp::path!("sensors" / "catalog")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .and_then(|snapshot: SnapshotHandle| async move {
+            Ok::<_, warp::Rejection>(ApiResponse::success(read_sensor_catalog(
+                &snapshot.load().runtime_config.widget_settings,
+            )))
+        });
+
+    let update = warp::path!("sensors" / "catalog")
+        .and(warp::path::end())
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(update_sensor_catalog);
+
+    get.or(update)
+}
+
+async fn update_sensor_catalog(
+    mut catalog: SensorCatalog,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let mut seen = HashSet::new();
+    catalog.sensors.retain(|sensor| {
+        let id = sensor.id.trim();
+        !id.is_empty() && !sensor.name.trim().is_empty() && seen.insert(id.to_string())
+    });
+    if catalog.sensors.is_empty() {
+        return Ok(error_response(
+            "At least one sensor is required",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    for sensor in &mut catalog.sensors {
+        sensor.id = sensor.id.trim().to_string();
+        sensor.name = sensor.name.trim().to_string();
+        if sensor.source.trim().is_empty() {
+            sensor.source = default_sensor_source();
+        }
+    }
+    let valid_ids = catalog
+        .sensors
+        .iter()
+        .map(|sensor| sensor.id.as_str())
+        .collect::<HashSet<_>>();
+    for group in &mut catalog.groups {
+        group.id = group.id.trim().to_string();
+        group.name = group.name.trim().to_string();
+        group
+            .sensor_ids
+            .retain(|id| valid_ids.contains(id.as_str()));
+        group.sensor_ids.sort();
+        group.sensor_ids.dedup();
+    }
+    catalog
+        .groups
+        .retain(|group| !group.id.is_empty() && !group.name.is_empty());
+    catalog
+        .sensors
+        .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    catalog
+        .groups
+        .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+
+    let setting = config_queries::WidgetSettingRow {
+        key: SENSOR_CATALOG_SETTING_KEY.to_string(),
+        config: serde_json::to_value(&catalog).unwrap_or_default(),
+    };
+    let persistence_setting = setting.clone();
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_widget_setting(setting.clone());
+                Ok::<_, ()>(
+                    state
+                        .runtime_config
+                        .widget_settings
+                        .iter()
+                        .find(|item| item.key == SENSOR_CATALOG_SETTING_KEY)
+                        .and_then(|item| serde_json::from_value(item.config.clone()).ok())
+                        .unwrap_or(catalog),
+                )
+            })
+        })
+        .await;
+    let response = match result {
+        Ok(Ok(value)) => value,
+        _ => return Ok(actor_unavailable()),
+    };
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_widget_setting(&persistence_setting).await;
+    Ok(config_write_response(
+        response,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
 
 fn logs_routes() -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     warp::path("logs")

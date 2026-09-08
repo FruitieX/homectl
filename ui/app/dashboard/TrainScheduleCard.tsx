@@ -51,6 +51,10 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     'HSL:2131551',
   );
   const walkMinutes = getDashboardWidgetOptionNumber(widget, 'walkMinutes', 12);
+  const overdueMinutes = Math.max(
+    0,
+    Math.min(60, getDashboardWidgetOptionNumber(widget, 'overdueMinutes', 3)),
+  );
   const resultLimit = getDashboardWidgetOptionNumber(widget, 'limit', 5);
   const displayLimit = Math.max(
     1,
@@ -73,12 +77,14 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     directionId ||
     stationId !== 'HSL:2131551' ||
     walkMinutes !== 12 ||
-    resultLimit !== 5;
+    resultLimit !== 5 ||
+    overdueMinutes !== 3;
   const trainSchedulePath = hasProxyOptions
     ? buildDashboardWidgetProxyPath('/api/train-schedule', {
         url: trainApiUrl,
         station_id: stationId,
         walk_minutes: walkMinutes,
+        overdue_minutes: overdueMinutes,
         limit: requestedLimit,
         destination,
         direction_id: directionId,
@@ -96,7 +102,8 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   const query = useWidgetResource<Train[]>(trainScheduleUrl);
   const trains = (query.data ?? []).filter(
     (train) =>
-      train.departureAt === undefined || train.departureAt * 1000 >= now,
+      train.departureAt === undefined ||
+      train.departureAt * 1000 >= now - overdueMinutes * 60 * 1000,
   );
   const error = query.isError ? 'Departures could not be refreshed.' : null;
 
