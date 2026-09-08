@@ -457,7 +457,7 @@ export function TimeSeriesPlot({
       </svg>
       {selectedTime !== null && (
         <div
-          className="pointer-events-none absolute inset-x-3 top-9 min-w-0 rounded-lg bg-popover/95 px-2 py-1.5 text-xs text-popover-foreground shadow-sm break-words whitespace-normal"
+          className={`pointer-events-none absolute inset-x-3 ${showLegend ? 'top-9' : 'top-1'} min-w-0 rounded-lg bg-popover/95 px-2 py-1.5 text-xs text-popover-foreground shadow-sm break-words whitespace-normal`}
           aria-live="polite"
         >
           {selectedTime !== null ? (

@@ -24,6 +24,7 @@ const formatPrice = (value: number | undefined) =>
 export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [spacing] = useDashboardSpacing();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const [chartInteracting, setChartInteracting] = useState(false);
   const isIdle = useIdle();
   const priceQuery = useSpotPriceResource(
     getDashboardWidgetOptionString(
@@ -58,7 +59,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard interactive className="group col-span-4">
+      <WidgetCard interactive={!chartInteracting} className="group col-span-4">
         <div className="relative h-full w-full rounded-[inherit] text-left">
           <CardContent className="relative flex w-full flex-col p-[var(--widget-padding,1rem)]">
             <Button
@@ -90,24 +91,32 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                 </div>
               </div>
             </div>
-            <ResponsiveChart
-              height={
-                spacing === 'compact' ? 180 : spacing === 'spacious' ? 245 : 215
-              }
-              className="relative z-[2] mt-1 min-w-0 overflow-hidden"
+            <div
+              className="relative z-[2]"
+              onPointerDown={() => setChartInteracting(true)}
+              onPointerUp={() => setChartInteracting(false)}
+              onPointerCancel={() => setChartInteracting(false)}
+              onPointerLeave={() => setChartInteracting(false)}
             >
-              {({ width, height }) => (
-                <SpotPriceChart
-                  data={data}
-                  width={width}
-                  height={height}
-                  animate
-                  showCurrentTime
-                  showLegend={false}
-                  showUnit={false}
-                />
-              )}
-            </ResponsiveChart>
+              <ResponsiveChart
+                height={
+                  spacing === 'compact' ? 180 : spacing === 'spacious' ? 245 : 215
+                }
+                className="mt-1 min-w-0 overflow-hidden"
+              >
+                {({ width, height }) => (
+                  <SpotPriceChart
+                    data={data}
+                    width={width}
+                    height={height}
+                    animate
+                    showCurrentTime
+                    showLegend={false}
+                    showUnit={false}
+                  />
+                )}
+              </ResponsiveChart>
+            </div>
             {priceQuery.isError && (
               <p role="status" className="pointer-events-none relative z-[1] text-xs text-muted-foreground">
                 Prices could not be refreshed
