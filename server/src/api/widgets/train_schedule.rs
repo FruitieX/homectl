@@ -81,7 +81,7 @@ async fn handle(
         .unwrap_or(DEFAULT_WALK_MINUTES)
         .clamp(0, 240);
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, 20);
-    let overdue_minutes = query.overdue_minutes.unwrap_or(0).clamp(0, 60);
+    let overdue_minutes = query.overdue_minutes.unwrap_or(3).clamp(0, 60);
     if query.direction_id.is_some_and(|direction| direction > 1) {
         return error(StatusCode::BAD_REQUEST, "Direction must be 0 or 1");
     }
@@ -239,7 +239,7 @@ fn transform(
         let min_until_departure = sec_until_departure.div_euclid(60);
         let min_until_home_departure = min_until_departure - walk_minutes;
 
-        if sec_until_departure < -overdue_minutes * 60 {
+        if min_until_home_departure < -overdue_minutes {
             continue;
         }
 
@@ -290,13 +290,28 @@ mod tests {
             5,
             None,
             None,
-            0,
+            9,
             86340,
         );
         assert_eq!(result[0]["departureAt"], 86520);
         assert_eq!(result[0]["departureFormatted"], "00:02");
         assert_eq!(result[0]["leaveAt"], 85800);
         assert_eq!(result[0]["minUntilHomeDeparture"], -9);
+    }
+
+    #[test]
+    fn overdue_limit_uses_leave_home_countdown_before_limiting_results() {
+        let result = transform(
+            response(vec![
+                departure(0, 1480, "Helsinki", "0"),
+                departure(0, 1540, "Helsinki", "0"),
+                departure(0, 1720, "Helsinki", "0"),
+            ]),
+            12, 1, None, None, 3, 1000,
+        );
+        assert_eq!(result.as_array().unwrap().len(), 1);
+        assert_eq!(result[0]["minUntilHomeDeparture"], -3);
+        assert_eq!(result[0]["departureAt"], 1540);
     }
 
     #[test]

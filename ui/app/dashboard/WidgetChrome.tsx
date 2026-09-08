@@ -39,7 +39,7 @@ export function WidgetHeading({
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {detail ? (
-        <ArrowUpRight className="size-4 opacity-45 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-80" />
+        <ArrowUpRight className="mr-1 size-4 shrink-0 opacity-45 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-80" />
       ) : null}
     </div>
   );

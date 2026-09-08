@@ -107,42 +107,47 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   };
   return (
     <>
-      <WidgetCard className="p-[var(--widget-padding,1rem)]">
-        <div className="mb-3 flex items-center gap-2">
-          <WidgetHeading icon={<Activity />} label="Climate sensors" />
-          <Button size="sm" variant="ghost" onClick={() => show('all')}>
-            All
-          </Button>
+      <WidgetCard className="group relative p-[var(--widget-padding,1rem)]">
+        <Button
+          variant="ghost"
+          aria-label="Open all climate sensors"
+          onClick={() => show('all')}
+          className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 hover:bg-muted/30"
+        />
+        <div className="pointer-events-none relative z-[1]">
+          <div className="mb-3">
+            <WidgetHeading icon={<Activity />} label="Climate sensors" detail />
+          </div>
+          <div
+            className={
+              getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
+                ? spacing === 'compact'
+                  ? 'pointer-events-auto grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
+                  : 'pointer-events-auto grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
+                : 'pointer-events-auto flex gap-2 overflow-x-auto pb-1'
+            }
+          >
+            {preview.map((sensor) => (
+              <SensorChip
+                key={sensor.device_id}
+                sensor={sensor}
+                now={now}
+                onOpen={() => show(sensor.device_id)}
+              />
+            ))}
+          </div>
+          {(resource.isPending ||
+            resource.isError ||
+            resource.rows.length === 0) && (
+            <p role="status" className="pointer-events-none pt-3 text-xs text-muted-foreground">
+              {resource.isPending
+                ? 'Loading sensor readings…'
+                : resource.isError
+                  ? 'Sensor readings could not be refreshed.'
+                  : 'No sensor readings available.'}
+            </p>
+          )}
         </div>
-        <div
-          className={
-            getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
-              ? spacing === 'compact'
-                ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
-                : 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
-              : 'flex gap-2 overflow-x-auto pb-1'
-          }
-        >
-          {preview.map((sensor) => (
-            <SensorChip
-              key={sensor.device_id}
-              sensor={sensor}
-              now={now}
-              onOpen={() => show(sensor.device_id)}
-            />
-          ))}
-        </div>
-        {(resource.isPending ||
-          resource.isError ||
-          resource.rows.length === 0) && (
-          <p role="status" className="pt-3 text-xs text-muted-foreground">
-            {resource.isPending
-              ? 'Loading sensor readings…'
-              : resource.isError
-                ? 'Sensor readings could not be refreshed.'
-                : 'No sensor readings available.'}
-          </p>
-        )}
       </WidgetCard>
       <ResponsiveOverlay
         open={open}

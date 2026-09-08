@@ -72,7 +72,8 @@ export function SensorChip({
     <div
       className={cn(
         'relative min-w-28 rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
-        selectable && 'cursor-pointer transition hover:border-primary/60',
+        (selectable || onOpen) &&
+          'cursor-pointer transition hover:border-primary/60 hover:bg-muted/20',
       )}
       onClick={selectable ? toggle : undefined}
       onKeyDown={

@@ -14,6 +14,7 @@ import {
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { SpotPriceChart } from '@/ui/charts/SpotPriceChart';
 import { CardContent } from '@/ui/primitives/card';
+import { Button } from '@/ui/primitives/button';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { DetailPanel, Metric, WidgetCard, WidgetHeading } from './WidgetChrome';
 
@@ -57,34 +58,35 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard className="col-span-4">
-        <div className="h-full w-full rounded-[inherit] text-left">
-          <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
-            <button
-              type="button"
+      <WidgetCard className="group col-span-4">
+        <div className="relative h-full w-full rounded-[inherit] text-left">
+          <CardContent className="relative flex w-full flex-col p-[var(--widget-padding,1rem)]">
+            <Button
+              variant="ghost"
               aria-label="Open electricity price details"
               onClick={() => setDetailsOpen(true)}
-              className="group w-full rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
+              className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 text-left hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset"
+            />
+            <div className="pointer-events-none relative z-[1]">
               <WidgetHeading icon={<Zap />} label="Electricity price" detail />
-            </button>
-            <div className="mt-3 flex items-end justify-between gap-4 px-1">
-              <div>
-                <div className="text-xs text-muted-foreground">
-                  Next 24 hours
-                </div>
-                {stats ? (
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    Average {formatPrice(stats.average)}
+              <div className="mt-3 flex items-end justify-between gap-4 px-1 pb-1">
+                <div>
+                  <div className="text-xs text-muted-foreground">
+                    Next 24 hours
                   </div>
-                ) : null}
-              </div>
-              <div className="text-right">
-                <div className="text-xs font-medium text-muted-foreground">
-                  Now
+                  {stats ? (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Average {formatPrice(stats.average)}
+                    </div>
+                  ) : null}
                 </div>
-                <div className="mt-1 whitespace-nowrap text-2xl font-semibold tracking-tight tabular-nums">
-                  {formatPrice(stats?.current?.value)}
+                <div className="text-right">
+                  <div className="text-xs font-medium text-muted-foreground">
+                    Now
+                  </div>
+                  <div className="mt-1 whitespace-nowrap text-2xl font-semibold tracking-tight tabular-nums">
+                    {formatPrice(stats?.current?.value)}
+                  </div>
                 </div>
               </div>
             </div>
@@ -92,7 +94,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               height={
                 spacing === 'compact' ? 155 : spacing === 'spacious' ? 215 : 180
               }
-              className="mt-1 min-w-0 overflow-hidden"
+              className="relative z-[2] mt-1 min-w-0 overflow-hidden"
             >
               {({ width, height }) => (
                 <SpotPriceChart
@@ -105,7 +107,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               )}
             </ResponsiveChart>
             {priceQuery.isError && (
-              <p role="status" className="text-xs text-muted-foreground">
+              <p role="status" className="pointer-events-none relative z-[1] text-xs text-muted-foreground">
                 Prices could not be refreshed
                 {data.length ? '; showing earlier results.' : '.'}
               </p>

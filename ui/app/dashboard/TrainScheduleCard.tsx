@@ -78,7 +78,8 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     stationId !== 'HSL:2131551' ||
     walkMinutes !== 12 ||
     resultLimit !== 5 ||
-    overdueMinutes !== 3;
+    overdueMinutes !== 3 ||
+    requestedLimit !== 5;
   const trainSchedulePath = hasProxyOptions
     ? buildDashboardWidgetProxyPath('/api/train-schedule', {
         url: trainApiUrl,
@@ -100,10 +101,18 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   );
 
   const query = useWidgetResource<Train[]>(trainScheduleUrl);
+  const remainingMinutes = (train: Train) => {
+    const leaveAt =
+      train.leaveAt ??
+      (train.departureAt === undefined
+        ? undefined
+        : train.departureAt - walkMinutes * 60);
+    return leaveAt === undefined
+      ? train.minUntilHomeDeparture
+      : Math.floor((leaveAt * 1000 - now) / 60000);
+  };
   const trains = (query.data ?? []).filter(
-    (train) =>
-      train.departureAt === undefined ||
-      train.departureAt * 1000 >= now - overdueMinutes * 60 * 1000,
+    (train) => remainingMinutes(train) >= -overdueMinutes,
   );
   const error = query.isError ? 'Departures could not be refreshed.' : null;
 
@@ -116,10 +125,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     <div className="divide-y divide-border/45">
       {(compact && !scrollMore ? rows.slice(0, displayLimit) : rows).map(
         (train, index) => {
-          const remaining =
-            train.leaveAt === undefined
-              ? train.minUntilHomeDeparture
-              : Math.floor((train.leaveAt * 1000 - now) / 60000);
+          const remaining = remainingMinutes(train);
           const cancelled = train.realtimeState === 'CANCELED';
           return (
             <div

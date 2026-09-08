@@ -41,9 +41,7 @@ import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { cn } from '@/lib/cn';
-
-const rangeClassName =
-  'h-2 w-full cursor-pointer appearance-none rounded-full bg-secondary accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+import { ColorSlider } from '@/ui/ColorSlider';
 
 const colorToHsva = (color: Color) => {
   const hsva = color.hsv();
@@ -77,7 +75,14 @@ const ColorWheelTab = ({
     const container = wheelContainer.current;
     if (!container) return;
     const observer = new ResizeObserver(([entry]) => {
-      setWheelSize(Math.max(0, Math.floor(Math.min(entry.contentRect.width, entry.contentRect.height))));
+      setWheelSize(
+        Math.max(
+          0,
+          Math.floor(
+            Math.min(entry.contentRect.width, entry.contentRect.height),
+          ),
+        ),
+      );
     });
     observer.observe(container);
     return () => observer.disconnect();
@@ -95,13 +100,11 @@ const ColorWheelTab = ({
   useEffect(() => {
     setHsva(colorToHsva(color));
     setBri(brightness);
+    latestColor.current = color;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const latestColor = useRef<Color>(color);
-  useEffect(() => {
-    latestColor.current = color;
-  }, [color]);
 
   const handleChange = useCallback(
     (result: ColorResult) => {
@@ -133,20 +136,26 @@ const ColorWheelTab = ({
 
   return (
     <>
-      <div ref={wheelContainer} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-        {wheelSize > 0 && <Wheel
-          color={hsvaWithMaxValue}
-          onChange={handleChange}
-          onTouchEnd={handleChangeComplete}
-          onMouseUp={handleChangeComplete}
-          width={wheelSize}
-          height={wheelSize}
-          className="mx-auto"
-        />}
+      <div
+        ref={wheelContainer}
+        className="flex min-h-0 flex-1 items-center justify-center overflow-hidden"
+      >
+        {wheelSize > 0 && (
+          <Wheel
+            color={hsvaWithMaxValue}
+            onChange={handleChange}
+            onTouchEnd={handleChangeComplete}
+            onMouseUp={handleChangeComplete}
+            width={wheelSize}
+            height={wheelSize}
+            className="mx-auto"
+          />
+        )}
       </div>
-      <input
-        type="range"
-        className={rangeClassName}
+      <ColorSlider
+        label="Brightness"
+        channel="brightness"
+        color={Color.hsv(hsva.h, hsva.s, 100)}
         onChange={handleBrightnessChange}
         onTouchEnd={handleChangeComplete}
         onMouseUp={handleChangeComplete}
@@ -195,13 +204,11 @@ const SwatchesTab = ({
   useEffect(() => {
     setHex(color.value(100).hex());
     setBri(brightness);
+    latestColor.current = color;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const latestColor = useRef<Color>(color);
-  useEffect(() => {
-    latestColor.current = color;
-  }, [color]);
 
   const handleChange = useCallback(
     (result: ColorResult) => {
@@ -241,9 +248,10 @@ const SwatchesTab = ({
           className="flex-1"
         />
       </div>
-      <input
-        type="range"
-        className={cn(rangeClassName, 'mt-6')}
+      <ColorSlider
+        label="Brightness"
+        channel="brightness"
+        color={Color(hex)}
         onChange={handleBrightnessChange}
         onTouchEnd={handleChangeComplete}
         onMouseUp={handleChangeComplete}
@@ -408,11 +416,12 @@ const SlidersTab = ({
 
   return (
     <>
-      Hue:
       <div className="flex items-center">
-        <input
-          type="range"
-          className={rangeClassName}
+        <ColorSlider
+          label="Hue"
+          className="flex-1"
+          channel="hue"
+          color={Color.hsv(hue, sat, 100)}
           onChange={handleHueChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
@@ -421,6 +430,7 @@ const SlidersTab = ({
           value={hue}
         />
         <Input
+          aria-label="Hue in degrees"
           name="hue-input"
           className="ml-3 w-24"
           value={Math.round(hue)}
@@ -430,11 +440,12 @@ const SlidersTab = ({
           onBlur={blurInput}
         />
       </div>
-      Saturation:
       <div className="flex items-center">
-        <input
-          type="range"
-          className={rangeClassName}
+        <ColorSlider
+          label="Saturation"
+          className="flex-1"
+          channel="saturation"
+          color={Color.hsv(hue, sat, 100)}
           onChange={handleSatChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
@@ -443,6 +454,7 @@ const SlidersTab = ({
           value={sat}
         />
         <Input
+          aria-label="Saturation percent"
           name="sat-input"
           className="ml-3 w-24"
           value={Math.round(sat)}
@@ -452,11 +464,12 @@ const SlidersTab = ({
           onBlur={blurInput}
         />
       </div>
-      Brightness:
       <div className="flex items-center">
-        <input
-          type="range"
-          className={rangeClassName}
+        <ColorSlider
+          label="Brightness"
+          className="flex-1"
+          channel="brightness"
+          color={Color.hsv(hue, sat, 100)}
           onChange={handleBriChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
@@ -465,6 +478,7 @@ const SlidersTab = ({
           value={bri * 100}
         />
         <Input
+          aria-label="Brightness percent"
           name="bri-input"
           className="ml-3 w-24"
           value={Math.round(bri * 100)}
@@ -654,10 +668,10 @@ const ImageTab = ({
       />
       <div className="flex shrink-0 gap-2 text-xs [&>div]:min-w-0 [&>div]:flex-1">
         <div>
-          Saturation:
-          <input
-            type="range"
-            className={cn(rangeClassName, 'mt-2')}
+          <ColorSlider
+            label="Saturation"
+            channel="saturation"
+            color={Color.hsv(hsva.h, hsva.s, 100)}
             onChange={handleSaturationChange}
             min={0}
             max={100}
@@ -665,10 +679,10 @@ const ImageTab = ({
           />
         </div>
         <div>
-          Brightness:
-          <input
-            type="range"
-            className={cn(rangeClassName, 'mt-2')}
+          <ColorSlider
+            label="Brightness"
+            channel="brightness"
+            color={Color.hsv(hsva.h, hsva.s, 100)}
             onChange={handleBrightnessChange}
             min={0}
             max={100}
@@ -875,7 +889,8 @@ export const ColorPickerModal = () => {
   const groupSelection = useRef<string[]>([]);
   useEffect(() => {
     if (!deviceModalOpen) groupSelection.current = [];
-    else if (deviceModalState.length > 1) groupSelection.current = deviceModalState;
+    else if (deviceModalState.length > 1)
+      groupSelection.current = deviceModalState;
   }, [deviceModalOpen, deviceModalState]);
   const section =
     floorplanSection === 'color' && colorDevices.length === 0
@@ -901,51 +916,67 @@ export const ColorPickerModal = () => {
       className="max-w-3xl"
       desktopPresentation={deviceModalPresentation}
     >
-      <div className={cn('px-3 pb-3 md:px-0 md:pb-0', inFloorplan && section === 'color' ? 'flex h-full min-h-0 flex-col [&>label]:shrink-0 [&>div:first-of-type]:shrink-0' : '', compactFloorplan ? 'space-y-2' : 'space-y-4')}>
-        {deviceModalPresentation === 'floorplan' && deviceModalState.length > 1 && (
-          <label className="block space-y-1 text-xs text-muted-foreground">
-            <select
-              aria-label="Apply controls to"
-              className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
-              value=""
-              onChange={(event) => {
-                const value = event.target.value;
-                setDeviceModalState(
-                  value === 'selection' ? groupSelection.current : value.startsWith('group:')
-                    ? (groups?.[value.slice(6)]?.device_keys ?? [])
-                    : [value.slice(7)],
-                );
-              }}
-            >
-              <option value="" disabled>
-                Apply to…
-              </option>
-              {groupSelection.current.length > 1 && (
-                <option value="selection">All {groupSelection.current.length} devices</option>
-              )}
-              {Object.entries(groups ?? {})
-                .filter(([, group]) =>
-                  group?.device_keys.some((key) =>
-                    deviceModalState.includes(key),
-                  ),
-                )
-                .map(([id, group]) => (
-                  <option key={id} value={`group:${id}`}>
-                    {group?.name ?? id}
-                  </option>
-                ))}
-              {(groupSelection.current.length ? groupSelection.current : deviceModalState).flatMap((key) =>
-                devices?.[key]
-                  ? [
-                      <option key={key} value={`device:${key}`}>
-                        {getDeviceDisplayLabel(devices[key]!, displayNames)}
-                      </option>,
-                    ]
-                  : [],
-              )}
-            </select>
-          </label>
+      <div
+        className={cn(
+          'px-3 pb-3 md:px-0 md:pb-0',
+          inFloorplan && section === 'color'
+            ? 'flex h-full min-h-0 flex-col [&>label]:shrink-0 [&>div:first-of-type]:shrink-0'
+            : '',
+          compactFloorplan ? 'space-y-2' : 'space-y-4',
         )}
+      >
+        {deviceModalPresentation === 'floorplan' &&
+          deviceModalState.length > 1 && (
+            <label className="block space-y-1 text-xs text-muted-foreground">
+              <select
+                aria-label="Apply controls to"
+                className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
+                value=""
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setDeviceModalState(
+                    value === 'selection'
+                      ? groupSelection.current
+                      : value.startsWith('group:')
+                        ? (groups?.[value.slice(6)]?.device_keys ?? [])
+                        : [value.slice(7)],
+                  );
+                }}
+              >
+                <option value="" disabled>
+                  Apply to…
+                </option>
+                {groupSelection.current.length > 1 && (
+                  <option value="selection">
+                    All {groupSelection.current.length} devices
+                  </option>
+                )}
+                {Object.entries(groups ?? {})
+                  .filter(([, group]) =>
+                    group?.device_keys.some((key) =>
+                      deviceModalState.includes(key),
+                    ),
+                  )
+                  .map(([id, group]) => (
+                    <option key={id} value={`group:${id}`}>
+                      {group?.name ?? id}
+                    </option>
+                  ))}
+                {(groupSelection.current.length
+                  ? groupSelection.current
+                  : deviceModalState
+                ).flatMap((key) =>
+                  devices?.[key]
+                    ? [
+                        <option key={key} value={`device:${key}`}>
+                          {getDeviceDisplayLabel(devices[key]!, displayNames)}
+                        </option>,
+                      ]
+                    : [],
+                )}
+              </select>
+            </label>
+          )}
         {inFloorplan && (
           <Tabs value={section} onValueChange={setFloorplanSection}>
             <TabsList className="grid w-full grid-cols-3">
@@ -974,21 +1005,29 @@ export const ColorPickerModal = () => {
                 : 'rounded-xl border border-border p-4'
             }
           >
-            {!inFloorplan && <summary
-              className={
-                inFloorplan
-                  ? 'hidden'
-                  : 'cursor-pointer py-2 text-sm font-medium'
-              }
-            >
-              Color options
-            </summary>}
+            {!inFloorplan && (
+              <summary
+                className={
+                  inFloorplan
+                    ? 'hidden'
+                    : 'cursor-pointer py-2 text-sm font-medium'
+                }
+              >
+                Color options
+              </summary>
+            )}
             {colorDevices.length !== selected.length && (
               <p className="my-2 text-sm text-muted-foreground">
                 Color changes apply to {colorDevices.length} compatible devices.
               </p>
             )}
-            <fieldset disabled={!connected} className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !inFloorplan && 'mt-3 h-[min(60dvh,28rem)]')}>
+            <fieldset
+              disabled={!connected}
+              className={cn(
+                'flex min-h-0 min-w-0 flex-1 flex-col',
+                !inFloorplan && 'mt-3 h-[min(60dvh,28rem)]',
+              )}
+            >
               <Tabs
                 value={tab}
                 onValueChange={setTab}
@@ -1002,9 +1041,11 @@ export const ColorPickerModal = () => {
               >
                 <TabsList
                   aria-label="Color controls"
-                  className={compactFloorplan
-                    ? 'h-auto min-h-0 flex-col items-stretch justify-start overflow-y-auto gap-0.5 [&>button]:min-h-8 [&>button]:justify-start [&>button]:px-1.5 [&>button]:text-xs'
-                    : 'mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto'}
+                  className={
+                    compactFloorplan
+                      ? 'h-auto min-h-0 flex-col items-stretch justify-start overflow-y-auto gap-0.5 [&>button]:min-h-8 [&>button]:justify-start [&>button]:px-1.5 [&>button]:text-xs'
+                      : 'mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto'
+                  }
                 >
                   <TabsTrigger value="wheel" className="shrink-0">
                     Wheel
@@ -1022,9 +1063,7 @@ export const ColorPickerModal = () => {
 
                 <div
                   className={cn(
-                    compactFloorplan
-                      ? 'rounded-xl p-2'
-                      : 'rounded-2xl p-3',
+                    compactFloorplan ? 'rounded-xl p-2' : 'rounded-2xl p-3',
                     'min-h-0 min-w-0 flex-1 overflow-hidden border border-border/60',
                   )}
                 >
@@ -1066,15 +1105,17 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="sliders"
-                    className="m-0 flex h-full min-h-0 flex-col justify-evenly gap-1 overflow-y-auto [&_input[type=range]]:min-w-0 [&_input:not([type=range])]:w-16 [&_input:not([type=range])]:shrink-0"
+                    className="m-0 flex h-full min-h-0 flex-col overflow-y-auto [&_input[type=range]]:min-w-0 [&_input:not([type=range])]:w-16 [&_input:not([type=range])]:shrink-0"
                   >
-                    <SlidersTab
-                      color={deviceModalColor ?? black}
-                      brightness={deviceModalBrightness ?? 1}
-                      onChange={throttledSetDeviceColor}
-                      onChangeComplete={throttledSetDeviceColor}
-                      open={deviceModalOpen}
-                    />
+                    <div className="my-auto flex shrink-0 flex-col gap-3">
+                      <SlidersTab
+                        color={deviceModalColor ?? black}
+                        brightness={deviceModalBrightness ?? 1}
+                        onChange={throttledSetDeviceColor}
+                        onChangeComplete={throttledSetDeviceColor}
+                        open={deviceModalOpen}
+                      />
+                    </div>
                   </TabsContent>
                 </div>
               </Tabs>
