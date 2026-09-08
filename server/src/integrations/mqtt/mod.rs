@@ -1,6 +1,7 @@
 #![allow(clippy::redundant_closure_call)]
 
 mod utils;
+mod zigbee2mqtt;
 
 use crate::{
     types::{
@@ -26,11 +27,15 @@ use self::utils::homectl_to_mqtt;
 
 #[derive(Default, Debug, Deserialize, Clone)]
 pub struct MqttConfig {
+    /// Enable the Zigbee2MQTT wire format and discovery for this base topic.
+    zigbee2mqtt_base_topic: Option<String>,
     host: String,
     port: u16,
     username: Option<String>,
     password: Option<String>,
+    #[serde(default)]
     topic: String,
+    #[serde(default)]
     topic_set: String,
 
     /// Can be used to control whether the devices published by this integration
@@ -79,8 +84,23 @@ impl Integration for Mqtt {
         cli: &Cli,
         event_tx: TxEventChannel,
     ) -> Result<Self> {
-        let config: MqttConfig = serde_json::from_value(config.clone())
+        let mut config: MqttConfig = serde_json::from_value(config.clone())
             .wrap_err("Failed to deserialize config of Mqtt integration")?;
+        config.zigbee2mqtt_base_topic = config
+            .zigbee2mqtt_base_topic
+            .take()
+            .filter(|value| !value.trim().is_empty());
+        if let Some(base) = config.zigbee2mqtt_base_topic.clone() {
+            let base = base.trim().trim_end_matches('/');
+            if base.is_empty() || base.contains(['#', '+']) {
+                return Err(eyre!("Invalid Zigbee2MQTT base topic"));
+            }
+            config.zigbee2mqtt_base_topic = Some(base.to_owned());
+            config.topic = format!("{base}/{{id}}");
+            config.topic_set = format!("{base}/{{id}}/set");
+        } else if config.topic.is_empty() || config.topic_set.is_empty() {
+            return Err(eyre!("MQTT topic and topic_set are required"));
+        }
 
         Ok(Mqtt {
             id: id.clone(),
@@ -121,6 +141,7 @@ impl Integration for Mqtt {
         let config = Arc::new(self.config.clone());
 
         self.tasks.spawn(async move {
+            let mut discovery = zigbee2mqtt::Discovery::default();
             loop {
                 let notification = eventloop.poll().await;
 
@@ -131,16 +152,33 @@ impl Integration for Mqtt {
                 let res = (|| async {
                     match notification? {
                         rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
+                            if let Some(base) = &config.zigbee2mqtt_base_topic {
+                                client
+                                    .subscribe(format!("{base}/bridge/devices"), QoS::AtLeastOnce)
+                                    .await?;
+                            }
                             client
-                                .subscribe(config.topic.replace("{id}", "+"), QoS::AtMostOnce)
+                                .subscribe(
+                                    if let Some(base) = &config.zigbee2mqtt_base_topic {
+                                        format!("{base}/#")
+                                    } else {
+                                        config.topic.replace("{id}", "+")
+                                    },
+                                    QoS::AtMostOnce,
+                                )
                                 .await?;
                         }
 
                         rumqttc::Event::Incoming(rumqttc::Packet::Publish(msg)) => {
-                            let device =
-                                mqtt_to_homectl(&msg.payload, &msg.topic, id.clone(), &config);
+                            let devices = if let Some(base) = &config.zigbee2mqtt_base_topic {
+                                discovery.receive(base, &msg.topic, &msg.payload, &id, &config)
+                            } else {
+                                mqtt_to_homectl(&msg.payload, &msg.topic, id.clone(), &config)
+                                    .into_iter()
+                                    .collect()
+                            };
 
-                            if let Some(device) = device {
+                            for device in devices {
                                 let event = Event::ExternalStateUpdate { device };
                                 event_tx.send(event);
                             }
@@ -181,11 +219,28 @@ impl Integration for Mqtt {
             .replace("{id}", &device.id.to_string())
             .replace("{name}", &device.name.to_string());
 
-        let mqtt_device = homectl_to_mqtt(device.clone(), &self.config)?;
+        let mqtt_device = if self.config.zigbee2mqtt_base_topic.is_some() {
+            let mut payload = zigbee2mqtt::encode(device)?;
+            if payload.get("transition").is_none() {
+                if let Some(transition) = self.config.default_transition {
+                    payload["transition"] = serde_json::json!(transition);
+                }
+            }
+            payload
+        } else {
+            homectl_to_mqtt(device.clone(), &self.config)?
+        };
         let json = serde_json::to_string(&mqtt_device)?;
 
         if !self.cli.dry_run {
-            client.publish(topic, QoS::AtLeastOnce, true, json).await?;
+            client
+                .publish(
+                    topic,
+                    QoS::AtLeastOnce,
+                    self.config.zigbee2mqtt_base_topic.is_none(),
+                    json,
+                )
+                .await?;
         } else {
             debug!("(dry run) would publish device state: {device}");
         }

@@ -293,6 +293,13 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
             "Connect devices through MQTT topics, including Zigbee2MQTT-style bridges.",
             vec![
                 text_config_field(
+                    "zigbee2mqtt_base_topic",
+                    "Zigbee2MQTT base topic",
+                    false,
+                    "Enable Zigbee2MQTT light discovery and native color commands. Leave empty for generic MQTT. Overrides topic and topic_set.",
+                    Some("zigbee2mqtt"),
+                ),
+                text_config_field(
                     "host",
                     "Host",
                     true,
@@ -325,7 +332,7 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     text_config_field(
                         "topic",
                         "State topic",
-                        true,
+                        false,
                         "Topic to subscribe to for device state messages.",
                         Some("home/+/example/{id}"),
                     ),
@@ -335,7 +342,7 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     text_config_field(
                         "topic_set",
                         "Command topic",
-                        true,
+                        false,
                         "Topic used when publishing device state commands.",
                         Some("home/lights/example/{id}/set"),
                     ),
@@ -1035,7 +1042,11 @@ mod tests {
             .map(|field| field.key.as_str())
             .collect::<Vec<_>>();
 
-        assert_eq!(required_fields, vec!["host", "port", "topic", "topic_set"]);
+        assert_eq!(required_fields, vec!["host", "port"]);
+        // The profile derives its topics. Generic MQTT validates them at load.
+        for key in ["topic", "topic_set", "zigbee2mqtt_base_topic"] {
+            assert!(schema.fields.iter().any(|field| field.key == key));
+        }
     }
 
     #[test]
