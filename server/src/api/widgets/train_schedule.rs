@@ -307,7 +307,12 @@ mod tests {
                 departure(0, 1540, "Helsinki", "0"),
                 departure(0, 1720, "Helsinki", "0"),
             ]),
-            12, 1, None, None, 3, 1000,
+            12,
+            1,
+            None,
+            None,
+            3,
+            1000,
         );
         assert_eq!(result.as_array().unwrap().len(), 1);
         assert_eq!(result[0]["minUntilHomeDeparture"], -3);

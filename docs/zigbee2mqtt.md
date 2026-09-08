@@ -37,6 +37,14 @@ Office lamp exposes writable CT (153–500 mired), XY and HS. Endpoint 11 report
 empty `configured_reportings` list and only a manufacturer-specific binding. This
 is inventory evidence; no reporting configuration or device state was changed.
 
+Follow-up Office lamp test: `/get` returned a state update, but reading reporting
+configuration failed (power-cluster timeout; other clusters returned
+`reportConfigs is not iterable` on Zigbee2MQTT `2.9.2-dev`). Configuring `genOnOff`
+reporting on endpoint 11 (minimum 2 s, maximum 300 s) failed while binding to the
+coordinator with `TABLE_FULL`. Reporting was not successfully enabled. No existing
+bindings were removed. Inspect the actual binding table before removing any entry;
+bounded polling remains the fallback for this lamp.
+
 Remaining work: audit/configure reporting on the Office lamp, then consider bounded
 post-transition polling for devices that need it. Poll only properties advertising
 GET access, coalesce pending polls per device, and keep polling out of the state
