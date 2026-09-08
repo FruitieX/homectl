@@ -1160,6 +1160,14 @@ export function PixiFloorplanRenderer({
 
     const handlePointerMove = (event: PointerEvent) => {
       if (!pointers.has(event.pointerId)) {
+        if (event.pointerType === 'mouse') {
+          const point = getPointerPoint(container, event);
+          const bounds = container.getBoundingClientRect();
+          const inside = event.clientX >= bounds.left && event.clientX <= bounds.right &&
+            event.clientY >= bounds.top && event.clientY <= bounds.bottom;
+          const target = inside && findHitTarget(latestSceneRef.current, screenToScene(point, viewRef.current));
+          container.style.cursor = target ? 'pointer' : 'grab';
+        }
         return;
       }
 

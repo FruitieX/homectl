@@ -34,7 +34,7 @@ import { WebSocketRequest } from '@/bindings/WebSocketRequest';
 import { DeviceKey } from '@/bindings/DeviceKey';
 import { DevicesState } from '@/bindings/DevicesState';
 import { FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
-import { useToggle } from 'usehooks-ts';
+import { useToggle, useMediaQuery } from 'usehooks-ts';
 import { Button } from '@/ui/primitives/button';
 import { Checkbox } from '@/ui/primitives/checkbox';
 import { Input } from '@/ui/primitives/input';
@@ -63,6 +63,7 @@ type TabProps = {
   onChange?: (color: Color, brightness: number) => void;
   onChangeComplete?: (color: Color, brightness: number) => void;
   open: boolean;
+  compact?: boolean;
 };
 
 const ColorWheelTab = ({
@@ -71,6 +72,7 @@ const ColorWheelTab = ({
   onChange,
   onChangeComplete,
   open,
+  compact = false,
 }: TabProps) => {
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
@@ -129,8 +131,8 @@ const ColorWheelTab = ({
           onChange={handleChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
-          width={300}
-          height={300}
+          width={compact ? 144 : 300}
+          height={compact ? 144 : 300}
           className="mx-auto"
         />
       </div>
@@ -860,6 +862,12 @@ export const ColorPickerModal = () => {
   const [tab, setTab] = useState('wheel');
   const [floorplanSection, setFloorplanSection] = useState('controls');
   const inFloorplan = deviceModalPresentation === 'floorplan';
+  const compactFloorplan = useMediaQuery('(max-width: 767px)') && inFloorplan;
+  const groupSelection = useRef<string[]>([]);
+  useEffect(() => {
+    if (!deviceModalOpen) groupSelection.current = [];
+    else if (deviceModalState.length > 1) groupSelection.current = deviceModalState;
+  }, [deviceModalOpen, deviceModalState]);
   const section =
     floorplanSection === 'color' && colorDevices.length === 0
       ? 'controls'
@@ -883,7 +891,7 @@ export const ColorPickerModal = () => {
       className="max-w-3xl"
       desktopPresentation={deviceModalPresentation}
     >
-      <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
+      <div className={cn('px-3 pb-3 md:px-0 md:pb-0', compactFloorplan ? 'space-y-2' : 'space-y-4')}>
         {deviceModalPresentation === 'floorplan' && (
           <label className="block space-y-1 text-xs text-muted-foreground">
             <select
@@ -893,7 +901,7 @@ export const ColorPickerModal = () => {
               onChange={(event) => {
                 const value = event.target.value;
                 setDeviceModalState(
-                  value.startsWith('group:')
+                  value === 'selection' ? groupSelection.current : value.startsWith('group:')
                     ? (groups?.[value.slice(6)]?.device_keys ?? [])
                     : [value.slice(7)],
                 );
@@ -904,6 +912,9 @@ export const ColorPickerModal = () => {
                   ? 'Choose a group or device'
                   : 'All selected devices'}
               </option>
+              {groupSelection.current.length > 1 && (
+                <option value="selection">All {groupSelection.current.length} devices</option>
+              )}
               {Object.entries(groups ?? {})
                 .filter(([, group]) =>
                   group?.device_keys.some((key) =>
@@ -915,7 +926,7 @@ export const ColorPickerModal = () => {
                     {group?.name ?? id}
                   </option>
                 ))}
-              {deviceModalState.flatMap((key) =>
+              {(groupSelection.current.length ? groupSelection.current : deviceModalState).flatMap((key) =>
                 devices?.[key]
                   ? [
                       <option key={key} value={`device:${key}`}>
@@ -969,8 +980,18 @@ export const ColorPickerModal = () => {
               </p>
             )}
             <fieldset disabled={!connected} className="mt-3 min-w-0">
-              <Tabs value={tab} onValueChange={setTab}>
-                <TabsList className="mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto">
+              <Tabs
+                value={tab}
+                onValueChange={setTab}
+                orientation={compactFloorplan ? 'vertical' : 'horizontal'}
+                className={compactFloorplan ? 'grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2' : undefined}
+              >
+                <TabsList
+                  aria-label="Color controls"
+                  className={compactFloorplan
+                    ? 'h-auto flex-col items-stretch gap-1 [&>button]:min-h-10 [&>button]:justify-start [&>button]:px-2'
+                    : 'mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto'}
+                >
                   <TabsTrigger value="wheel" className="shrink-0">
                     Wheel
                   </TabsTrigger>
@@ -985,12 +1006,13 @@ export const ColorPickerModal = () => {
                   </TabsTrigger>
                 </TabsList>
 
-                <ScrollArea className="h-112 rounded-2xl border border-border/60 p-4">
+                <ScrollArea className={compactFloorplan ? 'min-w-0 rounded-xl border border-border/60 p-2' : 'h-112 rounded-2xl border border-border/60 p-4'}>
                   <TabsContent
                     value="wheel"
-                    className="m-0 flex h-104 flex-col justify-center"
+                    className={cn('m-0 flex flex-col justify-center', compactFloorplan ? 'h-44 gap-3' : 'h-104')}
                   >
                     <ColorWheelTab
+                      compact={compactFloorplan}
                       color={deviceModalColor ?? black}
                       brightness={deviceModalBrightness ?? 1}
                       onChange={throttledSetDeviceColor}
@@ -1000,7 +1022,7 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="swatches"
-                    className="m-0 flex h-104 flex-col justify-center"
+                    className={cn('m-0 flex flex-col justify-center', compactFloorplan ? 'min-h-44' : 'h-104')}
                   >
                     <SwatchesTab
                       color={deviceModalColor ?? black}
@@ -1012,7 +1034,7 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="image"
-                    className="m-0 flex h-104 flex-col justify-center"
+                    className={cn('m-0 flex flex-col justify-center', compactFloorplan ? 'h-60' : 'h-104')}
                   >
                     <ImageTab
                       color={deviceModalColor ?? black}
@@ -1024,7 +1046,7 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="sliders"
-                    className="m-0 flex h-104 flex-col justify-center gap-3"
+                    className={cn('m-0 flex flex-col justify-center gap-3', compactFloorplan ? 'min-h-44' : 'h-104')}
                   >
                     <SlidersTab
                       color={deviceModalColor ?? black}

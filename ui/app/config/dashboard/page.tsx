@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createUuid } from '@/lib/uuid';
 import {
   useDashboardSpacing,
   type DashboardSpacing,
@@ -245,7 +246,7 @@ function SensorGroupsField() {
   const addGroup = () => {
     const name = newGroup.trim();
     if (!name || groups[name]) return;
-    const nextGroups = [...(catalog?.groups ?? []), { id: crypto.randomUUID(), name, sensorIds: [] }];
+    const nextGroups = [...(catalog?.groups ?? []), { id: createUuid(), name, sensorIds: [] }];
     void saveCatalog({ sensors: catalog?.sensors ?? [], groups: nextGroups });
     setNewGroup('');
   };

@@ -34,7 +34,7 @@ export function FloorplanInspector({
         <Button
           variant="ghost"
           size="icon"
-          className="md:hidden"
+          className="size-8 md:hidden"
           aria-label={expanded ? 'Collapse controls' : 'Expand controls'}
           aria-expanded={expanded}
           onClick={() => setExpanded(!expanded)}
@@ -45,13 +45,14 @@ export function FloorplanInspector({
           variant="ghost"
           size="icon"
           aria-label="Close controls"
+          className="size-8"
           onClick={onClose}
         >
           <X />
         </Button>
       </div>
       <div
-        className={`${expanded ? 'h-[60dvh]' : 'h-[min(34dvh,19rem)]'} min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] md:h-auto md:flex-1 md:px-4 md:pb-4`}
+        className={`${expanded ? 'h-[60dvh]' : 'h-[min(44dvh,21rem)]'} min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain pb-[env(safe-area-inset-bottom)] md:h-auto md:flex-1 md:px-4 md:pb-4`}
       >
         {children}
       </div>

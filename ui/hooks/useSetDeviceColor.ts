@@ -1,4 +1,5 @@
 import { toast } from 'sonner';
+import { createUuid } from '@/lib/uuid';
 import type { Device } from '@/bindings/Device';
 import { useWebsocket } from '@/hooks/websocket';
 import Color from 'color';
@@ -28,7 +29,7 @@ export const useSetDeviceState = () => {
       }
       const hsv = color?.hsv();
       void sendDeviceCommand(ws, {
-        request_id: crypto.randomUUID(),
+        request_id: createUuid(),
         device_key: getDeviceKey(device),
         power,
         preserve_scene: preserveScene,

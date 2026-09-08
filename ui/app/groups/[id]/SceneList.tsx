@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { createUuid } from '@/lib/uuid';
 import { useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
 import { Check, Star } from 'lucide-react';
@@ -87,7 +88,7 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
     setPendingScene(sceneId);
     try {
       await sendSceneCommand(ws, {
-        request_id: crypto.randomUUID(),
+        request_id: createUuid(),
         scene_id: sceneId,
         device_keys: targets,
         group_keys: null,

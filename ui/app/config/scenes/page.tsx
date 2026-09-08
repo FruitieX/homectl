@@ -1,4 +1,5 @@
 import type { SceneCommand } from '@/bindings/SceneCommand';
+import { createUuid } from '@/lib/uuid';
 import { useSearchParams } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import {
@@ -78,7 +79,7 @@ async function triggerScene(apiEndpoint: string, sceneId: string) {
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        request_id: crypto.randomUUID(),
+        request_id: createUuid(),
         scene_id: sceneId,
         device_keys: null,
         group_keys: null,
