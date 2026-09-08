@@ -292,7 +292,7 @@ export function TimeSeriesPlot({
             </text>
           </g>
         ))}
-        {x.ticks(Math.max(2, Math.floor(plotWidth / 95))).map((tick) => (
+        {x.ticks(Math.max(3, Math.floor(plotWidth / 58))).map((tick) => (
           <text
             key={tick.getTime()}
             x={x(tick)}
@@ -322,7 +322,7 @@ export function TimeSeriesPlot({
                     width={Math.max(0, endX - startX)}
                     height={plotHeight}
                     className="fill-muted-foreground"
-                    opacity={0.04}
+                    opacity={0.035}
                   />
                 )}
                 {band.index > 0 && startX <= left + plotWidth && (
@@ -332,8 +332,8 @@ export function TimeSeriesPlot({
                     y1={top}
                     y2={top + plotHeight}
                     className="stroke-border"
-                    strokeDasharray="2 4"
-                    opacity={0.3}
+                    strokeDasharray="5 4"
+                    opacity={0.8}
                   />
                 )}
               </g>
