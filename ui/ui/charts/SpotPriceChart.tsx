@@ -4,12 +4,16 @@ export function SpotPriceChart({
   width,
   height,
   showCurrentTime = true,
+  showLegend = true,
+  showUnit = true,
 }: {
   data: { time: number; value: number; fill: string; end?: number }[];
   width: number;
   height: number;
   animate?: boolean;
   showCurrentTime?: boolean;
+  showLegend?: boolean;
+  showUnit?: boolean;
 }) {
   return (
     <TimeSeriesPlot
@@ -19,6 +23,8 @@ export function SpotPriceChart({
       height={height}
       zero
       showNow={showCurrentTime}
+      showLegend={showLegend}
+      showUnit={showUnit}
       series={[
         {
           name: 'Spot price',

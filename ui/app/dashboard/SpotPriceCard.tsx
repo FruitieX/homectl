@@ -92,7 +92,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
             </div>
             <ResponsiveChart
               height={
-                spacing === 'compact' ? 155 : spacing === 'spacious' ? 215 : 180
+                spacing === 'compact' ? 180 : spacing === 'spacious' ? 245 : 215
               }
               className="relative z-[2] mt-1 min-w-0 overflow-hidden"
             >
@@ -103,6 +103,8 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                   height={height}
                   animate
                   showCurrentTime
+                  showLegend={false}
+                  showUnit={false}
                 />
               )}
             </ResponsiveChart>

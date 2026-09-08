@@ -132,6 +132,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                 key={sensor.device_id}
                 sensor={sensor}
                 now={now}
+                compact
                 onOpen={() => show(sensor.device_id)}
               />
             ))}
