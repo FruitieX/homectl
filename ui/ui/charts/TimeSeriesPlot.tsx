@@ -7,6 +7,7 @@ export type PlotPoint = {
   low?: number;
   high?: number;
   end?: number;
+  fill?: string;
 };
 export type PlotSeries = {
   name: string;
@@ -359,7 +360,7 @@ export function TimeSeriesPlot({
                               0,
                               y(Math.min(0, p.value)) - y(p.high),
                             )}
-                            fill="currentColor"
+                            fill={p.fill ?? 'currentColor'}
                             opacity={0.2}
                           />
                         )}
@@ -368,7 +369,7 @@ export function TimeSeriesPlot({
                           y={Math.min(y(p.value), y(0))}
                           width={w}
                           height={Math.max(1, Math.abs(y(p.value) - y(0)))}
-                          fill="currentColor"
+                          fill={p.fill ?? 'currentColor'}
                           opacity={0.8}
                           rx={1.5}
                         />

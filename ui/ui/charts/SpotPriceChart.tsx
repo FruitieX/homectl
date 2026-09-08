@@ -7,7 +7,7 @@ export function SpotPriceChart({
   showLegend = true,
   showUnit = true,
 }: {
-  data: { time: number; value: number; fill: string; end?: number }[];
+  data: { time: number; value: number; fill?: string; end?: number }[];
   width: number;
   height: number;
   animate?: boolean;

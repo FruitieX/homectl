@@ -9,8 +9,13 @@ import { priceWindow } from '@/lib/widgetData';
 import { useInterval } from 'usehooks-ts';
 import {
   type DashboardWidget,
+  getDashboardWidgetOptionNumber,
   getDashboardWidgetOptionString,
 } from '@/hooks/useDashboard';
+import {
+  getSpotPriceColor,
+  normalizeSpotPriceThresholds,
+} from '@/lib/spotPriceColors';
 import { ResponsiveChart } from '@/ui/charts/ResponsiveChart';
 import { SpotPriceChart } from '@/ui/charts/SpotPriceChart';
 import { CardContent } from '@/ui/primitives/card';
@@ -39,6 +44,34 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { data, current, average } = useMemo(
     () => priceWindow(priceQuery.rows, now),
     [priceQuery.rows, now],
+  );
+  const lowPriceThreshold = getDashboardWidgetOptionNumber(
+    widget,
+    'lowPriceThreshold',
+    2,
+  );
+  const mediumPriceThreshold = getDashboardWidgetOptionNumber(
+    widget,
+    'mediumPriceThreshold',
+    5,
+  );
+  const highPriceThreshold = getDashboardWidgetOptionNumber(
+    widget,
+    'highPriceThreshold',
+    8,
+  );
+  const thresholds = useMemo(
+    () =>
+      normalizeSpotPriceThresholds({
+        low: lowPriceThreshold,
+        medium: mediumPriceThreshold,
+        high: highPriceThreshold,
+      }),
+    [highPriceThreshold, lowPriceThreshold, mediumPriceThreshold],
+  );
+  const coloredData = useMemo(
+    () => data.map((point) => ({ ...point, fill: getSpotPriceColor(point.value, thresholds) })),
+    [data, thresholds],
   );
 
   const stats = useMemo(() => {
@@ -106,7 +139,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               >
                 {({ width, height }) => (
                   <SpotPriceChart
-                    data={data}
+                    data={coloredData}
                     width={width}
                     height={height}
                     animate
@@ -159,7 +192,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
             >
               {({ width, height }) => (
                 <SpotPriceChart
-                  data={data}
+                  data={coloredData}
                   width={width}
                   height={height}
                   animate

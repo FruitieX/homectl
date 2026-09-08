@@ -817,6 +817,37 @@ function WidgetOptionFields({
     );
   }
 
+  if (widgetType === 'spot_price') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <OptionTextField
+          label="Spot price endpoint path"
+          value={getString('spotPricePath', '/api/influxdb/spot-prices')}
+          onChange={(value) => onChange('spotPricePath', value)}
+        />
+        <ConfigHelpPanel>
+          Bars fade smoothly from green through amber to red as the price
+          moves between these thresholds. Values are in c/kWh.
+        </ConfigHelpPanel>
+        <OptionNumberField
+          label="Low price threshold"
+          value={getNumber('lowPriceThreshold', 2)}
+          onChange={(value) => onChange('lowPriceThreshold', value)}
+        />
+        <OptionNumberField
+          label="Medium price threshold"
+          value={getNumber('mediumPriceThreshold', 5)}
+          onChange={(value) => onChange('mediumPriceThreshold', value)}
+        />
+        <OptionNumberField
+          label="High price threshold"
+          value={getNumber('highPriceThreshold', 8)}
+          onChange={(value) => onChange('highPriceThreshold', value)}
+        />
+      </div>
+    );
+  }
+
   if (widgetType === 'train_schedule') {
     return (
       <div className="grid gap-4 md:grid-cols-2">

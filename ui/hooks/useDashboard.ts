@@ -195,6 +195,9 @@ export const widgetRegistry: Record<
     defaultOptions: {
       region: 'FI',
       spotPricePath: '/api/influxdb/spot-prices',
+      lowPriceThreshold: 2,
+      mediumPriceThreshold: 5,
+      highPriceThreshold: 8,
     },
   },
   train_schedule: {
