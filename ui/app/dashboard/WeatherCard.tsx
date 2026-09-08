@@ -9,6 +9,7 @@ import {
   type DashboardWidget,
   buildDashboardWidgetProxyPath,
   getDashboardWidgetOptionNumber,
+  getDashboardWidgetOptionBoolean,
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
@@ -149,7 +150,10 @@ const buildDailyData = (
   return Array.from(dailyGroups.entries())
     .slice(0, forecastDays)
     .map(([dateKey, dayDataPoints]): DailyWeatherData => {
-      const date = new Date(dateKey);
+      // Keep the grouped day in the browser's local timezone. Parsing the
+      // human-readable `toDateString()` key can otherwise shift it to UTC.
+      const date = new Date(dayDataPoints[0].time);
+      date.setHours(0, 0, 0, 0);
       let bestSymbolDataPoint = dayDataPoints[0];
       let bestNoonDistance = 24;
 
@@ -189,6 +193,50 @@ const buildDailyData = (
       };
     });
 };
+
+function DailyForecastCard({
+  day,
+  compact = false,
+}: {
+  day: DailyWeatherData;
+  compact?: boolean;
+}) {
+  const today = day.date.toDateString() === new Date().toDateString();
+  return (
+    <div
+      className={clsx(
+        'min-w-0 rounded-xl border border-border/50 bg-muted/35',
+        compact
+          ? 'flex min-w-[106px] flex-1 items-center gap-2 px-2 py-1.5 text-left'
+          : 'flex min-w-[106px] shrink-0 flex-1 flex-col items-center p-2 text-center md:p-3',
+      )}
+    >
+      <img
+        className={compact ? 'size-8 shrink-0' : 'mb-2 size-10 shrink-0'}
+        src={`/weathericons/${day.symbolCode}.svg`}
+        width={compact ? 32 : 40}
+        height={compact ? 32 : 40}
+        decoding="async"
+        alt=""
+      />
+      <div className={clsx('min-w-0', !compact && 'w-full')}>
+        <div className="truncate text-xs font-semibold">
+          {today
+            ? 'Today'
+            : day.date.toLocaleDateString('en-US', { weekday: 'short' })}
+        </div>
+        {!compact && (
+          <div className="truncate text-[0.7rem] text-muted-foreground">
+            {day.date.toLocaleDateString('en-FI', { month: 'short', day: 'numeric' })}
+          </div>
+        )}
+        <div className="tabular-nums text-xs text-muted-foreground">
+          {Math.round(day.maxTemp)}° / {Math.round(day.minTemp)}°
+        </div>
+      </div>
+    </div>
+  );
+}
 
 const buildChartSeries = (
   currentAndFutureSeries: WeatherTimeSeries[],
@@ -293,6 +341,11 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
     Math.max(30, refreshSeconds) * 1000,
   );
   const weather = weatherQuery.data ?? null;
+  const showWidgetForecast = getDashboardWidgetOptionBoolean(
+    widget,
+    'showWidgetForecast',
+    false,
+  );
 
   useTimeout(
     () => {
@@ -318,6 +371,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   const currentAndFutureSeries = getCurrentAndFutureSeries(weather);
   const hourlyData = currentAndFutureSeries.slice(0, forecastHours);
+  const dailyData = buildDailyData(currentAndFutureSeries, 5);
 
   return (
     <>
@@ -329,13 +383,29 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
         >
           <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading icon={<CloudSun />} label="Weather" detail />
-            <div className="flex flex-1 items-center justify-center py-[var(--widget-inner-y,0.75rem)]">
-              {renderWeatherDetail(
-                currentAndFutureSeries[0],
-                true,
-                latestFrontyardTemp !== undefined
-                  ? Math.round(latestFrontyardTemp)
-                  : undefined,
+            <div
+              className={clsx(
+                'flex flex-1 items-center justify-center gap-2 py-[var(--widget-inner-y,0.75rem)]',
+                showWidgetForecast
+                  ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] items-center'
+                  : 'flex-col',
+              )}
+            >
+              <div className="min-w-0">
+                {renderWeatherDetail(
+                  currentAndFutureSeries[0],
+                  true,
+                  latestFrontyardTemp !== undefined
+                    ? Math.round(latestFrontyardTemp)
+                    : undefined,
+                )}
+              </div>
+              {showWidgetForecast && dailyData.length > 0 && (
+                <div className="grid grid-cols-1 gap-1.5">
+                  {dailyData.slice(0, 3).map((day) => (
+                    <DailyForecastCard key={day.date.toISOString()} day={day} compact />
+                  ))}
+                </div>
               )}
             </div>
             {weatherQuery.isError && (
@@ -366,18 +436,22 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             value={String(activeTab)}
             onValueChange={(value) => setActiveTab(Number(value))}
           >
-            <TabsList className="h-11 w-full justify-start overflow-x-auto rounded-2xl bg-muted/60 p-1.5">
+            <TabsList className="grid h-11 w-full grid-cols-2 rounded-2xl bg-muted/60 p-1.5">
               <TabsTrigger value="0">Table</TabsTrigger>
-              <TabsTrigger value="1">Hourly charts</TabsTrigger>
-              <TabsTrigger value="2">Long-term</TabsTrigger>
+              <TabsTrigger value="1">Charts</TabsTrigger>
             </TabsList>
           </Tabs>
 
           <div
             ref={modalBodyRef}
-            className="relative flex flex-col gap-3 overflow-x-hidden pb-4"
+            className="relative flex flex-col gap-3 pb-4"
           >
-            {activeTab === 0 && <WeatherHourlyPanel hourlyData={hourlyData} />}
+            {activeTab === 0 && (
+              <WeatherHourlyPanel
+                hourlyData={hourlyData}
+                dailyData={dailyData}
+              />
+            )}
 
             {activeTab === 1 && (
               <WeatherLongTermPanel
@@ -390,12 +464,6 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
                 showDaily={false}
               />
             )}
-            {activeTab === 2 && (
-              <WeatherLongTermPanel
-                currentAndFutureSeries={currentAndFutureSeries}
-                forecastDays={forecastDays}
-              />
-            )}
           </div>
         </div>
       </ResponsiveOverlay>
@@ -405,11 +473,18 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
 
 function WeatherHourlyPanel({
   hourlyData,
+  dailyData,
 }: {
   hourlyData: WeatherTimeSeries[];
+  dailyData: DailyWeatherData[];
 }) {
   return (
     <>
+      <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+        {dailyData.map((day) => (
+          <DailyForecastCard key={day.date.toISOString()} day={day} compact />
+        ))}
+      </div>
       {hourlyData.map((series, index) => {
         const rainProbability =
           series.data.next_1_hours?.details?.probability_of_precipitation || 0;
@@ -423,7 +498,7 @@ function WeatherHourlyPanel({
         return (
           <Fragment key={currentDate.toISOString()}>
             {index === 0 && (
-              <div className="sticky top-0 z-20 flex flex-row items-center gap-2 rounded-2xl border border-border/60 bg-popover/95 px-4 py-3 text-base shadow-sm backdrop-blur">
+              <div className="sticky top-0 z-20 flex flex-row items-center gap-2 rounded-2xl border border-border/60 bg-popover/95 px-4 py-3 text-base shadow-md backdrop-blur">
                 <span className="w-16 md:w-24 text-sm text-muted-foreground flex-shrink-0">
                   Time
                 </span>
@@ -500,46 +575,9 @@ function WeatherLongTermPanel({
     <>
       {showDaily && (
         <div className="flex w-full flex-row gap-2 overflow-x-auto pb-2 scrollbar-none">
-          {dailyData.map((dayData) => {
-            const today = new Date();
-            const isToday =
-              dayData.date.toDateString() === today.toDateString();
-
-            return (
-              <div
-                key={dayData.date.toISOString()}
-                className="flex-1 min-w-[76px] rounded-2xl border border-border bg-muted/50 p-2 md:p-3 text-center flex-shrink-0"
-              >
-                <div className="mb-2 text-sm font-semibold whitespace-nowrap overflow-hidden text-ellipsis">
-                  {isToday
-                    ? 'Today'
-                    : dayData.date.toLocaleDateString('en-US', {
-                        weekday: 'short',
-                      })}
-                </div>
-                <div className="mb-2 text-xs text-muted-foreground whitespace-nowrap overflow-hidden text-ellipsis">
-                  {dayData.date.toLocaleDateString('en-FI', {
-                    month: 'short',
-                    day: 'numeric',
-                  })}
-                </div>
-                <img
-                  className="mx-auto mb-2 size-12"
-                  src={`/weathericons/${dayData.symbolCode}.svg`}
-                  width={48}
-                  height={48}
-                  decoding="async"
-                  alt="Weather icon"
-                />
-                <div className="text-lg font-bold">
-                  {Math.round(dayData.maxTemp)}°
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {Math.round(dayData.minTemp)}°
-                </div>
-              </div>
-            );
-          })}
+          {dailyData.map((dayData) => (
+            <DailyForecastCard key={dayData.date.toISOString()} day={dayData} />
+          ))}
         </div>
       )}
 

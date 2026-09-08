@@ -39,6 +39,8 @@ export function TimeSeriesPlot({
   label,
   zero = false,
   showNow = false,
+  showLegend = true,
+  showUnit = true,
 }: {
   series: PlotSeries[];
   width: number;
@@ -47,6 +49,8 @@ export function TimeSeriesPlot({
   label: string;
   zero?: boolean;
   showNow?: boolean;
+  showLegend?: boolean;
+  showUnit?: boolean;
 }) {
   const id = useId();
   const [keyboardInspect, setKeyboardInspect] = useState(false);
@@ -76,7 +80,7 @@ export function TimeSeriesPlot({
     right = 12,
     top = 16,
     bottom = 30;
-  const svgHeight = Math.max(70, height - 32);
+  const svgHeight = Math.max(70, height - (showLegend ? 32 : 0));
   const plotWidth = Math.max(1, width - left - right),
     plotHeight = Math.max(1, svgHeight - top - bottom);
   const minTime = times[0] ?? Date.now();
@@ -156,7 +160,7 @@ export function TimeSeriesPlot({
       className="relative min-w-0 overflow-hidden text-foreground"
       style={{ width, height }}
     >
-      <div className="flex h-8 min-w-0 items-center gap-3 overflow-x-auto px-3 text-xs">
+      {showLegend && <div className="flex h-8 min-w-0 items-center gap-3 overflow-x-auto px-3 text-xs">
         {clean.map((s, index) => (
           <button
             key={s.name}
@@ -177,8 +181,8 @@ export function TimeSeriesPlot({
             {s.name}
           </button>
         ))}
-        <span className="ml-auto shrink-0 text-muted-foreground">{unit}</span>
-      </div>
+        {showUnit && <span className="ml-auto shrink-0 text-muted-foreground">{unit}</span>}
+      </div>}
       <svg
         width={width}
         height={svgHeight}
@@ -410,7 +414,7 @@ export function TimeSeriesPlot({
       </svg>
       {selectedTime !== null && (
         <div
-          className="pointer-events-none absolute inset-x-3 bottom-1 min-w-0 rounded-lg bg-popover/95 px-2 py-1.5 text-xs text-popover-foreground shadow-sm break-words whitespace-normal"
+          className="pointer-events-none absolute inset-x-3 top-9 min-w-0 rounded-lg bg-popover/95 px-2 py-1.5 text-xs text-popover-foreground shadow-sm break-words whitespace-normal"
           aria-live="polite"
         >
           {selectedTime !== null ? (

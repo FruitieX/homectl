@@ -23,12 +23,14 @@ export function SensorChip({
   checked,
   onCheckedChange,
   onOpen,
+  compact = false,
 }: {
   sensor: SensorDataRow;
   now?: number;
   checked?: boolean;
   onCheckedChange?: (checked: boolean) => void;
   onOpen?: () => void;
+  compact?: boolean;
 }) {
   const current = now ?? Date.now();
   const temp = calculateTemperatureStats(sensor.temp_data, current);
@@ -71,7 +73,8 @@ export function SensorChip({
   return (
     <div
       className={cn(
-        'relative min-w-28 rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
+        'relative rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
+        compact ? 'min-w-[5.6rem]' : 'min-w-28',
         (selectable || onOpen) &&
           'cursor-pointer transition hover:border-primary/60 hover:bg-muted/20',
       )}

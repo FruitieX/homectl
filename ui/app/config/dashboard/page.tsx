@@ -736,6 +736,11 @@ function WidgetOptionFields({
           max={10}
           onChange={(value) => onChange('forecastDays', value)}
         />
+        <OptionCheckboxField
+          label="Show 3-day forecast on widget"
+          checked={getBoolean('showWidgetForecast', false)}
+          onChange={(value) => onChange('showWidgetForecast', value)}
+        />
         <OptionNumberField
           label="Refresh seconds"
           value={getNumber('refreshSeconds', 60)}

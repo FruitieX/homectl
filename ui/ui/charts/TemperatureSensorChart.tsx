@@ -490,8 +490,6 @@ const TemperatureSensorChartComponent: React.FC<
           tooltipLeft={tooltipLeft}
           tooltipOpen={tooltipOpen}
           margin={margin}
-          offsetTop={-40}
-          offsetLeft={-10}
         />
       )}
     </div>
