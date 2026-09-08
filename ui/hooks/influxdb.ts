@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import { useAppConfig } from './appConfig';
 import { resolveDashboardWidgetUrl } from './useDashboard';
 import { useWidgetResource } from './useWidgetResource';
@@ -114,11 +114,28 @@ export const useTempSensorsResource = (
   endpointPath = '/api/influxdb/temp-sensors',
 ) => {
   const { apiEndpoint } = useAppConfig();
+  const previousRows = useRef<SensorRow[]>([]);
+  const previousEndpointPath = useRef(endpointPath);
+  if (previousEndpointPath.current !== endpointPath) {
+    previousEndpointPath.current = endpointPath;
+    previousRows.current = [];
+  }
   const query = useWidgetResource<unknown>(
     resolveDashboardWidgetUrl(apiEndpoint, endpointPath),
   );
   const rows = useMemo(() => normalizeSensorRows(query.data), [query.data]);
-  return { ...query, rows };
+  const stableRows = useMemo(() => {
+    if (rows.length > 0) {
+      previousRows.current = rows;
+      return rows;
+    }
+
+    // Influx can briefly return an empty aggregate while it is restarting or
+    // while the development proxy is being reloaded. Keep the last useful
+    // sample set visible until a non-empty response arrives.
+    return previousRows.current;
+  }, [rows]);
+  return { ...query, rows: stableRows };
 };
 
 export const useTempSensorsQuery = (

@@ -35,17 +35,22 @@ export function SensorChip({
   const current = now ?? Date.now();
   const temp = calculateTemperatureStats(sensor.temp_data, current);
   const humidity = calculateHumidityStats(sensor.humidity_data, current);
+  const temperatureStale = isOffline(sensor.latest_temp_time, 15, current);
+  const humidityStale = isOffline(sensor.latest_humidity_time, 15, current);
   const content = (
     <>
       <div className="mb-2 truncate text-xs font-medium">
         {sensor.device_name}
       </div>
-      <div className="flex items-center gap-1.5 text-sm tabular-nums">
+      <div
+        className={cn(
+          'flex items-center gap-1.5 text-sm tabular-nums',
+          temperatureStale && 'text-muted-foreground',
+        )}
+        aria-label={temperatureStale ? 'Temperature, last known reading' : 'Temperature'}
+      >
         <Thermometer className="size-3.5 shrink-0 text-muted-foreground" />
-        {sensor.latest_temp === undefined ||
-        isOffline(sensor.latest_temp_time, 15, current)
-          ? '—'
-          : `${sensor.latest_temp.toFixed(1)}°`}
+        {sensor.latest_temp === undefined ? '—' : `${sensor.latest_temp.toFixed(1)}°`}
         <span
           className="text-xs text-muted-foreground"
           aria-label={temp ? trendLabel(temp.trend) : undefined}
@@ -53,12 +58,15 @@ export function SensorChip({
           {temp ? getTrendIcon(temp.trend) : null}
         </span>
       </div>
-      <div className="mt-1 flex items-center gap-1.5 text-sm tabular-nums">
+      <div
+        className={cn(
+          'mt-1 flex items-center gap-1.5 text-sm tabular-nums',
+          humidityStale && 'text-muted-foreground',
+        )}
+        aria-label={humidityStale ? 'Humidity, last known reading' : 'Humidity'}
+      >
         <Droplets className="size-3.5 shrink-0 text-muted-foreground" />
-        {sensor.latest_humidity === undefined ||
-        isOffline(sensor.latest_humidity_time, 15, current)
-          ? '—'
-          : `${sensor.latest_humidity.toFixed(0)}%`}
+        {sensor.latest_humidity === undefined ? '—' : `${sensor.latest_humidity.toFixed(0)}%`}
         <span
           className="text-xs text-muted-foreground"
           aria-label={humidity ? trendLabel(humidity.trend) : undefined}
