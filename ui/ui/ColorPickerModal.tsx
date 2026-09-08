@@ -40,7 +40,6 @@ import { Checkbox } from '@/ui/primitives/checkbox';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
-import { ScrollArea } from '@/ui/primitives/scroll-area';
 import { cn } from '@/lib/cn';
 
 const rangeClassName =
@@ -63,7 +62,6 @@ type TabProps = {
   onChange?: (color: Color, brightness: number) => void;
   onChangeComplete?: (color: Color, brightness: number) => void;
   open: boolean;
-  compact?: boolean;
 };
 
 const ColorWheelTab = ({
@@ -72,8 +70,18 @@ const ColorWheelTab = ({
   onChange,
   onChangeComplete,
   open,
-  compact = false,
 }: TabProps) => {
+  const wheelContainer = useRef<HTMLDivElement>(null);
+  const [wheelSize, setWheelSize] = useState(0);
+  useEffect(() => {
+    const container = wheelContainer.current;
+    if (!container) return;
+    const observer = new ResizeObserver(([entry]) => {
+      setWheelSize(Math.max(0, Math.floor(Math.min(entry.contentRect.width, entry.contentRect.height))));
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
   const [hsva, setHsva] = useState(colorToHsva(color));
   const [bri, setBri] = useState(brightness);
 
@@ -125,16 +133,16 @@ const ColorWheelTab = ({
 
   return (
     <>
-      <div className="flex-1">
-        <Wheel
+      <div ref={wheelContainer} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        {wheelSize > 0 && <Wheel
           color={hsvaWithMaxValue}
           onChange={handleChange}
           onTouchEnd={handleChangeComplete}
           onMouseUp={handleChangeComplete}
-          width={compact ? 144 : 300}
-          height={compact ? 144 : 300}
+          width={wheelSize}
+          height={wheelSize}
           className="mx-auto"
-        />
+        />}
       </div>
       <input
         type="range"
@@ -225,7 +233,7 @@ const SwatchesTab = ({
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-3">
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
         <Circle
           colors={presetColors}
           color={hex}
@@ -513,7 +521,8 @@ const ImageTab = ({
   const handlePastedImage = useCallback(() => {
     if (pastedImage === null) return;
 
-    pastedImage.style.objectFit = 'cover';
+    pastedImage.style.objectFit = 'contain';
+    pastedImage.style.width = '100%';
     pastedImage.style.height = '100%';
     pastedImage.style.marginLeft = 'auto';
     pastedImage.style.marginRight = 'auto';
@@ -627,7 +636,7 @@ const ImageTab = ({
   return (
     <>
       <div ref={pastedImageContainer} className="min-h-0 w-full flex-1 pb-4" />
-      <div className="flex w-full justify-center gap-4">
+      <div className="flex w-full shrink-0 flex-wrap justify-center gap-2 [&>button]:px-2 [&>button]:text-xs">
         <Button onClick={handlePasteClick}>
           <Clipboard />
           Paste image
@@ -641,9 +650,9 @@ const ImageTab = ({
         colors={computedColors.map((color) => color.hex())}
         color={hsva}
         onChange={handleChange}
-        className="min-h-10 flex-nowrap! overflow-x-auto justify-center pt-4 *:shrink-0"
+        className="min-h-8 shrink-0 flex-nowrap! overflow-x-auto justify-center pt-1 *:shrink-0"
       />
-      <div className="flex flex-nowrap gap-4">
+      <div className="flex shrink-0 gap-2 text-xs [&>div]:min-w-0 [&>div]:flex-1">
         <div>
           Saturation:
           <input
@@ -872,6 +881,7 @@ export const ColorPickerModal = () => {
     floorplanSection === 'color' && colorDevices.length === 0
       ? 'controls'
       : floorplanSection;
+  const ColorSection = inFloorplan ? 'div' : 'details';
   return (
     <ResponsiveOverlay
       open={deviceModalOpen}
@@ -891,11 +901,11 @@ export const ColorPickerModal = () => {
       className="max-w-3xl"
       desktopPresentation={deviceModalPresentation}
     >
-      <div className={cn('px-3 pb-3 md:px-0 md:pb-0', compactFloorplan ? 'space-y-2' : 'space-y-4')}>
-        {deviceModalPresentation === 'floorplan' && (
+      <div className={cn('px-3 pb-3 md:px-0 md:pb-0', inFloorplan && section === 'color' ? 'flex h-full min-h-0 flex-col [&>label]:shrink-0 [&>div:first-of-type]:shrink-0' : '', compactFloorplan ? 'space-y-2' : 'space-y-4')}>
+        {deviceModalPresentation === 'floorplan' && deviceModalState.length > 1 && (
           <label className="block space-y-1 text-xs text-muted-foreground">
             <select
-              aria-label="Control selection"
+              aria-label="Apply controls to"
               className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground"
               value=""
               onChange={(event) => {
@@ -908,9 +918,7 @@ export const ColorPickerModal = () => {
               }}
             >
               <option value="" disabled>
-                {deviceModalState.length === 1
-                  ? 'Choose a group or device'
-                  : 'All selected devices'}
+                Apply to…
               </option>
               {groupSelection.current.length > 1 && (
                 <option value="selection">All {groupSelection.current.length} devices</option>
@@ -959,13 +967,14 @@ export const ColorPickerModal = () => {
           <ScenesTab deviceKeys={deviceModalState} />
         )}
         {colorDevices.length > 0 && (!inFloorplan || section === 'color') && (
-          <details
-            open={inFloorplan ? true : undefined}
+          <ColorSection
             className={
-              inFloorplan ? 'min-w-0' : 'rounded-xl border border-border p-4'
+              inFloorplan
+                ? 'flex min-h-0 min-w-0 flex-1 flex-col'
+                : 'rounded-xl border border-border p-4'
             }
           >
-            <summary
+            {!inFloorplan && <summary
               className={
                 inFloorplan
                   ? 'hidden'
@@ -973,23 +982,28 @@ export const ColorPickerModal = () => {
               }
             >
               Color options
-            </summary>
+            </summary>}
             {colorDevices.length !== selected.length && (
               <p className="my-2 text-sm text-muted-foreground">
                 Color changes apply to {colorDevices.length} compatible devices.
               </p>
             )}
-            <fieldset disabled={!connected} className="mt-3 min-w-0">
+            <fieldset disabled={!connected} className={cn('flex min-h-0 min-w-0 flex-1 flex-col', !inFloorplan && 'mt-3 h-[min(60dvh,28rem)]')}>
               <Tabs
                 value={tab}
                 onValueChange={setTab}
                 orientation={compactFloorplan ? 'vertical' : 'horizontal'}
-                className={compactFloorplan ? 'grid grid-cols-[auto_minmax(0,1fr)] items-start gap-2' : undefined}
+                className={cn(
+                  'min-h-0 min-w-0 flex-1',
+                  compactFloorplan
+                    ? 'grid grid-rows-[minmax(0,1fr)] grid-cols-[auto_minmax(0,1fr)] items-stretch gap-2'
+                    : 'flex flex-col',
+                )}
               >
                 <TabsList
                   aria-label="Color controls"
                   className={compactFloorplan
-                    ? 'h-auto flex-col items-stretch gap-1 [&>button]:min-h-10 [&>button]:justify-start [&>button]:px-2'
+                    ? 'h-auto min-h-0 flex-col items-stretch justify-start overflow-y-auto gap-0.5 [&>button]:min-h-8 [&>button]:justify-start [&>button]:px-1.5 [&>button]:text-xs'
                     : 'mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto'}
                 >
                   <TabsTrigger value="wheel" className="shrink-0">
@@ -1006,13 +1020,19 @@ export const ColorPickerModal = () => {
                   </TabsTrigger>
                 </TabsList>
 
-                <ScrollArea className={compactFloorplan ? 'min-w-0 rounded-xl border border-border/60 p-2' : 'h-112 rounded-2xl border border-border/60 p-4'}>
+                <div
+                  className={cn(
+                    compactFloorplan
+                      ? 'rounded-xl p-2'
+                      : 'rounded-2xl p-3',
+                    'min-h-0 min-w-0 flex-1 overflow-hidden border border-border/60',
+                  )}
+                >
                   <TabsContent
                     value="wheel"
-                    className={cn('m-0 flex flex-col justify-center', compactFloorplan ? 'h-44 gap-3' : 'h-104')}
+                    className="m-0 flex h-full min-h-0 flex-col gap-3"
                   >
                     <ColorWheelTab
-                      compact={compactFloorplan}
                       color={deviceModalColor ?? black}
                       brightness={deviceModalBrightness ?? 1}
                       onChange={throttledSetDeviceColor}
@@ -1022,7 +1042,7 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="swatches"
-                    className={cn('m-0 flex flex-col justify-center', compactFloorplan ? 'min-h-44' : 'h-104')}
+                    className="m-0 flex h-full min-h-0 flex-col"
                   >
                     <SwatchesTab
                       color={deviceModalColor ?? black}
@@ -1034,7 +1054,7 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="image"
-                    className={cn('m-0 flex flex-col justify-center', compactFloorplan ? 'h-60' : 'h-104')}
+                    className="m-0 flex h-full min-h-0 flex-col overflow-y-auto"
                   >
                     <ImageTab
                       color={deviceModalColor ?? black}
@@ -1046,7 +1066,7 @@ export const ColorPickerModal = () => {
                   </TabsContent>
                   <TabsContent
                     value="sliders"
-                    className={cn('m-0 flex flex-col justify-center gap-3', compactFloorplan ? 'min-h-44' : 'h-104')}
+                    className="m-0 flex h-full min-h-0 flex-col justify-evenly gap-1 overflow-y-auto [&_input[type=range]]:min-w-0 [&_input:not([type=range])]:w-16 [&_input:not([type=range])]:shrink-0"
                   >
                     <SlidersTab
                       color={deviceModalColor ?? black}
@@ -1056,10 +1076,10 @@ export const ColorPickerModal = () => {
                       open={deviceModalOpen}
                     />
                   </TabsContent>
-                </ScrollArea>
+                </div>
               </Tabs>
             </fieldset>
-          </details>
+          </ColorSection>
         )}
       </div>
     </ResponsiveOverlay>
