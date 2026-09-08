@@ -44,8 +44,11 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [open, setOpen] = useState(false),
     [activeId, setActiveId] = useState<string>('all'),
     [filter, setFilter] = useState('all');
-  const [now, setNow] = useState(Date.now);
-  useInterval(() => setNow(Date.now()), 60000);
+  // Age readings even without a data update, but evaluate incoming samples
+  // against this render's time rather than the preceding timer tick.
+  const [, setClockTick] = useState(0);
+  useInterval(() => setClockTick((tick) => tick + 1), 60000);
+  const now = Date.now();
   const isIdle = useIdle();
   useTimeout(() => setOpen(false), open && isIdle ? 10000 : null);
   const sensorIds = getDashboardWidgetOptionStringArray(widget, 'sensorIds');
