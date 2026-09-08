@@ -75,7 +75,11 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
     sensorIds,
   });
   const resource = useTempSensorsResource(endpointPath);
-  const preview = sensors.slice(0, 5);
+  // The settings picker is the source of truth. Keep every selected sensor in
+  // the preview so a valid selection is never hidden by an arbitrary cap.
+  const preview = sensorIds.length
+    ? sensors.filter((sensor) => sensorIds.includes(sensor.device_id))
+    : sensors;
   const active = sensors.find((s) => s.device_id === activeId);
   const chosen = active
     ? [active]

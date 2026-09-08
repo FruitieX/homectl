@@ -24,6 +24,9 @@ export function useWidgetResource<T>(
     },
     refetchInterval: refreshMs,
     staleTime: refreshMs / 2,
-    retry: 1,
+    refetchOnMount: 'always',
+    refetchOnReconnect: true,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 5000),
   });
 }

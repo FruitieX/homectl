@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { useAppConfig } from '@/hooks/appConfig';
 import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
+import { useDeveloperMode } from '@/hooks/developerMode';
 import { cn } from '@/lib/cn';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
@@ -373,8 +374,33 @@ function AppearanceSettingsCard() {
               aria-label="Enable blur effects"
             />
           </div>
+          <DeveloperModeSetting />
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function DeveloperModeSetting() {
+  const [developerMode, setDeveloperMode] = useDeveloperMode();
+
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
+      <span className="space-y-1">
+        <span className="block text-sm font-medium text-foreground">
+          Developer mode
+        </span>
+        <span className="block text-xs leading-5 text-muted-foreground">
+          Show troubleshooting actions in the navigation, such as a manual
+          page refresh. This setting is stored in this browser.
+        </span>
+      </span>
+      <Switch
+        type="button"
+        checked={developerMode}
+        onCheckedChange={setDeveloperMode}
+        aria-label="Enable developer mode"
+      />
+    </div>
   );
 }

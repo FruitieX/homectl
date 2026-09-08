@@ -1,6 +1,7 @@
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Link, useLocation } from 'react-router-dom';
-import { Cog, House, Layers3, Map } from 'lucide-react';
+import { Cog, House, Layers3, Map, RefreshCw } from 'lucide-react';
+import { useDeveloperMode } from '@/hooks/developerMode';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { Button } from '@/ui/primitives/button';
 import { cn } from '@/lib/cn';
@@ -30,6 +31,7 @@ export const HomectlBottomNavigation = () => {
   const route = getRoute(pathname);
 
   const [isFullscreen] = useIsFullscreen();
+  const [developerMode] = useDeveloperMode();
 
   if (isFullscreen) {
     return null;
@@ -49,7 +51,13 @@ export const HomectlBottomNavigation = () => {
 
   return (
     <div className="z-30 shrink-0 border-t border-border/50 bg-background px-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] pt-1.5    lg:hidden">
-      <nav aria-label="Primary navigation" className="grid grid-cols-4 gap-1.5">
+      <nav
+        aria-label="Primary navigation"
+        className={cn(
+          'grid gap-1.5',
+          developerMode ? 'grid-cols-5' : 'grid-cols-4',
+        )}
+      >
         {items.map((item) => {
           const Icon = item.icon;
           const active = route === item.route;
@@ -73,6 +81,17 @@ export const HomectlBottomNavigation = () => {
             </Button>
           );
         })}
+        {developerMode ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="relative h-14 min-w-0 flex-col gap-1.5 rounded-2xl px-1 py-1.5 text-[0.68rem] font-semibold leading-tight"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="size-4" />
+            <span className="max-w-full truncate leading-tight">Refresh</span>
+          </Button>
+        ) : null}
       </nav>
     </div>
   );
@@ -82,6 +101,7 @@ export const HomectlNavigationRail = () => {
   const pathname = useLocation().pathname;
   const route = getRoute(pathname);
   const [isFullscreen] = useIsFullscreen();
+  const [developerMode] = useDeveloperMode();
 
   if (isFullscreen) return null;
 
@@ -128,6 +148,17 @@ export const HomectlNavigationRail = () => {
             </Button>
           );
         })}
+        {developerMode ? (
+          <Button
+            type="button"
+            variant="ghost"
+            className="relative mt-auto h-[4.6rem] w-full flex-col gap-2 rounded-[1.35rem] px-1 text-[0.68rem] font-semibold text-muted-foreground hover:bg-muted/50"
+            onClick={() => window.location.reload()}
+          >
+            <RefreshCw className="!size-5" strokeWidth={1.8} />
+            <span>Refresh</span>
+          </Button>
+        ) : null}
       </nav>
     </aside>
   );
