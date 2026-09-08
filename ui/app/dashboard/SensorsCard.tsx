@@ -107,7 +107,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   };
   return (
     <>
-      <WidgetCard className="group relative p-[var(--widget-padding,1rem)]">
+      <WidgetCard interactive className="group relative p-[var(--widget-padding,1rem)]">
         <Button
           variant="ghost"
           aria-label="Open all climate sensors"

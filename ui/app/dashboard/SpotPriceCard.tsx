@@ -58,7 +58,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard className="group col-span-4">
+      <WidgetCard interactive className="group col-span-4">
         <div className="relative h-full w-full rounded-[inherit] text-left">
           <CardContent className="relative flex w-full flex-col p-[var(--widget-padding,1rem)]">
             <Button

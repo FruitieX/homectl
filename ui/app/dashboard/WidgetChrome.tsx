@@ -4,11 +4,16 @@ import { ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Card } from '@/ui/primitives/card';
 
-export function WidgetCard({ className, ...props }: ComponentProps<'div'>) {
+export function WidgetCard({
+  className,
+  interactive = false,
+  ...props
+}: ComponentProps<'div'> & { interactive?: boolean }) {
   return (
     <Card
       className={cn(
         'relative overflow-hidden rounded-[1.5rem] border-border/55 bg-gradient-to-br from-card via-card to-muted/30 shadow-[0_1px_0_hsl(var(--foreground)/0.03),0_12px_32px_-24px_hsl(var(--foreground)/0.35)]',
+        interactive && 'transition-transform active:scale-[0.98]',
         className,
       )}
       {...props}
