@@ -115,7 +115,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           className={
             getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
               ? spacing === 'compact'
-                ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-5'
+                ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
                 : 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
               : 'flex gap-2 overflow-x-auto pb-1'
           }
@@ -128,12 +128,12 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
                 type="button"
                 key={sensor.device_id}
                 onClick={() => show(sensor.device_id)}
-                className="min-w-0 rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)] text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="min-w-28 rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)] text-left transition hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="mb-2 truncate text-xs font-medium">
                   {sensor.device_name}
                 </div>
-                <div className="flex items-center gap-1.5 text-base tabular-nums">
+                <div className="flex items-center gap-1.5 text-sm tabular-nums">
                   <Thermometer className="size-3.5 shrink-0 text-muted-foreground" />
                   {!isOffline(sensor.latest_temp_time, 15, now) &&
                   sensor.latest_temp !== undefined
@@ -183,7 +183,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
         className="max-w-5xl"
       >
         <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 p-1">
             <Select value={activeId} onValueChange={setActiveId}>
               <SelectTrigger aria-label="Sensor" className="w-52">
                 <SelectValue />

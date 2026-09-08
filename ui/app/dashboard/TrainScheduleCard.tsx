@@ -8,6 +8,7 @@ import {
   type DashboardWidget,
   buildDashboardWidgetProxyPath,
   getDashboardWidgetOptionNumber,
+  getDashboardWidgetOptionBoolean,
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
@@ -51,6 +52,19 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   );
   const walkMinutes = getDashboardWidgetOptionNumber(widget, 'walkMinutes', 12);
   const resultLimit = getDashboardWidgetOptionNumber(widget, 'limit', 5);
+  const displayLimit = Math.max(
+    1,
+    Math.min(20, getDashboardWidgetOptionNumber(widget, 'displayLimit', 3)),
+  );
+  const scrollMore = getDashboardWidgetOptionBoolean(
+    widget,
+    'scrollMore',
+    false,
+  );
+  const requestedLimit = Math.max(
+    resultLimit,
+    displayLimit + (scrollMore ? 5 : 0),
+  );
   const destination = getDashboardWidgetOptionString(widget, 'destination', '');
   const directionId = getDashboardWidgetOptionString(widget, 'directionId', '');
   const hasProxyOptions =
@@ -65,7 +79,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
         url: trainApiUrl,
         station_id: stationId,
         walk_minutes: walkMinutes,
-        limit: resultLimit,
+        limit: requestedLimit,
         destination,
         direction_id: directionId,
       })
@@ -93,59 +107,57 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   const departureRows = (rows: Train[], compact = false) => (
     <div className="divide-y divide-border/45">
-      {(compact ? rows.slice(0, 3) : rows).map((train, index) => {
-        const remaining =
-          train.leaveAt === undefined
-            ? train.minUntilHomeDeparture
-            : Math.floor((train.leaveAt * 1000 - now) / 60000);
-        const cancelled = train.realtimeState === 'CANCELED';
-        return (
-          <div
-            key={`${train.name}-${train.departureFormatted}-${index}`}
-            className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
-          >
-            <div className="min-w-0">
-              <div className="truncate font-semibold">{train.name}</div>
-              <div className="truncate text-sm">
-                {train.destination || 'Destination unavailable'}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                Departure {train.departureFormatted}
-              </div>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              {!train.realtime && !cancelled ? 'Scheduled' : ''}
-            </span>
+      {(compact && !scrollMore ? rows.slice(0, displayLimit) : rows).map(
+        (train, index) => {
+          const remaining =
+            train.leaveAt === undefined
+              ? train.minUntilHomeDeparture
+              : Math.floor((train.leaveAt * 1000 - now) / 60000);
+          const cancelled = train.realtimeState === 'CANCELED';
+          return (
             <div
-              className={clsx(
-                'min-w-16 rounded-xl px-3 py-2 text-right',
-                remaining <= 5 && !cancelled
-                  ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
-                  : 'bg-muted/60',
-              )}
+              key={`${train.name}-${train.departureFormatted}-${index}`}
+              className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
             >
-              <div className="text-lg font-semibold leading-none tabular-nums">
-                {cancelled
-                  ? 'Cancelled'
-                  : remaining < 0
-                    ? 'Too late'
+              <div className="min-w-0">
+                <div className="truncate font-semibold">{train.name}</div>
+                <div className="truncate text-sm">
+                  {train.destination || 'Destination unavailable'}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Departure {train.departureFormatted}
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {!train.realtime && !cancelled ? 'Scheduled' : ''}
+              </span>
+              <div
+                className={clsx(
+                  'min-w-16 rounded-xl px-3 py-2 text-right',
+                  remaining <= 5 && !cancelled
+                    ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
+                    : 'bg-muted/60',
+                )}
+              >
+                <div className="text-lg font-semibold leading-none tabular-nums">
+                  {cancelled
+                    ? 'Cancelled'
                     : remaining === 0
                       ? 'Now'
                       : remaining}
-              </div>
-              <div className="mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
-                {cancelled
-                  ? 'Do not board'
-                  : remaining < 0
-                    ? 'for the walk'
+                </div>
+                <div className="mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
+                  {cancelled
+                    ? 'departure cancelled'
                     : remaining === 0
                       ? 'Leave home'
                       : 'min to leave'}
+                </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        },
+      )}
     </div>
   );
 
@@ -163,7 +175,16 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               label="Next departures"
               detail
             />
-            <div className="mt-2">{departureRows(trains, true)}</div>
+            <div
+              className="mt-2 overflow-y-auto overscroll-contain"
+              style={
+                scrollMore
+                  ? { maxHeight: `${displayLimit * 5.25}rem` }
+                  : undefined
+              }
+            >
+              {departureRows(trains, true)}
+            </div>
             {error && (
               <p role="status" className="text-sm text-muted-foreground">
                 Departures could not be refreshed

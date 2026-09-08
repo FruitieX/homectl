@@ -691,6 +691,18 @@ function WidgetOptionFields({
           max={20}
           onChange={(value) => onChange('limit', value)}
         />
+        <OptionNumberField
+          label="Departures visible in card"
+          value={getNumber('displayLimit', 3)}
+          min={1}
+          max={20}
+          onChange={(value) => onChange('displayLimit', value)}
+        />
+        <OptionCheckboxField
+          label="Scroll for additional departures"
+          checked={getBoolean('scrollMore', false)}
+          onChange={(value) => onChange('scrollMore', value)}
+        />
       </div>
     );
   }
