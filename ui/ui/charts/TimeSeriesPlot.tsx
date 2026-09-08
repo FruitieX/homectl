@@ -56,9 +56,16 @@ export function TimeSeriesPlot({
     () =>
       series.map((s) => ({
         ...s,
-        points: s.points
-          .filter((p) => Number.isFinite(p.time) && Number.isFinite(p.value))
-          .sort((a, b) => a.time - b.time),
+        points: [
+          ...new Map(
+            s.points
+              .filter(
+                (p) => Number.isFinite(p.time) && Number.isFinite(p.value),
+              )
+              .sort((a, b) => a.time - b.time)
+              .map((point) => [point.time, point]),
+          ).values(),
+        ],
       })),
     [series],
   );
@@ -102,6 +109,23 @@ export function TimeSeriesPlot({
       ? null
       : Math.max(0, Math.min(active, times.length - 1));
   const selectedTime = selectedIndex === null ? null : times[selectedIndex];
+  const selectedBar =
+    selectedTime === null
+      ? undefined
+      : visible
+          .filter((series) => series.bars)
+          .flatMap((series) => series.points)
+          .find(
+            (point) =>
+              point.time <= selectedTime &&
+              (point.end === undefined || point.end > selectedTime),
+          );
+  const selectedX =
+    selectedBar === undefined
+      ? selectedTime === null
+        ? undefined
+        : x(selectedTime)
+      : x((selectedBar.time + (selectedBar.end ?? selectedBar.time)) / 2);
   const nearest = (s: (typeof clean)[number]) =>
     selectedTime === null
       ? undefined
@@ -362,10 +386,10 @@ export function TimeSeriesPlot({
               opacity={0.55}
             />
           )}
-          {selectedTime !== null && (
+          {selectedX !== undefined && (
             <line
-              x1={x(selectedTime)}
-              x2={x(selectedTime)}
+              x1={selectedX}
+              x2={selectedX}
               y1={top}
               y2={top + plotHeight}
               className="stroke-foreground"
