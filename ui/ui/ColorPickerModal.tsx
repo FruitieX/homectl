@@ -1,9 +1,12 @@
-import { DeviceHealth } from '@/ui/DeviceHealth';
+import { DeviceColorMode } from '@/ui/DeviceColorMode';
 import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
-import { DeviceQuickControls } from '@/ui/DeviceControls';
+import {
+  useLiveDeviceControls,
+  DeviceQuickControls,
+} from '@/ui/DeviceControls';
 import { useConnectionStatus } from '@/hooks/websocket';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
@@ -885,6 +888,24 @@ export const ColorPickerModal = () => {
   }, [setDeviceModalOpen]);
 
   const [tab, setTab] = useState('wheel');
+  const setLiveState = useLiveDeviceControls();
+  const temperatureDevices = colorDevices.filter(
+    (d) => 'Controllable' in d.data && d.data.Controllable.capabilities.ct,
+  );
+  const hasChromaticColor = colorDevices.some(
+    (d) =>
+      'Controllable' in d.data &&
+      (d.data.Controllable.capabilities.hs ||
+        d.data.Controllable.capabilities.xy ||
+        d.data.Controllable.capabilities.rgb),
+  );
+  const colorTab =
+    !hasChromaticColor ||
+    (tab === 'temperature' && temperatureDevices.length === 0)
+      ? hasChromaticColor
+        ? 'wheel'
+        : 'temperature'
+      : tab;
   const [floorplanSection, setFloorplanSection] = useState('controls');
   const inFloorplan = deviceModalPresentation === 'floorplan';
   const compactFloorplan = useMediaQuery('(max-width: 767px)') && inFloorplan;
@@ -910,7 +931,7 @@ export const ColorPickerModal = () => {
       title={
         <span className="inline-flex min-w-0 items-center gap-2">
           {deviceModalTitle ?? 'Device controls'}
-          {selected.length === 1 && <DeviceHealth device={selected[0]} />}
+          <DeviceReportStatus devices={selected} />
         </span>
       }
       description={
@@ -984,7 +1005,6 @@ export const ColorPickerModal = () => {
               </select>
             </label>
           )}
-        <DeviceReportStatus devices={selected} />
         {inFloorplan && (
           <Tabs value={section} onValueChange={setFloorplanSection}>
             <TabsList className="grid w-full grid-cols-3">
@@ -1037,7 +1057,7 @@ export const ColorPickerModal = () => {
               )}
             >
               <Tabs
-                value={tab}
+                value={colorTab}
                 onValueChange={setTab}
                 orientation={compactFloorplan ? 'vertical' : 'horizontal'}
                 className={cn(
@@ -1055,18 +1075,27 @@ export const ColorPickerModal = () => {
                       : 'mb-3 min-h-10 flex-nowrap! justify-start overflow-x-auto'
                   }
                 >
-                  <TabsTrigger value="wheel" className="shrink-0">
-                    Wheel
-                  </TabsTrigger>
-                  <TabsTrigger value="swatches" className="shrink-0">
-                    Swatches
-                  </TabsTrigger>
-                  <TabsTrigger value="image" className="shrink-0">
-                    Image
-                  </TabsTrigger>
-                  <TabsTrigger value="sliders" className="shrink-0">
-                    Sliders
-                  </TabsTrigger>
+                  {hasChromaticColor && (
+                    <>
+                      <TabsTrigger value="wheel" className="shrink-0">
+                        Wheel
+                      </TabsTrigger>
+                      <TabsTrigger value="swatches" className="shrink-0">
+                        Swatches
+                      </TabsTrigger>
+                      <TabsTrigger value="image" className="shrink-0">
+                        Image
+                      </TabsTrigger>
+                      <TabsTrigger value="sliders" className="shrink-0">
+                        Sliders
+                      </TabsTrigger>
+                    </>
+                  )}
+                  {temperatureDevices.length > 0 && (
+                    <TabsTrigger value="temperature" className="shrink-0">
+                      Temperature
+                    </TabsTrigger>
+                  )}
                 </TabsList>
 
                 <div
@@ -1075,6 +1104,20 @@ export const ColorPickerModal = () => {
                     'min-h-0 min-w-0 flex-1 overflow-hidden border border-border/60',
                   )}
                 >
+                  <TabsContent
+                    value="temperature"
+                    className="m-0 flex h-full min-h-0 flex-col overflow-y-auto"
+                  >
+                    <div className="my-auto">
+                      <DeviceColorMode
+                        key={deviceModalState.join(',')}
+                        devices={temperatureDevices}
+                        connected={connected}
+                        onChange={setLiveState}
+                        temperatureOnly
+                      />
+                    </div>
+                  </TabsContent>
                   <TabsContent
                     value="wheel"
                     className="m-0 flex h-full min-h-0 flex-col gap-3"

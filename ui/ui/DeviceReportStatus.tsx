@@ -3,6 +3,11 @@ import {
   reachabilityLabels,
 } from '@/lib/deviceReachability';
 import { DeviceEnabledToggle } from '@/ui/DeviceEnabledToggle';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/ui/primitives/popover';
 import { DeviceHealth } from '@/ui/DeviceHealth';
 import { useEffect, useState } from 'react';
 import type { Device } from '@/bindings/Device';
@@ -20,9 +25,12 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
     const report = data.last_report;
     const health = deviceReachability(device, now);
     const label = reachabilityLabels[health];
-    const age = report
-      ? Math.max(0, Math.floor((now - report.received_at_ms) / 1000))
-      : null;
+    const lastHeard = Math.max(
+      report && !report.retained ? report.received_at_ms : 0,
+      data.availability?.observed_at_ms ?? 0,
+    );
+    const age =
+      lastHeard > 0 ? Math.max(0, Math.floor((now - lastHeard) / 1000)) : null;
     const ageLabel =
       age === null
         ? ''
@@ -38,6 +46,7 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
     return [
       {
         device,
+        health,
         differs:
           health !== 'disabled' &&
           report &&
@@ -49,37 +58,69 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
         label,
         ageLabel,
         value,
+        cached: report?.retained,
       },
     ];
   });
   if (!reports.length) return null;
+  const indicator =
+    reports.find(
+      (r) =>
+        r.health === 'offline' ||
+        r.health === 'stale' ||
+        r.health === 'unknown',
+    ) ??
+    reports.find((r) => r.health === 'cached') ??
+    reports.find((r) => r.health === 'disabled') ??
+    reports[0];
   return (
-    <details className="min-w-0 text-xs text-muted-foreground">
-      <summary className="flex cursor-pointer items-center gap-2 py-1">
-        <DeviceHealth device={reports[0].device} />
-        <span>{reports.length === 1 ? reports[0].label : `${reports.filter((r) => r.label === 'Recently reachable').length}/${reports.length} reachable`}</span>
-        {reports.length === 1 && reports[0].ageLabel && <span>· {reports[0].ageLabel}</span>}
-      </summary>
-      <div className="mt-1 space-y-1 rounded-lg border border-border/60 bg-muted/20 p-2">
-        {reports.map((report) => (
-          <div
-            key={report.key}
-            className="flex flex-wrap justify-between gap-x-3 gap-y-1"
-          >
-            <span className="min-w-0 break-words">
-              {reports.length > 1 ? `${report.name}: ` : ''}
-              {report.value || report.label}
-            </span>
-            <span>
-              {report.differs
-                ? 'Reported state differs from requested'
-                : report.label}{' '}
-              {report.ageLabel && `· ${report.ageLabel}`}
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          data-vaul-no-drag
+          aria-label="Device reachability details"
+          className="inline-flex size-9 shrink-0 items-center justify-center rounded-full hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <DeviceHealth device={indicator.device} />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        data-vaul-no-drag
+        align="end"
+        className="max-h-[min(60dvh,28rem)] w-80 max-w-[calc(100vw-2rem)] overflow-y-auto p-3 text-sm font-normal"
+      >
+        <div className="space-y-3">
+          {reports.map((report) => (
+            <div
+              key={report.key}
+              className="space-y-2 border-b border-border/60 pb-3 last:border-0 last:pb-0"
+            >
+              {reports.length > 1 && (
+                <div className="break-words font-medium">{report.name}</div>
+              )}
+              <div className="flex items-center gap-2">
+                <DeviceHealth device={report.device} />
+                <span>{report.label}</span>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {report.ageLabel}
+                </span>
+              </div>
+              {report.value && (
+                <div className="text-xs text-muted-foreground">
+                  {report.cached ? 'Saved state' : 'Reported'}: {report.value}
+                </div>
+              )}
+              {report.differs && (
+                <div className="text-xs text-amber-600 dark:text-amber-400">
+                  Reported state differs from requested
+                </div>
+              )}
               <DeviceEnabledToggle device={report.device} />
-            </span>
-          </div>
-        ))}
-      </div>
-    </details>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 }

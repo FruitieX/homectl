@@ -210,6 +210,14 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         } => {
             if let Some(mut device) = state.devices.get_device(device_key).cloned() {
                 if let crate::types::device::DeviceData::Controllable(data) = &mut device.data {
+                    if *observed_at_ms == 0
+                        && data
+                            .availability
+                            .as_ref()
+                            .is_some_and(|value| value.observed_at_ms > 0)
+                    {
+                        return Ok(outcome);
+                    }
                     data.availability = Some(crate::types::device::DeviceAvailability {
                         online: *online,
                         observed_at_ms: *observed_at_ms,

@@ -478,6 +478,28 @@ impl Devices {
 
         let mut normalized = device.clone();
         if let DeviceData::Controllable(ref mut data) = normalized.data {
+            if let Some(Device {
+                data: DeviceData::Controllable(previous),
+                ..
+            }) = self.get_device(&device_key)
+            {
+                // Commands and discovery replays must not erase live evidence.
+                if data.last_report.is_none()
+                    || (data
+                        .last_report
+                        .as_ref()
+                        .is_some_and(|report| report.retained)
+                        && previous
+                            .last_report
+                            .as_ref()
+                            .is_some_and(|report| !report.retained))
+                {
+                    data.last_report.clone_from(&previous.last_report);
+                }
+                if data.availability.is_none() {
+                    data.availability.clone_from(&previous.availability);
+                }
+            }
             let supported = data.state.brightness.is_some()
                 || data.capabilities.xy
                 || data.capabilities.hs
@@ -585,7 +607,18 @@ impl Devices {
         if let (DeviceData::Controllable(current), DeviceData::Controllable(report)) =
             (&mut device.data, &incoming.data)
         {
-            current.last_report.clone_from(&report.last_report);
+            if report.last_report.is_some()
+                && (report
+                    .last_report
+                    .as_ref()
+                    .is_some_and(|report| !report.retained)
+                    || !current
+                        .last_report
+                        .as_ref()
+                        .is_some_and(|report| !report.retained))
+            {
+                current.last_report.clone_from(&report.last_report);
+            }
             current.capabilities.clone_from(&report.capabilities);
             current.refresh_report_match();
         }
@@ -1099,6 +1132,48 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered_keys, vec!["mqtt/near", "mqtt/far", "mqtt/missing"]);
+    }
+
+    #[tokio::test]
+    async fn cached_replays_preserve_live_evidence_even_when_powered_off() {
+        for managed in [ManageKind::Full, ManageKind::Unmanaged] {
+            let (mut devices, _events) = test_devices();
+            let mut current = managed_controllable_device("cached-test", "Lamp");
+            if let DeviceData::Controllable(data) = &mut current.data {
+                data.managed = managed;
+                data.state.power = false;
+                data.availability = Some(crate::types::device::DeviceAvailability {
+                    online: true,
+                    observed_at_ms: 1500,
+                });
+                data.last_report = Some(Box::new(crate::types::device::DeviceReport {
+                    state: data.state.clone(),
+                    received_at_ms: 2000,
+                    retained: false,
+                    matches_requested: true,
+                }));
+            }
+            devices.set_state(&current, true, true);
+            let mut replay = current.clone();
+            if let DeviceData::Controllable(data) = &mut replay.data {
+                data.availability = None;
+                let report = data.last_report.as_mut().unwrap();
+                report.retained = true;
+                report.received_at_ms = 3000;
+            }
+            devices
+                .handle_external_state_update(&replay, &Scenes::default())
+                .await
+                .unwrap();
+            let DeviceData::Controllable(data) =
+                &devices.get_device(&current.get_device_key()).unwrap().data
+            else {
+                panic!()
+            };
+            assert_eq!(data.last_report.as_ref().unwrap().received_at_ms, 2000);
+            assert!(!data.last_report.as_ref().unwrap().retained);
+            assert_eq!(data.availability.as_ref().unwrap().observed_at_ms, 1500);
+        }
     }
 
     #[tokio::test]

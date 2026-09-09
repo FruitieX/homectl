@@ -23,6 +23,7 @@ export interface FloorplanScenePoint {
 }
 
 export interface FloorplanSceneLight {
+  label?: string;
   health?: ReturnType<typeof deviceReachability>;
   deviceKey: string;
   x: number;
@@ -52,6 +53,7 @@ export interface FloorplanSceneGroupMask {
 }
 
 export interface FloorplanScene {
+  labelMode?: FloorplanGrid['labelMode'];
   layoutKey: string;
   width: number;
   height: number;
@@ -490,12 +492,13 @@ export function buildFloorplanScene({
       const brightness = override?.brightness ?? resolved?.brightness ?? 0;
       const radius = (100 + 200 * brightness) * deviceScale;
       lights.push({
+        label: displayNames?.[deviceKey] ?? device.name,
         health: deviceReachability(device),
         deviceKey,
         x: position.x,
         y: position.y,
         radius,
-        intensity: brightness,
+        intensity: deviceReachability(device) === 'disabled' ? 0 : brightness,
         power: override?.power ?? resolved?.power ?? false,
         color: colorToRgbTuple(device, override),
         visibilityPolygon: getCachedVisibilityPolygon(
@@ -536,6 +539,7 @@ export function buildFloorplanScene({
 
   return {
     layoutKey: staticScene.key,
+    labelMode: grid?.labelMode ?? 'sensors',
     width: staticScene.width,
     height: staticScene.height,
     ...(image ? { backgroundImage: image } : {}),

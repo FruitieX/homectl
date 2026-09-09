@@ -61,7 +61,9 @@ export const Viewport = () => {
   const [floorplanMode, setFloorplanMode] = useState<FloorplanMode>('all');
   const [selecting, setSelecting] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
-  const [showLabels, setShowLabels] = useState(true);
+  const [labelMode, setLabelMode] = useState<
+    'default' | 'none' | 'sensors' | 'lights' | 'all'
+  >('default');
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
@@ -118,6 +120,7 @@ export const Viewport = () => {
     groups,
     displayNames: deviceDisplayNameMap,
   });
+  if (labelMode !== 'default') floorplanScene.labelMode = labelMode;
   const activeSensor = activeSensorKey
     ? (devicesState?.[activeSensorKey] ?? null)
     : null;
@@ -215,12 +218,20 @@ export const Viewport = () => {
               </PopoverTrigger>
               <PopoverContent align="end" className="space-y-4">
                 <label className="flex items-center justify-between gap-3 text-sm">
-                  Sensor labels
-                  <input
-                    type="checkbox"
-                    checked={showLabels}
-                    onChange={(event) => setShowLabels(event.target.checked)}
-                  />
+                  Device labels
+                  <select
+                    className="h-10 rounded-md border border-input bg-background px-2"
+                    value={labelMode}
+                    onChange={(event) =>
+                      setLabelMode(event.target.value as typeof labelMode)
+                    }
+                  >
+                    <option value="default">Floorplan default</option>
+                    <option value="none">Hidden</option>
+                    <option value="sensors">Sensors</option>
+                    <option value="lights">Lights</option>
+                    <option value="all">All devices</option>
+                  </select>
                 </label>
                 <label className="block space-y-2 text-sm">
                   <span>Open device or group</span>
@@ -336,7 +347,7 @@ export const Viewport = () => {
             key={effectiveSelectedFloorplanId ?? 'default'}
             scene={floorplanScene}
             fitOnResize
-            renderLabels={showLabels}
+            renderLabels
             selectedDeviceKeys={selectedDevices}
             onDevicePress={(key) =>
               selecting ? toggleSelectedDevice(key) : openDevice([key])

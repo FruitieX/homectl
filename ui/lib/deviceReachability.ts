@@ -5,6 +5,7 @@ export type DeviceReachability =
   | 'offline'
   | 'stale'
   | 'unknown'
+  | 'cached'
   | 'disabled';
 const RECENT_MS = 10 * 60 * 1000;
 
@@ -31,13 +32,14 @@ export function deviceReachability(
     availability?.online ? availability.observed_at_ms : 0,
   );
   if (lastHeard > 0 && now - lastHeard <= RECENT_MS) return 'online';
-  return lastHeard > 0 ? 'stale' : 'unknown';
+  return lastHeard > 0 ? 'stale' : data.last_report ? 'cached' : 'unknown';
 }
 
 export const reachabilityLabels: Record<DeviceReachability, string> = {
   online: 'Recently reachable',
-  offline: 'Unreachable',
-  stale: 'No recent response',
-  unknown: 'Unreachable',
+  offline: 'Bridge reports offline',
+  stale: 'Last response over 10m ago',
+  unknown: 'Waiting for first report',
+  cached: 'Last known state only',
   disabled: 'Disabled',
 };

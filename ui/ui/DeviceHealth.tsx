@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CirclePause } from 'lucide-react';
+import { AlertTriangle, CirclePause, Clock3 } from 'lucide-react';
 import type { Device } from '@/bindings/Device';
 import {
   deviceReachability,
@@ -21,12 +21,12 @@ export function DeviceHealth({ device }: { device: Device }) {
     >
       {status === 'disabled' ? (
         <CirclePause className="size-4 text-muted-foreground" />
+      ) : status === 'cached' ? (
+        <Clock3 className="size-4 text-muted-foreground" />
       ) : status === 'offline' || status === 'stale' || status === 'unknown' ? (
         <AlertTriangle className="size-4 text-amber-500" />
       ) : (
-        <span
-          className="size-2 rounded-full bg-emerald-500"
-        />
+        <span className="size-2 rounded-full bg-emerald-500" />
       )}
     </span>
   );

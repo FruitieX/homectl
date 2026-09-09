@@ -123,10 +123,6 @@ export function DeviceQuickControls({
   const [pendingBrightness, setPendingBrightness] = useState<number | null>(
     null,
   );
-  const [temperatureDraft, setTemperatureDraft] = useState<number | null>(null);
-  const [pendingTemperature, setPendingTemperature] = useState<number | null>(
-    null,
-  );
   const scenes = useScenesState();
   const ws = useWebsocket();
   const previousScenes = useAtomValue(previousDeviceScenesAtom);
@@ -138,62 +134,6 @@ export function DeviceQuickControls({
   );
   const readonlyCount = allControllable.length - controllable.length;
   const dimmable = controllable.filter(supportsDeviceBrightness);
-  const temperatureDevices = controllable.filter(
-    (device) =>
-      'Controllable' in device.data &&
-      device.data.Controllable.capabilities.ct !== null,
-  );
-  const temperatureRanges = temperatureDevices.flatMap((device) =>
-    'Controllable' in device.data && device.data.Controllable.capabilities.ct
-      ? [device.data.Controllable.capabilities.ct]
-      : [],
-  );
-  const minTemperature = Math.max(
-    ...temperatureRanges.map((range) => range.start),
-  );
-  const maxTemperature = Math.min(
-    ...temperatureRanges.map((range) => range.end),
-  );
-  const temperatures = temperatureDevices.map((device) => {
-    const color =
-      'Controllable' in device.data
-        ? device.data.Controllable.state.color
-        : null;
-    return color && 'ct' in color ? color.ct : null;
-  });
-  const temperatureMixed = temperatures.some(
-    (value) => value !== temperatures[0],
-  );
-  const temperature =
-    temperatureDraft ??
-    temperatures.find((value) => value !== null) ??
-    minTemperature;
-  const temperatureConfirmed =
-    pendingTemperature !== null &&
-    temperatures.every(
-      (value) => value !== null && Math.abs(value - pendingTemperature) <= 25,
-    );
-  useEffect(() => {
-    if (pendingTemperature === null) return;
-    if (temperatureConfirmed || !connected) {
-      setTemperatureDraft(null);
-      setPendingTemperature(null);
-      return;
-    }
-    const timeout = setTimeout(() => {
-      setTemperatureDraft(null);
-      setPendingTemperature(null);
-    }, 10000);
-    return () => clearTimeout(timeout);
-  }, [pendingTemperature, temperatureConfirmed, connected]);
-  const applyTemperature = (value: number) => {
-    const clamped = Math.max(minTemperature, Math.min(maxTemperature, value));
-    setTemperatureDraft(clamped);
-    setPendingTemperature(clamped);
-    temperatureDevices.forEach((device) =>
-      setState(device, true, undefined, { ct: clamped }),
-    );
-  };
   const restorable = controllable.filter((device) => {
     const id = previousScenes[getDeviceKey(device)];
     return (
@@ -226,8 +166,6 @@ export function DeviceQuickControls({
       );
       setDraft(null);
       setPendingBrightness(null);
-      setTemperatureDraft(null);
-      setPendingTemperature(null);
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : 'Could not restore scenes.',
@@ -273,29 +211,17 @@ export function DeviceQuickControls({
     ) : null;
   const brightness = draft ?? Math.round((values[0] ?? 0) * 100);
   return (
-    <div
-      className={
-        compact
-          ? 'space-y-2'
-          : 'space-y-4 rounded-xl border border-border bg-card p-4'
-      }
-    >
-      <DeviceColorMode
-        devices={devices}
-        connected={connected}
-        onChange={setState}
-      />
+    <div className={compact ? 'space-y-2' : 'space-y-3'}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-muted-foreground">
           {controllable.length === 1
-            ? onCount
-              ? 'On'
-              : 'Off'
+            ? 'Power'
             : `${onCount} of ${controllable.length} on`}
         </span>
         <div className="flex gap-2">
           <Button
-            variant="secondary"
+            variant={onCount === controllable.length ? 'secondary' : 'outline'}
+            aria-pressed={onCount === controllable.length}
             disabled={!connected}
             onClick={() =>
               controllable.forEach((device) => setState(device, true))
@@ -304,7 +230,8 @@ export function DeviceQuickControls({
             On
           </Button>
           <Button
-            variant="outline"
+            variant={onCount === 0 ? 'secondary' : 'outline'}
+            aria-pressed={onCount === 0}
             disabled={!connected}
             onClick={() =>
               controllable.forEach((device) => setState(device, false))
@@ -386,65 +313,13 @@ export function DeviceQuickControls({
           )}
         </div>
       )}
-      {!compact &&
-        temperatureDevices.length > 0 &&
-        minTemperature <= maxTemperature && (
-          <div>
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span>Color temperature</span>
-              <span className="tabular-nums text-muted-foreground">
-                {temperatureDraft === null && temperatureMixed
-                  ? 'Mixed'
-                  : temperatureDraft === null &&
-                      temperatures.every((value) => value === null)
-                    ? 'Color mode'
-                    : `${Math.round(temperature)} K`}
-              </span>
-            </div>
-            <Slider
-              aria-label="Color temperature"
-              className="min-h-11 [&>span:first-child]:bg-linear-to-r [&>span:first-child]:from-amber-300 [&>span:first-child]:via-stone-100 [&>span:first-child]:to-blue-200 [&>span:first-child>span]:bg-transparent"
-              min={minTemperature}
-              max={maxTemperature}
-              step={1}
-              value={[temperature]}
-              disabled={!connected || minTemperature === maxTemperature}
-              onValueChange={([value]) => {
-                setPendingTemperature(null);
-                setTemperatureDraft(value);
-              }}
-              onValueCommit={([value]) => applyTemperature(value)}
-            />
-            <div className="flex flex-wrap gap-2">
-              {[
-                { name: 'Warm', value: 2700 },
-                { name: 'Neutral', value: 4000 },
-                { name: 'Cool', value: 6500 },
-              ]
-                .filter(
-                  ({ value }) =>
-                    value >= minTemperature && value <= maxTemperature,
-                )
-                .map(({ name, value }) => (
-                  <Button
-                    key={value}
-                    variant="outline"
-                    className="flex-1"
-                    disabled={!connected}
-                    onClick={() => applyTemperature(value)}
-                  >
-                    {name}
-                  </Button>
-                ))}
-            </div>
-            {temperatureDevices.length !== controllable.length && (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Applies to {temperatureDevices.length} lights with temperature
-                control.
-              </p>
-            )}
-          </div>
-        )}
+      {!compact && (
+        <DeviceColorMode
+          devices={devices}
+          connected={connected}
+          onChange={setState}
+        />
+      )}
       {!compact && restorable.length > 0 && (
         <Button
           variant="outline"

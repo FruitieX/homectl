@@ -64,6 +64,7 @@ interface AvailableFloorplanDevice {
 }
 
 export interface FloorplanGrid {
+  labelMode?: 'none' | 'sensors' | 'lights' | 'all';
   width: number;
   height: number;
   tiles: TileType[][];
@@ -1575,6 +1576,24 @@ export function FloorplanGridEditor({
         max={maxFloorplanDeviceScale}
         onChange={updateDeviceScale}
       />
+      <label className="flex items-center justify-between gap-3 text-sm">
+        Device labels
+        <select
+          className="h-10 rounded-md border border-input bg-background px-3"
+          value={grid.labelMode ?? 'sensors'}
+          onChange={(event) =>
+            onChange({
+              ...grid,
+              labelMode: event.target.value as FloorplanGrid['labelMode'],
+            })
+          }
+        >
+          <option value="none">Hidden</option>
+          <option value="sensors">Sensors</option>
+          <option value="lights">Lights</option>
+          <option value="all">All devices</option>
+        </select>
+      </label>
 
       {backgroundImageUrl && (
         <FloorplanBackgroundControls
@@ -2083,6 +2102,11 @@ export function deserializeGrid(json: string): FloorplanGrid | null {
       deviceScale,
       devices,
       groups: normalizeGroupMasks(parsed.groups, width, height),
+      labelMode: ['none', 'sensors', 'lights', 'all'].includes(
+        parsed.labelMode ?? '',
+      )
+        ? parsed.labelMode
+        : 'sensors',
     };
   } catch {
     return null;

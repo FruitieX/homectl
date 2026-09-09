@@ -49,7 +49,10 @@ async fn get_devices_impl(
         .devices
         .0
         .values()
-        .map(|device| device.color_to_mode(query.color_mode.clone().unwrap_or(ColorMode::Hs), true))
+        .map(|device| match &query.color_mode {
+            Some(mode) => device.color_to_mode(mode.clone(), true),
+            None => device.clone(),
+        })
         .collect::<Vec<Device>>();
 
     let response = DevicesResponse {

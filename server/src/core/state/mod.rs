@@ -5,7 +5,6 @@ use crate::db::config_queries::{
     SceneRow, WidgetSettingRow,
 };
 use crate::types::{
-    color::ColorMode,
     device::{DeviceKey, DevicesState},
     event::TxEventChannel,
     group::FlattenedGroupsConfig,
@@ -915,6 +914,7 @@ enum WebSocketPatchResponseRef<'a> {
 /// Build a `StateUpdate` from the currently published runtime snapshot and
 /// broadcast it to the given WebSocket peers. If `user_id` is omitted, the
 /// message is broadcast to all connected peers.
+// Preserve native color modes; display conversion belongs in the client.
 pub async fn send_state_ws_from_snapshot(
     snapshot: &SnapshotHandle,
     ws: &WebSockets,
@@ -930,12 +930,7 @@ pub async fn send_state_ws_from_snapshot(
         .devices
         .0
         .values()
-        .map(|device| {
-            (
-                device.get_device_key(),
-                device.color_to_mode(ColorMode::Hs, true),
-            )
-        })
+        .map(|device| (device.get_device_key(), device.clone()))
         .collect();
 
     let message = WebSocketResponseRef::State(StateUpdateRef {
@@ -947,6 +942,55 @@ pub async fn send_state_ws_from_snapshot(
     });
 
     ws.send(user_id, &message).await;
+}
+
+#[cfg(test)]
+mod native_color_tests {
+    use super::*;
+    use crate::core::snapshot::new_snapshot_handle;
+    use crate::types::device::Device;
+
+    #[tokio::test]
+    async fn full_and_partial_updates_preserve_xy() {
+        let (state, _events) = crate::core::event::tests::test_state();
+        let device: Device = serde_json::from_value(serde_json::json!({
+            "id": "lamp", "name": "Lamp", "integration_id": "dummy", "raw": null,
+            "data": {"Controllable": {
+                "scene_id": null, "state_source": null,
+                "state": {"power": true, "brightness": 0.5, "color": {"x": 0.3, "y": 0.4}, "transition": null},
+                "capabilities": {"brightness": true, "xy": true, "hs": true, "rgb": false, "ct": null},
+                "managed": "Full"
+            }}
+        })).unwrap();
+        let key = device.get_device_key();
+        let mut snapshot = state.snapshot.load().as_ref().clone();
+        snapshot.devices = Arc::new(DevicesState([(key.clone(), device)].into()));
+        let handle = new_snapshot_handle(snapshot);
+        let ws = WebSockets::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        ws.user_connected(1, tx).await;
+        send_state_ws_from_snapshot(&handle, &ws, Some(1)).await;
+        send_state_ws_patch_from_snapshot(
+            &handle,
+            &ws,
+            Some(1),
+            PendingWsUpdate::device_upsert(key, SnapshotChanges::devices()),
+        )
+        .await;
+        send_state_ws_patch_from_snapshot(&handle, &ws, Some(1), SnapshotChanges::devices().into())
+            .await;
+        for path in [
+            "/State/devices/dummy~1lamp/data/Controllable/state/color",
+            "/Patch/devices/upserted/dummy~1lamp/data/Controllable/state/color",
+            "/Patch/devices/upserted/dummy~1lamp/data/Controllable/state/color",
+        ] {
+            let message = rx.recv().await.unwrap();
+            let value: serde_json::Value = serde_json::from_str(message.to_str().unwrap()).unwrap();
+            let color = value.pointer(path).expect("native color in device update");
+            assert!(color.get("x").is_some() && color.get("y").is_some());
+            assert!(color.get("h").is_none());
+        }
+    }
 }
 
 /// Build a targeted `StatePatch` from the currently published runtime snapshot
@@ -978,12 +1022,7 @@ pub async fn send_state_ws_patch_from_snapshot(
             snap.devices
                 .0
                 .values()
-                .map(|device| {
-                    (
-                        device.get_device_key(),
-                        device.color_to_mode(ColorMode::Hs, true),
-                    )
-                })
+                .map(|device| (device.get_device_key(), device.clone()))
                 .collect()
         } else {
             update
@@ -993,7 +1032,7 @@ pub async fn send_state_ws_patch_from_snapshot(
                     snap.devices
                         .0
                         .get(&device_key)
-                        .map(|device| (device_key, device.color_to_mode(ColorMode::Hs, true)))
+                        .map(|device| (device_key, device.clone()))
                 })
                 .collect()
         };

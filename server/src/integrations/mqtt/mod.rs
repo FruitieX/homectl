@@ -256,8 +256,7 @@ impl Integration for Mqtt {
                                                     crate::types::device::DeviceId::new(device_id),
                                                 ),
                                                 online: status == "online",
-                                                observed_at_ms: if msg.retain && status == "online"
-                                                {
+                                                observed_at_ms: if msg.retain {
                                                     0
                                                 } else {
                                                     chrono::Utc::now().timestamp_millis()

@@ -96,6 +96,7 @@ interface GroupRenderEntry {
 }
 
 interface SceneRenderState {
+  hoveredKey?: string;
   backgroundLayer: Container;
   groupLayer: Container;
   tileLayer: Container;
@@ -146,7 +147,7 @@ function getRendererQuality(): RendererQuality {
     return {
       label: 'low',
       lightTextureSize: 192,
-      renderLabels: false,
+      renderLabels: true,
       resolutionCap: 1.25,
     };
   }
@@ -577,16 +578,43 @@ function drawLightMarker(
   graphics: Graphics,
   light: FloorplanScene['lights'][number],
   selected: boolean,
+  hovered = false,
 ) {
   graphics.clear();
+  const disabled = light.health === 'disabled';
+  const tint = disabled
+    ? 0x7b8490
+    : light.power
+      ? rgbToHex(light.color)
+      : 0x94a3b8;
+  graphics.alpha = disabled ? (hovered ? 0.75 : 0.45) : 1;
+  graphics.pivot.set(light.x, light.y);
+  graphics.position.set(light.x, light.y);
+  graphics.scale.set(hovered ? 1.1 : 1);
+  if (hovered || selected)
+    graphics
+      .circle(light.x, light.y, 23)
+      .fill({ color: selected ? 0xffffff : tint, alpha: 0.12 });
+  graphics
+    .circle(light.x, light.y + 2, 18)
+    .fill({ color: 0x000000, alpha: 0.25 });
   graphics
     .circle(light.x, light.y, 18)
-    .fill({ color: rgbToHex(light.color), alpha: light.power ? 1 : 0.35 })
+    .fill({ color: 0x172027, alpha: 0.96 })
     .stroke({
-      color: selected ? 0xffffff : 0x0f172a,
-      width: selected ? 5 : 3,
-      alpha: 0.95,
+      color: selected ? 0xffffff : hovered ? 0xd1d5db : 0x64748b,
+      width: selected ? 2.5 : 1,
+      alpha: 0.85,
     });
+  graphics
+    .circle(light.x, light.y - 3, 7)
+    .fill({ color: tint, alpha: disabled || !light.power ? 0.35 : 0.9 })
+    .stroke({ color: tint, width: 1.3 });
+  graphics.roundRect(light.x - 4, light.y + 4, 8, 3, 1.5).fill({ color: tint });
+  graphics
+    .moveTo(light.x - 2, light.y + 9)
+    .lineTo(light.x + 2, light.y + 9)
+    .stroke({ color: tint, width: 1.5 });
 
   if (selected) {
     graphics
@@ -595,7 +623,11 @@ function drawLightMarker(
       .lineTo(light.x + 10, light.y - 9)
       .stroke({ color: 0xffffff, width: 4, alpha: 1 });
   }
-  if (light.health === 'offline' || light.health === 'stale') {
+  if (
+    light.health === 'offline' ||
+    light.health === 'stale' ||
+    light.health === 'unknown'
+  ) {
     const x = light.x + 15,
       y = light.y - 15;
     graphics
@@ -622,15 +654,36 @@ function drawLightMarker(
 function drawSensorMarker(
   graphics: Graphics,
   sensor: FloorplanScene['sensors'][number],
+  hovered = false,
 ) {
   graphics.clear();
+  if (hovered)
+    graphics
+      .circle(sensor.x, sensor.y, 22 * sensor.scale)
+      .fill({ color: 0x94a3b8, alpha: 0.18 })
+      .stroke({ color: 0xe2e8f0, width: 1 });
   graphics
-    .regularPoly(sensor.x, sensor.y, 16 * sensor.scale, 3)
-    .fill({
-      color: sensor.color ? rgbToHex(sensor.color) : 0x38bdf8,
-      alpha: 0.95,
-    })
-    .stroke({ color: 0x0f172a, width: 2, alpha: 0.9 });
+    .roundRect(
+      sensor.x - 14 * sensor.scale,
+      sensor.y - 14 * sensor.scale,
+      28 * sensor.scale,
+      28 * sensor.scale,
+      7 * sensor.scale,
+    )
+    .fill({ color: 0x172027, alpha: 0.96 })
+    .stroke({
+      color: sensor.color ? rgbToHex(sensor.color) : 0x7da8bc,
+      width: 1.5,
+      alpha: 0.85,
+    });
+  if (!sensor.statusLabel) {
+    graphics
+      .circle(sensor.x, sensor.y, 4 * sensor.scale)
+      .fill({ color: sensor.color ? rgbToHex(sensor.color) : 0x7da8bc });
+    graphics
+      .circle(sensor.x, sensor.y, 8 * sensor.scale)
+      .stroke({ color: 0x7da8bc, width: sensor.scale, alpha: 0.45 });
+  }
 }
 
 function syncMarkers(
@@ -650,7 +703,12 @@ function syncMarkers(
       renderState.markerLayer.addChild(graphics);
     }
 
-    drawLightMarker(graphics, light, selectedSet.has(light.deviceKey));
+    drawLightMarker(
+      graphics,
+      light,
+      selectedSet.has(light.deviceKey),
+      renderState.hoveredKey === light.deviceKey,
+    );
   }
 
   for (const sensor of scene.sensors) {
@@ -662,7 +720,11 @@ function syncMarkers(
       renderState.markerLayer.addChild(graphics);
     }
 
-    drawSensorMarker(graphics, sensor);
+    drawSensorMarker(
+      graphics,
+      sensor,
+      renderState.hoveredKey === sensor.deviceKey,
+    );
   }
 
   for (const [deviceKey, graphics] of renderState.lightMarkerEntries) {
@@ -750,6 +812,22 @@ function syncSensorLabel(
   entry.status.position.set(sensor.x, sensor.y);
 }
 
+function sceneLabels(scene: FloorplanScene): FloorplanScene['sensors'] {
+  const mode = scene.labelMode ?? 'sensors';
+  return [
+    ...(mode === 'sensors' || mode === 'all' ? scene.sensors : []),
+    ...(mode === 'lights' || mode === 'all'
+      ? scene.lights.map((light) => ({
+          deviceKey: light.deviceKey,
+          x: light.x,
+          y: light.y,
+          scale: 1,
+          label: light.label ?? light.deviceKey,
+        }))
+      : []),
+  ];
+}
+
 function syncSensorLabels(
   renderState: SceneRenderState,
   scene: FloorplanScene,
@@ -769,7 +847,7 @@ function syncSensorLabels(
   renderState.labelTextureScale = textureScale;
   const seenDeviceKeys = new Set<string>();
 
-  for (const sensor of scene.sensors) {
+  for (const sensor of sceneLabels(scene)) {
     seenDeviceKeys.add(sensor.deviceKey);
     let entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
     if (!entry) {
@@ -808,7 +886,7 @@ function syncLabelTextureScale(
   }
 
   renderState.labelTextureScale = textureScale;
-  for (const sensor of scene.sensors) {
+  for (const sensor of sceneLabels(scene)) {
     const entry = renderState.sensorLabelEntries.get(sensor.deviceKey);
     if (entry) {
       syncSensorLabel(entry, sensor, textureScale);
@@ -1197,6 +1275,17 @@ export function PixiFloorplanRenderer({
               screenToScene(point, viewRef.current),
             );
           container.style.cursor = target ? 'pointer' : 'grab';
+          const state = renderStateRef.current;
+          const hoveredKey =
+            target && target.type !== 'group' ? target.key : undefined;
+          if (state && state.hoveredKey !== hoveredKey) {
+            state.hoveredKey = hoveredKey;
+            syncMarkers(
+              state,
+              latestSceneRef.current,
+              new Set(latestSelectedKeysRef.current),
+            );
+          }
         }
         return;
       }
