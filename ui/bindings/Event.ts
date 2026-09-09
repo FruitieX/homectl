@@ -5,19 +5,19 @@ import type { DeviceKey } from "./DeviceKey";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
 
-export type Event = { "ExternalStateUpdate": { device: Device, } } | { "InternalStateUpdate": { device_key: DeviceKey, old: Device | null, new: Device, } } | { "SetExternalState": { device: Device, } } | { "SetInternalState": { device: Device, 
+export type Event = { "DeviceAvailability": { device_key: DeviceKey, online: boolean, observed_at_ms: number, } } | { "ExternalStateUpdate": { device: Device, } } | { "InternalStateUpdate": { device_key: DeviceKey, old: Device | null, new: Device, } } | { "SetExternalState": { device: Device, } } | { "SetInternalState": { device: Device,
 /**
  * Whether to skip sending [Event::SetExternalState] as a result of this state update.
  */
-skip_external_update: boolean | null, 
+skip_external_update: boolean | null,
 /**
  * Whether to skip persisting the device state to DB as a result of this state update.
  */
-skip_db_update: boolean | null, } } | { "ApplyDeviceState": { device: Device, 
+skip_db_update: boolean | null, } } | { "ApplyDeviceState": { device: Device,
 /**
  * Whether to skip sending [Event::SetExternalState] as a result of this state update.
  */
-skip_external_update: boolean | null, 
+skip_external_update: boolean | null,
 /**
  * Whether to skip persisting the device state to DB as a result of this state update.
  */

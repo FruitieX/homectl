@@ -705,6 +705,8 @@ fn schema(
     mut fields: Vec<IntegrationConfigFieldSchema>,
 ) -> IntegrationConfigSchema {
     fields.push(outbound_device_update_field());
+    fields.push(json_config_field("disabled_device_ids", "Disabled devices", false,
+        "Device IDs excluded from state commands and Zigbee2MQTT polling. Also editable in each device dialog.", Some(json!([]))));
 
     IntegrationConfigSchema {
         plugin: plugin.to_string(),
@@ -936,6 +938,33 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn disabled_device_policy_round_trips_in_database_config_exports() {
+        let (state, _rx) = crate::core::event::tests::test_state();
+        let mut export = state.runtime_config.clone();
+        export.integrations.push(config_queries::IntegrationRow {
+            id: "policy-test".into(),
+            plugin: "mqtt".into(),
+            enabled: true,
+            config: json!({"disabled_device_ids":["lamp"]}),
+        });
+        let restored: config_queries::ConfigExport =
+            serde_json::from_str(&serde_json::to_string(&export).unwrap()).unwrap();
+        let row = restored
+            .integrations
+            .iter()
+            .find(|row| row.id == "policy-test")
+            .unwrap();
+        assert!(crate::types::integration::device_is_disabled(
+            &row.config,
+            "lamp"
+        ));
+        assert!(!crate::types::integration::device_is_disabled(
+            &json!({}),
+            "lamp"
+        ));
+    }
+
+    #[tokio::test]
     async fn invalid_reload_preserves_existing_integration() {
         let (mut state, _rx) = crate::core::event::tests::test_state();
         let original = config_queries::IntegrationRow {
@@ -1090,6 +1119,7 @@ mod tests {
                 "transition",
                 "strobe_interval",
                 "outbound_device_updates.min_interval_ms",
+                "disabled_device_ids",
             ]
         );
     }

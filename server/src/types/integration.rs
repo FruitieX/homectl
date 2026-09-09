@@ -156,3 +156,10 @@ pub trait Integration: Send {
         Ok(())
     }
 }
+
+/// Runtime device exclusions stored in the integration's database configuration.
+pub fn device_is_disabled(config: &serde_json::Value, id: &str) -> bool {
+    config["disabled_device_ids"]
+        .as_array()
+        .is_some_and(|ids| ids.iter().any(|value| value.as_str() == Some(id)))
+}

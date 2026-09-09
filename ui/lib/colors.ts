@@ -32,7 +32,9 @@ function isStatefulColorPayload(value: unknown): value is StatefulColorPayload {
   );
 }
 
-function getStatefulColorPayload(data: DeviceData): StatefulColorPayload | null {
+function getStatefulColorPayload(
+  data: DeviceData,
+): StatefulColorPayload | null {
   if ('Controllable' in data) {
     return data.Controllable.state;
   }
@@ -64,12 +66,21 @@ function getColorFromPayload(
   }
 
   if ('ct' in color) {
-    const normalized = Math.max(0, Math.min(1, (color.ct - 153) / (500 - 153)));
-    return Color.rgb(
-      Math.round(255 - normalized * 55),
-      Math.round(240 - normalized * 30),
-      Math.round(200 + normalized * 55),
-    );
+    // homectl uses Kelvin; approximate black-body RGB for UI/color-mode conversion.
+    const t = Math.max(1000, Math.min(40000, color.ct)) / 100;
+    const red = t <= 66 ? 255 : 329.698727446 * (t - 60) ** -0.1332047592;
+    const green =
+      t <= 66
+        ? 99.4708025861 * Math.log(t) - 161.1195681661
+        : 288.1221695283 * (t - 60) ** -0.0755148492;
+    const blue =
+      t >= 66
+        ? 255
+        : t <= 19
+          ? 0
+          : 138.5177312231 * Math.log(t - 10) - 305.0447927307;
+    const clamp = (v: number) => Math.max(0, Math.min(255, Math.round(v)));
+    return Color.rgb(clamp(red), clamp(green), clamp(blue));
   }
 
   if ('x' in color && 'y' in color) {
@@ -82,11 +93,19 @@ function getColorFromPayload(
     let green = -linearX * 0.707196 + 1.655397 + linearZ * 0.036152;
     let blue = linearX * 0.051713 - 0.121364 + linearZ * 1.01153;
 
-    red = red <= 0.0031308 ? 12.92 * red : 1.055 * Math.pow(red, 1 / 2.4) - 0.055;
-    green = green <= 0.0031308 ? 12.92 * green : 1.055 * Math.pow(green, 1 / 2.4) - 0.055;
-    blue = blue <= 0.0031308 ? 12.92 * blue : 1.055 * Math.pow(blue, 1 / 2.4) - 0.055;
+    red =
+      red <= 0.0031308 ? 12.92 * red : 1.055 * Math.pow(red, 1 / 2.4) - 0.055;
+    green =
+      green <= 0.0031308
+        ? 12.92 * green
+        : 1.055 * Math.pow(green, 1 / 2.4) - 0.055;
+    blue =
+      blue <= 0.0031308
+        ? 12.92 * blue
+        : 1.055 * Math.pow(blue, 1 / 2.4) - 0.055;
 
-    const clamp = (value: number) => Math.max(0, Math.min(255, Math.round(value * 255)));
+    const clamp = (value: number) =>
+      Math.max(0, Math.min(255, Math.round(value * 255)));
 
     return Color.rgb(clamp(red), clamp(green), clamp(blue));
   }
@@ -106,7 +125,9 @@ export const getResolvedDeviceColorState = (
 
   return {
     brightness,
-    color: getColorFromPayload(payload.color) ?? (payload.power || brightness > 0 ? white : black),
+    color:
+      getColorFromPayload(payload.color) ??
+      (payload.power || brightness > 0 ? white : black),
     power: payload.power,
   };
 };

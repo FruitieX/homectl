@@ -39,6 +39,8 @@ pub struct MqttConfig {
     zigbee2mqtt_base_topic: Option<String>,
     /// Poll GET-capable Zigbee2MQTT devices when attribute reporting is unavailable.
     zigbee2mqtt_poll_interval_secs: Option<u64>,
+    #[serde(default)]
+    disabled_device_ids: Vec<String>,
     host: String,
     port: u16,
     username: Option<String>,
@@ -210,7 +212,10 @@ impl Integration for Mqtt {
                             {
                                 let now = Instant::now();
                                 if msg.topic == format!("{base}/bridge/devices") {
-                                    scheduler.sync(discovery.poll_requests(base), now);
+                                    scheduler.sync(
+                                        discovery.poll_requests(base, &config.disabled_device_ids),
+                                        now,
+                                    );
                                 } else if let Some(key) = discovery.poll_key(base, &msg.topic) {
                                     let value =
                                         serde_json::from_slice::<serde_json::Value>(&msg.payload)
@@ -229,6 +234,36 @@ impl Integration for Mqtt {
                                         );
                                     } else if !msg.retain && !devices.is_empty() {
                                         scheduler.report(&key, now);
+                                    }
+                                }
+                            }
+                            if msg.topic.ends_with("/availability") {
+                                if let Some(base) = &config.zigbee2mqtt_base_topic {
+                                    if let Some(key) = discovery.poll_key(base, &msg.topic) {
+                                        let value = serde_json::from_slice::<serde_json::Value>(
+                                            &msg.payload,
+                                        )
+                                        .unwrap_or_default();
+                                        if let Some(status @ ("online" | "offline")) =
+                                            value.as_str().or_else(|| value["state"].as_str())
+                                        {
+                                            let device_id = key
+                                                .trim_start_matches(&format!("{base}/"))
+                                                .trim_end_matches("/get");
+                                            event_tx.send(Event::DeviceAvailability {
+                                                device_key: crate::types::device::DeviceKey::new(
+                                                    id.clone(),
+                                                    crate::types::device::DeviceId::new(device_id),
+                                                ),
+                                                online: status == "online",
+                                                observed_at_ms: if msg.retain && status == "online"
+                                                {
+                                                    0
+                                                } else {
+                                                    chrono::Utc::now().timestamp_millis()
+                                                },
+                                            });
+                                        }
                                     }
                                 }
                             }

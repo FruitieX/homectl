@@ -1,3 +1,4 @@
+import { DeviceColorMode } from '@/ui/DeviceColorMode';
 import {
   isDeviceReadOnly,
   supportsDeviceBrightness,
@@ -267,7 +268,7 @@ export function DeviceQuickControls({
   if (controllable.length === 0)
     return readonlyCount > 0 ? (
       <p className="rounded-xl border border-border p-4 text-sm text-muted-foreground">
-        Read-only devices. Live controls are unavailable.
+        Devices are disabled or read-only. Live controls are unavailable.
       </p>
     ) : null;
   const brightness = draft ?? Math.round((values[0] ?? 0) * 100);
@@ -279,6 +280,11 @@ export function DeviceQuickControls({
           : 'space-y-4 rounded-xl border border-border bg-card p-4'
       }
     >
+      <DeviceColorMode
+        devices={devices}
+        connected={connected}
+        onChange={setState}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-muted-foreground">
           {controllable.length === 1
@@ -310,7 +316,7 @@ export function DeviceQuickControls({
       </div>
       {readonlyCount > 0 && (
         <p className="text-sm text-muted-foreground">
-          {readonlyCount} read-only devices excluded from controls.
+          {readonlyCount} disabled or read-only devices excluded from controls.
         </p>
       )}
       {!compact && dimmable.length > 0 && (

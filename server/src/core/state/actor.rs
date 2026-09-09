@@ -395,7 +395,9 @@ fn spawn_watchdog(
 /// Compact human-readable summary of an event for log messages.
 fn event_kind(event: &Event) -> &'static str {
     match event {
-        Event::ExternalStateUpdate { .. } => "ExternalStateUpdate",
+        Event::DeviceAvailability { .. } | Event::ExternalStateUpdate { .. } => {
+            "ExternalStateUpdate"
+        }
         Event::InternalStateUpdate { .. } => "InternalStateUpdate",
         Event::SetExternalState { .. } => "SetExternalState",
         Event::SetInternalState { .. } => "SetInternalState",

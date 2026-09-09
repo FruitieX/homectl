@@ -186,6 +186,14 @@ pub struct DeviceStateSource {
     pub linked_device_key: Option<DeviceKey>,
 }
 
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[ts(export)]
+pub struct DeviceAvailability {
+    pub online: bool,
+    #[ts(type = "number")]
+    pub observed_at_ms: i64,
+}
+
 /// Latest integration report, separate from the requested device state.
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
@@ -201,6 +209,13 @@ pub struct DeviceReport {
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableDevice {
+    /// Projection of the integration's database-backed disabled_device_ids policy.
+    #[serde(default)]
+    #[ts(optional)]
+    pub disabled: Option<bool>,
+    #[serde(default)]
+    #[ts(optional)]
+    pub availability: Option<DeviceAvailability>,
     #[serde(default)]
     #[ts(optional)]
     pub last_report: Option<Box<DeviceReport>>,
@@ -222,14 +237,7 @@ impl ControllableDevice {
         if let Some(report) = &self.last_report {
             let mut reported = self.clone();
             reported.state = report.state.clone();
-            let brightness_matches = !self.state.power
-                || self.state.brightness.is_none()
-                || reported
-                    .state
-                    .brightness
-                    .zip(self.state.brightness)
-                    .is_some_and(|(a, b)| (a.0 - b.0).abs() <= 0.02);
-            let matches = brightness_matches && cmp_device_states(&reported, &self.state);
+            let matches = cmp_device_states(&reported, &self.state);
             self.last_report.as_mut().unwrap().matches_requested = matches;
         }
     }
@@ -250,6 +258,8 @@ impl ControllableDevice {
                 || capabilities.ct.is_some(),
         );
         ControllableDevice {
+            disabled: None,
+            availability: None,
             last_report: None,
             requested_at_ms: None,
             scene_id: scene,
@@ -373,15 +383,24 @@ fn cmp_light_color(
     expected_bri: &Option<f32>,
 ) -> bool {
     // If brightness mismatches, the light state is not equal
-    let bri_delta = 0.01;
+    let bri_delta = 0.01 + f32::EPSILON;
     if f32::abs(incoming_bri.unwrap_or(1.0) - expected_bri.unwrap_or(1.0)) > bri_delta {
         return false;
     }
 
     // Convert expected color to supported color mode before performing comparison
-    let expected_converted = expected
-        .as_ref()
-        .and_then(|c| c.to_device_preferred_mode(capabilities));
+    let expected_converted = expected.as_ref().and_then(|c| {
+        let mut comparison = capabilities.clone();
+        if let Some(incoming) = incoming {
+            comparison.xy = matches!(incoming, DeviceColor::Xy(_));
+            comparison.hs = matches!(incoming, DeviceColor::Hs(_));
+            comparison.rgb = matches!(incoming, DeviceColor::Rgb(_));
+            if !matches!(incoming, DeviceColor::Ct(_)) {
+                comparison.ct = None;
+            }
+        }
+        c.to_device_preferred_mode(&comparison)
+    });
 
     // If colors are equal by PartialEq, the light state is equal
     if incoming.as_ref() == expected_converted.as_ref() {
@@ -391,8 +410,8 @@ fn cmp_light_color(
     // Otherwise compare colors by components, allow slight deltas to account
     // for rounding errors
     let hue_delta = 1;
-    let sat_delta = 0.01;
-    let xy_delta = 0.01;
+    let sat_delta = 0.01 + f32::EPSILON;
+    let xy_delta = 0.01 + f32::EPSILON;
     let cct_delta = 10;
 
     match (incoming, expected_converted) {
@@ -402,7 +421,10 @@ fn cmp_light_color(
         }
         (Some(DeviceColor::Hs(a)), Some(DeviceColor::Hs(b))) => {
             // Light state is equal if all components differ by less than a given delta
-            (u64::abs_diff(a.h, b.h) <= hue_delta) && (f32::abs(*a.s - *b.s) <= sat_delta)
+            ({
+                let delta = u64::abs_diff(a.h % 360, b.h % 360);
+                delta.min(360 - delta) <= hue_delta
+            }) && (f32::abs(*a.s - *b.s) <= sat_delta)
         }
         (Some(DeviceColor::Ct(a)), Some(DeviceColor::Ct(b))) => {
             u64::abs_diff(a.ct, b.ct) <= cct_delta
@@ -421,18 +443,35 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
 
     // Keep comparing color while off as well. Color changes are meaningful for
     // the next power-on and one-shot color actions rely on them being applied.
-    if device.state.color.is_some() != expected.color.is_some() {
+    if expected.color.is_some() && device.state.color.is_none() {
+        return false;
+    }
+
+    if device.state.power
+        && device
+            .state
+            .brightness
+            .zip(expected.brightness)
+            .is_some_and(|(a, b)| (a.0 - b.0).abs() > 0.01 + f32::EPSILON)
+    {
         return false;
     }
 
     // Compare colors if supported
-    if device.state.color.is_some() {
+    if expected.color.is_some() {
         return cmp_light_color(
             &device.capabilities,
             &device.state.color,
-            &device.state.brightness.map(|b| b.into_inner()),
+            &device
+                .state
+                .brightness
+                .filter(|_| expected.power)
+                .map(|b| b.into_inner()),
             &expected.color,
-            &expected.brightness.map(|b| b.into_inner()),
+            &expected
+                .brightness
+                .filter(|_| expected.power)
+                .map(|b| b.into_inner()),
         );
     }
 
@@ -813,6 +852,46 @@ mod tests {
     use super::*;
     use crate::types::color::Rgb;
     use serde_json;
+
+    #[test]
+    fn report_and_scene_comparison_share_tolerance_and_reported_mode() {
+        let capabilities = Capabilities {
+            brightness: Some(true),
+            xy: true,
+            hs: true,
+            rgb: false,
+            ct: Some(2000..6500),
+        };
+        let mut device = ControllableDevice::new(
+            None,
+            true,
+            Some(0.77),
+            Some(DeviceColor::new_from_hs(120, 0.5)),
+            None,
+            capabilities,
+            ManageKind::Full,
+        );
+        let mut reported = device.clone();
+        reported.state.brightness = Some(OrderedFloat(0.76));
+        let mut xy_only = reported.capabilities.clone();
+        xy_only.hs = false;
+        reported.state.color = reported
+            .state
+            .color
+            .as_ref()
+            .and_then(|color| color.to_device_preferred_mode(&xy_only));
+        assert!(cmp_device_states(&reported, &device.state));
+        device.last_report = Some(Box::new(DeviceReport {
+            state: reported.state.clone(),
+            received_at_ms: 1,
+            retained: false,
+            matches_requested: false,
+        }));
+        device.refresh_report_match();
+        assert!(device.last_report.as_ref().unwrap().matches_requested);
+        reported.state.brightness = Some(OrderedFloat(0.6));
+        assert!(!cmp_device_states(&reported, &device.state));
+    }
 
     #[test]
     fn test_sensor_device_serialization() {

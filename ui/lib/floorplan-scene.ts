@@ -1,3 +1,4 @@
+import { deviceReachability } from '@/lib/deviceReachability';
 import { type Device } from '@/bindings/Device';
 import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { getResolvedDeviceColorState } from '@/lib/colors';
@@ -22,6 +23,7 @@ export interface FloorplanScenePoint {
 }
 
 export interface FloorplanSceneLight {
+  health?: ReturnType<typeof deviceReachability>;
   deviceKey: string;
   x: number;
   y: number;
@@ -199,8 +201,14 @@ function buildBlockingSegments(
     return [];
   }
 
-  const horizontalEdges = new Map<number, Array<{ start: number; end: number }>>();
-  const verticalEdges = new Map<number, Array<{ start: number; end: number }>>();
+  const horizontalEdges = new Map<
+    number,
+    Array<{ start: number; end: number }>
+  >();
+  const verticalEdges = new Map<
+    number,
+    Array<{ start: number; end: number }>
+  >();
 
   for (let y = 0; y < grid.height; y += 1) {
     for (let x = 0; x < grid.width; x += 1) {
@@ -427,7 +435,8 @@ function buildStaticFloorplanScene(
     visibilityPolygons: new Map(),
   };
 
-  const nextCachedByKey = cachedByKey ?? new Map<string, StaticFloorplanScene>();
+  const nextCachedByKey =
+    cachedByKey ?? new Map<string, StaticFloorplanScene>();
   nextCachedByKey.set(cacheKey, staticScene);
   staticSceneCache.set(grid, nextCachedByKey);
 
@@ -481,6 +490,7 @@ export function buildFloorplanScene({
       const brightness = override?.brightness ?? resolved?.brightness ?? 0;
       const radius = (100 + 200 * brightness) * deviceScale;
       lights.push({
+        health: deviceReachability(device),
         deviceKey,
         x: position.x,
         y: position.y,

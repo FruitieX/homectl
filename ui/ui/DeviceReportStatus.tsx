@@ -1,3 +1,8 @@
+import {
+  deviceReachability,
+  reachabilityLabels,
+} from '@/lib/deviceReachability';
+import { DeviceEnabledToggle } from '@/ui/DeviceEnabledToggle';
 import { useEffect, useState } from 'react';
 import type { Device } from '@/bindings/Device';
 
@@ -12,15 +17,8 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
     if (!('Controllable' in device.data)) return [];
     const data = device.data.Controllable;
     const report = data.last_report;
-    const label = !report
-      ? 'No report yet'
-      : report.retained
-        ? 'Cached report'
-        : report.received_at_ms < (data.requested_at_ms ?? 0)
-          ? 'Awaiting report'
-          : !report.matches_requested
-            ? 'Report differs'
-            : 'Report matches';
+    const health = deviceReachability(device, now);
+    const label = reachabilityLabels[health];
     const age = report
       ? Math.max(0, Math.floor((now - report.received_at_ms) / 1000))
       : null;
@@ -38,6 +36,13 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
       : '';
     return [
       {
+        device,
+        differs:
+          health !== 'disabled' &&
+          report &&
+          !report.retained &&
+          report.received_at_ms >= (data.requested_at_ms ?? 0) &&
+          !report.matches_requested,
         key: `${device.integration_id}/${device.id}`,
         name: device.name,
         label,
@@ -52,7 +57,7 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
       <summary className="cursor-pointer py-1">
         {reports.length === 1
           ? `${reports[0].label}${reports[0].ageLabel ? ` · ${reports[0].ageLabel}` : ''}`
-          : `${reports.filter((r) => r.label === 'Report matches').length}/${reports.length} reports match`}
+          : `${reports.filter((r) => r.label === 'Recently reachable').length}/${reports.length} recently reachable`}
       </summary>
       <div className="mt-1 space-y-1 rounded-lg bg-muted/30 p-2">
         {reports.map((report) => (
@@ -65,7 +70,11 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
               {report.value || report.label}
             </span>
             <span>
-              {report.label} {report.ageLabel && `· ${report.ageLabel}`}
+              {report.differs
+                ? 'Reported state differs from requested'
+                : report.label}{' '}
+              {report.ageLabel && `· ${report.ageLabel}`}
+              <DeviceEnabledToggle device={report.device} />
             </span>
           </div>
         ))}

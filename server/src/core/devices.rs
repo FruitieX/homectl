@@ -496,6 +496,7 @@ impl Devices {
                             old.capabilities == new.capabilities
                                 && old.managed == new.managed
                                 && old.last_report == new.last_report
+                                && old.availability == new.availability
                         }
                         _ => true,
                     };

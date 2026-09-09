@@ -42,6 +42,11 @@ import {
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
 export const Viewport = () => {
+  const [, refreshHealth] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => refreshHealth((value) => value + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
   const devicesState = useDevicesState();
   const liveGroups = useGroupsState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();

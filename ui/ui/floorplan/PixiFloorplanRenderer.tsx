@@ -595,6 +595,28 @@ function drawLightMarker(
       .lineTo(light.x + 10, light.y - 9)
       .stroke({ color: 0xffffff, width: 4, alpha: 1 });
   }
+  if (light.health === 'offline' || light.health === 'stale') {
+    const x = light.x + 15,
+      y = light.y - 15;
+    graphics
+      .moveTo(x, y - 9)
+      .lineTo(x + 9, y + 7)
+      .lineTo(x - 9, y + 7)
+      .closePath()
+      .fill({ color: 0xf59e0b })
+      .stroke({ color: 0x0f172a, width: 1 });
+    graphics
+      .moveTo(x, y - 3)
+      .lineTo(x, y + 1)
+      .stroke({ color: 0x0f172a, width: 2 });
+    graphics.circle(x, y + 4, 1).fill({ color: 0x0f172a });
+  } else if (light.health === 'disabled') {
+    graphics.circle(light.x + 15, light.y - 15, 7).fill({ color: 0x64748b });
+    graphics
+      .moveTo(light.x + 12, light.y - 15)
+      .lineTo(light.x + 18, light.y - 15)
+      .stroke({ color: 0xffffff, width: 2 });
+  }
 }
 
 function drawSensorMarker(
@@ -1163,9 +1185,17 @@ export function PixiFloorplanRenderer({
         if (event.pointerType === 'mouse') {
           const point = getPointerPoint(container, event);
           const bounds = container.getBoundingClientRect();
-          const inside = event.clientX >= bounds.left && event.clientX <= bounds.right &&
-            event.clientY >= bounds.top && event.clientY <= bounds.bottom;
-          const target = inside && findHitTarget(latestSceneRef.current, screenToScene(point, viewRef.current));
+          const inside =
+            event.clientX >= bounds.left &&
+            event.clientX <= bounds.right &&
+            event.clientY >= bounds.top &&
+            event.clientY <= bounds.bottom;
+          const target =
+            inside &&
+            findHitTarget(
+              latestSceneRef.current,
+              screenToScene(point, viewRef.current),
+            );
           container.style.cursor = target ? 'pointer' : 'grab';
         }
         return;

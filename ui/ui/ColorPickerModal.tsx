@@ -1,3 +1,4 @@
+import { DeviceHealth } from '@/ui/DeviceHealth';
 import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
@@ -906,7 +907,12 @@ export const ColorPickerModal = () => {
           closeDeviceModal();
         }
       }}
-      title={deviceModalTitle ?? 'Device controls'}
+      title={
+        <span className="inline-flex min-w-0 items-center gap-2">
+          {deviceModalTitle ?? 'Device controls'}
+          {selected.length === 1 && <DeviceHealth device={selected[0]} />}
+        </span>
+      }
       description={
         persistEnabled
           ? 'Scene autosave is enabled for this selection.'

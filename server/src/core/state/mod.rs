@@ -141,8 +141,25 @@ impl AppState {
             } else {
                 Arc::clone(&previous.runtime_config)
             },
-            devices: if changes.devices {
-                Arc::new(self.devices.get_state().clone())
+            devices: if changes.devices || changes.runtime_config {
+                let mut devices = self.devices.get_state().clone();
+                for device in devices.0.values_mut() {
+                    if let crate::types::device::DeviceData::Controllable(data) = &mut device.data {
+                        data.disabled = Some(
+                            self.runtime_config
+                                .integrations
+                                .iter()
+                                .find(|row| row.id == device.integration_id.to_string())
+                                .is_some_and(|row| {
+                                    crate::types::integration::device_is_disabled(
+                                        &row.config,
+                                        &device.id.to_string(),
+                                    )
+                                }),
+                        );
+                    }
+                }
+                Arc::new(devices)
             } else {
                 Arc::clone(&previous.devices)
             },
@@ -574,6 +591,8 @@ impl AppState {
         self.runtime_config.integrations = runtime_config.integrations;
         self.integrations = integrations;
         let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
+        // Device policy projections (e.g. disabled) must reach already-open UIs.
+        self.schedule_ws_broadcast(PendingWsUpdate::full_state());
 
         if !removed_ids.is_empty() {
             self.refresh_routine_statuses();

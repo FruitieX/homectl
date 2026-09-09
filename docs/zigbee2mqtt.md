@@ -103,3 +103,38 @@ production rollout verification is a separate step.
 Protocol references:
 - https://www.zigbee2mqtt.io/guide/usage/exposes.html
 - https://www.zigbee2mqtt.io/guide/usage/mqtt_topics_and_messages.html
+
+## Reachability and disabling devices
+
+The device modal shows reachability beside its name; the floorplan marks offline
+or stale devices with a warning and disabled devices with a separate indicator.
+A non-retained device report or fresh bridge-online event within ten minutes is
+recent reachability evidence. Cached startup reports alone do not establish it.
+A bridge-offline event overrides older reports; a later report establishes
+reachability again. Staleness is labelled “No recent response”, not treated as
+proof that the device is powered off. Detailed report comparisons remain inside
+the expandable status area and use the same comparator as scene correction:
+one percentage point of brightness/saturation, one degree of hue, 0.01 XY,
+and 10 K, with floating-point boundary tolerance. Expected colors are compared
+in the reported mode. Off-state brightness and unspecified requested color are
+ignored. The Controls card offers the supported CT/HSV/XY modes (the common
+supported modes for a selection), initially reflecting the latest report.
+
+Device enablement is controlled through
+`PUT /api/v1/config/integrations/{integration}/devices/{device}/enabled`, with
+`{"enabled": false}` or `{"enabled": true}`. Device IDs are percent-encoded path
+segments. This edits the existing database integration row's
+`disabled_device_ids` array, preserved by configuration export/import; an absent
+array means no exclusions. The dialog exposes an enable/disable button in the
+expandable status area. Disabled devices remain visible and retain scene
+membership/requested state, but normal state commands never enter the integration
+actor's queue and Zigbee2MQTT polling excludes them. Reload cancels old queued
+updates; stopped integration actors reject late commands. Already transmitted
+Zigbee commands cannot be recalled. This policy does not prevent another MQTT
+client or Zigbee controller from controlling the device.
+
+The five Hue outdoor spots were added to production's database exclusion list
+while their power supply is broken (user-reported). Their existing Zigbee2MQTT
+`disabled` options were retained as a rollout safeguard. Once this implementation
+is deployed, migrate those bridge options separately; until then, enabling a spot
+in homectl alone will not undo its independent bridge disablement.

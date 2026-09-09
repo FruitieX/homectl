@@ -10,6 +10,12 @@ use super::{action::Action, device::Device, device::DeviceKey};
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
 #[ts(export)]
 pub enum Event {
+    DeviceAvailability {
+        device_key: DeviceKey,
+        online: bool,
+        #[ts(type = "number")]
+        observed_at_ms: i64,
+    },
     /// An integration has informed us of current device state. We'll want to
     /// check if this matches with our internal "expected" state. If there's a
     /// mismatch, we'll try to correct it.

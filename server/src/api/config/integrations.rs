@@ -16,6 +16,11 @@ pub(super) fn integrations_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let enabled = warp::path!("integrations" / String / "devices" / String / "enabled")
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(set_device_enabled);
     let list = warp::path("integrations")
         .and(warp::path::end())
         .and(warp::get())
@@ -46,7 +51,81 @@ pub(super) fn integrations_routes(
         .and(with_handle(handle))
         .and_then(delete_integration);
 
-    list.or(get).or(create).or(update).or(delete)
+    enabled.or(list).or(get).or(create).or(update).or(delete)
+}
+
+#[derive(Deserialize)]
+struct DeviceEnabledRequest {
+    enabled: bool,
+}
+
+async fn set_device_enabled(
+    id: String,
+    device_id: String,
+    request: DeviceEnabledRequest,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let device_id = decode_path_key(device_id);
+    if !handle
+        .snapshot
+        .load()
+        .runtime_config
+        .integrations
+        .iter()
+        .any(|row| row.id == id)
+    {
+        return Ok(not_found("Integration"));
+    }
+    if let Err(error) = apply_runtime_integrations_change(&handle, &_guard, |config| {
+        let row = config
+            .integrations
+            .iter_mut()
+            .find(|row| row.id == id)
+            .unwrap();
+        let mut ids: Vec<String> = serde_json::from_value(
+            row.config
+                .get("disabled_device_ids")
+                .cloned()
+                .unwrap_or_else(|| serde_json::json!([])),
+        )
+        .unwrap_or_default();
+        ids.retain(|value| value != &device_id);
+        if !request.enabled {
+            ids.push(device_id.clone());
+        }
+        ids.sort();
+        ids.dedup();
+        row.config["disabled_device_ids"] = serde_json::json!(ids);
+        true
+    })
+    .await
+    {
+        return Ok(error_response(
+            &format!("Device enablement change failed: {error}"),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    let row = handle
+        .snapshot
+        .load()
+        .runtime_config
+        .integrations
+        .iter()
+        .find(|row| row.id == id)
+        .cloned()
+        .unwrap();
+    let available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_integration(&row).await;
+    Ok(config_write_response(
+        serde_json::json!({"enabled":request.enabled}),
+        persistence,
+        available,
+        StatusCode::OK,
+    ))
 }
 
 pub(super) async fn list_integrations(

@@ -203,6 +203,22 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
     let mut outcome = EventOutcome::default();
 
     match event {
+        Event::DeviceAvailability {
+            device_key,
+            online,
+            observed_at_ms,
+        } => {
+            if let Some(mut device) = state.devices.get_device(device_key).cloned() {
+                if let crate::types::device::DeviceData::Controllable(data) = &mut device.data {
+                    data.availability = Some(crate::types::device::DeviceAvailability {
+                        online: *online,
+                        observed_at_ms: *observed_at_ms,
+                    });
+                    state.devices.set_state(&device, true, true);
+                    outcome.mark_snapshot_changes(SnapshotChanges::devices());
+                }
+            }
+        }
         Event::ExternalStateUpdate { device } => {
             state
                 .devices

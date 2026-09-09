@@ -122,11 +122,15 @@ impl Discovery {
             .get(key)
             .map(|meta| format!("{base}/{}/get", meta.id))
     }
-    pub(super) fn poll_requests(&self, base: &str) -> Vec<(String, Value)> {
+    pub(super) fn poll_requests(&self, base: &str, disabled: &[String]) -> Vec<(String, Value)> {
         let mut seen = HashSet::new();
         self.devices
             .values()
-            .filter(|metadata| !metadata.get_fields.is_empty() && seen.insert(metadata.id.as_str()))
+            .filter(|metadata| {
+                !metadata.get_fields.is_empty()
+                    && !disabled.contains(&metadata.id)
+                    && seen.insert(metadata.id.as_str())
+            })
             .map(|metadata| {
                 let payload = metadata
                     .get_fields
@@ -319,8 +323,9 @@ mod tests {
             &"zigbee".parse().unwrap(),
             &MqttConfig::default(),
         );
+        assert!(discovery.poll_requests("z", &["0x123".into()]).is_empty());
         assert_eq!(
-            discovery.poll_requests("z"),
+            discovery.poll_requests("z", &[]),
             vec![(
                 "z/0x123/get".into(),
                 json!({"state":"", "color":"", "color_temp":""})

@@ -90,6 +90,9 @@ impl IntegrationHandle {
     }
 
     pub fn set_device_state(&self, device: Device) {
+        if crate::types::integration::device_is_disabled(&self.config, &device.id.to_string()) {
+            return;
+        }
         if self
             .tx
             .send(IntegrationCmd::SetDeviceState {
@@ -115,6 +118,7 @@ async fn run_integration_actor(
     mut rx: mpsc::UnboundedReceiver<IntegrationCmd>,
 ) {
     let mut device_updates = DeviceUpdateQueue::new(device_update_policy);
+    let mut running = false;
     if let Some(min_interval) = device_updates.policy.min_interval() {
         info!(
             "Integration {integration_id} outbound device updates rate-limited to at most one every {:?}",
@@ -153,8 +157,14 @@ async fn run_integration_actor(
             break;
         };
 
-        handle_integration_command(&integration_id, &mut integration, &mut device_updates, cmd)
-            .await;
+        handle_integration_command(
+            &integration_id,
+            &mut integration,
+            &mut device_updates,
+            &mut running,
+            cmd,
+        )
+        .await;
     }
 
     debug!("Integration actor for {integration_id} exiting (channel closed)");
@@ -259,6 +269,7 @@ async fn handle_integration_command(
     integration_id: &IntegrationId,
     integration: &mut Box<dyn Integration>,
     device_updates: &mut DeviceUpdateQueue,
+    running: &mut bool,
     cmd: IntegrationCmd,
 ) {
     match cmd {
@@ -269,9 +280,11 @@ async fn handle_integration_command(
         }
         IntegrationCmd::Start { done } => {
             let result = run_lifecycle_command(integration_id, "start", integration.start()).await;
+            *running = result.is_ok();
             let _ = done.send(result);
         }
         IntegrationCmd::Stop { done } => {
+            *running = false;
             let dropped = device_updates.clear_pending();
             if dropped > 0 {
                 warn!(
@@ -283,11 +296,17 @@ async fn handle_integration_command(
             let _ = done.send(result);
         }
         IntegrationCmd::SetDeviceState { device } => {
+            if !*running {
+                return;
+            }
             if let Some(device) = device_updates.enqueue_or_ready(*device) {
                 run_device_state_update(integration_id, integration, device_updates, device).await;
             }
         }
         IntegrationCmd::RunAction { payload } => {
+            if !*running {
+                return;
+            }
             run_data_plane_command(
                 integration_id,
                 "run_integration_action",
@@ -382,6 +401,23 @@ mod tests {
             DeviceData::Controllable(controllable) => controllable.state.power,
             DeviceData::Sensor(_) => panic!("expected controllable test device"),
         }
+    }
+
+    #[test]
+    fn disabled_devices_never_enter_the_actor_command_queue() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let handle = IntegrationHandle {
+            tx,
+            module_name: "mqtt".into(),
+            config: serde_json::json!({"disabled_device_ids":["broken"]}),
+        };
+        handle.set_device_state(test_device("broken", true));
+        assert!(rx.try_recv().is_err());
+        handle.set_device_state(test_device("working", true));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(IntegrationCmd::SetDeviceState { .. })
+        ));
     }
 
     #[test]
