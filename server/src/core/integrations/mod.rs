@@ -303,7 +303,7 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     "zigbee2mqtt_poll_interval_secs",
                     "Zigbee2MQTT poll interval",
                     false,
-                    "Fallback GET polling interval for Zigbee2MQTT devices when reporting is unavailable. Set to 0 to disable.",
+                    "Refresh stale Zigbee2MQTT lights after this many seconds (default 300, minimum 30). Also enables paced readback after commands. Set to 0 to disable all polling.",
                     (Some(0.0), Some(86_400.0), Some(1.0)),
                     Some("300"),
                 ),

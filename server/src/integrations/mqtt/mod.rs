@@ -1,5 +1,6 @@
 #![allow(clippy::redundant_closure_call)]
 
+mod polling;
 mod utils;
 mod zigbee2mqtt;
 
@@ -19,7 +20,7 @@ use rand::{distributions::Alphanumeric, Rng};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::Deserialize;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::integrations::mqtt::utils::mqtt_to_homectl;
 
@@ -142,31 +143,24 @@ impl Integration for Mqtt {
         let event_tx = self.event_tx.clone();
         let config = Arc::new(self.config.clone());
 
+        let dry_run = self.cli.dry_run;
         self.tasks.spawn(async move {
             let mut discovery = zigbee2mqtt::Discovery::default();
-            let mut poll_interval = config
-                .zigbee2mqtt_poll_interval_secs
-                .or_else(|| config.zigbee2mqtt_base_topic.as_ref().map(|_| 300))
-                .filter(|seconds| *seconds > 0)
-                .map(|seconds| tokio::time::interval(Duration::from_secs(seconds)));
-            if let Some(interval) = poll_interval.as_mut() {
-                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-            }
+            let mut polling = polling::Polling::configured(
+                config.zigbee2mqtt_base_topic.is_some(),
+                dry_run,
+                config.zigbee2mqtt_poll_interval_secs,
+            );
+            let mut tick = tokio::time::interval(Duration::from_secs(1));
+            tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            let mut connected = false;
             loop {
-                let notification = if let Some(interval) = poll_interval.as_mut() {
-                    tokio::select! {
-                        notification = eventloop.poll() => notification,
-                        _ = interval.tick() => {
-                            for (topic, payload) in discovery.poll_requests(config.zigbee2mqtt_base_topic.as_deref().unwrap_or_default()) {
-                                if let Err(error) = client.publish(topic, QoS::AtMostOnce, false, payload.to_string()).await {
-                                    error!(target: &format!("homectl_server::integrations::mqtt::{id}"), "Zigbee2MQTT poll failed: {error:?}");
-                                }
-                            }
-                            continue;
-                        }
+                let notification = tokio::select! {
+                    notification = eventloop.poll() => notification,
+                    _ = tick.tick(), if polling.is_some() && connected => {
+                        polling.as_mut().unwrap().publish_due(&client, Instant::now());
+                        continue;
                     }
-                } else {
-                    eventloop.poll().await
                 };
 
                 let id = id.clone();
@@ -176,6 +170,7 @@ impl Integration for Mqtt {
                 let res = (|| async {
                     match notification? {
                         rumqttc::Event::Incoming(rumqttc::Packet::ConnAck(_)) => {
+                            connected = true;
                             if let Some(base) = &config.zigbee2mqtt_base_topic {
                                 client
                                     .subscribe(format!("{base}/bridge/devices"), QoS::AtLeastOnce)
@@ -202,6 +197,33 @@ impl Integration for Mqtt {
                                     .collect()
                             };
 
+                            if let (Some(base), Some(scheduler)) =
+                                (&config.zigbee2mqtt_base_topic, polling.as_mut())
+                            {
+                                let now = Instant::now();
+                                if msg.topic == format!("{base}/bridge/devices") {
+                                    scheduler.sync(discovery.poll_requests(base), now);
+                                } else if let Some(key) = discovery.poll_key(base, &msg.topic) {
+                                    let value =
+                                        serde_json::from_slice::<serde_json::Value>(&msg.payload)
+                                            .unwrap_or_default();
+                                    if msg.topic.ends_with("/availability") {
+                                        let state =
+                                            value.as_str().or_else(|| value["state"].as_str());
+                                        if let Some(state) = state {
+                                            scheduler.availability(&key, state == "online");
+                                        }
+                                    } else if !msg.retain && msg.topic.ends_with("/set") {
+                                        scheduler.command(
+                                            &key,
+                                            value["transition"].as_f64().unwrap_or(0.0),
+                                            now,
+                                        );
+                                    } else if !msg.retain && !devices.is_empty() {
+                                        scheduler.report(&key, now);
+                                    }
+                                }
+                            }
                             for device in devices {
                                 let event = Event::ExternalStateUpdate { device };
                                 event_tx.send(event);
@@ -215,6 +237,7 @@ impl Integration for Mqtt {
                 .await;
 
                 if let Err(e) = res {
+                    connected = false;
                     error!(
                         target: &format!("homectl_server::integrations::mqtt::{id}"),
                         "MQTT error: {e:?}"

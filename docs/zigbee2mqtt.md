@@ -13,11 +13,29 @@ Temperature ranges are converted from mired to Kelvin. Reports select the active
 representation using `color_mode`; outbound commands translate Kelvin to mired and
 HS saturation from a fraction to a percentage. Commands are not retained.
 
-When attribute reporting is unavailable, the profile polls each discovered
-device's GET-capable properties every five minutes. Set
-`zigbee2mqtt_poll_interval_secs` in the database-backed integration configuration
-to change the interval, or to `0` to disable the fallback. Polls are bounded to
-discovered devices and only request properties advertised by the bridge.
+The profile refreshes enabled, discovered lights/switches whose state has not
+been reported for five minutes. Set `zigbee2mqtt_poll_interval_secs` in the
+database-backed integration configuration to change this stale threshold (positive
+values are clamped to 30–86400 seconds), or `0` to disable all polling, including
+command readbacks. Generic MQTT and dry-run mode never schedule these reads.
+
+Non-retained `/set` messages observed through the bridge subscription schedule a
+readback after the requested transition plus two seconds. Repeated commands
+replace the pending deadline for that device. Fresh, non-retained state reports
+defer background refresh; reports after the readback deadline satisfy it. Retained
+startup state does not count as a fresh report. Disabled devices are excluded and
+devices advertised offline are skipped.
+
+One scheduler per MQTT integration allows at most one outstanding GET, with a
+minimum two-second gap between requests. A report releases that slot; otherwise
+it times out after 15 seconds and that device backs off from 30 seconds up to
+15 minutes. MQTT queue writes never wait for capacity: a full queue leaves the
+readback pending while MQTT processing continues. Requests are non-retained and
+contain only GET-capable state/brightness/color properties. A single MQTT GET can
+still cause several Zigbee reads; this limits homectl's request traffic, not all
+traffic from other Zigbee clients. A report is not proof that every requested
+property was freshly read, especially when bridge caching/optimistic updates are
+enabled.
 
 The inventory is cached for the MQTT task's lifetime, including reconnects, and
 refreshed from bridge metadata. State arriving before discovery is buffered with a
@@ -51,10 +69,9 @@ coordinator with `TABLE_FULL`. Reporting was not successfully enabled. No existi
 bindings were removed. Inspect the actual binding table before removing any entry;
 bounded polling remains the fallback for this lamp.
 
-Remaining work: audit/configure reporting on the Office lamp, then consider bounded
-post-transition polling for devices that need it. Poll only properties advertising
-GET access, coalesce pending polls per device, and keep polling out of the state
-actor. Explicit device-confirmation status in the UI remains a separate change.
+Remaining work: audit/configure reporting on the Office lamp. Paced post-transition
+readback and stale refresh now run outside the state actor. Explicit
+device-confirmation status in the UI remains a separate change.
 
 Protocol references:
 - https://www.zigbee2mqtt.io/guide/usage/exposes.html

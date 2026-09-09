@@ -37,6 +37,9 @@ fn writable(feature: &Value) -> bool {
 }
 
 fn metadata(value: &Value) -> Option<Metadata> {
+    if value["disabled"] == true {
+        return None;
+    }
     let id = value["ieee_address"].as_str()?.to_owned();
     let name = value["friendly_name"].as_str()?.to_owned();
     let exposes = value["definition"]["exposes"].as_array()?;
@@ -109,6 +112,16 @@ fn metadata(value: &Value) -> Option<Metadata> {
 }
 
 impl Discovery {
+    pub(super) fn poll_key(&self, base: &str, topic: &str) -> Option<String> {
+        let key = topic.strip_prefix(&format!("{base}/"))?;
+        let key = key
+            .strip_suffix("/set")
+            .or_else(|| key.strip_suffix("/availability"))
+            .unwrap_or(key);
+        self.devices
+            .get(key)
+            .map(|meta| format!("{base}/{}/get", meta.id))
+    }
     pub(super) fn poll_requests(&self, base: &str) -> Vec<(String, Value)> {
         let mut seen = HashSet::new();
         self.devices
@@ -121,7 +134,7 @@ impl Discovery {
                     .map(|field| (field.clone(), Value::String(String::new())))
                     .collect::<serde_json::Map<_, _>>();
                 (
-                    format!("{base}/{}/get", metadata.name),
+                    format!("{base}/{}/get", metadata.id),
                     Value::Object(payload),
                 )
             })
@@ -287,6 +300,40 @@ mod tests {
             {"name":"color_xy","property":"color","access":7},
             {"name":"color_hs","property":"color","access":7}
         ]}]}}])
+    }
+
+    #[test]
+    fn polling_deduplicates_aliases_and_only_reads_get_capable_enabled_lights() {
+        let mut inventory = inventory();
+        inventory[0]["definition"]["exposes"][0]["features"][1]["access"] = json!(3);
+        let mut disabled = inventory[0].clone();
+        disabled["ieee_address"] = json!("disabled");
+        disabled["friendly_name"] = json!("Disabled");
+        disabled["disabled"] = json!(true);
+        inventory.as_array_mut().unwrap().push(disabled);
+        let mut discovery = Discovery::default();
+        discovery.receive(
+            "z",
+            "z/bridge/devices",
+            &serde_json::to_vec(&inventory).unwrap(),
+            &"zigbee".parse().unwrap(),
+            &MqttConfig::default(),
+        );
+        assert_eq!(
+            discovery.poll_requests("z"),
+            vec![(
+                "z/0x123/get".into(),
+                json!({"state":"", "color":"", "color_temp":""})
+            )]
+        );
+        assert_eq!(
+            discovery.poll_key("z", "z/Office/set"),
+            Some("z/0x123/get".into())
+        );
+        assert_eq!(
+            discovery.poll_key("z", "z/0x123/availability"),
+            Some("z/0x123/get".into())
+        );
     }
 
     #[test]
