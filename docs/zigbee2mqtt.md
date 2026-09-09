@@ -13,6 +13,12 @@ Temperature ranges are converted from mired to Kelvin. Reports select the active
 representation using `color_mode`; outbound commands translate Kelvin to mired and
 HS saturation from a fraction to a percentage. Commands are not retained.
 
+When attribute reporting is unavailable, the profile polls each discovered
+device's GET-capable properties every five minutes. Set
+`zigbee2mqtt_poll_interval_secs` in the database-backed integration configuration
+to change the interval, or to `0` to disable the fallback. Polls are bounded to
+discovered devices and only request properties advertised by the bridge.
+
 The inventory is cached for the MQTT task's lifetime, including reconnects, and
 refreshed from bridge metadata. State arriving before discovery is buffered with a
 bounded size. Discovery alone does not invent a power state or replay previous
@@ -26,9 +32,9 @@ confirm IEEE IDs match the existing homectl device IDs. Check the configured sen
 value mappings too. This is a wire-format change, not just a capability override.
 Use fixtures for command conversion tests before testing an Office light.
 
-This profile does not configure Zigbee attribute reporting or automatically poll
-devices. The household installation currently needs explicit `/get` requests for
-fresh device reports (user-confirmed 2026-09-08); the Zigbee2MQTT frontend is at
+This profile does not configure Zigbee attribute reporting. The household
+installation currently needs `/get` requests for fresh device reports
+(user-confirmed 2026-09-08); the Zigbee2MQTT frontend is at
 http://192.168.1.15:8080. Old raw reports must not be interpreted as proof of device
 failure. A homectl command acknowledgement means acceptance, not Zigbee readback.
 

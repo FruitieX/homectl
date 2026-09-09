@@ -299,6 +299,14 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                     "Enable Zigbee2MQTT light discovery and native color commands. Leave empty for generic MQTT. Overrides topic and topic_set.",
                     Some("zigbee2mqtt"),
                 ),
+                number_config_field(
+                    "zigbee2mqtt_poll_interval_secs",
+                    "Zigbee2MQTT poll interval",
+                    false,
+                    "Fallback GET polling interval for Zigbee2MQTT devices when reporting is unavailable. Set to 0 to disable.",
+                    (Some(0.0), Some(86_400.0), Some(1.0)),
+                    Some("300"),
+                ),
                 text_config_field(
                     "host",
                     "Host",

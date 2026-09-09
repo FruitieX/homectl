@@ -1,5 +1,5 @@
 //! Zigbee2MQTT protocol boundary. Discovery is separate from reported state.
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use color_eyre::eyre::{eyre, Result};
 use serde_json::{json, Value};
@@ -16,6 +16,7 @@ struct Metadata {
     id: String,
     name: String,
     capabilities: Capabilities,
+    get_fields: Vec<String>,
 }
 
 #[derive(Default)]
@@ -55,6 +56,7 @@ fn metadata(value: &Value) -> Option<Metadata> {
             id,
             name,
             capabilities,
+            get_fields: vec![],
         });
     };
     let features = light["features"].as_array()?;
@@ -64,6 +66,17 @@ fn metadata(value: &Value) -> Option<Metadata> {
     {
         return None;
     }
+    let get_fields = features
+        .iter()
+        .filter(|feature| {
+            feature["access"]
+                .as_u64()
+                .is_some_and(|access| access & 4 != 0)
+        })
+        .filter_map(|feature| feature["property"].as_str())
+        .filter(|property| matches!(*property, "state" | "brightness" | "color" | "color_temp"))
+        .map(str::to_owned)
+        .collect();
     for feature in features.iter().filter(|f| writable(f)) {
         match feature["name"].as_str() {
             Some("brightness") if feature["property"] == "brightness" => {
@@ -91,10 +104,30 @@ fn metadata(value: &Value) -> Option<Metadata> {
         id,
         name,
         capabilities,
+        get_fields,
     })
 }
 
 impl Discovery {
+    pub(super) fn poll_requests(&self, base: &str) -> Vec<(String, Value)> {
+        let mut seen = HashSet::new();
+        self.devices
+            .values()
+            .filter(|metadata| !metadata.get_fields.is_empty() && seen.insert(metadata.id.as_str()))
+            .map(|metadata| {
+                let payload = metadata
+                    .get_fields
+                    .iter()
+                    .map(|field| (field.clone(), Value::String(String::new())))
+                    .collect::<serde_json::Map<_, _>>();
+                (
+                    format!("{base}/{}/get", metadata.name),
+                    Value::Object(payload),
+                )
+            })
+            .collect()
+    }
+
     pub(super) fn receive(
         &mut self,
         base: &str,

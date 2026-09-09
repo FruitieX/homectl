@@ -29,6 +29,8 @@ use self::utils::homectl_to_mqtt;
 pub struct MqttConfig {
     /// Enable the Zigbee2MQTT wire format and discovery for this base topic.
     zigbee2mqtt_base_topic: Option<String>,
+    /// Poll GET-capable Zigbee2MQTT devices when attribute reporting is unavailable.
+    zigbee2mqtt_poll_interval_secs: Option<u64>,
     host: String,
     port: u16,
     username: Option<String>,
@@ -142,8 +144,30 @@ impl Integration for Mqtt {
 
         self.tasks.spawn(async move {
             let mut discovery = zigbee2mqtt::Discovery::default();
+            let mut poll_interval = config
+                .zigbee2mqtt_poll_interval_secs
+                .or_else(|| config.zigbee2mqtt_base_topic.as_ref().map(|_| 300))
+                .filter(|seconds| *seconds > 0)
+                .map(|seconds| tokio::time::interval(Duration::from_secs(seconds)));
+            if let Some(interval) = poll_interval.as_mut() {
+                interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+            }
             loop {
-                let notification = eventloop.poll().await;
+                let notification = if let Some(interval) = poll_interval.as_mut() {
+                    tokio::select! {
+                        notification = eventloop.poll() => notification,
+                        _ = interval.tick() => {
+                            for (topic, payload) in discovery.poll_requests(config.zigbee2mqtt_base_topic.as_deref().unwrap_or_default()) {
+                                if let Err(error) = client.publish(topic, QoS::AtMostOnce, false, payload.to_string()).await {
+                                    error!(target: &format!("homectl_server::integrations::mqtt::{id}"), "Zigbee2MQTT poll failed: {error:?}");
+                                }
+                            }
+                            continue;
+                        }
+                    }
+                } else {
+                    eventloop.poll().await
+                };
 
                 let id = id.clone();
                 let event_tx = event_tx.clone();
