@@ -392,12 +392,17 @@ fn cmp_light_color(
     let expected_converted = expected.as_ref().and_then(|c| {
         let mut comparison = capabilities.clone();
         if let Some(incoming) = incoming {
+            // Compare in the mode reported by the bridge. Otherwise a device
+            // advertising several modes may always prefer XY during conversion,
+            // making an equivalent CT/HS report look different.
+            comparison.xy = false;
+            comparison.hs = false;
+            comparison.rgb = false;
+            comparison.ct = None;
             comparison.xy = matches!(incoming, DeviceColor::Xy(_));
             comparison.hs = matches!(incoming, DeviceColor::Hs(_));
             comparison.rgb = matches!(incoming, DeviceColor::Rgb(_));
-            if !matches!(incoming, DeviceColor::Ct(_)) {
-                comparison.ct = None;
-            }
+            if matches!(incoming, DeviceColor::Ct(_)) { comparison.ct = capabilities.ct.clone(); }
         }
         c.to_device_preferred_mode(&comparison)
     });

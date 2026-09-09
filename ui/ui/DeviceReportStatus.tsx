@@ -3,6 +3,7 @@ import {
   reachabilityLabels,
 } from '@/lib/deviceReachability';
 import { DeviceEnabledToggle } from '@/ui/DeviceEnabledToggle';
+import { DeviceHealth } from '@/ui/DeviceHealth';
 import { useEffect, useState } from 'react';
 import type { Device } from '@/bindings/Device';
 
@@ -54,12 +55,12 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
   if (!reports.length) return null;
   return (
     <details className="min-w-0 text-xs text-muted-foreground">
-      <summary className="cursor-pointer py-1">
-        {reports.length === 1
-          ? `${reports[0].label}${reports[0].ageLabel ? ` · ${reports[0].ageLabel}` : ''}`
-          : `${reports.filter((r) => r.label === 'Recently reachable').length}/${reports.length} recently reachable`}
+      <summary className="flex cursor-pointer items-center gap-2 py-1">
+        <DeviceHealth device={reports[0].device} />
+        <span>{reports.length === 1 ? reports[0].label : `${reports.filter((r) => r.label === 'Recently reachable').length}/${reports.length} reachable`}</span>
+        {reports.length === 1 && reports[0].ageLabel && <span>· {reports[0].ageLabel}</span>}
       </summary>
-      <div className="mt-1 space-y-1 rounded-lg bg-muted/30 p-2">
+      <div className="mt-1 space-y-1 rounded-lg border border-border/60 bg-muted/20 p-2">
         {reports.map((report) => (
           <div
             key={report.key}
@@ -78,10 +79,6 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
             </span>
           </div>
         ))}
-        <p className="pt-1">
-          Controls show requested state. Bridge reports may contain cached
-          values.
-        </p>
       </div>
     </details>
   );

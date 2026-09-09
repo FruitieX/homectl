@@ -38,6 +38,6 @@ export const reachabilityLabels: Record<DeviceReachability, string> = {
   online: 'Recently reachable',
   offline: 'Unreachable',
   stale: 'No recent response',
-  unknown: 'Reachability unknown',
+  unknown: 'Unreachable',
   disabled: 'Disabled',
 };

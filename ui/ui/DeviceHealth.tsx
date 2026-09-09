@@ -21,11 +21,11 @@ export function DeviceHealth({ device }: { device: Device }) {
     >
       {status === 'disabled' ? (
         <CirclePause className="size-4 text-muted-foreground" />
-      ) : status === 'offline' || status === 'stale' ? (
+      ) : status === 'offline' || status === 'stale' || status === 'unknown' ? (
         <AlertTriangle className="size-4 text-amber-500" />
       ) : (
         <span
-          className={`size-2 rounded-full ${status === 'online' ? 'bg-emerald-500' : 'bg-muted-foreground/50'}`}
+          className="size-2 rounded-full bg-emerald-500"
         />
       )}
     </span>
