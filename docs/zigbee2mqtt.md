@@ -13,6 +13,21 @@ Temperature ranges are converted from mired to Kelvin. Reports select the active
 representation using `color_mode`; outbound commands translate Kelvin to mired and
 HS saturation from a fraction to a percentage. Commands are not retained.
 
+The profile accepts incoming MQTT packets up to 4 MiB (outgoing limit 64 KiB).
+The generic MQTT default is unchanged. Production bridge metadata exceeded the
+client's previous 10 KiB incoming default and caused repeated reconnects.
+
+MQTT controllable devices expose `last_report` separately from requested `state`,
+with the normalized reported state, server receive time, retained/cached flag,
+and a comparison with the requested state. `requested_at_ms` records when homectl
+changes its requested state, not a hardware acknowledgement. Managed devices keep
+their requested state when reports differ, while reports refresh capabilities and
+remain visible even when raw values repeat. The device modal shows a compact
+report status with expandable report values and age. “Report matches” means the
+bridge report matches within the server's comparison tolerances; it does not
+establish fresh per-property hardware confirmation. Other integration types may
+not supply report metadata yet.
+
 The profile refreshes enabled, discovered lights/switches whose state has not
 been reported for five minutes. Set `zigbee2mqtt_poll_interval_secs` in the
 database-backed integration configuration to change this stale threshold (positive
@@ -69,9 +84,21 @@ coordinator with `TABLE_FULL`. Reporting was not successfully enabled. No existi
 bindings were removed. Inspect the actual binding table before removing any entry;
 bounded polling remains the fallback for this lamp.
 
-Remaining work: audit/configure reporting on the Office lamp. Paced post-transition
-readback and stale refresh now run outside the state actor. Explicit
-device-confirmation status in the UI remains a separate change.
+2026-09-09 follow-up: a direct ZDO binding-table read (cluster 0x0033, page 0)
+returned exactly one entry: endpoint 11, cluster 0xfc03, coordinator endpoint 1.
+There are no stale bindings identified for removal. Direct manufacturer-specific
+ZCL reporting read/configure requests for attribute 0x0002 on that existing
+cluster both returned default-response status 0x84 (`UNSUP_MANUF_GENERAL_COMMAND`).
+The configure attempt requested a 2-second minimum and 300-second maximum.
+The bridge action transport returned `status: ok`, but the device's embedded ZCL
+response rejected the operation. No binding was removed or light state changed.
+Native reporting remains unresolved; do not interpret these transport successes
+as successful reporting configuration.
+
+Remaining work: resolving native reporting requires device/firmware-specific
+investigation. Per-property hardware confirmation and multi-endpoint controls
+remain unsupported. Paced readback and separate bridge-report status are implemented;
+production rollout verification is a separate step.
 
 Protocol references:
 - https://www.zigbee2mqtt.io/guide/usage/exposes.html

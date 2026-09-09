@@ -26,6 +26,13 @@ use crate::integrations::mqtt::utils::mqtt_to_homectl;
 
 use self::utils::homectl_to_mqtt;
 
+fn configure_packet_limits(options: &mut MqttOptions, zigbee2mqtt: bool) {
+    if zigbee2mqtt {
+        // Bridge metadata is much larger than individual device reports.
+        options.set_max_packet_size(4 * 1024 * 1024, 64 * 1024);
+    }
+}
+
 #[derive(Default, Debug, Deserialize, Clone)]
 pub struct MqttConfig {
     /// Enable the Zigbee2MQTT wire format and discovery for this base topic.
@@ -129,6 +136,7 @@ impl Integration for Mqtt {
             self.config.port,
         );
         options.set_keep_alive(Duration::from_secs(5));
+        configure_packet_limits(&mut options, self.config.zigbee2mqtt_base_topic.is_some());
 
         // Set credentials if provided
         if let Some(username) = &self.config.username {
@@ -224,7 +232,26 @@ impl Integration for Mqtt {
                                     }
                                 }
                             }
-                            for device in devices {
+                            for mut device in devices {
+                                if let crate::types::device::DeviceData::Controllable(data) =
+                                    &mut device.data
+                                {
+                                    data.last_report =
+                                        Some(Box::new(crate::types::device::DeviceReport {
+                                            state: data.state.clone(),
+                                            received_at_ms: chrono::Utc::now().timestamp_millis(),
+                                            // Buffered discovery replay has unknown original freshness.
+                                            retained: msg.retain
+                                                || config
+                                                    .zigbee2mqtt_base_topic
+                                                    .as_ref()
+                                                    .is_some_and(|base| {
+                                                        msg.topic
+                                                            == format!("{base}/bridge/devices")
+                                                    }),
+                                            matches_requested: false,
+                                        }));
+                                }
                                 let event = Event::ExternalStateUpdate { device };
                                 event_tx.send(event);
                             }
@@ -308,5 +335,39 @@ impl Integration for Mqtt {
             .await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod packet_tests {
+    use super::*;
+    #[test]
+    fn bridge_sized_packets_decode_but_incoming_size_remains_bounded() {
+        let mut options = MqttOptions::new("test", "localhost", 1883);
+        let mut bytes = bytes::BytesMut::new();
+        let packet = rumqttc::mqttbytes::v4::Publish::new(
+            "zigbee2mqtt/bridge/devices",
+            QoS::AtMostOnce,
+            vec![b' '; 261080],
+        );
+        packet.write(&mut bytes).unwrap();
+        assert!(rumqttc::mqttbytes::v4::Packet::read(
+            &mut bytes.clone(),
+            options.max_packet_size()
+        )
+        .is_err());
+        configure_packet_limits(&mut options, true);
+        assert!(
+            rumqttc::mqttbytes::v4::Packet::read(&mut bytes, options.max_packet_size()).is_ok()
+        );
+        let huge = rumqttc::mqttbytes::v4::Publish::new(
+            "zigbee2mqtt/bridge/devices",
+            QoS::AtMostOnce,
+            vec![b' '; 4 * 1024 * 1024],
+        );
+        huge.write(&mut bytes).unwrap();
+        assert!(
+            rumqttc::mqttbytes::v4::Packet::read(&mut bytes, options.max_packet_size()).is_err()
+        );
     }
 }

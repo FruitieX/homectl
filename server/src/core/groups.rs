@@ -443,6 +443,8 @@ mod groups_runtime_tests {
             DeviceId::new(device_id),
             name.to_string(),
             DeviceData::Controllable(ControllableDevice {
+                last_report: None,
+                requested_at_ms: None,
                 scene_id: scene_id.map(|s| SceneId::from_str(s).unwrap()),
                 state_source: None,
                 capabilities: Capabilities {

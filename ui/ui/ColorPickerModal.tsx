@@ -1,3 +1,4 @@
+import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
@@ -977,6 +978,7 @@ export const ColorPickerModal = () => {
               </select>
             </label>
           )}
+        <DeviceReportStatus devices={selected} />
         {inFloorplan && (
           <Tabs value={section} onValueChange={setFloorplanSection}>
             <TabsList className="grid w-full grid-cols-3">

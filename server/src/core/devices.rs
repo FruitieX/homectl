@@ -493,7 +493,9 @@ impl Devices {
                 let metadata_eq = old.name == device.name
                     && match (&old.data, &device.data) {
                         (DeviceData::Controllable(old), DeviceData::Controllable(new)) => {
-                            old.capabilities == new.capabilities && old.managed == new.managed
+                            old.capabilities == new.capabilities
+                                && old.managed == new.managed
+                                && old.last_report == new.last_report
                         }
                         _ => true,
                     };
@@ -512,11 +514,29 @@ impl Devices {
         let mut device = device.clone();
 
         if let DeviceData::Controllable(ref mut controllable) = device.data {
+            if !skip_external_update {
+                // Report metadata belongs to the server, never to command callers.
+                if let Some(Device {
+                    data: DeviceData::Controllable(previous),
+                    ..
+                }) = old
+                {
+                    controllable.last_report.clone_from(&previous.last_report);
+                }
+                controllable.requested_at_ms = Some(chrono::Utc::now().timestamp_millis());
+            } else if let Some(Device {
+                data: DeviceData::Controllable(previous),
+                ..
+            }) = old
+            {
+                controllable.requested_at_ms = previous.requested_at_ms;
+            }
             // Make sure brightness is set when device is powered on, defaults to 100%
             if controllable.state.power {
                 controllable.state.brightness =
                     Some(controllable.state.brightness.unwrap_or(OrderedFloat(1.0)));
             }
+            controllable.refresh_report_match();
         }
 
         let old = old.cloned();
@@ -559,13 +579,15 @@ impl Devices {
             )
         })?;
 
-        // If the fields are already equal, do nothing
-        if device.raw == incoming.raw {
-            return Ok(());
-        }
-
         let mut device = device.clone();
         device.raw.clone_from(&incoming.raw);
+        if let (DeviceData::Controllable(current), DeviceData::Controllable(report)) =
+            (&mut device.data, &incoming.data)
+        {
+            current.last_report.clone_from(&report.last_report);
+            current.capabilities.clone_from(&report.capabilities);
+            current.refresh_report_match();
+        }
 
         if emit_internal_state_update {
             self.set_state(&device, true, true);
@@ -1076,6 +1098,71 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ordered_keys, vec!["mqtt/near", "mqtt/far", "mqtt/missing"]);
+    }
+
+    #[tokio::test]
+    async fn managed_reports_preserve_requested_state_and_refresh_capabilities() {
+        let (mut devices, _event_rx) = test_devices();
+        let current = managed_controllable_device("report-test", "Lamp");
+        devices.set_state(&current, true, true);
+        let mut incoming = current.clone();
+        if let DeviceData::Controllable(data) = &mut incoming.data {
+            data.state.brightness = Some(OrderedFloat(0.2));
+            data.capabilities.ct = Some(2000..6500);
+            data.last_report = Some(Box::new(crate::types::device::DeviceReport {
+                state: data.state.clone(),
+                received_at_ms: 1000,
+                retained: false,
+                matches_requested: false,
+            }));
+        }
+        devices
+            .handle_external_state_update(&incoming, &Scenes::default())
+            .await
+            .unwrap();
+        let stored = devices.get_device(&current.get_device_key()).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!()
+        };
+        assert_eq!(data.state.brightness, Some(OrderedFloat(0.5)));
+        assert_eq!(data.capabilities.ct, Some(2000..6500));
+        assert!(!data.last_report.as_ref().unwrap().matches_requested);
+        assert_eq!(
+            data.last_report.as_ref().unwrap().state.brightness,
+            Some(OrderedFloat(0.2))
+        );
+
+        // Identical raw payloads still refresh report timestamps and reach snapshots.
+        if let DeviceData::Controllable(data) = &mut incoming.data {
+            let report = data.last_report.as_mut().unwrap();
+            data.state.brightness = Some(OrderedFloat(0.5));
+            report.state = data.state.clone();
+            report.received_at_ms = 2000;
+        }
+        devices
+            .handle_external_state_update(&incoming, &Scenes::default())
+            .await
+            .unwrap();
+        let stored = devices.get_device(&current.get_device_key()).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!()
+        };
+        assert!(data.last_report.as_ref().unwrap().matches_requested);
+        assert_eq!(data.last_report.as_ref().unwrap().received_at_ms, 2000);
+        let mut command = stored.clone();
+        if let DeviceData::Controllable(data) = &mut command.data {
+            data.state.power = false;
+            data.last_report = None;
+        }
+        devices.set_state(&command, false, true);
+        let DeviceData::Controllable(data) =
+            &devices.get_device(&command.get_device_key()).unwrap().data
+        else {
+            panic!()
+        };
+        assert!(data.requested_at_ms.is_some());
+        assert!(data.last_report.is_some());
+        assert!(!data.last_report.as_ref().unwrap().matches_requested);
     }
 
     #[tokio::test]

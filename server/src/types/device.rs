@@ -186,10 +186,27 @@ pub struct DeviceStateSource {
     pub linked_device_key: Option<DeviceKey>,
 }
 
-/// lights with adjustable brightness and/or color
+/// Latest integration report, separate from the requested device state.
+#[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
+#[ts(export)]
+pub struct DeviceReport {
+    pub state: ControllableState,
+    #[ts(type = "number")]
+    pub received_at_ms: i64,
+    pub retained: bool,
+    pub matches_requested: bool,
+}
+
+/// Requested state and the latest separately observed integration report.
 #[derive(TS, Clone, Debug, PartialEq, Deserialize, Serialize, Hash, Eq)]
 #[ts(export)]
 pub struct ControllableDevice {
+    #[serde(default)]
+    #[ts(optional)]
+    pub last_report: Option<Box<DeviceReport>>,
+    #[serde(default)]
+    #[ts(optional, type = "number")]
+    pub requested_at_ms: Option<i64>,
     pub scene_id: Option<SceneId>,
     #[serde(default)]
     pub state_source: Option<DeviceStateSource>,
@@ -201,6 +218,21 @@ pub struct ControllableDevice {
 }
 
 impl ControllableDevice {
+    pub fn refresh_report_match(&mut self) {
+        if let Some(report) = &self.last_report {
+            let mut reported = self.clone();
+            reported.state = report.state.clone();
+            let brightness_matches = !self.state.power
+                || self.state.brightness.is_none()
+                || reported
+                    .state
+                    .brightness
+                    .zip(self.state.brightness)
+                    .is_some_and(|(a, b)| (a.0 - b.0).abs() <= 0.02);
+            let matches = brightness_matches && cmp_device_states(&reported, &self.state);
+            self.last_report.as_mut().unwrap().matches_requested = matches;
+        }
+    }
     pub fn new(
         scene: Option<SceneId>,
         power: bool,
@@ -218,6 +250,8 @@ impl ControllableDevice {
                 || capabilities.ct.is_some(),
         );
         ControllableDevice {
+            last_report: None,
+            requested_at_ms: None,
             scene_id: scene,
             state_source: None,
             state: ControllableState {
