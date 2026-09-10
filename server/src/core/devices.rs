@@ -362,9 +362,45 @@ impl Devices {
         incoming: &Device,
         incoming_state: &ControllableDevice,
     ) -> Result<()> {
+        self.handle_controllable_update_calibrated(current, incoming, incoming_state, None)
+            .await
+    }
+
+    async fn handle_controllable_update_calibrated(
+        &mut self,
+        current: Device,
+        incoming: &Device,
+        incoming_state: &ControllableDevice,
+        calibration: Option<&crate::core::color_calibration::DeviceColorCalibration>,
+    ) -> Result<()> {
         // If device is not managed, we set internal state and bail
         if !incoming.is_managed() {
-            self.set_state(incoming, true, false);
+            let mut logical = incoming.clone();
+            if let (Some(calibration), DeviceData::Controllable(data)) =
+                (calibration, &mut logical.data)
+            {
+                if let Some(color) = &data.state.color {
+                    let physical = crate::core::color_calibration::calibrated_device(
+                        &current,
+                        Some(calibration),
+                    );
+                    let mut color_only = incoming_state.clone();
+                    if let Some(expected) = physical.get_controllable_state() {
+                        color_only.state.power = expected.power;
+                        color_only.state.brightness = expected.brightness;
+                        data.state.color = if expected.color.is_some()
+                            && cmp_device_states(&color_only, expected)
+                        {
+                            current
+                                .get_controllable_state()
+                                .and_then(|state| state.color.clone())
+                        } else {
+                            Some(calibration.reference_for_report(color))
+                        };
+                    }
+                }
+            }
+            self.set_state(&logical, true, false);
 
             return Ok(());
         }
@@ -379,12 +415,15 @@ impl Devices {
             )
         })?;
 
-        if cmp_device_states(incoming_state, expected_state) {
+        let physical = crate::core::color_calibration::calibrated_device(&current, calibration);
+        let physical_expected = physical.get_controllable_state().unwrap_or(expected_state);
+        if cmp_device_states(incoming_state, physical_expected) {
             // If states match and device is partially managed with
             // uncommitted changes, we mark the change as committed.
 
             if incoming_state.has_partial_uncommitted_changes() {
                 let mut incoming_state = incoming_state.clone();
+                incoming_state.state.color = expected_state.color.clone();
                 incoming_state.managed = ManageKind::Partial {
                     prev_change_committed: true,
                 };
@@ -400,7 +439,7 @@ impl Devices {
             // this by emitting a SetExternalState event back to integration
 
             let expected_converted =
-                expected_state.color_to_device_preferred_mode(&incoming_state.capabilities);
+                physical_expected.color_to_device_preferred_mode(&incoming_state.capabilities);
 
             info!(
                 "{integration_id}/{name} state mismatch detected:\nwas:      {}\nexpected: {}\n",
@@ -428,6 +467,16 @@ impl Devices {
         incoming: &Device,
         scenes: &Scenes,
     ) -> Result<()> {
+        self.handle_external_state_update_calibrated(incoming, scenes, None)
+            .await
+    }
+
+    pub async fn handle_external_state_update_calibrated(
+        &mut self,
+        incoming: &Device,
+        scenes: &Scenes,
+        calibration: Option<&crate::core::color_calibration::DeviceColorCalibration>,
+    ) -> Result<()> {
         trace!("handle_external_state_update {incoming:?}");
 
         let device_key = incoming.get_device_key();
@@ -437,7 +486,15 @@ impl Devices {
         match (&incoming.data, current) {
             // Device was seen for the first time
             (_, None) => {
-                self.discover_device(incoming, scenes).await;
+                let mut logical = incoming.clone();
+                if let (Some(calibration), DeviceData::Controllable(data)) =
+                    (calibration, &mut logical.data)
+                {
+                    if let Some(color) = &data.state.color {
+                        data.state.color = Some(calibration.reference_for_report(color));
+                    }
+                }
+                self.discover_device(&logical, scenes).await;
             }
 
             // Metadata-only placeholder updates should never replace an
@@ -452,7 +509,15 @@ impl Devices {
             // Once we receive a real device state for a placeholder entry,
             // treat it as a first-class discovery and replace the placeholder.
             (_, Some(current)) if current.is_unknown_placeholder_sensor() => {
-                self.discover_device(incoming, scenes).await;
+                let mut logical = incoming.clone();
+                if let (Some(calibration), DeviceData::Controllable(data)) =
+                    (calibration, &mut logical.data)
+                {
+                    if let Some(color) = &data.state.color {
+                        data.state.color = Some(calibration.reference_for_report(color));
+                    }
+                }
+                self.discover_device(&logical, scenes).await;
             }
 
             // Previously seen sensor, state is always updated
@@ -464,8 +529,13 @@ impl Devices {
             (DeviceData::Controllable(ref incoming_state), Some(current)) => {
                 let current = current.clone();
 
-                self.handle_controllable_update(current, incoming, incoming_state)
-                    .await?;
+                self.handle_controllable_update_calibrated(
+                    current,
+                    incoming,
+                    incoming_state,
+                    calibration,
+                )
+                .await?;
             }
         }
 
@@ -612,10 +682,10 @@ impl Devices {
                     .last_report
                     .as_ref()
                     .is_some_and(|report| !report.retained)
-                    || !current
+                    || current
                         .last_report
                         .as_ref()
-                        .is_some_and(|report| !report.retained))
+                        .is_none_or(|report| report.retained))
             {
                 current.last_report.clone_from(&report.last_report);
             }
@@ -974,6 +1044,59 @@ mod tests {
             )),
             None,
         )
+    }
+
+    #[tokio::test]
+    async fn calibrated_reports_do_not_trigger_correction_or_overwrite_logical_color() {
+        let (mut devices, mut rx) = test_devices();
+        let calibration: crate::core::color_calibration::DeviceColorCalibration = serde_json::from_value(serde_json::json!({
+            "device_key":"mqtt/lamp", "points":[{"reference":{"h":30,"s":0.25},"output":{"h":55,"s":0.1}}]
+        })).unwrap();
+        for managed in [
+            ManageKind::Full,
+            ManageKind::Partial {
+                prev_change_committed: false,
+            },
+            ManageKind::Unmanaged,
+        ] {
+            let mut current = managed_controllable_device("lamp", "Lamp");
+            if let DeviceData::Controllable(data) = &mut current.data {
+                data.capabilities.hs = true;
+                data.state.color = Some(crate::types::color::DeviceColor::new_from_hs(30, 0.25));
+                data.managed = managed;
+            }
+            devices.set_state(&current, true, true);
+            while rx.try_recv().is_ok() {}
+            let report =
+                crate::core::color_calibration::calibrated_device(&current, Some(&calibration));
+            let DeviceData::Controllable(data) = &report.data else {
+                unreachable!()
+            };
+            devices
+                .handle_controllable_update_calibrated(
+                    current.clone(),
+                    &report,
+                    data,
+                    Some(&calibration),
+                )
+                .await
+                .unwrap();
+            while let Ok(event) = rx.try_recv() {
+                assert!(!matches!(
+                    event,
+                    crate::types::event::Event::SetExternalState { .. }
+                ));
+            }
+            assert_eq!(
+                devices
+                    .get_device(&current.get_device_key())
+                    .unwrap()
+                    .get_controllable_state()
+                    .unwrap()
+                    .color,
+                current.get_controllable_state().unwrap().color
+            );
+        }
     }
 
     fn placeholder_sensor(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {

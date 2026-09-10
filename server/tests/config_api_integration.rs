@@ -19,6 +19,7 @@ fn blank_backup_config() -> Value {
         "floorplans": [],
         "group_positions": [],
         "device_display_overrides": [],
+        "device_color_calibrations": [],
         "device_sensor_configs": [],
         "dashboard_layouts": [
             {
@@ -30,6 +31,79 @@ fn blank_backup_config() -> Value {
         "dashboard_widgets": [],
         "widget_settings": []
     })
+}
+
+#[test]
+fn color_calibration_crud_validation_and_export_import() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let url = format!(
+        "{}/api/v1/config/device-color-calibrations/mqtt%2Flamp",
+        server.base_url
+    );
+    let row = json!({"device_key":"ignored", "points":[
+        {"reference":{"h":30,"s":0.25},"output":{"h":55,"s":0.1}},
+        {"reference":{"h":27,"s":0.9},"output":{"h":35,"s":0.8}}
+    ]});
+    let saved: Value = client
+        .put(&url)
+        .json(&row)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(saved["data"]["device_key"], "mqtt/lamp");
+    let export_url = format!("{}/api/v1/config/export", server.base_url);
+    let exported: Value = client.get(&export_url).send().unwrap().json().unwrap();
+    assert_eq!(
+        exported["data"]["device_color_calibrations"][0],
+        saved["data"]
+    );
+    let mut invalid = row.clone();
+    invalid["points"][0]["output"]["s"] = json!(1.5);
+    assert_eq!(
+        client.put(&url).json(&invalid).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+    client
+        .delete(&url)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let list_url = format!(
+        "{}/api/v1/config/device-color-calibrations",
+        server.base_url
+    );
+    let cleared: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(cleared["data"], json!([]));
+    client
+        .post(format!("{}/api/v1/config/import", server.base_url))
+        .json(&exported["data"])
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let restored: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(
+        restored["data"],
+        exported["data"]["device_color_calibrations"]
+    );
+    let mut invalid_import = exported["data"].clone();
+    invalid_import["device_color_calibrations"][0]["points"][0]["output"]["s"] = json!(-0.1);
+    assert_eq!(
+        client
+            .post(format!("{}/api/v1/config/import", server.base_url))
+            .json(&invalid_import)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let after: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(after["data"], restored["data"]);
 }
 
 fn floorplan_grid_with_devices(devices: &[(&str, &str, i32, i32)]) -> String {
@@ -452,6 +526,7 @@ fn sample_config_export() -> Value {
         ],
         "group_positions": [],
         "device_display_overrides": [],
+        "device_color_calibrations": [],
         "device_sensor_configs": [],
         "dashboard_layouts": [
             {

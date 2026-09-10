@@ -193,3 +193,11 @@ pub enum WidgetSettings {
     Config,
     UpdatedAt,
 }
+
+#[derive(Clone, Copy, Iden)]
+pub enum DeviceColorCalibrations {
+    Table,
+    DeviceKey,
+    Points,
+    UpdatedAt,
+}

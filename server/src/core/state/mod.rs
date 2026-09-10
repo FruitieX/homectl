@@ -215,6 +215,33 @@ impl AppState {
         self.runtime_config.device_display_overrides.len() != len_before
     }
 
+    pub fn upsert_device_color_calibration(
+        &mut self,
+        row: crate::core::color_calibration::DeviceColorCalibration,
+    ) {
+        if let Some(existing) = self
+            .runtime_config
+            .device_color_calibrations
+            .iter_mut()
+            .find(|existing| existing.device_key == row.device_key)
+        {
+            *existing = row;
+        } else {
+            self.runtime_config.device_color_calibrations.push(row);
+            self.runtime_config
+                .device_color_calibrations
+                .sort_by(|left, right| left.device_key.cmp(&right.device_key));
+        }
+    }
+
+    pub fn delete_device_color_calibration(&mut self, device_key: &str) -> bool {
+        let len_before = self.runtime_config.device_color_calibrations.len();
+        self.runtime_config
+            .device_color_calibrations
+            .retain(|row| row.device_key != device_key);
+        self.runtime_config.device_color_calibrations.len() != len_before
+    }
+
     pub fn upsert_device_sensor_config(&mut self, row: DeviceSensorConfigRow) {
         if let Some(existing) = self
             .runtime_config

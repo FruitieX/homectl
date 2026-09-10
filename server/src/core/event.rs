@@ -230,7 +230,15 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         Event::ExternalStateUpdate { device } => {
             state
                 .devices
-                .handle_external_state_update(device, &state.scenes)
+                .handle_external_state_update_calibrated(
+                    device,
+                    &state.scenes,
+                    state
+                        .runtime_config
+                        .device_color_calibrations
+                        .iter()
+                        .find(|row| row.device_key == device.get_device_key().to_string()),
+                )
                 .await?;
             outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
@@ -341,7 +349,14 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         Event::SetExternalState { device } => {
             outcome.push(DeferredEventWork::PublishIntegrationState {
                 integrations: state.integrations.clone(),
-                device: Box::new(device.color_to_preferred_mode()),
+                device: Box::new(crate::core::color_calibration::calibrated_device(
+                    device,
+                    state
+                        .runtime_config
+                        .device_color_calibrations
+                        .iter()
+                        .find(|row| row.device_key == device.get_device_key().to_string()),
+                )),
             });
         }
         Event::ApplyDeviceState {
@@ -672,6 +687,7 @@ pub(crate) mod tests {
             floorplans: Vec::new(),
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
+            device_color_calibrations: Vec::new(),
             device_sensor_configs: Vec::new(),
             widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),

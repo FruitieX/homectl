@@ -1,8 +1,8 @@
 use crate::db::schema::{
-    ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
-    DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
-    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
-    WidgetSettings,
+    ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceColorCalibrations,
+    DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
+    GroupPositions, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
+    SceneOverrides, Scenes, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -15,6 +15,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(M20260227000000Init),
             Box::new(M20260420000000DashboardWidgetSources),
+            Box::new(M20260910000000ColorCalibration),
         ]
     }
 }
@@ -792,4 +793,49 @@ async fn create_indexes(manager: &SchemaManager<'_>) -> Result<(), DbErr> {
     }
 
     Ok(())
+}
+
+struct M20260910000000ColorCalibration;
+impl MigrationName for M20260910000000ColorCalibration {
+    fn name(&self) -> &str {
+        "m20260910000000_color_calibration"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for M20260910000000ColorCalibration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(DeviceColorCalibrations::Table)
+                    .col(
+                        ColumnDef::new(DeviceColorCalibrations::DeviceKey)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(DeviceColorCalibrations::Points)
+                            .text()
+                            .not_null()
+                            .default("[]"),
+                    )
+                    .col(
+                        ColumnDef::new(DeviceColorCalibrations::UpdatedAt)
+                            .timestamp()
+                            .default(Expr::current_timestamp()),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(
+                Table::drop()
+                    .table(DeviceColorCalibrations::Table)
+                    .to_owned(),
+            )
+            .await
+    }
 }

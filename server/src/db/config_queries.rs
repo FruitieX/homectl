@@ -5,12 +5,14 @@
 //! target SQLite and PostgreSQL.
 
 use super::get_db_connection;
+use super::schema::DeviceColorCalibrations;
 use super::schema::{
     ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
     DeviceSensorConfigs, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
     Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
     WidgetSettings,
 };
+use crate::core::color_calibration::DeviceColorCalibration;
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
 use sea_orm::{ConnectionTrait, QueryResult, Statement, StatementBuilder, TransactionTrait};
@@ -187,6 +189,8 @@ pub struct ConfigExport {
     pub group_positions: Vec<GroupPositionRow>,
     #[serde(default)]
     pub device_display_overrides: Vec<DeviceDisplayNameRow>,
+    #[serde(default)]
+    pub device_color_calibrations: Vec<DeviceColorCalibration>,
     #[serde(default)]
     pub device_sensor_configs: Vec<DeviceSensorConfigRow>,
     #[serde(default)]
@@ -479,6 +483,97 @@ pub async fn db_delete_device_display_override(device_key: &str) -> Result<bool>
         device_key,
     )
     .await
+}
+
+pub async fn db_get_device_color_calibrations() -> Result<Vec<DeviceColorCalibration>> {
+    let db = get_db_connection()?;
+    let rows = all(
+        db,
+        Query::select()
+            .columns([
+                DeviceColorCalibrations::DeviceKey,
+                DeviceColorCalibrations::Points,
+            ])
+            .from(DeviceColorCalibrations::Table)
+            .order_by(DeviceColorCalibrations::DeviceKey, Order::Asc)
+            .to_owned(),
+    )
+    .await?;
+
+    rows.into_iter()
+        .map(device_color_calibration_from_row)
+        .collect()
+}
+
+pub async fn db_upsert_device_color_calibration(row: &DeviceColorCalibration) -> Result<()> {
+    upsert_device_color_calibration_on(get_db_connection()?, row).await
+}
+
+async fn upsert_device_color_calibration_on<C: ConnectionTrait>(
+    db: &C,
+    row: &DeviceColorCalibration,
+) -> Result<()> {
+    row.validate().map_err(|error| eyre!(error))?;
+
+    execute(
+        db,
+        Query::insert()
+            .into_table(DeviceColorCalibrations::Table)
+            .columns([
+                DeviceColorCalibrations::DeviceKey,
+                DeviceColorCalibrations::Points,
+            ])
+            .values_panic([
+                Expr::value(row.device_key.clone()),
+                Expr::value(serde_json::to_string(&row.points)?),
+            ])
+            .on_conflict(
+                OnConflict::column(DeviceColorCalibrations::DeviceKey)
+                    .update_column(DeviceColorCalibrations::Points)
+                    .value(
+                        DeviceColorCalibrations::UpdatedAt,
+                        Expr::current_timestamp(),
+                    )
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_device_color_calibration(device_key: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+    delete_by_string_key(
+        db,
+        DeviceColorCalibrations::Table,
+        DeviceColorCalibrations::DeviceKey,
+        device_key,
+    )
+    .await
+}
+
+async fn replace_device_color_calibrations_on<C: ConnectionTrait + TransactionTrait>(
+    db: &C,
+    rows: &[DeviceColorCalibration],
+) -> Result<()> {
+    for row in rows {
+        row.validate().map_err(|error| eyre!(error))?;
+    }
+    let txn = db.begin().await?;
+    execute(
+        &txn,
+        Query::delete()
+            .from_table(DeviceColorCalibrations::Table)
+            .to_owned(),
+    )
+    .await?;
+    for row in rows {
+        upsert_device_color_calibration_on(&txn, row).await?;
+    }
+    txn.commit().await?;
+    Ok(())
 }
 
 pub async fn db_get_device_sensor_configs() -> Result<Vec<DeviceSensorConfigRow>> {
@@ -1528,6 +1623,22 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     .map(device_display_name_from_row)
     .collect::<Result<Vec<_>>>()?;
 
+    let device_color_calibrations = all(
+        db,
+        Query::select()
+            .columns([
+                DeviceColorCalibrations::DeviceKey,
+                DeviceColorCalibrations::Points,
+            ])
+            .from(DeviceColorCalibrations::Table)
+            .order_by(DeviceColorCalibrations::DeviceKey, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(device_color_calibration_from_row)
+    .collect::<Result<Vec<_>>>()?;
+
     let device_sensor_configs = all(
         db,
         Query::select()
@@ -1598,6 +1709,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         floorplans,
         group_positions,
         device_display_overrides,
+        device_color_calibrations,
         device_sensor_configs,
         widget_settings,
         dashboard_layouts,
@@ -1606,6 +1718,9 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
 }
 
 pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
+    for row in &config.device_color_calibrations {
+        row.validate().map_err(|error| eyre!(error))?;
+    }
     db_update_core_config(&config.core).await?;
     db_replace_widget_settings(&config.widget_settings).await?;
 
@@ -1673,6 +1788,8 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     for device_display_override in &config.device_display_overrides {
         db_upsert_device_display_override(device_display_override).await?;
     }
+    replace_device_color_calibrations_on(get_db_connection()?, &config.device_color_calibrations)
+        .await?;
     for device_sensor_config in &config.device_sensor_configs {
         db_upsert_device_sensor_config(device_sensor_config).await?;
     }
@@ -1723,6 +1840,7 @@ pub async fn db_has_config() -> Result<bool> {
         || !db_get_routines().await?.is_empty()
         || !db_get_group_positions().await?.is_empty()
         || !db_get_device_display_overrides().await?.is_empty()
+        || !db_get_device_color_calibrations().await?.is_empty()
         || !db_get_device_sensor_configs().await?.is_empty()
         || !db_get_widget_settings().await?.is_empty()
     {
@@ -2435,6 +2553,48 @@ mod consistency_tests {
             .unwrap();
         db
     }
+
+    #[tokio::test]
+    async fn color_calibration_database_export_import_round_trip() {
+        let source = database().await;
+        let row: DeviceColorCalibration = serde_json::from_value(json!({
+            "device_key": "mqtt/lamp", "points": [
+                {"reference":{"h":30,"s":0.25},"output":{"h":55,"s":0.1}},
+                {"reference":{"h":27,"s":0.9},"output":{"h":35,"s":0.8}}
+            ]
+        }))
+        .unwrap();
+        upsert_device_color_calibration_on(&source, &row)
+            .await
+            .unwrap();
+        let export = db_export_config_from_connection(&source).await.unwrap();
+        let json = serde_json::to_value(&export).unwrap();
+        let restored: ConfigExport = serde_json::from_value(json.clone()).unwrap();
+        let target = database().await;
+        replace_device_color_calibrations_on(&target, &restored.device_color_calibrations)
+            .await
+            .unwrap();
+        let reexport = db_export_config_from_connection(&target).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&reexport.device_color_calibrations).unwrap(),
+            json["device_color_calibrations"]
+        );
+        let mut legacy = json;
+        legacy
+            .as_object_mut()
+            .unwrap()
+            .remove("device_color_calibrations");
+        let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.device_color_calibrations.is_empty());
+        replace_device_color_calibrations_on(&target, &legacy.device_color_calibrations)
+            .await
+            .unwrap();
+        assert!(db_export_config_from_connection(&target)
+            .await
+            .unwrap()
+            .device_color_calibrations
+            .is_empty());
+    }
     fn routine(id: &str, target: &str) -> RoutineRow {
         RoutineRow {
             id: id.into(),
@@ -2539,4 +2699,14 @@ mod consistency_tests {
         assert_eq!(after.core.warmup_time_seconds, 123);
         assert!(after.widget_settings.iter().any(|row| row.key == "first"));
     }
+}
+
+fn device_color_calibration_from_row(row: QueryResult) -> Result<DeviceColorCalibration> {
+    let points: String = row.try_get("", "points")?;
+    let calibration = DeviceColorCalibration {
+        device_key: row.try_get("", "device_key")?,
+        points: serde_json::from_str(&points)?,
+    };
+    calibration.validate().map_err(|error| eyre!(error))?;
+    Ok(calibration)
 }

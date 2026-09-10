@@ -53,6 +53,10 @@ fn create_device(
                 transition: None,
             },
             managed: ManageKind::Full,
+            disabled: Some(false),
+            availability: None,
+            last_report: None,
+            requested_at_ms: None,
         }),
         None,
     )

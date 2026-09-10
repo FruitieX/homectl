@@ -318,6 +318,9 @@ async fn apply_runtime_config_snapshot(
     runtime_config: ConfigExport,
     _guard: &tokio::sync::OwnedMutexGuard<()>,
 ) -> color_eyre::Result<()> {
+    for row in &runtime_config.device_color_calibrations {
+        row.validate().map_err(|error| eyre::eyre!(error))?;
+    }
     let mut integrations = handle
         .mutate(|state| Box::pin(async move { state.integrations.clone() }))
         .await?;
@@ -378,6 +381,7 @@ struct DeviceConfigRewriteResult {
     changed_routines: Vec<RoutineRow>,
     changed_floorplans: Vec<ChangedFloorplan>,
     display_override_changed: bool,
+    color_calibration_changed: bool,
     sensor_config_changed: bool,
     position_changed: bool,
 }
@@ -995,6 +999,13 @@ fn rewrite_device_config_references(
     replacement_device: Option<&Device>,
 ) -> DeviceConfigRewriteResult {
     let mut result = DeviceConfigRewriteResult::default();
+    // Calibration belongs to this physical lamp, never its replacement.
+    let previous_calibrations = config.device_color_calibrations.len();
+    config
+        .device_color_calibrations
+        .retain(|row| row.device_key != source.device_key);
+    result.color_calibration_changed =
+        previous_calibrations != config.device_color_calibrations.len();
 
     for group in &mut config.groups {
         if rewrite_group_device_refs(group, source, replacement) {
@@ -1106,6 +1117,17 @@ async fn persist_device_config_rewrite(
             warn!(
                 "Failed to persist updated floorplan '{}': {error}",
                 changed_floorplan.floorplan.id
+            );
+        }
+    }
+
+    if rewrite.color_calibration_changed {
+        if let Err(error) =
+            config_queries::db_delete_device_color_calibration(&source.device_key).await
+        {
+            warn!(
+                "Failed to delete source color calibration for '{}': {error}",
+                source.device_key
             );
         }
     }
@@ -1256,6 +1278,7 @@ pub fn config(
             .or(logs_routes())
             .or(routine_history_routes())
             .or(device_display_name_routes(snapshot, handle))
+            .or(device_color_calibration_routes(snapshot, handle))
             .or(device_sensor_config_routes(snapshot, handle))
             .or(sensor_catalog_routes(snapshot, handle))
             .or(device_config_routes(handle))
@@ -1629,6 +1652,110 @@ async fn delete_device_display_name(
 
     let database_available = db::is_db_connected();
     let persistence = config_queries::db_delete_device_display_override(&device_key).await;
+
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
+fn device_color_calibration_routes(
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let list = warp::path("device-color-calibrations")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .and_then(list_device_color_calibrations);
+
+    let upsert = warp::path!("device-color-calibrations" / String)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(upsert_device_color_calibration);
+
+    let delete = warp::path!("device-color-calibrations" / String)
+        .and(warp::delete())
+        .and(with_handle(handle))
+        .and_then(delete_device_color_calibration);
+
+    list.or(upsert).or(delete)
+}
+
+async fn list_device_color_calibrations(
+    snapshot: SnapshotHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    Ok(ApiResponse::success(
+        snap.runtime_config.device_color_calibrations.clone(),
+    ))
+}
+
+async fn upsert_device_color_calibration(
+    device_key: String,
+    mut row: crate::core::color_calibration::DeviceColorCalibration,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    row.device_key = decode_path_key(device_key);
+    if let Err(error) = row.validate() {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    }
+
+    let row_for_state = row.clone();
+    if handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_device_color_calibration(row_for_state);
+            })
+        })
+        .await
+        .is_err()
+    {
+        return Ok(actor_unavailable());
+    }
+
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_device_color_calibration(&row).await;
+
+    Ok(config_write_response(
+        row,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
+async fn delete_device_color_calibration(
+    device_key: String,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let device_key = decode_path_key(device_key);
+    let key_for_state = device_key.clone();
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move { state.delete_device_color_calibration(&key_for_state) })
+        })
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    let _ = deleted; // DELETE is idempotent, including persistence retries.
+
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_device_color_calibration(&device_key).await;
 
     Ok(config_write_response(
         (),
@@ -2800,6 +2927,7 @@ impl MigratePreviewResult {
             floorplans: Vec::new(),
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
+            device_color_calibrations: Vec::new(),
             device_sensor_configs: Vec::new(),
             widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),
@@ -4010,6 +4138,7 @@ devices = [
             floorplans: Vec::new(),
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
+            device_color_calibrations: Vec::new(),
             device_sensor_configs: Vec::new(),
             widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),

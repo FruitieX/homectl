@@ -180,6 +180,7 @@ export interface ConfigExport {
   floorplan?: Record<string, unknown> | null;
   floorplans?: Record<string, unknown>[];
   device_display_overrides?: DeviceDisplayNameOverride[];
+  device_color_calibrations?: import('@/bindings/DeviceColorCalibration').DeviceColorCalibration[];
   device_sensor_configs?: DeviceSensorConfig[];
   dashboard_layouts?: Record<string, unknown>[];
   dashboard_widgets?: Record<string, unknown>[];
@@ -359,6 +360,12 @@ export function useRoutines() {
 
 export function useDeviceDisplayNames() {
   return useConfigApi<DeviceDisplayNameOverride>('device-display-names');
+}
+
+export function useDeviceColorCalibrations() {
+  return useConfigApi<
+    import('@/bindings/DeviceColorCalibration').DeviceColorCalibration
+  >('device-color-calibrations');
 }
 
 export function useDeviceSensorConfigs() {

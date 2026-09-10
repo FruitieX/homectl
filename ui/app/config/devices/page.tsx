@@ -32,6 +32,8 @@ import {
   resolveSensorInteraction,
 } from '@/lib/sensorInteraction';
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { DeviceColorCalibrationEditor } from '@/ui/DeviceColorCalibrationEditor';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -1414,7 +1416,16 @@ export default function DevicesPage() {
                     </ConfigFormSection>
                   </TabsContent>
 
-                  <TabsContent value="config" className="mt-4">
+                  <TabsContent value="config" className="mt-4 space-y-4">
+                    {'Controllable' in device.data &&
+                      device.data.Controllable.capabilities.hs &&
+                      !isDeviceReadOnly(device) && (
+                        <DeviceColorCalibrationEditor
+                          key={deviceKey}
+                          device={device}
+                          devices={devices}
+                        />
+                      )}
                     <ConfigFormSection
                       title="Configuration"
                       description="Customize how this device is displayed and how sensor payloads appear in control surfaces."

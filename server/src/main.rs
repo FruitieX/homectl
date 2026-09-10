@@ -67,6 +67,7 @@ impl RuntimeConfigSnapshot {
                 floorplans: Vec::new(),
                 group_positions: Vec::new(),
                 device_display_overrides: Vec::new(),
+                device_color_calibrations: Vec::new(),
                 device_sensor_configs: Vec::new(),
                 widget_settings: Vec::new(),
                 dashboard_layouts: Vec::new(),

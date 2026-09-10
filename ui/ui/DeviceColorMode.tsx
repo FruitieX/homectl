@@ -3,6 +3,7 @@ import type { Device } from '@/bindings/Device';
 import type { DeviceColor } from '@/bindings/DeviceColor';
 import { getColor } from '@/lib/colors';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
+import { useDeviceColorCalibrations } from '@/hooks/useConfig';
 import { Slider } from '@/ui/primitives/slider';
 import { Button } from '@/ui/primitives/button';
 import Color from 'color';
@@ -36,6 +37,8 @@ export function DeviceColorMode({
     color?: DeviceColor,
   ) => void;
 }) {
+  const { data: calibrations, loading: calibrationLoading } =
+    useDeviceColorCalibrations();
   const eligible = devices.filter(
     (d) => 'Controllable' in d.data && !isDeviceReadOnly(d),
   );
@@ -59,6 +62,18 @@ export function DeviceColorMode({
   const colors = eligible.map((d) => {
     if (!('Controllable' in d.data)) return null;
     const data = d.data.Controllable;
+    // Report metadata contains the physical HSV command. Editing it as a
+    // reference would apply calibration a second time on the next adjustment.
+    if (
+      calibrationLoading ||
+      calibrations.some(
+        (row) =>
+          row.device_key === `${d.integration_id}/${d.id}` &&
+          row.points.length > 0,
+      )
+    ) {
+      return data.state.color;
+    }
     return data.last_report &&
       !data.last_report.retained &&
       data.last_report.received_at_ms >= (data.requested_at_ms ?? 0)
@@ -268,9 +283,9 @@ export function DeviceColorMode({
   const colorY = color && 'x' in color ? color.y : null;
   // The function intentionally captures the current color; primitive values
   // are the stable cache key while the slider is being dragged.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   const xyGradients = useMemo(
     () => ({ x: xyGradient('x'), y: xyGradient('y') }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [colorX, colorY],
   );
   if (!options.length) return null;

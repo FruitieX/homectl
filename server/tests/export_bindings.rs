@@ -26,6 +26,9 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all_to(&output_dir)?;
         homectl_server::types::config_write::ConfigWriteStatus::export_all_to(&output_dir)?;
         Device::export_all_to(&output_dir)?;
+        homectl_server::core::color_calibration::DeviceColorCalibration::export_all_to(
+            &output_dir,
+        )?;
         DevicesState::export_all_to(&output_dir)?;
         FlattenedDimConfig::export_all_to(&output_dir)?;
         FlattenedGroupConfig::export_all_to(&output_dir)?;

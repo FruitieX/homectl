@@ -274,6 +274,7 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
         floorplans,
         group_positions: Vec::new(),
         device_display_overrides,
+        device_color_calibrations: Vec::new(),
         device_sensor_configs: Vec::new(),
         widget_settings,
         dashboard_layouts,
@@ -528,6 +529,7 @@ fn config_export_has_data(config: &ConfigExport) -> bool {
         || !config.floorplans.is_empty()
         || !config.group_positions.is_empty()
         || !config.device_display_overrides.is_empty()
+        || !config.device_color_calibrations.is_empty()
         || !config.device_sensor_configs.is_empty()
         || config
             .dashboard_layouts

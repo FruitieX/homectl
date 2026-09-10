@@ -6,16 +6,26 @@ const ts = require('typescript');
 const Color = require('color');
 
 // Exercise rendered controls and event handlers without contacting devices.
-function harness(data, temperatureOnly = false) {
+function harness(data, temperatureOnly = false, calibrated = false) {
   let cursor = 0;
   const state = [];
   const commands = [];
   const context = {
     exports: {},
     require(name) {
+      if (name === '@/hooks/useConfig')
+        return {
+          useDeviceColorCalibrations: () => ({
+            loading: false,
+            data: calibrated ? [{ device_key: 'mqtt/lamp', points: [{}] }] : [],
+          }),
+        };
       if (name === 'react')
         return {
           useEffect() {},
+          useMemo(factory) {
+            return factory();
+          },
           useState(initial) {
             const index = cursor++;
             if (!(index in state)) state[index] = initial;
@@ -43,6 +53,7 @@ function harness(data, temperatureOnly = false) {
       {
         compilerOptions: {
           module: ts.ModuleKind.CommonJS,
+          esModuleInterop: true,
           jsx: ts.JsxEmit.ReactJSX,
           target: ts.ScriptTarget.ES2022,
         },
@@ -63,7 +74,13 @@ function harness(data, temperatureOnly = false) {
       }
       walk(
         context.exports.DeviceColorMode({
-          devices: [{ data: { Controllable: data } }],
+          devices: [
+            {
+              id: 'lamp',
+              integration_id: 'mqtt',
+              data: { Controllable: data },
+            },
+          ],
           connected: true,
           temperatureOnly,
           onChange: (...args) => commands.push(args),
@@ -89,6 +106,17 @@ const fixture = () => ({
   },
 });
 const sliders = (nodes) => nodes.filter((n) => n.type === 'slider');
+
+test('calibrated lamps edit reference HSV instead of already-corrected reports', () => {
+  const data = fixture();
+  data.state.color = { h: 30, s: 0.25 };
+  data.last_report.received_at_ms = 110;
+  data.last_report.state.color = { h: 55, s: 0.1 };
+  const h = harness(data, false, true);
+  const controls = sliders(h.render());
+  assert.equal(controls[0].props.value[0], 30);
+  assert.equal(controls[1].props.value[0], 0.25);
+});
 
 test('XY adjustments keep the other coordinate and track scale fixed', () => {
   const data = fixture();
