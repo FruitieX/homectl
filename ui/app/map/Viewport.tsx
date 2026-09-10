@@ -31,13 +31,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/ui/primitives/popover';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/ui/primitives/select';
+import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
@@ -178,7 +172,7 @@ export const Viewport = () => {
         createPortal(
           <>
             {floorplans.length > 1 && (
-              <Select
+              <Tabs
                 value={effectiveSelectedFloorplanId ?? ''}
                 onValueChange={(id) => {
                   clearSelection();
@@ -186,21 +180,22 @@ export const Viewport = () => {
                   setSelectedFloorplanId(id);
                   setPixiFallbackReason(null);
                 }}
+                className="min-w-0 flex-1"
               >
-                <SelectTrigger
-                  aria-label="Floorplan"
-                  className="h-9 max-w-36 border-0 bg-transparent sm:max-w-56"
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {floorplans.map((floorplan) => (
-                    <SelectItem key={floorplan.id} value={floorplan.id}>
-                      {floorplan.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <div className="min-w-0 overflow-x-auto">
+                  <TabsList className="h-9 w-max min-w-full justify-start bg-transparent p-0">
+                    {floorplans.map((floorplan) => (
+                      <TabsTrigger
+                        key={floorplan.id}
+                        value={floorplan.id}
+                        className="h-8 shrink-0 px-3 text-xs"
+                      >
+                        {floorplan.name}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </div>
+              </Tabs>
             )}
             <Popover open={viewOpen} onOpenChange={setViewOpen}>
               <PopoverTrigger asChild>

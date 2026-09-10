@@ -47,12 +47,19 @@ export function DeviceReportStatus({ devices }: { devices: Device[] }) {
       {
         device,
         health,
+        // XY/HS values are commonly clipped by the lamp's physical gamut.
+        // Keep the detailed report, but only flag actionable power/brightness
+        // divergence in this compact status surface.
         differs:
           health !== 'disabled' &&
           report &&
           !report.retained &&
           report.received_at_ms >= (data.requested_at_ms ?? 0) &&
-          !report.matches_requested,
+          (report.state.power !== data.state.power ||
+            (report.state.brightness !== null &&
+              data.state.brightness !== null &&
+              Math.abs(report.state.brightness - data.state.brightness) >
+                0.03)),
         key: `${device.integration_id}/${device.id}`,
         name: device.name,
         label,

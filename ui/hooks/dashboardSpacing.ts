@@ -3,11 +3,17 @@ import { atomWithStorage } from 'jotai/utils';
 import type { CSSProperties } from 'react';
 
 export type DashboardSpacing = 'compact' | 'balanced' | 'spacious';
+export type DashboardSpacingSettings = { outer: number; gap: number };
 const spacingAtom = atomWithStorage<DashboardSpacing>(
   'homectl-dashboard-spacing',
   'balanced',
 );
 export const useDashboardSpacing = () => useAtom(spacingAtom);
+const spacingSettingsAtom = atomWithStorage<DashboardSpacingSettings>(
+  'homectl-dashboard-spacing-settings',
+  { outer: 10, gap: 12 },
+);
+export const useDashboardSpacingSettings = () => useAtom(spacingSettingsAtom);
 export const dashboardSpacingStyles: Record<DashboardSpacing, CSSProperties> = {
   compact: {
     '--widget-padding': '0.625rem',

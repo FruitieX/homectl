@@ -1,10 +1,11 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { Device } from '@/bindings/Device';
 import type { DeviceColor } from '@/bindings/DeviceColor';
 import { getColor } from '@/lib/colors';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { Slider } from '@/ui/primitives/slider';
 import { Button } from '@/ui/primitives/button';
+import Color from 'color';
 
 type Mode = 'ct' | 'hs' | 'xy' | 'rgb';
 function activeMode(color: DeviceColor | null | undefined): Mode | '' {
@@ -131,7 +132,6 @@ export function DeviceColorMode({
         );
     });
   }
-  if (!options.length) return null;
   const color =
     draft ??
     (mode && options.some(([value]) => value === mode) ? initial(mode) : null);
@@ -225,8 +225,55 @@ export function DeviceColorMode({
   }
   function xyGradient(key: string) {
     const edge = xyLimit(key) * 100;
-    return `linear-gradient(to right, color-mix(in oklab, var(--primary) 45%, var(--muted)) 0%, color-mix(in oklab, var(--primary) 75%, var(--muted)) ${edge}%, transparent ${edge}%), repeating-linear-gradient(135deg, var(--muted) 0px 4px, color-mix(in oklab, var(--foreground) 12%, var(--muted)) 4px 8px)`;
+    const other =
+      color && 'x' in color ? (key === 'x' ? color.y : color.x) : 0.329;
+    const stops = Array.from({ length: 25 }, (_, index) => {
+      const position = index / 24;
+      if (position > edge / 100) return `#28332f ${position * 100}%`;
+      const coordinate = Math.min(position, edge / 100);
+      const x = key === 'x' ? coordinate : other;
+      const y = key === 'y' ? coordinate : other;
+      const safeY = Math.max(0.0001, y);
+      const z = Math.max(0, 1 - x - y);
+      let red = 1.656492 * (x / safeY) - 0.354851 - 0.255038 * (z / safeY);
+      let green = -0.707196 * (x / safeY) + 1.655397 + 0.036152 * (z / safeY);
+      let blue = 0.051713 * (x / safeY) - 0.121364 + 1.01153 * (z / safeY);
+      const gamma = (value: number) =>
+        value <= 0.0031308
+          ? 12.92 * value
+          : 1.055 * Math.pow(Math.max(0, value), 1 / 2.4) - 0.055;
+      red = gamma(red);
+      green = gamma(green);
+      blue = gamma(blue);
+      // Preserve fractional RGB values. 8-bit hex quantizes nearby XY values
+      // into visible steps while dragging.
+      const tone = (value: number, neutral: number) =>
+        Math.max(0, Math.min(1, value * 0.7 + neutral * 0.3));
+      return `rgb(${tone(red, 0.443) * 100}% ${tone(green, 0.502) * 100}% ${tone(blue, 0.471) * 100}%) ${position * 100}%`;
+    });
+    return `linear-gradient(to right, ${stops.join(', ')}, #28332f ${edge}%, #28332f 100%)`;
   }
+  function colorGradient(key: string) {
+    const base = eligible[0] ? getColor(eligible[0].data) : Color('#7aa88f');
+    const tone = (hex: string) => Color(hex).mix(Color('#718078'), 0.3).hex();
+    const stops = Array.from({ length: 17 }, (_, index) => {
+      const position = index / 16;
+      if (key === 's')
+        return tone(Color.hsv(base.hue(), position * 100, 100).hex());
+      return tone(base.value(position * 100).hex());
+    });
+    return `linear-gradient(to right, ${stops.join(', ')})`;
+  }
+  const colorX = color && 'x' in color ? color.x : null;
+  const colorY = color && 'x' in color ? color.y : null;
+  // The function intentionally captures the current color; primitive values
+  // are the stable cache key while the slider is being dragged.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const xyGradients = useMemo(
+    () => ({ x: xyGradient('x'), y: xyGradient('y') }),
+    [colorX, colorY],
+  );
+  if (!options.length) return null;
   return (
     <div className="space-y-2 rounded-xl border border-border/60 p-3">
       {!temperatureOnly && (
@@ -259,14 +306,7 @@ export function DeviceColorMode({
         .map((channel) => (
           <div key={channel.key}>
             <div className="flex items-center justify-between text-sm">
-              <span>
-                {channel.label}
-                {(channel.key === 'x' || channel.key === 'y') && (
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    ≤ {Number(xyLimit(channel.key).toFixed(3))}
-                  </span>
-                )}
-              </span>
+              <span>{channel.label}</span>
               <span className="tabular-nums text-muted-foreground">
                 {mixed
                   ? 'Mixed'
@@ -277,19 +317,20 @@ export function DeviceColorMode({
             </div>
             <Slider
               aria-label={channel.label}
-              className="min-h-11 [&>span:first-child]:bg-[image:var(--channel-gradient)] [&>span:first-child>span]:bg-transparent"
-              style={
-                {
-                  '--channel-gradient':
-                    channel.key === 'x' || channel.key === 'y'
-                      ? xyGradient(channel.key)
-                      : channel.key === 'ct'
-                        ? 'linear-gradient(to right, #e9bd83, #ece6dc, #aec6e4)'
-                        : channel.key === 'h'
-                          ? 'linear-gradient(to right, #d97979, #d9d979, #79d979, #79d9d9, #7979d9, #d979d9, #d97979)'
-                          : 'linear-gradient(to right, var(--muted), var(--primary))',
-                } as CSSProperties
-              }
+              className="min-h-11 [&>span:first-child>span]:bg-transparent"
+              rangeClassName="bg-transparent"
+              trackStyle={{
+                backgroundImage:
+                  channel.key === 'x' || channel.key === 'y'
+                    ? xyGradients[channel.key as 'x' | 'y']
+                    : channel.key === 'ct'
+                      ? 'linear-gradient(to right, #c9ad82, #d0ccc2, #9fb2c4)'
+                      : channel.key === 'h'
+                        ? 'linear-gradient(to right, #c58484, #c5c584, #84c584, #84c5c5, #8484c5, #c584c5, #c58484)'
+                        : channel.key === 's' || channel.key === 'v'
+                          ? colorGradient(channel.key)
+                          : 'linear-gradient(to right, #3a4650, #8aa7b8)',
+              }}
               min={channel.min}
               max={channel.max}
               step={channel.step}

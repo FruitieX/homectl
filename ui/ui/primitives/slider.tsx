@@ -1,14 +1,21 @@
 import * as SliderPrimitive from '@radix-ui/react-slider';
-import { type ComponentProps } from 'react';
+import { type ComponentProps, type CSSProperties } from 'react';
 
 import { cn } from '@/lib/cn';
 
+type SliderProps = ComponentProps<typeof SliderPrimitive.Root> & {
+  trackStyle?: CSSProperties;
+  rangeClassName?: string;
+};
+
 export function Slider({
   className,
+  trackStyle,
+  rangeClassName,
   'aria-label': ariaLabel,
   'aria-labelledby': ariaLabelledBy,
   ...props
-}: ComponentProps<typeof SliderPrimitive.Root>) {
+}: SliderProps) {
   return (
     <SliderPrimitive.Root
       className={cn(
@@ -17,8 +24,13 @@ export function Slider({
       )}
       {...props}
     >
-      <SliderPrimitive.Track className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary">
-        <SliderPrimitive.Range className="absolute h-full bg-primary" />
+      <SliderPrimitive.Track
+        style={trackStyle}
+        className="relative h-2 w-full grow overflow-hidden rounded-full bg-secondary"
+      >
+        <SliderPrimitive.Range
+          className={cn('absolute h-full bg-primary', rangeClassName)}
+        />
       </SliderPrimitive.Track>
       <SliderPrimitive.Thumb
         aria-label={ariaLabel}

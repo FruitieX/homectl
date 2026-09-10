@@ -22,11 +22,12 @@ import {
   useScenesState,
   useWebsocket,
 } from '@/hooks/websocket';
-import { getPower } from '@/lib/colors';
+import { getColor, getPower } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { Button } from '@/ui/primitives/button';
 import { Slider } from '@/ui/primitives/slider';
+import Color from 'color';
 
 // Preserve the existing scene override mode when changing live controls.
 export function useLiveDeviceControls() {
@@ -210,6 +211,9 @@ export function DeviceQuickControls({
       </p>
     ) : null;
   const brightness = draft ?? Math.round((values[0] ?? 0) * 100);
+  const brightnessColor = dimmable[0]
+    ? getColor(dimmable[0].data)
+    : Color('#8aa7b8');
   return (
     <div className={compact ? 'space-y-2' : 'space-y-3'}>
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -261,6 +265,10 @@ export function DeviceQuickControls({
           <Slider
             aria-label="Brightness"
             className="min-h-11"
+            rangeClassName="bg-transparent"
+            trackStyle={{
+              backgroundImage: `linear-gradient(to right, #11161a, ${brightnessColor.value(100).hex()})`,
+            }}
             value={[brightness]}
             min={0}
             max={100}

@@ -19,18 +19,17 @@ export function ColorSlider({
 }: Props) {
   const id = useId();
   const stops = Array.from({ length: 7 }, (_, index) => {
+    const tone = (hex: string) => Color(hex).mix(Color('#718078'), 0.3).hex();
     const position = index / 6;
-    if (channel === 'hue') return Color.hsv(position * 360, 44, 85).hex();
+    if (channel === 'hue') return tone(Color.hsv(position * 360, 44, 85).hex());
     if (channel === 'saturation')
-      return color
-        .saturationv(position * 100)
-        .value(100)
-        .mix(Color('#b0b0b0'), 0.2)
-        .hex();
-    return color
-      .value(position * 100)
-      .mix(Color('#b0b0b0'), 0.2)
-      .hex();
+      return tone(
+        color
+          .saturationv(position * 100)
+          .value(100)
+          .hex(),
+      );
+    return tone(color.value(position * 100).hex());
   });
   return (
     <div className={cn('min-w-0 shrink-0', className)}>

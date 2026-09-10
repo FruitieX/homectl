@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createUuid } from '@/lib/uuid';
 import {
   useDashboardSpacing,
+  useDashboardSpacingSettings,
   type DashboardSpacing,
 } from '@/hooks/dashboardSpacing';
 import { useSensorData } from '@/hooks/influxdb';
@@ -174,16 +175,24 @@ function SensorVisibilityField({
   const options = [
     ...(catalog?.sensors ?? []),
     ...sensors
-      .filter((sensor) => !(catalog?.sensors ?? []).some((item) => item.id === sensor.device_id))
-      .map((sensor) => ({ id: sensor.device_id, name: sensor.device_name, source: 'influxdb', enabled: true })),
+      .filter(
+        (sensor) =>
+          !(catalog?.sensors ?? []).some(
+            (item) => item.id === sensor.device_id,
+          ),
+      )
+      .map((sensor) => ({
+        id: sensor.device_id,
+        name: sensor.device_name,
+        source: 'influxdb',
+        enabled: true,
+      })),
   ];
   const configured = Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string')
     : [];
   const selected = new Set(
-    configured.length > 0
-      ? configured
-      : options.map((sensor) => sensor.id),
+    configured.length > 0 ? configured : options.map((sensor) => sensor.id),
   );
 
   const toggle = (id: string, checked: boolean) => {
@@ -193,19 +202,26 @@ function SensorVisibilityField({
     onChange(
       next.size === options.length
         ? []
-        : options.filter((sensor) => next.has(sensor.id)).map(
-            (sensor) => sensor.id,
-          ),
+        : options
+            .filter((sensor) => next.has(sensor.id))
+            .map((sensor) => sensor.id),
     );
   };
 
   return (
     <div className="grid gap-2 md:col-span-2">
-      <span className="text-sm font-medium leading-none text-foreground">Sensors shown</span>
-      <span className="text-xs leading-5 text-muted-foreground">Choose which known sensors appear in this widget. An empty selection means all sensors.</span>
+      <span className="text-sm font-medium leading-none text-foreground">
+        Sensors shown
+      </span>
+      <span className="text-xs leading-5 text-muted-foreground">
+        Choose which known sensors appear in this widget. An empty selection
+        means all sensors.
+      </span>
       <div className="grid grid-cols-2 gap-2 rounded-xl border border-border bg-muted/20 p-3 min-[600px]:grid-cols-4">
         {sensors
-          .filter((sensor) => options.some((option) => option.id === sensor.device_id))
+          .filter((sensor) =>
+            options.some((option) => option.id === sensor.device_id),
+          )
           .map((sensor) => (
             <div key={sensor.device_id} className="space-y-1">
               <SensorChip
@@ -216,16 +232,31 @@ function SensorVisibilityField({
               <Input
                 aria-label={`Name for ${sensor.device_name}`}
                 className="h-8 text-xs"
-                defaultValue={options.find((option) => option.id === sensor.device_id)?.name ?? sensor.device_name}
+                defaultValue={
+                  options.find((option) => option.id === sensor.device_id)
+                    ?.name ?? sensor.device_name
+                }
                 onPointerDown={(event) => event.stopPropagation()}
                 onClick={(event) => event.stopPropagation()}
                 onBlur={(event) => {
                   const name = event.target.value.trim();
                   if (!name || !catalog) return;
-                  const existing = catalog.sensors.find((item) => item.id === sensor.device_id);
+                  const existing = catalog.sensors.find(
+                    (item) => item.id === sensor.device_id,
+                  );
                   const sensors = existing
-                    ? catalog.sensors.map((item) => item.id === sensor.device_id ? { ...item, name } : item)
-                    : [...catalog.sensors, { id: sensor.device_id, name, source: 'influxdb', enabled: true }];
+                    ? catalog.sensors.map((item) =>
+                        item.id === sensor.device_id ? { ...item, name } : item,
+                      )
+                    : [
+                        ...catalog.sensors,
+                        {
+                          id: sensor.device_id,
+                          name,
+                          source: 'influxdb',
+                          enabled: true,
+                        },
+                      ];
                   void saveCatalog({ sensors, groups: catalog.groups });
                 }}
               />
@@ -246,7 +277,10 @@ function SensorGroupsField() {
   const addGroup = () => {
     const name = newGroup.trim();
     if (!name || groups[name]) return;
-    const nextGroups = [...(catalog?.groups ?? []), { id: createUuid(), name, sensorIds: [] }];
+    const nextGroups = [
+      ...(catalog?.groups ?? []),
+      { id: createUuid(), name, sensorIds: [] },
+    ];
     void saveCatalog({ sensors: catalog?.sensors ?? [], groups: nextGroups });
     setNewGroup('');
   };
@@ -269,8 +303,13 @@ function SensorGroupsField() {
 
   return (
     <div className="grid gap-2 md:col-span-2">
-      <span className="text-sm font-medium leading-none text-foreground">Sensor groups</span>
-      <span className="text-xs leading-5 text-muted-foreground">Create your own groups for filtering the detail view, such as Upstairs or Bedrooms.</span>
+      <span className="text-sm font-medium leading-none text-foreground">
+        Sensor groups
+      </span>
+      <span className="text-xs leading-5 text-muted-foreground">
+        Create your own groups for filtering the detail view, such as Upstairs
+        or Bedrooms.
+      </span>
       <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3">
         {(catalog?.groups ?? []).map((group) => (
           <div
@@ -291,7 +330,9 @@ function SensorGroupsField() {
                 onClick={() => {
                   void saveCatalog({
                     sensors: catalog?.sensors ?? [],
-                    groups: (catalog?.groups ?? []).filter((item) => item.id !== group.id),
+                    groups: (catalog?.groups ?? []).filter(
+                      (item) => item.id !== group.id,
+                    ),
                   });
                 }}
               >
@@ -309,7 +350,9 @@ function SensorGroupsField() {
                       group.id,
                       checked
                         ? [...group.sensorIds, sensor.device_id]
-                        : group.sensorIds.filter((id) => id !== sensor.device_id),
+                        : group.sensorIds.filter(
+                            (id) => id !== sensor.device_id,
+                          ),
                     )
                   }
                 />
@@ -345,6 +388,7 @@ function SensorGroupsField() {
 
 export default function DashboardConfigPage() {
   const [spacing, setSpacing] = useDashboardSpacing();
+  const [spacingSettings, setSpacingSettings] = useDashboardSpacingSettings();
   const {
     layouts,
     loading: layoutsLoading,
@@ -406,6 +450,41 @@ export default function DashboardConfigPage() {
           <option value="balanced">Balanced</option>
           <option value="spacious">Spacious</option>
         </select>
+      </ConfigField>
+      <ConfigField
+        label="Card spacing"
+        description="Adjust edge padding and the gap between cards on this device."
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(
+            [
+              ['outer', 'Edge padding'],
+              ['gap', 'Gap between cards'],
+            ] as const
+          ).map(([key, label]) => (
+            <label key={key} className="grid gap-1 text-sm">
+              <span className="flex justify-between">
+                <span>{label}</span>
+                <span className="tabular-nums text-muted-foreground">
+                  {spacingSettings[key]} px
+                </span>
+              </span>
+              <input
+                type="range"
+                min={4}
+                max={32}
+                step={1}
+                value={spacingSettings[key]}
+                onChange={(event) =>
+                  setSpacingSettings({
+                    ...spacingSettings,
+                    [key]: Number(event.target.value),
+                  })
+                }
+              />
+            </label>
+          ))}
+        </div>
       </ConfigField>
       <div className="grid gap-6 lg:grid-cols-[minmax(0,22rem)_1fr]">
         <Card>
@@ -826,8 +905,8 @@ function WidgetOptionFields({
           onChange={(value) => onChange('spotPricePath', value)}
         />
         <ConfigHelpPanel>
-          Bars fade smoothly from green through amber to red as the price
-          moves between these thresholds. Values are in c/kWh.
+          Bars fade smoothly from green through amber to red as the price moves
+          between these thresholds. Values are in c/kWh.
         </ConfigHelpPanel>
         <OptionNumberField
           label="Low price threshold"

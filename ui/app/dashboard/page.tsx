@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import {
   useDashboardSpacing,
+  useDashboardSpacingSettings,
   dashboardSpacingStyles,
 } from '@/hooks/dashboardSpacing';
 import { Link } from 'react-router-dom';
@@ -140,6 +141,7 @@ function DashboardLoadingGrid() {
 
 export default function Page() {
   const [storedSpacing] = useDashboardSpacing();
+  const [spacingSettings] = useDashboardSpacingSettings();
   const spacing =
     storedSpacing in dashboardSpacingStyles ? storedSpacing : 'balanced';
   const [isFullscreen] = useIsFullscreen();
@@ -218,8 +220,14 @@ export default function Page() {
   return (
     <div
       data-dashboard-spacing={spacing}
-      style={dashboardSpacingStyles[spacing]}
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6"
+      style={
+        {
+          ...dashboardSpacingStyles[spacing],
+          '--dashboard-outer': `${spacingSettings.outer}px`,
+          '--dashboard-gap': `${spacingSettings.gap}px`,
+        } as React.CSSProperties
+      }
+      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-[var(--dashboard-outer)] py-[var(--dashboard-outer)]"
     >
       <div className="mx-auto max-w-[100rem] space-y-8">
         <section>
