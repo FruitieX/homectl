@@ -275,6 +275,8 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
         group_positions: Vec::new(),
         device_display_overrides,
         device_color_calibrations: Vec::new(),
+        color_calibration_profiles: Vec::new(),
+        color_calibration_assignments: Vec::new(),
         device_sensor_configs: Vec::new(),
         widget_settings,
         dashboard_layouts,
@@ -530,6 +532,7 @@ fn config_export_has_data(config: &ConfigExport) -> bool {
         || !config.group_positions.is_empty()
         || !config.device_display_overrides.is_empty()
         || !config.device_color_calibrations.is_empty()
+        || !config.color_calibration_profiles.is_empty()
         || !config.device_sensor_configs.is_empty()
         || config
             .dashboard_layouts

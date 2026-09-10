@@ -1,57 +1,48 @@
-# Per-device HSV color calibration
+# Color matching wizard and reusable profiles
 
-Open **Configuration → Devices**, expand a lamp, and use **Config → Color calibration**.
-Calibration is stored in the database per physical device and included in JSON
-exports. Existing backups without calibration remain compatible.
+Open **Configuration → Devices**, expand a writable HSV light, and choose
+**Config → Color calibration**. Select a reference light whose colors you want
+to match, name the profile, and choose the brightness you normally use.
 
-Each matching point maps a reference HSV color (the value shared by scenes) to
-the HSV command that makes this lamp look like the reference lamp. Brightness
-stays separate. Native color-temperature, XY and RGB commands are unchanged.
+## Match two lights
 
-## Start with existing circadian profiles
+The wizard suggests 15 distinct points: neutral white, warm white, cool white,
+six saturated hues around the color wheel, and six softer hues. For each point,
+adjust the target lamp's hue and saturation until the illumination matches the
+reference. Changes preview automatically; **Looks matched** confirms the point.
+Compare light on the same neutral surface, not the colors shown on a screen.
 
-Select the reference circadian integration and the lamp's existing compensated
-integration, then load their day/night points. The profiles are read from the
-runtime configuration; loading them only changes the editor draft.
+Review then offers four colors between the initial matches. Test them and use
+**Improve this color** to add any weak match to the calibration. You can also
+revisit earlier points. Fifteen points provide broad coverage, not a guarantee
+of a perfect match: lamp gamut, brightness, placement and visual judgment matter.
+This calibration adjusts HSV hue and saturation; brightness, native color
+temperature, RGB and XY commands are not calibrated.
 
-For the existing profiles, use `circadian` as reference:
+Testing temporarily overrides the two lights' physical output. Existing target
+calibration is bypassed; the reference light retains its normal calibration.
+Scene state continues advancing normally and is not replaced by preview values.
+**Cancel** or **Finish** returns both lights to their current normal state.
+Closing the view requests cancellation; a disconnected session expires after
+two minutes without a heartbeat (checked every 30 seconds). Previews are not
+saved to device state or configuration.
 
-| Point | Reference H/S | LIFX H/S | Tuya H/S |
-| --- | --- | --- | --- |
-| Day | 30° / 25% | 55° / 10% | 48° / 60% |
-| Night | 27° / 90% | 35° / 80% | 34° / 100% |
+## Save once, reuse from the devices list
 
-Save the calibration on the corresponding physical lamps. Then change those
-lamps' scene links to `circadian`. The compensated integrations and scene links
-are not rewritten automatically: keeping an old compensated link after enabling
-calibration applies the correction twice. Leave the reference Hue lamps without
-a profile unless you want to correct them too.
+**Save profile & finish** saves the named profile and assigns it to the target
+lamp. Checkboxes in the devices list select other writable HSV lights. Choose a
+saved profile in the selection toolbar and apply it to the whole selection, or
+remove calibration from the selection. Filtering preserves selected lights and
+the toolbar explicitly indicates selections hidden by filters.
 
-## Match additional colors
+A batch validates every selected device before applying anything, then persists
+the assignments in one transaction. Reuse works best for lamps of the same model;
+check a representative lamp before assigning a profile to many lights. Profile
+changes are saved as a new profile so other assigned lamps are not changed
+unexpectedly. Deleting/replacing a lamp removes its assignment but keeps the
+reusable profile.
 
-Choose a reference lamp and a fixed test brightness. Start with the two white
-points, then add red, yellow, green, cyan, blue and magenta, followed by less
-saturated colors where matching is poor. Enter the same reference and output
-values initially. Use **Save & test**, adjust the output hue/saturation until the
-light matches, and test again. Compare illumination on the same neutral surface.
-
-Testing saves the entire draft, powers on the selected lamps and detaches their
-active scenes. Reactivate their scenes when finished. There is no automatic
-measurement: the browser cannot observe the actual light emitted by the lamps.
-
-The server blends hue and saturation offsets using inverse-distance weights on
-a hue/saturation disk. This respects the red hue wrap and distinguishes points
-with similar hue but different saturation. Every saved matching point is exact;
-colors between and outside points are estimates. Two warm-white points do not
-determine a full lamp gamut, and lamps may require different corrections at
-different brightness levels. This version has no brightness-dependent profiles.
-
-Scene state stays in reference coordinates. Outbound HSV commands are corrected
-once, and managed-device reports are compared against the corrected expected
-state. Unmanaged reports reuse the known reference command where possible;
-otherwise the server estimates an inverse. Saturation clipping can make that
-inverse ambiguous. Raw report metadata remains in the lamp's coordinates.
-
-**Reset calibration** removes the saved profile. The next command uses the
-uncorrected reference color. Deleting or replacing a physical device removes its
-calibration instead of copying it to a different lamp.
+Profiles and assignments are stored in the database and round-trip through JSON
+exports. Older backups and existing per-device matching points remain supported.
+A profile assignment supersedes the older points; removing calibration removes
+both. No integration configuration is needed for calibration.

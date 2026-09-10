@@ -402,7 +402,9 @@ fn cmp_light_color(
             comparison.xy = matches!(incoming, DeviceColor::Xy(_));
             comparison.hs = matches!(incoming, DeviceColor::Hs(_));
             comparison.rgb = matches!(incoming, DeviceColor::Rgb(_));
-            if matches!(incoming, DeviceColor::Ct(_)) { comparison.ct = capabilities.ct.clone(); }
+            if matches!(incoming, DeviceColor::Ct(_)) {
+                comparison.ct = capabilities.ct.clone();
+            }
         }
         c.to_device_preferred_mode(&comparison)
     });

@@ -181,6 +181,8 @@ export interface ConfigExport {
   floorplans?: Record<string, unknown>[];
   device_display_overrides?: DeviceDisplayNameOverride[];
   device_color_calibrations?: import('@/bindings/DeviceColorCalibration').DeviceColorCalibration[];
+  color_calibration_profiles?: import('@/bindings/ColorCalibrationProfile').ColorCalibrationProfile[];
+  color_calibration_assignments?: import('@/bindings/ColorCalibrationAssignment').ColorCalibrationAssignment[];
   device_sensor_configs?: DeviceSensorConfig[];
   dashboard_layouts?: Record<string, unknown>[];
   dashboard_widgets?: Record<string, unknown>[];
@@ -370,6 +372,55 @@ export function useDeviceColorCalibrations() {
 
 export function useDeviceSensorConfigs() {
   return useConfigApi<DeviceSensorConfig>('device-sensor-configs');
+}
+
+export function useCalibrationProfiles() {
+  return useConfigApi<
+    import('@/bindings/ColorCalibrationProfile').ColorCalibrationProfile
+  >('calibration-profiles');
+}
+
+export function useCalibrationAssignments() {
+  return useConfigApi<
+    import('@/bindings/ColorCalibrationAssignment').ColorCalibrationAssignment
+  >('calibration-assignments');
+}
+
+export function useAssignCalibrationProfile() {
+  const { apiEndpoint } = useAppConfig();
+  const queryClient = useQueryClient();
+  const recordWrite = useRecordConfigWrite();
+  return useMutation({
+    mutationFn: async ({
+      deviceKeys,
+      profileId,
+    }: {
+      deviceKeys: string[];
+      profileId: string | null;
+    }) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/calibration-assignments`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            device_keys: deviceKeys,
+            profile_id: profileId,
+          }),
+        },
+      );
+      const result = await readApiResponse<null>(
+        response,
+        'Failed to assign calibration profile',
+      );
+      if (!result.success)
+        throw new Error(result.error || 'Failed to assign calibration profile');
+      recordWrite('calibration-assignments', result.write);
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['config'] });
+    },
+  });
 }
 
 export function useConfigDevices() {

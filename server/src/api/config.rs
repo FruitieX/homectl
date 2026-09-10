@@ -318,6 +318,9 @@ async fn apply_runtime_config_snapshot(
     runtime_config: ConfigExport,
     _guard: &tokio::sync::OwnedMutexGuard<()>,
 ) -> color_eyre::Result<()> {
+    runtime_config
+        .validate_calibration_profiles()
+        .map_err(|error| eyre::eyre!(error))?;
     for row in &runtime_config.device_color_calibrations {
         row.validate().map_err(|error| eyre::eyre!(error))?;
     }
@@ -1000,12 +1003,16 @@ fn rewrite_device_config_references(
 ) -> DeviceConfigRewriteResult {
     let mut result = DeviceConfigRewriteResult::default();
     // Calibration belongs to this physical lamp, never its replacement.
-    let previous_calibrations = config.device_color_calibrations.len();
+    let previous_calibrations =
+        config.device_color_calibrations.len() + config.color_calibration_assignments.len();
+    config
+        .color_calibration_assignments
+        .retain(|row| row.device_key != source.device_key);
     config
         .device_color_calibrations
         .retain(|row| row.device_key != source.device_key);
-    result.color_calibration_changed =
-        previous_calibrations != config.device_color_calibrations.len();
+    result.color_calibration_changed = previous_calibrations
+        != config.device_color_calibrations.len() + config.color_calibration_assignments.len();
 
     for group in &mut config.groups {
         if rewrite_group_device_refs(group, source, replacement) {
@@ -1661,6 +1668,8 @@ async fn delete_device_display_name(
     ))
 }
 
+mod calibration;
+
 fn device_color_calibration_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
@@ -1682,15 +1691,31 @@ fn device_color_calibration_routes(
         .and(with_handle(handle))
         .and_then(delete_device_color_calibration);
 
-    list.or(upsert).or(delete)
+    list.or(upsert)
+        .or(delete)
+        .or(calibration::routes(snapshot, handle))
 }
 
 async fn list_device_color_calibrations(
     snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let snap = snapshot.load();
+    let mut keys: std::collections::BTreeSet<String> = snap
+        .runtime_config
+        .device_color_calibrations
+        .iter()
+        .map(|row| row.device_key.clone())
+        .collect();
+    keys.extend(
+        snap.runtime_config
+            .color_calibration_assignments
+            .iter()
+            .map(|row| row.device_key.clone()),
+    );
     Ok(ApiResponse::success(
-        snap.runtime_config.device_color_calibrations.clone(),
+        keys.into_iter()
+            .filter_map(|key| snap.runtime_config.calibration_for_device(&key))
+            .collect::<Vec<_>>(),
     ))
 }
 
@@ -2928,6 +2953,8 @@ impl MigratePreviewResult {
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_color_calibrations: Vec::new(),
+            color_calibration_profiles: Vec::new(),
+            color_calibration_assignments: Vec::new(),
             device_sensor_configs: Vec::new(),
             widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),
@@ -4139,6 +4166,8 @@ devices = [
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_color_calibrations: Vec::new(),
+            color_calibration_profiles: Vec::new(),
+            color_calibration_assignments: Vec::new(),
             device_sensor_configs: Vec::new(),
             widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),

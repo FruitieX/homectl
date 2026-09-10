@@ -16,6 +16,7 @@ impl MigratorTrait for Migrator {
             Box::new(M20260227000000Init),
             Box::new(M20260420000000DashboardWidgetSources),
             Box::new(M20260910000000ColorCalibration),
+            Box::new(M20260910000001CalibrationProfiles),
         ]
     }
 }
@@ -110,6 +111,55 @@ impl MigrationTrait for M20260420000000DashboardWidgetSources {
                     .if_exists()
                     .to_owned(),
             )
+            .await
+    }
+}
+
+struct M20260910000001CalibrationProfiles;
+impl MigrationName for M20260910000001CalibrationProfiles {
+    fn name(&self) -> &str {
+        "m20260910000001_calibration_profiles"
+    }
+}
+#[async_trait::async_trait]
+impl MigrationTrait for M20260910000001CalibrationProfiles {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        use crate::db::config_queries::calibration::{
+            CalibrationAssignments as A, CalibrationProfiles as P,
+        };
+        manager
+            .create_table(
+                Table::create()
+                    .table(P::Table)
+                    .col(ColumnDef::new(P::Id).text().not_null().primary_key())
+                    .col(ColumnDef::new(P::Config).text().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_table(
+                Table::create()
+                    .table(A::Table)
+                    .col(ColumnDef::new(A::DeviceKey).text().not_null().primary_key())
+                    .col(ColumnDef::new(A::ProfileId).text().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .from(A::Table, A::ProfileId)
+                            .to(P::Table, P::Id),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        use crate::db::config_queries::calibration::{
+            CalibrationAssignments as A, CalibrationProfiles as P,
+        };
+        manager
+            .drop_table(Table::drop().table(A::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(P::Table).to_owned())
             .await
     }
 }

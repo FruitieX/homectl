@@ -105,6 +105,7 @@ impl From<SnapshotChanges> for PendingWsUpdate {
 }
 
 pub struct AppState {
+    pub calibration_sessions: HashMap<String, super::calibration_session::CalibrationSession>,
     pub warming_up: bool,
     pub runtime_config: ConfigExport,
     pub integrations: Integrations,
@@ -219,6 +220,9 @@ impl AppState {
         &mut self,
         row: crate::core::color_calibration::DeviceColorCalibration,
     ) {
+        self.runtime_config
+            .color_calibration_assignments
+            .retain(|assignment| assignment.device_key != row.device_key);
         if let Some(existing) = self
             .runtime_config
             .device_color_calibrations
@@ -235,11 +239,17 @@ impl AppState {
     }
 
     pub fn delete_device_color_calibration(&mut self, device_key: &str) -> bool {
-        let len_before = self.runtime_config.device_color_calibrations.len();
+        let len_before = self.runtime_config.device_color_calibrations.len()
+            + self.runtime_config.color_calibration_assignments.len();
+        self.runtime_config
+            .color_calibration_assignments
+            .retain(|assignment| assignment.device_key != device_key);
         self.runtime_config
             .device_color_calibrations
             .retain(|row| row.device_key != device_key);
-        self.runtime_config.device_color_calibrations.len() != len_before
+        self.runtime_config.device_color_calibrations.len()
+            + self.runtime_config.color_calibration_assignments.len()
+            != len_before
     }
 
     pub fn upsert_device_sensor_config(&mut self, row: DeviceSensorConfigRow) {

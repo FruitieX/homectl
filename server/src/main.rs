@@ -68,6 +68,8 @@ impl RuntimeConfigSnapshot {
                 group_positions: Vec::new(),
                 device_display_overrides: Vec::new(),
                 device_color_calibrations: Vec::new(),
+                color_calibration_profiles: Vec::new(),
+                color_calibration_assignments: Vec::new(),
                 device_sensor_configs: Vec::new(),
                 widget_settings: Vec::new(),
                 dashboard_layouts: Vec::new(),
@@ -209,6 +211,7 @@ async fn run_event_loop(
     });
 
     let state = AppState {
+        calibration_sessions: Default::default(),
         warming_up: true,
         runtime_config: runtime_config.config.clone(),
         integrations,

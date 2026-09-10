@@ -228,16 +228,22 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             }
         }
         Event::ExternalStateUpdate { device } => {
+            if state
+                .calibration_preview_device(&device.get_device_key().to_string())
+                .is_some()
+            {
+                // A preview report must not replace normal state or trigger drift correction.
+                return Ok(outcome);
+            }
+            let calibration = state
+                .runtime_config
+                .calibration_for_device(&device.get_device_key().to_string());
             state
                 .devices
                 .handle_external_state_update_calibrated(
                     device,
                     &state.scenes,
-                    state
-                        .runtime_config
-                        .device_color_calibrations
-                        .iter()
-                        .find(|row| row.device_key == device.get_device_key().to_string()),
+                    calibration.as_ref(),
                 )
                 .await?;
             outcome.mark_snapshot_changes(SnapshotChanges::devices());
@@ -347,16 +353,17 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::SetExternalState { device } => {
+            let calibration = state
+                .runtime_config
+                .calibration_for_device(&device.get_device_key().to_string());
+            let physical = state
+                .calibration_preview_device(&device.get_device_key().to_string())
+                .unwrap_or_else(|| {
+                    crate::core::color_calibration::calibrated_device(device, calibration.as_ref())
+                });
             outcome.push(DeferredEventWork::PublishIntegrationState {
                 integrations: state.integrations.clone(),
-                device: Box::new(crate::core::color_calibration::calibrated_device(
-                    device,
-                    state
-                        .runtime_config
-                        .device_color_calibrations
-                        .iter()
-                        .find(|row| row.device_key == device.get_device_key().to_string()),
-                )),
+                device: Box::new(physical),
             });
         }
         Event::ApplyDeviceState {
@@ -688,6 +695,8 @@ pub(crate) mod tests {
             group_positions: Vec::new(),
             device_display_overrides: Vec::new(),
             device_color_calibrations: Vec::new(),
+            color_calibration_profiles: Vec::new(),
+            color_calibration_assignments: Vec::new(),
             device_sensor_configs: Vec::new(),
             widget_settings: Vec::new(),
             dashboard_layouts: Vec::new(),
@@ -710,6 +719,7 @@ pub(crate) mod tests {
             warming_up: false,
         });
         let state = AppState {
+            calibration_sessions: Default::default(),
             warming_up: false,
             runtime_config,
             integrations: Integrations::new(event_tx.clone(), &cli),

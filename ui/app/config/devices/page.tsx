@@ -9,11 +9,15 @@ import {
   useGroups,
   useDeviceSensorConfigs,
   useScenes,
+  useCalibrationProfiles,
+  useCalibrationAssignments,
+  useAssignCalibrationProfile,
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useDevicesState } from '@/hooks/websocket';
 import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
+import { canCalibrateDevice, toggleSelection } from '@/lib/colorCalibration';
 import {
   getDefaultDeviceLabel,
   getDeviceDisplayLabel,
@@ -33,7 +37,7 @@ import {
 } from '@/lib/sensorInteraction';
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
-import { DeviceColorCalibrationEditor } from '@/ui/DeviceColorCalibrationEditor';
+import { ColorCalibrationWizard } from '@/ui/ColorCalibrationWizard';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -513,6 +517,15 @@ function DeviceFactRow({ label, value }: { label: string; value: string }) {
 
 export default function DevicesPage() {
   const {
+    data: calibrationProfiles,
+    loading: profilesLoading,
+    error: profilesError,
+  } = useCalibrationProfiles();
+  const { data: calibrationAssignments } = useCalibrationAssignments();
+  const assignCalibration = useAssignCalibrationProfile();
+  const [selectedKeys, setSelectedKeys] = useState<string[]>([]);
+  const [batchProfileId, setBatchProfileId] = useState('');
+  const {
     devices,
     loading: devicesLoading,
     refetch: refetchDevices,
@@ -672,6 +685,37 @@ export default function DevicesPage() {
 
     return Array.from(mergedDevices.values());
   }, [devices, websocketDevices]);
+
+  const selectedLights = selectedKeys.filter((key) =>
+    liveDevices.some(
+      (device) => getDeviceKey(device) === key && canCalibrateDevice(device),
+    ),
+  );
+  const applyCalibration = async (profileId: string | null) => {
+    setError(null);
+    setNotice(null);
+    try {
+      if (selectedLights.length !== selectedKeys.length)
+        throw new Error(
+          'Some selected lights are no longer available for calibration. Clear the selection and select them again.',
+        );
+      const count = selectedLights.length;
+      await assignCalibration.mutateAsync({
+        deviceKeys: selectedLights,
+        profileId,
+      });
+      setNotice(
+        profileId
+          ? `Applied ${calibrationProfiles.find((profile) => profile.id === profileId)?.name ?? 'profile'} to ${count} lights.`
+          : `Removed calibration from ${count} lights.`,
+      );
+      setSelectedKeys([]);
+    } catch (error) {
+      setError(
+        error instanceof Error ? error.message : 'Could not assign calibration',
+      );
+    }
+  };
 
   const replacementOptions = useMemo(
     () =>
@@ -1142,6 +1186,88 @@ export default function DevicesPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-3 p-4">
+          <Button
+            variant="outline"
+            disabled={assignCalibration.isPending}
+            onClick={() =>
+              setSelectedKeys((selected) =>
+                toggleSelection(
+                  selected,
+                  visibleDevices
+                    .filter((entry) => canCalibrateDevice(entry.device))
+                    .map((entry) => entry.deviceKey),
+                ),
+              )
+            }
+          >
+            Select / deselect visible lights
+          </Button>
+          <span className="text-sm">
+            {selectedKeys.length} selected
+            {selectedKeys.some(
+              (key) => !visibleDevices.some((entry) => entry.deviceKey === key),
+            )
+              ? ' (including hidden by filters)'
+              : ''}
+          </span>
+          {selectedKeys.length > 0 && (
+            <>
+              <select
+                aria-label="Calibration profile for selected lights"
+                className={selectClassName}
+                value={batchProfileId}
+                onChange={(event) => setBatchProfileId(event.target.value)}
+                disabled={assignCalibration.isPending || profilesLoading}
+              >
+                <option value="">Choose calibration profile</option>
+                {calibrationProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                disabled={
+                  assignCalibration.isPending ||
+                  !batchProfileId ||
+                  profilesLoading ||
+                  !!profilesError
+                }
+                onClick={() => void applyCalibration(batchProfileId)}
+              >
+                Apply profile to {selectedKeys.length} lights
+              </Button>
+              <Button
+                variant="outline"
+                disabled={assignCalibration.isPending}
+                onClick={() => void applyCalibration(null)}
+              >
+                Remove calibration
+              </Button>
+              <Button
+                variant="ghost"
+                disabled={assignCalibration.isPending}
+                onClick={() => setSelectedKeys([])}
+              >
+                Clear selection
+              </Button>
+            </>
+          )}
+          <p className="w-full text-sm text-muted-foreground">
+            Create a profile in a light’s Config tab. Select lights here to
+            reuse it—ideally lamps of the same model. Applying a profile also
+            reapplies their current color.
+          </p>
+          {profilesError && (
+            <p role="alert" className="text-sm">
+              {profilesError}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
       <div className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3">
         {visibleDevices.map((entry) => {
           const {
@@ -1206,6 +1332,27 @@ export default function DevicesPage() {
               summary={
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
+                    {canCalibrateDevice(device) && (
+                      <label
+                        className="flex items-center gap-2 pt-1"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          className="size-5 accent-primary"
+                          aria-label={`Select ${label}`}
+                          checked={selectedKeys.includes(deviceKey)}
+                          disabled={assignCalibration.isPending}
+                          onChange={() =>
+                            setSelectedKeys((selected) =>
+                              selected.includes(deviceKey)
+                                ? selected.filter((key) => key !== deviceKey)
+                                : [...selected, deviceKey],
+                            )
+                          }
+                        />
+                      </label>
+                    )}
                     <div className="min-w-0 flex-1">
                       <h2 className="truncate text-base font-semibold">
                         {label}
@@ -1217,6 +1364,19 @@ export default function DevicesPage() {
 
                     {hasDisplayOverride && <Badge>Custom label</Badge>}
                   </div>
+                  {calibrationAssignments.find(
+                    (row) => row.device_key === deviceKey,
+                  ) && (
+                    <Badge variant="outline">
+                      {calibrationProfiles.find(
+                        (profile) =>
+                          profile.id ===
+                          calibrationAssignments.find(
+                            (row) => row.device_key === deviceKey,
+                          )?.profile_id,
+                      )?.name ?? 'Calibrated'}
+                    </Badge>
+                  )}
 
                   <div className="text-sm text-foreground/80">
                     {runtimeSummary}
@@ -1420,10 +1580,10 @@ export default function DevicesPage() {
                     {'Controllable' in device.data &&
                       device.data.Controllable.capabilities.hs &&
                       !isDeviceReadOnly(device) && (
-                        <DeviceColorCalibrationEditor
+                        <ColorCalibrationWizard
                           key={deviceKey}
                           device={device}
-                          devices={devices}
+                          devices={liveDevices}
                         />
                       )}
                     <ConfigFormSection

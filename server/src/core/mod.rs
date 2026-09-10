@@ -1,3 +1,4 @@
+pub mod calibration_session;
 pub mod color_calibration;
 pub mod config;
 pub mod config_diagnostics;

@@ -5,6 +5,7 @@
 //! target SQLite and PostgreSQL.
 
 use super::get_db_connection;
+pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
     ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
@@ -191,6 +192,11 @@ pub struct ConfigExport {
     pub device_display_overrides: Vec<DeviceDisplayNameRow>,
     #[serde(default)]
     pub device_color_calibrations: Vec<DeviceColorCalibration>,
+    #[serde(default)]
+    pub color_calibration_profiles: Vec<crate::core::color_calibration::ColorCalibrationProfile>,
+    #[serde(default)]
+    pub color_calibration_assignments:
+        Vec<crate::core::color_calibration::ColorCalibrationAssignment>,
     #[serde(default)]
     pub device_sensor_configs: Vec<DeviceSensorConfigRow>,
     #[serde(default)]
@@ -506,7 +512,17 @@ pub async fn db_get_device_color_calibrations() -> Result<Vec<DeviceColorCalibra
 }
 
 pub async fn db_upsert_device_color_calibration(row: &DeviceColorCalibration) -> Result<()> {
-    upsert_device_color_calibration_on(get_db_connection()?, row).await
+    let txn = get_db_connection()?.begin().await?;
+    delete_by_string_key(
+        &txn,
+        calibration::CalibrationAssignments::Table,
+        calibration::CalibrationAssignments::DeviceKey,
+        &row.device_key,
+    )
+    .await?;
+    upsert_device_color_calibration_on(&txn, row).await?;
+    txn.commit().await?;
+    Ok(())
 }
 
 async fn upsert_device_color_calibration_on<C: ConnectionTrait>(
@@ -544,14 +560,23 @@ async fn upsert_device_color_calibration_on<C: ConnectionTrait>(
 }
 
 pub async fn db_delete_device_color_calibration(device_key: &str) -> Result<bool> {
-    let db = get_db_connection()?;
-    delete_by_string_key(
-        db,
+    let txn = get_db_connection()?.begin().await?;
+    let assignment = delete_by_string_key(
+        &txn,
+        calibration::CalibrationAssignments::Table,
+        calibration::CalibrationAssignments::DeviceKey,
+        device_key,
+    )
+    .await?;
+    let legacy = delete_by_string_key(
+        &txn,
         DeviceColorCalibrations::Table,
         DeviceColorCalibrations::DeviceKey,
         device_key,
     )
-    .await
+    .await?;
+    txn.commit().await?;
+    Ok(assignment || legacy)
 }
 
 async fn replace_device_color_calibrations_on<C: ConnectionTrait + TransactionTrait>(
@@ -1710,6 +1735,8 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         group_positions,
         device_display_overrides,
         device_color_calibrations,
+        color_calibration_profiles: calibration::profiles(db).await?,
+        color_calibration_assignments: calibration::assignments(db).await?,
         device_sensor_configs,
         widget_settings,
         dashboard_layouts,
@@ -1718,9 +1745,13 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
 }
 
 pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
+    config
+        .validate_calibration_profiles()
+        .map_err(|error| eyre!(error))?;
     for row in &config.device_color_calibrations {
         row.validate().map_err(|error| eyre!(error))?;
     }
+    calibration::import(get_db_connection()?, config).await?;
     db_update_core_config(&config.core).await?;
     db_replace_widget_settings(&config.widget_settings).await?;
 
@@ -1840,6 +1871,9 @@ pub async fn db_has_config() -> Result<bool> {
         || !db_get_routines().await?.is_empty()
         || !db_get_group_positions().await?.is_empty()
         || !db_get_device_display_overrides().await?.is_empty()
+        || !calibration::profiles(get_db_connection()?)
+            .await?
+            .is_empty()
         || !db_get_device_color_calibrations().await?.is_empty()
         || !db_get_device_sensor_configs().await?.is_empty()
         || !db_get_widget_settings().await?.is_empty()

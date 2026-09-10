@@ -20,6 +20,8 @@ fn blank_backup_config() -> Value {
         "group_positions": [],
         "device_display_overrides": [],
         "device_color_calibrations": [],
+        "color_calibration_profiles": [],
+        "color_calibration_assignments": [],
         "device_sensor_configs": [],
         "dashboard_layouts": [
             {
@@ -104,6 +106,152 @@ fn color_calibration_crud_validation_and_export_import() {
     );
     let after: Value = client.get(&list_url).send().unwrap().json().unwrap();
     assert_eq!(after["data"], restored["data"]);
+}
+
+#[test]
+fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
+    let mut config = blank_backup_config();
+    let light = json!({"Controllable": {
+        "scene_id":null, "state_source":null,
+        "capabilities":{"hs":true,"brightness":true},
+        "state":{"power":false,"brightness":0.5,"color":{"h":90,"s":0.3},"transition":null},
+        "managed":"Full"
+    }});
+    config["integrations"] = json!([{"id":"dummy","plugin":"dummy","enabled":true,"config":{"devices":{
+        "target":{"name":"Target","init_state":light},
+        "reference":{"name":"Reference","init_state":light},
+        "other":{"name":"Other","init_state":light}
+    }}}]);
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(config.to_string()),
+        ..Default::default()
+    })
+    .unwrap();
+    let base = &server.base_url;
+    let client = Client::new();
+    wait_for("calibration lights", || {
+        device_by_name(&get_json(base, "/api/v1/devices"), "Target").is_some()
+    });
+    let profile = json!({"id":"matching-model","name":"Matching model","reference_device_key":"dummy/reference","brightness":0.5,"points":[
+        {"reference":{"h":30,"s":0.25},"output":{"h":45,"s":0.3}}
+    ]});
+    client
+        .post(format!("{base}/api/v1/config/calibration-profiles"))
+        .json(&profile)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let assignment_url = format!("{base}/api/v1/config/calibration-assignments");
+    client
+        .put(&assignment_url)
+        .json(&json!({"device_keys":["dummy/target","dummy/other"],"profile_id":"matching-model"}))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let assigned = get_json(base, "/api/v1/config/calibration-assignments");
+    assert_eq!(assigned["data"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        client
+            .put(&assignment_url)
+            .json(&json!({"device_keys":["dummy/target","dummy/missing"],"profile_id":null}))
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        get_json(base, "/api/v1/config/calibration-assignments")["data"],
+        assigned["data"]
+    );
+    let effective = get_json(base, "/api/v1/config/device-color-calibrations");
+    assert!(effective["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|row| row["points"] == profile["points"]));
+    let before = get_json(base, "/api/v1/devices");
+    let session_url = format!("{base}/api/v1/config/calibration-sessions/test-session");
+    let preview = json!({"target_key":"dummy/target","reference_key":"dummy/reference","reference":{"h":30,"s":0.25},"output":{"h":47,"s":0.4},"brightness":0.5});
+    client
+        .post(&session_url)
+        .json(&preview)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    client
+        .put(&session_url)
+        .json(&preview)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let during = get_json(base, "/api/v1/devices");
+    for name in ["Target", "Reference"] {
+        assert_eq!(
+            device_by_name(&before, name).unwrap()["data"]["Controllable"]["state"],
+            device_by_name(&during, name).unwrap()["data"]["Controllable"]["state"]
+        );
+    }
+    client
+        .delete(&session_url)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        client
+            .put(&session_url)
+            .json(&preview)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    let exported = get_json(base, "/api/v1/config/export");
+    assert_eq!(
+        exported["data"]["color_calibration_profiles"],
+        json!([profile])
+    );
+    assert_eq!(
+        exported["data"]["color_calibration_assignments"],
+        assigned["data"]
+    );
+    let mut invalid_import = exported["data"].clone();
+    invalid_import["color_calibration_assignments"][0]["profile_id"] = json!("does-not-exist");
+    assert_eq!(
+        client
+            .post(format!("{base}/api/v1/config/import"))
+            .json(&invalid_import)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+    client
+        .put(&assignment_url)
+        .json(&json!({"device_keys":["dummy/target","dummy/other"],"profile_id":null}))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        get_json(base, "/api/v1/config/calibration-assignments")["data"],
+        json!([])
+    );
+    client
+        .post(format!("{base}/api/v1/config/import"))
+        .json(&exported["data"])
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        get_json(base, "/api/v1/config/calibration-assignments")["data"],
+        assigned["data"]
+    );
 }
 
 fn floorplan_grid_with_devices(devices: &[(&str, &str, i32, i32)]) -> String {
@@ -527,6 +675,8 @@ fn sample_config_export() -> Value {
         "group_positions": [],
         "device_display_overrides": [],
         "device_color_calibrations": [],
+        "color_calibration_profiles": [],
+        "color_calibration_assignments": [],
         "device_sensor_configs": [],
         "dashboard_layouts": [
             {

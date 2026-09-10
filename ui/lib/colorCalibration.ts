@@ -1,44 +1,89 @@
 import type { ColorCalibrationPoint } from '@/bindings/ColorCalibrationPoint';
 import type { Hs } from '@/bindings/Hs';
-import type { Integration } from '@/hooks/useConfig';
+import type { Device } from '@/bindings/Device';
+import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 
-function hsv(value: unknown): Hs {
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !('h' in value) ||
-    !('s' in value) ||
-    typeof value.h !== 'number' ||
-    typeof value.s !== 'number' ||
-    !Number.isFinite(value.h) ||
-    !Number.isFinite(value.s) ||
-    value.h < 0 ||
-    value.h > 360 ||
-    value.s < 0 ||
-    value.s > 1
-  ) {
-    throw new Error(
-      'Both circadian profiles must have HSV day and night colors.',
+export type MatchingPoint = ColorCalibrationPoint & {
+  label: string;
+  matched: boolean;
+};
+
+export function suggestedMatchingPoints(): MatchingPoint[] {
+  const colors: { label: string; color: Hs }[] = [
+    { label: 'Neutral white', color: { h: 0, s: 0 } },
+    { label: 'Warm white', color: { h: 30, s: 0.25 } },
+    { label: 'Cool white', color: { h: 210, s: 0.12 } },
+  ];
+  const names = ['Red', 'Yellow', 'Green', 'Cyan', 'Blue', 'Magenta'];
+  for (const saturation of [1, 0.45]) {
+    names.forEach((name, index) =>
+      colors.push({
+        label: saturation === 1 ? name : `Soft ${name.toLowerCase()}`,
+        color: { h: index * 60, s: saturation },
+      }),
     );
   }
-  return { h: Math.round(value.h) % 360, s: value.s };
+  return colors.map(({ label, color }) => ({
+    label,
+    reference: { ...color },
+    output: { ...color },
+    matched: false,
+  }));
 }
 
-export function seedCircadianCalibration(
-  reference: Integration,
-  output: Integration,
-): ColorCalibrationPoint[] {
-  const points = ['day_color', 'night_color'].map((key) => ({
-    reference: hsv(reference.config[key]),
-    output: hsv(output.config[key]),
-  }));
-  if (
-    points[0].reference.h === points[1].reference.h &&
-    points[0].reference.s === points[1].reference.s
-  ) {
-    throw new Error(
-      'The reference profile needs distinct day and night colors.',
-    );
+export const verificationColors = [
+  { label: 'Orange', color: { h: 30, s: 0.7 } },
+  { label: 'Mint', color: { h: 150, s: 0.7 } },
+  { label: 'Sky blue', color: { h: 210, s: 0.7 } },
+  { label: 'Violet', color: { h: 270, s: 0.7 } },
+];
+
+// Match the server interpolation when testing between measured anchors.
+export function calibratedHsv(input: Hs, points: ColorCalibrationPoint[]): Hs {
+  if (!points.length) return { ...input };
+  const position = (color: Hs) => [
+    color.s * Math.cos((color.h * Math.PI) / 180),
+    color.s * Math.sin((color.h * Math.PI) / 180),
+  ];
+  const [x, y] = position(input);
+  let weights = 0,
+    dx = 0,
+    dy = 0;
+  for (const point of points) {
+    const [px, py] = position(point.reference);
+    const distance = (x - px) ** 2 + (y - py) ** 2;
+    if (distance < 1e-8) return { ...point.output };
+    const weight = 1 / distance;
+    weights += weight;
+    const [ox, oy] = position(point.output);
+    dx += weight * (ox - px);
+    dy += weight * (oy - py);
   }
-  return points;
+  if (dx === 0 && dy === 0) return { ...input };
+  const ox = x + dx / weights;
+  const oy = y + dy / weights;
+  return {
+    h: Math.round(((Math.atan2(oy, ox) * 180) / Math.PI + 360) % 360) % 360,
+    s: Math.min(1, Math.hypot(ox, oy)),
+  };
+}
+
+export function canCalibrateDevice(device: Device): boolean {
+  return (
+    'Controllable' in device.data &&
+    device.data.Controllable.capabilities.hs &&
+    !isDeviceReadOnly(device)
+  );
+}
+
+export function toggleSelection(
+  selected: string[],
+  visibleKeys: string[],
+): string[] {
+  const allSelected =
+    visibleKeys.length > 0 &&
+    visibleKeys.every((key) => selected.includes(key));
+  return allSelected
+    ? selected.filter((key) => !visibleKeys.includes(key))
+    : [...new Set([...selected, ...visibleKeys])];
 }
