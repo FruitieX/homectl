@@ -17,6 +17,7 @@ import {
   getCurrentHsColor,
   matchingPointsFromProfile,
   nextManualCalibrationPoint,
+  pointForCurrentReference,
   removeCalibrationPoint,
   stepCalibrationValue,
   suggestedMatchingPoints,
@@ -100,6 +101,9 @@ export function ColorCalibrationWizard({
   const currentReferenceColor = referenceDevice
     ? getCurrentHsColor(referenceDevice)
     : null;
+  const currentReferencePoint = currentReferenceColor
+    ? pointForCurrentReference(points, currentReferenceColor)
+    : null;
   const canAmendCurrentPoint = canAmendReferencePoint(
     currentReferenceColor,
     points,
@@ -147,6 +151,25 @@ export function ColorCalibrationWizard({
       await enqueue(() => request(`calibration-sessions/${id}`, 'DELETE'));
       session.current = null;
     }
+  };
+  const startMatching = (startingPoint: (typeof points)[number]) => {
+    void run(async () => {
+      const id = createUuid();
+      session.current = id;
+      try {
+        await enqueue(() =>
+          request(
+            `calibration-sessions/${id}`,
+            'POST',
+            previewBody(startingPoint.reference, startingPoint.output),
+          ),
+        );
+        setPhase('match');
+      } catch (error) {
+        await stop();
+        throw error;
+      }
+    });
   };
 
   const editCurrentProfile = () => {
@@ -290,6 +313,22 @@ export function ColorCalibrationWizard({
     setPreviewed(false);
   };
 
+  const calibrateCurrentReference = () => {
+    if (!currentReferenceColor || !currentReferencePoint) return;
+    const { index: currentIndex, point: startingPoint } = currentReferencePoint;
+    setPoints((previous) =>
+      currentIndex === previous.length
+        ? [...previous, startingPoint]
+        : previous.map((item, pointIndex) =>
+            pointIndex === currentIndex ? startingPoint : item,
+          ),
+    );
+    setIndex(currentIndex);
+    setCheckIndex(null);
+    setPreviewed(false);
+    startMatching(startingPoint);
+  };
+
   const deleteCurrentPoint = () => {
     const result = removeCalibrationPoint(points, index);
     if (result.points === points) return;
@@ -336,6 +375,23 @@ export function ColorCalibrationWizard({
                   onClick={editCurrentProfile}
                 >
                   Edit current profile
+                </Button>
+              </div>
+            )}
+            {editingProfileId && currentReferencePoint && (
+              <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-sm">
+                  Calibrate the reference light’s current color without starting
+                  from the first saved point. Existing points stay loaded, and a
+                  new point starts from this profile’s current output.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={calibrateCurrentReference}
+                >
+                  Calibrate current reference state
                 </Button>
               </div>
             )}
@@ -419,25 +475,7 @@ export function ColorCalibrationWizard({
                 brightness < 1 ||
                 brightness > 100
               }
-              onClick={() =>
-                void run(async () => {
-                  const id = createUuid();
-                  session.current = id;
-                  try {
-                    await enqueue(() =>
-                      request(
-                        `calibration-sessions/${id}`,
-                        'POST',
-                        previewBody(point.reference, point.output),
-                      ),
-                    );
-                    setPhase('match');
-                  } catch (error) {
-                    await stop();
-                    throw error;
-                  }
-                })
-              }
+              onClick={() => startMatching(point)}
             >
               {editingProfileId
                 ? `Start editing · ${points.length} points`
@@ -470,6 +508,13 @@ export function ColorCalibrationWizard({
               Adjust <strong>{device.name}</strong> until its light looks the
               same. Changes preview automatically.
             </p>
+            {editingProfileId && (
+              <p className="text-sm text-muted-foreground">
+                Saved calibration values are loaded for each point as you move
+                through the list. Only make changes where the physical lights
+                still differ.
+              </p>
+            )}
             <div className="space-y-2">
               <div className="flex flex-wrap gap-2">
                 <Button

@@ -12,6 +12,7 @@ import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { cn } from '@/lib/cn';
+import { normalizeBuildInfo } from '@/lib/buildInfo';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
@@ -76,6 +77,12 @@ const themeOptions: {
   { value: 'dark', label: 'Dark', icon: <Moon className="size-5" /> },
   { value: 'auto', label: 'Auto', icon: <Monitor className="size-5" /> },
 ];
+
+const buildInfo = normalizeBuildInfo({
+  version: import.meta.env.VITE_APP_VERSION,
+  gitCommit: import.meta.env.VITE_GIT_COMMIT,
+  buildDate: import.meta.env.VITE_BUILD_DATE,
+});
 
 function normalizeCoreConfig(
   value: CoreConfigApiResponse | null | undefined,
@@ -313,6 +320,36 @@ export default function SettingsPage() {
                 </p>
               </CardContent>
             </Card>
+            <Card className="mt-4">
+              <CardHeader>
+                <CardTitle>Build Information</CardTitle>
+                <CardDescription>
+                  Source and build metadata for the frontend currently loaded.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                  <div className="min-w-0 space-y-1">
+                    <dt className="text-muted-foreground">Version</dt>
+                    <dd className="font-medium text-foreground">
+                      {buildInfo.version}
+                    </dd>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <dt className="text-muted-foreground">Build date (UTC)</dt>
+                    <dd className="break-all font-mono text-xs text-foreground">
+                      {buildInfo.buildDate}
+                    </dd>
+                  </div>
+                  <div className="min-w-0 space-y-1">
+                    <dt className="text-muted-foreground">Git commit</dt>
+                    <dd className="break-all font-mono text-xs text-foreground">
+                      {buildInfo.gitCommit}
+                    </dd>
+                  </div>
+                </dl>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </form>
@@ -391,8 +428,8 @@ function DeveloperModeSetting() {
           Developer mode
         </span>
         <span className="block text-xs leading-5 text-muted-foreground">
-          Show troubleshooting actions in the navigation, such as a manual
-          page refresh. This setting is stored in this browser.
+          Show troubleshooting actions in the navigation, such as a manual page
+          refresh. This setting is stored in this browser.
         </span>
       </span>
       <Switch

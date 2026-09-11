@@ -26,6 +26,7 @@ const {
   toggleSelection,
   canCalibrateDevice,
   matchingPointsFromProfile,
+  pointForCurrentReference,
   getCurrentHsColor,
   canAmendReferencePoint,
   stepCalibrationValue,
@@ -148,6 +149,37 @@ test('existing profiles can be loaded into editable matching points', () => {
       matched: true,
     },
   ]);
+});
+
+test('current reference calibration reuses saved output or existing interpolation', () => {
+  const points = [
+    {
+      label: 'Point 1',
+      reference: { h: 0, s: 0 },
+      output: { h: 10, s: 0.2 },
+      matched: true,
+    },
+    {
+      label: 'Point 2',
+      reference: { h: 120, s: 1 },
+      output: { h: 110, s: 0.9 },
+      matched: true,
+    },
+  ];
+  const existing = pointForCurrentReference(points, { h: 0, s: 0 });
+  assert.equal(existing.index, 0);
+  assert.deepEqual(plain(existing.point.output), points[0].output);
+  assert.equal(existing.point.matched, false);
+
+  const current = { h: 60, s: 0.5 };
+  const added = pointForCurrentReference(points, current);
+  assert.equal(added.index, points.length);
+  assert.deepEqual(plain(added.point.reference), current);
+  assert.deepEqual(
+    plain(added.point.output),
+    plain(calibratedHsv(current, points)),
+  );
+  assert.equal(added.point.matched, false);
 });
 
 test('current reference state only exposes HSV and rejects duplicate anchors', () => {

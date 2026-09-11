@@ -57,6 +57,37 @@ function sameHs(left: Hs, right: Hs): boolean {
   return left.h === right.h && left.s === right.s;
 }
 
+export function pointForCurrentReference(
+  points: MatchingPoint[],
+  current: Hs,
+): { point: MatchingPoint; index: number } {
+  const existingIndex = points.findIndex((point) =>
+    sameHs(point.reference, current),
+  );
+  if (existingIndex >= 0) {
+    const existing = points[existingIndex];
+    return {
+      index: existingIndex,
+      point: {
+        ...existing,
+        reference: { ...existing.reference },
+        output: { ...existing.output },
+        matched: false,
+      },
+    };
+  }
+
+  return {
+    index: points.length,
+    point: {
+      label: `Point ${points.length + 1}`,
+      reference: { ...current },
+      output: calibratedHsv(current, points),
+      matched: false,
+    },
+  };
+}
+
 export function nextManualCalibrationPoint(
   points: ColorCalibrationPoint[],
   preferred: Hs | null = null,

@@ -118,6 +118,9 @@ jobs:
           platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            VITE_GIT_COMMIT=${{ github.sha }}
+            VITE_BUILD_DATE=${{ github.event.head_commit.timestamp || github.run_started_at }}
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Deploy to homelab

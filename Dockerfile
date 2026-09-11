@@ -9,7 +9,9 @@ COPY ui/package.json ui/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY ui ./
-RUN pnpm build
+ARG VITE_GIT_COMMIT
+ARG VITE_BUILD_DATE
+RUN VITE_GIT_COMMIT="$VITE_GIT_COMMIT" VITE_BUILD_DATE="$VITE_BUILD_DATE" pnpm build
 
 FROM rust:1.90-slim-bookworm AS server-builder
 
