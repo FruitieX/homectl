@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 
+import { formatBuildInfoSummary, normalizeBuildInfo } from '@/lib/buildInfo';
 import {
   configSections,
   matchesConfigSectionSearch,
@@ -16,6 +17,12 @@ const sectionGroups = [
   'Interface',
   'Operations',
 ] as const;
+
+const buildInfo = normalizeBuildInfo({
+  version: import.meta.env.VITE_APP_VERSION,
+  gitCommit: import.meta.env.VITE_GIT_COMMIT,
+  buildDate: import.meta.env.VITE_BUILD_DATE,
+});
 
 export default function ConfigPage() {
   const [search, setSearch] = useState('');
@@ -72,6 +79,12 @@ export default function ConfigPage() {
           })}
         </div>
       )}
+
+      <footer className="border-t border-border/50 pt-4 text-center text-xs text-muted-foreground/70">
+        <p className="break-words leading-relaxed">
+          {formatBuildInfoSummary(buildInfo)}
+        </p>
+      </footer>
     </div>
   );
 }
