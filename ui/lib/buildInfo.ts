@@ -19,3 +19,11 @@ export function normalizeBuildInfo(input: BuildInfoInput): BuildInfo {
     buildDate: nonEmptyString(input.buildDate) ?? 'unknown',
   };
 }
+
+export function formatBuildInfoSummary({
+  version,
+  gitCommit,
+  buildDate,
+}: BuildInfo): string {
+  return `Version ${version} · Built ${buildDate} · Commit ${gitCommit}`;
+}

@@ -18,8 +18,21 @@ function load(path) {
   return context.exports;
 }
 
-const { normalizeBuildInfo } = load('../lib/buildInfo.ts');
+const { formatBuildInfoSummary, normalizeBuildInfo } = load(
+  '../lib/buildInfo.ts',
+);
 const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test('formats a compact build metadata summary for the settings footer', () => {
+  assert.equal(
+    formatBuildInfoSummary({
+      version: '1.0.0',
+      gitCommit: 'abc123',
+      buildDate: '2026-09-11T12:00:00Z',
+    }),
+    'Version 1.0.0 · Built 2026-09-11T12:00:00Z · Commit abc123',
+  );
+});
 
 test('normalizes complete build metadata for display', () => {
   assert.deepEqual(

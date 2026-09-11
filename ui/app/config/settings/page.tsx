@@ -12,7 +12,7 @@ import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { cn } from '@/lib/cn';
-import { normalizeBuildInfo } from '@/lib/buildInfo';
+import { formatBuildInfoSummary, normalizeBuildInfo } from '@/lib/buildInfo';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
@@ -353,6 +353,11 @@ export default function SettingsPage() {
           </TabsContent>
         </Tabs>
       </form>
+      <footer className="mt-8 max-w-3xl border-t border-border/50 pt-4 text-center text-xs text-muted-foreground/70">
+        <p className="break-words leading-relaxed">
+          {formatBuildInfoSummary(buildInfo)}
+        </p>
+      </footer>
     </Form>
   );
 }
