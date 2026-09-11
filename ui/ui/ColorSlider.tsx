@@ -7,6 +7,7 @@ type Props = Omit<ComponentProps<'input'>, 'type' | 'value' | 'color'> & {
   value: number;
   color: Color;
   channel: 'hue' | 'saturation' | 'brightness';
+  sliderClassName?: string;
 };
 
 export function ColorSlider({
@@ -15,6 +16,7 @@ export function ColorSlider({
   color,
   channel,
   className,
+  sliderClassName,
   ...props
 }: Props) {
   const id = useId();
@@ -56,7 +58,10 @@ export function ColorSlider({
           type="range"
           value={value}
           aria-valuetext={`${Math.round(value)}${channel === 'hue' ? ' degrees' : ' percent'}`}
-          className="relative m-0 block h-11 w-full cursor-pointer appearance-none rounded-lg bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-border [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-thumb]:box-border [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-border [&::-moz-range-thumb]:bg-foreground [&::-moz-range-thumb]:shadow-sm [&::-moz-range-track]:bg-transparent"
+          className={cn(
+            'relative m-0 block h-11 w-full cursor-pointer appearance-none rounded-lg bg-transparent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&::-webkit-slider-thumb]:size-5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-border [&::-webkit-slider-thumb]:bg-foreground [&::-webkit-slider-thumb]:shadow-sm [&::-moz-range-thumb]:box-border [&::-moz-range-thumb]:size-5 [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border [&::-moz-range-thumb]:border-border [&::-moz-range-thumb]:bg-foreground [&::-moz-range-thumb]:shadow-sm [&::-moz-range-track]:bg-transparent',
+            sliderClassName,
+          )}
         />
       </div>
     </div>

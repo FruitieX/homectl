@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import Color from 'color';
 import type { Device } from '@/bindings/Device';
 import type { Hs } from '@/bindings/Hs';
 import {
@@ -15,16 +16,51 @@ import {
   canCalibrateDevice,
   getCurrentHsColor,
   matchingPointsFromProfile,
+  nextManualCalibrationPoint,
+  removeCalibrationPoint,
+  stepCalibrationValue,
   suggestedMatchingPoints,
   verificationColors,
 } from '@/lib/colorCalibration';
 import { ConfigFormSection } from '@/ui/config-form';
+import { ColorSlider } from '@/ui/ColorSlider';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 
 type Phase = 'setup' | 'match' | 'review' | 'saved';
 const selectClass =
   'w-full rounded-xl border border-input bg-background p-3 text-sm';
+
+function SliderStepButtons({
+  disabled = false,
+  label,
+  onStep,
+}: {
+  disabled?: boolean;
+  label: string;
+  onStep: (delta: number) => void;
+}) {
+  return (
+    <div
+      className="grid grid-cols-4 gap-2"
+      role="group"
+      aria-label={`${label} step controls`}
+    >
+      {[-1, -5, 1, 5].map((delta) => (
+        <Button
+          key={delta}
+          type="button"
+          variant="outline"
+          className="min-h-11 flex-1 px-2 text-base"
+          disabled={disabled}
+          onClick={() => onStep(delta)}
+        >
+          {delta > 0 ? `+${delta}` : delta}
+        </Button>
+      ))}
+    </div>
+  );
+}
 
 export function ColorCalibrationWizard({
   device,
@@ -231,6 +267,37 @@ export function ColorCalibrationWizard({
     );
   };
 
+  const stepOutput = (field: 'h' | 's', delta: number) => {
+    const value = field === 'h' ? point.output.h : point.output.s * 100;
+    const stepped = stepCalibrationValue(
+      value,
+      delta,
+      0,
+      field === 'h' ? 359 : 100,
+      field === 'h' ? 1 : 10,
+    );
+    adjust(field, field === 'h' ? stepped : stepped / 100);
+  };
+
+  const stepBrightness = (delta: number) => {
+    setBrightness((value) => stepCalibrationValue(value, delta, 1, 100));
+  };
+
+  const addPoint = () => {
+    const added = nextManualCalibrationPoint(points, currentReferenceColor);
+    setPoints((previous) => [...previous, added]);
+    setIndex(points.length);
+    setPreviewed(false);
+  };
+
+  const deleteCurrentPoint = () => {
+    const result = removeCalibrationPoint(points, index);
+    if (result.points === points) return;
+    setPoints(result.points);
+    setIndex(result.index);
+    setPreviewed(false);
+  };
+
   return (
     <ConfigFormSection
       title="Color calibration"
@@ -306,9 +373,28 @@ export function ColorCalibrationWizard({
                 disabled={busy}
               />
             </label>
-            <label className="block space-y-2 text-sm">
-              Test brightness (%)
+            <div className="space-y-2">
+              <ColorSlider
+                label="Test brightness"
+                channel="brightness"
+                color={Color.hsv(point.output.h, point.output.s * 100, 100)}
+                value={brightness}
+                min={1}
+                max={100}
+                step={1}
+                sliderClassName="h-12 min-h-12 touch-none"
+                disabled={busy}
+                onChange={(event) =>
+                  setBrightness(event.currentTarget.valueAsNumber)
+                }
+              />
+              <SliderStepButtons
+                label="Test brightness"
+                disabled={busy}
+                onStep={stepBrightness}
+              />
               <Input
+                aria-label="Test brightness percent"
                 type="number"
                 min={1}
                 max={100}
@@ -316,7 +402,7 @@ export function ColorCalibrationWizard({
                 onChange={(event) => setBrightness(event.target.valueAsNumber)}
                 disabled={busy}
               />
-            </label>
+            </div>
             <p className="text-sm text-muted-foreground">
               Both lights will temporarily turn on. Finish or Cancel returns
               them to normal control. Use the brightness you usually use; color
@@ -384,19 +470,50 @@ export function ColorCalibrationWizard({
               Adjust <strong>{device.name}</strong> until its light looks the
               same. Changes preview automatically.
             </p>
+            <div className="space-y-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={addPoint}
+                >
+                  Add point
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy || points.length <= 1}
+                  onClick={deleteCurrentPoint}
+                >
+                  Delete current point
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Add creates a new unique reference anchor. Delete removes the
+                selected point; at least one point is required to save.
+              </p>
+            </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <label className="space-y-2 text-sm">
-                Lamp hue · {point.output.h}°
-                <input
-                  aria-label="Lamp hue"
-                  type="range"
+              <div className="space-y-2">
+                <ColorSlider
+                  label="Lamp hue"
+                  channel="hue"
+                  color={Color.hsv(point.output.h, point.output.s * 100, 100)}
                   min={0}
                   max={359}
                   step={1}
                   value={point.output.h}
-                  className="h-12 min-h-12 w-full touch-none accent-primary"
+                  sliderClassName="h-12 min-h-12 touch-none"
                   disabled={busy}
-                  onChange={(event) => adjust('h', event.target.valueAsNumber)}
+                  onChange={(event) =>
+                    adjust('h', event.currentTarget.valueAsNumber)
+                  }
+                />
+                <SliderStepButtons
+                  label="Lamp hue"
+                  disabled={busy}
+                  onStep={(delta) => stepOutput('h', delta)}
                 />
                 <Input
                   aria-label="Lamp hue in degrees"
@@ -407,21 +524,26 @@ export function ColorCalibrationWizard({
                   disabled={busy}
                   onChange={(event) => adjust('h', event.target.valueAsNumber)}
                 />
-              </label>
-              <label className="space-y-2 text-sm">
-                Lamp saturation · {Math.round(point.output.s * 1000) / 10}%
-                <input
-                  aria-label="Lamp saturation"
-                  type="range"
+              </div>
+              <div className="space-y-2">
+                <ColorSlider
+                  label="Lamp saturation"
+                  channel="saturation"
+                  color={Color.hsv(point.output.h, point.output.s * 100, 100)}
                   min={0}
                   max={100}
                   step={0.1}
                   value={point.output.s * 100}
-                  className="h-12 min-h-12 w-full touch-none accent-primary"
+                  sliderClassName="h-12 min-h-12 touch-none"
                   disabled={busy}
                   onChange={(event) =>
-                    adjust('s', event.target.valueAsNumber / 100)
+                    adjust('s', event.currentTarget.valueAsNumber / 100)
                   }
+                />
+                <SliderStepButtons
+                  label="Lamp saturation"
+                  disabled={busy}
+                  onStep={(delta) => stepOutput('s', delta)}
                 />
                 <Input
                   aria-label="Lamp saturation percent"
@@ -435,7 +557,7 @@ export function ColorCalibrationWizard({
                     adjust('s', event.target.valueAsNumber / 100)
                   }
                 />
-              </label>
+              </div>
             </div>
             <div className="space-y-2">
               <Button

@@ -42,6 +42,51 @@ export function canAmendReferencePoint(
   );
 }
 
+export function stepCalibrationValue(
+  value: number,
+  delta: number,
+  min: number,
+  max: number,
+  precision = 1,
+): number {
+  const stepped = Math.round((value + delta) * precision) / precision;
+  return Math.max(min, Math.min(max, stepped));
+}
+
+function sameHs(left: Hs, right: Hs): boolean {
+  return left.h === right.h && left.s === right.s;
+}
+
+export function nextManualCalibrationPoint(
+  points: ColorCalibrationPoint[],
+  preferred: Hs | null = null,
+): MatchingPoint {
+  const candidates = [
+    ...(preferred ? [preferred] : []),
+    ...suggestedMatchingPoints().map((point) => point.reference),
+    ...Array.from({ length: 360 }, (_, h) => ({ h, s: 0.5 })),
+  ];
+  const reference = candidates.find(
+    (candidate) => !points.some((point) => sameHs(point.reference, candidate)),
+  ) ?? { h: 0, s: 0 };
+  return {
+    label: `Point ${points.length + 1}`,
+    reference: { ...reference },
+    output: { ...reference },
+    matched: false,
+  };
+}
+
+export function removeCalibrationPoint(
+  points: MatchingPoint[],
+  index: number,
+): { points: MatchingPoint[]; index: number } {
+  if (points.length <= 1 || index < 0 || index >= points.length)
+    return { points, index };
+  const remaining = points.filter((_, pointIndex) => pointIndex !== index);
+  return { points: remaining, index: Math.min(index, remaining.length - 1) };
+}
+
 export function suggestedMatchingPoints(): MatchingPoint[] {
   const colors: { label: string; color: Hs }[] = [
     { label: 'Neutral white', color: { h: 0, s: 0 } },

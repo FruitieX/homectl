@@ -28,6 +28,9 @@ const {
   matchingPointsFromProfile,
   getCurrentHsColor,
   canAmendReferencePoint,
+  stepCalibrationValue,
+  nextManualCalibrationPoint,
+  removeCalibrationPoint,
 } = load('../lib/colorCalibration.ts', {
   '@/lib/deviceCapabilities': load('../lib/deviceCapabilities.ts'),
 });
@@ -154,7 +157,9 @@ test('current reference state only exposes HSV and rejects duplicate anchors', (
   };
   assert.deepEqual(plain(getCurrentHsColor(device)), current);
   assert.equal(
-    getCurrentHsColor({ data: { Controllable: { state: { color: { ct: 2700 } } } } }),
+    getCurrentHsColor({
+      data: { Controllable: { state: { color: { ct: 2700 } } } },
+    }),
     null,
   );
   const points = [
@@ -163,8 +168,34 @@ test('current reference state only exposes HSV and rejects duplicate anchors', (
   ];
   assert.equal(canAmendReferencePoint(current, points, 0), true);
   assert.equal(canAmendReferencePoint(current, points, 1), false);
-  assert.equal(
-    canAmendReferencePoint({ h: 60, s: 0.5 }, points, 1),
-    true,
-  );
+  assert.equal(canAmendReferencePoint({ h: 60, s: 0.5 }, points, 1), true);
+});
+
+test('calibration sliders step in their displayed units and clamp at bounds', () => {
+  assert.equal(stepCalibrationValue(3, -5, 0, 359), 0);
+  assert.equal(stepCalibrationValue(357, 5, 0, 359), 359);
+  assert.equal(stepCalibrationValue(42.3, -1, 0, 100, 10), 41.3);
+});
+
+test('manual points use a unique reference and deletion keeps a valid selection', () => {
+  const points = [
+    {
+      label: 'Point 1',
+      reference: { h: 0, s: 0 },
+      output: { h: 0, s: 0 },
+      matched: true,
+    },
+  ];
+  const added = plain(nextManualCalibrationPoint(points, { h: 0, s: 0 }));
+  assert.equal(added.label, 'Point 2');
+  assert.notDeepEqual(added.reference, points[0].reference);
+  assert.deepEqual(added.output, added.reference);
+  assert.equal(added.matched, false);
+
+  const removed = removeCalibrationPoint([...points, added], 1);
+  assert.deepEqual(plain(removed.points), points);
+  assert.equal(removed.index, 0);
+  const preserved = removeCalibrationPoint(points, 0);
+  assert.deepEqual(plain(preserved.points), points);
+  assert.equal(preserved.index, 0);
 });
