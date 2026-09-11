@@ -117,19 +117,6 @@ impl crate::core::state::AppState {
         profile: ColorCalibrationProfile,
     ) -> Result<(), String> {
         profile.validate()?;
-        if let Some(existing) = self
-            .runtime_config
-            .color_calibration_profiles
-            .iter()
-            .find(|row| row.id == profile.id)
-        {
-            if serde_json::to_value(existing).ok() != serde_json::to_value(&profile).ok() {
-                return Err(
-                    "Save changes as a new profile to preserve the calibration of other lamps"
-                        .into(),
-                );
-            }
-        }
         let db = crate::db::get_db_connection().map_err(|error| error.to_string())?;
         crate::db::config_queries::calibration::save_profile(db, &profile)
             .await

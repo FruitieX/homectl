@@ -11,7 +11,10 @@ import { getDeviceKey } from '@/lib/device';
 import { createUuid } from '@/lib/uuid';
 import {
   calibratedHsv,
+  canAmendReferencePoint,
   canCalibrateDevice,
+  getCurrentHsColor,
+  matchingPointsFromProfile,
   suggestedMatchingPoints,
   verificationColors,
 } from '@/lib/colorCalibration';
@@ -31,7 +34,7 @@ export function ColorCalibrationWizard({
   devices: Device[];
 }) {
   const { apiEndpoint } = useAppConfig();
-  const { data: profiles, create } = useCalibrationProfiles();
+  const { data: profiles, create, update } = useCalibrationProfiles();
   const { data: assignments } = useCalibrationAssignments();
   const assign = useAssignCalibrationProfile();
   const targetKey = getDeviceKey(device);
@@ -41,6 +44,7 @@ export function ColorCalibrationWizard({
       assignments.find((row) => row.device_key === targetKey)?.profile_id,
   );
   const [phase, setPhase] = useState<Phase>('setup');
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [referenceKey, setReferenceKey] = useState('');
   const [name, setName] = useState(`${device.name} color match`);
   const [brightness, setBrightness] = useState(50);
@@ -56,6 +60,14 @@ export function ColorCalibrationWizard({
   const point = points[index];
   const referenceDevice = devices.find(
     (candidate) => getDeviceKey(candidate) === referenceKey,
+  );
+  const currentReferenceColor = referenceDevice
+    ? getCurrentHsColor(referenceDevice)
+    : null;
+  const canAmendCurrentPoint = canAmendReferencePoint(
+    currentReferenceColor,
+    points,
+    index,
   );
   const baseUrl = `${apiEndpoint}/api/v1/config`;
 
@@ -99,6 +111,21 @@ export function ColorCalibrationWizard({
       await enqueue(() => request(`calibration-sessions/${id}`, 'DELETE'));
       session.current = null;
     }
+  };
+
+  const editCurrentProfile = () => {
+    if (!currentProfile) return;
+    setEditingProfileId(currentProfile.id);
+    setName(currentProfile.name);
+    setReferenceKey(currentProfile.reference_device_key ?? '');
+    setBrightness(Math.round(currentProfile.brightness * 100));
+    setPoints(matchingPointsFromProfile(currentProfile));
+    setIndex(0);
+    setCheckIndex(null);
+    setPreviewed(false);
+    setError('');
+    saved.current = null;
+    setPhase('setup');
   };
 
   // Requests run in order: dragging cannot make an older response overwrite a
@@ -229,6 +256,22 @@ export function ColorCalibrationWizard({
               whites, vivid colors and softer colors, then check a few colors
               between them. Compare the light on the same neutral surface.
             </p>
+            {currentProfile && !editingProfileId && (
+              <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                <p className="text-sm">
+                  This light uses <strong>{currentProfile.name}</strong>.
+                  Editing it updates every light that uses this profile.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={editCurrentProfile}
+                >
+                  Edit current profile
+                </Button>
+              </div>
+            )}
             <label className="block space-y-2 text-sm">
               Reference light
               <select
@@ -310,7 +353,9 @@ export function ColorCalibrationWizard({
                 })
               }
             >
-              Start matching · {points.length} points
+              {editingProfileId
+                ? `Start editing · ${points.length} points`
+                : `Start matching · ${points.length} points`}
             </Button>
             <p className="text-sm text-muted-foreground">
               To reuse a saved profile, select lights in the devices list and
@@ -349,7 +394,7 @@ export function ColorCalibrationWizard({
                   max={359}
                   step={1}
                   value={point.output.h}
-                  className="w-full accent-primary"
+                  className="h-12 min-h-12 w-full touch-none accent-primary"
                   disabled={busy}
                   onChange={(event) => adjust('h', event.target.valueAsNumber)}
                 />
@@ -372,7 +417,7 @@ export function ColorCalibrationWizard({
                   max={100}
                   step={0.1}
                   value={point.output.s * 100}
-                  className="w-full accent-primary"
+                  className="h-12 min-h-12 w-full touch-none accent-primary"
                   disabled={busy}
                   onChange={(event) =>
                     adjust('s', event.target.valueAsNumber / 100)
@@ -391,6 +436,37 @@ export function ColorCalibrationWizard({
                   }
                 />
               </label>
+            </div>
+            <div className="space-y-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={busy || !canAmendCurrentPoint}
+                onClick={() => {
+                  if (!currentReferenceColor) return;
+                  setPreviewed(false);
+                  setPoints((previous) =>
+                    previous.map((item, i) =>
+                      i === index
+                        ? {
+                            ...item,
+                            reference: { ...currentReferenceColor },
+                            matched: false,
+                          }
+                        : item,
+                    ),
+                  );
+                }}
+              >
+                Use current reference state
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                {currentReferenceColor
+                  ? canAmendCurrentPoint
+                    ? 'Replace this point’s reference color with the HSV state currently reported by the reference light.'
+                    : 'The current reference color is already used by another point.'
+                  : 'The reference light is not currently reporting an HSV color.'}
+              </p>
             </div>
             <p className="text-xs text-muted-foreground">
               {previewed
@@ -570,10 +646,17 @@ export function ColorCalibrationWizard({
                       })),
                     };
                     const content = JSON.stringify(profile);
-                    if (saved.current?.content !== content) {
-                      const id = createUuid();
-                      await create({ id, ...profile });
-                      saved.current = { id, content };
+                    const profileId = editingProfileId ?? createUuid();
+                    if (
+                      saved.current?.content !== content ||
+                      saved.current?.id !== profileId
+                    ) {
+                      if (editingProfileId) {
+                        await update(editingProfileId, profile);
+                      } else {
+                        await create({ id: profileId, ...profile });
+                      }
+                      saved.current = { id: profileId, content };
                     }
                     await assign.mutateAsync({
                       deviceKeys: [targetKey],
@@ -604,6 +687,8 @@ export function ColorCalibrationWizard({
               type="button"
               variant="outline"
               onClick={() => {
+                setEditingProfileId(null);
+                saved.current = null;
                 setPoints(suggestedMatchingPoints());
                 setIndex(0);
                 setCheckIndex(null);

@@ -1,4 +1,5 @@
 import type { ColorCalibrationPoint } from '@/bindings/ColorCalibrationPoint';
+import type { ColorCalibrationProfile } from '@/bindings/ColorCalibrationProfile';
 import type { Hs } from '@/bindings/Hs';
 import type { Device } from '@/bindings/Device';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
@@ -7,6 +8,39 @@ export type MatchingPoint = ColorCalibrationPoint & {
   label: string;
   matched: boolean;
 };
+
+export function matchingPointsFromProfile(
+  profile: ColorCalibrationProfile,
+): MatchingPoint[] {
+  return profile.points.map((point, index) => ({
+    label: `Point ${index + 1}`,
+    reference: { ...point.reference },
+    output: { ...point.output },
+    matched: true,
+  }));
+}
+
+export function getCurrentHsColor(device: Device): Hs | null {
+  if (!('Controllable' in device.data)) return null;
+  const color = device.data.Controllable.state.color;
+  return color && 'h' in color && 's' in color ? { ...color } : null;
+}
+
+export function canAmendReferencePoint(
+  current: Hs | null,
+  points: ColorCalibrationPoint[],
+  index: number,
+): boolean {
+  return Boolean(
+    current &&
+      points.every(
+        (point, pointIndex) =>
+          pointIndex === index ||
+          point.reference.h !== current.h ||
+          point.reference.s !== current.s,
+      ),
+  );
+}
 
 export function suggestedMatchingPoints(): MatchingPoint[] {
   const colors: { label: string; color: Hs }[] = [

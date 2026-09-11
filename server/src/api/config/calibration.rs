@@ -31,6 +31,12 @@ pub(super) fn routes(
         .and(warp::body::json())
         .and(with_handle(handle))
         .and_then(save_profile);
+    let update = warp::path!("calibration-profiles" / String)
+        .and(warp::put())
+        .and(warp::body::content_length_limit(64 * 1024))
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(update_profile);
     let assignments = warp::path!("calibration-assignments")
         .and(warp::get())
         .and(with_snapshot(snapshot))
@@ -71,6 +77,7 @@ pub(super) fn routes(
         .and_then(keep_session);
     profiles
         .or(save)
+        .or(update)
         .or(assignments)
         .or(assign)
         .or(start)
@@ -83,24 +90,43 @@ async fn save_profile(
     profile: ColorCalibrationProfile,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    Ok(persist_profile(profile, handle, StatusCode::CREATED).await)
+}
+
+async fn update_profile(
+    id: String,
+    profile: ColorCalibrationProfile,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    if id != profile.id {
+        return Ok(error_response(
+            "Calibration profile id does not match the URL",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    Ok(persist_profile(profile, handle, StatusCode::OK).await)
+}
+
+async fn persist_profile(
+    profile: ColorCalibrationProfile,
+    handle: StateHandle,
+    status: StatusCode,
+) -> warp::reply::WithStatus<warp::reply::Json> {
     let _guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
-        Err(_) => return Ok(actor_unavailable()),
+        Err(_) => return actor_unavailable(),
     };
     let saved = profile.clone();
     let result = handle
         .mutate(move |state| Box::pin(async move { state.save_calibration_profile(saved).await }))
         .await;
-    Ok(match result {
-        Ok(Ok(())) => config_write_response(
-            profile,
-            Ok::<(), color_eyre::Report>(()),
-            true,
-            StatusCode::CREATED,
-        ),
+    match result {
+        Ok(Ok(())) => {
+            config_write_response(profile, Ok::<(), color_eyre::Report>(()), true, status)
+        }
         Ok(Err(error)) => error_response(&error, StatusCode::BAD_REQUEST),
         Err(_) => actor_unavailable(),
-    })
+    }
 }
 
 async fn assign_profile(

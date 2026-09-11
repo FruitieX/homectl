@@ -142,6 +142,23 @@ fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
         .unwrap()
         .error_for_status()
         .unwrap();
+    let mut edited_profile = profile.clone();
+    edited_profile["name"] = json!("Edited matching model");
+    edited_profile["points"][0]["output"] = json!({"h":50,"s":0.35});
+    client
+        .put(format!(
+            "{base}/api/v1/config/calibration-profiles/{}",
+            profile["id"].as_str().unwrap()
+        ))
+        .json(&edited_profile)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert_eq!(
+        get_json(base, "/api/v1/config/calibration-profiles")["data"],
+        json!([edited_profile])
+    );
     let assignment_url = format!("{base}/api/v1/config/calibration-assignments");
     client
         .put(&assignment_url)
@@ -170,7 +187,7 @@ fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
         .as_array()
         .unwrap()
         .iter()
-        .all(|row| row["points"] == profile["points"]));
+        .all(|row| row["points"] == edited_profile["points"]));
     let before = get_json(base, "/api/v1/devices");
     let session_url = format!("{base}/api/v1/config/calibration-sessions/test-session");
     let preview = json!({"target_key":"dummy/target","reference_key":"dummy/reference","reference":{"h":30,"s":0.25},"output":{"h":47,"s":0.4},"brightness":0.5});
@@ -213,7 +230,7 @@ fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
     let exported = get_json(base, "/api/v1/config/export");
     assert_eq!(
         exported["data"]["color_calibration_profiles"],
-        json!([profile])
+        json!([edited_profile])
     );
     assert_eq!(
         exported["data"]["color_calibration_assignments"],

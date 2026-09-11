@@ -25,6 +25,9 @@ const {
   calibratedHsv,
   toggleSelection,
   canCalibrateDevice,
+  matchingPointsFromProfile,
+  getCurrentHsColor,
+  canAmendReferencePoint,
 } = load('../lib/colorCalibration.ts', {
   '@/lib/deviceCapabilities': load('../lib/deviceCapabilities.ts'),
 });
@@ -115,4 +118,53 @@ test('batch calibration only accepts writable HSV lights', () => {
   device.data.Controllable.managed = 'FullReadOnly';
   assert.equal(canCalibrateDevice(device), false);
   assert.equal(canCalibrateDevice({ data: { Sensor: {} } }), false);
+});
+
+test('existing profiles can be loaded into editable matching points', () => {
+  const profile = {
+    id: 'profile',
+    name: 'Profile',
+    reference_device_key: 'dummy/reference',
+    brightness: 0.42,
+    points: [
+      { reference: { h: 30, s: 0.25 }, output: { h: 45, s: 0.3 } },
+      { reference: { h: 120, s: 1 }, output: { h: 110, s: 0.9 } },
+    ],
+  };
+  assert.deepEqual(plain(matchingPointsFromProfile(profile)), [
+    {
+      label: 'Point 1',
+      reference: profile.points[0].reference,
+      output: profile.points[0].output,
+      matched: true,
+    },
+    {
+      label: 'Point 2',
+      reference: profile.points[1].reference,
+      output: profile.points[1].output,
+      matched: true,
+    },
+  ]);
+});
+
+test('current reference state only exposes HSV and rejects duplicate anchors', () => {
+  const current = { h: 30, s: 0.25 };
+  const device = {
+    data: { Controllable: { state: { color: current } } },
+  };
+  assert.deepEqual(plain(getCurrentHsColor(device)), current);
+  assert.equal(
+    getCurrentHsColor({ data: { Controllable: { state: { color: { ct: 2700 } } } } }),
+    null,
+  );
+  const points = [
+    { reference: current, output: { h: 45, s: 0.3 } },
+    { reference: { h: 120, s: 1 }, output: { h: 110, s: 0.9 } },
+  ];
+  assert.equal(canAmendReferencePoint(current, points, 0), true);
+  assert.equal(canAmendReferencePoint(current, points, 1), false);
+  assert.equal(
+    canAmendReferencePoint({ h: 60, s: 0.5 }, points, 1),
+    true,
+  );
 });
