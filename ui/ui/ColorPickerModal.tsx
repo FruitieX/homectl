@@ -31,7 +31,8 @@ import {
   useScenesState,
   useWebsocket,
 } from '@/hooks/websocket';
-import { Clipboard, Dices, Settings } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Clipboard, Dices, Settings, SquarePen } from 'lucide-react';
 import { usePastedImage } from '@/hooks/pastedImage';
 import { SceneList } from 'app/groups/[id]/SceneList';
 import { excludeUndefined } from 'utils/excludeUndefined';
@@ -775,6 +776,7 @@ const eqSet = <T,>(xs: Set<T>, ys: Set<T>) =>
   xs.size === ys.size && [...xs].every((x) => ys.has(x));
 
 export const ColorPickerModal = () => {
+  const navigate = useNavigate();
   const {
     state: deviceModalState,
     open: deviceModalOpen,
@@ -932,6 +934,24 @@ export const ColorPickerModal = () => {
         <span className="inline-flex min-w-0 items-center gap-2">
           {deviceModalTitle ?? 'Device controls'}
           <DeviceReportStatus devices={selected} />
+          {inFloorplan && deviceModalState.length === 1 && firstDevice && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 shrink-0"
+              aria-label={`Edit ${getDeviceDisplayLabel(firstDevice, displayNames)} device settings`}
+              title="Edit device settings"
+              onClick={() => {
+                closeDeviceModal();
+                navigate(
+                  `/config/devices?device=${encodeURIComponent(deviceModalState[0])}`,
+                );
+              }}
+            >
+              <SquarePen />
+            </Button>
+          )}
         </span>
       }
       description={

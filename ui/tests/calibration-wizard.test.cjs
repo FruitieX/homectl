@@ -35,7 +35,31 @@ const {
 } = load('../lib/colorCalibration.ts', {
   '@/lib/deviceCapabilities': load('../lib/deviceCapabilities.ts'),
 });
+const { compareDeviceNames } = load('../lib/deviceLabel.ts');
 const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test('reference lights sort by name using natural alphanumeric order', () => {
+  const devices = [
+    { id: '10', integration_id: 'tuya', name: 'Kitchen downlight 10' },
+    { id: '2', integration_id: 'tuya', name: 'Kitchen downlight 2' },
+    { id: '1', integration_id: 'tuya', name: 'kitchen downlight 1' },
+    {
+      id: 'strip',
+      integration_id: 'zigbee2mqtt',
+      name: 'Kitchen lightstrip upper',
+    },
+  ];
+
+  assert.deepEqual(
+    devices.sort(compareDeviceNames).map((device) => device.name),
+    [
+      'kitchen downlight 1',
+      'Kitchen downlight 2',
+      'Kitchen downlight 10',
+      'Kitchen lightstrip upper',
+    ],
+  );
+});
 
 test('guided pass covers distinct whites plus the hue circle at two saturations', () => {
   const points = suggestedMatchingPoints();

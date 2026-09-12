@@ -9,6 +9,7 @@ import {
 } from '@/hooks/useConfig';
 import { useAppConfig } from '@/hooks/appConfig';
 import { getDeviceKey } from '@/lib/device';
+import { compareDeviceNames } from '@/lib/deviceLabel';
 import { createUuid } from '@/lib/uuid';
 import {
   calibratedHsv,
@@ -410,6 +411,7 @@ export function ColorCalibrationWizard({
                       getDeviceKey(candidate) !== targetKey &&
                       canCalibrateDevice(candidate),
                   )
+                  .sort(compareDeviceNames)
                   .map((candidate) => (
                     <option
                       key={getDeviceKey(candidate)}
@@ -781,8 +783,9 @@ export function ColorCalibrationWizard({
             <p className="text-sm">
               {points.filter((item) => item.matched).length} matched points ·{' '}
               {brightness}% brightness. Save applies this profile to{' '}
-              {device.name}. Other lights can be selected together in the
-              devices list.
+              {device.name}. Saving ends the temporary preview and reapplies the
+              current normal-scene state through the profile; it does not pin
+              the lights to the last test point.
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -843,8 +846,9 @@ export function ColorCalibrationWizard({
         {phase === 'saved' && (
           <>
             <p role="status">
-              Saved “{name}” and applied it to {device.name}. Both lights have
-              returned to normal control.
+              Saved “{name}” and applied it to {device.name}. The temporary
+              preview has ended; normal scene state is active again and is now
+              routed through this profile.
             </p>
             <p className="text-sm text-muted-foreground">
               Select other lights in the devices list to apply this profile to

@@ -23,7 +23,7 @@ pub struct CalibrationSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::event::{handle_event, tests::test_state};
+    use crate::core::event::{handle_event, tests::test_state, DeferredEventWork};
     use crate::types::{
         color::Capabilities,
         device::{ControllableDevice, DeviceId, ManageKind},
@@ -133,11 +133,37 @@ mod tests {
             }
         }
         assert_eq!(restored.len(), 2);
-        assert!(restored
-            .iter()
-            .any(|device| device.get_device_key() == updated.get_device_key()
+        assert!(restored.iter().any(|device| {
+            device.get_device_key() == updated.get_device_key()
                 && device.get_controllable_state().unwrap().color
-                    == updated.get_controllable_state().unwrap().color));
+                    == updated.get_controllable_state().unwrap().color
+        }));
+
+        let calibration = state
+            .runtime_config
+            .calibration_for_device(&updated.get_device_key().to_string());
+        let expected = calibrated_device(&updated, calibration.as_ref());
+        let mut republished_target = None;
+        for device in restored {
+            let outcome = handle_event(&mut state, &Event::SetExternalState { device })
+                .await
+                .unwrap();
+            for work in outcome.into_deferred_work() {
+                if let DeferredEventWork::PublishIntegrationState { device, .. } = work {
+                    if device.get_device_key() == updated.get_device_key() {
+                        republished_target = Some(device);
+                    }
+                }
+            }
+        }
+        assert_eq!(
+            republished_target
+                .expect("finishing calibration should republish the target")
+                .get_controllable_state()
+                .unwrap()
+                .color,
+            expected.get_controllable_state().unwrap().color,
+        );
     }
 
     #[tokio::test]

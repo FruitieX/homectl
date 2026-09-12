@@ -53,7 +53,7 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 type DeviceTypeFilter = 'all' | 'controllable' | 'sensor' | 'other';
 
@@ -548,6 +548,8 @@ export default function DevicesPage() {
   const { replace: replaceConfigDevice, remove: removeConfigDevice } =
     useConfigDevices();
   const [searchParams] = useSearchParams();
+  const requestedDeviceKey = searchParams.get('device');
+  const appliedDeviceRequest = useRef<string | null>(null);
   const [deviceSearch, setDeviceSearch] = useState(
     () => searchParams.get('q') ?? '',
   );
@@ -861,6 +863,20 @@ export default function DevicesPage() {
       normalizedSearch,
     ],
   );
+
+  useEffect(() => {
+    if (
+      !requestedDeviceKey ||
+      appliedDeviceRequest.current === requestedDeviceKey ||
+      !visibleDevices.some((entry) => entry.deviceKey === requestedDeviceKey)
+    ) {
+      return;
+    }
+
+    appliedDeviceRequest.current = requestedDeviceKey;
+    setOpenDeviceKey(requestedDeviceKey);
+    setDeviceDetailTab('config');
+  }, [requestedDeviceKey, visibleDevices]);
 
   const updateSensorDraftKind = (
     deviceRef: string,
