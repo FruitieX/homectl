@@ -5,6 +5,11 @@
 //! which converts MQTT integrations to dummy equivalents. Then they exercise the main
 //! logic paths: scene activation, motion sensor routines, switch routines, and
 //! CycleScenes.
+//!
+//! The production configuration is intentionally private and is not checked into this
+//! repository. The tests are therefore ignored in the default test run and can be
+//! enabled locally by placing prod-config.toml at the repository root and running
+//! `cargo test --test prod_config -- --ignored`.
 
 mod common;
 
@@ -147,6 +152,7 @@ fn wait_for_device_state(
 // ============================================================================
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_server_boots() {
     let server = start_prod_simulation();
 
@@ -178,6 +184,7 @@ fn prod_config_server_boots() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_has_expected_config() {
     let server = start_prod_simulation();
 
@@ -255,6 +262,7 @@ fn prod_config_has_expected_config() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_scene_activation() {
     let server = start_prod_simulation();
 
@@ -302,6 +310,7 @@ fn prod_config_scene_activation() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_night_scene() {
     let server = start_prod_simulation();
 
@@ -348,6 +357,7 @@ fn prod_config_night_scene() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_arrive_home_routine() {
     let server = start_prod_simulation();
 
@@ -383,6 +393,7 @@ fn prod_config_arrive_home_routine() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_leave_home_routine() {
     let server = start_prod_simulation();
 
@@ -419,6 +430,7 @@ fn prod_config_leave_home_routine() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_nightlight_cycle() {
     let server = start_prod_simulation();
 
@@ -464,6 +476,7 @@ fn prod_config_nightlight_cycle() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_staircase_motion_upstairs() {
     let server = start_prod_simulation();
 
@@ -508,6 +521,7 @@ fn prod_config_staircase_motion_upstairs() {
 }
 
 #[test]
+#[ignore = "requires the private prod-config.toml fixture"]
 fn prod_config_group_scoped_activation() {
     let server = start_prod_simulation();
 
