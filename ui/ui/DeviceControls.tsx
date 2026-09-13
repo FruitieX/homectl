@@ -1,4 +1,4 @@
-import { DeviceColorMode } from '@/ui/DeviceColorMode';
+import { DeviceColorTabs, colorToDeviceHs } from '@/ui/DeviceColorTabs';
 import {
   isDeviceReadOnly,
   supportsDeviceBrightness,
@@ -46,7 +46,7 @@ export function useLiveDeviceControls() {
         scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
     );
     // Omitted color/brightness preserve each device's own state and color mode.
-    setState(device, persist, power, undefined, brightness, 0.25, color);
+    setState(device, persist, power, undefined, brightness, undefined, color);
   };
 }
 
@@ -114,9 +114,11 @@ export function DeviceRow({
 export function DeviceQuickControls({
   devices,
   compact = false,
+  showColorTabs = true,
 }: {
   devices: Device[];
   compact?: boolean;
+  showColorTabs?: boolean;
 }) {
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
@@ -321,11 +323,20 @@ export function DeviceQuickControls({
           )}
         </div>
       )}
-      {!compact && (
-        <DeviceColorMode
+      {!compact && showColorTabs && (
+        <DeviceColorTabs
           devices={devices}
           connected={connected}
-          onChange={setState}
+          onChange={(device, color, colorBrightness) => {
+            if ('Controllable' in device.data)
+              setState(
+                device,
+                getPower(device.data),
+                colorBrightness,
+                colorToDeviceHs(color),
+              );
+          }}
+          onNativeChange={setState}
         />
       )}
       {!compact && restorable.length > 0 && (

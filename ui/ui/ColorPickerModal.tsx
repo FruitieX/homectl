@@ -866,7 +866,7 @@ export const ColorPickerModal = () => {
               true,
               color,
               brightness,
-              0.25,
+              undefined,
             );
           }
         });
@@ -1040,6 +1040,7 @@ export const ColorPickerModal = () => {
           <DeviceQuickControls
             key={deviceModalState.join(',')}
             devices={selected}
+            showColorTabs={false}
           />
         )}
         {(!inFloorplan || section === 'scenes') && (
