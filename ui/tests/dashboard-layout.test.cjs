@@ -25,6 +25,18 @@ function load(name) {
 
 const { getDashboardWidgetMinimumWidth, getDashboardWidgetSpanClass } =
   load('dashboard-layout');
+const weatherCardSource = fs.readFileSync(
+  path.join(__dirname, '../app/dashboard/WeatherCard.tsx'),
+  'utf8',
+);
+
+test('keeps the weather container query free of display conflicts', () => {
+  assert.match(weatherCardSource, /dashboard-weather-layout grid grid-cols-1/);
+  assert.doesNotMatch(
+    weatherCardSource,
+    /dashboard-weather-layout flex flex-col/,
+  );
+});
 
 test('gives dense widgets a usable minimum width', () => {
   assert.equal(getDashboardWidgetMinimumWidth('weather'), 2);

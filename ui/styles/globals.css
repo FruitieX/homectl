@@ -72,7 +72,6 @@
 
   @container dashboard-widget (min-width: 28rem) {
     .dashboard-weather-layout {
-      display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     }
   }

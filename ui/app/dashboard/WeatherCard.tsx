@@ -390,7 +390,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               className={clsx(
                 'min-h-0 flex-1 items-center justify-center gap-2 overflow-y-auto py-[var(--widget-inner-y,0.75rem)]',
                 showWidgetForecast
-                  ? 'dashboard-weather-layout flex flex-col'
+                  ? 'dashboard-weather-layout grid grid-cols-1'
                   : 'flex flex-col',
               )}
             >
