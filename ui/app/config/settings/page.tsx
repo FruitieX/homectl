@@ -39,12 +39,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 
 const coreConfigFormSchema = z.object({
   warmupTimeSeconds: z.number().int().min(0).max(60),
+  defaultTransitionMs: z.number().int().min(0).max(65535000).nullable(),
 });
 
 const coreConfigApiResponseSchema = z
   .object({
     warmupTimeSeconds: z.number().optional(),
     warmup_time_seconds: z.number().optional(),
+    defaultTransitionMs: z.number().nullable().optional(),
+    default_transition_ms: z.number().nullable().optional(),
   })
   .passthrough();
 
@@ -66,6 +69,7 @@ type CoreConfigApiResponse = z.infer<typeof coreConfigApiResponseSchema>;
 
 const defaultValues: CoreConfigFormValues = {
   warmupTimeSeconds: 1,
+  defaultTransitionMs: null,
 };
 
 const themeOptions: {
@@ -90,6 +94,8 @@ function normalizeCoreConfig(
   return {
     warmupTimeSeconds:
       value?.warmupTimeSeconds ?? value?.warmup_time_seconds ?? 1,
+    defaultTransitionMs:
+      value?.defaultTransitionMs ?? value?.default_transition_ms ?? null,
   };
 }
 
@@ -113,6 +119,7 @@ async function updateCoreConfig(
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       warmup_time_seconds: values.warmupTimeSeconds,
+      default_transition_ms: values.defaultTransitionMs,
     }),
   });
   const result = coreConfigEnvelopeSchema.parse(await response.json());
@@ -281,6 +288,42 @@ export default function SettingsPage() {
                         <FormDescription>
                           Increase this if devices are not ready when routines
                           first run.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="defaultTransitionMs"
+                    render={({ field }) => (
+                      <FormItem className="mt-6">
+                        <FormLabel>Global default transition (milliseconds)</FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={65535000}
+                            step={1}
+                            inputMode="numeric"
+                            placeholder="Disabled"
+                            value={field.value ?? ''}
+                            onBlur={field.onBlur}
+                            onChange={(event) =>
+                              field.onChange(
+                                event.target.value === ''
+                                  ? null
+                                  : Number(event.target.value),
+                              )
+                            }
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Used when a command has no explicit transition. Set
+                          this to 1000 for a one-second default; leave empty to
+                          preserve each integration&apos;s own behavior.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

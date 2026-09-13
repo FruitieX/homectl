@@ -16,6 +16,7 @@ pub enum CoreConfig {
     Table,
     Id,
     WarmupTimeSeconds,
+    DefaultTransitionMs,
     UpdatedAt,
 }
 

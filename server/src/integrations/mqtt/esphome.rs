@@ -148,6 +148,28 @@ pub(super) fn availability(base: &str, topic: &str, payload: &[u8]) -> Option<(S
     Some((id.to_owned(), status))
 }
 
+const MAX_TRANSITION_SECONDS: f32 = u16::MAX as f32;
+const MAX_TRANSITION_MILLISECONDS: u64 = u16::MAX as u64 * 1000;
+
+/// Add the ESPHome transition extension and, where lossless, its stock
+/// ESPHome counterpart. ESPHome's native field is whole seconds; the custom
+/// field keeps the exact homectl duration in milliseconds.
+pub(super) fn add_transition(value: &mut Value, transition: Option<f32>) {
+    let Some(transition) = transition.filter(|value| value.is_finite()) else {
+        return;
+    };
+
+    let seconds = transition.clamp(0.0, MAX_TRANSITION_SECONDS);
+    let milliseconds = (f64::from(seconds) * 1000.0).round() as u64;
+    value["transition_ms"] = json!(milliseconds.min(MAX_TRANSITION_MILLISECONDS));
+
+    if seconds == 0.0 {
+        value["transition"] = json!(0);
+    } else if seconds.fract() == 0.0 {
+        value["transition"] = json!(seconds as u64);
+    }
+}
+
 pub(super) fn encode(device: &Device, config: &MqttConfig) -> Result<Value> {
     let DeviceData::Controllable(data) = &device.data else {
         return Err(eyre!("Not a controllable device"));
@@ -180,18 +202,17 @@ pub(super) fn encode(device: &Device, config: &MqttConfig) -> Result<Value> {
             }
         }
     }
-    if let Some(transition) = data.state.transition {
-        if transition.0.is_finite() {
-            value["transition"] = json!(transition.0.clamp(0.0, u16::MAX as f32).round() as u16);
-        }
-    }
-    if value.get("transition").is_none() {
-        if let Some(transition) = config.default_transition {
-            if transition.is_finite() {
-                value["transition"] = json!(transition.clamp(0.0, u16::MAX as f32).round() as u16);
-            }
-        }
-    }
+    let transition = data
+        .state
+        .transition
+        .map(|transition| transition.0)
+        .filter(|transition| transition.is_finite())
+        .or_else(|| {
+            config
+                .default_transition
+                .filter(|transition| transition.is_finite())
+        });
+    add_transition(&mut value, transition);
     Ok(value)
 }
 
@@ -292,7 +313,7 @@ mod tests {
         };
         assert_eq!(
             encode(&rgb, &config()).unwrap(),
-            json!({"state":"ON","brightness":128,"color":{"r":255,"g":20,"b":0},"transition":1})
+            json!({"state":"ON","brightness":128,"color":{"r":255,"g":20,"b":0},"transition_ms":500})
         );
 
         let mut ct = rgb;
@@ -301,6 +322,26 @@ mod tests {
             data.state.transition = None;
         }
         assert_eq!(encode(&ct, &config()).unwrap()["color_temp"], json!(250));
+    }
+
+    #[test]
+    fn transition_encoding_preserves_milliseconds_and_stock_compatibility() {
+        for (seconds, expected) in [
+            (None, json!({})),
+            (Some(0.0), json!({"transition_ms": 0, "transition": 0})),
+            (Some(0.25), json!({"transition_ms": 250})),
+            (Some(1.0), json!({"transition_ms": 1000, "transition": 1})),
+            (Some(1.5), json!({"transition_ms": 1500})),
+            (Some(2.0), json!({"transition_ms": 2000, "transition": 2})),
+            (
+                Some(f32::MAX),
+                json!({"transition_ms": MAX_TRANSITION_MILLISECONDS, "transition": u16::MAX}),
+            ),
+        ] {
+            let mut payload = json!({});
+            add_transition(&mut payload, seconds);
+            assert_eq!(payload, expected);
+        }
     }
 
     #[test]

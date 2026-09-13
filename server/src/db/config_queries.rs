@@ -150,12 +150,18 @@ fn default_warmup_time_seconds() -> i32 {
 pub struct CoreConfigRow {
     #[serde(default = "default_warmup_time_seconds")]
     pub warmup_time_seconds: i32,
+    /// Optional system-wide fallback for commands without an explicit
+    /// transition. Stored in milliseconds so integrations with sub-second
+    /// transition support can preserve the configured duration exactly.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_transition_ms: Option<u64>,
 }
 
 impl Default for CoreConfigRow {
     fn default() -> Self {
         Self {
             warmup_time_seconds: default_warmup_time_seconds(),
+            default_transition_ms: None,
         }
     }
 }
@@ -379,6 +385,7 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
             db,
             Query::select()
                 .column(CoreConfig::WarmupTimeSeconds)
+                .column(CoreConfig::DefaultTransitionMs)
                 .from(CoreConfig::Table)
                 .and_where(Expr::col(CoreConfig::Id).eq(1))
                 .to_owned(),
@@ -387,6 +394,7 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
 
     Ok(row.map(|row| CoreConfigRow {
         warmup_time_seconds: get_i32_or_default(&row, "warmup_time_seconds", 1),
+        default_transition_ms: get_u64(&row, "default_transition_ms"),
     }))
 }
 
@@ -402,6 +410,13 @@ async fn update_core_config_on<C: ConnectionTrait>(db: &C, config: &CoreConfigRo
             .value(
                 CoreConfig::WarmupTimeSeconds,
                 Expr::value(config.warmup_time_seconds),
+            )
+            .value(
+                CoreConfig::DefaultTransitionMs,
+                config
+                    .default_transition_ms
+                    .map(Expr::value)
+                    .unwrap_or_else(|| Expr::cust("NULL")),
             )
             .value(CoreConfig::UpdatedAt, Expr::current_timestamp())
             .and_where(Expr::col(CoreConfig::Id).eq(1))
@@ -1517,6 +1532,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         db,
         Query::select()
             .column(CoreConfig::WarmupTimeSeconds)
+            .column(CoreConfig::DefaultTransitionMs)
             .from(CoreConfig::Table)
             .and_where(Expr::col(CoreConfig::Id).eq(1))
             .to_owned(),
@@ -1524,6 +1540,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     .await?
     .map(|row| CoreConfigRow {
         warmup_time_seconds: get_i32_or_default(&row, "warmup_time_seconds", 1),
+        default_transition_ms: get_u64(&row, "default_transition_ms"),
     })
     .unwrap_or_default();
 
@@ -2545,6 +2562,13 @@ fn get_i32_or_default(row: &QueryResult, column: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
+fn get_u64(row: &QueryResult, column: &str) -> Option<u64> {
+    row.try_get::<Option<i64>>("", column)
+        .ok()
+        .flatten()
+        .and_then(|value| u64::try_from(value).ok())
+}
+
 fn get_f32(row: &QueryResult, column: &str) -> Result<f32> {
     match row.try_get::<f32>("", column) {
         Ok(value) => Ok(value),
@@ -2707,7 +2731,8 @@ mod consistency_tests {
         assert!(update_core_settings_on(
             &db,
             &CoreConfigRow {
-                warmup_time_seconds: 123
+                warmup_time_seconds: 123,
+                default_transition_ms: None,
             },
             &settings
         )
@@ -2724,6 +2749,7 @@ mod consistency_tests {
             &db,
             &CoreConfigRow {
                 warmup_time_seconds: 123,
+                default_transition_ms: Some(1000),
             },
             &settings,
         )
@@ -2731,6 +2757,7 @@ mod consistency_tests {
         .unwrap();
         let after = db_export_config_from_connection(&db).await.unwrap();
         assert_eq!(after.core.warmup_time_seconds, 123);
+        assert_eq!(after.core.default_transition_ms, Some(1000));
         assert!(after.widget_settings.iter().any(|row| row.key == "first"));
     }
 }

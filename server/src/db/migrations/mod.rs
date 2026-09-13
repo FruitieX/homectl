@@ -17,7 +17,45 @@ impl MigratorTrait for Migrator {
             Box::new(M20260420000000DashboardWidgetSources),
             Box::new(M20260910000000ColorCalibration),
             Box::new(M20260910000001CalibrationProfiles),
+            Box::new(M20260913000000DefaultTransition),
         ]
+    }
+}
+
+struct M20260913000000DefaultTransition;
+
+impl MigrationName for M20260913000000DefaultTransition {
+    fn name(&self) -> &str {
+        "m20260913000000_default_transition"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260913000000DefaultTransition {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreConfig::Table)
+                    .add_column(
+                        ColumnDef::new(CoreConfig::DefaultTransitionMs)
+                            .big_integer()
+                            .null(),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreConfig::Table)
+                    .drop_column(CoreConfig::DefaultTransitionMs)
+                    .to_owned(),
+            )
+            .await
     }
 }
 

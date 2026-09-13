@@ -76,6 +76,8 @@ struct RuntimeStatusResponse {
 struct CoreConfigPayload {
     warmup_time_seconds: i32,
     #[serde(default)]
+    default_transition_ms: Option<u64>,
+    #[serde(default)]
     weather_api_url: String,
     #[serde(default)]
     train_api_url: String,
@@ -92,6 +94,7 @@ struct CoreConfigPayload {
 #[serde(deny_unknown_fields)]
 struct CoreConfigPatch {
     warmup_time_seconds: Option<i32>,
+    default_transition_ms: Option<Option<u64>>,
     weather_api_url: Option<String>,
     train_api_url: Option<String>,
     influx_url: Option<String>,
@@ -109,6 +112,12 @@ impl CoreConfigPatch {
             .unwrap_or(current.core.warmup_time_seconds);
         if warmup_time_seconds < 0 {
             return Err("Warmup time cannot be negative".into());
+        }
+        let default_transition_ms = self
+            .default_transition_ms
+            .unwrap_or(current.core.default_transition_ms);
+        if default_transition_ms.is_some_and(|value| value > 65_535_000) {
+            return Err("Default transition must be between 0 and 65,535,000 milliseconds".into());
         }
         let mut updates = BTreeMap::<String, config_queries::WidgetSettingRow>::new();
         for (key, field, value) in [
@@ -143,6 +152,7 @@ impl CoreConfigPatch {
         Ok((
             CoreConfigRow {
                 warmup_time_seconds,
+                default_transition_ms,
             },
             updates.into_values().collect(),
         ))
@@ -155,6 +165,7 @@ impl CoreConfigPayload {
 
         Self {
             warmup_time_seconds: config.core.warmup_time_seconds,
+            default_transition_ms: config.core.default_transition_ms,
             weather_api_url: widget_setting_string_or_env(
                 settings,
                 WEATHER_SETTING_KEY,
@@ -3141,6 +3152,7 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
     // Convert core config
     let core = CoreConfigRow {
         warmup_time_seconds: config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1) as i32,
+        default_transition_ms: None,
     };
 
     // Convert integrations
@@ -3804,6 +3816,26 @@ mod tests {
         }
         .resolve(&config)
         .is_err());
+        let (core, _) = CoreConfigPatch {
+            default_transition_ms: Some(Some(1000)),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .unwrap();
+        assert_eq!(core.default_transition_ms, Some(1000));
+        let (core, _) = CoreConfigPatch {
+            default_transition_ms: Some(None),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .unwrap();
+        assert_eq!(core.default_transition_ms, None);
+        assert!(CoreConfigPatch {
+            default_transition_ms: Some(Some(65_535_001)),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .is_err());
     }
 
     #[tokio::test]
@@ -3970,6 +4002,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                default_transition_ms: None,
             },
         };
 
@@ -4051,6 +4084,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                default_transition_ms: None,
             },
         };
 
@@ -4120,6 +4154,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                default_transition_ms: None,
             },
         };
 
@@ -4151,6 +4186,7 @@ devices = [
             version: 1,
             core: CoreConfigRow {
                 warmup_time_seconds: 5,
+                default_transition_ms: None,
             },
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
@@ -4190,6 +4226,7 @@ devices = [
             routines: Vec::new(),
             core: CoreConfigRow {
                 warmup_time_seconds: 9,
+                default_transition_ms: None,
             },
         };
 
@@ -4239,6 +4276,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                default_transition_ms: None,
             },
         };
 
@@ -4274,6 +4312,7 @@ devices = [
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                default_transition_ms: None,
             },
         };
 

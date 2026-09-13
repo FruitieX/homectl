@@ -30,8 +30,10 @@ use super::{
     ui::Ui,
     websockets::WebSockets,
 };
+use crate::types::device::{Device, DeviceData};
 
 use color_eyre::Result;
+use ordered_float::OrderedFloat;
 use serde::Serialize;
 use std::time::Duration;
 use std::{
@@ -190,6 +192,23 @@ impl AppState {
 
     pub fn update_core_config(&mut self, config: CoreConfigRow) {
         self.runtime_config.core = config;
+    }
+
+    /// Apply the configured system-wide fallback only to the outbound copy of
+    /// a command. Explicit device, scene, and action transitions remain
+    /// untouched, and the fallback is not written into device or scene state.
+    pub fn apply_default_transition(&self, mut device: Device) -> Device {
+        let Some(default_transition_ms) = self.runtime_config.core.default_transition_ms else {
+            return device;
+        };
+
+        if let DeviceData::Controllable(data) = &mut device.data {
+            if data.state.transition.is_none() {
+                data.state.transition = Some(OrderedFloat(default_transition_ms as f32 / 1000.0));
+            }
+        }
+
+        device
     }
 
     pub fn upsert_device_display_override(&mut self, row: DeviceDisplayNameRow) {

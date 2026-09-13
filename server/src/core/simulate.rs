@@ -137,6 +137,11 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
     .await?
     .map(|row| config_queries::CoreConfigRow {
         warmup_time_seconds: get_i32_or_default(&row, "warmup_time_seconds", 1),
+        default_transition_ms: row
+            .try_get::<Option<i64>>("", "default_transition_ms")
+            .ok()
+            .flatten()
+            .and_then(|value| u64::try_from(value).ok()),
     })
     .unwrap_or_default();
 

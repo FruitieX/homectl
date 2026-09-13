@@ -510,7 +510,7 @@ impl Integration for Mqtt {
             MqttMode::Zigbee2Mqtt => zigbee2mqtt::encode(device)?,
             MqttMode::EspHome => esphome::encode(device, &self.config)?,
         };
-        if mqtt_device.get("transition").is_none() {
+        if mode != MqttMode::EspHome && mqtt_device.get("transition").is_none() {
             if let Some(transition) = self.config.default_transition {
                 mqtt_device["transition"] = serde_json::json!(transition);
             }

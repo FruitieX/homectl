@@ -361,6 +361,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 .unwrap_or_else(|| {
                     crate::core::color_calibration::calibrated_device(device, calibration.as_ref())
                 });
+            let physical = state.apply_default_transition(physical);
             outcome.push(DeferredEventWork::PublishIntegrationState {
                 integrations: state.integrations.clone(),
                 device: Box::new(physical),
@@ -685,6 +686,7 @@ pub(crate) mod tests {
             version: 1,
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
+                default_transition_ms: None,
             },
             integrations: Vec::new(),
             groups: Vec::new(),
@@ -786,6 +788,7 @@ pub(crate) mod tests {
     #[tokio::test]
     async fn set_external_state_is_deferred() {
         let (mut state, _event_rx) = test_state();
+        state.runtime_config.core.default_transition_ms = Some(1000);
         let device = Device::new(
             IntegrationId::from("mqtt".to_string()),
             DeviceId::new("lamp1"),
@@ -816,7 +819,21 @@ pub(crate) mod tests {
             DeferredEventWork::PublishIntegrationState {
                 device: deferred_device,
                 ..
-            } => assert_eq!(deferred_device.get_device_key(), device.get_device_key()),
+            } => {
+                assert_eq!(deferred_device.get_device_key(), device.get_device_key());
+                assert_eq!(
+                    deferred_device
+                        .get_controllable_state()
+                        .and_then(|state| state.transition),
+                    Some(1.0.into())
+                );
+                assert_eq!(
+                    device
+                        .get_controllable_state()
+                        .and_then(|state| state.transition),
+                    None
+                );
+            }
             _ => panic!("expected deferred integration publish"),
         }
     }
