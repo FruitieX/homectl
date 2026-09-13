@@ -5,7 +5,7 @@ import { cn } from '@/lib/cn';
 import { Card } from '@/ui/primitives/card';
 
 const dashboardCardClassName =
-  'flex h-full min-h-0 min-w-0 flex-col overflow-hidden';
+  'dashboard-widget-container flex h-full min-h-0 min-w-0 flex-col overflow-hidden';
 
 export function DashboardCard({ className, ...props }: ComponentProps<'div'>) {
   return <Card className={cn(dashboardCardClassName, className)} {...props} />;
