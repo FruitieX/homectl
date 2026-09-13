@@ -36,6 +36,8 @@ import {
   resolveSensorInteraction,
 } from '@/lib/sensorInteraction';
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
+import { DeviceQuickControls } from '@/ui/DeviceControls';
+import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { ColorCalibrationWizard } from '@/ui/ColorCalibrationWizard';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
@@ -568,7 +570,7 @@ export default function DevicesPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [openDeviceKey, setOpenDeviceKey] = useState<string | null>(null);
   const [deviceDetailTab, setDeviceDetailTab] = useState<
-    'runtime' | 'config' | 'actions' | 'raw'
+    'state' | 'runtime' | 'config' | 'actions' | 'raw'
   >('runtime');
   const [replacementDrafts, setReplacementDrafts] = useState<
     Record<string, string>
@@ -576,6 +578,7 @@ export default function DevicesPage() {
 
   const changeDeviceDetailTab = (value: string) => {
     if (
+      value === 'state' ||
       value === 'runtime' ||
       value === 'config' ||
       value === 'actions' ||
@@ -1442,12 +1445,30 @@ export default function DevicesPage() {
                   onValueChange={changeDeviceDetailTab}
                   className="space-y-4"
                 >
-                  <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+                  <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-5">
+                    <TabsTrigger value="state">State</TabsTrigger>
                     <TabsTrigger value="runtime">Runtime</TabsTrigger>
                     <TabsTrigger value="config">Config</TabsTrigger>
                     <TabsTrigger value="actions">Actions</TabsTrigger>
                     <TabsTrigger value="raw">Raw</TabsTrigger>
                   </TabsList>
+
+                  <TabsContent value="state" className="mt-4 space-y-4">
+                    <ConfigFormSection
+                      title="Live controls"
+                      description="The same power, brightness, and color controls available from the floorplan device modal."
+                      actions={<DeviceReportStatus devices={[device]} />}
+                    >
+                      {'Controllable' in device.data ? (
+                        <DeviceQuickControls devices={[device]} />
+                      ) : (
+                        <ConfigHelpPanel>
+                          Sensors expose their current value in the Runtime tab;
+                          live light controls are not available for this device.
+                        </ConfigHelpPanel>
+                      )}
+                    </ConfigFormSection>
+                  </TabsContent>
 
                   <TabsContent
                     value="runtime"
