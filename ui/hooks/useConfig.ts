@@ -1,8 +1,9 @@
 import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
+import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
+import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
-import { type JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { useAppConfig } from './appConfig';
@@ -15,42 +16,7 @@ export interface Integration {
   enabled: boolean;
 }
 
-export type IntegrationConfigFieldKind =
-  | 'text'
-  | 'password'
-  | 'number'
-  | 'boolean'
-  | 'select'
-  | 'color'
-  | 'json';
-
-export interface IntegrationConfigFieldOption {
-  label: string;
-  value: JsonValue;
-  description?: string | null;
-}
-
-export interface IntegrationConfigFieldSchema {
-  key: string;
-  label: string;
-  kind: IntegrationConfigFieldKind;
-  required: boolean;
-  description?: string | null;
-  placeholder?: string | null;
-  options?: IntegrationConfigFieldOption[];
-  default_value?: JsonValue | null;
-  min?: number | null;
-  max?: number | null;
-  step?: number | null;
-  help_text?: string | null;
-}
-
-export interface IntegrationConfigSchema {
-  plugin: string;
-  name: string;
-  description: string;
-  fields: IntegrationConfigFieldSchema[];
-}
+export type { IntegrationConfigFieldSchema, IntegrationConfigSchema };
 
 export interface Group {
   id: string;

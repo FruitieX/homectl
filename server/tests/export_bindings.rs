@@ -5,6 +5,10 @@ use homectl_server::types::{
     device::{Device, DevicesState},
     dim::FlattenedDimConfig,
     group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupId},
+    integration::{
+        IntegrationConfigFieldKind, IntegrationConfigFieldOption, IntegrationConfigFieldSchema,
+        IntegrationConfigFieldVisibility, IntegrationConfigSchema,
+    },
     routine_status::{RoutineRuntimeStatus, RoutineStatuses, RuleRuntimeStatus},
     rule::{Routine, Rule, TriggerMode},
     scene::{FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig},
@@ -40,6 +44,11 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         FlattenedGroupConfig::export_all_to(&output_dir)?;
         FlattenedGroupsConfig::export_all_to(&output_dir)?;
         GroupId::export_all_to(&output_dir)?;
+        IntegrationConfigFieldKind::export_all_to(&output_dir)?;
+        IntegrationConfigFieldOption::export_all_to(&output_dir)?;
+        IntegrationConfigFieldSchema::export_all_to(&output_dir)?;
+        IntegrationConfigFieldVisibility::export_all_to(&output_dir)?;
+        IntegrationConfigSchema::export_all_to(&output_dir)?;
         RuleRuntimeStatus::export_all_to(&output_dir)?;
         Rule::export_all_to(&output_dir)?;
         Routine::export_all_to(&output_dir)?;

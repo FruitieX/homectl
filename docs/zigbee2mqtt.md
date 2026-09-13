@@ -1,11 +1,12 @@
 # Zigbee2MQTT MQTT profile
 
-The MQTT integration supports an opt-in `zigbee2mqtt_base_topic` field in its
-database-backed configuration (Integrations → MQTT). Set it to the bridge's MQTT
-base topic, normally `zigbee2mqtt`. Broker connection and management settings
-remain configured on the integration. Generic MQTT integrations still require
-their state and command topic fields. The Zigbee2MQTT profile derives those topics
-from the base topic and addresses commands by IEEE address.
+The MQTT integration has an explicit `mode: "zigbee2mqtt"` profile in its
+database-backed configuration (Integrations → MQTT). Set its base topic to the
+bridge's MQTT base topic, normally `zigbee2mqtt`. Broker connection and
+management settings remain configured on the integration. Older configurations
+with `zigbee2mqtt_base_topic` and no `mode` are inferred as Zigbee2MQTT; older
+configurations without that field remain Generic MQTT. The profile derives state
+and command topics from the base topic and addresses commands by IEEE address.
 
 The profile subscribes to `bridge/devices` and state topics. It derives writable
 brightness, XY, HS and temperature support from each device's `definition.exposes`.

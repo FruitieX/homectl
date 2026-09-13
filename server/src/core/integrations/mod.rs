@@ -13,8 +13,9 @@ use crate::types::{
     event::TxEventChannel,
     integration::{
         Integration, IntegrationActionPayload, IntegrationConfigFieldKind,
-        IntegrationConfigFieldOption, IntegrationConfigFieldSchema, IntegrationConfigSchema,
-        IntegrationId, OutboundDeviceUpdatePolicy,
+        IntegrationConfigFieldOption, IntegrationConfigFieldSchema,
+        IntegrationConfigFieldVisibility, IntegrationConfigSchema, IntegrationId,
+        OutboundDeviceUpdatePolicy,
     },
 };
 use crate::utils::cli::Cli;
@@ -290,214 +291,125 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
         "mqtt" => Some(schema(
             "mqtt",
             "MQTT",
-            "Connect devices through MQTT topics, including Zigbee2MQTT-style bridges.",
+            "Connect generic MQTT devices, Zigbee2MQTT bridges, or ESPHome MQTT JSON lights.",
             vec![
-                text_config_field(
-                    "zigbee2mqtt_base_topic",
-                    "Zigbee2MQTT base topic",
-                    false,
-                    "Enable Zigbee2MQTT light discovery and native color commands. Leave empty for generic MQTT. Overrides topic and topic_set.",
-                    Some("zigbee2mqtt"),
-                ),
-                number_config_field(
-                    "zigbee2mqtt_poll_interval_secs",
-                    "Zigbee2MQTT poll interval",
-                    false,
-                    "Refresh stale Zigbee2MQTT lights after this many seconds (default 300, minimum 30). Also enables paced readback after commands. Set to 0 to disable all polling.",
-                    (Some(0.0), Some(86_400.0), Some(1.0)),
-                    Some("300"),
-                ),
-                text_config_field(
-                    "host",
-                    "Host",
-                    true,
-                    "MQTT broker hostname or IP address.",
-                    Some("mqtt.example.org"),
-                ),
-                number_config_field(
-                    "port",
-                    "Port",
-                    true,
-                    "MQTT broker port.",
-                    (Some(1.0), Some(65535.0), Some(1.0)),
-                    Some("1883"),
-                ),
-                text_config_field(
-                    "username",
-                    "Username",
-                    false,
-                    "Optional MQTT username.",
-                    Some("homeassistant"),
-                ),
-                password_config_field(
-                    "password",
-                    "Password",
-                    false,
-                    "Optional MQTT password.",
-                    None,
-                ),
-                with_help_text(
-                    text_config_field(
-                        "topic",
-                        "State topic",
-                        false,
-                        "Topic to subscribe to for device state messages.",
-                        Some("home/+/example/{id}"),
-                    ),
-                    "Use `{id}` where the device id appears in the MQTT topic. Wildcards such as `+` are accepted for subscriptions; homectl extracts the id from the matching topic segment.",
-                ),
-                with_help_text(
-                    text_config_field(
-                        "topic_set",
-                        "Command topic",
-                        false,
-                        "Topic used when publishing device state commands.",
-                        Some("home/lights/example/{id}/set"),
-                    ),
-                    "This topic is used for outbound commands. Include the same `{id}` placeholder unless every device should receive commands on one shared topic.",
-                ),
-                select_config_field(
-                    "managed",
-                    "Management mode",
-                    false,
-                    "Controls whether homectl corrects state drift for devices from this integration.",
-                    vec![
-                        option("Full", json!("Full"), Some("Continuously correct state drift.")),
-                        option(
-                            "Unmanaged",
-                            json!("Unmanaged"),
-                            Some("Send commands without correcting later drift."),
+                with_section(text_config_field("host", "Host", true, "MQTT broker hostname or IP address.", Some("mqtt.example.org")), "Connection"),
+                with_section(number_config_field("port", "Port", true, "MQTT broker port.", (Some(1.0), Some(65535.0), Some(1.0)), Some("1883")), "Connection"),
+                with_section(text_config_field("username", "Username", false, "Optional MQTT username.", Some("homeassistant")), "Connection"),
+                with_section(password_config_field("password", "Password", false, "Optional MQTT password.", None), "Connection"),
+                with_default_value(
+                    with_section(
+                        select_config_field(
+                            "mode",
+                            "Mode",
+                            true,
+                            "Generic MQTT: custom topics and payload mappings. Zigbee2MQTT: discover devices and capabilities from bridge metadata. ESPHome: standard ESPHome MQTT JSON lights.",
+                            vec![
+                                option("Generic MQTT", json!("generic"), Some("Custom MQTT topics and payload mappings.")),
+                                option("Zigbee2MQTT", json!("zigbee2mqtt"), Some("Discover devices and capabilities from Zigbee2MQTT bridge metadata.")),
+                                option("ESPHome", json!("esphome"), Some("ESPHome MQTT JSON lights using standard ESPHome light topics.")),
+                            ],
                         ),
-                        option(
-                            "Full read-only",
-                            json!("FullReadOnly"),
-                            Some("Track state but drop outbound commands."),
-                        ),
-                        option(
-                            "Unmanaged read-only",
-                            json!("UnmanagedReadOnly"),
-                            Some("Drop outbound commands and do not correct drift."),
-                        ),
-                    ],
-                ),
-                with_help_text(
-                    text_config_field(
-                        "id_field",
-                        "ID field",
-                        false,
-                        "JSON pointer to the device id in incoming payloads.",
-                        Some("/id"),
+                        "Mode",
                     ),
-                    "JSON pointers start with `/` and follow RFC 6901. For `{ \"device\": { \"id\": \"kitchen\" } }`, use `/device/id`.",
+                    json!("generic"),
                 ),
-                text_config_field(
-                    "name_field",
-                    "Name field",
-                    false,
-                    "JSON pointer to the device display name in incoming payloads.",
-                    Some("/name"),
-                ),
-                text_config_field(
-                    "power_field",
-                    "Power field",
-                    false,
-                    "JSON pointer to the power value in incoming and outgoing payloads.",
-                    Some("/power"),
-                ),
-                json_config_field(
-                    "power_on_value",
-                    "Power on value",
-                    false,
-                    "Optional JSON value that represents an on state.",
-                    Some(json!(true)),
-                ),
-                json_config_field(
-                    "power_off_value",
-                    "Power off value",
-                    false,
-                    "Optional JSON value that represents an off state.",
-                    Some(json!(false)),
-                ),
-                text_config_field(
-                    "color_field",
-                    "Color field",
-                    false,
-                    "JSON pointer to the color value.",
-                    Some("/color"),
-                ),
-                text_config_field(
-                    "brightness_field",
-                    "Brightness field",
-                    false,
-                    "JSON pointer to the brightness value.",
-                    Some("/brightness"),
-                ),
-                json_config_field(
-                    "brightness_range",
-                    "Brightness range",
-                    false,
-                    "Two-number JSON array describing the source brightness range.",
-                    Some(json!([0, 255])),
-                ),
-                with_help_text(
-                    json_config_field(
-                        "sensor_value_fields",
-                        "Sensor value fields",
-                        false,
-                        "JSON array of pointers to sensor values in incoming payloads.",
-                        Some(json!(["/temperature", "/humidity"])),
+                visible_when(
+                    with_help_text(
+                        with_section(
+                            text_config_field("topic", "State topic", true, "Topic to subscribe to for device state messages.", Some("home/+/example/{id}")),
+                            "Topics",
+                        ),
+                        "Use `{id}` where the device id appears in the MQTT topic. `+` and `#` are supported subscription wildcards.",
                     ),
-                    "List every numeric or boolean sensor value to keep. Example: `[\"/temperature\", \"/humidity\", \"/occupancy\"]`.",
+                    "mode",
+                    json!("generic"),
                 ),
-                text_config_field(
-                    "transition_field",
-                    "Transition field",
-                    false,
-                    "JSON pointer to transition/fade duration.",
-                    Some("/transition"),
+                visible_when(
+                    with_help_text(
+                        with_section(
+                            text_config_field("topic_set", "Command topic", true, "Topic used when publishing device state commands.", Some("home/lights/example/{id}/set")),
+                            "Topics",
+                        ),
+                        "Use `{id}` or `{name}` where the device identifier belongs in the command topic.",
+                    ),
+                    "mode",
+                    json!("generic"),
                 ),
-                json_config_field(
-                    "transition_range",
-                    "Transition range",
-                    false,
-                    "Two-number JSON array describing the transition duration range.",
-                    Some(json!([0, 600])),
+                visible_when(
+                    with_default_value(
+                        with_section(
+                            text_config_field("zigbee2mqtt_base_topic", "Base topic", false, "Zigbee2MQTT bridge base topic.", Some("zigbee2mqtt")),
+                            "Zigbee2MQTT",
+                        ),
+                        json!("zigbee2mqtt"),
+                    ),
+                    "mode",
+                    json!("zigbee2mqtt"),
                 ),
-                number_config_field(
-                    "default_transition",
-                    "Default transition",
-                    false,
-                    "Default transition duration in seconds when none is provided by homectl.",
-                    (Some(0.0), None, Some(0.1)),
-                    Some("0.6"),
+                visible_when(
+                    with_default_value(
+                        with_section(
+                            text_config_field("esphome_base_topic", "Base topic", false, "ESPHome MQTT topic prefix.", Some("esphome")),
+                            "ESPHome",
+                        ),
+                        json!("esphome"),
+                    ),
+                    "mode",
+                    json!("esphome"),
                 ),
-                text_config_field(
-                    "capabilities_field",
-                    "Capabilities field",
-                    false,
-                    "JSON pointer to advertised device capabilities.",
-                    Some("/capabilities"),
+                visible_when(
+                    with_default_value(
+                        with_section(
+                            text_config_field("esphome_light_object_id", "Light object ID", false, "ESPHome light object id used in the normal MQTT light topic layout.", Some("light")),
+                            "ESPHome",
+                        ),
+                        json!("light"),
+                    ),
+                    "mode",
+                    json!("esphome"),
                 ),
-                json_config_field(
-                    "capabilities_override",
-                    "Capabilities override",
-                    false,
-                    "Optional capabilities object that overrides discovered capabilities.",
-                    Some(json!({ "xy": true, "hs": false, "rgb": false, "ct": { "start": 2000, "end": 6500 } })),
+                visible_when(
+                    with_default_value(
+                        with_section(
+                            number_config_field("esphome_warm_white_kelvin", "Warm white", false, "Warm white endpoint of the ESPHome CWWW light.", (Some(1.0), Some(65535.0), Some(1.0)), Some("2700")),
+                            "ESPHome",
+                        ),
+                        json!(2700),
+                    ),
+                    "mode",
+                    json!("esphome"),
                 ),
-                text_config_field(
-                    "raw_field",
-                    "Raw payload field",
-                    false,
-                    "JSON pointer to store as raw device metadata.",
-                    Some("/raw"),
+                visible_when(
+                    with_default_value(
+                        with_section(
+                            number_config_field("esphome_cold_white_kelvin", "Cold white", false, "Cold white endpoint of the ESPHome CWWW light.", (Some(1.0), Some(65535.0), Some(1.0)), Some("6500")),
+                            "ESPHome",
+                        ),
+                        json!(6500),
+                    ),
+                    "mode",
+                    json!("esphome"),
                 ),
-                boolean_config_field(
-                    "include_id_name_in_set_payload",
-                    "Include id/name in command payload",
-                    false,
-                    "Include device id and name fields when publishing command payloads.",
-                ),
+                advanced(visible_when(with_section(number_config_field("zigbee2mqtt_poll_interval_secs", "Poll interval", false, "Refresh stale Zigbee2MQTT lights after this many seconds. Default 300; values below 30 are clamped by the runtime; 0 disables polling.", (Some(0.0), Some(86_400.0), Some(1.0)), Some("300")), "Advanced settings"), "mode", json!("zigbee2mqtt"))),
+                advanced(with_section(select_config_field("managed", "Management mode", false, "Controls whether homectl corrects state drift for devices from this integration.", vec![option("Full", json!("Full"), Some("Continuously correct state drift.")), option("Unmanaged", json!("Unmanaged"), Some("Send commands without correcting later drift.")), option("Full read-only", json!("FullReadOnly"), Some("Track state but drop outbound commands.")), option("Unmanaged read-only", json!("UnmanagedReadOnly"), Some("Drop outbound commands and do not correct drift."))]), "Advanced settings")),
+                advanced(with_section(number_config_field("default_transition", "Default transition", false, "Default transition duration in seconds when none is provided by homectl.", (Some(0.0), None, Some(0.1)), Some("0.6")), "Advanced settings")),
+                advanced(visible_when(with_section(boolean_config_field("retain_commands", "Retain generic commands", false, "Generic MQTT retains commands by default for backwards compatibility. Disable this for brokers/devices that should only receive live commands."), "Advanced settings"), "mode", json!("generic"))),
+                generic_advanced(with_help_text(with_section(text_config_field("id_field", "ID field", false, "JSON pointer to the device id when the state topic has no `{id}` placeholder.", Some("/id")), "Payload mapping"), "JSON pointers follow RFC 6901.")),
+                generic_advanced(with_section(text_config_field("name_field", "Name field", false, "JSON pointer to the device display name in incoming payloads.", Some("/name")), "Payload mapping")),
+                generic_advanced(with_section(text_config_field("power_field", "Power field", false, "JSON pointer to the power value in incoming and outgoing payloads.", Some("/power")), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("power_on_value", "Power on value", false, "JSON value that represents an on state.", Some(json!(true))), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("power_off_value", "Power off value", false, "JSON value that represents an off state.", Some(json!(false))), "Payload mapping")),
+                generic_advanced(with_section(text_config_field("color_field", "Color field", false, "JSON pointer to the color value.", Some("/color")), "Payload mapping")),
+                generic_advanced(with_section(text_config_field("brightness_field", "Brightness field", false, "JSON pointer to the brightness value.", Some("/brightness")), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("brightness_range", "Brightness range", false, "Two-number JSON array describing the source brightness range.", Some(json!([0, 255]))), "Payload mapping")),
+                generic_advanced(with_help_text(with_section(json_config_field("sensor_value_fields", "Sensor value fields", false, "JSON array of pointers to sensor values in incoming payloads.", Some(json!(["/temperature", "/humidity"]))), "Payload mapping"), "List every numeric or boolean sensor value to keep.")),
+                generic_advanced(with_section(text_config_field("transition_field", "Transition field", false, "JSON pointer to transition/fade duration.", Some("/transition")), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("transition_range", "Transition range", false, "Two-number JSON array describing the transition duration range.", Some(json!([0, 600]))), "Payload mapping")),
+                generic_advanced(with_section(text_config_field("capabilities_field", "Capabilities field", false, "JSON pointer to advertised device capabilities.", Some("/capabilities")), "Payload mapping")),
+                generic_advanced(with_section(json_config_field("capabilities_override", "Capabilities override", false, "Optional capabilities object that overrides discovered capabilities.", Some(json!({ "xy": true, "hs": false, "rgb": false, "ct": { "start": 2000, "end": 6500 } }))), "Payload mapping")),
+                generic_advanced(with_section(text_config_field("raw_field", "Raw payload field", false, "JSON pointer to store as raw device metadata.", Some("/raw")), "Payload mapping")),
+                generic_advanced(with_section(boolean_config_field("include_id_name_in_set_payload", "Include id/name in command payload", false, "Include device id and name fields when publishing command payloads."), "Payload mapping")),
             ],
         )),
         "circadian" => Some(schema(
@@ -704,9 +616,20 @@ fn schema(
     description: &str,
     mut fields: Vec<IntegrationConfigFieldSchema>,
 ) -> IntegrationConfigSchema {
-    fields.push(outbound_device_update_field());
-    fields.push(json_config_field("disabled_device_ids", "Disabled devices", false,
-        "Device IDs excluded from state commands and Zigbee2MQTT polling. Also editable in each device dialog.", Some(json!([]))));
+    fields.push(advanced(with_section(
+        outbound_device_update_field(),
+        "Advanced settings",
+    )));
+    fields.push(advanced(with_section(
+        json_config_field(
+            "disabled_device_ids",
+            "Disabled devices",
+            false,
+            "Device IDs excluded from state commands and Zigbee2MQTT polling. Also editable in each device dialog.",
+            Some(json!([])),
+        ),
+        "Advanced settings",
+    )));
 
     IntegrationConfigSchema {
         plugin: plugin.to_string(),
@@ -736,7 +659,47 @@ fn base_config_field(
         max: None,
         step: None,
         help_text: None,
+        section: None,
+        advanced: false,
+        visible_when: None,
     }
+}
+
+fn with_section(
+    mut field: IntegrationConfigFieldSchema,
+    section: &str,
+) -> IntegrationConfigFieldSchema {
+    field.section = Some(section.to_string());
+    field
+}
+
+fn advanced(mut field: IntegrationConfigFieldSchema) -> IntegrationConfigFieldSchema {
+    field.advanced = true;
+    field
+}
+
+fn generic_advanced(field: IntegrationConfigFieldSchema) -> IntegrationConfigFieldSchema {
+    advanced(visible_when(field, "mode", json!("generic")))
+}
+
+fn visible_when(
+    mut field: IntegrationConfigFieldSchema,
+    key: &str,
+    equals: serde_json::Value,
+) -> IntegrationConfigFieldSchema {
+    field.visible_when = Some(IntegrationConfigFieldVisibility {
+        key: key.to_string(),
+        equals,
+    });
+    field
+}
+
+fn with_default_value(
+    mut field: IntegrationConfigFieldSchema,
+    value: serde_json::Value,
+) -> IntegrationConfigFieldSchema {
+    field.default_value = Some(value);
+    field
 }
 
 fn text_config_field(
@@ -1079,11 +1042,61 @@ mod tests {
             .map(|field| field.key.as_str())
             .collect::<Vec<_>>();
 
-        assert_eq!(required_fields, vec!["host", "port"]);
-        // The profile derives its topics. Generic MQTT validates them at load.
-        for key in ["topic", "topic_set", "zigbee2mqtt_base_topic"] {
-            assert!(schema.fields.iter().any(|field| field.key == key));
-        }
+        assert!(required_fields.contains(&"mode"));
+        assert!(required_fields.contains(&"host"));
+        assert!(required_fields.contains(&"port"));
+        assert!(required_fields.contains(&"topic"));
+        assert!(required_fields.contains(&"topic_set"));
+
+        let field = |key: &str| schema.fields.iter().find(|field| field.key == key).unwrap();
+        assert_eq!(field("mode").default_value, Some(json!("generic")));
+        assert_eq!(field("topic").visible_when.as_ref().unwrap().key, "mode");
+        assert_eq!(
+            field("topic").visible_when.as_ref().unwrap().equals,
+            json!("generic")
+        );
+        assert!(field("id_field").advanced);
+        assert_eq!(
+            field("id_field").section.as_deref(),
+            Some("Payload mapping")
+        );
+        assert_eq!(
+            field("id_field").visible_when.as_ref().unwrap().equals,
+            json!("generic")
+        );
+        assert_eq!(
+            field("zigbee2mqtt_poll_interval_secs")
+                .visible_when
+                .as_ref()
+                .unwrap()
+                .equals,
+            json!("zigbee2mqtt")
+        );
+        assert_eq!(
+            field("zigbee2mqtt_base_topic").default_value,
+            Some(json!("zigbee2mqtt"))
+        );
+        assert_eq!(
+            field("esphome_base_topic").default_value,
+            Some(json!("esphome"))
+        );
+        assert_eq!(
+            field("esphome_light_object_id").default_value,
+            Some(json!("light"))
+        );
+        assert_eq!(
+            field("esphome_warm_white_kelvin").default_value,
+            Some(json!(2700))
+        );
+        assert_eq!(
+            field("esphome_cold_white_kelvin").default_value,
+            Some(json!(6500))
+        );
+
+        let serialized = serde_json::to_value(&schema).expect("schema should be serializable");
+        assert_eq!(serialized["plugin"], "mqtt");
+        assert_eq!(serialized["fields"][4]["key"], "mode");
+        assert_eq!(serialized["fields"][4]["visible_when"], json!(null));
     }
 
     #[test]

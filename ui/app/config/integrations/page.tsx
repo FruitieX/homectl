@@ -68,6 +68,69 @@ function getConfigPathValue(config: Record<string, unknown>, path: string) {
   return current;
 }
 
+function configFieldIsVisible(
+  config: Record<string, unknown>,
+  field: IntegrationConfigFieldSchema,
+) {
+  const condition = field.visible_when;
+  if (!condition) {
+    return true;
+  }
+
+  return (
+    JSON.stringify(getConfigPathValue(config, condition.key)) ===
+    JSON.stringify(condition.equals)
+  );
+}
+
+function fieldPlaceholder(field: IntegrationConfigFieldSchema) {
+  if (field.placeholder) {
+    return field.placeholder;
+  }
+
+  const defaultValue = field.default_value;
+  if (
+    typeof defaultValue === 'string' ||
+    typeof defaultValue === 'number' ||
+    typeof defaultValue === 'boolean'
+  ) {
+    return String(defaultValue);
+  }
+
+  return undefined;
+}
+
+function initialIntegrationConfig(
+  plugin: string,
+  config: Record<string, unknown>,
+) {
+  const nextConfig = { ...config };
+  if (plugin === 'mqtt' && typeof nextConfig.mode !== 'string') {
+    nextConfig.mode =
+      typeof nextConfig.zigbee2mqtt_base_topic === 'string' &&
+      nextConfig.zigbee2mqtt_base_topic.trim().length > 0
+        ? 'zigbee2mqtt'
+        : 'generic';
+  }
+  return nextConfig;
+}
+
+function sanitizeHiddenConditionalFields(
+  schema: IntegrationConfigSchema | undefined,
+  config: Record<string, unknown>,
+) {
+  if (!schema) {
+    return config;
+  }
+
+  return schema.fields.reduce((nextConfig, field) => {
+    if (field.visible_when && !configFieldIsVisible(config, field)) {
+      return setConfigPathValue(nextConfig, field.key, undefined);
+    }
+    return nextConfig;
+  }, config);
+}
+
 function setConfigPathValue(
   config: Record<string, unknown>,
   path: string,
@@ -726,33 +789,76 @@ function IntegrationConfigFieldsEditor({
     );
   }
 
+  const visibleFields = schema.fields.filter((field) =>
+    configFieldIsVisible(config, field),
+  );
+  const normalFields = visibleFields.filter((field) => !field.advanced);
+  const advancedFields = visibleFields.filter((field) => field.advanced);
+  const renderFieldGroups = (fields: IntegrationConfigFieldSchema[]) => {
+    const groups = new Map<string, IntegrationConfigFieldSchema[]>();
+    for (const field of fields) {
+      const section = field.section ?? 'Settings';
+      const group = groups.get(section) ?? [];
+      group.push(field);
+      groups.set(section, group);
+    }
+
+    return [...groups.entries()].map(([section, sectionFields]) => (
+      <ConfigFormSection
+        key={section}
+        title={section}
+        className="bg-background/70"
+      >
+        <div className="space-y-4">
+          {sectionFields.map((field) => (
+            <SchemaConfigField
+              key={field.key}
+              field={field}
+              config={config}
+              validationError={mqttProfileFieldError(config, field.key)}
+              onConfigChange={onConfigChange}
+            />
+          ))}
+        </div>
+      </ConfigFormSection>
+    ));
+  };
+
   return (
-    <ConfigFormSection
-      title={`${schema.name} settings`}
-      description={`${schema.description} Unknown fields are preserved and can be edited from the JSON tab.`}
-      className="bg-muted/20"
-    >
-      <div className="space-y-4">
-        {schema.fields.map((field) => (
-          <SchemaConfigField
-            key={field.key}
-            field={field}
-            config={config}
-            onConfigChange={onConfigChange}
-          />
-        ))}
-      </div>
-    </ConfigFormSection>
+    <div className="space-y-4">
+      <p className="px-1 text-sm leading-6 text-muted-foreground">
+        {schema.description} Unknown fields are preserved in the JSON editor.
+      </p>
+      {renderFieldGroups(normalFields)}
+      {advancedFields.length > 0 ? (
+        <details className="group rounded-3xl border border-border bg-muted/20 p-4 shadow-sm sm:p-5">
+          <summary className="cursor-pointer list-none text-sm font-semibold uppercase tracking-wide text-foreground [&::-webkit-details-marker]:hidden">
+            <span className="mr-2 inline-block transition-transform group-open:rotate-90">
+              ▸
+            </span>
+            Advanced settings
+            <span className="ml-2 text-xs font-normal normal-case tracking-normal text-muted-foreground">
+              {advancedFields.length} fields
+            </span>
+          </summary>
+          <div className="mt-4 space-y-4">
+            {renderFieldGroups(advancedFields)}
+          </div>
+        </details>
+      ) : null}
+    </div>
   );
 }
 
 function SchemaConfigField({
   field,
   config,
+  validationError,
   onConfigChange,
 }: {
   field: IntegrationConfigFieldSchema;
   config: Record<string, unknown>;
+  validationError?: string | null;
   onConfigChange: (config: Record<string, unknown>) => void;
 }) {
   const value = getConfigPathValue(config, field.key);
@@ -790,6 +896,9 @@ function SchemaConfigField({
     <div className="space-y-2">
       <ConfigField label={field.label} description={fieldDescription}>
         {renderSchemaInput(field, value, updateValue)}
+        {validationError ? (
+          <span className="text-sm text-destructive">{validationError}</span>
+        ) : null}
       </ConfigField>
       {field.help_text ? (
         <ConfigHelpPanel>{field.help_text}</ConfigHelpPanel>
@@ -811,7 +920,7 @@ function renderSchemaInput(
         max={field.max ?? undefined}
         step={field.step ?? undefined}
         value={typeof value === 'number' && Number.isFinite(value) ? value : ''}
-        placeholder={field.placeholder ?? undefined}
+        placeholder={fieldPlaceholder(field)}
         onChange={(event) => {
           const nextValue = parseNumberInput(event.target.value, field);
           const valueToStore =
@@ -854,7 +963,7 @@ function renderSchemaInput(
     <Input
       type={field.kind === 'password' ? 'password' : 'text'}
       value={textValue}
-      placeholder={field.placeholder ?? undefined}
+      placeholder={fieldPlaceholder(field)}
       onChange={(event) => {
         const nextValue = event.target.value;
         const valueToStore =
@@ -912,42 +1021,53 @@ function renderSelectInput(
   const options = field.options ?? [];
   const selectedValue =
     value === undefined ? unsetSelectValue : stringifyOptionValue(value);
+  const selectedOption = options.find(
+    (option) => stringifyOptionValue(option.value) === selectedValue,
+  );
 
   return (
-    <select
-      className={selectClassName}
-      value={selectedValue}
-      onChange={(event) => {
-        if (event.target.value === unsetSelectValue) {
-          onChange(undefined);
-          return;
-        }
+    <div className="grid gap-1.5">
+      <select
+        className={selectClassName}
+        value={selectedValue}
+        onChange={(event) => {
+          if (event.target.value === unsetSelectValue) {
+            onChange(undefined);
+            return;
+          }
 
-        const selectedOption = options.find(
-          (option) => stringifyOptionValue(option.value) === event.target.value,
-        );
+          const nextOption = options.find(
+            (option) =>
+              stringifyOptionValue(option.value) === event.target.value,
+          );
 
-        if (selectedOption) {
-          onChange(selectedOption.value);
-        }
-      }}
-    >
-      {field.required ? (
-        <option value={unsetSelectValue} disabled>
-          Select...
-        </option>
-      ) : (
-        <option value={unsetSelectValue}>Unset</option>
-      )}
-      {options.map((option) => (
-        <option
-          key={stringifyOptionValue(option.value)}
-          value={stringifyOptionValue(option.value)}
-        >
-          {option.label}
-        </option>
-      ))}
-    </select>
+          if (nextOption) {
+            onChange(nextOption.value);
+          }
+        }}
+      >
+        {field.required ? (
+          <option value={unsetSelectValue} disabled>
+            Select...
+          </option>
+        ) : (
+          <option value={unsetSelectValue}>Unset</option>
+        )}
+        {options.map((option) => (
+          <option
+            key={stringifyOptionValue(option.value)}
+            value={stringifyOptionValue(option.value)}
+          >
+            {option.label}
+          </option>
+        ))}
+      </select>
+      {selectedOption?.description ? (
+        <span className="text-xs leading-5 text-muted-foreground">
+          {selectedOption.description}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
@@ -1260,14 +1380,21 @@ function JsonConfigField({
   return (
     <div className="space-y-2">
       <Textarea
-        className="min-h-28 font-mono text-sm"
+        className="min-h-14 max-h-52 resize-y font-mono text-sm"
+        rows={2}
         value={text}
         placeholder={placeholder}
         onChange={(event) => setText(event.target.value)}
         onBlur={applyText}
       />
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={applyText}>
+      <div className="flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={applyText}
+        >
           Apply JSON
         </Button>
         {hasExample ? (
@@ -1275,6 +1402,7 @@ function JsonConfigField({
             type="button"
             variant="secondary"
             size="sm"
+            className="h-7 px-2 text-xs"
             onClick={useExample}
           >
             Use example
@@ -1285,13 +1413,19 @@ function JsonConfigField({
             type="button"
             variant="ghost"
             size="sm"
-            className="text-destructive hover:text-destructive"
+            className="h-7 px-2 text-xs text-destructive hover:text-destructive"
             onClick={clearValue}
           >
             Clear
           </Button>
         ) : null}
       </div>
+      {hasExample ? (
+        <p className="text-[11px] leading-4 text-muted-foreground">
+          Placeholder/example only; it is not saved unless you apply or enter
+          it.
+        </p>
+      ) : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>
   );
@@ -1302,8 +1436,13 @@ function formatJsonValue(value: unknown) {
     return '';
   }
 
-  const text = JSON.stringify(value, null, 2);
-  return text ?? '';
+  const compact = JSON.stringify(value);
+  if (!compact) {
+    return '';
+  }
+  return compact.length <= 80
+    ? compact
+    : (JSON.stringify(value, null, 2) ?? '');
 }
 
 type JsonParseResult =
@@ -1339,7 +1478,7 @@ function requiredFieldMissing(
   config: Record<string, unknown>,
   field: IntegrationConfigFieldSchema,
 ) {
-  if (!field.required) {
+  if (!field.required || !configFieldIsVisible(config, field)) {
     return false;
   }
 
@@ -1377,6 +1516,92 @@ function missingRequiredFieldLabels(
     .map((field) => field.label);
 }
 
+function mqttProfileValidationError(config: Record<string, unknown>) {
+  const mode = config.mode;
+  if (mode !== 'esphome') {
+    return null;
+  }
+
+  const base = config.esphome_base_topic;
+  if (base !== undefined && (typeof base !== 'string' || !base.trim())) {
+    return 'ESPHome base topic must not be empty.';
+  }
+  const objectId = config.esphome_light_object_id;
+  if (
+    objectId !== undefined &&
+    (typeof objectId !== 'string' ||
+      !objectId.trim() ||
+      /[\s\/#{}+]/.test(objectId))
+  ) {
+    return 'ESPHome light object ID must be one valid MQTT topic segment.';
+  }
+
+  const warm = config.esphome_warm_white_kelvin ?? 2700;
+  const cold = config.esphome_cold_white_kelvin ?? 6500;
+  if (
+    typeof warm !== 'number' ||
+    !Number.isFinite(warm) ||
+    typeof cold !== 'number' ||
+    !Number.isFinite(cold) ||
+    warm <= 0 ||
+    cold <= 0 ||
+    warm >= cold
+  ) {
+    return 'ESPHome warm white must be greater than 0 and lower than cold white.';
+  }
+
+  return null;
+}
+
+function mqttProfileFieldError(
+  config: Record<string, unknown>,
+  fieldKey: string,
+) {
+  if (config.mode !== 'esphome') {
+    return null;
+  }
+
+  if (
+    fieldKey === 'esphome_base_topic' &&
+    config.esphome_base_topic !== undefined &&
+    (typeof config.esphome_base_topic !== 'string' ||
+      !config.esphome_base_topic.trim())
+  ) {
+    return 'Base topic must not be empty.';
+  }
+
+  if (
+    fieldKey === 'esphome_light_object_id' &&
+    config.esphome_light_object_id !== undefined &&
+    (typeof config.esphome_light_object_id !== 'string' ||
+      !config.esphome_light_object_id.trim() ||
+      /[\s\/#{}+]/.test(config.esphome_light_object_id))
+  ) {
+    return 'Use one valid MQTT topic segment.';
+  }
+
+  if (
+    fieldKey === 'esphome_warm_white_kelvin' ||
+    fieldKey === 'esphome_cold_white_kelvin'
+  ) {
+    const warm = config.esphome_warm_white_kelvin ?? 2700;
+    const cold = config.esphome_cold_white_kelvin ?? 6500;
+    if (
+      typeof warm !== 'number' ||
+      !Number.isFinite(warm) ||
+      typeof cold !== 'number' ||
+      !Number.isFinite(cold) ||
+      warm <= 0 ||
+      cold <= 0 ||
+      warm >= cold
+    ) {
+      return 'Warm white must be greater than 0 and lower than cold white.';
+    }
+  }
+
+  return null;
+}
+
 function IntegrationOverlay({
   mode,
   integration,
@@ -1399,7 +1624,10 @@ function IntegrationOverlay({
     integration?.plugin ?? initialPlugin ?? '',
   );
   const [config, setConfig] = useState<Record<string, unknown>>(
-    integration?.config ?? {},
+    initialIntegrationConfig(
+      integration?.plugin ?? initialPlugin ?? '',
+      integration?.config ?? {},
+    ),
   );
   const [enabled, setEnabled] = useState(integration?.enabled ?? true);
   const [editTab, setEditTab] = useState<'settings' | 'json'>('settings');
@@ -1418,7 +1646,24 @@ function IntegrationOverlay({
     selectedSchema,
     validationConfig,
   );
-  const canSubmit = Boolean(id && plugin && missingFields.length === 0);
+  const profileValidationError =
+    plugin === 'mqtt' && validationConfig
+      ? mqttProfileValidationError(validationConfig)
+      : null;
+  const canSubmit = Boolean(
+    id &&
+      plugin &&
+      missingFields.length === 0 &&
+      !profileValidationError &&
+      (editTab !== 'json' || validationConfig),
+  );
+
+  const selectPlugin = (nextPlugin: string) => {
+    setPlugin(nextPlugin);
+    setConfig((currentConfig) =>
+      initialIntegrationConfig(nextPlugin, currentConfig),
+    );
+  };
 
   const changeTab = (value: string) => {
     if (value === 'json') {
@@ -1464,10 +1709,17 @@ function IntegrationOverlay({
       return;
     }
 
+    const nextProfileValidationError =
+      plugin === 'mqtt' ? mqttProfileValidationError(effectiveConfig) : null;
+    if (nextProfileValidationError) {
+      alert(nextProfileValidationError);
+      return;
+    }
+
     void onSubmit({
       id,
       plugin,
-      config: effectiveConfig,
+      config: sanitizeHiddenConditionalFields(selectedSchema, effectiveConfig),
       enabled,
     });
   };
@@ -1516,7 +1768,7 @@ function IntegrationOverlay({
                       <select
                         className={selectClassName}
                         value={plugin}
-                        onChange={(event) => setPlugin(event.target.value)}
+                        onChange={(event) => selectPlugin(event.target.value)}
                       >
                         <option value="">Select plugin...</option>
                         {pluginOptions.map((option) => (
@@ -1530,7 +1782,7 @@ function IntegrationOverlay({
                   <IntegrationGettingStarted
                     schemas={schemas}
                     onSelectPlugin={(nextPlugin) => {
-                      setPlugin(nextPlugin);
+                      selectPlugin(nextPlugin);
                       if (!id) {
                         setId(nextPlugin);
                       }
@@ -1577,6 +1829,11 @@ function IntegrationOverlay({
                 </AlertDescription>
               </Alert>
             ) : null}
+            {profileValidationError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{profileValidationError}</AlertDescription>
+              </Alert>
+            ) : null}
           </TabsContent>
 
           <TabsContent value="json" className="mt-4">
@@ -1585,7 +1842,8 @@ function IntegrationOverlay({
               description="Use this for unknown or advanced plugin settings. Values edited here are preserved when returning to Settings."
             >
               <Textarea
-                className="h-96 font-mono text-sm"
+                className="min-h-40 max-h-72 resize-y font-mono text-sm"
+                rows={8}
                 value={jsonText}
                 onChange={(event) => setJsonText(event.target.value)}
               />

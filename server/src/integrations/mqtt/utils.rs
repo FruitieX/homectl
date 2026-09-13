@@ -4,9 +4,129 @@ use crate::types::{
     device::{ControllableDevice, Device, DeviceData, DeviceId, SensorDevice},
     integration::IntegrationId,
 };
-use color_eyre::Result;
+use color_eyre::{eyre::eyre, Result};
 use jsonptr::{Assign, Pointer};
 use ordered_float::OrderedFloat;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MqttTopicMatch {
+    pub id: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum TopicSegment {
+    Literal(String),
+    SingleWildcard,
+    MultiWildcard,
+    Id,
+    Name,
+}
+
+/// Validate a topic template and return its parsed segments.
+///
+/// `{id}` and `{name}` are homectl placeholders and must occupy an entire
+/// topic level. MQTT wildcards follow the broker syntax: `+` occupies one
+/// level and `#` must be the final level.
+pub fn validate_mqtt_topic_template(
+    template: &str,
+    allow_name: bool,
+    allow_wildcards: bool,
+) -> Result<()> {
+    parse_topic_template(template, allow_name, allow_wildcards).map(|_| ())
+}
+
+fn parse_topic_template(
+    template: &str,
+    allow_name: bool,
+    allow_wildcards: bool,
+) -> Result<Vec<TopicSegment>> {
+    if template.trim().is_empty() {
+        return Err(eyre!("MQTT topic must not be empty"));
+    }
+    if template.contains('\0') {
+        return Err(eyre!("MQTT topic must not contain NUL characters"));
+    }
+
+    let mut id_count = 0;
+    let mut name_count = 0;
+    let mut segments = Vec::new();
+    for (index, segment) in template.split('/').enumerate() {
+        let parsed = match segment {
+            "+" if allow_wildcards => TopicSegment::SingleWildcard,
+            "#" if allow_wildcards => {
+                if index != template.split('/').count() - 1 {
+                    return Err(eyre!("MQTT multi-level wildcard '#' must be final"));
+                }
+                TopicSegment::MultiWildcard
+            }
+            "{id}" => {
+                id_count += 1;
+                if id_count > 1 {
+                    return Err(eyre!("MQTT topic may contain at most one '{{id}}'"));
+                }
+                TopicSegment::Id
+            }
+            "{name}" if allow_name => {
+                name_count += 1;
+                if name_count > 1 {
+                    return Err(eyre!("MQTT topic may contain at most one '{{name}}'"));
+                }
+                TopicSegment::Name
+            }
+            "{name}" => {
+                return Err(eyre!("'{{name}}' is only valid in an MQTT command topic"));
+            }
+            value if value.contains(['+', '#', '{', '}']) => {
+                return Err(eyre!("Malformed MQTT topic segment '{value}'"));
+            }
+            "" => return Err(eyre!("MQTT topic must not contain empty segments")),
+            value => TopicSegment::Literal(value.to_owned()),
+        };
+        segments.push(parsed);
+    }
+
+    Ok(segments)
+}
+
+/// Match a received MQTT topic against a configured topic template.
+///
+/// The returned id is populated only when the template contains `{id}`. A
+/// caller can then fall back to the legacy JSON `/id` field for templates that
+/// do not contain that placeholder.
+pub fn match_mqtt_topic(template: &str, topic: &str) -> Option<MqttTopicMatch> {
+    let segments = parse_topic_template(template, false, true).ok()?;
+    let topic_segments = topic.split('/').collect::<Vec<_>>();
+    let mut topic_index = 0;
+    let mut id = None;
+
+    for segment in segments {
+        match segment {
+            TopicSegment::MultiWildcard => return Some(MqttTopicMatch { id }),
+            TopicSegment::Literal(expected) => {
+                if topic_segments.get(topic_index).copied() != Some(expected.as_str()) {
+                    return None;
+                }
+                topic_index += 1;
+            }
+            TopicSegment::SingleWildcard => {
+                topic_segments.get(topic_index)?;
+                topic_index += 1;
+            }
+            TopicSegment::Id => {
+                let value = topic_segments.get(topic_index).copied()?;
+                if value.is_empty() {
+                    return None;
+                }
+                id = Some(value.to_owned());
+                topic_index += 1;
+            }
+            // `{name}` is not allowed by match_mqtt_topic's parser.
+            TopicSegment::Name => return None,
+        }
+    }
+
+    (topic_index == topic_segments.len()).then_some(MqttTopicMatch { id })
+}
 
 pub fn mqtt_to_homectl(
     payload: &[u8],
@@ -63,11 +183,27 @@ pub fn mqtt_to_homectl(
         .as_deref()
         .unwrap_or(Pointer::from_static("/capabilities"));
 
-    let id = id_field
-        .resolve(&value)
-        .ok()
-        .and_then(serde_json::Value::as_str)
-        .map(|id| id.to_string());
+    let topic_match = if config.topic.is_empty() {
+        None
+    } else {
+        let topic_match = match_mqtt_topic(&config.topic, topic);
+        if topic_match.is_none() {
+            error!(
+                "MQTT topic '{topic}' does not match configured template '{}'",
+                config.topic
+            );
+            return None;
+        }
+        topic_match
+    };
+
+    let id = topic_match.and_then(|matched| matched.id).or_else(|| {
+        id_field
+            .resolve(&value)
+            .ok()
+            .and_then(serde_json::Value::as_str)
+            .map(|id| id.to_string())
+    });
 
     let Some(id) = id else {
         error!("Missing '{id_field}' field in MQTT message");
@@ -297,6 +433,85 @@ mod tests {
     use ordered_float::OrderedFloat;
     use serde_json::json;
     use std::str::FromStr;
+
+    #[test]
+    fn topic_template_extracts_id_from_a_literal_template() {
+        assert_eq!(
+            match_mqtt_topic("home/{id}/state", "home/kitchen/state"),
+            Some(MqttTopicMatch {
+                id: Some("kitchen".into())
+            })
+        );
+    }
+
+    #[test]
+    fn topic_template_extracts_id_with_plus_wildcards() {
+        assert_eq!(
+            match_mqtt_topic(
+                "home/+/devices/{id}/state",
+                "home/site-a/devices/lamp-7/state"
+            ),
+            Some(MqttTopicMatch {
+                id: Some("lamp-7".into())
+            })
+        );
+    }
+
+    #[test]
+    fn topic_template_supports_a_final_multi_level_wildcard() {
+        assert_eq!(
+            match_mqtt_topic("home/{id}/#", "home/kitchen/state/brightness"),
+            Some(MqttTopicMatch {
+                id: Some("kitchen".into())
+            })
+        );
+    }
+
+    #[test]
+    fn topic_template_rejects_mismatches_and_malformed_patterns() {
+        assert!(match_mqtt_topic("home/{id}/state", "home/kitchen/command").is_none());
+        assert!(validate_mqtt_topic_template("home/{id}/{id}", false, true).is_err());
+        assert!(validate_mqtt_topic_template("home/#/state", false, true).is_err());
+        assert!(validate_mqtt_topic_template("home/+/state", false, false).is_err());
+    }
+
+    #[test]
+    fn topic_without_id_uses_the_legacy_json_id_fallback() {
+        let config = MqttConfig {
+            host: "localhost".into(),
+            port: 1883,
+            topic: "home/+/state".into(),
+            topic_set: "home/{id}/set".into(),
+            ..Default::default()
+        };
+        let device = mqtt_to_homectl(
+            br#"{"id":"legacy-id","power":true}"#,
+            "home/kitchen/state",
+            "mqtt".parse().unwrap(),
+            &config,
+        )
+        .unwrap();
+        assert_eq!(device.id.to_string(), "legacy-id");
+    }
+
+    #[test]
+    fn topic_id_takes_precedence_over_the_legacy_json_id() {
+        let config = MqttConfig {
+            host: "localhost".into(),
+            port: 1883,
+            topic: "home/{id}/state".into(),
+            topic_set: "home/{id}/set".into(),
+            ..Default::default()
+        };
+        let device = mqtt_to_homectl(
+            br#"{"id":"payload-id","power":true}"#,
+            "home/topic-id/state",
+            "mqtt".parse().unwrap(),
+            &config,
+        )
+        .unwrap();
+        assert_eq!(device.id.to_string(), "topic-id");
+    }
 
     #[test]
     fn test_homectl_to_mqtt() {

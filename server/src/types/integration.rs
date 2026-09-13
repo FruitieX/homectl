@@ -33,7 +33,8 @@ pub struct IntegrationConfig {
 
 pub type IntegrationsConfig = HashMap<IntegrationId, IntegrationConfig>;
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(TS, Clone, Debug, Serialize, PartialEq)]
+#[ts(export)]
 pub struct IntegrationConfigSchema {
     pub plugin: String,
     pub name: String,
@@ -41,7 +42,8 @@ pub struct IntegrationConfigSchema {
     pub fields: Vec<IntegrationConfigFieldSchema>,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(TS, Clone, Debug, Serialize, PartialEq)]
+#[ts(export)]
 pub struct IntegrationConfigFieldSchema {
     /// Dot-separated config path, for example
     /// `outbound_device_updates.min_interval_ms`.
@@ -58,9 +60,24 @@ pub struct IntegrationConfigFieldSchema {
     pub max: Option<f64>,
     pub step: Option<f64>,
     pub help_text: Option<String>,
+    /// Optional visual section/group for schema-driven configuration forms.
+    pub section: Option<String>,
+    /// Obscure settings are hidden in the form's collapsed advanced section.
+    #[serde(default)]
+    pub advanced: bool,
+    /// Only show this field when another config value equals the given value.
+    pub visible_when: Option<IntegrationConfigFieldVisibility>,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(TS, Clone, Debug, Serialize, PartialEq)]
+#[ts(export)]
+pub struct IntegrationConfigFieldVisibility {
+    pub key: String,
+    pub equals: serde_json::Value,
+}
+
+#[derive(TS, Clone, Debug, Serialize, PartialEq)]
+#[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum IntegrationConfigFieldKind {
     Text,
@@ -72,7 +89,8 @@ pub enum IntegrationConfigFieldKind {
     Json,
 }
 
-#[derive(Clone, Debug, Serialize, PartialEq)]
+#[derive(TS, Clone, Debug, Serialize, PartialEq)]
+#[ts(export)]
 pub struct IntegrationConfigFieldOption {
     pub label: String,
     pub value: serde_json::Value,
