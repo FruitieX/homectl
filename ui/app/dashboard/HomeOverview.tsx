@@ -6,7 +6,8 @@ import { ChevronRight } from 'lucide-react';
 import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { getPower } from '@/lib/colors';
 import { SceneList } from '../groups/[id]/SceneList';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
+import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
+import { DashboardCard } from './WidgetChrome';
 
 export function HomeOverview() {
   const devices = useDevicesState();
@@ -19,8 +20,8 @@ export function HomeOverview() {
       device && 'Controllable' in device.data && getPower(device.data),
   );
   return (
-    <Card>
-      <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+    <DashboardCard>
+      <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle>Home</CardTitle>
         <Button
           variant="outline"
@@ -34,7 +35,7 @@ export function HomeOverview() {
           All devices off
         </Button>
       </CardHeader>
-      <CardContent className="space-y-5">
+      <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto">
         <section className="space-y-3">
           <h2 className="text-sm font-medium">Scenes</h2>
           <SceneList deviceKeys={keys} compact />
@@ -66,6 +67,6 @@ export function HomeOverview() {
             })}
         </section>
       </CardContent>
-    </Card>
+    </DashboardCard>
   );
 }

@@ -455,9 +455,9 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
+          <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading icon={<Clock />} label="Now" detail />
-            <div className="flex flex-1 flex-col items-center justify-center py-[var(--widget-inner-y,1rem)]">
+            <div className="min-h-0 flex-1 overflow-y-auto flex flex-col items-center justify-center py-[var(--widget-inner-y,1rem)]">
               <LiveClockDisplay showSeconds={showSeconds} showDate={showDate} />
               <CalendarSummary
                 showCalendar={showCalendar}

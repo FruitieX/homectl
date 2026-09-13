@@ -4,6 +4,13 @@ import { ArrowUpRight } from 'lucide-react';
 import { cn } from '@/lib/cn';
 import { Card } from '@/ui/primitives/card';
 
+const dashboardCardClassName =
+  'flex h-full min-h-0 min-w-0 flex-col overflow-hidden';
+
+export function DashboardCard({ className, ...props }: ComponentProps<'div'>) {
+  return <Card className={cn(dashboardCardClassName, className)} {...props} />;
+}
+
 export function WidgetCard({
   className,
   interactive = false,
@@ -12,7 +19,8 @@ export function WidgetCard({
   return (
     <Card
       className={cn(
-        'relative overflow-hidden rounded-[1.5rem] border-border/55 bg-gradient-to-br from-card via-card to-muted/30 shadow-[0_1px_0_hsl(var(--foreground)/0.03),0_12px_32px_-24px_hsl(var(--foreground)/0.35)]',
+        dashboardCardClassName,
+        'relative rounded-[1.5rem] border-border/55 bg-gradient-to-br from-card via-card to-muted/30 shadow-[0_1px_0_hsl(var(--foreground)/0.03),0_12px_32px_-24px_hsl(var(--foreground)/0.35)]',
         interactive && 'transition-transform active:scale-[0.98]',
         className,
       )}

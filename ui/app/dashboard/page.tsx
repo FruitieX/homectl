@@ -22,7 +22,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
+import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Skeleton } from '@/ui/primitives/skeleton';
 
@@ -32,6 +32,7 @@ import { SensorsCard } from './SensorsCard';
 import { SpotPriceCard } from './SpotPriceCard';
 import { TrainScheduleCard } from './TrainScheduleCard';
 import { WeatherCard } from './WeatherCard';
+import { DashboardCard } from './WidgetChrome';
 import { HomeOverview } from './HomeOverview';
 
 function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
@@ -52,27 +53,27 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       return <WeatherCard widget={widget} />;
     case 'text':
       return (
-        <Card>
-          <CardHeader>
+        <DashboardCard>
+          <CardHeader className="shrink-0">
             <CardTitle>{widget.title}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-0 flex-1 overflow-y-auto">
             <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
               {getDashboardWidgetOptionString(widget, 'body', '')}
             </p>
           </CardContent>
-        </Card>
+        </DashboardCard>
       );
     case 'link':
       return (
-        <Card className="overflow-hidden">
+        <DashboardCard>
           <Button
             asChild
             variant="ghost"
             className="h-full w-full justify-start p-0 text-left"
           >
             <a href={getDashboardWidgetOptionString(widget, 'url', '/')}>
-              <CardContent className="flex h-full flex-col justify-center gap-2 p-5">
+              <CardContent className="flex h-full min-h-0 flex-col justify-center gap-2 overflow-y-auto p-5">
                 <div className="text-lg font-semibold">
                   {getDashboardWidgetOptionString(
                     widget,
@@ -86,11 +87,11 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
               </CardContent>
             </a>
           </Button>
-        </Card>
+        </DashboardCard>
       );
     case 'iframe':
       return (
-        <Card className="overflow-hidden">
+        <DashboardCard>
           <iframe
             title={getDashboardWidgetOptionString(
               widget,
@@ -98,33 +99,33 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
               widget.title,
             )}
             src={getDashboardWidgetOptionString(widget, 'url', 'about:blank')}
-            className="h-full min-h-40 w-full border-0"
+            className="h-full min-h-0 w-full flex-1 border-0"
             loading="lazy"
           />
-        </Card>
+        </DashboardCard>
       );
     case 'image':
       return (
-        <Card className="overflow-hidden">
+        <DashboardCard>
           <img
             src={getDashboardWidgetOptionString(widget, 'imageUrl', '')}
             alt={getDashboardWidgetOptionString(widget, 'alt', widget.title)}
-            className="h-full min-h-40 w-full object-cover"
+            className="h-full min-h-0 w-full flex-1 object-cover"
           />
-        </Card>
+        </DashboardCard>
       );
     case 'custom':
       return (
-        <Card>
-          <CardHeader>
+        <DashboardCard>
+          <CardHeader className="shrink-0">
             <CardTitle>{widget.title}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="min-h-0 flex-1 overflow-y-auto">
             <p className="text-sm opacity-70">
               Custom widgets are not runtime-rendered yet.
             </p>
           </CardContent>
-        </Card>
+        </DashboardCard>
       );
   }
 }
@@ -301,7 +302,7 @@ export default function Page() {
                 key={widget.id}
                 className={cn(
                   'min-h-0 min-w-0 *:h-full',
-                  getDashboardWidgetSpanClass(widget.width),
+                  getDashboardWidgetSpanClass(widget.width, widget.widget_type),
                 )}
                 style={getDashboardWidgetRowSpanStyle(widget.height)}
               >

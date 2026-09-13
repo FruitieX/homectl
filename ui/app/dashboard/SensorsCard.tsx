@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
+import { cn } from '@/lib/cn';
 import { useInterval, useTimeout } from 'usehooks-ts';
 import { Activity } from 'lucide-react';
 import { useSensorData, useTempSensorsResource } from '@/hooks/influxdb';
@@ -92,7 +93,9 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           (filter === 'indoor'
             ? s.is_indoor
             : sensorGroups.find((group) => group.id === filter)
-              ? sensorGroups.find((group) => group.id === filter)?.sensorIds.includes(s.device_id)
+              ? sensorGroups
+                  .find((group) => group.id === filter)
+                  ?.sensorIds.includes(s.device_id)
               : !s.is_indoor),
       );
   const temperature = active
@@ -107,25 +110,29 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   };
   return (
     <>
-      <WidgetCard interactive className="group relative p-[var(--widget-padding,1rem)]">
+      <WidgetCard
+        interactive
+        className="group relative p-[var(--widget-padding,1rem)]"
+      >
         <Button
           variant="ghost"
           aria-label="Open all climate sensors"
           onClick={() => show('all')}
           className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 hover:bg-muted/30"
         />
-        <div className="pointer-events-none relative z-[1]">
-          <div className="mb-3">
+        <div className="pointer-events-none relative z-[1] flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
+          <div className="mb-3 shrink-0">
             <WidgetHeading icon={<Activity />} label="Climate sensors" detail />
           </div>
           <div
-            className={
+            className={cn(
+              'pointer-events-auto min-h-0 flex-1',
               getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
                 ? spacing === 'compact'
-                  ? 'pointer-events-auto grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
-                  : 'pointer-events-auto grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
-                : 'pointer-events-auto flex gap-2 overflow-x-auto pb-1'
-            }
+                  ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
+                  : 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-3'
+                : 'flex gap-2 overflow-x-auto pb-1',
+            )}
           >
             {preview.map((sensor) => (
               <SensorChip
@@ -140,7 +147,10 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           {(resource.isPending ||
             resource.isError ||
             resource.rows.length === 0) && (
-            <p role="status" className="pointer-events-none pt-3 text-xs text-muted-foreground">
+            <p
+              role="status"
+              className="pointer-events-none pt-3 text-xs text-muted-foreground"
+            >
               {resource.isPending
                 ? 'Loading sensor readings…'
                 : resource.isError

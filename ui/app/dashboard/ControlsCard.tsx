@@ -7,7 +7,8 @@ import {
 import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { DeviceRow } from '@/ui/DeviceControls';
-import { Card, CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
+import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
+import { DashboardCard } from './WidgetChrome';
 
 export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const state = useDevicesState();
@@ -32,11 +33,11 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
         ? (groups?.[groupId]?.device_keys ?? [])
         : Object.keys(state ?? {});
   return (
-    <Card>
-      <CardHeader>
+    <DashboardCard>
+      <CardHeader className="shrink-0">
         <CardTitle>{widget?.title || 'Controls'}</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-2">
+      <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto">
         {keys.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Choose devices in dashboard settings.
@@ -59,6 +60,6 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
           })
         )}
       </CardContent>
-    </Card>
+    </DashboardCard>
   );
 };

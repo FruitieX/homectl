@@ -227,7 +227,10 @@ function DailyForecastCard({
         </div>
         {!compact && (
           <div className="truncate text-[0.7rem] text-muted-foreground">
-            {day.date.toLocaleDateString('en-FI', { month: 'short', day: 'numeric' })}
+            {day.date.toLocaleDateString('en-FI', {
+              month: 'short',
+              day: 'numeric',
+            })}
           </div>
         )}
         <div className="tabular-nums text-xs text-muted-foreground">
@@ -381,14 +384,14 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
-          <CardContent className="flex w-full flex-col p-[var(--widget-padding,1rem)]">
+          <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading icon={<CloudSun />} label="Weather" detail />
             <div
               className={clsx(
-                'flex flex-1 items-center justify-center gap-2 py-[var(--widget-inner-y,0.75rem)]',
+                'min-h-0 flex-1 items-center justify-center gap-2 overflow-y-auto py-[var(--widget-inner-y,0.75rem)]',
                 showWidgetForecast
-                  ? 'grid grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] items-center'
-                  : 'flex-col',
+                  ? 'flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]'
+                  : 'flex flex-col',
               )}
             >
               <div className="min-w-0">
@@ -403,7 +406,11 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               {showWidgetForecast && dailyData.length > 0 && (
                 <div className="grid grid-cols-1 gap-1.5">
                   {dailyData.slice(0, 3).map((day) => (
-                    <DailyForecastCard key={day.date.toISOString()} day={day} compact />
+                    <DailyForecastCard
+                      key={day.date.toISOString()}
+                      day={day}
+                      compact
+                    />
                   ))}
                 </div>
               )}
@@ -442,10 +449,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             </TabsList>
           </Tabs>
 
-          <div
-            ref={modalBodyRef}
-            className="relative flex flex-col gap-3 pb-4"
-          >
+          <div ref={modalBodyRef} className="relative flex flex-col gap-3 pb-4">
             {activeTab === 0 && (
               <WeatherHourlyPanel
                 hourlyData={hourlyData}

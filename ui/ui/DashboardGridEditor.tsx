@@ -15,6 +15,7 @@ import { cn } from '@/lib/cn';
 import {
   clampDashboardWidgetHeight,
   clampDashboardWidgetWidth,
+  getDashboardWidgetMinimumWidth,
   DASHBOARD_COMPACT_COLUMNS,
   DASHBOARD_GRID_HELP,
   DASHBOARD_MAX_ROWS,
@@ -129,7 +130,10 @@ function getAutoLayoutStyle(
   widget: DashboardWidget,
   columns: PreviewColumnCount,
 ) {
-  const width = clampDashboardWidgetWidth(widget.width, columns);
+  const width = clampDashboardWidgetWidth(
+    Math.max(widget.width, getDashboardWidgetMinimumWidth(widget.widget_type)),
+    columns,
+  );
   const height = clampDashboardWidgetHeight(widget.height);
 
   return {
@@ -522,7 +526,10 @@ export function DashboardGridEditor({
       );
       const nextWidth = clamp(
         interaction.startWidth + columnDelta,
-        1,
+        getDashboardWidgetMinimumWidth(
+          draftWidgetsRef.current.find((widget) => widget.id === interaction.id)
+            ?.widget_type ?? '',
+        ),
         interaction.columns,
       );
       const nextHeight = clamp(
@@ -663,7 +670,13 @@ export function DashboardGridEditor({
       kind: 'resize',
       startClientX: event.clientX,
       startClientY: event.clientY,
-      startWidth: clampDashboardWidgetWidth(widget.width, previewColumns),
+      startWidth: clampDashboardWidgetWidth(
+        Math.max(
+          widget.width,
+          getDashboardWidgetMinimumWidth(widget.widget_type),
+        ),
+        previewColumns,
+      ),
       startHeight: clampDashboardWidgetHeight(widget.height),
       ...metrics,
     };
@@ -745,6 +758,10 @@ export function DashboardGridEditor({
                           widget.widget_type}
                         <span className="ml-2">
                           {widget.width}×{widget.height}
+                          {widget.width <
+                          getDashboardWidgetMinimumWidth(widget.widget_type)
+                            ? ` · min ${getDashboardWidgetMinimumWidth(widget.widget_type)}`
+                            : ''}
                         </span>
                       </div>
                     </div>

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
+import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { Zap } from 'lucide-react';
 import { useTimeout } from 'usehooks-ts';
 
@@ -28,6 +29,7 @@ const formatPrice = (value: number | undefined) =>
 
 export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [spacing] = useDashboardSpacing();
+  const [dashboardScrollEnabled] = useDashboardScroll();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [chartInteracting, setChartInteracting] = useState(false);
   const isIdle = useIdle();
@@ -70,7 +72,11 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
     [highPriceThreshold, lowPriceThreshold, mediumPriceThreshold],
   );
   const coloredData = useMemo(
-    () => data.map((point) => ({ ...point, fill: getSpotPriceColor(point.value, thresholds) })),
+    () =>
+      data.map((point) => ({
+        ...point,
+        fill: getSpotPriceColor(point.value, thresholds),
+      })),
     [data, thresholds],
   );
 
@@ -93,15 +99,15 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
   return (
     <>
       <WidgetCard interactive={!chartInteracting} className="group col-span-4">
-        <div className="relative h-full w-full rounded-[inherit] text-left">
-          <CardContent className="relative flex w-full flex-col p-[var(--widget-padding,1rem)]">
+        <div className="relative flex h-full min-h-0 flex-1 w-full rounded-[inherit] text-left">
+          <CardContent className="relative flex min-h-0 flex-1 w-full flex-col p-[var(--widget-padding,1rem)]">
             <Button
               variant="ghost"
               aria-label="Open electricity price details"
               onClick={() => setDetailsOpen(true)}
               className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 text-left hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset"
             />
-            <div className="pointer-events-none relative z-[1]">
+            <div className="pointer-events-none relative z-[1] shrink-0">
               <WidgetHeading icon={<Zap />} label="Electricity price" detail />
               <div className="mt-3 flex items-end justify-between gap-4 px-1 pb-1">
                 <div>
@@ -125,7 +131,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               </div>
             </div>
             <div
-              className="relative z-[2]"
+              className="relative z-[2] min-h-0 flex-1"
               onPointerDown={() => setChartInteracting(true)}
               onPointerUp={() => setChartInteracting(false)}
               onPointerCancel={() => setChartInteracting(false)}
@@ -133,9 +139,14 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
             >
               <ResponsiveChart
                 height={
-                  spacing === 'compact' ? 180 : spacing === 'spacious' ? 245 : 215
+                  spacing === 'compact'
+                    ? 180
+                    : spacing === 'spacious'
+                      ? 245
+                      : 215
                 }
-                className="mt-1 min-w-0 overflow-hidden"
+                fit={!dashboardScrollEnabled}
+                className="mt-1 h-full min-h-0 min-w-0 overflow-hidden"
               >
                 {({ width, height }) => (
                   <SpotPriceChart
@@ -151,7 +162,10 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               </ResponsiveChart>
             </div>
             {priceQuery.isError && (
-              <p role="status" className="pointer-events-none relative z-[1] text-xs text-muted-foreground">
+              <p
+                role="status"
+                className="pointer-events-none relative z-[1] text-xs text-muted-foreground"
+              >
                 Prices could not be refreshed
                 {data.length ? '; showing earlier results.' : '.'}
               </p>

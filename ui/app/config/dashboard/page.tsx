@@ -5,6 +5,7 @@ import {
   useDashboardSpacingSettings,
   type DashboardSpacing,
 } from '@/hooks/dashboardSpacing';
+import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useSensorData } from '@/hooks/influxdb';
 import { useSensorCatalog } from '@/hooks/sensorCatalog';
 import { SensorChip } from '@/ui/SensorChip';
@@ -44,6 +45,7 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
+import { Switch } from '@/ui/primitives/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Textarea } from '@/ui/primitives/textarea';
 
@@ -393,6 +395,8 @@ function SensorGroupsField() {
 export default function DashboardConfigPage() {
   const [spacing, setSpacing] = useDashboardSpacing();
   const [spacingSettings, setSpacingSettings] = useDashboardSpacingSettings();
+  const [dashboardScrollEnabled, setDashboardScrollEnabled] =
+    useDashboardScroll();
   const {
     layouts,
     loading: layoutsLoading,
@@ -454,6 +458,22 @@ export default function DashboardConfigPage() {
           <option value="balanced">Balanced</option>
           <option value="spacious">Spacious</option>
         </select>
+      </ConfigField>
+      <ConfigField
+        label="Dashboard scrolling"
+        description="Stored in this browser only. Disable it for wall displays; widgets fit the viewport and long lists scroll inside their own widget."
+      >
+        <div className="flex items-center gap-3">
+          <Switch
+            type="button"
+            checked={dashboardScrollEnabled}
+            onCheckedChange={setDashboardScrollEnabled}
+            aria-label="Enable dashboard scrolling"
+          />
+          <span className="text-sm text-muted-foreground">
+            {dashboardScrollEnabled ? 'Enabled' : 'Disabled'}
+          </span>
+        </div>
       </ConfigField>
       <ConfigField
         label="Card spacing"
