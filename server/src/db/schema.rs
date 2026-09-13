@@ -17,6 +17,7 @@ pub enum CoreConfig {
     Id,
     WarmupTimeSeconds,
     DefaultTransitionMs,
+    SceneTransitionMs,
     UpdatedAt,
 }
 

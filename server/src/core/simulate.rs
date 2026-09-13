@@ -142,6 +142,7 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
             .ok()
             .flatten()
             .and_then(|value| u64::try_from(value).ok()),
+        scene_transition_ms: None,
     })
     .unwrap_or_default();
 

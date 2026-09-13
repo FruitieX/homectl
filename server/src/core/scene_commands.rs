@@ -78,6 +78,11 @@ fn prepare(state: &AppState, command: &SceneCommand) -> Result<Vec<Device>, Stri
             .ok_or_else(|| format!("Scene has no resolved state for {}", device.name))?;
         if let Some(transition) = command.transition {
             desired.transition = Some(OrderedFloat(transition));
+        } else if let Some(transition_ms) = state.runtime_config.core.scene_transition_ms {
+            // A configured UI scene transition is an explicit application
+            // preference. It wins over a transition stored inside the scene,
+            // while the command-level transition above remains authoritative.
+            desired.transition = Some(OrderedFloat(transition_ms as f32 / 1000.0));
         } else if !command.use_scene_transition {
             desired.transition = None;
         }
@@ -256,6 +261,12 @@ mod tests {
             .iter()
             .all(|device| device.get_controllable_state().unwrap().transition
                 == Some(OrderedFloat(2.0))));
+        state.runtime_config.core.scene_transition_ms = Some(1500);
+        let prepared = prepare(&state, &command).unwrap();
+        assert!(prepared
+            .iter()
+            .all(|device| device.get_controllable_state().unwrap().transition
+                == Some(OrderedFloat(1.5))));
         command.transition = Some(0.5);
         assert!(prepare(&state, &command)
             .unwrap()

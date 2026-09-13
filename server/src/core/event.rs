@@ -687,6 +687,7 @@ pub(crate) mod tests {
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
             integrations: Vec::new(),
             groups: Vec::new(),

@@ -155,6 +155,11 @@ pub struct CoreConfigRow {
     /// transition support can preserve the configured duration exactly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_transition_ms: Option<u64>,
+    /// Optional transition applied when a scene command does not provide an
+    /// explicit transition. Stored separately so interactive controls and
+    /// scene applications can be tuned independently.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scene_transition_ms: Option<u64>,
 }
 
 impl Default for CoreConfigRow {
@@ -162,6 +167,7 @@ impl Default for CoreConfigRow {
         Self {
             warmup_time_seconds: default_warmup_time_seconds(),
             default_transition_ms: None,
+            scene_transition_ms: None,
         }
     }
 }
@@ -386,6 +392,7 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
             Query::select()
                 .column(CoreConfig::WarmupTimeSeconds)
                 .column(CoreConfig::DefaultTransitionMs)
+                .column(CoreConfig::SceneTransitionMs)
                 .from(CoreConfig::Table)
                 .and_where(Expr::col(CoreConfig::Id).eq(1))
                 .to_owned(),
@@ -395,6 +402,7 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
     Ok(row.map(|row| CoreConfigRow {
         warmup_time_seconds: get_i32_or_default(&row, "warmup_time_seconds", 1),
         default_transition_ms: get_u64(&row, "default_transition_ms"),
+        scene_transition_ms: get_u64(&row, "scene_transition_ms"),
     }))
 }
 
@@ -415,6 +423,13 @@ async fn update_core_config_on<C: ConnectionTrait>(db: &C, config: &CoreConfigRo
                 CoreConfig::DefaultTransitionMs,
                 config
                     .default_transition_ms
+                    .map(Expr::value)
+                    .unwrap_or_else(|| Expr::cust("NULL")),
+            )
+            .value(
+                CoreConfig::SceneTransitionMs,
+                config
+                    .scene_transition_ms
                     .map(Expr::value)
                     .unwrap_or_else(|| Expr::cust("NULL")),
             )
@@ -1533,6 +1548,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         Query::select()
             .column(CoreConfig::WarmupTimeSeconds)
             .column(CoreConfig::DefaultTransitionMs)
+            .column(CoreConfig::SceneTransitionMs)
             .from(CoreConfig::Table)
             .and_where(Expr::col(CoreConfig::Id).eq(1))
             .to_owned(),
@@ -1541,6 +1557,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     .map(|row| CoreConfigRow {
         warmup_time_seconds: get_i32_or_default(&row, "warmup_time_seconds", 1),
         default_transition_ms: get_u64(&row, "default_transition_ms"),
+        scene_transition_ms: get_u64(&row, "scene_transition_ms"),
     })
     .unwrap_or_default();
 
@@ -2733,6 +2750,7 @@ mod consistency_tests {
             &CoreConfigRow {
                 warmup_time_seconds: 123,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
             &settings
         )
@@ -2750,6 +2768,7 @@ mod consistency_tests {
             &CoreConfigRow {
                 warmup_time_seconds: 123,
                 default_transition_ms: Some(1000),
+                scene_transition_ms: Some(1000),
             },
             &settings,
         )
@@ -2758,6 +2777,7 @@ mod consistency_tests {
         let after = db_export_config_from_connection(&db).await.unwrap();
         assert_eq!(after.core.warmup_time_seconds, 123);
         assert_eq!(after.core.default_transition_ms, Some(1000));
+        assert_eq!(after.core.scene_transition_ms, Some(1000));
         assert!(after.widget_settings.iter().any(|row| row.key == "first"));
     }
 }

@@ -18,7 +18,45 @@ impl MigratorTrait for Migrator {
             Box::new(M20260910000000ColorCalibration),
             Box::new(M20260910000001CalibrationProfiles),
             Box::new(M20260913000000DefaultTransition),
+            Box::new(M20260913000001SceneTransition),
         ]
+    }
+}
+
+struct M20260913000001SceneTransition;
+
+impl MigrationName for M20260913000001SceneTransition {
+    fn name(&self) -> &str {
+        "m20260913000001_scene_transition"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260913000001SceneTransition {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreConfig::Table)
+                    .add_column(
+                        ColumnDef::new(CoreConfig::SceneTransitionMs)
+                            .big_integer()
+                            .null(),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(CoreConfig::Table)
+                    .drop_column(CoreConfig::SceneTransitionMs)
+                    .to_owned(),
+            )
+            .await
     }
 }
 

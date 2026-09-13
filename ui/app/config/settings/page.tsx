@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 const coreConfigFormSchema = z.object({
   warmupTimeSeconds: z.number().int().min(0).max(60),
   defaultTransitionMs: z.number().int().min(0).max(65535000).nullable(),
+  sceneTransitionMs: z.number().int().min(0).max(65535000).nullable(),
 });
 
 const coreConfigApiResponseSchema = z
@@ -48,6 +49,8 @@ const coreConfigApiResponseSchema = z
     warmup_time_seconds: z.number().optional(),
     defaultTransitionMs: z.number().nullable().optional(),
     default_transition_ms: z.number().nullable().optional(),
+    sceneTransitionMs: z.number().nullable().optional(),
+    scene_transition_ms: z.number().nullable().optional(),
   })
   .passthrough();
 
@@ -70,6 +73,7 @@ type CoreConfigApiResponse = z.infer<typeof coreConfigApiResponseSchema>;
 const defaultValues: CoreConfigFormValues = {
   warmupTimeSeconds: 1,
   defaultTransitionMs: null,
+  sceneTransitionMs: null,
 };
 
 const themeOptions: {
@@ -96,6 +100,8 @@ function normalizeCoreConfig(
       value?.warmupTimeSeconds ?? value?.warmup_time_seconds ?? 1,
     defaultTransitionMs:
       value?.defaultTransitionMs ?? value?.default_transition_ms ?? null,
+    sceneTransitionMs:
+      value?.sceneTransitionMs ?? value?.scene_transition_ms ?? null,
   };
 }
 
@@ -120,6 +126,7 @@ async function updateCoreConfig(
     body: JSON.stringify({
       warmup_time_seconds: values.warmupTimeSeconds,
       default_transition_ms: values.defaultTransitionMs,
+      scene_transition_ms: values.sceneTransitionMs,
     }),
   });
   const result = coreConfigEnvelopeSchema.parse(await response.json());
@@ -298,7 +305,9 @@ export default function SettingsPage() {
                     name="defaultTransitionMs"
                     render={({ field }) => (
                       <FormItem className="mt-6">
-                        <FormLabel>Global default transition (milliseconds)</FormLabel>
+                        <FormLabel>
+                          Interactive controls transition (milliseconds)
+                        </FormLabel>
                         <FormControl>
                           <Input
                             type="number"
@@ -321,9 +330,48 @@ export default function SettingsPage() {
                           />
                         </FormControl>
                         <FormDescription>
-                          Used when a command has no explicit transition. Set
-                          this to 1000 for a one-second default; leave empty to
-                          preserve each integration&apos;s own behavior.
+                          Used for sliders, color wheels, and direct device
+                          controls when no explicit transition is requested.
+                          Set this to 1000 for one second; leave empty to use
+                          integration defaults.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="sceneTransitionMs"
+                    render={({ field }) => (
+                      <FormItem className="mt-6">
+                        <FormLabel>
+                          Scene application transition (milliseconds)
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={65535000}
+                            step={1}
+                            inputMode="numeric"
+                            placeholder="Use scene/default behavior"
+                            value={field.value ?? ''}
+                            onBlur={field.onBlur}
+                            onChange={(event) =>
+                              field.onChange(
+                                event.target.value === ''
+                                  ? null
+                                  : Number(event.target.value),
+                              )
+                            }
+                            name={field.name}
+                            ref={field.ref}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          Used when applying scenes from the UI. A configured
+                          value overrides scene-stored transition defaults;
+                          leave empty to preserve existing scene behavior.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

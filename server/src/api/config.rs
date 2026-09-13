@@ -78,6 +78,8 @@ struct CoreConfigPayload {
     #[serde(default)]
     default_transition_ms: Option<u64>,
     #[serde(default)]
+    scene_transition_ms: Option<u64>,
+    #[serde(default)]
     weather_api_url: String,
     #[serde(default)]
     train_api_url: String,
@@ -95,6 +97,7 @@ struct CoreConfigPayload {
 struct CoreConfigPatch {
     warmup_time_seconds: Option<i32>,
     default_transition_ms: Option<Option<u64>>,
+    scene_transition_ms: Option<Option<u64>>,
     weather_api_url: Option<String>,
     train_api_url: Option<String>,
     influx_url: Option<String>,
@@ -118,6 +121,12 @@ impl CoreConfigPatch {
             .unwrap_or(current.core.default_transition_ms);
         if default_transition_ms.is_some_and(|value| value > 65_535_000) {
             return Err("Default transition must be between 0 and 65,535,000 milliseconds".into());
+        }
+        let scene_transition_ms = self
+            .scene_transition_ms
+            .unwrap_or(current.core.scene_transition_ms);
+        if scene_transition_ms.is_some_and(|value| value > 65_535_000) {
+            return Err("Scene transition must be between 0 and 65,535,000 milliseconds".into());
         }
         let mut updates = BTreeMap::<String, config_queries::WidgetSettingRow>::new();
         for (key, field, value) in [
@@ -153,6 +162,7 @@ impl CoreConfigPatch {
             CoreConfigRow {
                 warmup_time_seconds,
                 default_transition_ms,
+                scene_transition_ms,
             },
             updates.into_values().collect(),
         ))
@@ -166,6 +176,7 @@ impl CoreConfigPayload {
         Self {
             warmup_time_seconds: config.core.warmup_time_seconds,
             default_transition_ms: config.core.default_transition_ms,
+            scene_transition_ms: config.core.scene_transition_ms,
             weather_api_url: widget_setting_string_or_env(
                 settings,
                 WEATHER_SETTING_KEY,
@@ -3153,6 +3164,7 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
     let core = CoreConfigRow {
         warmup_time_seconds: config.core.and_then(|c| c.warmup_time_seconds).unwrap_or(1) as i32,
         default_transition_ms: None,
+        scene_transition_ms: None,
     };
 
     // Convert integrations
@@ -3830,6 +3842,19 @@ mod tests {
         .resolve(&config)
         .unwrap();
         assert_eq!(core.default_transition_ms, None);
+        let (core, _) = CoreConfigPatch {
+            scene_transition_ms: Some(Some(1500)),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .unwrap();
+        assert_eq!(core.scene_transition_ms, Some(1500));
+        assert!(CoreConfigPatch {
+            scene_transition_ms: Some(Some(65_535_001)),
+            ..Default::default()
+        }
+        .resolve(&config)
+        .is_err());
         assert!(CoreConfigPatch {
             default_transition_ms: Some(Some(65_535_001)),
             ..Default::default()
@@ -4003,6 +4028,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
         };
 
@@ -4085,6 +4111,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
         };
 
@@ -4155,6 +4182,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
         };
 
@@ -4187,6 +4215,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 5,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
             integrations: vec![IntegrationRow {
                 id: "zigbee2mqtt".to_string(),
@@ -4227,6 +4256,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 9,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
         };
 
@@ -4277,6 +4307,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
         };
 
@@ -4313,6 +4344,7 @@ devices = [
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
                 default_transition_ms: None,
+                scene_transition_ms: None,
             },
         };
 
