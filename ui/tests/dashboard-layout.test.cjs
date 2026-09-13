@@ -29,12 +29,20 @@ const weatherCardSource = fs.readFileSync(
   path.join(__dirname, '../app/dashboard/WeatherCard.tsx'),
   'utf8',
 );
+const weatherStylesSource = fs.readFileSync(
+  path.join(__dirname, '../styles/globals.css'),
+  'utf8',
+);
 
 test('keeps the weather container query free of display conflicts', () => {
   assert.match(weatherCardSource, /dashboard-weather-layout grid grid-cols-1/);
   assert.doesNotMatch(
     weatherCardSource,
     /dashboard-weather-layout flex flex-col/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(min-width: 20rem\)/,
   );
 });
 

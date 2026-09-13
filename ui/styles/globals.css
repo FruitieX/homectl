@@ -70,7 +70,7 @@
     container: dashboard-widget / inline-size;
   }
 
-  @container dashboard-widget (min-width: 28rem) {
+  @container dashboard-widget (min-width: 20rem) {
     .dashboard-weather-layout {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     }
