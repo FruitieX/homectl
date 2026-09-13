@@ -4,6 +4,7 @@ import { useInterval, useTimeout } from 'usehooks-ts';
 import { Clock3, TrainFront } from 'lucide-react';
 import useIdle from '@/hooks/useIdle';
 import { useAppConfig } from '@/hooks/appConfig';
+import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import {
   type DashboardWidget,
   buildDashboardWidgetProxyPath,
@@ -12,6 +13,11 @@ import {
   getDashboardWidgetOptionString,
   resolveDashboardWidgetUrl,
 } from '@/hooks/useDashboard';
+import {
+  DEFAULT_MAX_MINUTES_AHEAD,
+  filterDeparturesWithinHorizon,
+  normalizeMaxMinutesAhead,
+} from '@/lib/trainSchedule';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { useWidgetResource } from '@/hooks/useWidgetResource';
 import { Button } from '@/ui/primitives/button';
@@ -40,6 +46,7 @@ type Train = {
 
 export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
   const { apiEndpoint } = useAppConfig();
+  const [dashboardScrollEnabled] = useDashboardScroll();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [now, setNow] = useState(Date.now);
   useInterval(() => setNow(Date.now()), 15000);
@@ -55,6 +62,13 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     0,
     Math.min(60, getDashboardWidgetOptionNumber(widget, 'overdueMinutes', 3)),
   );
+  const maxMinutesAhead = normalizeMaxMinutesAhead(
+    getDashboardWidgetOptionNumber(
+      widget,
+      'maxMinutesAhead',
+      DEFAULT_MAX_MINUTES_AHEAD,
+    ),
+  );
   const resultLimit = getDashboardWidgetOptionNumber(widget, 'limit', 5);
   const displayLimit = Math.max(
     1,
@@ -65,9 +79,10 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     'scrollMore',
     false,
   );
+  const scrollRows = scrollMore || !dashboardScrollEnabled;
   const requestedLimit = Math.max(
     resultLimit,
-    displayLimit + (scrollMore ? 5 : 0),
+    displayLimit + (scrollRows ? 5 : 0),
   );
   const destination = getDashboardWidgetOptionString(widget, 'destination', '');
   const directionId = getDashboardWidgetOptionString(widget, 'directionId', '');
@@ -111,8 +126,12 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
       ? train.minUntilHomeDeparture
       : Math.floor((leaveAt * 1000 - now) / 60000);
   };
-  const trains = (query.data ?? []).filter(
-    (train) => remainingMinutes(train) >= -overdueMinutes,
+  const trains = filterDeparturesWithinHorizon(
+    (query.data ?? []).filter(
+      (train) => remainingMinutes(train) >= -overdueMinutes,
+    ),
+    now,
+    maxMinutesAhead,
   );
   const error = query.isError ? 'Departures could not be refreshed.' : null;
 
@@ -123,7 +142,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   const departureRows = (rows: Train[], compact = false) => (
     <div className="divide-y divide-border/45">
-      {(compact && !scrollMore ? rows.slice(0, displayLimit) : rows).map(
+      {(compact && !scrollRows ? rows.slice(0, displayLimit) : rows).map(
         (train, index) => {
           const remaining = remainingMinutes(train);
           const cancelled = train.realtimeState === 'CANCELED';
@@ -182,16 +201,16 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={() => setDetailsOpen(true)}
         >
-          <CardContent className="w-full p-[var(--widget-padding,1rem)]">
+          <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
             <WidgetHeading
               icon={<TrainFront />}
               label="Next departures"
               detail
             />
             <div
-              className="mt-2 overflow-y-auto overscroll-contain"
+              className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain"
               style={
-                scrollMore
+                scrollRows
                   ? { maxHeight: `${displayLimit * 5.25}rem` }
                   : undefined
               }

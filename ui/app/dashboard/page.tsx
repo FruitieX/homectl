@@ -13,6 +13,7 @@ import {
   useDashboardWidgets,
 } from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
+import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import {
   getDashboardWidgetRowSpanStyle,
@@ -142,6 +143,7 @@ function DashboardLoadingGrid() {
 export default function Page() {
   const [storedSpacing] = useDashboardSpacing();
   const [spacingSettings] = useDashboardSpacingSettings();
+  const [dashboardScrollEnabled] = useDashboardScroll();
   const spacing =
     storedSpacing in dashboardSpacingStyles ? storedSpacing : 'balanced';
   const [isFullscreen] = useIsFullscreen();
@@ -172,7 +174,12 @@ export default function Page() {
 
   if (dashboardLoading) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6">
+      <div
+        className={cn(
+          'min-h-0 flex-1 px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6',
+          dashboardScrollEnabled ? 'overflow-y-auto' : 'overflow-hidden',
+        )}
+      >
         <div className="mx-auto max-w-[100rem] space-y-8">
           <DashboardLoadingGrid />
         </div>
@@ -182,7 +189,12 @@ export default function Page() {
 
   if (dashboardError) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6">
+      <div
+        className={cn(
+          'min-h-0 flex-1 px-2.5 py-2.5 sm:px-5 sm:py-3 lg:px-8 lg:py-6',
+          dashboardScrollEnabled ? 'overflow-y-auto' : 'overflow-hidden',
+        )}
+      >
         <div className="mx-auto max-w-[100rem] space-y-6">
           <Alert variant="destructive">
             <AlertTitle>Dashboard configuration failed to load</AlertTitle>
@@ -195,7 +207,12 @@ export default function Page() {
 
   if (!hasConfiguredLayout || renderedWidgets.length === 0) {
     return (
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3 sm:px-5 lg:px-8 lg:py-6">
+      <div
+        className={cn(
+          'min-h-0 flex-1 px-3 py-3 sm:px-5 lg:px-8 lg:py-6',
+          dashboardScrollEnabled ? 'overflow-y-auto' : 'overflow-hidden',
+        )}
+      >
         <div className="mx-auto max-w-[100rem] space-y-8">
           <EmptyState
             title="Your dashboard is empty"
@@ -220,6 +237,7 @@ export default function Page() {
   return (
     <div
       data-dashboard-spacing={spacing}
+      data-dashboard-scroll={dashboardScrollEnabled ? 'enabled' : 'disabled'}
       style={
         {
           ...dashboardSpacingStyles[spacing],
@@ -227,10 +245,24 @@ export default function Page() {
           '--dashboard-gap': `${spacingSettings.gap}px`,
         } as React.CSSProperties
       }
-      className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain px-[var(--dashboard-outer)] py-[var(--dashboard-outer)]"
+      className={cn(
+        'min-h-0 flex-1 overflow-x-hidden px-[var(--dashboard-outer)] py-[var(--dashboard-outer)]',
+        dashboardScrollEnabled
+          ? 'overflow-y-auto overscroll-contain'
+          : 'overflow-hidden',
+      )}
     >
-      <div className="mx-auto max-w-[100rem] space-y-8">
-        <section>
+      <div
+        className={cn(
+          'mx-auto max-w-[100rem] space-y-8',
+          !dashboardScrollEnabled && 'flex h-full min-h-0 flex-col',
+        )}
+      >
+        <section
+          className={cn(
+            !dashboardScrollEnabled && 'flex min-h-0 flex-1 flex-col',
+          )}
+        >
           {layouts.length > 1 ? (
             <div className="mb-3 flex items-center justify-end gap-3 px-1">
               <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-border/50 bg-card/55 p-1.5 backdrop-blur-xl">
@@ -256,12 +288,19 @@ export default function Page() {
             </div>
           ) : null}
 
-          <div className="grid auto-rows-[minmax(var(--dashboard-row),auto)] grid-cols-4 gap-[var(--dashboard-gap)] min-[37.5rem]:grid-cols-6 lg:grid-cols-8">
+          <div
+            className={cn(
+              'grid grid-cols-4 gap-[var(--dashboard-gap)] min-[37.5rem]:grid-cols-6 lg:grid-cols-8',
+              dashboardScrollEnabled
+                ? 'auto-rows-[minmax(var(--dashboard-row),auto)]'
+                : 'min-h-0 flex-1 auto-rows-fr overflow-hidden',
+            )}
+          >
             {renderedWidgets.map((widget) => (
               <div
                 key={widget.id}
                 className={cn(
-                  'min-w-0 *:h-full',
+                  'min-h-0 min-w-0 *:h-full',
                   getDashboardWidgetSpanClass(widget.width),
                 )}
                 style={getDashboardWidgetRowSpanStyle(widget.height)}

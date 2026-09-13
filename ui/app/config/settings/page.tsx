@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { useAppConfig } from '@/hooks/appConfig';
+import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
@@ -331,8 +332,8 @@ export default function SettingsPage() {
                         </FormControl>
                         <FormDescription>
                           Used for sliders, color wheels, and direct device
-                          controls when no explicit transition is requested.
-                          Set this to 1000 for one second; leave empty to use
+                          controls when no explicit transition is requested. Set
+                          this to 1000 for one second; leave empty to use
                           integration defaults.
                         </FormDescription>
                         <FormMessage />
@@ -451,6 +452,8 @@ export default function SettingsPage() {
 function AppearanceSettingsCard() {
   const [themeMode, setThemeMode] = useTheme();
   const [blurEffectsEnabled, setBlurEffectsEnabled] = useBackdropBlurEffects();
+  const [dashboardScrollEnabled, setDashboardScrollEnabled] =
+    useDashboardScroll();
 
   return (
     <Card>
@@ -500,6 +503,25 @@ function AppearanceSettingsCard() {
               checked={blurEffectsEnabled}
               onCheckedChange={setBlurEffectsEnabled}
               aria-label="Enable blur effects"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
+            <span className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                Dashboard scrolling
+              </span>
+              <span className="block text-xs leading-5 text-muted-foreground">
+                Allow the dashboard itself to scroll vertically. Disable this
+                for wall displays; widgets fit the available viewport and long
+                lists scroll inside their own widget. This setting is stored in
+                this browser only.
+              </span>
+            </span>
+            <Switch
+              type="button"
+              checked={dashboardScrollEnabled}
+              onCheckedChange={setDashboardScrollEnabled}
+              aria-label="Enable dashboard scrolling"
             />
           </div>
           <DeveloperModeSetting />

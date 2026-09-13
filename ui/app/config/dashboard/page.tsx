@@ -20,6 +20,10 @@ import {
 import { cn } from '@/lib/cn';
 import { DASHBOARD_GRID_HELP } from '@/lib/dashboard-layout';
 import {
+  DEFAULT_MAX_MINUTES_AHEAD,
+  MAX_MAX_MINUTES_AHEAD,
+} from '@/lib/trainSchedule';
+import {
   ConfigField,
   ConfigFormActions,
   ConfigFormSection,
@@ -980,6 +984,13 @@ function WidgetOptionFields({
           min={0}
           max={60}
           onChange={(value) => onChange('overdueMinutes', value)}
+        />
+        <OptionNumberField
+          label="Show departures up to (minutes ahead)"
+          value={getNumber('maxMinutesAhead', DEFAULT_MAX_MINUTES_AHEAD)}
+          min={0}
+          max={MAX_MAX_MINUTES_AHEAD}
+          onChange={(value) => onChange('maxMinutesAhead', value)}
         />
         <OptionNumberField
           label="Result limit"
