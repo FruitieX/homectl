@@ -40,7 +40,7 @@ sqlx = { version = "=0.8.6", features = [
   "postgres",
   "migrate",
 ] }
-sea-orm = { version = "1.1", features = [
+sea-orm = { version = "=1.1.20", features = [
   "runtime-tokio-rustls",
   "sqlx-postgres",
   "sqlx-sqlite",
@@ -48,7 +48,7 @@ sea-orm = { version = "1.1", features = [
   "with-chrono",
   "with-json",
 ] }
-sea-orm-migration = { version = "1.1", features = [
+sea-orm-migration = { version = "=1.1.20", features = [
   "runtime-tokio-rustls",
   "sqlx-postgres",
   "sqlx-sqlite",
@@ -91,11 +91,11 @@ default = []
 tokio-console = ["dep:console-subscriber"]
 
 [dev-dependencies]
-datatest-stable = "0.2"
-reqwest = { version = "0.12", features = ["blocking", "json"] }
-testcontainers = { version = "0.23", features = ["blocking"] }
-testcontainers-modules = { version = "0.11", features = ["postgres"] }
-which = "7.0"
+datatest-stable = "=0.2.10"
+reqwest = { version = "=0.12.28", features = ["blocking", "json"] }
+testcontainers = { version = "=0.23.3", features = ["blocking"] }
+testcontainers-modules = { version = "=0.11.6", features = ["postgres"] }
+which = "=7.0.3"
 
 [[test]]
 name = "integration"

@@ -13,7 +13,7 @@ ARG VITE_GIT_COMMIT
 ARG VITE_BUILD_DATE
 RUN VITE_GIT_COMMIT="$VITE_GIT_COMMIT" VITE_BUILD_DATE="$VITE_BUILD_DATE" pnpm build
 
-FROM rust:1.90-slim-bookworm AS server-builder
+FROM rust:1.90-slim-bookworm@sha256:64232e656c058f4468e8d024e990acff04f0fd5a5c0a88a574dc37773d7325c9 AS server-builder
 
 WORKDIR /app
 
@@ -23,7 +23,7 @@ COPY server ./server
 
 RUN cargo build --release -p homectl-server
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:bookworm-slim@sha256:88200866dfff7ea7f5cbcb6ec7c8a701889efe6fe859fe64d6990e4b07ea4171 AS runtime
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
