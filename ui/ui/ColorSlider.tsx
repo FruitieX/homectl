@@ -1,5 +1,7 @@
 import { useId, type ComponentProps } from 'react';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import { cn } from '@/lib/cn';
 
 type Props = Omit<ComponentProps<'input'>, 'type' | 'value' | 'color'> & {

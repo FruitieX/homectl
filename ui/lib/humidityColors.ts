@@ -1,4 +1,6 @@
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 // Unified humidity thresholds and categories
 const HUMIDITY_THRESHOLDS = {

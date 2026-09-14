@@ -6,7 +6,9 @@ import {
   getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
 import { black, getResolvedDeviceColorState, white } from '@/lib/colors';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 export type SceneTargetKind = 'device' | 'group';
 

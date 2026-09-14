@@ -8,7 +8,9 @@ import {
   getFloorplanRenderMetrics,
 } from '@/lib/floorplan-metrics';
 import { type FloorplanGrid, type TileType } from '@/ui/FloorplanGridEditor';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import { useEffect, useMemo, useRef } from 'react';
 
 const stageWidth = 112;

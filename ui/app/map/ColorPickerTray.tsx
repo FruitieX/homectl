@@ -3,7 +3,9 @@ import { useActiveColor } from '@/hooks/activeColor';
 import { useDevicesState } from '@/hooks/websocket';
 import { getColor } from '@/lib/colors';
 import clsx from 'clsx';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import { uniqBy } from 'lodash';
 import { excludeUndefined } from 'utils/excludeUndefined';
 

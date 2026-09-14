@@ -2,7 +2,9 @@ import { toast } from 'sonner';
 import { createUuid } from '@/lib/uuid';
 import type { Device } from '@/bindings/Device';
 import { useWebsocket } from '@/hooks/websocket';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import { useCallback } from 'react';
 import { getDeviceKey } from '@/lib/device';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
