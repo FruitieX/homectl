@@ -731,6 +731,41 @@ fn config_export_import_roundtrip_preserves_config() {
 }
 
 #[test]
+fn dashboard_fractional_dimensions_round_trip_through_database() {
+    let server = TestServer::new().expect("Failed to start test server");
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/config/dashboard/widgets",
+        &json!({
+            "id": 0,
+            "layout_id": 1,
+            "widget_type": "weather",
+            "config": { "title": "Weather", "options": {} },
+            "grid_x": 0,
+            "grid_y": 0,
+            "grid_w": 1.5,
+            "grid_h": 0.75,
+            "sort_order": 0
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let result: Value = response
+        .json()
+        .expect("Dashboard widget response should be valid JSON");
+    assert_eq!(result["success"], true);
+    assert_eq!(result["data"]["grid_w"], 1.5);
+    assert_eq!(result["data"]["grid_h"], 0.75);
+
+    let widgets = get_json(
+        &server.base_url,
+        "/api/v1/config/dashboard/layouts/1/widgets",
+    );
+    assert_eq!(widgets["success"], true);
+    assert_eq!(widgets["data"][0]["grid_w"], 1.5);
+    assert_eq!(widgets["data"][0]["grid_h"], 0.75);
+}
+
+#[test]
 fn config_api_starts_from_json_backup_with_default_sqlite_database() {
     let backup_config = sample_config_export();
     let server = TestServer::with_config(TestServerConfig {

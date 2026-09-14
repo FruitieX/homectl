@@ -67,9 +67,9 @@ export function DeviceRow({
     'Controllable' in device.data ? device.data.Controllable.state : null;
   if (!state) return null;
   return (
-    <div className="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3">
+    <div className="dashboard-device-row flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3">
       <button
-        className="flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="dashboard-device-adjust flex min-h-11 min-w-0 flex-1 items-center gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         aria-label={`Adjust ${label}`}
         onClick={() => {
           if (getDeviceKey(device) === 'tuya_devices/bfe553b84e883ace37nvxw') {
@@ -84,7 +84,7 @@ export function DeviceRow({
         <Lightbulb
           className={`size-5 shrink-0 ${active ? 'text-primary' : 'text-muted-foreground'}`}
         />
-        <span className="min-w-0 flex-1">
+        <span className="dashboard-device-label min-w-0 flex-1">
           <span className="block truncate text-sm font-medium">{label}</span>
           <span className="block text-sm text-muted-foreground">
             {isDeviceReadOnly(device) ? 'Read-only · ' : ''}
@@ -95,11 +95,12 @@ export function DeviceRow({
               : 'Off'}
           </span>
         </span>
-        <SlidersHorizontal className="size-4 shrink-0 text-muted-foreground" />
+        <SlidersHorizontal className="dashboard-device-settings size-4 shrink-0 text-muted-foreground" />
       </button>
       <Button
         variant={active ? 'secondary' : 'outline'}
         size="icon"
+        className="dashboard-device-power"
         aria-label={`Turn ${label} ${active ? 'off' : 'on'}`}
         aria-pressed={active}
         disabled={!connected || isDeviceReadOnly(device)}

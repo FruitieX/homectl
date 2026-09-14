@@ -19,7 +19,90 @@ impl MigratorTrait for Migrator {
             Box::new(M20260910000001CalibrationProfiles),
             Box::new(M20260913000000DefaultTransition),
             Box::new(M20260913000001SceneTransition),
+            Box::new(M20260913000002DashboardFractionalUnits),
         ]
+    }
+}
+
+struct M20260913000002DashboardFractionalUnits;
+
+impl MigrationName for M20260913000002DashboardFractionalUnits {
+    fn name(&self) -> &str {
+        "m20260913000002_dashboard_fractional_units"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260913000002DashboardFractionalUnits {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(DashboardWidgets::Table)
+                    .add_column(
+                        ColumnDef::new(DashboardWidgets::GridWValue)
+                            .double()
+                            .not_null()
+                            .default(1.0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(DashboardWidgets::Table)
+                    .add_column(
+                        ColumnDef::new(DashboardWidgets::GridHValue)
+                            .double()
+                            .not_null()
+                            .default(1.0),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .exec_stmt(
+                Query::update()
+                    .table(DashboardWidgets::Table)
+                    .value(
+                        DashboardWidgets::GridWValue,
+                        Expr::col(DashboardWidgets::GridW),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .exec_stmt(
+                Query::update()
+                    .table(DashboardWidgets::Table)
+                    .value(
+                        DashboardWidgets::GridHValue,
+                        Expr::col(DashboardWidgets::GridH),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(DashboardWidgets::Table)
+                    .drop_column(DashboardWidgets::GridWValue)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(DashboardWidgets::Table)
+                    .drop_column(DashboardWidgets::GridHValue)
+                    .to_owned(),
+            )
+            .await
     }
 }
 

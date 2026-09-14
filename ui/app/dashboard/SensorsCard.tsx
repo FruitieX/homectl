@@ -112,7 +112,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
     <>
       <WidgetCard
         interactive
-        className="group relative p-[var(--widget-padding,1rem)]"
+        className="group relative"
       >
         <Button
           variant="ghost"
@@ -120,13 +120,13 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           onClick={() => show('all')}
           className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 hover:bg-muted/30"
         />
-        <div className="pointer-events-none relative z-[1] flex h-full min-h-0 flex-1 flex-col overflow-y-auto">
+        <div className="pointer-events-none relative z-[1] flex h-full min-h-0 flex-1 flex-col overflow-hidden p-[var(--widget-padding,1rem)]">
           <div className="mb-3 shrink-0">
             <WidgetHeading icon={<Activity />} label="Climate sensors" detail />
           </div>
           <div
             className={cn(
-              'pointer-events-auto min-h-0 flex-1',
+              'dashboard-sensors-preview pointer-events-auto min-h-0 flex-1 overflow-hidden',
               getDashboardWidgetOptionBoolean(widget, 'wrapPreview', true)
                 ? spacing === 'compact'
                   ? 'grid grid-cols-2 gap-2 min-[600px]:grid-cols-4'
@@ -149,7 +149,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
             resource.rows.length === 0) && (
             <p
               role="status"
-              className="pointer-events-none pt-3 text-xs text-muted-foreground"
+              className="dashboard-widget-status pointer-events-none pt-3 text-xs text-muted-foreground"
             >
               {resource.isPending
                 ? 'Loading sensor readings…'

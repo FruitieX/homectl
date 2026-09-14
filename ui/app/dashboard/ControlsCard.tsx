@@ -34,10 +34,10 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
         : Object.keys(state ?? {});
   return (
     <DashboardCard>
-      <CardHeader className="shrink-0">
+      <CardHeader className="dashboard-controls-title shrink-0">
         <CardTitle>{widget?.title || 'Controls'}</CardTitle>
       </CardHeader>
-      <CardContent className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+      <CardContent className="dashboard-controls-content min-h-0 flex-1 space-y-2 overflow-hidden">
         {keys.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Choose devices in dashboard settings.
@@ -49,13 +49,15 @@ export const ControlsCard = ({ widget }: { widget?: DashboardWidget }) => {
               return (
                 <p
                   key={key}
-                  className="break-words text-sm text-muted-foreground"
+                  className="dashboard-controls-row break-words text-sm text-muted-foreground"
                 >
                   {names[key] ?? key} · Unavailable
                 </p>
               );
             return 'Controllable' in device.data ? (
-              <DeviceRow key={key} device={device} displayNames={names} />
+              <div key={key} className="dashboard-controls-row min-w-0">
+                <DeviceRow device={device} displayNames={names} />
+              </div>
             ) : null;
           })
         )}

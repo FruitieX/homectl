@@ -32,18 +32,20 @@ export function WidgetCard({
 export function WidgetHeading({
   icon,
   label,
+  compactValue,
   detail = false,
   className,
 }: {
   icon: ReactNode;
   label: ReactNode;
+  compactValue?: ReactNode;
   detail?: boolean;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        'flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
+        'dashboard-widget-heading flex w-full items-center gap-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground',
         className,
       )}
     >
@@ -51,6 +53,11 @@ export function WidgetHeading({
         {icon}
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
+      {compactValue ? (
+        <span className="dashboard-widget-heading-compact-value min-w-0 shrink truncate text-right normal-case tracking-normal text-foreground/80">
+          {compactValue}
+        </span>
+      ) : null}
       {detail ? (
         <ArrowUpRight className="mr-1 size-4 shrink-0 opacity-45 transition group-hover:translate-x-0.5 group-hover:-translate-y-0.5 group-hover:opacity-80" />
       ) : null}

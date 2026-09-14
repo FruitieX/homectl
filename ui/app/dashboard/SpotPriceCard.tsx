@@ -108,9 +108,14 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 text-left hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-inset"
             />
             <div className="pointer-events-none relative z-[1] shrink-0">
-              <WidgetHeading icon={<Zap />} label="Electricity price" detail />
-              <div className="mt-3 flex items-end justify-between gap-4 px-1 pb-1">
-                <div>
+              <WidgetHeading
+                icon={<Zap />}
+                label="Electricity price"
+                compactValue={stats ? formatPrice(stats.current?.value) : null}
+                detail
+              />
+              <div className="dashboard-spot-summary mt-3 flex items-end justify-between gap-4 px-1 pb-1">
+                <div className="dashboard-spot-secondary">
                   <div className="text-xs text-muted-foreground">
                     Next 24 hours
                   </div>
@@ -124,7 +129,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                   <div className="text-xs font-medium text-muted-foreground">
                     Now
                   </div>
-                  <div className="mt-1 whitespace-nowrap text-2xl font-semibold tracking-tight tabular-nums">
+                  <div className="dashboard-spot-current mt-1 whitespace-nowrap text-2xl font-semibold tracking-tight tabular-nums">
                     {formatPrice(stats?.current?.value)}
                   </div>
                 </div>
@@ -146,7 +151,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                       : 215
                 }
                 fit={!dashboardScrollEnabled}
-                className="mt-1 h-full min-h-0 min-w-0 overflow-hidden"
+                className="dashboard-spot-chart mt-1 h-full min-h-0 min-w-0 overflow-hidden"
               >
                 {({ width, height }) => (
                   <SpotPriceChart
@@ -164,7 +169,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
             {priceQuery.isError && (
               <p
                 role="status"
-                className="pointer-events-none relative z-[1] text-xs text-muted-foreground"
+                className="dashboard-widget-status pointer-events-none relative z-[1] text-xs text-muted-foreground"
               >
                 Prices could not be refreshed
                 {data.length ? '; showing earlier results.' : '.'}

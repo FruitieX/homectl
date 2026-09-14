@@ -453,27 +453,57 @@ async fn legacy_dashboard<C: ConnectionTrait>(
     let mut dashboard_widgets = Vec::new();
     for row in layout_rows {
         let layout = dashboard_layout_from_row(row)?;
-        let widgets = optional_all(
-            db,
-            Query::select()
-                .columns([
-                    DashboardWidgets::Id,
-                    DashboardWidgets::LayoutId,
-                    DashboardWidgets::WidgetType,
-                    DashboardWidgets::Config,
-                    DashboardWidgets::GridX,
-                    DashboardWidgets::GridY,
-                    DashboardWidgets::GridW,
-                    DashboardWidgets::GridH,
-                    DashboardWidgets::SortOrder,
-                ])
-                .from(DashboardWidgets::Table)
-                .and_where(Expr::col(DashboardWidgets::LayoutId).eq(layout.id))
-                .order_by(DashboardWidgets::SortOrder, Order::Asc)
-                .to_owned(),
-            "dashboard widgets",
-        )
-        .await?
+        let current_query = Query::select()
+            .columns([
+                DashboardWidgets::Id,
+                DashboardWidgets::LayoutId,
+                DashboardWidgets::WidgetType,
+                DashboardWidgets::Config,
+                DashboardWidgets::GridX,
+                DashboardWidgets::GridY,
+                DashboardWidgets::GridWValue,
+                DashboardWidgets::GridHValue,
+                DashboardWidgets::SortOrder,
+            ])
+            .from(DashboardWidgets::Table)
+            .and_where(Expr::col(DashboardWidgets::LayoutId).eq(layout.id))
+            .order_by(DashboardWidgets::SortOrder, Order::Asc)
+            .to_owned();
+        let widgets = match all(db, current_query).await {
+            Ok(rows) => rows,
+            Err(error) => {
+                warn!(
+                    "Failed to read fractional dashboard widget dimensions from source database: {error}"
+                );
+                optional_all(
+                    db,
+                    Query::select()
+                        .columns([
+                            DashboardWidgets::Id,
+                            DashboardWidgets::LayoutId,
+                            DashboardWidgets::WidgetType,
+                            DashboardWidgets::Config,
+                            DashboardWidgets::GridX,
+                            DashboardWidgets::GridY,
+                        ])
+                        .expr_as(
+                            Expr::col(DashboardWidgets::GridW),
+                            Alias::new("grid_w_value"),
+                        )
+                        .expr_as(
+                            Expr::col(DashboardWidgets::GridH),
+                            Alias::new("grid_h_value"),
+                        )
+                        .column(DashboardWidgets::SortOrder)
+                        .from(DashboardWidgets::Table)
+                        .and_where(Expr::col(DashboardWidgets::LayoutId).eq(layout.id))
+                        .order_by(DashboardWidgets::SortOrder, Order::Asc)
+                        .to_owned(),
+                    "legacy dashboard widgets",
+                )
+                .await?
+            }
+        }
         .into_iter()
         .map(dashboard_widget_from_row)
         .collect::<Result<Vec<_>>>()?;
@@ -694,8 +724,8 @@ fn dashboard_widget_from_row(row: QueryResult) -> Result<config_queries::Dashboa
         config: parse_json_or_default(&config),
         grid_x: row.try_get("", "grid_x")?,
         grid_y: row.try_get("", "grid_y")?,
-        grid_w: row.try_get("", "grid_w")?,
-        grid_h: row.try_get("", "grid_h")?,
+        grid_w: get_f32(&row, "grid_w_value")?,
+        grid_h: get_f32(&row, "grid_h_value")?,
         sort_order: get_i32_or_default(&row, "sort_order", 0),
     })
 }
@@ -727,6 +757,16 @@ fn get_i32_or_default(row: &QueryResult, column: &str, default: i32) -> i32 {
         .ok()
         .flatten()
         .unwrap_or(default)
+}
+
+fn get_f32(row: &QueryResult, column: &str) -> Result<f32> {
+    match row.try_get::<f32>("", column) {
+        Ok(value) => Ok(value),
+        Err(_) => {
+            let value: f64 = row.try_get("", column)?;
+            Ok(value as f32)
+        }
+    }
 }
 
 /// Rewrite all MQTT integrations in the simulation snapshot as dummy equivalents.

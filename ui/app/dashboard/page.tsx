@@ -15,10 +15,7 @@ import {
 import { cn } from '@/lib/cn';
 import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
-import {
-  getDashboardWidgetRowSpanStyle,
-  getDashboardWidgetSpanClass,
-} from '@/lib/dashboard-layout';
+import { getDashboardWidgetResponsiveGridStyle } from '@/lib/dashboard-layout';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -53,11 +50,11 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       return <WeatherCard widget={widget} />;
     case 'text':
       return (
-        <DashboardCard>
-          <CardHeader className="shrink-0">
+        <DashboardCard className="dashboard-text-card">
+          <CardHeader className="dashboard-widget-title shrink-0">
             <CardTitle>{widget.title}</CardTitle>
           </CardHeader>
-          <CardContent className="min-h-0 flex-1 overflow-y-auto">
+          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden">
             <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
               {getDashboardWidgetOptionString(widget, 'body', '')}
             </p>
@@ -66,22 +63,22 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       );
     case 'link':
       return (
-        <DashboardCard>
+        <DashboardCard className="dashboard-link-card">
           <Button
             asChild
             variant="ghost"
             className="h-full w-full justify-start p-0 text-left"
           >
             <a href={getDashboardWidgetOptionString(widget, 'url', '/')}>
-              <CardContent className="flex h-full min-h-0 flex-col justify-center gap-2 overflow-y-auto p-5">
-                <div className="text-lg font-semibold">
+              <CardContent className="dashboard-link-content flex h-full min-h-0 flex-col justify-center gap-2 overflow-hidden p-5">
+                <div className="dashboard-link-label text-lg font-semibold">
                   {getDashboardWidgetOptionString(
                     widget,
                     'label',
                     widget.title,
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground">
+                <p className="dashboard-link-description text-sm text-muted-foreground">
                   {getDashboardWidgetOptionString(widget, 'description', '')}
                 </p>
               </CardContent>
@@ -91,7 +88,7 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       );
     case 'iframe':
       return (
-        <DashboardCard>
+        <DashboardCard className="dashboard-iframe-card">
           <iframe
             title={getDashboardWidgetOptionString(
               widget,
@@ -106,7 +103,7 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       );
     case 'image':
       return (
-        <DashboardCard>
+        <DashboardCard className="dashboard-image-card">
           <img
             src={getDashboardWidgetOptionString(widget, 'imageUrl', '')}
             alt={getDashboardWidgetOptionString(widget, 'alt', widget.title)}
@@ -116,11 +113,11 @@ function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       );
     case 'custom':
       return (
-        <DashboardCard>
-          <CardHeader className="shrink-0">
+        <DashboardCard className="dashboard-custom-card">
+          <CardHeader className="dashboard-widget-title shrink-0">
             <CardTitle>{widget.title}</CardTitle>
           </CardHeader>
-          <CardContent className="min-h-0 flex-1 overflow-y-auto">
+          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden">
             <p className="text-sm opacity-70">
               Custom widgets are not runtime-rendered yet.
             </p>
@@ -291,20 +288,28 @@ export default function Page() {
 
           <div
             className={cn(
-              'grid grid-cols-4 gap-[var(--dashboard-gap)] min-[37.5rem]:grid-cols-6 lg:grid-cols-8',
+              'dashboard-layout-grid grid min-w-0 gap-0',
               dashboardScrollEnabled
-                ? 'auto-rows-[minmax(var(--dashboard-row),auto)]'
-                : 'min-h-0 flex-1 auto-rows-fr overflow-hidden',
+                ? 'auto-rows-[minmax(calc(var(--dashboard-row)/4),auto)]'
+                : 'min-h-0 flex-1 overflow-hidden',
             )}
+            style={{
+              gridAutoRows: dashboardScrollEnabled
+                ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
+                : 'minmax(0, 1fr)',
+            }}
           >
             {renderedWidgets.map((widget) => (
               <div
                 key={widget.id}
-                className={cn(
-                  'min-h-0 min-w-0 *:h-full',
-                  getDashboardWidgetSpanClass(widget.width, widget.widget_type),
-                )}
-                style={getDashboardWidgetRowSpanStyle(widget.height)}
+                className={cn('dashboard-layout-item min-h-0 min-w-0 *:h-full')}
+                style={{
+                  ...getDashboardWidgetResponsiveGridStyle(
+                    widget.width,
+                    widget.height,
+                  ),
+                  margin: 'calc(var(--dashboard-gap) / 2)',
+                }}
               >
                 <DashboardWidgetCard widget={widget} />
               </div>

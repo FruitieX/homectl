@@ -149,23 +149,23 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
           return (
             <div
               key={`${train.name}-${train.departureFormatted}-${index}`}
-              className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
+              className="dashboard-train-row grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
             >
               <div className="min-w-0">
                 <div className="truncate font-semibold">{train.name}</div>
-                <div className="truncate text-sm">
+                <div className="dashboard-train-destination truncate text-sm">
                   {train.destination || 'Destination unavailable'}
                 </div>
-                <div className="text-xs text-muted-foreground">
+                <div className="dashboard-train-extra text-xs text-muted-foreground">
                   Departure {train.departureFormatted}
                 </div>
               </div>
-              <span className="text-xs text-muted-foreground">
+              <span className="dashboard-train-extra text-xs text-muted-foreground">
                 {!train.realtime && !cancelled ? 'Scheduled' : ''}
               </span>
               <div
                 className={clsx(
-                  'min-w-16 rounded-xl px-3 py-2 text-right',
+                  'dashboard-train-time min-w-16 rounded-xl px-3 py-2 text-right',
                   remaining <= 5 && !cancelled
                     ? 'bg-amber-500/12 text-amber-700 dark:text-amber-300'
                     : 'bg-muted/60',
@@ -178,7 +178,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
                       ? 'Now'
                       : remaining}
                 </div>
-                <div className="mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
+                <div className="dashboard-train-time-label mt-1 text-[0.65rem] font-medium uppercase tracking-wide">
                   {cancelled
                     ? 'departure cancelled'
                     : remaining === 0
@@ -208,7 +208,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               detail
             />
             <div
-              className="mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain"
+              className="mt-2 min-h-0 flex-1 overflow-hidden overscroll-contain"
               style={
                 scrollRows
                   ? { maxHeight: `${displayLimit * 5.25}rem` }
@@ -218,7 +218,10 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               {departureRows(trains, true)}
             </div>
             {error && (
-              <p role="status" className="text-sm text-muted-foreground">
+              <p
+                role="status"
+                className="dashboard-widget-status text-sm text-muted-foreground"
+              >
                 Departures could not be refreshed
                 {trains.length ? '; showing earlier results.' : '.'}
               </p>

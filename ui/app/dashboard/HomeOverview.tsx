@@ -25,6 +25,7 @@ export function HomeOverview() {
         <CardTitle>Home</CardTitle>
         <Button
           variant="outline"
+          className="dashboard-home-power"
           disabled={!connected || powered.length === 0}
           onClick={() =>
             powered.forEach((device) => {
@@ -35,12 +36,12 @@ export function HomeOverview() {
           All devices off
         </Button>
       </CardHeader>
-      <CardContent className="min-h-0 flex-1 space-y-5 overflow-y-auto">
-        <section className="space-y-3">
+      <CardContent className="dashboard-home-content min-h-0 flex-1 space-y-5 overflow-hidden">
+        <section className="dashboard-home-scenes space-y-3">
           <h2 className="text-sm font-medium">Scenes</h2>
           <SceneList deviceKeys={keys} compact />
         </section>
-        <section className="space-y-2">
+        <section className="dashboard-home-rooms space-y-2">
           <h2 className="text-sm font-medium">Rooms</h2>
           {Object.entries(groups ?? {})
             .filter(([, group]) => group && !group.hidden)

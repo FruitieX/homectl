@@ -13,9 +13,11 @@ import {
 } from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
 import {
+  DASHBOARD_GRID_PRECISION,
+  DASHBOARD_MIN_SIZE_UNIT,
   clampDashboardWidgetHeight,
   clampDashboardWidgetWidth,
-  getDashboardWidgetMinimumWidth,
+  getDashboardWidgetGridStyle,
   DASHBOARD_COMPACT_COLUMNS,
   DASHBOARD_GRID_HELP,
   DASHBOARD_MAX_ROWS,
@@ -26,6 +28,7 @@ import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 
 const GRID_ROW_HEIGHT_PX = 160;
+const GRID_GAP_PX = 12;
 const DRAG_THRESHOLD_PX = 6;
 
 type PreviewColumnCount =
@@ -112,15 +115,16 @@ function getGridMetrics(grid: HTMLDivElement, columns: PreviewColumnCount) {
   const columnGap = Number.parseFloat(styles.columnGap || '0') || 0;
   const rowGap = Number.parseFloat(styles.rowGap || '0') || columnGap;
   const contentWidth = Math.max(1, grid.getBoundingClientRect().width);
+  const renderedColumns = columns * DASHBOARD_GRID_PRECISION;
   const cellWidth = Math.max(
     1,
-    (contentWidth - columnGap * (columns - 1)) / columns,
+    (contentWidth - columnGap * (renderedColumns - 1)) / renderedColumns,
   );
 
   return {
     columns,
     cellWidth,
-    cellHeight: GRID_ROW_HEIGHT_PX,
+    cellHeight: GRID_ROW_HEIGHT_PX / DASHBOARD_GRID_PRECISION,
     columnGap,
     rowGap,
   };
@@ -130,16 +134,10 @@ function getAutoLayoutStyle(
   widget: DashboardWidget,
   columns: PreviewColumnCount,
 ) {
-  const width = clampDashboardWidgetWidth(
-    Math.max(widget.width, getDashboardWidgetMinimumWidth(widget.widget_type)),
-    columns,
-  );
+  const width = clampDashboardWidgetWidth(widget.width, columns);
   const height = clampDashboardWidgetHeight(widget.height);
 
-  return {
-    gridColumn: `span ${width} / span ${width}`,
-    gridRow: `span ${height} / span ${height}`,
-  };
+  return getDashboardWidgetGridStyle(width, height);
 }
 
 function getWidgetIds(widgets: DashboardWidget[]) {
@@ -524,18 +522,12 @@ export function DashboardGridEditor({
       const rowDelta = Math.round(
         deltaY / (interaction.cellHeight + interaction.rowGap),
       );
-      const nextWidth = clamp(
-        interaction.startWidth + columnDelta,
-        getDashboardWidgetMinimumWidth(
-          draftWidgetsRef.current.find((widget) => widget.id === interaction.id)
-            ?.widget_type ?? '',
-        ),
+      const nextWidth = clampDashboardWidgetWidth(
+        interaction.startWidth + columnDelta / DASHBOARD_GRID_PRECISION,
         interaction.columns,
       );
-      const nextHeight = clamp(
-        interaction.startHeight + rowDelta,
-        1,
-        DASHBOARD_MAX_ROWS,
+      const nextHeight = clampDashboardWidgetHeight(
+        interaction.startHeight + rowDelta / DASHBOARD_GRID_PRECISION,
       );
 
       setDraftWidgets((currentWidgets) =>
@@ -671,16 +663,57 @@ export function DashboardGridEditor({
       startClientX: event.clientX,
       startClientY: event.clientY,
       startWidth: clampDashboardWidgetWidth(
-        Math.max(
-          widget.width,
-          getDashboardWidgetMinimumWidth(widget.widget_type),
-        ),
+        Math.max(widget.width, DASHBOARD_MIN_SIZE_UNIT),
         previewColumns,
       ),
       startHeight: clampDashboardWidgetHeight(widget.height),
       ...metrics,
     };
     setActiveWidgetId(widget.id);
+  };
+
+  const updateDraftSize = (
+    widgetId: string,
+    dimension: 'width' | 'height',
+    value: number,
+  ) => {
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    setDraftWidgets((currentWidgets) =>
+      currentWidgets.map((widget) =>
+        widget.id === widgetId ? { ...widget, [dimension]: value } : widget,
+      ),
+    );
+  };
+
+  const saveSizeField = (widgetId: string) => {
+    const updatedWidget = draftWidgetsRef.current.find(
+      (widget) => widget.id === widgetId,
+    );
+    if (!updatedWidget) {
+      return;
+    }
+
+    const width = clampDashboardWidgetWidth(updatedWidget.width);
+    const height = clampDashboardWidgetHeight(updatedWidget.height);
+    setDraftWidgets((currentWidgets) =>
+      currentWidgets.map((widget) =>
+        widget.id === widgetId ? { ...widget, width, height } : widget,
+      ),
+    );
+    setSavingWidgetId(widgetId);
+    void onUpdateWidget(widgetId, { width, height })
+      .catch((error: unknown) => {
+        setDraftWidgets(sortWidgets(widgets));
+        setEditorError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to save dashboard widget size.',
+        );
+      })
+      .finally(() => setSavingWidgetId(null));
   };
 
   return (
@@ -691,6 +724,7 @@ export function DashboardGridEditor({
           <div className="text-xs text-muted-foreground">
             Drag from anywhere on a widget card to reorder. The dashboard
             auto-layouts cards by order and size, so widgets cannot overlap.
+            Use the W/H fields or the corner handle for quarter-unit sizes.
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -722,9 +756,10 @@ export function DashboardGridEditor({
         <div className="overflow-x-auto pb-2">
           <div
             ref={gridRef}
-            className="relative grid auto-rows-[10rem] grid-flow-row gap-3"
+            className="relative grid grid-flow-row gap-0"
             style={{
-              gridTemplateColumns: `repeat(${previewColumns}, minmax(0, 1fr))`,
+              gridTemplateColumns: `repeat(${previewColumns * DASHBOARD_GRID_PRECISION}, minmax(0, 1fr))`,
+              gridAutoRows: `${GRID_ROW_HEIGHT_PX / DASHBOARD_GRID_PRECISION}px`,
               minWidth: `${previewColumns * 6}rem`,
             }}
           >
@@ -744,7 +779,10 @@ export function DashboardGridEditor({
                     'z-10 scale-[1.01] cursor-grabbing ring-2 ring-primary shadow-lg',
                   savingWidgetId === widget.id && 'opacity-70',
                 )}
-                style={getAutoLayoutStyle(widget, previewColumns)}
+                style={{
+                  ...getAutoLayoutStyle(widget, previewColumns),
+                  margin: `${GRID_GAP_PX / 2}px`,
+                }}
               >
                 <CardContent
                   className="flex h-full cursor-grab touch-none select-none flex-col gap-3 p-4 active:cursor-grabbing"
@@ -757,17 +795,58 @@ export function DashboardGridEditor({
                         {widgetRegistry[widget.widget_type]?.name ||
                           widget.widget_type}
                         <span className="ml-2">
-                          {widget.width}×{widget.height}
-                          {widget.width <
-                          getDashboardWidgetMinimumWidth(widget.widget_type)
-                            ? ` · min ${getDashboardWidgetMinimumWidth(widget.widget_type)}`
-                            : ''}
+                          {widget.width}×{widget.height} units
                         </span>
                       </div>
                     </div>
                     <span className="rounded-xl border border-border bg-muted/60 px-2 py-1 text-xs font-medium text-muted-foreground">
                       #{widget.position + 1}
                     </span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <label className="flex items-center gap-1">
+                      <span>W</span>
+                      <input
+                        aria-label={`Width of ${widget.title}`}
+                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-foreground"
+                        type="number"
+                        min={DASHBOARD_MIN_SIZE_UNIT}
+                        max={DASHBOARD_WIDE_COLUMNS}
+                        step={DASHBOARD_MIN_SIZE_UNIT}
+                        value={widget.width}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onChange={(event) =>
+                          updateDraftSize(
+                            widget.id,
+                            'width',
+                            event.target.valueAsNumber,
+                          )
+                        }
+                        onBlur={() => saveSizeField(widget.id)}
+                      />
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <span>H</span>
+                      <input
+                        aria-label={`Height of ${widget.title}`}
+                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-foreground"
+                        type="number"
+                        min={DASHBOARD_MIN_SIZE_UNIT}
+                        max={DASHBOARD_MAX_ROWS}
+                        step={DASHBOARD_MIN_SIZE_UNIT}
+                        value={widget.height}
+                        onPointerDown={(event) => event.stopPropagation()}
+                        onChange={(event) =>
+                          updateDraftSize(
+                            widget.id,
+                            'height',
+                            event.target.valueAsNumber,
+                          )
+                        }
+                        onBlur={() => saveSizeField(widget.id)}
+                      />
+                    </label>
                   </div>
 
                   <div className="min-h-0 flex-1 overflow-hidden">

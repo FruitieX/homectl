@@ -25,11 +25,13 @@ use widgets::{
 };
 
 use color_eyre::Result;
+use warp::http::header::{HeaderValue, CACHE_CONTROL};
 use warp::{filters::BoxedFilter, path::FullPath, reply::Response, Filter, Rejection, Reply};
 
 use self::ws::ws;
 
 const DEFAULT_UI_DIST_CANDIDATES: [&str; 2] = ["ui/dist", "../ui/dist"];
+const UI_DOCUMENT_CACHE_CONTROL: &str = "no-cache, must-revalidate";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -212,8 +214,18 @@ fn bundled_ui_routes() -> Option<BoxedFilter<(Response,)>> {
     info!("Serving bundled UI assets from {}", dist_dir.display());
 
     let static_assets = warp::get()
+        .and(warp::path::full())
         .and(warp::fs::dir(dist_dir))
-        .map(Reply::into_response);
+        .map(|full_path: FullPath, file: warp::fs::File| {
+            let mut response = file.into_response();
+            if is_ui_document_path(full_path.as_str()) {
+                response.headers_mut().insert(
+                    CACHE_CONTROL,
+                    HeaderValue::from_static(UI_DOCUMENT_CACHE_CONTROL),
+                );
+            }
+            response
+        });
 
     let spa_fallback = warp::get()
         .and(warp::path::full())
@@ -267,7 +279,16 @@ async fn serve_spa_index(full_path: FullPath, index_file: PathBuf) -> Result<Res
             warp::reject::not_found()
         })?;
 
-    Ok(warp::reply::html(html).into_response())
+    let mut response = warp::reply::html(html).into_response();
+    response.headers_mut().insert(
+        CACHE_CONTROL,
+        HeaderValue::from_static(UI_DOCUMENT_CACHE_CONTROL),
+    );
+    Ok(response)
+}
+
+fn is_ui_document_path(path: &str) -> bool {
+    path == "/" || path == "/index.html" || path == "/manifest.json"
 }
 
 fn is_reserved_server_path(path: &str) -> bool {

@@ -67,6 +67,15 @@ const getNextClockDelay = (date: Date, showSeconds: boolean) => {
   return Math.max(250, 1000 - date.getMilliseconds());
 };
 
+const formatClockValue = (date: Date, showSeconds: boolean) =>
+  `${date.getHours().toString().padStart(2, '0')}:${date
+    .getMinutes()
+    .toString()
+    .padStart(
+      2,
+      '0',
+    )}${showSeconds ? `:${date.getSeconds().toString().padStart(2, '0')}` : ''}`;
+
 const formatTime = (dateString: string) => {
   const date = new Date(dateString);
   return date.toLocaleTimeString('en-US', {
@@ -231,13 +240,7 @@ function useMinuteNow(enabled: boolean) {
   return now;
 }
 
-function LiveClockDisplay({
-  showSeconds,
-  showDate,
-}: {
-  showSeconds: boolean;
-  showDate: boolean;
-}) {
+function useLiveClockTime(showSeconds: boolean) {
   const [time, setTime] = useState(() => new Date());
 
   useEffect(() => {
@@ -255,15 +258,25 @@ function LiveClockDisplay({
     return () => clearTimeout(timeoutId);
   }, [showSeconds]);
 
+  return time;
+}
+
+function LiveClockDisplay({
+  time,
+  showSeconds,
+  showDate,
+}: {
+  time: Date;
+  showSeconds: boolean;
+  showDate: boolean;
+}) {
   return (
     <>
-      <span className="font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
-        {time.getHours().toString().padStart(2, '0')}:
-        {time.getMinutes().toString().padStart(2, '0')}
-        {showSeconds ? `:${time.getSeconds().toString().padStart(2, '0')}` : ''}
+      <span className="dashboard-clock-display font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
+        {formatClockValue(time, showSeconds)}
       </span>
       {showDate ? (
-        <span className="mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        <span className="dashboard-clock-date mt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
           {time.toLocaleDateString(undefined, {
             weekday: 'short',
             month: 'short',
@@ -299,7 +312,7 @@ function CalendarSummary({
   if (!displayEvent) return null;
 
   return (
-    <div className="mt-4 w-full border-t border-border/50 pt-3 text-center">
+    <div className="dashboard-clock-calendar mt-4 w-full border-t border-border/50 pt-3 text-center">
       <div className="mb-1 flex items-center justify-center gap-1">
         <Calendar className="size-3" />
         {currentEvent && <Badge>Now</Badge>}
@@ -396,6 +409,7 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
   const [detailsModalOpen, toggleDetailsModal, setDetailsModalOpen] =
     useToggle(false);
   const calendarNow = useMinuteNow(showCalendar || detailsModalOpen);
+  const liveClockTime = useLiveClockTime(showSeconds);
   const eventViews = calendar
     ? buildEventViews(calendar.events, calendarNow)
     : [];
@@ -449,16 +463,29 @@ export const ClockCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard className="col-span-2">
+      <WidgetCard className="dashboard-clock-card col-span-2">
         <Button
           variant="ghost"
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
-            <WidgetHeading icon={<Clock />} label="Now" detail />
-            <div className="min-h-0 flex-1 overflow-y-auto flex flex-col items-center justify-center py-[var(--widget-inner-y,1rem)]">
-              <LiveClockDisplay showSeconds={showSeconds} showDate={showDate} />
+            <WidgetHeading
+              icon={<Clock />}
+              label="Now"
+              compactValue={
+                <span className="dashboard-clock-heading-value">
+                  {formatClockValue(liveClockTime, showSeconds)}
+                </span>
+              }
+              detail
+            />
+            <div className="dashboard-clock-content flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden py-[var(--widget-inner-y,1rem)]">
+              <LiveClockDisplay
+                time={liveClockTime}
+                showSeconds={showSeconds}
+                showDate={showDate}
+              />
               <CalendarSummary
                 showCalendar={showCalendar}
                 error={error}

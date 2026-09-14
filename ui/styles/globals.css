@@ -67,12 +67,454 @@
 
 @layer utilities {
   .dashboard-widget-container {
-    container: dashboard-widget / inline-size;
+    --widget-padding: 1rem;
+    --widget-inner-y: 0.75rem;
+    --widget-tile-padding: 0.75rem;
+    container: dashboard-widget / size;
+  }
+
+  .dashboard-widget-heading-compact-value {
+    display: none;
+  }
+
+  .dashboard-weather-heading-value,
+  .dashboard-clock-heading-value {
+    display: none;
+  }
+
+  .dashboard-layout-grid {
+    grid-template-columns: repeat(16, minmax(0, 1fr));
+  }
+
+  .dashboard-layout-item {
+    grid-column: span var(--dashboard-widget-span-mobile) / span
+      var(--dashboard-widget-span-mobile);
   }
 
   @container dashboard-widget (min-width: 20rem) {
     .dashboard-weather-layout {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    }
+  }
+
+  @container dashboard-widget (max-width: 20rem) {
+    .dashboard-widget-heading > span:first-child {
+      width: 1.75rem;
+      height: 1.75rem;
+    }
+
+    .dashboard-widget-heading > svg {
+      width: 0.875rem;
+      height: 0.875rem;
+    }
+
+    .dashboard-widget-secondary {
+      font-size: 0.7rem;
+    }
+
+    .dashboard-weather-forecast {
+      display: flex;
+      flex-direction: row;
+      width: 100%;
+      gap: 0.375rem;
+    }
+
+    .dashboard-weather-forecast > * {
+      min-width: 0;
+    }
+  }
+
+  /*
+   * A dashboard with scrolling disabled gives every row a share of the
+   * available height. Use the card's height, rather than the viewport, to
+   * progressively trade decoration and secondary information for legibility.
+   */
+  @container dashboard-widget (max-height: 10rem) {
+    .dashboard-widget-container > * {
+      --widget-padding: 0.75rem;
+      --widget-inner-y: 0.35rem;
+      --widget-tile-padding: 0.5rem;
+    }
+
+    .dashboard-widget-heading {
+      gap: 0.45rem;
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+    }
+
+    .dashboard-widget-heading > span:first-child {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+
+    .dashboard-widget-heading-compact-value {
+      display: inline-flex;
+      font-size: 0.7rem;
+    }
+
+    .dashboard-spot-summary {
+      display: none;
+    }
+
+    .dashboard-clock-calendar,
+    .dashboard-weather-forecast,
+    .dashboard-home-rooms,
+    .dashboard-widget-status {
+      display: none;
+    }
+
+    .dashboard-weather-current .dashboard-weather-icon {
+      width: clamp(2rem, 25cqh, 3rem);
+      height: clamp(2rem, 25cqh, 3rem);
+    }
+
+    .dashboard-weather-current .dashboard-weather-temperature {
+      font-size: clamp(1rem, 14cqh, 1.5rem);
+    }
+
+    .dashboard-clock-display {
+      font-size: clamp(1.5rem, 28cqh, 2.75rem);
+    }
+
+    .dashboard-clock-date {
+      margin-top: 0.25rem;
+      font-size: 0.65rem;
+    }
+  }
+
+  @container dashboard-widget (max-height: 16rem) {
+    .dashboard-weather-forecast {
+      display: flex;
+      flex-direction: row;
+      width: 100%;
+      gap: 0.375rem;
+    }
+
+    .dashboard-weather-forecast > * {
+      min-width: 0;
+    }
+  }
+
+  @container dashboard-widget (max-width: 12rem) {
+    .dashboard-widget-container > * {
+      --widget-padding: 0.65rem;
+      --widget-inner-y: 0.45rem;
+      --widget-tile-padding: 0.5rem;
+    }
+
+    .dashboard-widget-heading {
+      gap: 0.35rem;
+      font-size: 0.625rem;
+      letter-spacing: 0.08em;
+    }
+
+    .dashboard-widget-heading > span:first-child {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+
+    .dashboard-widget-heading > svg {
+      display: none;
+    }
+
+    .dashboard-widget-secondary {
+      display: none;
+    }
+
+    .dashboard-widget-title {
+      padding: 0.65rem 0.65rem 0.35rem;
+    }
+
+    .dashboard-link-content {
+      padding: 0.65rem;
+    }
+
+    .dashboard-home-power {
+      display: none;
+    }
+
+    .dashboard-controls-title {
+      padding: 0.65rem 0.65rem 0.35rem;
+    }
+
+    .dashboard-weather-current img {
+      width: 2.75rem;
+      height: 2.75rem;
+    }
+
+    .dashboard-weather-current .dashboard-weather-temperature {
+      font-size: 1.25rem;
+    }
+
+    .dashboard-sensor-chip:nth-child(n + 3),
+    .dashboard-controls-row:nth-child(n + 4),
+    .dashboard-train-row:nth-child(n + 3) {
+      display: none;
+    }
+
+    .dashboard-train-row {
+      gap: 0.35rem;
+      padding-top: 0.45rem;
+      padding-bottom: 0.45rem;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .dashboard-train-row .dashboard-train-extra {
+      display: none;
+    }
+
+    .dashboard-spot-current {
+      font-size: 1.15rem;
+    }
+
+    .dashboard-widget-heading-compact-value {
+      display: inline-flex;
+      font-size: 0.65rem;
+    }
+
+    .dashboard-spot-summary {
+      display: none;
+    }
+  }
+
+  @container dashboard-widget (max-width: 3.75rem) {
+    .dashboard-widget-container > * {
+      --widget-padding: 0.4rem;
+      --widget-inner-y: 0.25rem;
+      --widget-tile-padding: 0.35rem;
+    }
+
+    .dashboard-widget-heading {
+      justify-content: center;
+    }
+
+    .dashboard-widget-heading > span:first-child {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    .dashboard-widget-heading > span:nth-child(2) {
+      display: none;
+    }
+
+    .dashboard-widget-heading-compact-value {
+      display: none;
+    }
+
+    .dashboard-widget-title {
+      padding: 0.4rem;
+    }
+
+    .dashboard-controls-title {
+      display: none;
+    }
+
+    .dashboard-text-card .dashboard-widget-title,
+    .dashboard-custom-card .dashboard-widget-title {
+      display: none;
+    }
+
+    .dashboard-weather-forecast,
+    .dashboard-clock-calendar,
+    .dashboard-home-scenes,
+    .dashboard-home-rooms,
+    .dashboard-spot-secondary,
+    .dashboard-train-extra {
+      display: none;
+    }
+
+    .dashboard-weather-current {
+      gap: 0;
+    }
+
+    .dashboard-weather-current img {
+      width: 2rem;
+      height: 2rem;
+    }
+
+    .dashboard-weather-current .dashboard-weather-temperature {
+      font-size: 1rem;
+    }
+
+    .dashboard-weather-current .dashboard-weather-meta {
+      display: none;
+    }
+
+    .dashboard-clock-display {
+      font-size: 1.15rem;
+    }
+
+    .dashboard-sensor-chip:nth-child(n + 2),
+    .dashboard-controls-row:nth-child(n + 2),
+    .dashboard-train-row:nth-child(n + 2) {
+      display: none;
+    }
+
+    .dashboard-sensor-chip {
+      min-width: 0;
+    }
+
+    .dashboard-sensor-humidity,
+    .dashboard-device-label,
+    .dashboard-device-settings,
+    .dashboard-device-power,
+    .dashboard-train-time-label,
+    .dashboard-link-description {
+      display: none;
+    }
+
+    .dashboard-device-row {
+      gap: 0.25rem;
+      padding: 0.35rem;
+    }
+
+    .dashboard-device-adjust {
+      min-height: 0;
+      justify-content: center;
+    }
+
+    .dashboard-train-time {
+      min-width: 0;
+      padding: 0.35rem;
+    }
+
+    .dashboard-train-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .dashboard-link-label {
+      font-size: 0.75rem;
+    }
+  }
+
+  @container dashboard-widget (max-height: 8rem) {
+    .dashboard-widget-container > * {
+      --widget-padding: 0.65rem;
+      --widget-inner-y: 0.35rem;
+      --widget-tile-padding: 0.5rem;
+    }
+
+    .dashboard-clock-calendar,
+    .dashboard-weather-forecast,
+    .dashboard-home-rooms,
+    .dashboard-widget-status {
+      display: none;
+    }
+
+    .dashboard-weather-meta {
+      display: none;
+    }
+
+    .dashboard-sensor-chip:nth-child(n + 3),
+    .dashboard-controls-row:nth-child(n + 4),
+    .dashboard-train-row:nth-child(n + 3) {
+      display: none;
+    }
+  }
+
+  @container dashboard-widget (max-height: 5rem) {
+    .dashboard-widget-container > * {
+      --widget-padding: 0.5rem;
+      --widget-inner-y: 0.2rem;
+      --widget-tile-padding: 0.4rem;
+    }
+
+    .dashboard-widget-heading {
+      margin-bottom: 0;
+      gap: 0.35rem;
+      font-size: 0.625rem;
+      letter-spacing: 0.08em;
+    }
+
+    .dashboard-widget-heading > span:first-child {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    .dashboard-widget-secondary,
+    .dashboard-spot-secondary,
+    .dashboard-weather-forecast,
+    .dashboard-clock-calendar,
+    .dashboard-home-rooms,
+    .dashboard-widget-status {
+      display: none;
+    }
+
+    .dashboard-weather-detail {
+      gap: 0;
+    }
+
+    .dashboard-weather-detail.flex-col {
+      flex-direction: row;
+      gap: 0.35rem;
+    }
+
+    .dashboard-weather-current .dashboard-weather-icon {
+      width: clamp(1.65rem, 22cqh, 2.25rem);
+      height: clamp(1.65rem, 22cqh, 2.25rem);
+    }
+
+    .dashboard-weather-current .dashboard-weather-temperature {
+      font-size: 1.05rem;
+    }
+
+    .dashboard-clock-display {
+      font-size: clamp(1.15rem, 23cqh, 2rem);
+    }
+
+    .dashboard-clock-date {
+      display: none;
+    }
+
+    .dashboard-widget-heading-compact-value {
+      font-size: 0.65rem;
+    }
+  }
+
+  @container dashboard-widget (max-height: 3.75rem) {
+    .dashboard-widget-container > * {
+      --widget-padding: 0.35rem;
+      --widget-inner-y: 0.1rem;
+      --widget-tile-padding: 0.3rem;
+    }
+
+    .dashboard-widget-heading {
+      gap: 0.25rem;
+      font-size: 0.575rem;
+      letter-spacing: 0.06em;
+    }
+
+    .dashboard-widget-heading > span:first-child {
+      width: 1.1rem;
+      height: 1.1rem;
+    }
+
+    .dashboard-widget-heading-compact-value {
+      font-size: 0.6rem;
+    }
+
+    .dashboard-weather-content,
+    .dashboard-clock-content,
+    .dashboard-spot-chart {
+      display: none;
+    }
+
+    .dashboard-weather-heading-value,
+    .dashboard-clock-heading-value {
+      display: inline;
+    }
+
+    .dashboard-weather-current .dashboard-weather-icon {
+      width: 1.65rem;
+      height: 1.65rem;
+    }
+
+    .dashboard-weather-current .dashboard-weather-temperature {
+      font-size: 0.9rem;
+    }
+
+    .dashboard-clock-display {
+      font-size: 1.1rem;
     }
   }
 
@@ -84,6 +526,28 @@
   .content-visibility-card {
     contain-intrinsic-size: auto 7rem;
     content-visibility: auto;
+  }
+}
+
+@media (min-width: 37.5rem) {
+  .dashboard-layout-grid {
+    grid-template-columns: repeat(24, minmax(0, 1fr));
+  }
+
+  .dashboard-layout-item {
+    grid-column: span var(--dashboard-widget-span-compact) / span
+      var(--dashboard-widget-span-compact);
+  }
+}
+
+@media (min-width: 64rem) {
+  .dashboard-layout-grid {
+    grid-template-columns: repeat(32, minmax(0, 1fr));
+  }
+
+  .dashboard-layout-item {
+    grid-column: span var(--dashboard-widget-span-wide) / span
+      var(--dashboard-widget-span-wide);
   }
 }
 

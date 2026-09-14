@@ -23,8 +23,13 @@ function load(name) {
   return module.exports;
 }
 
-const { getDashboardWidgetMinimumWidth, getDashboardWidgetSpanClass } =
-  load('dashboard-layout');
+const {
+  clampDashboardWidgetHeight,
+  clampDashboardWidgetWidth,
+  getDashboardWidgetGridStyle,
+  getDashboardWidgetMinimumWidth,
+  getDashboardWidgetSpanClass,
+} = load('dashboard-layout');
 const weatherCardSource = fs.readFileSync(
   path.join(__dirname, '../app/dashboard/WeatherCard.tsx'),
   'utf8',
@@ -44,6 +49,13 @@ test('keeps the weather container query free of display conflicts', () => {
     weatherStylesSource,
     /@container dashboard-widget \(min-width: 20rem\)/,
   );
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(max-height: 10rem\)/,
+  );
+  assert.match(weatherStylesSource, /dashboard-weather-icon/);
+  assert.match(weatherStylesSource, /dashboard-clock-display/);
+  assert.match(weatherStylesSource, /dashboard-widget-heading-compact-value/);
 });
 
 test('gives dense widgets a usable minimum width', () => {
@@ -67,4 +79,13 @@ test('uses the widget minimum when rendering a narrow configured width', () => {
     getDashboardWidgetSpanClass(5, 'weather'),
     /min-\[37\.5rem\]:col-span-5 lg:col-span-5/,
   );
+});
+
+test('preserves quarter-unit widget dimensions in the rendered grid', () => {
+  assert.equal(clampDashboardWidgetWidth(1.5), 1.5);
+  assert.equal(clampDashboardWidgetHeight(0.1), 0.25);
+  assert.deepEqual(getDashboardWidgetGridStyle(1.5, 1.25), {
+    gridColumn: 'span 6 / span 6',
+    gridRow: 'span 5 / span 5',
+  });
 });

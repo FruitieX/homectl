@@ -47,10 +47,14 @@ export function SensorChip({
           'flex items-center gap-1.5 text-sm tabular-nums',
           temperatureStale && 'text-muted-foreground',
         )}
-        aria-label={temperatureStale ? 'Temperature, last known reading' : 'Temperature'}
+        aria-label={
+          temperatureStale ? 'Temperature, last known reading' : 'Temperature'
+        }
       >
         <Thermometer className="size-3.5 shrink-0 text-muted-foreground" />
-        {sensor.latest_temp === undefined ? '—' : `${sensor.latest_temp.toFixed(1)}°`}
+        {sensor.latest_temp === undefined
+          ? '—'
+          : `${sensor.latest_temp.toFixed(1)}°`}
         <span
           className="text-xs text-muted-foreground"
           aria-label={temp ? trendLabel(temp.trend) : undefined}
@@ -60,13 +64,16 @@ export function SensorChip({
       </div>
       <div
         className={cn(
+          'dashboard-sensor-humidity',
           'mt-1 flex items-center gap-1.5 text-sm tabular-nums',
           humidityStale && 'text-muted-foreground',
         )}
         aria-label={humidityStale ? 'Humidity, last known reading' : 'Humidity'}
       >
         <Droplets className="size-3.5 shrink-0 text-muted-foreground" />
-        {sensor.latest_humidity === undefined ? '—' : `${sensor.latest_humidity.toFixed(0)}%`}
+        {sensor.latest_humidity === undefined
+          ? '—'
+          : `${sensor.latest_humidity.toFixed(0)}%`}
         <span
           className="text-xs text-muted-foreground"
           aria-label={humidity ? trendLabel(humidity.trend) : undefined}
@@ -81,7 +88,7 @@ export function SensorChip({
   return (
     <div
       className={cn(
-        'relative rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
+        'dashboard-sensor-chip relative rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
         compact ? 'min-w-[5.6rem]' : 'min-w-28',
         (selectable || onOpen) &&
           'cursor-pointer transition hover:border-primary/60 hover:bg-muted/20',

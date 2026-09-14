@@ -130,8 +130,8 @@ pub struct DashboardWidgetRow {
     pub config: serde_json::Value,
     pub grid_x: i32,
     pub grid_y: i32,
-    pub grid_w: i32,
-    pub grid_h: i32,
+    pub grid_w: f32,
+    pub grid_h: f32,
     pub sort_order: i32,
 }
 
@@ -1448,8 +1448,8 @@ pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i
                 .value(DashboardWidgets::Config, Expr::value(config))
                 .value(DashboardWidgets::GridX, Expr::value(widget.grid_x))
                 .value(DashboardWidgets::GridY, Expr::value(widget.grid_y))
-                .value(DashboardWidgets::GridW, Expr::value(widget.grid_w))
-                .value(DashboardWidgets::GridH, Expr::value(widget.grid_h))
+                .value(DashboardWidgets::GridWValue, Expr::value(widget.grid_w))
+                .value(DashboardWidgets::GridHValue, Expr::value(widget.grid_h))
                 .value(DashboardWidgets::SortOrder, Expr::value(widget.sort_order))
                 .and_where(Expr::col(DashboardWidgets::Id).eq(widget.id))
                 .to_owned(),
@@ -1469,8 +1469,8 @@ pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i
                     DashboardWidgets::Config,
                     DashboardWidgets::GridX,
                     DashboardWidgets::GridY,
-                    DashboardWidgets::GridW,
-                    DashboardWidgets::GridH,
+                    DashboardWidgets::GridWValue,
+                    DashboardWidgets::GridHValue,
                     DashboardWidgets::SortOrder,
                 ])
                 .values_panic([
@@ -2329,8 +2329,8 @@ async fn dashboard_widgets_for_layout<C: ConnectionTrait>(
                 DashboardWidgets::Config,
                 DashboardWidgets::GridX,
                 DashboardWidgets::GridY,
-                DashboardWidgets::GridW,
-                DashboardWidgets::GridH,
+                DashboardWidgets::GridWValue,
+                DashboardWidgets::GridHValue,
                 DashboardWidgets::SortOrder,
             ])
             .from(DashboardWidgets::Table)
@@ -2522,8 +2522,8 @@ fn dashboard_widget_from_row(row: QueryResult) -> Result<DashboardWidgetRow> {
         config: parse_json_or_default(&config, "dashboard widget config"),
         grid_x: row.try_get("", "grid_x")?,
         grid_y: row.try_get("", "grid_y")?,
-        grid_w: row.try_get("", "grid_w")?,
-        grid_h: row.try_get("", "grid_h")?,
+        grid_w: get_f32(&row, "grid_w_value")?,
+        grid_h: get_f32(&row, "grid_h_value")?,
         sort_order: get_i32_or_default(&row, "sort_order", 0),
     })
 }

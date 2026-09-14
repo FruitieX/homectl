@@ -207,7 +207,7 @@ function DailyForecastCard({
       className={clsx(
         'min-w-0 rounded-xl border border-border/50 bg-muted/35',
         compact
-          ? 'flex min-w-[106px] flex-1 items-center gap-2 px-2 py-1.5 text-left'
+          ? 'flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left'
           : 'flex min-w-[106px] shrink-0 flex-1 flex-col items-center p-2 text-center md:p-3',
       )}
     >
@@ -375,36 +375,51 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
   const currentAndFutureSeries = getCurrentAndFutureSeries(weather);
   const hourlyData = currentAndFutureSeries.slice(0, forecastHours);
   const dailyData = buildDailyData(currentAndFutureSeries, 5);
+  const currentSeries = currentAndFutureSeries[0];
+  const currentTemperature = currentSeries
+    ? latestFrontyardTemp !== undefined
+      ? Math.round(latestFrontyardTemp)
+      : Math.round(currentSeries.data.instant.details.air_temperature)
+    : undefined;
 
   return (
     <>
-      <WidgetCard className="col-span-1">
+      <WidgetCard className="dashboard-weather-card col-span-1">
         <Button
           variant="ghost"
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
           onClick={toggleDetailsModal}
         >
           <CardContent className="flex h-full min-h-0 w-full flex-col p-[var(--widget-padding,1rem)]">
-            <WidgetHeading icon={<CloudSun />} label="Weather" detail />
+            <WidgetHeading
+              icon={<CloudSun />}
+              label="Weather"
+              compactValue={
+                currentTemperature !== undefined ? (
+                  <span className="dashboard-weather-heading-value">
+                    {currentTemperature}°
+                  </span>
+                ) : null
+              }
+              detail
+            />
             <div
               className={clsx(
-                'min-h-0 flex-1 items-center justify-center gap-2 overflow-y-auto py-[var(--widget-inner-y,0.75rem)]',
+                'dashboard-weather-content min-h-0 flex-1 items-center justify-center gap-2 overflow-hidden py-[var(--widget-inner-y,0.75rem)]',
                 showWidgetForecast
                   ? 'dashboard-weather-layout grid grid-cols-1'
                   : 'flex flex-col',
               )}
             >
-              <div className="min-w-0">
+              <div className="dashboard-weather-current min-w-0">
                 {renderWeatherDetail(
                   currentAndFutureSeries[0],
                   true,
-                  latestFrontyardTemp !== undefined
-                    ? Math.round(latestFrontyardTemp)
-                    : undefined,
+                  currentTemperature,
                 )}
               </div>
               {showWidgetForecast && dailyData.length > 0 && (
-                <div className="grid grid-cols-1 gap-1.5">
+                <div className="dashboard-weather-forecast grid grid-cols-1 gap-1.5">
                   {dailyData.slice(0, 3).map((day) => (
                     <DailyForecastCard
                       key={day.date.toISOString()}
@@ -418,7 +433,7 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
             {weatherQuery.isError && (
               <p
                 role="status"
-                className="whitespace-normal text-xs text-muted-foreground"
+                className="dashboard-widget-status whitespace-normal text-xs text-muted-foreground"
               >
                 {weather
                   ? 'Forecast could not be refreshed.'
@@ -426,7 +441,9 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               </p>
             )}
             {weatherQuery.isPending && (
-              <p className="text-xs text-muted-foreground">Loading weather…</p>
+              <p className="dashboard-widget-status text-xs text-muted-foreground">
+                Loading weather…
+              </p>
             )}
           </CardContent>
         </Button>
@@ -658,12 +675,13 @@ const renderWeatherDetail = (
   return (
     <div
       className={clsx(
-        'flex items-center justify-center',
+        'dashboard-weather-detail flex items-center justify-center',
         horizontal ? 'flex-col gap-1' : 'gap-2 md:gap-3',
       )}
     >
       <img
         className={clsx(
+          'dashboard-weather-icon',
           horizontal ? 'size-16' : 'size-12 md:size-16 flex-shrink-0',
         )}
         src={`/weathericons/${series.data.next_1_hours?.summary?.symbol_code || series.data.next_6_hours?.summary?.symbol_code || 'clearsky_day'}.svg`}
@@ -680,7 +698,7 @@ const renderWeatherDetail = (
       >
         <span
           className={clsx(
-            'whitespace-nowrap font-semibold',
+            'dashboard-weather-temperature whitespace-nowrap font-semibold',
             horizontal ? 'text-2xl' : 'text-lg md:text-2xl',
           )}
         >
@@ -691,7 +709,7 @@ const renderWeatherDetail = (
         </span>
         <span
           className={clsx(
-            'flex',
+            'dashboard-weather-meta flex',
             horizontal
               ? 'gap-2'
               : 'flex-wrap gap-x-2 gap-y-0.5 text-xs md:text-sm',

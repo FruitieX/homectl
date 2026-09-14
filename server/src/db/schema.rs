@@ -168,6 +168,8 @@ pub enum DashboardWidgets {
     GridY,
     GridW,
     GridH,
+    GridWValue,
+    GridHValue,
     SortOrder,
 }
 
