@@ -59,7 +59,7 @@ test('keeps the weather container query free of display conflicts', () => {
   );
   assert.match(
     weatherStylesSource,
-    /@container dashboard-widget \(min-width: 20rem\)/,
+    /@container dashboard-widget \(min-width: 18rem\)/,
   );
   assert.match(
     weatherStylesSource,
@@ -76,6 +76,11 @@ test('keeps the weather container query free of display conflicts', () => {
     weatherStylesSource,
     /@container dashboard-widget \(max-height: 12rem\)/,
   );
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(min-width: 18rem\) and \(min-height: 10\.1rem\)/,
+  );
+  assert.match(weatherStylesSource, /overflow-x: auto/);
   assert.match(
     fs.readFileSync(
       path.join(__dirname, '../app/dashboard/ClockCard.tsx'),

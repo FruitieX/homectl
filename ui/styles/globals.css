@@ -92,13 +92,13 @@
       var(--dashboard-widget-span-mobile);
   }
 
-  @container dashboard-widget (min-width: 20rem) {
+  @container dashboard-widget (min-width: 18rem) {
     .dashboard-weather-layout {
       grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
     }
   }
 
-  @container dashboard-widget (max-width: 20rem) {
+  @container dashboard-widget (max-width: 18rem) {
     .dashboard-widget-heading > span:first-child {
       width: 1.75rem;
       height: 1.75rem;
@@ -239,8 +239,62 @@
       height: 1.75rem;
     }
 
+    .dashboard-train-row {
+      padding-top: 0.5rem;
+      padding-bottom: 0.5rem;
+    }
+
+    .dashboard-train-time {
+      padding: 0.5rem;
+    }
+
+    .dashboard-train-extra {
+      display: none;
+    }
+
     .dashboard-clock-display {
-      font-size: clamp(1.4rem, min(14cqw, 24cqh), 3rem);
+      font-size: clamp(1.4rem, min(14cqw, 20cqh), 3rem);
+    }
+  }
+
+  /*
+   * Medium-height weather cards need a compact three-day strip. Keep the
+   * current conditions and strip in separate columns when the card is wide;
+   * narrow cards use the same strip below the current conditions.
+   */
+  @container dashboard-widget (min-width: 18rem) and (min-height: 10.1rem) and
+    (max-height: 13rem) {
+    .dashboard-weather-forecast {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+  }
+
+  @container dashboard-widget (max-width: 24rem) and (min-height: 10.1rem) {
+    .dashboard-weather-forecast {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .dashboard-weather-forecast > * {
+      flex-direction: column;
+      justify-content: center;
+      gap: 0.15rem;
+      padding: 0.25rem 0.15rem;
+      text-align: center;
+    }
+
+    .dashboard-weather-forecast > * img {
+      width: 1.5rem;
+      height: 1.5rem;
+    }
+
+    .dashboard-weather-forecast > * > div {
+      width: 100%;
+    }
+  }
+
+  @container dashboard-widget (max-height: 14rem) {
+    .dashboard-clock-calendar > div:last-child {
+      display: none;
     }
   }
 
@@ -478,13 +532,13 @@
     }
 
     .dashboard-controls-row:nth-child(n + 2),
-    .dashboard-sensor-chip:nth-child(n + 2),
     .dashboard-home-scenes {
       display: none;
     }
 
     .dashboard-train-content {
       margin-top: 0;
+      max-height: 5rem !important;
     }
 
     .dashboard-sensors-heading {
@@ -492,16 +546,30 @@
     }
 
     .dashboard-sensors-preview {
-      grid-template-columns: minmax(0, 1fr);
+      display: flex;
+      overflow-x: auto;
       gap: 0.35rem;
+      padding-bottom: 0.15rem;
     }
 
     .dashboard-sensor-chip {
-      padding: 0.35rem 0.5rem;
+      flex: 0 0 5.6rem;
+      padding: 0.2rem 0.4rem;
     }
 
     .dashboard-sensor-chip .mb-2 {
-      margin-bottom: 0.2rem;
+      margin-bottom: 0;
+    }
+
+    .dashboard-sensor-chip .text-sm {
+      font-size: 0.75rem;
+      line-height: 1rem;
+      gap: 0.25rem;
+    }
+
+    .dashboard-sensor-chip svg {
+      width: 0.75rem;
+      height: 0.75rem;
     }
 
     .dashboard-sensor-chip .dashboard-sensor-humidity {
