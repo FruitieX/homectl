@@ -27,7 +27,9 @@ import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { Button } from '@/ui/primitives/button';
 import { Slider } from '@/ui/primitives/slider';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 // Preserve the existing scene override mode when changing live controls.
 export function useLiveDeviceControls() {

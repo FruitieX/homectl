@@ -1,5 +1,7 @@
 import { atom, useAtom } from 'jotai';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 const activeColorAtom = atom<Color | null>(null);
 

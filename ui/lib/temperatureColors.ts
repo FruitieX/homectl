@@ -1,4 +1,6 @@
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 export const tempToColor = (temp: number) => {
   // Define temperature thresholds and corresponding hue values

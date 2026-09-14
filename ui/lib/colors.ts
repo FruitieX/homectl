@@ -1,5 +1,7 @@
 import { DeviceData } from '@/bindings/DeviceData';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 export const black = Color('black');
 export const white = Color('white');

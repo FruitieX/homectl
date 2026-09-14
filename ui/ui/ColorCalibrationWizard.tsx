@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import type { Device } from '@/bindings/Device';
 import type { Hs } from '@/bindings/Hs';
 import {

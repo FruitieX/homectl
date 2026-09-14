@@ -11,7 +11,9 @@ import { useConnectionStatus } from '@/hooks/websocket';
 import { ColorResult } from 'react-color';
 import Wheel from '@uiw/react-color-wheel';
 import Circle from '@uiw/react-color-circle';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import ColorThief from 'colorthief';
 import {
   ChangeEvent,

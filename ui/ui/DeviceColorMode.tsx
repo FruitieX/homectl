@@ -6,7 +6,9 @@ import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { useDeviceColorCalibrations } from '@/hooks/useConfig';
 import { Slider } from '@/ui/primitives/slider';
 import { Button } from '@/ui/primitives/button';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 
 type Mode = 'ct' | 'hs' | 'xy' | 'rgb';
 function activeMode(color: DeviceColor | null | undefined): Mode | '' {

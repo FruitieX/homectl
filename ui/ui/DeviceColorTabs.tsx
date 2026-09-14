@@ -11,7 +11,9 @@ import Circle from '@uiw/react-color-circle';
 import Wheel from '@uiw/react-color-wheel';
 import ColorThief from 'colorthief';
 import type { ColorResult } from 'react-color';
-import Color from 'color';
+import Color, { type ColorInstance } from 'color';
+
+type Color = ColorInstance;
 import { Clipboard, Dices } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
