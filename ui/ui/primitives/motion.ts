@@ -1,4 +1,4 @@
-import { type Transition } from 'framer-motion';
+import { type Transition } from 'motion/react';
 
 export const standardEase = [0.22, 1, 0.36, 1] as const;
 
