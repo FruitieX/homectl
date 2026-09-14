@@ -272,7 +272,7 @@ function LiveClockDisplay({
 }) {
   return (
     <>
-      <span className="dashboard-clock-display font-sans text-[clamp(1.75rem,8vw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
+      <span className="dashboard-clock-display font-sans text-[clamp(1.75rem,14cqw,3.5rem)] font-semibold leading-none tracking-[-0.06em] tabular-nums">
         {formatClockValue(time, showSeconds)}
       </span>
       {showDate ? (

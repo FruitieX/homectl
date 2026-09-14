@@ -68,6 +68,28 @@ test('keeps the weather container query free of display conflicts', () => {
   assert.match(weatherStylesSource, /dashboard-weather-icon/);
   assert.match(weatherStylesSource, /dashboard-clock-display/);
   assert.match(weatherStylesSource, /dashboard-widget-heading-compact-value/);
+  assert.doesNotMatch(
+    weatherStylesSource,
+    /dashboard-weather-forecast\s*\{\s*display: flex;\s*flex-direction: row/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(max-height: 12rem\)/,
+  );
+  assert.match(
+    fs.readFileSync(
+      path.join(__dirname, '../app/dashboard/ClockCard.tsx'),
+      'utf8',
+    ),
+    /14cqw/,
+  );
+  assert.match(
+    fs.readFileSync(
+      path.join(__dirname, '../app/dashboard/TrainScheduleCard.tsx'),
+      'utf8',
+    ),
+    /overflow-y-auto overscroll-contain scrollbar-none/,
+  );
 });
 
 test('gives compact cards a summary-only fallback before content can clip', () => {

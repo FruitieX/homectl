@@ -223,7 +223,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               detail
             />
             <div
-              className="dashboard-train-content mt-2 min-h-0 flex-1 overflow-hidden overscroll-contain"
+              className="dashboard-train-content mt-2 min-h-0 flex-1 overflow-y-auto overscroll-contain scrollbar-none"
               style={
                 scrollRows
                   ? { maxHeight: `${displayLimit * 5.25}rem` }
