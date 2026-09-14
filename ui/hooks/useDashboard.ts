@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAppConfig } from './appConfig';
 
 // Widget type definitions
@@ -474,6 +474,7 @@ export function useDashboardWidgets(layoutId: string | null) {
   const [widgetRows, setWidgetRows] = useState<DashboardWidgetRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadedLayoutIdRef = useRef<string | null>(null);
 
   const baseUrl = `${apiEndpoint}/api/v1/config/dashboard`;
 
@@ -482,17 +483,22 @@ export function useDashboardWidgets(layoutId: string | null) {
       setWidgets([]);
       setWidgetRows([]);
       setLoading(false);
+      loadedLayoutIdRef.current = null;
       return;
     }
 
+    const showLoadingState = loadedLayoutIdRef.current !== layoutId;
     try {
-      setLoading(true);
+      if (showLoadingState) {
+        setLoading(true);
+      }
       const response = await fetch(`${baseUrl}/layouts/${layoutId}/widgets`);
       const result = await response.json();
       if (result.success) {
         const nextRows = result.data as DashboardWidgetRow[];
         setWidgetRows(nextRows);
         setWidgets(nextRows.map(toDashboardWidget));
+        loadedLayoutIdRef.current = layoutId;
       } else {
         setError(result.error || 'Failed to fetch widgets');
       }

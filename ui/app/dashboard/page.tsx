@@ -4,14 +4,9 @@ import {
   useDashboardSpacingSettings,
   dashboardSpacingStyles,
 } from '@/hooks/dashboardSpacing';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
-import {
-  DashboardWidget,
-  getDashboardWidgetOptionString,
-  useDashboardLayouts,
-  useDashboardWidgets,
-} from '@/hooks/useDashboard';
+import { useDashboardLayouts, useDashboardWidgets } from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
 import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
@@ -19,113 +14,10 @@ import { getDashboardWidgetResponsiveGridStyle } from '@/lib/dashboard-layout';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
-import { CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Skeleton } from '@/ui/primitives/skeleton';
-
-import { ClockCard } from './ClockCard';
-import { ControlsCard } from './ControlsCard';
-import { SensorsCard } from './SensorsCard';
-import { SpotPriceCard } from './SpotPriceCard';
-import { TrainScheduleCard } from './TrainScheduleCard';
-import { WeatherCard } from './WeatherCard';
-import { DashboardCard } from './WidgetChrome';
-import { HomeOverview } from './HomeOverview';
-
-function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
-  switch (widget.widget_type) {
-    case 'home_overview':
-      return <HomeOverview />;
-    case 'clock':
-      return <ClockCard widget={widget} />;
-    case 'controls':
-      return <ControlsCard widget={widget} />;
-    case 'sensors':
-      return <SensorsCard widget={widget} />;
-    case 'spot_price':
-      return <SpotPriceCard widget={widget} />;
-    case 'train_schedule':
-      return <TrainScheduleCard widget={widget} />;
-    case 'weather':
-      return <WeatherCard widget={widget} />;
-    case 'text':
-      return (
-        <DashboardCard className="dashboard-text-card">
-          <CardHeader className="dashboard-widget-title shrink-0">
-            <CardTitle>{widget.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden">
-            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
-              {getDashboardWidgetOptionString(widget, 'body', '')}
-            </p>
-          </CardContent>
-        </DashboardCard>
-      );
-    case 'link':
-      return (
-        <DashboardCard className="dashboard-link-card">
-          <Button
-            asChild
-            variant="ghost"
-            className="h-full w-full justify-start p-0 text-left"
-          >
-            <a href={getDashboardWidgetOptionString(widget, 'url', '/')}>
-              <CardContent className="dashboard-link-content flex h-full min-h-0 flex-col justify-center gap-2 overflow-hidden p-5">
-                <div className="dashboard-link-label text-lg font-semibold">
-                  {getDashboardWidgetOptionString(
-                    widget,
-                    'label',
-                    widget.title,
-                  )}
-                </div>
-                <p className="dashboard-link-description text-sm text-muted-foreground">
-                  {getDashboardWidgetOptionString(widget, 'description', '')}
-                </p>
-              </CardContent>
-            </a>
-          </Button>
-        </DashboardCard>
-      );
-    case 'iframe':
-      return (
-        <DashboardCard className="dashboard-iframe-card">
-          <iframe
-            title={getDashboardWidgetOptionString(
-              widget,
-              'title',
-              widget.title,
-            )}
-            src={getDashboardWidgetOptionString(widget, 'url', 'about:blank')}
-            className="h-full min-h-0 w-full flex-1 border-0"
-            loading="lazy"
-          />
-        </DashboardCard>
-      );
-    case 'image':
-      return (
-        <DashboardCard className="dashboard-image-card">
-          <img
-            src={getDashboardWidgetOptionString(widget, 'imageUrl', '')}
-            alt={getDashboardWidgetOptionString(widget, 'alt', widget.title)}
-            className="h-full min-h-0 w-full flex-1 object-cover"
-          />
-        </DashboardCard>
-      );
-    case 'custom':
-      return (
-        <DashboardCard className="dashboard-custom-card">
-          <CardHeader className="dashboard-widget-title shrink-0">
-            <CardTitle>{widget.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden">
-            <p className="text-sm opacity-70">
-              Custom widgets are not runtime-rendered yet.
-            </p>
-          </CardContent>
-        </DashboardCard>
-      );
-  }
-}
+import { DashboardWidgetCard } from '@/ui/DashboardWidgetCard';
+import { DashboardGridEditor } from '@/ui/DashboardGridEditor';
 
 function DashboardLoadingGrid() {
   return (
@@ -139,6 +31,9 @@ function DashboardLoadingGrid() {
 }
 
 export default function Page() {
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isEditing = searchParams.get('edit') === '1';
   const [storedSpacing] = useDashboardSpacing();
   const [spacingSettings] = useDashboardSpacingSettings();
   const [dashboardScrollEnabled] = useDashboardScroll();
@@ -160,6 +55,9 @@ export default function Page() {
     widgets,
     loading: widgetsLoading,
     error: widgetsError,
+    removeWidget,
+    updateWidget,
+    reorderWidgets,
   } = useDashboardWidgets(activeLayout?.id ?? null);
   const hasConfiguredLayout = activeLayout !== null;
   const dashboardLoading =
@@ -169,6 +67,12 @@ export default function Page() {
   const renderedWidgets = [...(hasConfiguredLayout ? widgets : [])].sort(
     (left, right) => left.position - right.position,
   );
+
+  const stopEditing = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('edit');
+    setSearchParams(nextParams, { replace: true });
+  };
 
   if (dashboardLoading) {
     return (
@@ -245,7 +149,7 @@ export default function Page() {
       }
       className={cn(
         'min-h-0 flex-1 overflow-x-hidden px-[var(--dashboard-outer)] py-[var(--dashboard-outer)]',
-        dashboardScrollEnabled
+        isEditing || dashboardScrollEnabled
           ? 'overflow-y-auto overscroll-contain'
           : 'overflow-hidden',
       )}
@@ -286,35 +190,71 @@ export default function Page() {
             </div>
           ) : null}
 
-          <div
-            className={cn(
-              'dashboard-layout-grid grid min-w-0 gap-0',
-              dashboardScrollEnabled
-                ? 'auto-rows-[minmax(calc(var(--dashboard-row)/4),auto)]'
-                : 'min-h-0 flex-1 overflow-hidden',
-            )}
-            style={{
-              gridAutoRows: dashboardScrollEnabled
-                ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
-                : 'minmax(0, 1fr)',
-            }}
-          >
-            {renderedWidgets.map((widget) => (
-              <div
-                key={widget.id}
-                className={cn('dashboard-layout-item min-h-0 min-w-0 *:h-full')}
-                style={{
-                  ...getDashboardWidgetResponsiveGridStyle(
-                    widget.width,
-                    widget.height,
-                  ),
-                  margin: 'calc(var(--dashboard-gap) / 2)',
-                }}
-              >
-                <DashboardWidgetCard widget={widget} />
+          {isEditing ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-primary/30 bg-primary/5 p-3">
+                <div>
+                  <div className="text-sm font-medium">Editing dashboard</div>
+                  <div className="text-xs text-muted-foreground">
+                    Drag cards to reorder them, or use the corner handle to
+                    resize. These are the same widgets shown on the dashboard.
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link to="/config/dashboard">Widget settings</Link>
+                  </Button>
+                  <Button size="sm" onClick={stopEditing}>
+                    Done
+                  </Button>
+                </div>
               </div>
-            ))}
-          </div>
+              <DashboardGridEditor
+                variant="inline"
+                widgets={renderedWidgets}
+                onEdit={() => navigate('/config/dashboard')}
+                onRemove={(widget) => {
+                  if (confirm(`Remove widget "${widget.title}"?`)) {
+                    void removeWidget(widget.id);
+                  }
+                }}
+                onUpdateWidget={updateWidget}
+                onReorderWidgets={reorderWidgets}
+              />
+            </div>
+          ) : (
+            <div
+              className={cn(
+                'dashboard-layout-grid grid min-w-0 gap-0',
+                dashboardScrollEnabled
+                  ? 'auto-rows-[minmax(calc(var(--dashboard-row)/4),auto)]'
+                  : 'min-h-0 flex-1 overflow-hidden',
+              )}
+              style={{
+                gridAutoRows: dashboardScrollEnabled
+                  ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
+                  : 'minmax(0, 1fr)',
+              }}
+            >
+              {renderedWidgets.map((widget) => (
+                <div
+                  key={widget.id}
+                  className={cn(
+                    'dashboard-layout-item min-h-0 min-w-0 *:h-full',
+                  )}
+                  style={{
+                    ...getDashboardWidgetResponsiveGridStyle(
+                      widget.width,
+                      widget.height,
+                    ),
+                    margin: 'calc(var(--dashboard-gap) / 2)',
+                  }}
+                >
+                  <DashboardWidgetCard widget={widget} />
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

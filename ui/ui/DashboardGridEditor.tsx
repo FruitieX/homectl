@@ -6,26 +6,23 @@ import {
   type PointerEvent,
 } from 'react';
 
-import {
-  getDashboardWidgetOptionString,
-  type DashboardWidget,
-  widgetRegistry,
-} from '@/hooks/useDashboard';
+import { type DashboardWidget } from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
 import {
   DASHBOARD_GRID_PRECISION,
   DASHBOARD_MIN_SIZE_UNIT,
+  DASHBOARD_WIDE_BREAKPOINT_PX,
   clampDashboardWidgetHeight,
   clampDashboardWidgetWidth,
   getDashboardWidgetGridStyle,
   DASHBOARD_COMPACT_COLUMNS,
   DASHBOARD_GRID_HELP,
-  DASHBOARD_MAX_ROWS,
   DASHBOARD_MOBILE_COLUMNS,
   DASHBOARD_WIDE_COLUMNS,
 } from '@/lib/dashboard-layout';
 import { Button } from '@/ui/primitives/button';
-import { Card, CardContent } from '@/ui/primitives/card';
+import { DashboardWidgetCard } from '@/ui/DashboardWidgetCard';
+import { Pencil, Trash2 } from 'lucide-react';
 
 const GRID_ROW_HEIGHT_PX = 160;
 const GRID_GAP_PX = 12;
@@ -44,7 +41,7 @@ const PREVIEW_COLUMN_OPTIONS: PreviewColumnCount[] = [
 
 function columnsForViewport(width: number): PreviewColumnCount {
   if (width < 600) return DASHBOARD_MOBILE_COLUMNS;
-  if (width < 960) return DASHBOARD_COMPACT_COLUMNS;
+  if (width < DASHBOARD_WIDE_BREAKPOINT_PX) return DASHBOARD_COMPACT_COLUMNS;
   return DASHBOARD_WIDE_COLUMNS;
 }
 
@@ -79,6 +76,7 @@ interface DashboardGridEditorProps {
     widget: Partial<DashboardWidget>,
   ) => Promise<DashboardWidget>;
   onReorderWidgets: (ids: string[]) => Promise<void>;
+  variant?: 'config' | 'inline';
 }
 
 interface DropIndicator {
@@ -175,163 +173,7 @@ function sameIds(left: string[], right: string[]) {
 }
 
 function WidgetPreview({ widget }: { widget: DashboardWidget }) {
-  if (widget.widget_type === 'clock') {
-    return (
-      <div className="grid h-full place-items-center rounded-2xl bg-muted/30 text-center">
-        <div>
-          <div className="font-mono text-3xl font-semibold tracking-tight">
-            12:34
-          </div>
-          <div className="mt-2 text-xs uppercase tracking-wide text-muted-foreground">
-            Today · Calendar below
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'weather') {
-    return (
-      <div className="flex h-full items-center justify-between gap-3 rounded-2xl bg-sky-500/10 p-3">
-        <div>
-          <div className="text-3xl font-semibold">21°</div>
-          <div className="text-xs text-muted-foreground">Partly cloudy</div>
-        </div>
-        <div className="flex h-14 items-end gap-1">
-          {[32, 48, 40, 58, 46].map((height, index) => (
-            <span
-              key={index}
-              className="w-2 rounded-full bg-sky-500/50"
-              style={{ height }}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'sensors') {
-    return (
-      <div className="flex h-full flex-wrap items-center justify-center gap-2 rounded-2xl bg-muted/30 p-3">
-        {['Living 22°', 'Bedroom 21°', 'Outdoor 8°'].map((label) => (
-          <span
-            key={label}
-            className="rounded-full border border-border bg-background px-3 py-1 text-xs"
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'controls') {
-    return (
-      <div className="grid h-full grid-cols-2 gap-2 rounded-2xl bg-muted/30 p-3">
-        {['Lights', 'Evening', 'Away', 'Off'].map((label) => (
-          <span
-            key={label}
-            className="grid place-items-center rounded-xl bg-background text-xs font-medium shadow-sm"
-          >
-            {label}
-          </span>
-        ))}
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'spot_price') {
-    return (
-      <div className="flex h-full items-center justify-between rounded-2xl bg-amber-500/10 p-3">
-        <div>
-          <div className="text-2xl font-semibold">7.2 c/kWh</div>
-          <div className="text-xs text-muted-foreground">Spot price</div>
-        </div>
-        <div className="h-12 w-20 rounded-xl bg-amber-500/20" />
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'train_schedule') {
-    return (
-      <div className="grid h-full gap-2 rounded-2xl bg-muted/30 p-3 text-xs">
-        {[
-          'K · leave in 5 min',
-          'I · leave in 12 min',
-          'P · leave in 19 min',
-        ].map((label) => {
-          const [line, time] = label.split(' · ');
-
-          return (
-            <div
-              key={label}
-              className="flex items-center justify-between rounded-xl bg-background px-3 py-1"
-            >
-              <span>{line}</span>
-              <span className="text-muted-foreground">{time}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'text') {
-    return (
-      <div className="h-full rounded-2xl bg-muted/30 p-3 text-sm text-muted-foreground">
-        {getDashboardWidgetOptionString(widget, 'body', 'Text widget preview')}
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'link') {
-    return (
-      <div className="grid h-full place-items-center rounded-2xl bg-primary/10 p-3 text-center">
-        <div>
-          <div className="font-semibold">
-            {getDashboardWidgetOptionString(widget, 'label', 'Open')}
-          </div>
-          <div className="text-xs text-muted-foreground">
-            {getDashboardWidgetOptionString(widget, 'url', '/')}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'image') {
-    const imageUrl = getDashboardWidgetOptionString(widget, 'imageUrl', '');
-    return imageUrl ? (
-      <img
-        src={imageUrl}
-        alt={getDashboardWidgetOptionString(widget, 'alt', widget.title)}
-        className="h-full w-full rounded-2xl object-cover"
-      />
-    ) : (
-      <div className="grid h-full place-items-center rounded-2xl bg-muted/30 text-xs text-muted-foreground">
-        Image preview
-      </div>
-    );
-  }
-
-  if (widget.widget_type === 'iframe') {
-    return (
-      <div className="grid h-full place-items-center rounded-2xl bg-muted/30 p-3 text-center text-xs text-muted-foreground">
-        <div>
-          <div className="font-medium text-foreground">Embedded view</div>
-          <div>
-            {getDashboardWidgetOptionString(widget, 'url', 'No URL set')}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="grid h-full place-items-center rounded-2xl bg-muted/30 text-xs text-muted-foreground">
-      Custom widget preview
-    </div>
-  );
+  return <DashboardWidgetCard widget={widget} />;
 }
 
 export function DashboardGridEditor({
@@ -340,6 +182,7 @@ export function DashboardGridEditor({
   onRemove,
   onUpdateWidget,
   onReorderWidgets,
+  variant = 'config',
 }: DashboardGridEditorProps) {
   const [previewColumns, setPreviewColumns] = useState<PreviewColumnCount>(
     () =>
@@ -672,99 +515,61 @@ export function DashboardGridEditor({
     setActiveWidgetId(widget.id);
   };
 
-  const updateDraftSize = (
-    widgetId: string,
-    dimension: 'width' | 'height',
-    value: number,
-  ) => {
-    if (!Number.isFinite(value)) {
-      return;
-    }
-
-    setDraftWidgets((currentWidgets) =>
-      currentWidgets.map((widget) =>
-        widget.id === widgetId ? { ...widget, [dimension]: value } : widget,
-      ),
-    );
-  };
-
-  const saveSizeField = (widgetId: string) => {
-    const updatedWidget = draftWidgetsRef.current.find(
-      (widget) => widget.id === widgetId,
-    );
-    if (!updatedWidget) {
-      return;
-    }
-
-    const width = clampDashboardWidgetWidth(updatedWidget.width);
-    const height = clampDashboardWidgetHeight(updatedWidget.height);
-    setDraftWidgets((currentWidgets) =>
-      currentWidgets.map((widget) =>
-        widget.id === widgetId ? { ...widget, width, height } : widget,
-      ),
-    );
-    setSavingWidgetId(widgetId);
-    void onUpdateWidget(widgetId, { width, height })
-      .catch((error: unknown) => {
-        setDraftWidgets(sortWidgets(widgets));
-        setEditorError(
-          error instanceof Error
-            ? error.message
-            : 'Failed to save dashboard widget size.',
-        );
-      })
-      .finally(() => setSavingWidgetId(null));
-  };
-
   return (
     <div className="space-y-3">
       <div className="flex flex-col gap-3 rounded-3xl border border-border bg-card/80 p-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-medium">Visual dashboard editor</div>
           <div className="text-xs text-muted-foreground">
-            Drag from anywhere on a widget card to reorder. The dashboard
-            auto-layouts cards by order and size, so widgets cannot overlap.
-            Use the W/H fields or the corner handle for quarter-unit sizes.
+            Drag a card to reorder it and pull its corner to resize. These are
+            the live widget cards, so compact layouts match the dashboard.
           </div>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {PREVIEW_COLUMN_OPTIONS.map((columns) => (
-            <Button
-              key={columns}
-              size="sm"
-              variant={previewColumns === columns ? 'default' : 'outline'}
-              onClick={() => {
-                manuallySelectedColumns.current = true;
-                setPreviewColumns(columns);
-              }}
-            >
-              {getGridColumnLabel(columns)}
-            </Button>
-          ))}
-        </div>
+        {variant === 'config' ? (
+          <div className="flex flex-wrap gap-2">
+            {PREVIEW_COLUMN_OPTIONS.map((columns) => (
+              <Button
+                key={columns}
+                size="sm"
+                variant={previewColumns === columns ? 'default' : 'outline'}
+                onClick={() => {
+                  manuallySelectedColumns.current = true;
+                  setPreviewColumns(columns);
+                }}
+              >
+                {getGridColumnLabel(columns)}
+              </Button>
+            ))}
+          </div>
+        ) : null}
       </div>
 
       <div className="rounded-3xl border border-dashed border-border bg-muted/20 p-3">
-        <div className="mb-3 rounded-2xl bg-background/80 p-3 text-xs text-muted-foreground">
-          {DASHBOARD_GRID_HELP}
-        </div>
+        {variant === 'config' ? (
+          <div className="mb-3 rounded-2xl bg-background/80 p-3 text-xs text-muted-foreground">
+            {DASHBOARD_GRID_HELP}
+          </div>
+        ) : null}
         {editorError ? (
           <div className="mb-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
             {editorError}
           </div>
         ) : null}
-        <div className="overflow-x-auto pb-2">
+        <div className={cn(variant === 'config' && 'overflow-x-auto pb-2')}>
           <div
             ref={gridRef}
             className="relative grid grid-flow-row gap-0"
             style={{
               gridTemplateColumns: `repeat(${previewColumns * DASHBOARD_GRID_PRECISION}, minmax(0, 1fr))`,
-              gridAutoRows: `${GRID_ROW_HEIGHT_PX / DASHBOARD_GRID_PRECISION}px`,
-              minWidth: `${previewColumns * 6}rem`,
+              gridAutoRows:
+                variant === 'inline'
+                  ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
+                  : `${GRID_ROW_HEIGHT_PX / DASHBOARD_GRID_PRECISION}px`,
+              minWidth: variant === 'config' ? `${previewColumns * 6}rem` : 0,
             }}
           >
             {draftWidgets.map((widget) => (
-              <Card
+              <div
                 key={widget.id}
                 ref={(element) => {
                   if (element) {
@@ -774,115 +579,54 @@ export function DashboardGridEditor({
                   }
                 }}
                 className={cn(
-                  'group relative min-w-0 overflow-hidden rounded-2xl bg-background/90 shadow-sm ring-1 ring-border transition hover:ring-primary/50',
+                  'dashboard-editor-card relative min-h-0 min-w-0',
                   activeWidgetId === widget.id &&
-                    'z-10 scale-[1.01] cursor-grabbing ring-2 ring-primary shadow-lg',
+                    'z-10 scale-[1.01] cursor-grabbing',
                   savingWidgetId === widget.id && 'opacity-70',
                 )}
                 style={{
                   ...getAutoLayoutStyle(widget, previewColumns),
-                  margin: `${GRID_GAP_PX / 2}px`,
+                  margin:
+                    variant === 'inline'
+                      ? 'calc(var(--dashboard-gap) / 2)'
+                      : `${GRID_GAP_PX / 2}px`,
                 }}
+                onPointerDown={(event) => startDrag(event, widget)}
               >
-                <CardContent
-                  className="flex h-full cursor-grab touch-none select-none flex-col gap-3 p-4 active:cursor-grabbing"
-                  onPointerDown={(event) => startDrag(event, widget)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{widget.title}</div>
-                      <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {widgetRegistry[widget.widget_type]?.name ||
-                          widget.widget_type}
-                        <span className="ml-2">
-                          {widget.width}×{widget.height} units
-                        </span>
-                      </div>
-                    </div>
-                    <span className="rounded-xl border border-border bg-muted/60 px-2 py-1 text-xs font-medium text-muted-foreground">
-                      #{widget.position + 1}
-                    </span>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                    <label className="flex items-center gap-1">
-                      <span>W</span>
-                      <input
-                        aria-label={`Width of ${widget.title}`}
-                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-foreground"
-                        type="number"
-                        min={DASHBOARD_MIN_SIZE_UNIT}
-                        max={DASHBOARD_WIDE_COLUMNS}
-                        step={DASHBOARD_MIN_SIZE_UNIT}
-                        value={widget.width}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onChange={(event) =>
-                          updateDraftSize(
-                            widget.id,
-                            'width',
-                            event.target.valueAsNumber,
-                          )
-                        }
-                        onBlur={() => saveSizeField(widget.id)}
-                      />
-                    </label>
-                    <label className="flex items-center gap-1">
-                      <span>H</span>
-                      <input
-                        aria-label={`Height of ${widget.title}`}
-                        className="h-7 w-16 rounded-lg border border-input bg-background px-2 text-foreground"
-                        type="number"
-                        min={DASHBOARD_MIN_SIZE_UNIT}
-                        max={DASHBOARD_MAX_ROWS}
-                        step={DASHBOARD_MIN_SIZE_UNIT}
-                        value={widget.height}
-                        onPointerDown={(event) => event.stopPropagation()}
-                        onChange={(event) =>
-                          updateDraftSize(
-                            widget.id,
-                            'height',
-                            event.target.valueAsNumber,
-                          )
-                        }
-                        onBlur={() => saveSizeField(widget.id)}
-                      />
-                    </label>
-                  </div>
-
-                  <div className="min-h-0 flex-1 overflow-hidden">
-                    <WidgetPreview widget={widget} />
-                  </div>
-
-                  <div className="mt-auto flex flex-wrap gap-2 border-t border-border/70 pt-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => onEdit(widget)}
-                    >
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onPointerDown={(event) => event.stopPropagation()}
-                      onClick={() => onRemove(widget)}
-                    >
-                      Remove
-                    </Button>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="absolute bottom-2 right-2 size-8 cursor-nwse-resize rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-sm transition hover:bg-primary/20"
-                    aria-label={`Resize ${widget.title}`}
-                    onPointerDown={(event) => startResize(event, widget)}
+                <div className="pointer-events-none h-full min-h-0">
+                  <WidgetPreview widget={widget} />
+                </div>
+                <div className="absolute right-2 top-2 z-30 flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="pointer-events-auto size-8 rounded-xl border border-border/70 bg-background/85 shadow-sm backdrop-blur hover:bg-background"
+                    aria-label={`Edit ${widget.title}`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onEdit(widget)}
                   >
-                    ↘
-                  </button>
-                </CardContent>
-              </Card>
+                    <Pencil />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="pointer-events-auto size-8 rounded-xl border border-border/70 bg-background/85 text-destructive shadow-sm backdrop-blur hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={`Remove ${widget.title}`}
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={() => onRemove(widget)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                <button
+                  type="button"
+                  className="pointer-events-auto absolute bottom-2 right-2 z-30 size-8 cursor-nwse-resize rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-sm transition hover:bg-primary/20"
+                  aria-label={`Resize ${widget.title}`}
+                  onPointerDown={(event) => startResize(event, widget)}
+                >
+                  <span aria-hidden="true">↘</span>
+                </button>
+              </div>
             ))}
             {dropIndicator && activeWidgetId ? (
               <div

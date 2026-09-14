@@ -1,4 +1,4 @@
-import { Edit, ChevronLeft, Expand, Shrink } from 'lucide-react';
+import { Check, Edit, ChevronLeft, Expand, Shrink } from 'lucide-react';
 import { useCallback } from 'react';
 import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
 import { useGroupsState } from '@/hooks/websocket';
@@ -9,7 +9,11 @@ import { Button } from '@/ui/primitives/button';
 export const Navbar = () => {
   const navigate = useNavigate();
 
-  const pathname = useLocation().pathname;
+  const location = useLocation();
+  const pathname = location.pathname;
+  const isDashboardEditing =
+    (pathname === '/' || pathname === '/dashboard') &&
+    new URLSearchParams(location.search).get('edit') === '1';
   const groups = useGroupsState();
   const groupMatch = useMatch('/groups/:id');
 
@@ -102,8 +106,17 @@ export const Navbar = () => {
       {title === 'Home' && (
         <>
           <Button asChild variant="ghost" size="icon">
-            <Link to="/config/dashboard" aria-label="Edit dashboard">
-              <Edit />
+            <Link
+              to={
+                isDashboardEditing
+                  ? { pathname, search: '' }
+                  : { pathname, search: '?edit=1' }
+              }
+              aria-label={
+                isDashboardEditing ? 'Done editing dashboard' : 'Edit dashboard'
+              }
+            >
+              {isDashboardEditing ? <Check /> : <Edit />}
             </Link>
           </Button>
           <Button
