@@ -109,7 +109,7 @@ fn parse_events(ics: &str) -> Result<Value, String> {
         }
     }
 
-    events.sort_by(|a, b| a.start.cmp(&b.start));
+    events.sort_by_key(|event| event.start);
     events.truncate(10);
 
     let events: Vec<Value> = events

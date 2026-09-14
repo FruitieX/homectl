@@ -108,11 +108,9 @@ fn expand_action_source_context(
             group_keys,
             include_source_groups,
             ..
-        }) => {
-            if *include_source_groups {
-                merge_source_groups(group_keys, &source_groups);
-                *include_source_groups = false;
-            }
+        }) if *include_source_groups => {
+            merge_source_groups(group_keys, &source_groups);
+            *include_source_groups = false;
         }
         _ => {}
     }

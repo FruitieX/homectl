@@ -1444,10 +1444,10 @@ async fn update_sensor_catalog(
         .retain(|group| !group.id.is_empty() && !group.name.is_empty());
     catalog
         .sensors
-        .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        .sort_by_key(|sensor| sensor.name.to_lowercase());
     catalog
         .groups
-        .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        .sort_by_key(|group| group.name.to_lowercase());
 
     let setting = config_queries::WidgetSettingRow {
         key: SENSOR_CATALOG_SETTING_KEY.to_string(),
