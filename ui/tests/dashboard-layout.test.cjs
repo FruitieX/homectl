@@ -50,6 +50,10 @@ const homeCardSource = fs.readFileSync(
   path.join(__dirname, '../app/dashboard/HomeOverview.tsx'),
   'utf8',
 );
+const spotPriceCardSource = fs.readFileSync(
+  path.join(__dirname, '../app/dashboard/SpotPriceCard.tsx'),
+  'utf8',
+);
 
 test('keeps the weather container query free of display conflicts', () => {
   assert.match(weatherCardSource, /dashboard-weather-layout grid grid-cols-1/);
@@ -114,6 +118,24 @@ test('gives compact cards a summary-only fallback before content can clip', () =
   assert.match(trainCardSource, /dashboard-train-heading-value/);
   assert.match(sensorsCardSource, /dashboard-sensors-heading/);
   assert.match(homeCardSource, /dashboard-home-title/);
+});
+
+test('moves spot price statistics into the card when the chart is too short', () => {
+  assert.match(spotPriceCardSource, /dashboard-spot-card/);
+  assert.match(spotPriceCardSource, /dashboard-spot-compact-stats/);
+  assert.match(spotPriceCardSource, /formatPrice\(stats\?\.average\)/);
+  assert.match(
+    weatherStylesSource,
+    /dashboard-spot-card \.dashboard-widget-heading-compact-value[\s\S]*?display: none;/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /dashboard-spot-compact-stats[\s\S]*?grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /dashboard-spot-compact-stats[\s\S]*?display: none;/,
+  );
 });
 
 test('gives dense widgets a usable minimum width', () => {

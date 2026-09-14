@@ -98,7 +98,10 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard interactive={!chartInteracting} className="group col-span-4">
+      <WidgetCard
+        interactive={!chartInteracting}
+        className="dashboard-spot-card group col-span-4"
+      >
         <div className="relative flex h-full min-h-0 flex-1 w-full rounded-[inherit] text-left">
           <CardContent className="relative flex min-h-0 flex-1 w-full flex-col p-[var(--widget-padding,1rem)]">
             <Button
@@ -165,6 +168,33 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
                   />
                 )}
               </ResponsiveChart>
+              <div
+                className="dashboard-spot-compact-stats"
+                aria-label="Electricity price summary"
+              >
+                <div className="dashboard-spot-compact-stat">
+                  <div className="dashboard-spot-compact-stat-label">Now</div>
+                  <div className="dashboard-spot-compact-stat-value">
+                    {formatPrice(stats?.current?.value)}
+                  </div>
+                </div>
+                <div className="dashboard-spot-compact-stat">
+                  <div className="dashboard-spot-compact-stat-label">
+                    Average
+                  </div>
+                  <div className="dashboard-spot-compact-stat-value">
+                    {formatPrice(stats?.average)}
+                  </div>
+                </div>
+                <div className="dashboard-spot-compact-stat dashboard-spot-compact-stat-range">
+                  <div className="dashboard-spot-compact-stat-label">Range</div>
+                  <div className="dashboard-spot-compact-stat-value">
+                    {stats
+                      ? `${stats.low.toFixed(2)}–${stats.high.toFixed(2)} c/kWh`
+                      : '—'}
+                  </div>
+                </div>
+              </div>
             </div>
             {priceQuery.isError && (
               <p
