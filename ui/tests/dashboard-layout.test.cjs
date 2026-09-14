@@ -38,6 +38,18 @@ const weatherStylesSource = fs.readFileSync(
   path.join(__dirname, '../styles/globals.css'),
   'utf8',
 );
+const trainCardSource = fs.readFileSync(
+  path.join(__dirname, '../app/dashboard/TrainScheduleCard.tsx'),
+  'utf8',
+);
+const sensorsCardSource = fs.readFileSync(
+  path.join(__dirname, '../app/dashboard/SensorsCard.tsx'),
+  'utf8',
+);
+const homeCardSource = fs.readFileSync(
+  path.join(__dirname, '../app/dashboard/HomeOverview.tsx'),
+  'utf8',
+);
 
 test('keeps the weather container query free of display conflicts', () => {
   assert.match(weatherCardSource, /dashboard-weather-layout grid grid-cols-1/);
@@ -56,6 +68,25 @@ test('keeps the weather container query free of display conflicts', () => {
   assert.match(weatherStylesSource, /dashboard-weather-icon/);
   assert.match(weatherStylesSource, /dashboard-clock-display/);
   assert.match(weatherStylesSource, /dashboard-widget-heading-compact-value/);
+});
+
+test('gives compact cards a summary-only fallback before content can clip', () => {
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(max-height: 8rem\)/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /dashboard-weather-content,\n\s+\.dashboard-controls-content/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /\.dashboard-train-row:nth-child\(n \+ 2\)/,
+  );
+  assert.match(weatherStylesSource, /\.dashboard-link-content/);
+  assert.match(trainCardSource, /dashboard-train-heading-value/);
+  assert.match(sensorsCardSource, /dashboard-sensors-heading/);
+  assert.match(homeCardSource, /dashboard-home-title/);
 });
 
 test('gives dense widgets a usable minimum width', () => {

@@ -21,7 +21,7 @@ export function HomeOverview() {
   );
   return (
     <DashboardCard>
-      <CardHeader className="shrink-0 flex-row flex-wrap items-center justify-between gap-2">
+      <CardHeader className="dashboard-home-title shrink-0 flex-row flex-wrap items-center justify-between gap-2">
         <CardTitle>Home</CardTitle>
         <Button
           variant="outline"

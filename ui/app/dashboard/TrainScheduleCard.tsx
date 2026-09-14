@@ -134,6 +134,14 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
     maxMinutesAhead,
   );
   const error = query.isError ? 'Departures could not be refreshed.' : null;
+  const compactTrain = trains[0];
+  const compactDeparture = compactTrain
+    ? compactTrain.realtimeState === 'CANCELED'
+      ? 'Cancelled'
+      : remainingMinutes(compactTrain) === 0
+        ? 'Now'
+        : `${remainingMinutes(compactTrain)} min`
+    : null;
 
   useTimeout(
     () => setDetailsOpen(false),
@@ -195,7 +203,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
 
   return (
     <>
-      <WidgetCard className="col-span-4">
+      <WidgetCard className="dashboard-train-card col-span-4">
         <Button
           variant="ghost"
           className="group h-full w-full items-stretch rounded-[inherit] p-0 text-left hover:bg-muted/30"
@@ -205,10 +213,17 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
             <WidgetHeading
               icon={<TrainFront />}
               label="Next departures"
+              compactValue={
+                compactDeparture ? (
+                  <span className="dashboard-train-heading-value">
+                    {compactDeparture}
+                  </span>
+                ) : null
+              }
               detail
             />
             <div
-              className="mt-2 min-h-0 flex-1 overflow-hidden overscroll-contain"
+              className="dashboard-train-content mt-2 min-h-0 flex-1 overflow-hidden overscroll-contain"
               style={
                 scrollRows
                   ? { maxHeight: `${displayLimit * 5.25}rem` }
@@ -227,7 +242,7 @@ export const TrainScheduleCard = ({ widget }: { widget?: DashboardWidget }) => {
               </p>
             )}
             {trains.length === 0 ? (
-              <div className="flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground">
+              <div className="dashboard-train-empty flex min-h-24 items-center justify-center gap-2 text-sm text-muted-foreground">
                 <Clock3 className="size-4" />{' '}
                 {query.isPending
                   ? 'Loading departures…'

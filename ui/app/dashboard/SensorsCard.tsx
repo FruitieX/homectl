@@ -110,10 +110,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   };
   return (
     <>
-      <WidgetCard
-        interactive
-        className="group relative"
-      >
+      <WidgetCard interactive className="dashboard-sensors-card group relative">
         <Button
           variant="ghost"
           aria-label="Open all climate sensors"
@@ -121,7 +118,7 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
           className="absolute inset-0 z-0 h-auto w-auto rounded-[inherit] p-0 hover:bg-muted/30"
         />
         <div className="pointer-events-none relative z-[1] flex h-full min-h-0 flex-1 flex-col overflow-hidden p-[var(--widget-padding,1rem)]">
-          <div className="mb-3 shrink-0">
+          <div className="dashboard-sensors-heading mb-3 shrink-0">
             <WidgetHeading icon={<Activity />} label="Climate sensors" detail />
           </div>
           <div
