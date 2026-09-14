@@ -3,8 +3,12 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks';
 import typescriptEslintPlugin from '@typescript-eslint/eslint-plugin';
 import typescriptParser from '@typescript-eslint/parser';
 
-const reactHooksRecommendedRules =
-  reactHooksPlugin.configs['flat/recommended'][0]?.rules ?? {};
+// Keep the existing Hooks lint policy; the v7 compiler preset adds rules that
+// require a separate, deliberate migration of the existing UI code.
+const reactHooksRecommendedRules = {
+  'react-hooks/rules-of-hooks': 'error',
+  'react-hooks/exhaustive-deps': 'warn',
+};
 
 export default [
   {
