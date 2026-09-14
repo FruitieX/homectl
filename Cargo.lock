@@ -1758,7 +1758,7 @@ dependencies = [
  "macro-attr",
  "newtype_derive",
  "once_cell",
- "ordered-float 5.0.0",
+ "ordered-float 5.5.0",
  "palette",
  "percent-encoding",
  "pretty_env_logger",
@@ -2834,9 +2834,9 @@ dependencies = [
 
 [[package]]
 name = "ordered-float"
-version = "5.0.0"
+version = "5.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2c1f9f56e534ac6a9b8a4600bdf0f530fb393b5f393e7b4d03489c3cf0c3f01"
+checksum = "8c7c9e0d9b23589f26070720bac724174bfec1083e82f7854cdd0267518343c0"
 dependencies = [
  "num-traits",
  "rand 0.8.6",
@@ -5136,7 +5136,7 @@ version = "11.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4994acea2522cd2b3b85c1d9529a55991e3ad5e25cdcd3de9d505972c4379424"
 dependencies = [
- "ordered-float 5.0.0",
+ "ordered-float 5.5.0",
  "serde_json",
  "thiserror 2.0.17",
  "ts-rs-macros",
