@@ -2,7 +2,7 @@ import { useConfigWriteWarnings } from '@/hooks/configWriteStatus';
 import { useRuntimeStatus } from '@/hooks/useConfig';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
-import { motion, useReducedMotion } from 'framer-motion';
+import { motion, useReducedMotion } from 'motion/react';
 import { Link, useLocation } from 'react-router-dom';
 
 export default function ConfigLayout({
