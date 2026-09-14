@@ -169,6 +169,37 @@ function OptionCsvField({
   );
 }
 
+function SensorPrimaryField({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (value: string) => void;
+}) {
+  const sensors = useSensorData();
+  const selected = typeof value === 'string' ? value : '';
+
+  return (
+    <ConfigField
+      label="Header sensor"
+      description="Shown beside the title in compact cards. Leave empty to use the first shown sensor."
+    >
+      <select
+        className={selectClassName}
+        value={selected}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">First shown sensor</option>
+        {sensors.map((sensor) => (
+          <option key={sensor.device_id} value={sensor.device_id}>
+            {sensor.device_name}
+          </option>
+        ))}
+      </select>
+    </ConfigField>
+  );
+}
+
 function SensorVisibilityField({
   value,
   onChange,
@@ -887,6 +918,10 @@ function WidgetOptionFields({
         <SensorVisibilityField
           value={options.sensorIds}
           onChange={(value) => onChange('sensorIds', value)}
+        />
+        <SensorPrimaryField
+          value={options.primarySensorId}
+          onChange={(value) => onChange('primarySensorId', value)}
         />
         <SensorGroupsField />
         <OptionCheckboxField

@@ -174,6 +174,7 @@ export const widgetRegistry: Record<
     description: 'Displays sensor data charts',
     defaultOptions: {
       sensorIds: [],
+      primarySensorId: '',
       indoorSensorIds: [],
       prioritySensorIds: [],
       influxUrl: '',

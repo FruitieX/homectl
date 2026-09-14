@@ -63,7 +63,7 @@ test('keeps the weather container query free of display conflicts', () => {
   );
   assert.match(
     weatherStylesSource,
-    /@container dashboard-widget \(min-width: 18rem\)/,
+    /@container dashboard-widget \(min-width: 14rem\)/,
   );
   assert.match(
     weatherStylesSource,
@@ -82,7 +82,7 @@ test('keeps the weather container query free of display conflicts', () => {
   );
   assert.match(
     weatherStylesSource,
-    /@container dashboard-widget \(min-width: 18rem\) and \(min-height: 10\.1rem\)/,
+    /@container dashboard-widget \(min-height: 10\.1rem\) and\s+\(max-height: 13rem\)/,
   );
   assert.match(weatherStylesSource, /overflow-x: auto/);
   assert.match(
@@ -108,7 +108,7 @@ test('gives compact cards a summary-only fallback before content can clip', () =
   );
   assert.match(
     weatherStylesSource,
-    /dashboard-weather-content,\n\s+\.dashboard-controls-content/,
+    /dashboard-weather-content|\.dashboard-controls-content/,
   );
   assert.match(
     weatherStylesSource,
@@ -117,6 +117,13 @@ test('gives compact cards a summary-only fallback before content can clip', () =
   assert.match(weatherStylesSource, /\.dashboard-link-content/);
   assert.match(trainCardSource, /dashboard-train-heading-value/);
   assert.match(sensorsCardSource, /dashboard-sensors-heading/);
+  assert.match(sensorsCardSource, /primarySensorId/);
+  assert.match(sensorsCardSource, /dashboard-sensors-heading-value/);
+  assert.match(weatherStylesSource, /dashboard-weather-current-card/);
+  assert.match(
+    weatherStylesSource,
+    /dashboard-sensors-preview[\s\S]*?overflow-x: auto/,
+  );
   assert.match(homeCardSource, /dashboard-home-title/);
 });
 

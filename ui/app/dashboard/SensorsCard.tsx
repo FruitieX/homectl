@@ -84,6 +84,14 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
   const preview = sensorIds.length
     ? sensors.filter((sensor) => sensorIds.includes(sensor.device_id))
     : sensors;
+  const primarySensorId = getDashboardWidgetOptionString(
+    widget,
+    'primarySensorId',
+    '',
+  );
+  const primarySensor =
+    preview.find((sensor) => sensor.device_id === primarySensorId) ??
+    preview[0];
   const active = sensors.find((s) => s.device_id === activeId);
   const chosen = active
     ? [active]
@@ -119,7 +127,21 @@ export const SensorsCard = ({ widget }: { widget?: DashboardWidget }) => {
         />
         <div className="pointer-events-none relative z-[1] flex h-full min-h-0 flex-1 flex-col overflow-hidden p-[var(--widget-padding,1rem)]">
           <div className="dashboard-sensors-heading mb-3 shrink-0">
-            <WidgetHeading icon={<Activity />} label="Climate sensors" detail />
+            <WidgetHeading
+              icon={<Activity />}
+              label="Climate sensors"
+              compactValue={
+                primarySensor ? (
+                  <span className="dashboard-sensors-heading-value">
+                    {primarySensor.device_name}{' '}
+                    {primarySensor.latest_temp === undefined
+                      ? '—'
+                      : `${primarySensor.latest_temp.toFixed(1)}°`}
+                  </span>
+                ) : null
+              }
+              detail
+            />
           </div>
           <div
             className={cn(

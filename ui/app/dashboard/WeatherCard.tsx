@@ -412,11 +412,14 @@ export const WeatherCard = ({ widget }: { widget?: DashboardWidget }) => {
               )}
             >
               <div className="dashboard-weather-current min-w-0">
-                {renderWeatherDetail(
-                  currentAndFutureSeries[0],
-                  true,
-                  currentTemperature,
-                )}
+                <div className="dashboard-weather-current-card">
+                  <span className="dashboard-weather-current-label">Now</span>
+                  {renderWeatherDetail(
+                    currentAndFutureSeries[0],
+                    true,
+                    currentTemperature,
+                  )}
+                </div>
               </div>
               {showWidgetForecast && dailyData.length > 0 && (
                 <div className="dashboard-weather-forecast grid grid-cols-1 gap-1.5">
