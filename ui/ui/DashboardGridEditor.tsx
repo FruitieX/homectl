@@ -497,6 +497,7 @@ export function DashboardGridEditor({
 
     event.preventDefault();
     event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
     const metrics = getGridMetrics(gridRef.current, previewColumns);
 
     setDropIndicator(null);
@@ -517,15 +518,8 @@ export function DashboardGridEditor({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-3xl border border-border bg-card/80 p-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <div className="text-sm font-medium">Visual dashboard editor</div>
-          <div className="text-xs text-muted-foreground">
-            Drag a card to reorder it and pull its corner to resize. These are
-            the live widget cards, so compact layouts match the dashboard.
-          </div>
-        </div>
-        {variant === 'config' ? (
+      {variant === 'config' ? (
+        <div className="flex justify-end">
           <div className="flex flex-wrap gap-2">
             {PREVIEW_COLUMN_OPTIONS.map((columns) => (
               <Button
@@ -541,8 +535,8 @@ export function DashboardGridEditor({
               </Button>
             ))}
           </div>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="rounded-3xl border border-dashed border-border bg-muted/20 p-3">
         {variant === 'config' ? (
@@ -620,7 +614,7 @@ export function DashboardGridEditor({
                 </div>
                 <button
                   type="button"
-                  className="pointer-events-auto absolute bottom-2 right-2 z-30 size-8 cursor-nwse-resize rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-sm transition hover:bg-primary/20"
+                  className="pointer-events-auto absolute bottom-2 right-2 z-30 size-10 touch-none select-none cursor-nwse-resize rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-sm transition hover:bg-primary/20"
                   aria-label={`Resize ${widget.title}`}
                   onPointerDown={(event) => startResize(event, widget)}
                 >
