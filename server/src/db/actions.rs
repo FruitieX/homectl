@@ -260,6 +260,14 @@ pub async fn db_store_scene_overrides(
     overrides: &SceneDevicesConfig,
 ) -> Result<()> {
     let db = get_db_connection()?;
+    db_upsert_scene_overrides_on(db, scene_id, overrides).await
+}
+
+pub(crate) async fn db_upsert_scene_overrides_on<C: ConnectionTrait>(
+    db: &C,
+    scene_id: &SceneId,
+    overrides: &SceneDevicesConfig,
+) -> Result<()> {
     let overrides = serde_json::to_string(overrides)?;
 
     db.execute(statement(

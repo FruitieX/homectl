@@ -10,19 +10,20 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use crate::core::state::StateHandle;
+use crate::core::snapshot::SnapshotChanges;
+use crate::core::state::{PendingWsUpdate, StateHandle};
 use crate::core::{
     integrations::integration_config_schemas, logs::recent_logs,
     routine_history::recent_routine_history,
 };
 use crate::db::{
     self,
-    actions::{db_delete_device, db_update_device},
+    actions::db_update_device,
     config_queries::{
         self, ConfigExport, CoreConfigRow, DashboardLayoutRow, DashboardWidgetRow,
-        DeviceDisplayNameRow, DeviceSensorConfigRow, FloorplanExportRow, FloorplanMetadataRow,
-        FloorplanRow, GroupDeviceRow, GroupPositionRow, GroupRow, IntegrationRow, RoutineRow,
-        SceneRow,
+        DeviceConfigRewritePersistence, DeviceDisplayNameRow, DeviceSensorConfigRow,
+        FloorplanExportRow, FloorplanMetadataRow, FloorplanRow, GroupDeviceRow, GroupPositionRow,
+        GroupRow, IntegrationRow, RoutineRow, SceneRow,
     },
 };
 use crate::types::{
@@ -34,7 +35,7 @@ use crate::types::{
     rule::{AnyRule, Rule, Rules},
     scene::{
         ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor,
-        RolloutStyle, SceneDeviceConfig,
+        RolloutStyle, SceneDeviceConfig, SceneDevicesConfig, SceneOverridesConfig,
     },
 };
 use bytes::Buf;
@@ -401,10 +402,19 @@ struct DeviceConfigTarget {
 
 #[derive(Default)]
 struct DeviceConfigRewriteResult {
+    changed_integrations: Vec<IntegrationRow>,
     changed_groups: Vec<GroupRow>,
     changed_scenes: Vec<SceneRow>,
     changed_routines: Vec<RoutineRow>,
+    changed_scene_overrides: Vec<(String, SceneDevicesConfig)>,
     changed_floorplans: Vec<ChangedFloorplan>,
+    changed_dashboard_widgets: Vec<DashboardWidgetRow>,
+    changed_calibration_profiles: Vec<crate::core::color_calibration::ColorCalibrationProfile>,
+    moved_display_override: Option<DeviceDisplayNameRow>,
+    moved_sensor_config: Option<DeviceSensorConfigRow>,
+    moved_color_calibration: Option<crate::core::color_calibration::DeviceColorCalibration>,
+    moved_calibration_assignment:
+        Option<crate::core::color_calibration::ColorCalibrationAssignment>,
     display_override_changed: bool,
     color_calibration_changed: bool,
     sensor_config_changed: bool,
@@ -426,10 +436,15 @@ struct ReplaceDeviceRequest {
 struct DeviceConfigMutationResponse {
     deleted_device_key: String,
     replacement_device_key: Option<String>,
+    updated_integrations: usize,
     updated_groups: usize,
     updated_scenes: usize,
     updated_routines: usize,
+    updated_scene_overrides: usize,
+    updated_dashboard_widgets: usize,
+    updated_calibration_profiles: usize,
     display_override_changed: bool,
+    color_calibration_changed: bool,
     sensor_config_changed: bool,
     position_changed: bool,
 }
@@ -760,6 +775,119 @@ fn rewrite_scene_config_value(
     }
 }
 
+/// Rewrite exact device-key values in otherwise schemaless configuration.
+///
+/// Dashboard widget configuration is intentionally extensible, so it cannot
+/// be decoded into a Rust type here. Exact string values are safe to migrate;
+/// free-form text is left untouched and remains the responsibility of the
+/// widget or integration that owns it.
+fn rewrite_json_device_references(
+    value: &mut serde_json::Value,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> bool {
+    match value {
+        serde_json::Value::String(existing) if existing == &source.device_key => {
+            if let Some(replacement) = replacement {
+                *existing = replacement.device_key.clone();
+            } else {
+                *value = serde_json::Value::Null;
+            }
+            true
+        }
+        serde_json::Value::Array(values) => {
+            let mut changed = false;
+            let mut next_values = Vec::with_capacity(values.len());
+            let mut seen_device_keys = HashSet::new();
+
+            for mut nested_value in std::mem::take(values) {
+                if let serde_json::Value::String(existing) = &nested_value {
+                    if existing == &source.device_key {
+                        changed = true;
+                        if let Some(replacement) = replacement {
+                            if seen_device_keys.insert(replacement.device_key.clone()) {
+                                next_values.push(serde_json::Value::String(
+                                    replacement.device_key.clone(),
+                                ));
+                            }
+                        }
+                        continue;
+                    }
+
+                    if replacement.is_some_and(|replacement| existing == &replacement.device_key)
+                        && !seen_device_keys.insert(existing.clone())
+                    {
+                        changed = true;
+                        continue;
+                    }
+                    if replacement.is_some_and(|replacement| existing == &replacement.device_key) {
+                        seen_device_keys.insert(existing.clone());
+                    }
+
+                    next_values.push(nested_value);
+                    continue;
+                }
+
+                if rewrite_json_device_references(&mut nested_value, source, replacement) {
+                    changed = true;
+                }
+                next_values.push(nested_value);
+            }
+
+            *values = next_values;
+            changed
+        }
+        serde_json::Value::Object(map) => {
+            let mut changed = false;
+            let mut next_map = serde_json::Map::with_capacity(map.len());
+
+            for (key, mut nested_value) in std::mem::take(map) {
+                let next_key = if key == source.device_key {
+                    changed = true;
+                    replacement.map(|replacement| replacement.device_key.clone())
+                } else {
+                    Some(key)
+                };
+
+                if rewrite_json_device_references(&mut nested_value, source, replacement) {
+                    changed = true;
+                }
+
+                let Some(next_key) = next_key else {
+                    continue;
+                };
+
+                if next_map.contains_key(&next_key) {
+                    changed = true;
+                    continue;
+                }
+
+                next_map.insert(next_key, nested_value);
+            }
+
+            *map = next_map;
+            changed
+        }
+        _ => false,
+    }
+}
+
+fn rewrite_embedded_device_state_source(
+    device: &mut Device,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> RewriteStatus {
+    let DeviceData::Controllable(data) = &mut device.data else {
+        return RewriteStatus::Unchanged;
+    };
+
+    let Some(state_source) = data.state_source.as_mut() else {
+        return RewriteStatus::Unchanged;
+    };
+
+    rewrite_device_key_option(&mut state_source.linked_device_key, source, replacement)
+}
+
 fn rewrite_rule(
     rule: &mut Rule,
     source: &DeviceConfigTarget,
@@ -769,6 +897,7 @@ fn rewrite_rule(
         Rule::Sensor(sensor_rule) => {
             rewrite_device_ref(&mut sensor_rule.device_ref, source, replacement)
         }
+        Rule::Raw(raw_rule) => rewrite_device_ref(&mut raw_rule.device_ref, source, replacement),
         Rule::Device(device_rule) => {
             rewrite_device_ref(&mut device_rule.device_ref, source, replacement)
         }
@@ -814,7 +943,7 @@ fn rewrite_rule(
                 RewriteStatus::Changed
             }
         }
-        Rule::Raw(_) | Rule::Group(_) | Rule::EvalExpr(_) => RewriteStatus::Unchanged,
+        Rule::Group(_) | Rule::EvalExpr(_) => RewriteStatus::Unchanged,
     }
 }
 
@@ -846,16 +975,36 @@ fn rewrite_action(
             device.integration_id = replacement_device.integration_id.clone();
             device.id = replacement_device.id.clone();
             device.name = replacement_device.name.clone();
+            let _ = rewrite_embedded_device_state_source(device, source, replacement);
             RewriteStatus::Changed
         }
         Action::ToggleDeviceOverride { device_keys, .. } => {
             rewrite_required_device_keys(device_keys, source, replacement)
         }
-        Action::Custom(_)
-        | Action::ForceTriggerRoutine(_)
-        | Action::RandomizeColor(_)
-        | Action::Ui(_)
-        | Action::EvalExpr(_) => RewriteStatus::Unchanged,
+        Action::RandomizeColor(descriptor) => {
+            rewrite_required_device_keys(&mut descriptor.device_keys, source, replacement)
+        }
+        Action::Custom(descriptor) => {
+            let payload = descriptor.payload.to_string();
+            let Some(replacement) = replacement else {
+                return if payload.contains(&source.device_key) {
+                    RewriteStatus::Remove
+                } else {
+                    RewriteStatus::Unchanged
+                };
+            };
+
+            let next_payload = payload.replace(&source.device_key, &replacement.device_key);
+            if next_payload == payload {
+                RewriteStatus::Unchanged
+            } else {
+                descriptor.payload = next_payload.into();
+                RewriteStatus::Changed
+            }
+        }
+        Action::ForceTriggerRoutine(_) | Action::Ui(_) | Action::EvalExpr(_) => {
+            RewriteStatus::Unchanged
+        }
     }
 }
 
@@ -959,6 +1108,52 @@ fn rewrite_scene_device_refs(
     changed
 }
 
+fn rewrite_scene_override_refs(
+    overrides: &mut SceneOverridesConfig,
+    source: &DeviceConfigTarget,
+    replacement: Option<&DeviceConfigTarget>,
+) -> Vec<(String, SceneDevicesConfig)> {
+    let mut changed_overrides = Vec::new();
+
+    for (scene_id, scene_overrides) in overrides.iter_mut() {
+        let mut changed = false;
+        let mut next_overrides = HashMap::with_capacity(scene_overrides.len());
+
+        for (device_key, mut config_value) in std::mem::take(scene_overrides) {
+            let next_device_key = if device_key.to_string() == source.device_key {
+                changed = true;
+                replacement.map(DeviceConfigTarget::to_device_key)
+            } else {
+                Some(device_key)
+            };
+
+            match rewrite_scene_device_config(&mut config_value, source, replacement) {
+                RewriteStatus::Changed => changed = true,
+                RewriteStatus::Remove => {
+                    changed = true;
+                    continue;
+                }
+                RewriteStatus::Unchanged => {}
+            }
+
+            let Some(next_device_key) = next_device_key else {
+                continue;
+            };
+
+            next_overrides
+                .entry(next_device_key)
+                .or_insert(config_value);
+        }
+
+        *scene_overrides = next_overrides;
+        if changed {
+            changed_overrides.push((scene_id.to_string(), scene_overrides.clone()));
+        }
+    }
+
+    changed_overrides
+}
+
 fn rewrite_routine_device_refs(
     routine: &mut RoutineRow,
     source: &DeviceConfigTarget,
@@ -1024,17 +1219,101 @@ fn rewrite_device_config_references(
     replacement_device: Option<&Device>,
 ) -> DeviceConfigRewriteResult {
     let mut result = DeviceConfigRewriteResult::default();
-    // Calibration belongs to this physical lamp, never its replacement.
-    let previous_calibrations =
-        config.device_color_calibrations.len() + config.color_calibration_assignments.len();
-    config
+
+    // Retire the source at its integration boundary as well as removing it
+    // from the runtime device map. Otherwise a discovery event from a still
+    // enabled integration could immediately recreate the deleted device.
+    if let Some(integration) = config
+        .integrations
+        .iter_mut()
+        .find(|integration| integration.id == source.integration_id)
+    {
+        if let Some(config_object) = integration.config.as_object_mut() {
+            let disabled_device_ids = config_object
+                .entry("disabled_device_ids")
+                .or_insert_with(|| serde_json::Value::Array(Vec::new()));
+            let already_disabled = disabled_device_ids
+                .as_array()
+                .is_some_and(|ids| ids.iter().any(|id| id.as_str() == Some(&source.device_id)));
+            if !already_disabled {
+                if let Some(disabled_device_ids) = disabled_device_ids.as_array_mut() {
+                    disabled_device_ids.push(serde_json::Value::String(source.device_id.clone()));
+                } else {
+                    *disabled_device_ids =
+                        serde_json::Value::Array(vec![serde_json::Value::String(
+                            source.device_id.clone(),
+                        )]);
+                }
+                result.changed_integrations.push(integration.clone());
+            }
+        }
+    }
+
+    // A profile's reference device is a logical device reference, unlike the
+    // calibration points themselves. Keep the profile and update its source.
+    for profile in &mut config.color_calibration_profiles {
+        let Some(reference_device_key) = profile.reference_device_key.as_mut() else {
+            continue;
+        };
+        if reference_device_key != &source.device_key {
+            continue;
+        }
+
+        *reference_device_key = replacement
+            .map(|replacement| replacement.device_key.clone())
+            .unwrap_or_default();
+        if replacement.is_none() {
+            profile.reference_device_key = None;
+        }
+        result.changed_calibration_profiles.push(profile.clone());
+    }
+
+    // Per-device calibration belongs to the logical device being migrated.
+    // Move the source calibration when replacing, with an existing source
+    // assignment taking precedence over legacy point data. The destination's
+    // calibration is replaced to make the result deterministic.
+    let source_assignment = config
         .color_calibration_assignments
-        .retain(|row| row.device_key != source.device_key);
-    config
-        .device_color_calibrations
-        .retain(|row| row.device_key != source.device_key);
-    result.color_calibration_changed = previous_calibrations
-        != config.device_color_calibrations.len() + config.color_calibration_assignments.len();
+        .iter()
+        .find(|row| row.device_key == source.device_key)
+        .cloned();
+    let source_calibration = if source_assignment.is_none() {
+        config
+            .device_color_calibrations
+            .iter()
+            .find(|row| row.device_key == source.device_key)
+            .cloned()
+    } else {
+        None
+    };
+    result.color_calibration_changed = source_assignment.is_some()
+        || config
+            .device_color_calibrations
+            .iter()
+            .any(|row| row.device_key == source.device_key);
+
+    if result.color_calibration_changed {
+        config.color_calibration_assignments.retain(|row| {
+            row.device_key != source.device_key
+                && replacement.is_none_or(|replacement| row.device_key != replacement.device_key)
+        });
+        config.device_color_calibrations.retain(|row| {
+            row.device_key != source.device_key
+                && replacement.is_none_or(|replacement| row.device_key != replacement.device_key)
+        });
+
+        if let Some(replacement) = replacement {
+            if let Some(mut assignment) = source_assignment {
+                assignment.device_key = replacement.device_key.clone();
+                result.moved_calibration_assignment = Some(assignment.clone());
+                config.color_calibration_assignments.push(assignment);
+            } else if let Some(mut calibration) = source_calibration {
+                calibration.device_key = replacement.device_key.clone();
+                result.moved_color_calibration = Some(calibration.clone());
+                config.device_color_calibrations.push(calibration);
+            }
+        }
+    }
 
     for group in &mut config.groups {
         if rewrite_group_device_refs(group, source, replacement) {
@@ -1069,36 +1348,48 @@ fn rewrite_device_config_references(
         }
     }
 
-    if let Some(existing) = config
-        .device_display_overrides
-        .iter_mut()
-        .find(|row| row.device_key == source.device_key)
-    {
-        result.display_override_changed = true;
-        if let Some(replacement) = replacement {
-            existing.device_key = replacement.device_key.clone();
+    for widget in &mut config.dashboard_widgets {
+        if rewrite_json_device_references(&mut widget.config, source, replacement) {
+            result.changed_dashboard_widgets.push(widget.clone());
         }
     }
-    if replacement.is_none() {
-        config
-            .device_display_overrides
-            .retain(|row| row.device_key != source.device_key);
+
+    if let Some(existing) = config
+        .device_display_overrides
+        .iter()
+        .find(|row| row.device_key == source.device_key)
+        .cloned()
+    {
+        result.display_override_changed = true;
+        config.device_display_overrides.retain(|row| {
+            row.device_key != source.device_key
+                && replacement.is_none_or(|replacement| row.device_key != replacement.device_key)
+        });
+        if let Some(replacement) = replacement {
+            let mut moved = existing;
+            moved.device_key = replacement.device_key.clone();
+            result.moved_display_override = Some(moved.clone());
+            config.device_display_overrides.push(moved);
+        }
     }
 
     if let Some(existing) = config
         .device_sensor_configs
-        .iter_mut()
+        .iter()
         .find(|row| row.device_ref == source.device_key)
+        .cloned()
     {
         result.sensor_config_changed = true;
+        config.device_sensor_configs.retain(|row| {
+            row.device_ref != source.device_key
+                && replacement.is_none_or(|replacement| row.device_ref != replacement.device_key)
+        });
         if let Some(replacement) = replacement {
-            existing.device_ref = replacement.device_key.clone();
+            let mut moved = existing;
+            moved.device_ref = replacement.device_key.clone();
+            result.moved_sensor_config = Some(moved.clone());
+            config.device_sensor_configs.push(moved);
         }
-    }
-    if replacement.is_none() {
-        config
-            .device_sensor_configs
-            .retain(|row| row.device_ref != source.device_key);
     }
 
     config
@@ -1114,73 +1405,35 @@ fn rewrite_device_config_references(
 async fn persist_device_config_rewrite(
     rewrite: &DeviceConfigRewriteResult,
     source: &DeviceConfigTarget,
-) {
-    for group in &rewrite.changed_groups {
-        if let Err(error) = config_queries::db_upsert_group(group).await {
-            warn!("Failed to persist updated group '{}': {error}", group.id);
-        }
-    }
+    replacement: Option<&DeviceConfigTarget>,
+) -> color_eyre::Result<()> {
+    let changed_floorplans = rewrite
+        .changed_floorplans
+        .iter()
+        .map(|changed| (changed.sort_order, changed.floorplan.clone()))
+        .collect::<Vec<_>>();
 
-    for scene in &rewrite.changed_scenes {
-        if let Err(error) = config_queries::db_upsert_config_scene(scene).await {
-            warn!("Failed to persist updated scene '{}': {error}", scene.id);
-        }
-    }
-
-    for routine in &rewrite.changed_routines {
-        if let Err(error) = config_queries::db_upsert_routine(routine).await {
-            warn!(
-                "Failed to persist updated routine '{}': {error}",
-                routine.id
-            );
-        }
-    }
-
-    for changed_floorplan in &rewrite.changed_floorplans {
-        if let Err(error) = config_queries::db_upsert_floorplan_export(
-            &changed_floorplan.floorplan,
-            changed_floorplan.sort_order,
-        )
-        .await
-        {
-            warn!(
-                "Failed to persist updated floorplan '{}': {error}",
-                changed_floorplan.floorplan.id
-            );
-        }
-    }
-
-    if rewrite.color_calibration_changed {
-        if let Err(error) =
-            config_queries::db_delete_device_color_calibration(&source.device_key).await
-        {
-            warn!(
-                "Failed to delete source color calibration for '{}': {error}",
-                source.device_key
-            );
-        }
-    }
-
-    if rewrite.display_override_changed {
-        if let Err(error) =
-            config_queries::db_delete_device_display_override(&source.device_key).await
-        {
-            warn!(
-                "Failed to delete source display override for '{}': {error}",
-                source.device_key
-            );
-        }
-    }
-
-    if rewrite.sensor_config_changed {
-        if let Err(error) = config_queries::db_delete_device_sensor_config(&source.device_key).await
-        {
-            warn!(
-                "Failed to delete source sensor config for '{}': {error}",
-                source.device_key
-            );
-        }
-    }
+    config_queries::db_persist_device_config_rewrite(DeviceConfigRewritePersistence {
+        source_integration_id: &source.integration_id,
+        source_device_id: &source.device_id,
+        replacement_device_key: replacement.map(|replacement| replacement.device_key.as_str()),
+        changed_groups: &rewrite.changed_groups,
+        changed_scenes: &rewrite.changed_scenes,
+        changed_routines: &rewrite.changed_routines,
+        changed_scene_overrides: &rewrite.changed_scene_overrides,
+        changed_floorplans: &changed_floorplans,
+        changed_dashboard_widgets: &rewrite.changed_dashboard_widgets,
+        changed_calibration_profiles: &rewrite.changed_calibration_profiles,
+        changed_integrations: &rewrite.changed_integrations,
+        display_override_changed: rewrite.display_override_changed,
+        moved_display_override: rewrite.moved_display_override.as_ref(),
+        color_calibration_changed: rewrite.color_calibration_changed,
+        moved_color_calibration: rewrite.moved_color_calibration.as_ref(),
+        moved_calibration_assignment: rewrite.moved_calibration_assignment.as_ref(),
+        sensor_config_changed: rewrite.sensor_config_changed,
+        moved_sensor_config: rewrite.moved_sensor_config.as_ref(),
+    })
+    .await
 }
 
 fn rewrite_force_trigger_routine_references(
@@ -1858,6 +2111,11 @@ async fn replace_device_config(
     request: ReplaceDeviceRequest,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let source_key = decode_path_key(device_key);
     let replacement_key = request.replacement_device_key.trim().to_string();
 
@@ -1882,7 +2140,7 @@ async fn replace_device_config(
     };
 
     enum ReplaceOutcome {
-        Ok(DeviceConfigRewriteResult, DeviceConfigMutationResponse),
+        Ok(Box<DeviceConfigRewriteResult>, DeviceConfigMutationResponse),
         ReplacementMissing,
         SourceMissing,
     }
@@ -1914,17 +2172,28 @@ async fn replace_device_config(
                 }
 
                 let mut runtime_config = state.get_runtime_config().clone();
-                let rewrite = rewrite_device_config_references(
+                let mut rewrite = rewrite_device_config_references(
                     &mut runtime_config,
                     &source_for_state,
                     Some(&replacement_for_state),
                     Some(&replacement_device),
                 );
+                let mut scene_overrides = state.scenes.get_scene_overrides();
+                rewrite.changed_scene_overrides = rewrite_scene_override_refs(
+                    &mut scene_overrides,
+                    &source_for_state,
+                    Some(&replacement_for_state),
+                );
 
                 state.runtime_config = runtime_config;
+                state.scenes.replace_scene_overrides(scene_overrides);
                 state
                     .devices
                     .remove_device(&source_for_state.to_device_key());
+                state.schedule_ws_broadcast(PendingWsUpdate::device_removals(
+                    vec![source_for_state.to_device_key()],
+                    SnapshotChanges::devices(),
+                ));
                 state.apply_runtime_groups();
                 state.apply_runtime_scenes();
                 state.apply_runtime_routines();
@@ -1932,15 +2201,20 @@ async fn replace_device_config(
                 let response = DeviceConfigMutationResponse {
                     deleted_device_key: source_for_state.device_key.clone(),
                     replacement_device_key: Some(replacement_for_state.device_key.clone()),
+                    updated_integrations: rewrite.changed_integrations.len(),
                     updated_groups: rewrite.changed_groups.len(),
                     updated_scenes: rewrite.changed_scenes.len(),
                     updated_routines: rewrite.changed_routines.len(),
+                    updated_scene_overrides: rewrite.changed_scene_overrides.len(),
+                    updated_dashboard_widgets: rewrite.changed_dashboard_widgets.len(),
+                    updated_calibration_profiles: rewrite.changed_calibration_profiles.len(),
                     display_override_changed: rewrite.display_override_changed,
+                    color_calibration_changed: rewrite.color_calibration_changed,
                     sensor_config_changed: rewrite.sensor_config_changed,
                     position_changed: rewrite.position_changed,
                 };
 
-                ReplaceOutcome::Ok(rewrite, response)
+                ReplaceOutcome::Ok(Box::new(rewrite), response)
             })
         })
         .await;
@@ -1962,21 +2236,26 @@ async fn replace_device_config(
         }
     };
 
-    persist_device_config_rewrite(&rewrite, &source).await;
-    if let Err(error) = db_delete_device(&source.to_device_key()).await {
-        warn!(
-            "Failed to delete source device '{}' from database: {error}",
-            source.device_key
-        );
-    }
+    let database_available = db::is_db_connected();
+    let persistence = persist_device_config_rewrite(&rewrite, &source, Some(&replacement)).await;
 
-    Ok(ApiResponse::success(response))
+    Ok(config_write_response(
+        response,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn delete_config_device(
     device_key: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
     let source_key = decode_path_key(device_key);
     let Some(source) = DeviceConfigTarget::parse(&source_key) else {
         return Ok(error_response(
@@ -1986,7 +2265,7 @@ async fn delete_config_device(
     };
 
     enum DeleteOutcome {
-        Ok(DeviceConfigRewriteResult, DeviceConfigMutationResponse),
+        Ok(Box<DeviceConfigRewriteResult>, DeviceConfigMutationResponse),
         NotFound,
     }
 
@@ -2005,17 +2284,25 @@ async fn delete_config_device(
                 }
 
                 let mut runtime_config = state.get_runtime_config().clone();
-                let rewrite = rewrite_device_config_references(
+                let mut rewrite = rewrite_device_config_references(
                     &mut runtime_config,
                     &source_for_state,
                     None,
                     None,
                 );
+                let mut scene_overrides = state.scenes.get_scene_overrides();
+                rewrite.changed_scene_overrides =
+                    rewrite_scene_override_refs(&mut scene_overrides, &source_for_state, None);
 
                 state.runtime_config = runtime_config;
+                state.scenes.replace_scene_overrides(scene_overrides);
                 state
                     .devices
                     .remove_device(&source_for_state.to_device_key());
+                state.schedule_ws_broadcast(PendingWsUpdate::device_removals(
+                    vec![source_for_state.to_device_key()],
+                    SnapshotChanges::devices(),
+                ));
                 state.apply_runtime_groups();
                 state.apply_runtime_scenes();
                 state.apply_runtime_routines();
@@ -2023,15 +2310,20 @@ async fn delete_config_device(
                 let response = DeviceConfigMutationResponse {
                     deleted_device_key: source_for_state.device_key.clone(),
                     replacement_device_key: None,
+                    updated_integrations: rewrite.changed_integrations.len(),
                     updated_groups: rewrite.changed_groups.len(),
                     updated_scenes: rewrite.changed_scenes.len(),
                     updated_routines: rewrite.changed_routines.len(),
+                    updated_scene_overrides: rewrite.changed_scene_overrides.len(),
+                    updated_dashboard_widgets: rewrite.changed_dashboard_widgets.len(),
+                    updated_calibration_profiles: rewrite.changed_calibration_profiles.len(),
                     display_override_changed: rewrite.display_override_changed,
+                    color_calibration_changed: rewrite.color_calibration_changed,
                     sensor_config_changed: rewrite.sensor_config_changed,
                     position_changed: rewrite.position_changed,
                 };
 
-                DeleteOutcome::Ok(rewrite, response)
+                DeleteOutcome::Ok(Box::new(rewrite), response)
             })
         })
         .await;
@@ -2047,15 +2339,15 @@ async fn delete_config_device(
         }
     };
 
-    persist_device_config_rewrite(&rewrite, &source).await;
-    if let Err(error) = db_delete_device(&source.to_device_key()).await {
-        warn!(
-            "Failed to delete device '{}' from database: {error}",
-            source.device_key
-        );
-    }
+    let database_available = db::is_db_connected();
+    let persistence = persist_device_config_rewrite(&rewrite, &source, None).await;
 
-    Ok(ApiResponse::success(response))
+    Ok(config_write_response(
+        response,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
 }
 
 async fn list_device_sensor_configs(

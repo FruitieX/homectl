@@ -513,6 +513,23 @@ export function useDashboardWidgets(layoutId: string | null) {
     fetchWidgets();
   }, [fetchWidgets]);
 
+  useEffect(() => {
+    const handleDeviceConfigChanged = () => {
+      void fetchWidgets();
+    };
+
+    window.addEventListener(
+      'homectl:device-config-changed',
+      handleDeviceConfigChanged,
+    );
+    return () => {
+      window.removeEventListener(
+        'homectl:device-config-changed',
+        handleDeviceConfigChanged,
+      );
+    };
+  }, [fetchWidgets]);
+
   const addWidget = useCallback(
     async (widget: Partial<DashboardWidget>) => {
       if (!layoutId) {

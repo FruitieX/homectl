@@ -128,10 +128,15 @@ export interface RuntimeStatus {
 export interface DeviceConfigMutationResult {
   deleted_device_key: string;
   replacement_device_key?: string | null;
+  updated_integrations: number;
   updated_groups: number;
   updated_scenes: number;
   updated_routines: number;
+  updated_scene_overrides: number;
+  updated_dashboard_widgets: number;
+  updated_calibration_profiles: number;
   display_override_changed: boolean;
+  color_calibration_changed: boolean;
   sensor_config_changed: boolean;
   position_changed: boolean;
 }
@@ -390,6 +395,8 @@ export function useAssignCalibrationProfile() {
 }
 
 export function useConfigDevices() {
+  const queryClient = useQueryClient();
+  const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
   const baseUrl = `${apiEndpoint}/api/v1/config/devices`;
 
@@ -409,9 +416,12 @@ export function useConfigDevices() {
         response,
         'Failed to replace device references',
       );
+      recordWrite(`devices/${deviceKey}`, result.write);
+      await queryClient.invalidateQueries({ queryKey: ['config'] });
+      window.dispatchEvent(new CustomEvent('homectl:device-config-changed'));
       return result.data;
     },
-    [baseUrl],
+    [baseUrl, queryClient, recordWrite],
   );
 
   const remove = useCallback(
@@ -426,9 +436,12 @@ export function useConfigDevices() {
         response,
         'Failed to delete device',
       );
+      recordWrite(`devices/${deviceKey}`, result.write);
+      await queryClient.invalidateQueries({ queryKey: ['config'] });
+      window.dispatchEvent(new CustomEvent('homectl:device-config-changed'));
       return result.data;
     },
-    [baseUrl],
+    [baseUrl, queryClient, recordWrite],
   );
 
   return { replace, remove };
