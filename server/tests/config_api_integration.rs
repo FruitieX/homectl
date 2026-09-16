@@ -1566,8 +1566,9 @@ fn config_api_replaces_device_references_and_removes_source_device() {
 
     let replace_response = post_json(
         &server.base_url,
-        "/api/v1/config/devices/dummy%2Flight1/replace",
+        "/api/v1/config/devices/replace",
         &json!({
+            "source_device_key": "dummy/light1",
             "replacement_device_key": "dummy/light2"
         }),
     );

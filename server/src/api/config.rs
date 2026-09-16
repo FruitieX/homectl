@@ -432,6 +432,12 @@ struct ReplaceDeviceRequest {
     replacement_device_key: String,
 }
 
+#[derive(Deserialize)]
+struct ReplaceDeviceByKeyRequest {
+    source_device_key: String,
+    replacement_device_key: String,
+}
+
 #[derive(Serialize)]
 struct DeviceConfigMutationResponse {
     deleted_device_key: String,
@@ -2092,7 +2098,13 @@ fn device_sensor_config_routes(
 fn device_config_routes(
     handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    let replace = warp::path!("devices" / String / "replace")
+    let replace_by_key = warp::path!("devices" / "replace")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(replace_device_config_by_key);
+
+    let replace_legacy = warp::path!("devices" / String / "replace")
         .and(warp::post())
         .and(warp::body::json())
         .and(with_handle(handle))
@@ -2103,7 +2115,19 @@ fn device_config_routes(
         .and(with_handle(handle))
         .and_then(delete_config_device);
 
-    replace.or(delete)
+    replace_by_key.or(replace_legacy).or(delete)
+}
+
+async fn replace_device_config_by_key(
+    request: ReplaceDeviceByKeyRequest,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    replace_device_config_keys(
+        request.source_device_key,
+        request.replacement_device_key,
+        handle,
+    )
+    .await
 }
 
 async fn replace_device_config(
@@ -2111,13 +2135,26 @@ async fn replace_device_config(
     request: ReplaceDeviceRequest,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    replace_device_config_keys(
+        decode_path_key(device_key),
+        request.replacement_device_key,
+        handle,
+    )
+    .await
+}
+
+async fn replace_device_config_keys(
+    source_key: String,
+    replacement_key: String,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
 
-    let source_key = decode_path_key(device_key);
-    let replacement_key = request.replacement_device_key.trim().to_string();
+    let source_key = source_key.trim().to_string();
+    let replacement_key = replacement_key.trim().to_string();
 
     if source_key == replacement_key {
         return Ok(error_response(

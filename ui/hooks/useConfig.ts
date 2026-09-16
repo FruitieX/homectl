@@ -402,16 +402,14 @@ export function useConfigDevices() {
 
   const replace = useCallback(
     async (deviceKey: string, replacementDeviceKey: string) => {
-      const response = await fetch(
-        `${baseUrl}/${encodeURIComponent(deviceKey)}/replace`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            replacement_device_key: replacementDeviceKey,
-          }),
-        },
-      );
+      const response = await fetch(`${baseUrl}/replace`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_device_key: deviceKey,
+          replacement_device_key: replacementDeviceKey,
+        }),
+      });
       const result = await readApiResponse<DeviceConfigMutationResult>(
         response,
         'Failed to replace device references',
