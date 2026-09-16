@@ -122,6 +122,34 @@ pub async fn assign<C: ConnectionTrait + TransactionTrait>(
     Ok(())
 }
 
+pub async fn save_assignment<C: ConnectionTrait>(
+    db: &C,
+    assignment: &ColorCalibrationAssignment,
+) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(CalibrationAssignments::Table)
+            .columns([
+                CalibrationAssignments::DeviceKey,
+                CalibrationAssignments::ProfileId,
+            ])
+            .values_panic([
+                Expr::value(assignment.device_key.clone()),
+                Expr::value(assignment.profile_id.clone()),
+            ])
+            .on_conflict(
+                OnConflict::column(CalibrationAssignments::DeviceKey)
+                    .update_column(CalibrationAssignments::ProfileId)
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
 pub async fn import<C: ConnectionTrait + TransactionTrait>(
     db: &C,
     config: &ConfigExport,

@@ -690,6 +690,10 @@ impl Scenes {
         self.db_scene_overrides.clone()
     }
 
+    pub fn replace_scene_overrides(&mut self, overrides: SceneOverridesConfig) {
+        self.db_scene_overrides = overrides;
+    }
+
     pub fn get_scene_ids(&self) -> Vec<SceneId> {
         self.get_scenes().keys().cloned().collect()
     }

@@ -1042,8 +1042,20 @@ export default function DevicesPage() {
         ...previous,
         [deviceKey]: '',
       }));
+      const updatedReferences = ([
+        [result?.updated_integrations ?? 0, 'integration'],
+        [result?.updated_groups ?? 0, 'group'],
+        [result?.updated_scenes ?? 0, 'scene'],
+        [result?.updated_routines ?? 0, 'routine'],
+        [result?.updated_scene_overrides ?? 0, 'scene override'],
+        [result?.updated_dashboard_widgets ?? 0, 'dashboard widget'],
+        [result?.updated_calibration_profiles ?? 0, 'calibration profile'],
+      ] as Array<[number, string]>)
+        .filter(([count]) => count > 0)
+        .map(([count, label]) => `${count} ${label}${count === 1 ? '' : 's'}`)
+        .join(', ');
       setNotice(
-        `Replaced ${result?.updated_groups ?? 0} group, ${result?.updated_scenes ?? 0} scene, and ${result?.updated_routines ?? 0} routine references for ${getDefaultDeviceLabel(device)}.`,
+        `Replaced references for ${getDefaultDeviceLabel(device)}${updatedReferences ? `: ${updatedReferences}.` : '.'}`,
       );
     } catch (nextError) {
       setError(
@@ -1075,8 +1087,20 @@ export default function DevicesPage() {
       const result = await removeConfigDevice(deviceKey);
       await refreshConfigData();
       setOpenDeviceKey(null);
+      const updatedReferences = ([
+        [result?.updated_integrations ?? 0, 'integration'],
+        [result?.updated_groups ?? 0, 'group'],
+        [result?.updated_scenes ?? 0, 'scene'],
+        [result?.updated_routines ?? 0, 'routine'],
+        [result?.updated_scene_overrides ?? 0, 'scene override'],
+        [result?.updated_dashboard_widgets ?? 0, 'dashboard widget'],
+        [result?.updated_calibration_profiles ?? 0, 'calibration profile'],
+      ] as Array<[number, string]>)
+        .filter(([count]) => count > 0)
+        .map(([count, label]) => `${count} ${label}${count === 1 ? '' : 's'}`)
+        .join(', ');
       setNotice(
-        `Deleted ${getDefaultDeviceLabel(device)} and removed ${result?.updated_groups ?? 0} group, ${result?.updated_scenes ?? 0} scene, and ${result?.updated_routines ?? 0} routine references.`,
+        `Deleted ${getDefaultDeviceLabel(device)}${updatedReferences ? ` and removed ${updatedReferences}.` : '.'}`,
       );
     } catch (nextError) {
       setError(

@@ -228,6 +228,21 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             }
         }
         Event::ExternalStateUpdate { device } => {
+            let source_is_disabled = state
+                .runtime_config
+                .integrations
+                .iter()
+                .find(|integration| integration.id == device.integration_id.to_string())
+                .is_some_and(|integration| {
+                    crate::types::integration::device_is_disabled(
+                        &integration.config,
+                        &device.id.to_string(),
+                    )
+                });
+            if source_is_disabled {
+                return Ok(outcome);
+            }
+
             if state
                 .calibration_preview_device(&device.get_device_key().to_string())
                 .is_some()

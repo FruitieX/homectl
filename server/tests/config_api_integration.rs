@@ -1330,7 +1330,7 @@ fn config_api_device_sensor_configs_roundtrip() {
 
 #[test]
 fn config_api_replaces_device_references_and_removes_source_device() {
-    let server = TestServer::with_config(TestServerConfig {
+    let mut server = TestServer::with_config(TestServerConfig {
         config_content: Some(
             json!({
                 "version": 1,
@@ -1382,6 +1382,14 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                                 "device_id": "light1",
                                 "power": true,
                                 "trigger_mode": "level"
+                            },
+                            {
+                                "integration_id": "dummy",
+                                "device_id": "light1",
+                                "path": "/raw/power",
+                                "operator": "eq",
+                                "value": true,
+                                "trigger_mode": "pulse"
                             }
                         ],
                         "actions": [
@@ -1407,9 +1415,20 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                                     "Controllable": {
                                         "state": {
                                             "power": true
+                                        },
+                                        "state_source": {
+                                            "scope": "device",
+                                            "kind": "device_link",
+                                            "group_id": null,
+                                            "linked_scene_id": null,
+                                            "linked_device_key": "dummy/light1"
                                         }
                                     }
                                 }
+                            },
+                            {
+                                "action": "RandomizeColor",
+                                "device_keys": ["dummy/light1", "dummy/light2"]
                             }
                         ]
                     }
@@ -1435,7 +1454,44 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                         "display_name": "Renamed Source"
                     }
                 ],
-                "device_sensor_configs": [],
+                "device_color_calibrations": [
+                    {
+                        "device_key": "dummy/light1",
+                        "points": [
+                            {
+                                "reference": { "h": 30, "s": 0.25 },
+                                "output": { "h": 45, "s": 0.3 }
+                            }
+                        ]
+                    }
+                ],
+                "color_calibration_profiles": [
+                    {
+                        "id": "source-profile",
+                        "name": "Source profile",
+                        "reference_device_key": "dummy/light1",
+                        "brightness": 0.5,
+                        "points": [
+                            {
+                                "reference": { "h": 30, "s": 0.25 },
+                                "output": { "h": 45, "s": 0.3 }
+                            }
+                        ]
+                    }
+                ],
+                "color_calibration_assignments": [
+                    {
+                        "device_key": "dummy/light1",
+                        "profile_id": "source-profile"
+                    }
+                ],
+                "device_sensor_configs": [
+                    {
+                        "device_ref": "dummy/light1",
+                        "interaction_kind": "hue_dimmer",
+                        "config": { "on_value": "press" }
+                    }
+                ],
                 "dashboard_layouts": [
                     {
                         "id": 1,
@@ -1443,11 +1499,32 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                         "is_default": true
                     }
                 ],
-                "dashboard_widgets": []
+                "dashboard_widgets": [
+                    {
+                        "id": 0,
+                        "layout_id": 1,
+                        "widget_type": "controls",
+                        "config": {
+                            "options": {
+                                "deviceKeys": ["dummy/light1", "dummy/light2"]
+                            },
+                            "deviceKey": "dummy/light1",
+                            "devicesByKey": {
+                                "dummy/light1": { "enabled": true }
+                            }
+                        },
+                        "grid_x": 0,
+                        "grid_y": 0,
+                        "grid_w": 1,
+                        "grid_h": 1,
+                        "sort_order": 0
+                    }
+                ]
             })
             .to_string(),
         ),
         config_file_name: Some("config-backup.json".to_string()),
+        cleanup_working_dir: false,
         ..Default::default()
     })
     .expect("Failed to start replace-device test server");
@@ -1458,6 +1535,35 @@ fn config_api_replaces_device_references_and_removes_source_device() {
             && device_by_name(&devices, "Replacement Light").is_some()
     });
 
+    let activate_response = post_json(
+        &server.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ActivateScene",
+            "scene_id": "main_on",
+            "device_keys": ["dummy/light1"]
+        }),
+    );
+    assert_eq!(activate_response.status(), StatusCode::OK);
+    wait_for("source scene activation", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Source Light")
+            .and_then(|device| device["data"]["Controllable"]["scene_id"].as_str())
+            == Some("main_on")
+    });
+
+    let override_response = post_json(
+        &server.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ToggleDeviceOverride",
+            "device_keys": ["dummy/light1"],
+            "override_state": true
+        }),
+    );
+    assert_eq!(override_response.status(), StatusCode::OK);
+    thread::sleep(Duration::from_millis(250));
+
     let replace_response = post_json(
         &server.base_url,
         "/api/v1/config/devices/dummy%2Flight1/replace",
@@ -1466,6 +1572,13 @@ fn config_api_replaces_device_references_and_removes_source_device() {
         }),
     );
     assert_eq!(replace_response.status(), StatusCode::OK);
+    let replace_result: Value = replace_response
+        .json()
+        .expect("replacement response should be valid JSON");
+    assert_eq!(replace_result["success"], true);
+    assert_eq!(replace_result["data"]["updated_integrations"], 1);
+    assert_eq!(replace_result["data"]["updated_scene_overrides"], 1);
+    assert_eq!(replace_result["write"]["persistence"], "persisted");
 
     let devices = get_json(&server.base_url, "/api/v1/devices");
     assert!(device_by_name(&devices, "Source Light").is_none());
@@ -1497,6 +1610,10 @@ fn config_api_replaces_device_references_and_removes_source_device() {
         json!("light2")
     );
     assert_eq!(
+        routines["data"][0]["rules"][1]["device_id"],
+        json!("light2")
+    );
+    assert_eq!(
         routines["data"][0]["actions"][0]["device_keys"],
         json!(["dummy/light2"]),
     );
@@ -1505,6 +1622,21 @@ fn config_api_replaces_device_references_and_removes_source_device() {
         json!("dummy/light2"),
     );
     assert_eq!(routines["data"][0]["actions"][2]["id"], json!("light2"));
+    assert_eq!(
+        routines["data"][0]["actions"][2]["data"]["Controllable"]["state_source"]
+            ["linked_device_key"],
+        json!("dummy/light2")
+    );
+    assert_eq!(
+        routines["data"][0]["actions"][3]["device_keys"],
+        json!(["dummy/light2"]),
+    );
+
+    let integrations = get_json(&server.base_url, "/api/v1/config/integrations");
+    assert_eq!(
+        integrations["data"][0]["config"]["disabled_device_ids"],
+        json!(["light1"]),
+    );
 
     let export = get_json(&server.base_url, "/api/v1/config/export");
     assert_eq!(
@@ -1515,6 +1647,36 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                 "display_name": "Renamed Source"
             }
         ]),
+    );
+    assert_eq!(export["data"]["device_color_calibrations"], json!([]));
+    assert_eq!(
+        export["data"]["color_calibration_profiles"][0]["reference_device_key"],
+        json!("dummy/light2")
+    );
+    assert_eq!(
+        export["data"]["color_calibration_assignments"],
+        json!([{
+            "device_key": "dummy/light2",
+            "profile_id": "source-profile"
+        }]),
+    );
+    assert_eq!(
+        export["data"]["device_sensor_configs"],
+        json!([{
+            "device_ref": "dummy/light2",
+            "interaction_kind": "hue_dimmer",
+            "config": { "on_value": "press" }
+        }]),
+    );
+    assert_eq!(
+        export["data"]["dashboard_widgets"][0]["config"],
+        json!({
+            "options": { "deviceKeys": ["dummy/light2"] },
+            "deviceKey": "dummy/light2",
+            "devicesByKey": {
+                "dummy/light2": { "enabled": true }
+            }
+        }),
     );
     let exported_grid = exported_floorplan_grid(&export, "default");
     assert_eq!(
@@ -1528,6 +1690,72 @@ fn config_api_replaces_device_references_and_removes_source_device() {
             }
         ]),
     );
+
+    let temp_dir = server.temp_dir.clone();
+    server.stop();
+    drop(server);
+    let restarted = TestServer::with_config(TestServerConfig {
+        config_content: Some(
+            json!({
+                "version": 1,
+                "core": { "warmup_time_seconds": 0 },
+                "integrations": [
+                    {
+                        "id": "dummy",
+                        "plugin": "dummy",
+                        "enabled": true,
+                        "config": {
+                            "devices": {
+                                "light1": { "name": "Source Light" },
+                                "light2": { "name": "Replacement Light" }
+                            }
+                        }
+                    }
+                ],
+                "groups": [],
+                "scenes": [],
+                "routines": [],
+                "floorplan": null,
+                "floorplans": [],
+                "group_positions": [],
+                "device_display_overrides": [],
+                "device_color_calibrations": [],
+                "color_calibration_profiles": [],
+                "color_calibration_assignments": [],
+                "device_sensor_configs": [],
+                "dashboard_layouts": [],
+                "dashboard_widgets": [],
+                "widget_settings": []
+            })
+            .to_string(),
+        ),
+        config_file_name: Some("config-backup.json".to_string()),
+        working_dir: Some(temp_dir.clone()),
+        ..Default::default()
+    })
+    .expect("Failed to restart replace-device test server");
+    thread::sleep(Duration::from_millis(250));
+    let restarted_devices = get_json(&restarted.base_url, "/api/v1/devices");
+    assert!(device_by_name(&restarted_devices, "Source Light").is_none());
+    assert!(device_by_name(&restarted_devices, "Replacement Light").is_some());
+
+    let activate_replacement_response = post_json(
+        &restarted.base_url,
+        "/api/v1/actions/trigger",
+        &json!({
+            "action": "ActivateScene",
+            "scene_id": "main_on",
+            "device_keys": ["dummy/light2"]
+        }),
+    );
+    assert_eq!(activate_replacement_response.status(), StatusCode::OK);
+    wait_for("replacement scene override after restart", || {
+        let devices = get_json(&restarted.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Replacement Light")
+            .and_then(|device| device["data"]["Controllable"]["state_source"]["scope"].as_str())
+            == Some("override")
+    });
+    drop(restarted);
 }
 
 #[test]

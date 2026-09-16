@@ -4,12 +4,13 @@
 //! all runtime persistence through SeaORM/SeaQuery builders so the same code can
 //! target SQLite and PostgreSQL.
 
+use super::actions;
 use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
     ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
-    DeviceSensorConfigs, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
+    DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
     Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
     WidgetSettings,
 };
@@ -485,6 +486,13 @@ pub async fn db_get_device_display_overrides() -> Result<Vec<DeviceDisplayNameRo
 pub async fn db_upsert_device_display_override(row: &DeviceDisplayNameRow) -> Result<()> {
     let db = get_db_connection()?;
 
+    upsert_device_display_override_on(db, row).await
+}
+
+async fn upsert_device_display_override_on<C: ConnectionTrait>(
+    db: &C,
+    row: &DeviceDisplayNameRow,
+) -> Result<()> {
     execute(
         db,
         Query::insert()
@@ -654,6 +662,14 @@ pub async fn db_get_device_sensor_configs() -> Result<Vec<DeviceSensorConfigRow>
 
 pub async fn db_upsert_device_sensor_config(row: &DeviceSensorConfigRow) -> Result<()> {
     let db = get_db_connection()?;
+
+    upsert_device_sensor_config_on(db, row).await
+}
+
+async fn upsert_device_sensor_config_on<C: ConnectionTrait>(
+    db: &C,
+    row: &DeviceSensorConfigRow,
+) -> Result<()> {
     let config_json = serde_json::to_string(&row.config)?;
 
     execute(
@@ -743,8 +759,14 @@ pub async fn db_get_integration(id: &str) -> Result<Option<IntegrationRow>> {
 
 pub async fn db_upsert_integration(integration: &IntegrationRow) -> Result<()> {
     let db = get_db_connection()?;
-    let config = serde_json::to_string(&integration.config)?;
+    upsert_integration_on(db, integration).await
+}
 
+async fn upsert_integration_on<C: ConnectionTrait>(
+    db: &C,
+    integration: &IntegrationRow,
+) -> Result<()> {
+    let config = serde_json::to_string(&integration.config)?;
     execute(
         db,
         Query::insert()
@@ -1180,6 +1202,14 @@ pub async fn db_upsert_floorplan_export(
 ) -> Result<()> {
     let db = get_db_connection()?;
 
+    upsert_floorplan_export_on(db, floorplan, sort_order).await
+}
+
+async fn upsert_floorplan_export_on<C: ConnectionTrait>(
+    db: &C,
+    floorplan: &FloorplanExportRow,
+    sort_order: i32,
+) -> Result<()> {
     execute(
         db,
         Query::insert()
@@ -1433,6 +1463,13 @@ pub async fn db_get_dashboard_widgets(layout_id: i32) -> Result<Vec<DashboardWid
 
 pub async fn db_upsert_dashboard_widget(widget: &DashboardWidgetRow) -> Result<i32> {
     let db = get_db_connection()?;
+    upsert_dashboard_widget_on(db, widget).await
+}
+
+async fn upsert_dashboard_widget_on<C: ConnectionTrait>(
+    db: &C,
+    widget: &DashboardWidgetRow,
+) -> Result<i32> {
     let config = serde_json::to_string(&widget.config)?;
 
     if widget.id > 0 {
@@ -2341,6 +2378,173 @@ async fn dashboard_widgets_for_layout<C: ConnectionTrait>(
     .await?;
 
     rows.into_iter().map(dashboard_widget_from_row).collect()
+}
+
+pub struct DeviceConfigRewritePersistence<'a> {
+    pub source_integration_id: &'a str,
+    pub source_device_id: &'a str,
+    pub replacement_device_key: Option<&'a str>,
+    pub changed_groups: &'a [GroupRow],
+    pub changed_scenes: &'a [SceneRow],
+    pub changed_routines: &'a [RoutineRow],
+    pub changed_scene_overrides: &'a [(String, crate::types::scene::SceneDevicesConfig)],
+    pub changed_floorplans: &'a [(i32, FloorplanExportRow)],
+    pub changed_dashboard_widgets: &'a [DashboardWidgetRow],
+    pub changed_calibration_profiles:
+        &'a [crate::core::color_calibration::ColorCalibrationProfile],
+    pub changed_integrations: &'a [IntegrationRow],
+    pub display_override_changed: bool,
+    pub moved_display_override: Option<&'a DeviceDisplayNameRow>,
+    pub color_calibration_changed: bool,
+    pub moved_color_calibration: Option<&'a DeviceColorCalibration>,
+    pub moved_calibration_assignment:
+        Option<&'a crate::core::color_calibration::ColorCalibrationAssignment>,
+    pub sensor_config_changed: bool,
+    pub moved_sensor_config: Option<&'a DeviceSensorConfigRow>,
+}
+
+/// Persist a complete device-reference rewrite as one database transaction.
+///
+/// The state actor has already prepared the rewritten rows. Keeping the
+/// transaction here means a restart cannot observe a half-migrated set of
+/// groups, scenes, metadata, and device rows.
+pub async fn db_persist_device_config_rewrite(
+    rewrite: DeviceConfigRewritePersistence<'_>,
+) -> Result<()> {
+    let txn = get_db_connection()?.begin().await?;
+
+    for integration in rewrite.changed_integrations {
+        upsert_integration_on(&txn, integration).await?;
+    }
+    for group in rewrite.changed_groups {
+        upsert_group_on(&txn, group).await?;
+    }
+    for scene in rewrite.changed_scenes {
+        upsert_scene_on(&txn, scene).await?;
+    }
+    for routine in rewrite.changed_routines {
+        upsert_routine_on(&txn, routine).await?;
+    }
+    for (scene_id, overrides) in rewrite.changed_scene_overrides {
+        let scene_id = crate::types::scene::SceneId::new(scene_id.clone());
+        actions::db_upsert_scene_overrides_on(&txn, &scene_id, overrides).await?;
+    }
+    for (sort_order, floorplan) in rewrite.changed_floorplans {
+        upsert_floorplan_export_on(&txn, floorplan, *sort_order).await?;
+    }
+    for widget in rewrite.changed_dashboard_widgets {
+        upsert_dashboard_widget_on(&txn, widget).await?;
+    }
+    for profile in rewrite.changed_calibration_profiles {
+        calibration::save_profile(&txn, profile).await?;
+    }
+
+    if rewrite.display_override_changed {
+        delete_by_string_key(
+            &txn,
+            DeviceDisplayOverrides::Table,
+            DeviceDisplayOverrides::DeviceKey,
+            &format!(
+                "{}/{}",
+                rewrite.source_integration_id, rewrite.source_device_id
+            ),
+        )
+        .await?;
+        if let Some(replacement_device_key) = rewrite.replacement_device_key {
+            delete_by_string_key(
+                &txn,
+                DeviceDisplayOverrides::Table,
+                DeviceDisplayOverrides::DeviceKey,
+                replacement_device_key,
+            )
+            .await?;
+        }
+        if let Some(row) = rewrite.moved_display_override {
+            upsert_device_display_override_on(&txn, row).await?;
+        }
+    }
+
+    if rewrite.color_calibration_changed {
+        let source_key = format!(
+            "{}/{}",
+            rewrite.source_integration_id, rewrite.source_device_id
+        );
+        delete_by_string_key(
+            &txn,
+            DeviceColorCalibrations::Table,
+            DeviceColorCalibrations::DeviceKey,
+            &source_key,
+        )
+        .await?;
+        delete_by_string_key(
+            &txn,
+            calibration::CalibrationAssignments::Table,
+            calibration::CalibrationAssignments::DeviceKey,
+            &source_key,
+        )
+        .await?;
+        if let Some(replacement_device_key) = rewrite.replacement_device_key {
+            delete_by_string_key(
+                &txn,
+                DeviceColorCalibrations::Table,
+                DeviceColorCalibrations::DeviceKey,
+                replacement_device_key,
+            )
+            .await?;
+            delete_by_string_key(
+                &txn,
+                calibration::CalibrationAssignments::Table,
+                calibration::CalibrationAssignments::DeviceKey,
+                replacement_device_key,
+            )
+            .await?;
+        }
+        if let Some(row) = rewrite.moved_color_calibration {
+            upsert_device_color_calibration_on(&txn, row).await?;
+        }
+        if let Some(row) = rewrite.moved_calibration_assignment {
+            calibration::save_assignment(&txn, row).await?;
+        }
+    }
+
+    if rewrite.sensor_config_changed {
+        let source_key = format!(
+            "{}/{}",
+            rewrite.source_integration_id, rewrite.source_device_id
+        );
+        delete_by_string_key(
+            &txn,
+            DeviceSensorConfigs::Table,
+            DeviceSensorConfigs::DeviceRef,
+            &source_key,
+        )
+        .await?;
+        if let Some(replacement_device_key) = rewrite.replacement_device_key {
+            delete_by_string_key(
+                &txn,
+                DeviceSensorConfigs::Table,
+                DeviceSensorConfigs::DeviceRef,
+                replacement_device_key,
+            )
+            .await?;
+        }
+        if let Some(row) = rewrite.moved_sensor_config {
+            upsert_device_sensor_config_on(&txn, row).await?;
+        }
+    }
+
+    execute(
+        &txn,
+        Query::delete()
+            .from_table(Devices::Table)
+            .and_where(Expr::col(Devices::IntegrationId).eq(rewrite.source_integration_id))
+            .and_where(Expr::col(Devices::DeviceId).eq(rewrite.source_device_id))
+            .to_owned(),
+    )
+    .await?;
+
+    txn.commit().await?;
+    Ok(())
 }
 
 async fn upsert_widget_setting_on<C: ConnectionTrait>(
