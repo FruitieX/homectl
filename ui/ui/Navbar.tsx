@@ -3,6 +3,7 @@ import {
   Edit,
   ChevronLeft,
   Expand,
+  Plus,
   Settings2,
   Shrink,
 } from 'lucide-react';
@@ -127,14 +128,24 @@ export const Navbar = () => {
             </Link>
           </Button>
           {isDashboardEditing ? (
-            <Button asChild variant="ghost" size="icon">
-              <Link
-                to={{ pathname, search: '?edit=1&settings=1' }}
-                aria-label="Dashboard editing settings"
-              >
-                <Settings2 />
-              </Link>
-            </Button>
+            <>
+              <Button asChild variant="ghost" size="icon">
+                <Link
+                  to={{ pathname, search: '?edit=1&add-widget=1' }}
+                  aria-label="Add dashboard widget"
+                >
+                  <Plus />
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" size="icon">
+                <Link
+                  to={{ pathname, search: '?edit=1&settings=1' }}
+                  aria-label="Dashboard editing settings"
+                >
+                  <Settings2 />
+                </Link>
+              </Button>
+            </>
           ) : null}
           <Button
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}

@@ -80,6 +80,7 @@ export default function Page() {
     layoutsLoading || (hasConfiguredLayout && widgetsLoading);
   const dashboardError = layoutsError ?? widgetsError;
   const showSettings = isEditing && searchParams.get('settings') === '1';
+  const showAddWidget = isEditing && searchParams.get('add-widget') === '1';
 
   const renderedWidgets = [...(hasConfiguredLayout ? widgets : [])].sort(
     (left, right) => left.position - right.position,
@@ -88,6 +89,12 @@ export default function Page() {
   const closeSettings = () => {
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('settings');
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const closeAddWidget = () => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.delete('add-widget');
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -108,14 +115,6 @@ export default function Page() {
           current === layoutId ? null : current,
         );
       }}
-      widgets={renderedWidgets}
-      widgetsLoading={widgetsLoading}
-      widgetsError={widgetsError}
-      onAddWidget={addWidget}
-      onUpdateWidget={updateWidget}
-      onRemoveWidget={removeWidget}
-      onReorderWidgets={reorderWidgets}
-      dashboardScrollEnabled={dashboardScrollEnabled}
       gridSnap={editingSettings.gridSnap}
       screenSimulation={editingSettings.screenSimulation}
       onGridSnapChange={(gridSnap: DashboardGridSnap) =>
@@ -124,6 +123,17 @@ export default function Page() {
       onScreenSimulationChange={(screenSimulation: DashboardScreenSimulation) =>
         setEditingSettings((current) => ({ ...current, screenSimulation }))
       }
+    />
+  ) : null;
+
+  const dashboardAddWidgetOverlay = showAddWidget ? (
+    <WidgetOverlay
+      mode="add"
+      onClose={closeAddWidget}
+      onSubmit={async (widget) => {
+        await addWidget(widget);
+        closeAddWidget();
+      }}
     />
   ) : null;
 
@@ -140,6 +150,7 @@ export default function Page() {
             <DashboardLoadingGrid />
           </div>
         </div>
+        {dashboardAddWidgetOverlay}
         {dashboardSettingsOverlay}
       </>
     );
@@ -161,6 +172,7 @@ export default function Page() {
             </Alert>
           </div>
         </div>
+        {dashboardAddWidgetOverlay}
         {dashboardSettingsOverlay}
       </>
     );
@@ -193,6 +205,7 @@ export default function Page() {
             />
           </div>
         </div>
+        {dashboardAddWidgetOverlay}
         {dashboardSettingsOverlay}
       </>
     );
@@ -278,6 +291,7 @@ export default function Page() {
           )}
         </section>
       </div>
+      {dashboardAddWidgetOverlay}
       {editingWidget ? (
         <WidgetOverlay
           mode="edit"

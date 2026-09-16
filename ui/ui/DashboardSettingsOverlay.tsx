@@ -7,12 +7,7 @@ import {
   type DashboardGridSnap,
   type DashboardScreenSimulation,
 } from '@/hooks/dashboardEditing';
-import {
-  type DashboardLayout,
-  type DashboardWidget,
-} from '@/hooks/useDashboard';
-import { DashboardGridEditor } from '@/ui/DashboardGridEditor';
-import { WidgetOverlay } from '@/ui/DashboardWidgetSettingsOverlay';
+import { type DashboardLayout } from '@/hooks/useDashboard';
 import { ConfigField, ConfigFormSection } from '@/ui/config-form';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
@@ -36,17 +31,6 @@ export interface DashboardSettingsOverlayProps {
   onSelectLayout: (layoutId: string) => void;
   onCreateLayout: (name: string) => Promise<DashboardLayout>;
   onDeleteLayout: (layoutId: string) => Promise<void>;
-  widgets: DashboardWidget[];
-  widgetsLoading: boolean;
-  widgetsError: string | null;
-  onAddWidget: (widget: Partial<DashboardWidget>) => Promise<DashboardWidget>;
-  onUpdateWidget: (
-    id: string,
-    widget: Partial<DashboardWidget>,
-  ) => Promise<DashboardWidget>;
-  onRemoveWidget: (id: string) => Promise<void>;
-  onReorderWidgets: (ids: string[]) => Promise<void>;
-  dashboardScrollEnabled: boolean;
   gridSnap: DashboardGridSnap;
   screenSimulation: DashboardScreenSimulation;
   onGridSnapChange: (value: DashboardGridSnap) => void;
@@ -64,24 +48,12 @@ export function DashboardSettingsOverlay({
   onSelectLayout,
   onCreateLayout,
   onDeleteLayout,
-  widgets,
-  widgetsLoading,
-  widgetsError,
-  onAddWidget,
-  onUpdateWidget,
-  onRemoveWidget,
-  onReorderWidgets,
-  dashboardScrollEnabled,
   gridSnap,
   screenSimulation,
   onGridSnapChange,
   onScreenSimulationChange,
 }: DashboardSettingsOverlayProps) {
   const [newLayoutName, setNewLayoutName] = useState('');
-  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(
-    null,
-  );
-  const [showAddWidget, setShowAddWidget] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const currentLayoutId = activeLayout?.id ?? selectedLayoutId ?? '';
   const simulationOption = DASHBOARD_SCREEN_SIMULATION_OPTIONS.find(
@@ -117,19 +89,6 @@ export function DashboardSettingsOverlay({
     }
   };
 
-  const removeWidget = async (widget: DashboardWidget) => {
-    if (!confirm(`Remove widget "${widget.title}"?`)) return;
-
-    try {
-      setActionError(null);
-      await onRemoveWidget(widget.id);
-    } catch (error) {
-      setActionError(
-        error instanceof Error ? error.message : 'Failed to remove widget.',
-      );
-    }
-  };
-
   return (
     <>
       <ResponsiveOverlay
@@ -138,17 +97,15 @@ export function DashboardSettingsOverlay({
           if (!nextOpen) onClose();
         }}
         title="Dashboard editor"
-        description="Manage layouts and widgets without leaving the dashboard."
+        description="Manage dashboard layouts and editor behavior without leaving the dashboard."
         presentation="fullscreen"
         className="max-w-4xl"
       >
         <div className="space-y-5 px-5 pb-5 md:px-0 md:pb-0">
-          {layoutsError || widgetsError || actionError ? (
+          {layoutsError || actionError ? (
             <Alert variant="destructive">
               <AlertTitle>Dashboard editor action failed</AlertTitle>
-              <AlertDescription>
-                {actionError ?? layoutsError ?? widgetsError}
-              </AlertDescription>
+              <AlertDescription>{actionError ?? layoutsError}</AlertDescription>
             </Alert>
           ) : null}
 
@@ -284,71 +241,8 @@ export function DashboardSettingsOverlay({
               </ConfigField>
             </div>
           </ConfigFormSection>
-
-          <ConfigFormSection
-            title="Widgets"
-            description={
-              activeLayout
-                ? `Edit the widgets in ${activeLayout.name}. Drag cards to reorder them, or use the resize handle to change their footprint.`
-                : 'Create or select a layout before adding widgets.'
-            }
-            actions={
-              <Button
-                type="button"
-                size="sm"
-                disabled={!activeLayout}
-                onClick={() => setShowAddWidget(true)}
-              >
-                <Plus />
-                Add widget
-              </Button>
-            }
-          >
-            {widgetsLoading ? (
-              <Skeleton className="h-52 rounded-3xl" />
-            ) : activeLayout ? (
-              <DashboardGridEditor
-                variant="settings"
-                widgets={widgets}
-                dashboardScrollEnabled={dashboardScrollEnabled}
-                gridSnap={gridSnap}
-                screenSimulation={screenSimulation}
-                onEdit={setEditingWidget}
-                onRemove={(widget) => void removeWidget(widget)}
-                onUpdateWidget={onUpdateWidget}
-                onReorderWidgets={onReorderWidgets}
-              />
-            ) : (
-              <EmptyState
-                title="Select a layout"
-                description="The widget editor will appear here once a layout is selected."
-              />
-            )}
-          </ConfigFormSection>
         </div>
       </ResponsiveOverlay>
-
-      {showAddWidget ? (
-        <WidgetOverlay
-          mode="add"
-          onClose={() => setShowAddWidget(false)}
-          onSubmit={async (widget) => {
-            await onAddWidget(widget);
-            setShowAddWidget(false);
-          }}
-        />
-      ) : null}
-      {editingWidget ? (
-        <WidgetOverlay
-          mode="edit"
-          widget={editingWidget}
-          onClose={() => setEditingWidget(null)}
-          onSubmit={async (updated) => {
-            await onUpdateWidget(editingWidget.id, updated);
-            setEditingWidget(null);
-          }}
-        />
-      ) : null}
     </>
   );
 }

@@ -9,6 +9,7 @@ const readUiSource = (relativePath) =>
 const dashboardSource = readUiSource('app/dashboard/page.tsx');
 const editorSource = readUiSource('ui/DashboardGridEditor.tsx');
 const navbarSource = readUiSource('ui/Navbar.tsx');
+const settingsSource = readUiSource('ui/DashboardSettingsOverlay.tsx');
 const routesSource = readUiSource('src/routes.tsx');
 const configSectionsSource = readUiSource('app/config/sections.ts');
 const gridSettingsPath = path.join(
@@ -23,7 +24,12 @@ const gridSettingsSource = fs.existsSync(gridSettingsPath)
 test('dashboard editing exposes settings from the AppMenu instead of config dashboard', () => {
   assert.match(navbarSource, /settings=1/);
   assert.match(navbarSource, /Dashboard editing settings/);
+  assert.match(navbarSource, /Add dashboard widget/);
   assert.match(dashboardSource, /DashboardSettingsOverlay/);
+  assert.match(dashboardSource, /searchParams\.get\('add-widget'\)/);
+  assert.doesNotMatch(settingsSource, /title="Widgets"/);
+  assert.doesNotMatch(settingsSource, /DashboardGridEditor/);
+  assert.doesNotMatch(settingsSource, /WidgetOverlay/);
   assert.doesNotMatch(dashboardSource, /Link to="\/config\/dashboard"/);
   assert.doesNotMatch(routesSource, /ConfigDashboardPage/);
   assert.doesNotMatch(
@@ -38,6 +44,11 @@ test('dashboard editing keeps the normal card surface and removes editor notices
   assert.doesNotMatch(editorSource, /Visual dashboard editor/);
   assert.doesNotMatch(editorSource, /rounded-3xl border border-dashed/);
   assert.doesNotMatch(editorSource, /dashboard-editor-card/);
+  assert.doesNotMatch(editorSource, /dashboard-layout-item[\s\S]*\*:\s*h-full/);
+  assert.match(
+    editorSource,
+    /absolute bottom-2 right-2[^\n]*size-10[^\n]*touch-none/,
+  );
 });
 
 test('resize feedback is centered on the active card', () => {

@@ -576,7 +576,7 @@ export function DashboardGridEditor({
                   }
                 }}
                 className={cn(
-                  'dashboard-layout-item relative min-h-0 min-w-0 *:h-full',
+                  'dashboard-layout-item relative min-h-0 min-w-0',
                   activeWidgetId === widget.id && 'z-10 cursor-grabbing',
                   savingWidgetId === widget.id && 'opacity-70',
                 )}
