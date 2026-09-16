@@ -1858,6 +1858,23 @@ fn device_display_name_routes(
         .and(with_snapshot(snapshot))
         .and_then(list_device_display_names);
 
+    // Device keys are integration/device-id pairs and commonly contain '/'.
+    // Keep a body-based form so reverse proxies cannot reinterpret an encoded
+    // slash as another path segment.
+    let upsert_by_key = warp::path("device-display-names")
+        .and(warp::path::end())
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(upsert_device_display_name_by_key);
+
+    let delete_by_key = warp::path("device-display-names")
+        .and(warp::path::end())
+        .and(warp::delete())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(delete_device_display_name_by_key);
+
     let upsert = warp::path!("device-display-names" / String)
         .and(warp::put())
         .and(warp::body::json())
@@ -1869,7 +1886,10 @@ fn device_display_name_routes(
         .and(with_handle(handle))
         .and_then(delete_device_display_name);
 
-    list.or(upsert).or(delete)
+    list.or(upsert_by_key)
+        .or(delete_by_key)
+        .or(upsert)
+        .or(delete)
 }
 
 async fn list_device_display_names(
@@ -1886,11 +1906,18 @@ async fn upsert_device_display_name(
     mut row: DeviceDisplayNameRow,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    row.device_key = decode_path_key(device_key);
+    upsert_device_display_name_by_key(row, handle).await
+}
+
+async fn upsert_device_display_name_by_key(
+    row: DeviceDisplayNameRow,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
-    row.device_key = decode_path_key(device_key);
 
     let row_for_state = row.clone();
     if handle
@@ -1920,11 +1947,29 @@ async fn delete_device_display_name(
     device_key: String,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
+    delete_device_display_name_by_key(
+        DeviceDisplayNameRequest {
+            device_key: decode_path_key(device_key),
+        },
+        handle,
+    )
+    .await
+}
+
+#[derive(Deserialize)]
+struct DeviceDisplayNameRequest {
+    device_key: String,
+}
+
+async fn delete_device_display_name_by_key(
+    request: DeviceDisplayNameRequest,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
-    let device_key = decode_path_key(device_key);
+    let device_key = request.device_key;
     let key_for_state = device_key.clone();
     let deleted = handle
         .mutate(move |state| {

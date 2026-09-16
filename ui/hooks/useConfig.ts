@@ -184,7 +184,7 @@ async function readApiResponse<T>(response: Response, fallbackMessage: string) {
 }
 
 // Generic fetch hook for config API
-function useConfigApi<T>(endpoint: string) {
+function useConfigApi<T>(endpoint: string, keyInBody = false) {
   const recordWrite = useRecordConfigWrite();
   const { apiEndpoint } = useAppConfig();
   const queryClient = useQueryClient();
@@ -223,11 +223,15 @@ function useConfigApi<T>(endpoint: string) {
   const updateMutation = useMutation({
     mutationFn: async ({ id, item }: { id: string; item: Partial<T> }) => {
       const response = await fetch(
-        `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
+        keyInBody
+          ? `${baseUrl}/${endpoint}`
+          : `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
         {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, ...item }),
+          body: JSON.stringify(
+            keyInBody ? { ...item, device_key: id } : { id, ...item },
+          ),
         },
       );
       const result = await readApiResponse<T>(response, 'Failed to update');
@@ -246,9 +250,17 @@ function useConfigApi<T>(endpoint: string) {
   const removeMutation = useMutation({
     mutationFn: async (id: string) => {
       const response = await fetch(
-        `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
+        keyInBody
+          ? `${baseUrl}/${endpoint}`
+          : `${baseUrl}/${endpoint}/${encodeURIComponent(id)}`,
         {
           method: 'DELETE',
+          ...(keyInBody
+            ? {
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ device_key: id }),
+              }
+            : {}),
         },
       );
       const result = await readApiResponse<unknown>(
@@ -332,7 +344,7 @@ export function useRoutines() {
 }
 
 export function useDeviceDisplayNames() {
-  return useConfigApi<DeviceDisplayNameOverride>('device-display-names');
+  return useConfigApi<DeviceDisplayNameOverride>('device-display-names', true);
 }
 
 export function useDeviceColorCalibrations() {

@@ -550,6 +550,14 @@ fn delete(base_url: &str, path: &str) -> Response {
         .unwrap_or_else(|e| panic!("DELETE {path} failed: {e}"))
 }
 
+fn delete_json(base_url: &str, path: &str, body: &Value) -> Response {
+    Client::new()
+        .delete(format!("{base_url}{path}"))
+        .json(body)
+        .send()
+        .unwrap_or_else(|e| panic!("DELETE {path} failed: {e}"))
+}
+
 fn device_by_name<'a>(devices: &'a Value, name: &str) -> Option<&'a Value> {
     devices["devices"].as_array().and_then(|devices| {
         devices
@@ -1272,6 +1280,38 @@ fn config_api_device_display_name_overrides_roundtrip() {
     let final_list = get_json(&server.base_url, "/api/v1/config/device-display-names");
     assert_eq!(final_list["success"], true);
     assert_eq!(final_list["data"], json!([]));
+}
+
+#[test]
+fn config_api_device_display_name_overrides_accept_key_in_json_body() {
+    let server = TestServer::new().expect("Failed to start test server");
+    let device_key = "esphome-gx53/lower-bathroom-downlight-1";
+
+    let upsert_response = put_json(
+        &server.base_url,
+        "/api/v1/config/device-display-names",
+        &json!({
+            "device_key": device_key,
+            "display_name": "Lower bathroom downlight 1"
+        }),
+    );
+    assert_eq!(upsert_response.status(), StatusCode::OK);
+
+    let list_result = get_json(&server.base_url, "/api/v1/config/device-display-names");
+    assert_eq!(
+        list_result["data"],
+        json!([{
+            "device_key": device_key,
+            "display_name": "Lower bathroom downlight 1"
+        }]),
+    );
+
+    let delete_response = delete_json(
+        &server.base_url,
+        "/api/v1/config/device-display-names",
+        &json!({"device_key": device_key}),
+    );
+    assert_eq!(delete_response.status(), StatusCode::OK);
 }
 
 #[test]
