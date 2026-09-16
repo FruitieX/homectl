@@ -70,13 +70,6 @@ export const configSections = [
     keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
   },
   {
-    href: '/config/dashboard',
-    label: 'Dashboard',
-    description: 'Layouts, widgets, cards, and dashboard composition.',
-    group: 'Interface',
-    keywords: ['widgets', 'layout', 'cards', 'home screen'],
-  },
-  {
     href: '/config/floorplan',
     label: 'Floorplan',
     description:

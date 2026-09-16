@@ -6,7 +6,6 @@ import { Outlet, createBrowserRouter } from 'react-router-dom';
 import { Navigate } from 'react-router-dom';
 
 const DashboardPage = lazy(() => import('../app/dashboard/page'));
-const ConfigDashboardPage = lazy(() => import('../app/config/dashboard/page'));
 const ConfigDevicesPage = lazy(() => import('../app/config/devices/page'));
 const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
 const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
@@ -97,10 +96,6 @@ export const router = createBrowserRouter([
           {
             index: true,
             element: withSuspense(<ConfigPage />),
-          },
-          {
-            path: 'dashboard',
-            element: withSuspense(<ConfigDashboardPage />),
           },
           {
             path: 'devices',

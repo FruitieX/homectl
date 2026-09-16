@@ -73,10 +73,6 @@
     container: dashboard-widget / size;
   }
 
-  .dashboard-editor-card .dashboard-widget-heading > svg {
-    display: none;
-  }
-
   .dashboard-widget-heading-compact-value {
     display: none;
   }

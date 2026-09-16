@@ -8,25 +8,50 @@ const readUiSource = (relativePath) =>
 
 const dashboardSource = readUiSource('app/dashboard/page.tsx');
 const editorSource = readUiSource('ui/DashboardGridEditor.tsx');
-const configDashboardSource = readUiSource('app/config/dashboard/page.tsx');
+const navbarSource = readUiSource('ui/Navbar.tsx');
+const routesSource = readUiSource('src/routes.tsx');
+const configSectionsSource = readUiSource('app/config/sections.ts');
+const gridSettingsPath = path.join(
+  __dirname,
+  '..',
+  'hooks/dashboardEditing.ts',
+);
+const gridSettingsSource = fs.existsSync(gridSettingsPath)
+  ? fs.readFileSync(gridSettingsPath, 'utf8')
+  : '';
 
-test('inline widget edit opens the widget settings overlay', () => {
-  assert.match(dashboardSource, /WidgetOverlay/);
-  assert.match(dashboardSource, /onEdit=\{setEditingWidget\}/);
-  assert.match(dashboardSource, /updateWidget\(editingWidget\.id, updated\)/);
+test('dashboard editing exposes settings from the AppMenu instead of config dashboard', () => {
+  assert.match(navbarSource, /settings=1/);
+  assert.match(navbarSource, /Dashboard editing settings/);
+  assert.match(dashboardSource, /DashboardSettingsOverlay/);
+  assert.doesNotMatch(dashboardSource, /Link to="\/config\/dashboard"/);
+  assert.doesNotMatch(routesSource, /ConfigDashboardPage/);
   assert.doesNotMatch(
-    dashboardSource,
-    /onEdit=\{\(\) => navigate\('\/config\/dashboard'\)\}/,
+    configSectionsSource,
+    /href: ['"]\/config\/dashboard['"]/,
   );
 });
 
-test('dashboard editing does not render editor notices', () => {
+test('dashboard editing keeps the normal card surface and removes editor notices', () => {
+  assert.match(dashboardSource, /DashboardGridEditor[\s\S]*variant="inline"/);
   assert.doesNotMatch(dashboardSource, /Editing dashboard/);
   assert.doesNotMatch(editorSource, /Visual dashboard editor/);
-  assert.doesNotMatch(configDashboardSource, /visual editor/);
+  assert.doesNotMatch(editorSource, /rounded-3xl border border-dashed/);
+  assert.doesNotMatch(editorSource, /dashboard-editor-card/);
 });
 
-test('resize handle captures touch input without allowing text selection', () => {
+test('resize feedback is centered on the active card', () => {
+  assert.match(editorSource, /activeInteractionKind/);
+  assert.match(editorSource, /activeInteractionKind === 'resize'/);
+  assert.match(editorSource, /place-items-center/);
+  assert.match(editorSource, /tabular-nums/);
   assert.match(editorSource, /touch-none select-none/);
   assert.match(editorSource, /setPointerCapture\(event\.pointerId\)/);
+});
+
+test('dashboard editing settings default to the device viewport and quarter-unit snapping', () => {
+  assert.match(gridSettingsSource, /screenSimulation: 'device'/);
+  assert.match(gridSettingsSource, /gridSnap: 0\.25/);
+  assert.match(editorSource, /screenSimulation/);
+  assert.match(editorSource, /gridSnap/);
 });

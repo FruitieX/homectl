@@ -7,16 +7,20 @@ import {
 } from 'react';
 
 import { type DashboardWidget } from '@/hooks/useDashboard';
+import {
+  getDashboardColumnsForScreen,
+  type DashboardGridSnap,
+  type DashboardScreenSimulation,
+} from '@/hooks/dashboardEditing';
 import { cn } from '@/lib/cn';
 import {
   DASHBOARD_GRID_PRECISION,
   DASHBOARD_MIN_SIZE_UNIT,
-  DASHBOARD_WIDE_BREAKPOINT_PX,
   clampDashboardWidgetHeight,
   clampDashboardWidgetWidth,
   getDashboardWidgetGridStyle,
+  getDashboardWidgetResponsiveGridStyle,
   DASHBOARD_COMPACT_COLUMNS,
-  DASHBOARD_GRID_HELP,
   DASHBOARD_MOBILE_COLUMNS,
   DASHBOARD_WIDE_COLUMNS,
 } from '@/lib/dashboard-layout';
@@ -32,18 +36,6 @@ type PreviewColumnCount =
   | typeof DASHBOARD_MOBILE_COLUMNS
   | typeof DASHBOARD_COMPACT_COLUMNS
   | typeof DASHBOARD_WIDE_COLUMNS;
-
-const PREVIEW_COLUMN_OPTIONS: PreviewColumnCount[] = [
-  DASHBOARD_MOBILE_COLUMNS,
-  DASHBOARD_COMPACT_COLUMNS,
-  DASHBOARD_WIDE_COLUMNS,
-];
-
-function columnsForViewport(width: number): PreviewColumnCount {
-  if (width < 600) return DASHBOARD_MOBILE_COLUMNS;
-  if (width < DASHBOARD_WIDE_BREAKPOINT_PX) return DASHBOARD_COMPACT_COLUMNS;
-  return DASHBOARD_WIDE_COLUMNS;
-}
 
 type GridInteraction =
   | {
@@ -65,6 +57,7 @@ type GridInteraction =
       cellHeight: number;
       columnGap: number;
       rowGap: number;
+      gridSnap: DashboardGridSnap;
     };
 
 interface DashboardGridEditorProps {
@@ -76,7 +69,10 @@ interface DashboardGridEditorProps {
     widget: Partial<DashboardWidget>,
   ) => Promise<DashboardWidget>;
   onReorderWidgets: (ids: string[]) => Promise<void>;
-  variant?: 'config' | 'inline';
+  variant?: 'settings' | 'inline';
+  dashboardScrollEnabled?: boolean;
+  gridSnap?: DashboardGridSnap;
+  screenSimulation?: DashboardScreenSimulation;
 }
 
 interface DropIndicator {
@@ -87,18 +83,6 @@ interface DropIndicator {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
-}
-
-function getGridColumnLabel(columns: PreviewColumnCount) {
-  if (columns === DASHBOARD_MOBILE_COLUMNS) {
-    return 'Phone · 4 columns';
-  }
-
-  if (columns === DASHBOARD_COMPACT_COLUMNS) {
-    return '600px display · 6 columns';
-  }
-
-  return 'Large · 8 columns';
 }
 
 function sortWidgets(widgets: DashboardWidget[]) {
@@ -131,11 +115,14 @@ function getGridMetrics(grid: HTMLDivElement, columns: PreviewColumnCount) {
 function getAutoLayoutStyle(
   widget: DashboardWidget,
   columns: PreviewColumnCount,
+  useResponsiveLayout: boolean,
 ) {
   const width = clampDashboardWidgetWidth(widget.width, columns);
   const height = clampDashboardWidgetHeight(widget.height);
 
-  return getDashboardWidgetGridStyle(width, height);
+  return useResponsiveLayout
+    ? getDashboardWidgetResponsiveGridStyle(widget.width, height)
+    : getDashboardWidgetGridStyle(width, height);
 }
 
 function getWidgetIds(widgets: DashboardWidget[]) {
@@ -182,17 +169,23 @@ export function DashboardGridEditor({
   onRemove,
   onUpdateWidget,
   onReorderWidgets,
-  variant = 'config',
+  variant = 'settings',
+  dashboardScrollEnabled = true,
+  gridSnap = 0.25,
+  screenSimulation = 'device',
 }: DashboardGridEditorProps) {
-  const [previewColumns, setPreviewColumns] = useState<PreviewColumnCount>(
-    () =>
-      typeof window === 'undefined'
-        ? DASHBOARD_WIDE_COLUMNS
-        : columnsForViewport(window.innerWidth),
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window === 'undefined' ? 1024 : window.innerWidth,
   );
-  const manuallySelectedColumns = useRef(false);
+  const previewColumns = getDashboardColumnsForScreen(
+    screenSimulation,
+    viewportWidth,
+  ) as PreviewColumnCount;
   const [draftWidgets, setDraftWidgets] = useState(() => sortWidgets(widgets));
   const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null);
+  const [activeInteractionKind, setActiveInteractionKind] = useState<
+    GridInteraction['kind'] | null
+  >(null);
   const [dropIndicator, setDropIndicator] = useState<DropIndicator | null>(
     null,
   );
@@ -206,15 +199,15 @@ export function DashboardGridEditor({
   const initialOrderRef = useRef<string[]>([]);
 
   useEffect(() => {
-    const updateForViewport = () => {
-      if (!manuallySelectedColumns.current) {
-        setPreviewColumns(columnsForViewport(window.innerWidth));
-      }
-    };
+    if (screenSimulation !== 'device') {
+      return;
+    }
+
+    const updateForViewport = () => setViewportWidth(window.innerWidth);
     updateForViewport();
     window.addEventListener('resize', updateForViewport);
     return () => window.removeEventListener('resize', updateForViewport);
-  }, []);
+  }, [screenSimulation]);
 
   useEffect(() => {
     setDraftWidgets(sortWidgets(widgets));
@@ -359,18 +352,24 @@ export function DashboardGridEditor({
         return;
       }
 
-      const columnDelta = Math.round(
-        deltaX / (interaction.cellWidth + interaction.columnGap),
-      );
-      const rowDelta = Math.round(
-        deltaY / (interaction.cellHeight + interaction.rowGap),
-      );
+      const widthDelta =
+        deltaX /
+        (interaction.cellWidth + interaction.columnGap) /
+        DASHBOARD_GRID_PRECISION;
+      const heightDelta =
+        deltaY /
+        (interaction.cellHeight + interaction.rowGap) /
+        DASHBOARD_GRID_PRECISION;
       const nextWidth = clampDashboardWidgetWidth(
-        interaction.startWidth + columnDelta / DASHBOARD_GRID_PRECISION,
+        Math.round(
+          (interaction.startWidth + widthDelta) / interaction.gridSnap,
+        ) * interaction.gridSnap,
         interaction.columns,
       );
       const nextHeight = clampDashboardWidgetHeight(
-        interaction.startHeight + rowDelta / DASHBOARD_GRID_PRECISION,
+        Math.round(
+          (interaction.startHeight + heightDelta) / interaction.gridSnap,
+        ) * interaction.gridSnap,
       );
 
       setDraftWidgets((currentWidgets) =>
@@ -390,6 +389,7 @@ export function DashboardGridEditor({
 
       interactionRef.current = null;
       setActiveWidgetId(null);
+      setActiveInteractionKind(null);
       setDropIndicator(null);
       setEditorError(null);
 
@@ -485,6 +485,7 @@ export function DashboardGridEditor({
       hasMoved: false,
     };
     setActiveWidgetId(widget.id);
+    setActiveInteractionKind('drag');
   };
 
   const startResize = (
@@ -511,55 +512,57 @@ export function DashboardGridEditor({
         previewColumns,
       ),
       startHeight: clampDashboardWidgetHeight(widget.height),
+      gridSnap,
       ...metrics,
     };
     setActiveWidgetId(widget.id);
+    setActiveInteractionKind('resize');
   };
 
+  const isInline = variant === 'inline';
+  const usesDeviceLayout = isInline && screenSimulation === 'device';
+
   return (
-    <div className="space-y-3">
-      {variant === 'config' ? (
-        <div className="flex justify-end">
-          <div className="flex flex-wrap gap-2">
-            {PREVIEW_COLUMN_OPTIONS.map((columns) => (
-              <Button
-                key={columns}
-                size="sm"
-                variant={previewColumns === columns ? 'default' : 'outline'}
-                onClick={() => {
-                  manuallySelectedColumns.current = true;
-                  setPreviewColumns(columns);
-                }}
-              >
-                {getGridColumnLabel(columns)}
-              </Button>
-            ))}
-          </div>
+    <div
+      className={cn('space-y-3', isInline && 'flex min-h-0 flex-1 flex-col')}
+    >
+      {editorError ? (
+        <div className="rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
+          {editorError}
         </div>
       ) : null}
-
-      <div className="rounded-3xl border border-dashed border-border bg-muted/20 p-3">
-        {variant === 'config' ? (
-          <div className="mb-3 rounded-2xl bg-background/80 p-3 text-xs text-muted-foreground">
-            {DASHBOARD_GRID_HELP}
-          </div>
-        ) : null}
-        {editorError ? (
-          <div className="mb-3 rounded-2xl border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
-            {editorError}
-          </div>
-        ) : null}
-        <div className={cn(variant === 'config' && 'overflow-x-auto pb-2')}>
+      <div
+        className={cn(
+          !isInline && 'rounded-3xl bg-muted/20 p-3',
+          isInline && 'min-h-0 flex-1',
+        )}
+      >
+        <div
+          className={cn(
+            !isInline && 'overflow-x-auto pb-2',
+            isInline && 'min-h-0 h-full',
+          )}
+        >
           <div
             ref={gridRef}
-            className="relative grid grid-flow-row gap-0"
+            className={cn(
+              'relative grid min-w-0 grid-flow-row gap-0',
+              isInline && 'dashboard-layout-grid',
+              isInline && dashboardScrollEnabled
+                ? 'auto-rows-[minmax(calc(var(--dashboard-row)/4),auto)]'
+                : isInline && 'h-full min-h-0 flex-1 overflow-hidden',
+            )}
             style={{
-              gridTemplateColumns: `repeat(${previewColumns * DASHBOARD_GRID_PRECISION}, minmax(0, 1fr))`,
+              gridTemplateColumns: usesDeviceLayout
+                ? undefined
+                : `repeat(${previewColumns * DASHBOARD_GRID_PRECISION}, minmax(0, 1fr))`,
               gridAutoRows:
-                variant === 'inline'
+                isInline && dashboardScrollEnabled
                   ? 'minmax(calc(var(--dashboard-row) / 4), auto)'
-                  : `${GRID_ROW_HEIGHT_PX / DASHBOARD_GRID_PRECISION}px`,
-              minWidth: variant === 'config' ? `${previewColumns * 6}rem` : 0,
+                  : isInline
+                    ? 'minmax(0, 1fr)'
+                    : `${GRID_ROW_HEIGHT_PX / DASHBOARD_GRID_PRECISION}px`,
+              minWidth: isInline ? undefined : `${previewColumns * 6}rem`,
             }}
           >
             {draftWidgets.map((widget) => (
@@ -573,17 +576,19 @@ export function DashboardGridEditor({
                   }
                 }}
                 className={cn(
-                  'dashboard-editor-card relative min-h-0 min-w-0',
-                  activeWidgetId === widget.id &&
-                    'z-10 scale-[1.01] cursor-grabbing',
+                  'dashboard-layout-item relative min-h-0 min-w-0 *:h-full',
+                  activeWidgetId === widget.id && 'z-10 cursor-grabbing',
                   savingWidgetId === widget.id && 'opacity-70',
                 )}
                 style={{
-                  ...getAutoLayoutStyle(widget, previewColumns),
-                  margin:
-                    variant === 'inline'
-                      ? 'calc(var(--dashboard-gap) / 2)'
-                      : `${GRID_GAP_PX / 2}px`,
+                  ...getAutoLayoutStyle(
+                    widget,
+                    previewColumns,
+                    usesDeviceLayout,
+                  ),
+                  margin: isInline
+                    ? 'calc(var(--dashboard-gap) / 2)'
+                    : `${GRID_GAP_PX / 2}px`,
                 }}
                 onPointerDown={(event) => startDrag(event, widget)}
               >
@@ -620,6 +625,17 @@ export function DashboardGridEditor({
                 >
                   <span aria-hidden="true">↘</span>
                 </button>
+                {activeWidgetId === widget.id &&
+                activeInteractionKind === 'resize' ? (
+                  <div className="pointer-events-none absolute inset-0 z-40 grid place-items-center">
+                    <div
+                      className="rounded-2xl border border-primary/40 bg-background/90 px-4 py-3 text-center text-sm font-semibold tabular-nums text-foreground shadow-xl backdrop-blur"
+                      aria-live="polite"
+                    >
+                      {widget.width} × {widget.height}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ))}
             {dropIndicator && activeWidgetId ? (
