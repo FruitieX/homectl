@@ -4,9 +4,13 @@ import {
   useDashboardSpacingSettings,
   dashboardSpacingStyles,
 } from '@/hooks/dashboardSpacing';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 
-import { useDashboardLayouts, useDashboardWidgets } from '@/hooks/useDashboard';
+import {
+  useDashboardLayouts,
+  useDashboardWidgets,
+  type DashboardWidget,
+} from '@/hooks/useDashboard';
 import { cn } from '@/lib/cn';
 import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
@@ -18,6 +22,7 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { DashboardWidgetCard } from '@/ui/DashboardWidgetCard';
 import { DashboardGridEditor } from '@/ui/DashboardGridEditor';
+import { WidgetOverlay } from '@/ui/DashboardWidgetSettingsOverlay';
 
 function DashboardLoadingGrid() {
   return (
@@ -31,7 +36,6 @@ function DashboardLoadingGrid() {
 }
 
 export default function Page() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const isEditing = searchParams.get('edit') === '1';
   const [storedSpacing] = useDashboardSpacing();
@@ -41,6 +45,9 @@ export default function Page() {
     storedSpacing in dashboardSpacingStyles ? storedSpacing : 'balanced';
   const [isFullscreen] = useIsFullscreen();
   const [selectedLayoutId, setSelectedLayoutId] = useState<string | null>(null);
+  const [editingWidget, setEditingWidget] = useState<DashboardWidget | null>(
+    null,
+  );
   const {
     layouts,
     loading: layoutsLoading,
@@ -192,14 +199,7 @@ export default function Page() {
 
           {isEditing ? (
             <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-primary/30 bg-primary/5 p-3">
-                <div>
-                  <div className="text-sm font-medium">Editing dashboard</div>
-                  <div className="text-xs text-muted-foreground">
-                    Drag cards to reorder them, or use the corner handle to
-                    resize. These are the same widgets shown on the dashboard.
-                  </div>
-                </div>
+              <div className="flex justify-end">
                 <div className="flex items-center gap-2">
                   <Button asChild size="sm" variant="outline">
                     <Link to="/config/dashboard">Widget settings</Link>
@@ -212,7 +212,7 @@ export default function Page() {
               <DashboardGridEditor
                 variant="inline"
                 widgets={renderedWidgets}
-                onEdit={() => navigate('/config/dashboard')}
+                onEdit={setEditingWidget}
                 onRemove={(widget) => {
                   if (confirm(`Remove widget "${widget.title}"?`)) {
                     void removeWidget(widget.id);
@@ -257,6 +257,17 @@ export default function Page() {
           )}
         </section>
       </div>
+      {editingWidget ? (
+        <WidgetOverlay
+          mode="edit"
+          widget={editingWidget}
+          onClose={() => setEditingWidget(null)}
+          onSubmit={async (updated) => {
+            await updateWidget(editingWidget.id, updated);
+            setEditingWidget(null);
+          }}
+        />
+      ) : null}
     </div>
   );
 }
