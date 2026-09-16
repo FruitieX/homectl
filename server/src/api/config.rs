@@ -1223,6 +1223,7 @@ fn rewrite_device_config_references(
     source: &DeviceConfigTarget,
     replacement: Option<&DeviceConfigTarget>,
     replacement_device: Option<&Device>,
+    source_name: Option<&str>,
 ) -> DeviceConfigRewriteResult {
     let mut result = DeviceConfigRewriteResult::default();
 
@@ -1360,12 +1361,14 @@ fn rewrite_device_config_references(
         }
     }
 
-    if let Some(existing) = config
+    let existing_display_override = config
         .device_display_overrides
         .iter()
         .find(|row| row.device_key == source.device_key)
-        .cloned()
-    {
+        .cloned();
+    let preserved_display_name =
+        preserved_display_name(&source.device_key, existing_display_override, source_name);
+    if let Some(existing) = preserved_display_name {
         result.display_override_changed = true;
         config.device_display_overrides.retain(|row| {
             row.device_key != source.device_key
@@ -1406,6 +1409,22 @@ fn rewrite_device_config_references(
         .sort_by(|left, right| left.device_ref.cmp(&right.device_ref));
 
     result
+}
+
+fn preserved_display_name(
+    source_key: &str,
+    existing_override: Option<DeviceDisplayNameRow>,
+    source_name: Option<&str>,
+) -> Option<DeviceDisplayNameRow> {
+    existing_override.or_else(|| {
+        source_name
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .map(|name| DeviceDisplayNameRow {
+                device_key: source_key.to_string(),
+                display_name: name.to_string(),
+            })
+    })
 }
 
 async fn persist_device_config_rewrite(
@@ -2243,15 +2262,16 @@ async fn replace_device_config_keys(
                     return ReplaceOutcome::ReplacementMissing;
                 };
 
-                if state
+                let Some(source_device) = state
                     .devices
                     .get_state()
                     .0
                     .values()
-                    .all(|device| !source_for_state.matches_device(device))
-                {
+                    .find(|device| source_for_state.matches_device(device))
+                    .cloned()
+                else {
                     return ReplaceOutcome::SourceMissing;
-                }
+                };
 
                 let mut runtime_config = state.get_runtime_config().clone();
                 let mut rewrite = rewrite_device_config_references(
@@ -2259,6 +2279,7 @@ async fn replace_device_config_keys(
                     &source_for_state,
                     Some(&replacement_for_state),
                     Some(&replacement_device),
+                    Some(source_device.name.as_str()),
                 );
                 let mut scene_overrides = state.scenes.get_scene_overrides();
                 rewrite.changed_scene_overrides = rewrite_scene_override_refs(
@@ -2369,6 +2390,7 @@ async fn delete_config_device(
                 let mut rewrite = rewrite_device_config_references(
                     &mut runtime_config,
                     &source_for_state,
+                    None,
                     None,
                     None,
                 );
@@ -4165,6 +4187,33 @@ mod tests {
     use super::*;
     use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
+
+    #[test]
+    fn replacement_display_name_prefers_override_then_source_name() {
+        let inherited = preserved_display_name(
+            "esphome-gx53/lower-bathroom-downlight-1",
+            None,
+            Some(" Lower bathroom downlight 1 "),
+        )
+        .unwrap();
+        assert_eq!(
+            inherited.device_key,
+            "esphome-gx53/lower-bathroom-downlight-1"
+        );
+        assert_eq!(inherited.display_name, "Lower bathroom downlight 1");
+
+        let override_name = preserved_display_name(
+            "esphome-gx53/lower-bathroom-downlight-1",
+            Some(DeviceDisplayNameRow {
+                device_key: "old/device".to_string(),
+                display_name: "Custom name".to_string(),
+            }),
+            Some("Integration name"),
+        )
+        .unwrap();
+        assert_eq!(override_name.display_name, "Custom name");
+        assert!(preserved_display_name("old/device", None, Some("  ")).is_none());
+    }
 
     #[test]
     fn core_patch_preserves_omitted_settings_and_unrelated_fields() {
