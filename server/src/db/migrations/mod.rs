@@ -20,7 +20,45 @@ impl MigratorTrait for Migrator {
             Box::new(M20260913000000DefaultTransition),
             Box::new(M20260913000001SceneTransition),
             Box::new(M20260913000002DashboardFractionalUnits),
+            Box::new(M20260916000000UvColorCalibration),
         ]
+    }
+}
+
+/// HSV calibration anchors cannot be interpreted as CIE 1976 u′v′ anchors.
+/// Profiles are explicitly disposable for this migration, so clear all three
+/// legacy stores atomically before runtime configuration is loaded.
+struct M20260916000000UvColorCalibration;
+
+impl MigrationName for M20260916000000UvColorCalibration {
+    fn name(&self) -> &str {
+        "m20260916000000_uv_color_calibration"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260916000000UvColorCalibration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        use crate::db::config_queries::calibration::{
+            CalibrationAssignments as A, CalibrationProfiles as P,
+        };
+        manager
+            .exec_stmt(Query::delete().from_table(A::Table).to_owned())
+            .await?;
+        manager
+            .exec_stmt(Query::delete().from_table(P::Table).to_owned())
+            .await?;
+        manager
+            .exec_stmt(
+                Query::delete()
+                    .from_table(DeviceColorCalibrations::Table)
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, _manager: &SchemaManager) -> Result<(), DbErr> {
+        Ok(())
     }
 }
 
@@ -1046,5 +1084,44 @@ impl MigrationTrait for M20260910000000ColorCalibration {
                     .to_owned(),
             )
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::{ConnectionTrait, Database, DbBackend, Statement};
+
+    #[tokio::test]
+    async fn uv_migration_removes_incompatible_hsv_calibration_data() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        Migrator::up(&db, Some(7)).await.unwrap();
+        for sql in [
+            "INSERT INTO calibration_profiles (id, config) VALUES ('legacy', '{}')",
+            "INSERT INTO calibration_assignments (device_key, profile_id) VALUES ('mqtt/lamp', 'legacy')",
+            "INSERT INTO device_color_calibrations (device_key, points) VALUES ('mqtt/lamp', '[]')",
+        ] {
+            db.execute(Statement::from_string(DbBackend::Sqlite, sql))
+                .await
+                .unwrap();
+        }
+
+        Migrator::up(&db, None).await.unwrap();
+
+        for table in [
+            "calibration_assignments",
+            "calibration_profiles",
+            "device_color_calibrations",
+        ] {
+            let row = db
+                .query_one(Statement::from_string(
+                    DbBackend::Sqlite,
+                    format!("SELECT COUNT(*) AS count FROM {table}"),
+                ))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.try_get::<i64>("", "count").unwrap(), 0);
+        }
     }
 }

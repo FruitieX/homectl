@@ -14,6 +14,7 @@ import { getDeviceKey } from '@/lib/device';
 import { compareDeviceNames } from '@/lib/deviceLabel';
 import { createUuid } from '@/lib/uuid';
 import {
+  calibrationPointToUv,
   calibratedHsv,
   canAmendReferencePoint,
   canCalibrateDevice,
@@ -369,7 +370,8 @@ export function ColorCalibrationWizard({
               <div className="space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-3">
                 <p className="text-sm">
                   This light uses <strong>{currentProfile.name}</strong>.
-                  Editing it updates every light that uses this profile.
+                  Editing or adding points updates every light that uses this
+                  profile.
                 </p>
                 <Button
                   type="button"
@@ -377,7 +379,7 @@ export function ColorCalibrationWizard({
                   disabled={busy}
                   onClick={editCurrentProfile}
                 >
-                  Edit current profile
+                  Edit profile / add points
                 </Button>
               </div>
             )}
@@ -812,10 +814,9 @@ export function ColorCalibrationWizard({
                       name: name.trim(),
                       reference_device_key: referenceKey,
                       brightness: brightness / 100,
-                      points: points.map(({ reference, output }) => ({
-                        reference,
-                        output,
-                      })),
+                      points: points.map(({ reference, output }) =>
+                        calibrationPointToUv({ reference, output }),
+                      ),
                     };
                     const content = JSON.stringify(profile);
                     const profileId = editingProfileId ?? createUuid();

@@ -3,7 +3,8 @@ const { test } = require('node:test');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const ts = require('typescript');
-const Color = require('color');
+const ColorModule = require('color');
+const Color = ColorModule.default ?? ColorModule;
 
 // Exercise rendered controls and event handlers without contacting devices.
 function harness(data, temperatureOnly = false, calibrated = false) {

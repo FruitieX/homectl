@@ -2838,8 +2838,8 @@ mod consistency_tests {
         let source = database().await;
         let row: DeviceColorCalibration = serde_json::from_value(json!({
             "device_key": "mqtt/lamp", "points": [
-                {"reference":{"h":30,"s":0.25},"output":{"h":55,"s":0.1}},
-                {"reference":{"h":27,"s":0.9},"output":{"h":35,"s":0.8}}
+                {"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}},
+                {"reference":{"u":0.30,"v":0.52},"output":{"u":0.29,"v":0.51}}
             ]
         }))
         .unwrap();

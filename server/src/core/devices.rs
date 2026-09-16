@@ -1050,7 +1050,7 @@ mod tests {
     async fn calibrated_reports_do_not_trigger_correction_or_overwrite_logical_color() {
         let (mut devices, mut rx) = test_devices();
         let calibration: crate::core::color_calibration::DeviceColorCalibration = serde_json::from_value(serde_json::json!({
-            "device_key":"mqtt/lamp", "points":[{"reference":{"h":30,"s":0.25},"output":{"h":55,"s":0.1}}]
+            "device_key":"mqtt/lamp", "points":[{"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}}]
         })).unwrap();
         for managed in [
             ManageKind::Full,

@@ -32,6 +32,7 @@ const {
   stepCalibrationValue,
   nextManualCalibrationPoint,
   removeCalibrationPoint,
+  calibrationPointToUv,
 } = load('../lib/colorCalibration.ts', {
   '@/lib/deviceCapabilities': load('../lib/deviceCapabilities.ts'),
 });
@@ -61,20 +62,23 @@ test('reference lights sort by name using natural alphanumeric order', () => {
   );
 });
 
-test('guided pass covers distinct whites plus the hue circle at two saturations', () => {
+test('guided pass starts with colors that commonly mismatch between lamps', () => {
   const points = suggestedMatchingPoints();
-  assert.equal(points.length, 15);
+  assert.equal(points.length, 8);
   assert.equal(points.filter((point) => point.reference.s === 0).length, 1);
-  for (const saturation of [1, 0.45]) {
-    assert.deepEqual(
-      plain(
-        points
-          .filter((point) => point.reference.s === saturation)
-          .map((point) => point.reference.h),
-      ),
-      [0, 60, 120, 180, 240, 300],
-    );
-  }
+  assert.deepEqual(
+    plain(points.map((point) => point.label)),
+    [
+      'Neutral white',
+      'Warm white',
+      'Cool white',
+      'Red',
+      'Green',
+      'Cyan',
+      'Blue',
+      'Soft orange',
+    ],
+  );
   assert.equal(
     new Set(points.map((point) => JSON.stringify(point.reference))).size,
     points.length,
@@ -129,7 +133,7 @@ test('batch selection preserves hidden selections and never duplicates keys', ()
   assert.deepEqual(plain(toggleSelection(['hidden'], [])), ['hidden']);
 });
 
-test('batch calibration only accepts writable HSV lights', () => {
+test('batch calibration accepts every writable chromatic color format', () => {
   const device = {
     data: {
       Controllable: {
@@ -140,6 +144,13 @@ test('batch calibration only accepts writable HSV lights', () => {
     },
   };
   assert.equal(canCalibrateDevice(device), true);
+  for (const capability of ['rgb', 'xy']) {
+    device.data.Controllable.capabilities = { [capability]: true };
+    assert.equal(canCalibrateDevice(device), true);
+  }
+  device.data.Controllable.capabilities = { ct: { start: 2700, end: 6500 } };
+  assert.equal(canCalibrateDevice(device), false);
+  device.data.Controllable.capabilities = { rgb: true };
   device.data.Controllable.disabled = true;
   assert.equal(canCalibrateDevice(device), false);
   device.data.Controllable.disabled = false;
@@ -149,30 +160,26 @@ test('batch calibration only accepts writable HSV lights', () => {
 });
 
 test('existing profiles can be loaded into editable matching points', () => {
+  const hsPoints = [
+    { reference: { h: 30, s: 0.25 }, output: { h: 45, s: 0.3 } },
+    { reference: { h: 120, s: 1 }, output: { h: 110, s: 0.9 } },
+  ];
   const profile = {
     id: 'profile',
     name: 'Profile',
     reference_device_key: 'dummy/reference',
     brightness: 0.42,
-    points: [
-      { reference: { h: 30, s: 0.25 }, output: { h: 45, s: 0.3 } },
-      { reference: { h: 120, s: 1 }, output: { h: 110, s: 0.9 } },
-    ],
+    points: hsPoints.map(calibrationPointToUv),
   };
-  assert.deepEqual(plain(matchingPointsFromProfile(profile)), [
-    {
-      label: 'Point 1',
-      reference: profile.points[0].reference,
-      output: profile.points[0].output,
-      matched: true,
-    },
-    {
-      label: 'Point 2',
-      reference: profile.points[1].reference,
-      output: profile.points[1].output,
-      matched: true,
-    },
-  ]);
+  const loaded = matchingPointsFromProfile(profile);
+  assert.deepEqual(loaded.map((point) => point.label), ['Point 1', 'Point 2']);
+  assert.ok(loaded.every((point) => point.matched));
+  for (let index = 0; index < loaded.length; index += 1) {
+    assert.ok(Math.abs(loaded[index].reference.h - hsPoints[index].reference.h) <= 1);
+    assert.ok(Math.abs(loaded[index].reference.s - hsPoints[index].reference.s) < 0.01);
+    assert.ok(Math.abs(loaded[index].output.h - hsPoints[index].output.h) <= 1);
+    assert.ok(Math.abs(loaded[index].output.s - hsPoints[index].output.s) < 0.01);
+  }
 });
 
 test('current reference calibration reuses saved output or existing interpolation', () => {
@@ -206,12 +213,20 @@ test('current reference calibration reuses saved output or existing interpolatio
   assert.equal(added.point.matched, false);
 });
 
-test('current reference state only exposes HSV and rejects duplicate anchors', () => {
+test('current reference state accepts HS, RGB, and XY but not color temperature', () => {
   const current = { h: 30, s: 0.25 };
   const device = {
     data: { Controllable: { state: { color: current } } },
   };
   assert.deepEqual(plain(getCurrentHsColor(device)), current);
+  const rgbWhite = getCurrentHsColor({
+    data: { Controllable: { state: { color: { r: 255, g: 255, b: 255 } } } },
+  });
+  assert.ok(rgbWhite.s < 0.000001);
+  const xyRed = getCurrentHsColor({
+    data: { Controllable: { state: { color: { x: 0.64, y: 0.33 } } } },
+  });
+  assert.ok(xyRed.h <= 2 || xyRed.h >= 358);
   assert.equal(
     getCurrentHsColor({
       data: { Controllable: { state: { color: { ct: 2700 } } } },

@@ -1,7 +1,7 @@
 //! Ephemeral physical-output overrides. Normal scene state keeps advancing and
 //! is sent again when a session ends; previews never enter persisted devices.
 use super::{
-    color_calibration::{calibrated_device, ColorCalibrationPoint, DeviceColorCalibration},
+    color_calibration::{calibrated_device, ColorCalibrationPoint, DeviceColorCalibration, Uv},
     state::AppState,
 };
 use crate::types::{
@@ -79,14 +79,8 @@ mod tests {
             .push(DeviceColorCalibration {
                 device_key: "dummy/target".into(),
                 points: vec![ColorCalibrationPoint {
-                    reference: Hs {
-                        h: 45,
-                        s: 0.3.into(),
-                    },
-                    output: Hs {
-                        h: 80,
-                        s: 0.5.into(),
-                    },
+                    reference: Uv::from_xy(&DeviceColor::new_from_hs(45, 0.3).to_xy().unwrap()),
+                    output: Uv::from_xy(&DeviceColor::new_from_hs(80, 0.5).to_xy().unwrap()),
                 }],
             });
         while rx.try_recv().is_ok() {}
@@ -194,6 +188,29 @@ mod tests {
             .preview_calibration("one".into(), preview(), false)
             .is_err());
     }
+
+    #[tokio::test]
+    async fn rgb_only_lights_are_calibratable() {
+        let (mut state, _rx) = test_state();
+        let mut target = lamp("target");
+        if let DeviceData::Controllable(data) = &mut target.data {
+            data.capabilities.hs = false;
+            data.capabilities.rgb = true;
+            data.state.color = Some(DeviceColor::new_from_rgb(255, 128, 64));
+        }
+        state.devices.set_state(&target, true, true);
+        state.devices.set_state(&lamp("reference"), true, true);
+
+        assert!(state.calibration_device("dummy/target").is_ok());
+        assert!(state
+            .preview_calibration("rgb-session".into(), preview(), true)
+            .is_ok());
+        let physical = state.calibration_preview_device("dummy/target").unwrap();
+        assert!(matches!(
+            physical.get_controllable_state().unwrap().color,
+            Some(DeviceColor::Hs(_))
+        ));
+    }
 }
 
 #[derive(Clone, Deserialize)]
@@ -215,7 +232,7 @@ impl AppState {
             .find(|device| device.get_device_key().to_string() == key)
             .cloned()
             .ok_or("Device is no longer available")?;
-        let supported = matches!(&device.data, DeviceData::Controllable(data) if data.capabilities.hs && data.disabled != Some(true));
+        let supported = matches!(&device.data, DeviceData::Controllable(data) if (data.capabilities.xy || data.capabilities.hs || data.capabilities.rgb) && data.disabled != Some(true));
         let disabled = self
             .runtime_config
             .integrations
@@ -226,7 +243,7 @@ impl AppState {
             });
         if !supported || device.is_readonly() || disabled {
             return Err(format!(
-                "{} must be an enabled, writable HSV light",
+                "{} must be an enabled, writable color light",
                 device.name
             ));
         }
@@ -256,8 +273,10 @@ impl AppState {
         DeviceColorCalibration {
             device_key: preview.target_key.clone(),
             points: vec![ColorCalibrationPoint {
-                reference: preview.reference.clone(),
-                output: preview.output.clone(),
+                reference: Uv::from_xy(
+                    &DeviceColor::Hs(preview.reference.clone()).to_xy().unwrap(),
+                ),
+                output: Uv::from_xy(&DeviceColor::Hs(preview.output.clone()).to_xy().unwrap()),
             }],
         }
         .validate()?;

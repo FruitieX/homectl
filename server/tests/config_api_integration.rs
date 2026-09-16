@@ -44,8 +44,8 @@ fn color_calibration_crud_validation_and_export_import() {
         server.base_url
     );
     let row = json!({"device_key":"ignored", "points":[
-        {"reference":{"h":30,"s":0.25},"output":{"h":55,"s":0.1}},
-        {"reference":{"h":27,"s":0.9},"output":{"h":35,"s":0.8}}
+        {"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}},
+        {"reference":{"u":0.30,"v":0.52},"output":{"u":0.29,"v":0.51}}
     ]});
     let saved: Value = client
         .put(&url)
@@ -64,7 +64,7 @@ fn color_calibration_crud_validation_and_export_import() {
         saved["data"]
     );
     let mut invalid = row.clone();
-    invalid["points"][0]["output"]["s"] = json!(1.5);
+    invalid["points"][0]["output"]["u"] = json!(-0.1);
     assert_eq!(
         client.put(&url).json(&invalid).send().unwrap().status(),
         StatusCode::BAD_REQUEST
@@ -94,7 +94,7 @@ fn color_calibration_crud_validation_and_export_import() {
         exported["data"]["device_color_calibrations"]
     );
     let mut invalid_import = exported["data"].clone();
-    invalid_import["device_color_calibrations"][0]["points"][0]["output"]["s"] = json!(-0.1);
+    invalid_import["device_color_calibrations"][0]["points"][0]["output"]["u"] = json!(-0.1);
     assert_eq!(
         client
             .post(format!("{}/api/v1/config/import", server.base_url))
@@ -133,7 +133,7 @@ fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
         device_by_name(&get_json(base, "/api/v1/devices"), "Target").is_some()
     });
     let profile = json!({"id":"matching-model","name":"Matching model","reference_device_key":"dummy/reference","brightness":0.5,"points":[
-        {"reference":{"h":30,"s":0.25},"output":{"h":45,"s":0.3}}
+        {"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}}
     ]});
     client
         .post(format!("{base}/api/v1/config/calibration-profiles"))
@@ -144,7 +144,7 @@ fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
         .unwrap();
     let mut edited_profile = profile.clone();
     edited_profile["name"] = json!("Edited matching model");
-    edited_profile["points"][0]["output"] = json!({"h":50,"s":0.35});
+    edited_profile["points"][0]["output"] = json!({"u":0.22,"v":0.49});
     client
         .put(format!(
             "{base}/api/v1/config/calibration-profiles/{}",
@@ -1459,8 +1459,8 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                         "device_key": "dummy/light1",
                         "points": [
                             {
-                                "reference": { "h": 30, "s": 0.25 },
-                                "output": { "h": 45, "s": 0.3 }
+                                "reference": { "u": 0.20, "v": 0.47 },
+                                "output": { "u": 0.21, "v": 0.48 }
                             }
                         ]
                     }
@@ -1473,8 +1473,8 @@ fn config_api_replaces_device_references_and_removes_source_device() {
                         "brightness": 0.5,
                         "points": [
                             {
-                                "reference": { "h": 30, "s": 0.25 },
-                                "output": { "h": 45, "s": 0.3 }
+                                "reference": { "u": 0.20, "v": 0.47 },
+                                "output": { "u": 0.21, "v": 0.48 }
                             }
                         ]
                     }

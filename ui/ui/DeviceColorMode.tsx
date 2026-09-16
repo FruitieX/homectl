@@ -71,7 +71,7 @@ export function DeviceColorMode({
   const colors = eligible.map((d) => {
     if (!('Controllable' in d.data)) return null;
     const data = d.data.Controllable;
-    // Report metadata contains the physical HSV command. Editing it as a
+    // Report metadata contains the physical device command. Editing it as a
     // reference would apply calibration a second time on the next adjustment.
     if (
       calibrationLoading ||

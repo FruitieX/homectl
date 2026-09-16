@@ -325,6 +325,33 @@ mod tests {
     }
 
     #[test]
+    fn outbound_hs_white_for_rgb_only_light_is_neutral_rgb() {
+        let device = Device {
+            id: DeviceId::new("gx53-test"),
+            name: "gx53-test".into(),
+            integration_id: "mqtt".parse().unwrap(),
+            data: DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                Some(1.0),
+                Some(DeviceColor::new_from_hs(0, 0.0)),
+                None,
+                Capabilities {
+                    brightness: Some(true),
+                    rgb: true,
+                    ..Default::default()
+                },
+                ManageKind::Full,
+            )),
+            raw: None,
+        };
+        assert_eq!(
+            encode(&device, &config()).unwrap()["color"],
+            json!({"r":255,"g":255,"b":255})
+        );
+    }
+
+    #[test]
     fn transition_encoding_preserves_milliseconds_and_stock_compatibility() {
         for (seconds, expected) in [
             (None, json!({})),

@@ -1638,9 +1638,7 @@ export default function DevicesPage() {
                   </TabsContent>
 
                   <TabsContent value="config" className="mt-4 space-y-4">
-                    {'Controllable' in device.data &&
-                      device.data.Controllable.capabilities.hs &&
-                      !isDeviceReadOnly(device) && (
+                    {canCalibrateDevice(device) && (
                         <ColorCalibrationWizard
                           key={deviceKey}
                           device={device}

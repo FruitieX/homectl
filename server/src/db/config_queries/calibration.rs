@@ -216,7 +216,7 @@ mod tests {
         let db = database().await;
         let profile: ColorCalibrationProfile = serde_json::from_value(json!({
             "id":"warm-model", "name":"Warm model", "brightness":0.5, "reference_device_key":"dummy/reference",
-            "points":[{"reference":{"h":30,"s":0.25},"output":{"h":42,"s":0.3}}]
+            "points":[{"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}}]
         })).unwrap();
         save_profile(&db, &profile).await.unwrap();
         let keys = vec!["dummy/a".to_string(), "dummy/b".to_string()];
