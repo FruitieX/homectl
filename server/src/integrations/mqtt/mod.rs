@@ -55,6 +55,8 @@ pub struct MqttConfig {
     /// ESPHome MQTT light topic prefix and light object id.
     esphome_base_topic: Option<String>,
     esphome_light_object_id: Option<String>,
+    /// Home Assistant MQTT discovery prefix used by ESPHome (default: homeassistant).
+    esphome_discovery_prefix: Option<String>,
     esphome_warm_white_kelvin: Option<u16>,
     esphome_cold_white_kelvin: Option<u16>,
     #[serde(default)]
@@ -191,6 +193,11 @@ fn normalize_config(mut config: MqttConfig) -> Result<MqttConfig> {
                 "ESPHome base topic",
                 "esphome",
             )?;
+            let discovery_prefix = normalize_topic_prefix(
+                config.esphome_discovery_prefix.take(),
+                "ESPHome discovery prefix",
+                "homeassistant",
+            )?;
             let light_object_id = normalize_topic_segment(
                 config.esphome_light_object_id.take(),
                 "light object id",
@@ -210,6 +217,7 @@ fn normalize_config(mut config: MqttConfig) -> Result<MqttConfig> {
             }
             config.esphome_base_topic = Some(base.clone());
             config.esphome_light_object_id = Some(light_object_id.clone());
+            config.esphome_discovery_prefix = Some(discovery_prefix);
             config.esphome_warm_white_kelvin = Some(warm_kelvin);
             config.esphome_cold_white_kelvin = Some(cold_kelvin);
             config.topic = format!("{base}/{{id}}/light/{light_object_id}/state");
@@ -282,6 +290,7 @@ impl Integration for Mqtt {
         let dry_run = self.cli.dry_run;
         self.tasks.spawn(async move {
             let mut discovery = zigbee2mqtt::Discovery::default();
+            let mut esphome_discovery = esphome::Discovery::default();
             let mut polling = polling::Polling::configured(
                 config.mode() == MqttMode::Zigbee2Mqtt,
                 dry_run,
@@ -339,6 +348,10 @@ impl Integration for Mqtt {
                                     client
                                         .subscribe(format!("{base}/+/status"), QoS::AtMostOnce)
                                         .await?;
+                                    let prefix = config.esphome_discovery_prefix.as_ref().unwrap();
+                                    client
+                                        .subscribe(format!("{prefix}/light/#"), QoS::AtMostOnce)
+                                        .await?;
                                 }
                             }
                         }
@@ -355,9 +368,23 @@ impl Integration for Mqtt {
                                     discovery.receive(base, &msg.topic, &msg.payload, &id, &config)
                                 }
                                 MqttMode::EspHome => {
-                                    esphome::decode(&msg.payload, &msg.topic, id.clone(), &config)
-                                        .into_iter()
-                                        .collect()
+                                    let prefix = config.esphome_discovery_prefix.as_ref().unwrap();
+                                    if msg.topic.starts_with(&format!("{prefix}/light/")) {
+                                        esphome_discovery.receive(
+                                            prefix,
+                                            &msg.topic,
+                                            &msg.payload,
+                                            id.clone(),
+                                            &config,
+                                        )
+                                    } else {
+                                        esphome_discovery.state(
+                                            &msg.payload,
+                                            &msg.topic,
+                                            id.clone(),
+                                            &config,
+                                        )
+                                    }
                                 }
                             };
 
@@ -428,17 +455,23 @@ impl Integration for Mqtt {
                                     &msg.topic,
                                     &msg.payload,
                                 ) {
+                                    let observed_at_ms = if msg.retain {
+                                        0
+                                    } else {
+                                        chrono::Utc::now().timestamp_millis()
+                                    };
+                                    esphome_discovery.remember_availability(
+                                        &device_id,
+                                        online,
+                                        observed_at_ms,
+                                    );
                                     event_tx.send(Event::DeviceAvailability {
                                         device_key: crate::types::device::DeviceKey::new(
                                             id.clone(),
                                             crate::types::device::DeviceId::new(&device_id),
                                         ),
                                         online,
-                                        observed_at_ms: if msg.retain {
-                                            0
-                                        } else {
-                                            chrono::Utc::now().timestamp_millis()
-                                        },
+                                        observed_at_ms,
                                     });
                                 }
                             }
@@ -619,6 +652,10 @@ mod packet_tests {
         assert_eq!(config.mode(), MqttMode::EspHome);
         assert_eq!(config.topic, "esphome/{id}/light/light/state");
         assert_eq!(config.topic_set, "esphome/{id}/light/light/command");
+        assert_eq!(
+            config.esphome_discovery_prefix.as_deref(),
+            Some("homeassistant")
+        );
         assert_eq!(config.esphome_warm_white_kelvin, Some(2700));
         assert_eq!(config.esphome_cold_white_kelvin, Some(6500));
         assert!(!retain_commands(&config));

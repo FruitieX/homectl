@@ -450,7 +450,7 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
 
     // Keep comparing color while off as well. Color changes are meaningful for
     // the next power-on and one-shot color actions rely on them being applied.
-    if expected.color.is_some() && device.state.color.is_none() {
+    if expected.color.is_some() && device.state.power && device.state.color.is_none() {
         return false;
     }
 
@@ -465,7 +465,11 @@ pub fn cmp_device_states(device: &ControllableDevice, expected: &ControllableSta
     }
 
     // Compare colors if supported
-    if expected.color.is_some() {
+    // ESPHome reports an off light with an UNKNOWN color mode as a sparse
+    // snapshot (`{"color":{}}`). In that snapshot the stored color is
+    // intentionally unavailable, so compare color only when the report is on
+    // or actually contains a color value.
+    if expected.color.is_some() && (device.state.power || device.state.color.is_some()) {
         return cmp_light_color(
             &device.capabilities,
             &device.state.color,
@@ -898,6 +902,34 @@ mod tests {
         assert!(device.last_report.as_ref().unwrap().matches_requested);
         reported.state.brightness = Some(OrderedFloat(0.6));
         assert!(!cmp_device_states(&reported, &device.state));
+    }
+
+    #[test]
+    fn sparse_off_reports_do_not_require_unreported_color() {
+        let expected = ControllableDevice::new(
+            None,
+            false,
+            Some(0.6),
+            Some(DeviceColor::new_from_rgb(255, 20, 0)),
+            None,
+            Capabilities {
+                brightness: Some(true),
+                rgb: true,
+                ..Default::default()
+            },
+            ManageKind::Full,
+        );
+        let reported = ControllableDevice::new(
+            None,
+            false,
+            None,
+            None,
+            None,
+            expected.capabilities.clone(),
+            ManageKind::Full,
+        );
+
+        assert!(cmp_device_states(&reported, &expected.state));
     }
 
     #[test]

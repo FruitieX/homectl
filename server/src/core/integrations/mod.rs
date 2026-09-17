@@ -372,6 +372,17 @@ fn integration_config_schema(plugin: &str) -> Option<IntegrationConfigSchema> {
                 visible_when(
                     with_default_value(
                         with_section(
+                            text_config_field("esphome_discovery_prefix", "Discovery prefix", false, "Home Assistant MQTT discovery prefix published by ESPHome.", Some("homeassistant")),
+                            "ESPHome",
+                        ),
+                        json!("homeassistant"),
+                    ),
+                    "mode",
+                    json!("esphome"),
+                ),
+                visible_when(
+                    with_default_value(
+                        with_section(
                             number_config_field("esphome_warm_white_kelvin", "Warm white", false, "Warm white endpoint of the ESPHome CWWW light.", (Some(1.0), Some(65535.0), Some(1.0)), Some("2700")),
                             "ESPHome",
                         ),
@@ -1083,6 +1094,10 @@ mod tests {
         assert_eq!(
             field("esphome_light_object_id").default_value,
             Some(json!("light"))
+        );
+        assert_eq!(
+            field("esphome_discovery_prefix").default_value,
+            Some(json!("homeassistant"))
         );
         assert_eq!(
             field("esphome_warm_white_kelvin").default_value,

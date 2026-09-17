@@ -22,8 +22,9 @@
           rustToolchain
           pkgs.docker-client
           pkgs.postgresql
+          pkgs.stdenv.cc
           pkgs.pkg-config
-          pkgs.openssl
+          pkgs.openssl.dev
           pkgs.nodejs
           pkgs.pnpm
           pkgs.moon

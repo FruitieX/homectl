@@ -1536,6 +1536,14 @@ function mqttProfileValidationError(config: Record<string, unknown>) {
     return 'ESPHome light object ID must be one valid MQTT topic segment.';
   }
 
+  const discoveryPrefix = config.esphome_discovery_prefix;
+  if (
+    discoveryPrefix !== undefined &&
+    (typeof discoveryPrefix !== 'string' || !discoveryPrefix.trim())
+  ) {
+    return 'ESPHome discovery prefix must not be empty.';
+  }
+
   const warm = config.esphome_warm_white_kelvin ?? 2700;
   const cold = config.esphome_cold_white_kelvin ?? 6500;
   if (
@@ -1578,6 +1586,15 @@ function mqttProfileFieldError(
       /[\s\/#{}+]/.test(config.esphome_light_object_id))
   ) {
     return 'Use one valid MQTT topic segment.';
+  }
+
+  if (
+    fieldKey === 'esphome_discovery_prefix' &&
+    config.esphome_discovery_prefix !== undefined &&
+    (typeof config.esphome_discovery_prefix !== 'string' ||
+      !config.esphome_discovery_prefix.trim())
+  ) {
+    return 'Discovery prefix must not be empty.';
   }
 
   if (

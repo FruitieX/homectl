@@ -5,11 +5,12 @@
 
 use color_eyre::eyre::{eyre, Result};
 use serde_json::{json, Value};
+use std::collections::HashMap;
 
 use super::MqttConfig;
 use crate::types::{
     color::{Capabilities, DeviceColor},
-    device::{ControllableDevice, Device, DeviceData, DeviceId},
+    device::{ControllableDevice, Device, DeviceAvailability, DeviceData, DeviceId},
     integration::IntegrationId,
 };
 
@@ -31,6 +32,246 @@ fn state_device_id(config: &MqttConfig, topic: &str) -> Option<String> {
     let suffix = format!("/light/{object_id}/state");
     let id = topic.strip_prefix(&prefix)?.strip_suffix(&suffix)?;
     (!id.is_empty() && id != "discover" && !id.contains('/')).then_some(id.to_owned())
+}
+
+#[derive(Clone, Debug)]
+struct Metadata {
+    name: String,
+    capabilities: Capabilities,
+}
+
+/// Metadata sent by ESPHome using Home Assistant MQTT discovery.
+///
+/// State and discovery messages are retained independently, so state can
+/// arrive before the discovery config. In that case we decode the state with
+/// the protocol fallback and replay it when the metadata arrives.
+#[derive(Default)]
+pub(super) struct Discovery {
+    devices: HashMap<String, Metadata>,
+    last_states: HashMap<String, Value>,
+    availability: HashMap<String, DeviceAvailability>,
+}
+
+fn discovery_field<'a>(value: &'a Value, long: &str, short: &str) -> Option<&'a Value> {
+    value.get(long).or_else(|| value.get(short))
+}
+
+fn expand_discovery_topic(value: &Value, long: &str, short: &str) -> Option<String> {
+    let topic = discovery_field(value, long, short)?.as_str()?;
+    let base = value.get("~").and_then(Value::as_str);
+    match (base, topic) {
+        (Some(base), "~") => Some(base.to_owned()),
+        (Some(base), topic) => topic
+            .strip_prefix("~/")
+            .map(|suffix| format!("{base}/{suffix}"))
+            .or_else(|| Some(topic.to_owned())),
+        (None, topic) => Some(topic.to_owned()),
+    }
+}
+
+fn range_from_mireds(value: &Value, config: &MqttConfig) -> Option<std::ops::Range<u16>> {
+    let min_mireds = value
+        .get("min_mireds")
+        .or_else(|| value.get("min_mirs"))
+        .and_then(Value::as_f64);
+    let max_mireds = value
+        .get("max_mireds")
+        .or_else(|| value.get("max_mirs"))
+        .and_then(Value::as_f64);
+    match (min_mireds, max_mireds) {
+        (Some(min), Some(max)) if min > 0.0 && max >= min => {
+            let warm = (1_000_000.0 / max).ceil();
+            let cold = (1_000_000.0 / min).floor();
+            if warm >= 1.0 && cold <= u16::MAX as f64 && warm <= cold {
+                return Some(warm as u16..cold as u16);
+            }
+            None
+        }
+        _ => Some(configured_range(config).0..configured_range(config).1),
+    }
+}
+
+fn capabilities_from_discovery(value: &Value, config: &MqttConfig) -> Capabilities {
+    let mut capabilities = Capabilities::default();
+    let modes = discovery_field(value, "supported_color_modes", "sup_clrm")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .collect::<Vec<_>>();
+
+    for mode in &modes {
+        match mode {
+            &"onoff" => capabilities.brightness = Some(false),
+            &"brightness" | &"white" => capabilities.brightness = Some(true),
+            &"color_temp" => {
+                capabilities.brightness = Some(true);
+                capabilities.ct = range_from_mireds(value, config);
+            }
+            &"hs" => {
+                capabilities.brightness = Some(true);
+                capabilities.hs = true;
+            }
+            &"xy" => {
+                capabilities.brightness = Some(true);
+                capabilities.xy = true;
+            }
+            &"rgb" | &"rgbw" => {
+                capabilities.brightness = Some(true);
+                capabilities.rgb = true;
+            }
+            &"rgbct" | &"rgbww" => {
+                capabilities.brightness = Some(true);
+                capabilities.rgb = true;
+                capabilities.ct = range_from_mireds(value, config);
+            }
+            _ => {}
+        }
+    }
+
+    // Older ESPHome discovery payloads may only have the legacy brightness
+    // flag. Keep the normal ESPHome fallback when no mode list is available.
+    if modes.is_empty() {
+        capabilities.brightness = value
+            .get("brightness")
+            .and_then(Value::as_bool)
+            .or(Some(true));
+        capabilities.rgb = value
+            .get("color_mode")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
+        capabilities.ct = Some(configured_range(config).0..configured_range(config).1);
+    }
+
+    capabilities
+}
+
+impl Discovery {
+    pub(super) fn remember_availability(
+        &mut self,
+        device_id: &str,
+        online: bool,
+        observed_at_ms: i64,
+    ) {
+        self.availability.insert(
+            device_id.to_owned(),
+            DeviceAvailability {
+                online,
+                observed_at_ms,
+            },
+        );
+    }
+
+    fn apply_availability(&self, device: &mut Device) {
+        let Some(availability) = self.availability.get(&device.id.to_string()) else {
+            return;
+        };
+        if let DeviceData::Controllable(data) = &mut device.data {
+            data.availability = Some(availability.clone());
+        }
+    }
+
+    pub(super) fn receive(
+        &mut self,
+        prefix: &str,
+        topic: &str,
+        payload: &[u8],
+        integration_id: IntegrationId,
+        config: &MqttConfig,
+    ) -> Vec<Device> {
+        if !topic.starts_with(&format!("{prefix}/light/")) || !topic.ends_with("/config") {
+            return vec![];
+        }
+
+        let config_id = topic
+            .strip_prefix(&format!("{prefix}/light/"))
+            .and_then(|topic| topic.strip_suffix("/config"))
+            .and_then(|topic| {
+                let mut segments = topic.split('/');
+                let id = segments.next()?;
+                (!id.is_empty() && segments.next().is_some() && segments.next().is_none())
+                    .then_some(id.to_owned())
+            });
+
+        let Ok(value) = serde_json::from_slice::<Value>(payload) else {
+            if payload.is_empty() {
+                if let Some(id) = config_id {
+                    self.devices.remove(&id);
+                }
+            }
+            return vec![];
+        };
+        if value.is_null() {
+            if let Some(id) = config_id {
+                self.devices.remove(&id);
+            }
+            return vec![];
+        }
+        let Some(state_topic) = expand_discovery_topic(&value, "state_topic", "stat_t") else {
+            return vec![];
+        };
+        let Some(id) = state_device_id(config, &state_topic) else {
+            return vec![];
+        };
+
+        let name = value
+            .get("name")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .unwrap_or(&id)
+            .to_owned();
+        let metadata = Metadata {
+            name,
+            capabilities: capabilities_from_discovery(&value, config),
+        };
+        self.devices.insert(id.clone(), metadata);
+
+        let mut replayed = self
+            .last_states
+            .get(&id)
+            .and_then(|state| {
+                decode_with_metadata(
+                    &serde_json::to_vec(state).ok()?,
+                    &state_topic,
+                    integration_id,
+                    config,
+                    self.devices.get(&id),
+                )
+            })
+            .into_iter()
+            .collect::<Vec<_>>();
+        for device in &mut replayed {
+            self.apply_availability(device);
+        }
+        replayed
+    }
+
+    pub(super) fn state(
+        &mut self,
+        payload: &[u8],
+        topic: &str,
+        integration_id: IntegrationId,
+        config: &MqttConfig,
+    ) -> Vec<Device> {
+        let Some(id) = state_device_id(config, topic) else {
+            return vec![];
+        };
+        let Ok(value) = serde_json::from_slice::<Value>(payload) else {
+            return vec![];
+        };
+        self.last_states.insert(id.clone(), value);
+        let mut decoded = match self.devices.get(&id) {
+            Some(metadata) => {
+                decode_with_metadata(payload, topic, integration_id, config, Some(metadata))
+            }
+            None => decode(payload, topic, integration_id, config),
+        };
+        if let Some(device) = &mut decoded {
+            self.apply_availability(device);
+        }
+        decoded.into_iter().collect()
+    }
 }
 
 /// Convert ESPHome's CWWW state channels into homectl's Kelvin representation.
@@ -62,22 +303,115 @@ pub(super) fn decode(
     integration_id: IntegrationId,
     config: &MqttConfig,
 ) -> Option<Device> {
+    decode_with_metadata(payload, topic, integration_id, config, None)
+}
+
+fn fallback_capabilities(config: &MqttConfig) -> Capabilities {
+    // An ESPHome light that reports the UNKNOWN mode while off does not carry
+    // enough information to infer its traits. Keep the historical fallback so
+    // it remains controllable before retained discovery metadata arrives.
+    Capabilities {
+        brightness: Some(true),
+        rgb: true,
+        ct: Some(configured_range(config).0..configured_range(config).1),
+        ..Default::default()
+    }
+}
+
+fn capabilities_for_mode(
+    mode: Option<&str>,
+    object: &serde_json::Map<String, Value>,
+    config: &MqttConfig,
+) -> Capabilities {
+    let (warm_kelvin, cold_kelvin) = configured_range(config);
+    let mut capabilities = Capabilities::default();
+    match mode {
+        Some("onoff") => capabilities.brightness = Some(false),
+        Some("brightness" | "white") => capabilities.brightness = Some(true),
+        Some("color_temp" | "cwww") => {
+            capabilities.brightness = Some(true);
+            capabilities.ct = Some(warm_kelvin..cold_kelvin);
+        }
+        Some("rgb" | "rgbw") => {
+            capabilities.brightness = Some(true);
+            capabilities.rgb = true;
+        }
+        Some("rgbct" | "rgbww") => {
+            capabilities.brightness = Some(true);
+            capabilities.rgb = true;
+            capabilities.ct = Some(warm_kelvin..cold_kelvin);
+        }
+        None if object.get("state").is_none()
+            && object
+                .get("color")
+                .and_then(Value::as_object)
+                .is_some_and(|color| {
+                    ["r", "g", "b"].iter().all(|key| color.contains_key(*key))
+                }) =>
+        {
+            capabilities.brightness = Some(true);
+            capabilities.rgb = true;
+        }
+        None if object
+            .get("color")
+            .and_then(Value::as_object)
+            .is_some_and(|color| color.contains_key("c") || color.contains_key("w"))
+            || object.get("color_temp").is_some() =>
+        {
+            capabilities.brightness = Some(true);
+            capabilities.ct = Some(warm_kelvin..cold_kelvin);
+        }
+        _ => return fallback_capabilities(config),
+    }
+    capabilities
+}
+
+fn decode_with_metadata(
+    payload: &[u8],
+    topic: &str,
+    integration_id: IntegrationId,
+    config: &MqttConfig,
+    metadata: Option<&Metadata>,
+) -> Option<Device> {
     let value = serde_json::from_slice::<Value>(payload).ok()?;
     let object = value.as_object()?;
     let id = state_device_id(config, topic)?;
     let power = match object.get("state").and_then(Value::as_str) {
         Some("ON") => true,
         Some("OFF") => false,
+        None if object
+            .get("color")
+            .and_then(Value::as_object)
+            .is_some_and(|color| {
+                color.is_empty()
+                    && object.get("brightness").is_none()
+                    && object.get("color_temp").is_none()
+                    && object
+                        .get("color_mode")
+                        .is_none_or(|mode| mode.as_str() == Some("unknown"))
+            }) =>
+        {
+            false
+        }
         _ => return None,
     };
     let brightness = match object.get("brightness") {
         Some(value) => Some(f32::from(channel_value(value)?) / 255.0),
         None => None,
     };
-    let (warm_kelvin, cold_kelvin) = configured_range(config);
-    let color = match object.get("color_mode").and_then(Value::as_str) {
-        None | Some("onoff") | Some("brightness") => None,
-        Some("rgb") => {
+    let (warm_kelvin, cold_kelvin) = metadata
+        .and_then(|metadata| {
+            metadata
+                .capabilities
+                .ct
+                .as_ref()
+                .map(|range| (range.start, range.end))
+        })
+        .unwrap_or_else(|| configured_range(config));
+    let color_mode = object.get("color_mode").and_then(Value::as_str);
+    let color = match color_mode {
+        Some("onoff") | Some("brightness") => None,
+        Some("rgb" | "rgbw" | "rgbct") => {
             let color = object.get("color")?.as_object()?;
             Some(DeviceColor::new_from_rgb(
                 channel(color, "r")?,
@@ -85,7 +419,7 @@ pub(super) fn decode(
                 channel(color, "b")?,
             ))
         }
-        Some("cwww") => {
+        Some("cwww" | "rgbww") => {
             let color = object.get("color")?.as_object()?;
             let cold = channel(color, "c")?;
             let warm = channel(color, "w")?;
@@ -101,18 +435,38 @@ pub(super) fn decode(
                 kelvin.clamp(f64::from(warm_kelvin), f64::from(cold_kelvin)) as u16,
             ))
         }
+        None => {
+            let color = object.get("color")?.as_object()?;
+            if ["r", "g", "b"].iter().all(|key| color.contains_key(*key)) {
+                Some(DeviceColor::new_from_rgb(
+                    channel(color, "r")?,
+                    channel(color, "g")?,
+                    channel(color, "b")?,
+                ))
+            } else if color.contains_key("c") && color.contains_key("w") {
+                cwww_to_kelvin(
+                    channel(color, "c")?,
+                    channel(color, "w")?,
+                    warm_kelvin,
+                    cold_kelvin,
+                )
+                .map(DeviceColor::new_from_ct)
+            } else {
+                None
+            }
+        }
         Some(_) => return None,
     };
-    let capabilities = Capabilities {
-        brightness: Some(true),
-        rgb: true,
-        ct: Some(warm_kelvin..cold_kelvin),
-        ..Default::default()
-    };
+    let capabilities = metadata
+        .map(|metadata| metadata.capabilities.clone())
+        .unwrap_or_else(|| capabilities_for_mode(color_mode, object, config));
+    let name = metadata
+        .map(|metadata| metadata.name.clone())
+        .unwrap_or_else(|| id.clone());
 
     Some(Device {
         id: DeviceId::new(&id),
-        name: id,
+        name,
         integration_id,
         data: DeviceData::Controllable(ControllableDevice::new(
             None,
@@ -242,7 +596,7 @@ mod tests {
     }
 
     #[test]
-    fn decodes_rgb_state_and_preserves_configured_ct_capability() {
+    fn decodes_rgb_state_and_infers_rgb_capability() {
         let device = decode(
             br#"{"color_mode":"rgb","state":"ON","brightness":128,"color":{"r":255,"g":20,"b":0}}"#,
             "esphome/gx53-test/light/light/state",
@@ -260,7 +614,7 @@ mod tests {
             Some(DeviceColor::new_from_rgb(255, 20, 0))
         );
         assert!(data.capabilities.rgb);
-        assert_eq!(data.capabilities.ct, Some(2700..6500));
+        assert!(data.capabilities.ct.is_none());
         assert!(device.raw.is_some());
     }
 
@@ -287,6 +641,89 @@ mod tests {
             panic!()
         };
         assert_eq!(data.state.color, Some(DeviceColor::new_from_ct(3815)));
+    }
+
+    #[test]
+    fn decodes_esphome_unknown_mode_snapshot_as_off() {
+        let device = decode(
+            br#"{"color":{}}"#,
+            "esphome/gx53-test/light/light/state",
+            "mqtt".parse().unwrap(),
+            &config(),
+        )
+        .expect("ESPHome publishes an empty color object while off");
+        let DeviceData::Controllable(data) = device.data else {
+            panic!()
+        };
+        assert!(!data.state.power);
+        assert!(data.state.brightness.is_none());
+        assert!(data.state.color.is_none());
+    }
+
+    #[test]
+    fn cached_availability_is_attached_when_state_arrives_first() {
+        let mut discovery = Discovery::default();
+        let integration: IntegrationId = "mqtt".parse().unwrap();
+        let config = config();
+        discovery.remember_availability("gx53-test", true, 0);
+
+        let devices = discovery.state(
+            br#"{"color":{}}"#,
+            "esphome/gx53-test/light/light/state",
+            integration,
+            &config,
+        );
+        let DeviceData::Controllable(data) = &devices[0].data else {
+            panic!()
+        };
+        assert_eq!(
+            data.availability,
+            Some(crate::types::device::DeviceAvailability {
+                online: true,
+                observed_at_ms: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn discovery_replays_state_and_applies_capabilities() {
+        let mut discovery = Discovery::default();
+        let integration: IntegrationId = "mqtt".parse().unwrap();
+        let config = config();
+        let state_topic = "esphome/gx53-test/light/light/state";
+        let state =
+            br#"{"color_mode":"cwww","state":"ON","brightness":255,"color":{"c":255,"w":0}}"#;
+
+        let first = discovery.state(state, state_topic, integration.clone(), &config);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].name, "gx53-test");
+
+        let config_topic = "homeassistant/light/gx53-test/light/config";
+        let discovery_payload = json!({
+            "~": "esphome/gx53-test/light/light",
+            "stat_t": "~/state",
+            "cmd_t": "~/command",
+            "schema": "json",
+            "name": "Lower bathroom downlight 1",
+            "sup_clrm": ["color_temp"],
+            "min_mirs": 153,
+            "max_mirs": 370
+        });
+        let replayed = discovery.receive(
+            "homeassistant",
+            config_topic,
+            &serde_json::to_vec(&discovery_payload).unwrap(),
+            integration,
+            &config,
+        );
+        assert_eq!(replayed.len(), 1);
+        assert_eq!(replayed[0].name, "Lower bathroom downlight 1");
+        let DeviceData::Controllable(data) = &replayed[0].data else {
+            panic!()
+        };
+        assert_eq!(data.capabilities.brightness, Some(true));
+        assert!(!data.capabilities.rgb);
+        assert_eq!(data.capabilities.ct, Some(2703..6535));
     }
 
     #[test]

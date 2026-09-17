@@ -27,16 +27,17 @@ export function deviceReachability(
     availability.observed_at_ms >= reportTime
   )
     return 'offline';
-  const lastHeard = Math.max(
-    reportTime,
-    availability?.online ? availability.observed_at_ms : 0,
-  );
+  // An MQTT availability/birth topic is a liveness signal, not a periodic
+  // state report. Keep the device online until its last-will offline message
+  // (or another explicit availability update) says otherwise.
+  if (availability?.online) return 'online';
+  const lastHeard = reportTime;
   if (lastHeard > 0 && now - lastHeard <= RECENT_MS) return 'online';
   return lastHeard > 0 ? 'stale' : data.last_report ? 'cached' : 'unknown';
 }
 
 export const reachabilityLabels: Record<DeviceReachability, string> = {
-  online: 'Recently reachable',
+  online: 'Online via MQTT status',
   offline: 'Bridge reports offline',
   stale: 'Last response over 10m ago',
   unknown: 'Waiting for first report',

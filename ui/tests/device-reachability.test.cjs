@@ -88,3 +88,19 @@ test('off devices can be reachable and old evidence is distinguished from first 
     'online',
   );
 });
+
+test('online MQTT availability does not expire with the last state report', () => {
+  assert.equal(
+    health(
+      device({
+        availability: { online: true, observed_at_ms: now - 86_400_000 },
+        last_report: {
+          received_at_ms: now - 86_400_000,
+          retained: false,
+        },
+      }),
+      now,
+    ),
+    'online',
+  );
+});
