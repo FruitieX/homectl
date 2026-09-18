@@ -15,8 +15,7 @@ use tokio::sync::watch;
 
 use crate::core::{automation::TimerWakeup, clock::Clock};
 use crate::types::{
-    automation_definition::TimerId,
-    event::{Event, TxEventChannel},
+    event::{Event, TimerWakeupJob, TxEventChannel},
     rule::RoutineId,
 };
 
@@ -33,7 +32,7 @@ impl SchedulerHandle {
         let (tx, mut rx) = watch::channel(Vec::new());
         tokio::spawn(async move {
             let mut heap: BinaryHeap<Reverse<TimerWakeup>> = BinaryHeap::new();
-            let mut emitted: HashMap<(RoutineId, TimerId), u64> = HashMap::new();
+            let mut emitted: HashMap<(RoutineId, TimerWakeupJob), u64> = HashMap::new();
 
             loop {
                 let next_due = heap.peek().map(|Reverse(wakeup)| wakeup.due_monotonic_ms);
@@ -49,7 +48,7 @@ impl SchedulerHandle {
                         emitted.retain(|key, generation| {
                             pending.iter().any(|wakeup: &TimerWakeup| {
                                 key.0 == wakeup.routine_id
-                                    && key.1 == wakeup.timer
+                                    && key.1 == wakeup.job
                                     && wakeup.generation == *generation
                             })
                         });
@@ -57,7 +56,7 @@ impl SchedulerHandle {
                             .into_iter()
                             .filter(|wakeup| {
                                 emitted
-                                    .get(&(wakeup.routine_id.clone(), wakeup.timer.clone()))
+                                    .get(&(wakeup.routine_id.clone(), wakeup.job.clone()))
                                     != Some(&wakeup.generation)
                             })
                             .map(Reverse)
@@ -84,13 +83,13 @@ impl SchedulerHandle {
                                 break;
                             };
                             emitted.insert(
-                                (wakeup.routine_id.clone(), wakeup.timer.clone()),
+                                (wakeup.routine_id.clone(), wakeup.job.clone()),
                                 wakeup.generation,
                             );
                             event_tx.send(Event::TimerWakeup {
                                 routine_id: wakeup.routine_id,
                                 definition_revision: wakeup.definition_revision,
-                                timer: wakeup.timer,
+                                job: wakeup.job,
                                 generation: wakeup.generation,
                                 due_wall_ms: wakeup.due_wall_ms,
                             });
@@ -124,7 +123,9 @@ mod tests {
         let wakeup = TimerWakeup {
             routine_id: crate::types::rule::RoutineId("routine".to_string()),
             definition_revision: 1,
-            timer: TimerId("off".to_string()),
+            job: TimerWakeupJob::NamedTimer {
+                timer: crate::types::automation_definition::TimerId("off".to_string()),
+            },
             generation: 7,
             due_monotonic_ms: 500,
             due_wall_ms: 2_000,
@@ -136,12 +137,17 @@ mod tests {
         match event {
             Event::TimerWakeup {
                 routine_id,
-                timer,
+                job,
                 generation,
                 ..
             } => {
                 assert_eq!(routine_id.0, "routine");
-                assert_eq!(timer.0, "off");
+                assert_eq!(
+                    job,
+                    TimerWakeupJob::NamedTimer {
+                        timer: crate::types::automation_definition::TimerId("off".to_string()),
+                    }
+                );
                 assert_eq!(generation, 7);
             }
             other => panic!("unexpected event: {other:?}"),

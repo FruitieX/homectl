@@ -127,6 +127,8 @@ pub struct AppState {
     pub timers: crate::core::automation::TimerStore,
     /// Validated timer fires waiting for the next coherent frame (P09).
     pub pending_timer_fires: Vec<crate::core::automation::TimerFire>,
+    /// Validated sustained-predicate maturities waiting for the next frame.
+    pub pending_predicate_fires: Vec<crate::core::automation::PredicateDeadlineFire>,
     /// Injected wall/monotonic clock used by scheduling (P09).
     pub clock: Arc<dyn crate::core::clock::Clock>,
     pub event_tx: TxEventChannel,

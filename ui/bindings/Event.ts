@@ -9,8 +9,8 @@ import type { HelperId } from "./HelperId";
 import type { RoutineId } from "./RoutineId";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
-import type { TimerId } from "./TimerId";
 import type { TimerOperation } from "./TimerOperation";
+import type { TimerWakeupJob } from "./TimerWakeupJob";
 import type { JsonValue } from "./serde_json/JsonValue";
 
 export type Event = { "DeviceAvailability": { device_key: DeviceKey, online: boolean, observed_at_ms: number, 
@@ -94,4 +94,4 @@ value?: JsonValue | null,
 /**
  * Bounded failure message when the worker reported an error.
  */
-error?: string | null, } } | { "RoutineTimerOperation": { routine_id: RoutineId, definition_revision: bigint, operation: TimerOperation, causation: EventCausation, } } | { "TimerWakeup": { routine_id: RoutineId, definition_revision: bigint, timer: TimerId, generation: bigint, due_wall_ms: number, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };
+error?: string | null, } } | { "RoutineTimerOperation": { routine_id: RoutineId, definition_revision: bigint, operation: TimerOperation, causation: EventCausation, } } | { "TimerWakeup": { routine_id: RoutineId, definition_revision: bigint, job: TimerWakeupJob, generation: bigint, due_wall_ms: number, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };

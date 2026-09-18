@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use ts_rs::TS;
 
+use super::automation_definition::{NodeId, TimerId};
 use super::automation_event::{EventCausation, EventId, EventOrigin};
 use super::device::Device;
 use super::rule::RoutineId;
@@ -12,6 +13,17 @@ use super::{action::Action, device::DeviceKey};
 /// Process-unique stamp identifying the integration instance that produced an
 /// event. Events from a superseded instance are rejected after reload/cutover.
 pub type IntegrationEpoch = u64;
+
+/// Which authoritative job store entry a wakeup belongs to (P09).
+#[derive(TS, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Deserialize, Serialize)]
+#[serde(tag = "job", rename_all = "snake_case")]
+#[ts(export)]
+pub enum TimerWakeupJob {
+    /// A user-visible named timer (`schedule_timer`).
+    NamedTimer { timer: TimerId },
+    /// A sustained-predicate deadline (`predicate_for`).
+    PredicateDeadline { trigger: NodeId },
+}
 
 #[allow(clippy::large_enum_variant)]
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
@@ -186,13 +198,13 @@ pub enum Event {
         causation: EventCausation,
     },
 
-    /// The wakeup driver reached a timer deadline (P09). The actor re-validates
-    /// owner revision, key, and generation against the authoritative store
+    /// The wakeup driver reached a deadline (P09). The actor re-validates
+    /// owner revision, job key, and generation against the authoritative store
     /// before any routine can fire; stale wakeups are ignored.
     TimerWakeup {
         routine_id: RoutineId,
         definition_revision: i64,
-        timer: crate::types::automation_definition::TimerId,
+        job: TimerWakeupJob,
         generation: u64,
         #[ts(type = "number")]
         due_wall_ms: i64,

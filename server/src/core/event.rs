@@ -804,27 +804,43 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         Event::TimerWakeup {
             routine_id,
             definition_revision,
-            timer,
+            job,
             generation,
             due_wall_ms,
-        } => {
-            match state
-                .timers
-                .consume(routine_id, *definition_revision, timer, *generation)
-            {
-                Some(fire) => {
-                    state.pending_timer_fires.push(fire);
-                    outcome.mark_snapshot_changes(SnapshotChanges {
-                        timers: true,
-                        ..SnapshotChanges::none()
-                    });
+        } => match job {
+            crate::types::event::TimerWakeupJob::NamedTimer { timer } => {
+                match state
+                    .timers
+                    .consume(routine_id, *definition_revision, timer, *generation)
+                {
+                    Some(fire) => {
+                        state.pending_timer_fires.push(fire);
+                        outcome.mark_snapshot_changes(SnapshotChanges {
+                            timers: true,
+                            ..SnapshotChanges::none()
+                        });
+                    }
+                    None => debug!(
+                        "Ignoring stale timer wakeup for {routine_id}: \
+                         timer={timer} generation={generation} due_at={due_wall_ms}"
+                    ),
                 }
-                None => debug!(
-                    "Ignoring stale timer wakeup for {routine_id}: \
-                     timer={timer} generation={generation} due_at={due_wall_ms}"
-                ),
             }
-        }
+            crate::types::event::TimerWakeupJob::PredicateDeadline { trigger } => {
+                match state.timers.consume_predicate(
+                    routine_id,
+                    *definition_revision,
+                    trigger,
+                    *generation,
+                ) {
+                    Some(fire) => state.pending_predicate_fires.push(fire),
+                    None => debug!(
+                        "Ignoring stale predicate wakeup for {routine_id}: \
+                         trigger={trigger} generation={generation} due_at={due_wall_ms}"
+                    ),
+                }
+            }
+        },
     }
 
     Ok(outcome)
@@ -1858,6 +1874,7 @@ pub(crate) mod tests {
             scripts: Default::default(),
             timers: Default::default(),
             pending_timer_fires: Vec::new(),
+            pending_predicate_fires: Vec::new(),
             clock: Arc::new(crate::core::clock::ManualClock::new(1_000_000)),
             event_tx,
             ws: WebSockets::default(),
@@ -3326,7 +3343,7 @@ pub(crate) mod tests {
             &Event::TimerWakeup {
                 routine_id: owner.clone(),
                 definition_revision: first.definition_revision,
-                timer: first.timer.clone(),
+                job: first.job.clone(),
                 generation: first.generation,
                 due_wall_ms: first.due_wall_ms,
             },
@@ -3344,7 +3361,7 @@ pub(crate) mod tests {
             &Event::TimerWakeup {
                 routine_id: owner.clone(),
                 definition_revision: current.definition_revision,
-                timer: current.timer,
+                job: current.job,
                 generation: current.generation,
                 due_wall_ms: current.due_wall_ms,
             },
@@ -3621,5 +3638,59 @@ pub(crate) mod tests {
             ..SnapshotChanges::none()
         });
         assert!(state.snapshot.load().timers.is_empty());
+    }
+
+    // J06: a predicate wakeup is validated against the authoritative store
+    // before it can mature an episode.
+    #[tokio::test]
+    async fn p09_predicate_wakeup_is_validated_against_the_store() {
+        use crate::types::automation_definition::NodeId;
+        use crate::types::event::TimerWakeupJob;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let owner = RoutineId("timer_routine".to_string());
+        let trigger = NodeId("armed".to_string());
+        state
+            .timers
+            .ensure_predicate(&owner, 1, &trigger, 30_000, 0, 1_000_000)
+            .unwrap();
+        let generation = state
+            .timers
+            .pending_predicate_generation(&owner, &trigger)
+            .unwrap();
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: TimerWakeupJob::PredicateDeadline {
+                    trigger: trigger.clone(),
+                },
+                generation: generation + 1,
+                due_wall_ms: 1_030_000,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            state.pending_predicate_fires.is_empty(),
+            "a stale generation never matures"
+        );
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner,
+                definition_revision: 1,
+                job: TimerWakeupJob::PredicateDeadline { trigger },
+                generation,
+                due_wall_ms: 1_030_000,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(state.pending_predicate_fires.len(), 1);
     }
 }

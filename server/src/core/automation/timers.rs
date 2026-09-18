@@ -9,7 +9,8 @@
 use std::collections::BTreeMap;
 
 use crate::types::{
-    automation_definition::{TimerId, TimerOperation},
+    automation_definition::{NodeId, TimerId, TimerOperation},
+    event::TimerWakeupJob,
     rule::RoutineId,
 };
 
@@ -55,7 +56,7 @@ impl TimerOperationError {
 pub struct TimerWakeup {
     pub routine_id: RoutineId,
     pub definition_revision: i64,
-    pub timer: TimerId,
+    pub job: TimerWakeupJob,
     pub generation: u64,
     pub due_monotonic_ms: u64,
     pub due_wall_ms: i64,
@@ -82,6 +83,18 @@ pub struct TimerFire {
     pub due_wall_ms: i64,
 }
 
+/// One validated sustained-predicate maturity ready for frame evaluation. The
+/// predicate itself is re-evaluated against current state at expiry (J05);
+/// this only proves the deadline and generation were current.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PredicateDeadlineFire {
+    pub routine_id: RoutineId,
+    pub definition_revision: i64,
+    pub trigger: NodeId,
+    pub generation: u64,
+    pub due_wall_ms: i64,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct TimerJob {
     definition_revision: i64,
@@ -90,10 +103,24 @@ struct TimerJob {
     due_wall_ms: i64,
 }
 
-/// Actor-authoritative store of live named timers.
+fn named_job(timer: &TimerId) -> TimerWakeupJob {
+    TimerWakeupJob::NamedTimer {
+        timer: timer.clone(),
+    }
+}
+
+fn predicate_job(trigger: &NodeId) -> TimerWakeupJob {
+    TimerWakeupJob::PredicateDeadline {
+        trigger: trigger.clone(),
+    }
+}
+
+/// Actor-authoritative store of live timer jobs (named timers and
+/// sustained-predicate deadlines share the wakeup pipeline with distinct job
+/// kinds).
 #[derive(Clone, Debug, Default)]
 pub struct TimerStore {
-    jobs: BTreeMap<(RoutineId, TimerId), TimerJob>,
+    jobs: BTreeMap<(RoutineId, TimerWakeupJob), TimerJob>,
     next_generation: u64,
 }
 
@@ -107,13 +134,13 @@ impl TimerStore {
     }
 
     pub fn is_pending(&self, owner: &RoutineId, timer: &TimerId) -> bool {
-        self.jobs.contains_key(&(owner.clone(), timer.clone()))
+        self.jobs.contains_key(&(owner.clone(), named_job(timer)))
     }
 
     /// Current generation of a live owner/key, if any.
     pub fn pending_generation(&self, owner: &RoutineId, timer: &TimerId) -> Option<u64> {
         self.jobs
-            .get(&(owner.clone(), timer.clone()))
+            .get(&(owner.clone(), named_job(timer)))
             .map(|job| job.generation)
     }
 
@@ -131,7 +158,7 @@ impl TimerStore {
                     TimerCancellation::GenerationMismatch { current, expected }
                 }
                 _ => {
-                    self.jobs.remove(&(owner.clone(), timer.clone()));
+                    self.jobs.remove(&(owner.clone(), named_job(timer)));
                     TimerCancellation::Cancelled {
                         generation: current,
                     }
@@ -139,6 +166,75 @@ impl TimerStore {
             },
             None => TimerCancellation::NoOp,
         }
+    }
+
+    /// Current generation of a live sustained-predicate deadline, if any.
+    pub fn pending_predicate_generation(&self, owner: &RoutineId, trigger: &NodeId) -> Option<u64> {
+        self.jobs
+            .get(&(owner.clone(), predicate_job(trigger)))
+            .map(|job| job.generation)
+    }
+
+    /// Idempotently arm a sustained-predicate deadline: a live deadline for
+    /// the same owner revision is kept (no generation churn), otherwise a new
+    /// episode generation starts at `now` (J06 arming contract).
+    pub fn ensure_predicate(
+        &mut self,
+        owner: &RoutineId,
+        definition_revision: i64,
+        trigger: &NodeId,
+        delay_ms: u64,
+        now_monotonic_ms: u64,
+        now_wall_ms: i64,
+    ) -> Result<u64, TimerOperationError> {
+        let key = (owner.clone(), predicate_job(trigger));
+        if let Some(job) = self.jobs.get(&key) {
+            if job.definition_revision == definition_revision {
+                return Ok(job.generation);
+            }
+            self.jobs.remove(&key);
+        }
+        self.insert(
+            owner,
+            predicate_job(trigger),
+            definition_revision,
+            delay_ms,
+            now_monotonic_ms,
+            now_wall_ms,
+        )
+    }
+
+    /// Cancel a live sustained-predicate deadline. Returns its generation, or
+    /// zero when nothing was live (idempotent).
+    pub fn cancel_predicate(&mut self, owner: &RoutineId, trigger: &NodeId) -> u64 {
+        self.jobs
+            .remove(&(owner.clone(), predicate_job(trigger)))
+            .map(|job| job.generation)
+            .unwrap_or(0)
+    }
+
+    /// Validate and consume one predicate wakeup (revision + generation), so a
+    /// deadline that was canceled, replaced, or edited never matures.
+    pub fn consume_predicate(
+        &mut self,
+        owner: &RoutineId,
+        definition_revision: i64,
+        trigger: &NodeId,
+        generation: u64,
+    ) -> Option<PredicateDeadlineFire> {
+        let key = (owner.clone(), predicate_job(trigger));
+        let job = self.jobs.get(&key)?;
+        if job.generation != generation || job.definition_revision != definition_revision {
+            return None;
+        }
+        let job = self.jobs.remove(&key)?;
+        Some(PredicateDeadlineFire {
+            routine_id: owner.clone(),
+            definition_revision: job.definition_revision,
+            trigger: trigger.clone(),
+            generation: job.generation,
+            due_wall_ms: job.due_wall_ms,
+        })
     }
 
     /// Apply one timer operation. Returns the affected generation (zero for a
@@ -153,7 +249,7 @@ impl TimerStore {
     ) -> Result<u64, TimerOperationError> {
         match operation {
             TimerOperation::Schedule { timer, delay_ms } => {
-                if let Some(job) = self.jobs.get(&(owner.clone(), timer.clone())) {
+                if let Some(job) = self.jobs.get(&(owner.clone(), named_job(timer))) {
                     return Err(TimerOperationError::AlreadyPending {
                         timer: timer.clone(),
                         generation: job.generation,
@@ -161,7 +257,7 @@ impl TimerStore {
                 }
                 self.insert(
                     owner,
-                    timer,
+                    named_job(timer),
                     definition_revision,
                     *delay_ms,
                     now_monotonic_ms,
@@ -170,7 +266,7 @@ impl TimerStore {
             }
             TimerOperation::Replace { timer, delay_ms } => self.insert(
                 owner,
-                timer,
+                named_job(timer),
                 definition_revision,
                 *delay_ms,
                 now_monotonic_ms,
@@ -179,7 +275,7 @@ impl TimerStore {
             TimerOperation::Cancel { timer } => {
                 let generation = self
                     .jobs
-                    .remove(&(owner.clone(), timer.clone()))
+                    .remove(&(owner.clone(), named_job(timer)))
                     .map(|job| job.generation)
                     .unwrap_or(0);
                 Ok(generation)
@@ -190,7 +286,7 @@ impl TimerStore {
     fn insert(
         &mut self,
         owner: &RoutineId,
-        timer: &TimerId,
+        job: TimerWakeupJob,
         definition_revision: i64,
         delay_ms: u64,
         now_monotonic_ms: u64,
@@ -216,7 +312,7 @@ impl TimerStore {
         self.next_generation = self.next_generation.wrapping_add(1);
         let generation = self.next_generation;
         self.jobs.insert(
-            (owner.clone(), timer.clone()),
+            (owner.clone(), job),
             TimerJob {
                 definition_revision,
                 generation,
@@ -236,11 +332,11 @@ impl TimerStore {
         timer: &TimerId,
         generation: u64,
     ) -> Option<TimerFire> {
-        let job = self.jobs.get(&(owner.clone(), timer.clone()))?;
+        let job = self.jobs.get(&(owner.clone(), named_job(timer)))?;
         if job.generation != generation || job.definition_revision != definition_revision {
             return None;
         }
-        let job = self.jobs.remove(&(owner.clone(), timer.clone()))?;
+        let job = self.jobs.remove(&(owner.clone(), named_job(timer)))?;
         Some(TimerFire {
             routine_id: owner.clone(),
             definition_revision: job.definition_revision,
@@ -266,15 +362,18 @@ impl TimerStore {
 
         self.jobs
             .iter()
-            .map(|((owner, timer), job)| TimerRuntimeStatus {
-                routine_id: owner.clone(),
-                definition_revision: job.definition_revision,
-                timer: timer.clone(),
-                generation: job.generation,
-                status: TimerJobStatus::Pending,
-                due_wall_ms: job.due_wall_ms,
-                remaining_ms: job.due_monotonic_ms.saturating_sub(now_monotonic_ms),
-                persistence: TimerPersistence::Session,
+            .filter_map(|((owner, job_ref), job)| match job_ref {
+                TimerWakeupJob::NamedTimer { timer } => Some(TimerRuntimeStatus {
+                    routine_id: owner.clone(),
+                    definition_revision: job.definition_revision,
+                    timer: timer.clone(),
+                    generation: job.generation,
+                    status: TimerJobStatus::Pending,
+                    due_wall_ms: job.due_wall_ms,
+                    remaining_ms: job.due_monotonic_ms.saturating_sub(now_monotonic_ms),
+                    persistence: TimerPersistence::Session,
+                }),
+                TimerWakeupJob::PredicateDeadline { .. } => None,
             })
             .collect()
     }
@@ -283,10 +382,10 @@ impl TimerStore {
     pub fn wakeups(&self) -> Vec<TimerWakeup> {
         self.jobs
             .iter()
-            .map(|((owner, timer), job)| TimerWakeup {
+            .map(|((owner, job_ref), job)| TimerWakeup {
                 routine_id: owner.clone(),
                 definition_revision: job.definition_revision,
-                timer: timer.clone(),
+                job: job_ref.clone(),
                 generation: job.generation,
                 due_monotonic_ms: job.due_monotonic_ms,
                 due_wall_ms: job.due_wall_ms,
@@ -437,5 +536,80 @@ mod tests {
 
         store.retain_current(&BTreeMap::from([(owner("routine"), 2)]));
         assert!(store.is_empty());
+    }
+
+    // J06: arming is idempotent per episode; expiry is generation-checked.
+    #[test]
+    fn predicate_deadlines_are_idempotent_and_generation_checked() {
+        let mut store = TimerStore::default();
+        let trigger = NodeId("armed".to_string());
+        let first = store
+            .ensure_predicate(&owner("routine"), 1, &trigger, 30_000, 0, 1_000)
+            .unwrap();
+        let again = store
+            .ensure_predicate(&owner("routine"), 1, &trigger, 30_000, 5_000, 2_000)
+            .unwrap();
+        assert_eq!(
+            first, again,
+            "keeping a live episode must not churn generations"
+        );
+
+        assert!(
+            store
+                .consume_predicate(&owner("routine"), 1, &trigger, first + 1)
+                .is_none(),
+            "a mismatched generation never matures"
+        );
+        assert!(
+            store
+                .consume_predicate(&owner("routine"), 2, &trigger, first)
+                .is_none(),
+            "an edited revision never matures"
+        );
+        let fire = store
+            .consume_predicate(&owner("routine"), 1, &trigger, first)
+            .expect("current deadline matures");
+        assert_eq!(fire.trigger, trigger);
+        assert_eq!(fire.due_wall_ms, 31_000);
+        assert!(
+            store
+                .consume_predicate(&owner("routine"), 1, &trigger, first)
+                .is_none(),
+            "a generation matures at most once"
+        );
+
+        store
+            .ensure_predicate(&owner("routine"), 1, &trigger, 30_000, 0, 1_000)
+            .unwrap();
+        assert!(store.cancel_predicate(&owner("routine"), &trigger) > 0);
+        assert_eq!(
+            store.cancel_predicate(&owner("routine"), &trigger),
+            0,
+            "cancel is idempotent"
+        );
+    }
+
+    #[test]
+    fn predicate_jobs_stay_out_of_the_named_projection() {
+        let mut store = TimerStore::default();
+        let trigger = NodeId("armed".to_string());
+        store
+            .ensure_predicate(&owner("routine"), 1, &trigger, 30_000, 0, 1_000)
+            .unwrap();
+        schedule(&mut store, "routine", "off", 1_000);
+
+        assert_eq!(
+            store.runtime_statuses(0).len(),
+            1,
+            "only named timers are user-visible"
+        );
+        assert_eq!(
+            store.wakeups().len(),
+            2,
+            "both kinds still drive the scheduler"
+        );
+
+        store.retain_current(&BTreeMap::from([(owner("routine"), 2)]));
+        assert!(store.is_empty(), "an edited revision drops both kinds");
     }
 }
