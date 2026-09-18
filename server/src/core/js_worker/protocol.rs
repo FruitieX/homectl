@@ -42,6 +42,11 @@ pub const SUPPORTED_SCRIPT_API_VERSION: u32 = 1;
 /// version so the two ABIs can never be silently mixed (Section 6.4).
 pub const SUPPORTED_LEGACY_API_VERSION: u32 = 1;
 
+/// Legacy (v1) scene-materializer invocation format version: the same old
+/// `devices`/`groups` globals and helper prelude as legacy rules, but the raw
+/// JSON expression result instead of boolean truthiness.
+pub const SUPPORTED_LEGACY_SCENE_API_VERSION: u32 = 1;
+
 /// Maximum accepted `run_id` length.
 pub const MAX_RUN_ID_BYTES: usize = 256;
 
@@ -57,6 +62,11 @@ pub enum RequestKind {
     /// raw expression completion, and plain JavaScript boolean truthiness.
     /// Kept as a distinct kind so the v2 ABI is never applied to v1 scripts.
     ExecuteLegacy,
+    /// Execute a legacy (v1) scene expression: the same globals and helper
+    /// prelude as [`RequestKind::ExecuteLegacy`], but the expression's raw JSON
+    /// result. Kept separate so the v1 scene output format and the strict v2
+    /// scene-materializer contract can never be conflated.
+    ExecuteLegacyScene,
 }
 
 /// Deterministic fault-injection modes used by process-level tests.
@@ -160,6 +170,25 @@ impl ScriptRequest {
             test_mode: None,
         }
     }
+
+    /// A request that executes a legacy (v1) scene expression with the legacy
+    /// invocation context (`{devices, groups}`) and returns its raw JSON value.
+    pub fn execute_legacy_scene(
+        request_id: u64,
+        script: impl Into<String>,
+        context: serde_json::Value,
+    ) -> Self {
+        Self {
+            request_id,
+            generation: 0,
+            api_version: SUPPORTED_LEGACY_SCENE_API_VERSION,
+            kind: RequestKind::ExecuteLegacyScene,
+            script: script.into(),
+            context,
+            run_id: None,
+            test_mode: None,
+        }
+    }
 }
 
 /// One invocation response sent from a worker process to the supervisor.
@@ -224,15 +253,14 @@ impl ScriptResponse {
 
 /// Request-side validation that does not require a worker.
 pub fn validate_request(request: &ScriptRequest) -> Result<(), String> {
-    let supported_version = match request.kind {
-        RequestKind::Execute | RequestKind::Validate => SUPPORTED_SCRIPT_API_VERSION,
-        RequestKind::ExecuteLegacy => SUPPORTED_LEGACY_API_VERSION,
+    let (supported_version, abi) = match request.kind {
+        RequestKind::Execute | RequestKind::Validate => (SUPPORTED_SCRIPT_API_VERSION, "script"),
+        RequestKind::ExecuteLegacy => (SUPPORTED_LEGACY_API_VERSION, "legacy script"),
+        RequestKind::ExecuteLegacyScene => {
+            (SUPPORTED_LEGACY_SCENE_API_VERSION, "legacy scene script")
+        }
     };
     if request.api_version != supported_version {
-        let abi = match request.kind {
-            RequestKind::Execute | RequestKind::Validate => "script",
-            RequestKind::ExecuteLegacy => "legacy script",
-        };
         return Err(format!(
             "unsupported {abi} api_version {}; this build supports {}",
             request.api_version, supported_version
@@ -524,6 +552,22 @@ mod tests {
         assert!(validate_request(&legacy).is_ok());
 
         let mut mismatched = legacy;
+        mismatched.api_version = SUPPORTED_SCRIPT_API_VERSION + 1;
+        assert!(validate_request(&mismatched).is_err());
+    }
+
+    #[test]
+    fn legacy_scene_requests_validate_against_the_legacy_scene_api_version() {
+        let scene = ScriptRequest::execute_legacy_scene(
+            1,
+            "defineSceneScript(function () { return {}; })",
+            serde_json::json!({"devices": {}, "groups": {}}),
+        );
+        assert_eq!(scene.kind, RequestKind::ExecuteLegacyScene);
+        assert_eq!(scene.api_version, SUPPORTED_LEGACY_SCENE_API_VERSION);
+        assert!(validate_request(&scene).is_ok());
+
+        let mut mismatched = scene;
         mismatched.api_version = SUPPORTED_SCRIPT_API_VERSION + 1;
         assert!(validate_request(&mismatched).is_err());
     }

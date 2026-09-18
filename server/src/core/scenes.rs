@@ -147,6 +147,12 @@ pub struct Scenes {
     flattened_scenes: FlattenedScenesConfig,
     scene_devices_configs: ResolvedSceneDevicesConfigs,
     device_invalidation_map: HashMap<DeviceKey, HashSet<SceneId>>,
+    /// Script source last seen per scene, used to bump the scene script
+    /// revision only when the source actually changes.
+    script_sources: HashMap<SceneId, String>,
+    /// Per-scene script revision; script owners are re-registered when it
+    /// changes so in-flight materializations are rejected (SC06).
+    script_revisions: HashMap<SceneId, i64>,
 }
 
 /// Evaluates current state of given device in some given scene
@@ -641,6 +647,44 @@ impl Scenes {
             .into_iter()
             .filter(|(scene_id, _)| valid_scene_ids.contains(scene_id))
             .collect();
+        self.refresh_script_revisions();
+    }
+
+    /// Bump the script revision only for scenes whose script source changed,
+    /// so an edit rejects in-flight materializations while untouched scenes
+    /// keep their owner generation (SC06).
+    fn refresh_script_revisions(&mut self) {
+        let mut sources = HashMap::new();
+        let mut revisions = HashMap::new();
+        for (scene_id, scene) in &self.db_scenes {
+            let Some(script) = scene.script.as_deref() else {
+                continue;
+            };
+            let revision = match self.script_sources.get(scene_id) {
+                Some(previous) if previous == script => {
+                    self.script_revisions.get(scene_id).copied().unwrap_or(1)
+                }
+                Some(_) => self.script_revisions.get(scene_id).copied().unwrap_or(0) + 1,
+                None => 1,
+            };
+            sources.insert(scene_id.clone(), script.to_string());
+            revisions.insert(scene_id.clone(), revision);
+        }
+        self.script_sources = sources;
+        self.script_revisions = revisions;
+    }
+
+    /// Current per-scene script revisions for scenes that have a script.
+    pub fn script_revisions(&self) -> BTreeMap<SceneId, i64> {
+        self.script_revisions
+            .iter()
+            .map(|(scene_id, revision)| (scene_id.clone(), *revision))
+            .collect()
+    }
+
+    /// The script source currently configured for a scene, if any.
+    pub fn script_for(&self, scene_id: &SceneId) -> Option<String> {
+        self.db_scenes.get(scene_id)?.script.clone()
     }
 
     pub async fn refresh_db_scenes(&mut self) {
@@ -1378,6 +1422,56 @@ mod tests {
                 DeviceId::new("source"),
             )
         );
+    }
+
+    // SC06: the revision only changes when the script source changes, so an
+    // edit rejects in-flight materializations while untouched scenes keep
+    // their owner generation.
+    #[test]
+    fn script_revisions_bump_only_when_the_script_changes() {
+        let scene_row = |script: Option<&str>| config_queries::SceneRow {
+            id: "evening".to_string(),
+            name: "Evening".to_string(),
+            hidden: false,
+            script: script.map(str::to_string),
+            device_states: HashMap::new(),
+            group_states: HashMap::new(),
+            group_state_order: Vec::new(),
+        };
+        let scene_id = SceneId::new("evening".to_string());
+
+        let mut scenes = Scenes::new(ScenesConfig::new());
+        scenes.load_config_rows(
+            &[scene_row(Some(
+                "defineSceneScript(function () { return {}; })",
+            ))],
+            Default::default(),
+        );
+        assert_eq!(scenes.script_revisions().get(&scene_id), Some(&1));
+
+        scenes.load_config_rows(
+            &[scene_row(Some(
+                "defineSceneScript(function () { return {}; })",
+            ))],
+            Default::default(),
+        );
+        assert_eq!(
+            scenes.script_revisions().get(&scene_id),
+            Some(&1),
+            "an unchanged script source keeps its revision"
+        );
+
+        scenes.load_config_rows(
+            &[scene_row(Some(
+                "defineSceneScript(function () { return { 'test/target': {} }; })",
+            ))],
+            Default::default(),
+        );
+        assert_eq!(scenes.script_revisions().get(&scene_id), Some(&2));
+
+        scenes.load_config_rows(&[scene_row(None)], Default::default());
+        assert!(scenes.script_revisions().is_empty());
+        assert!(scenes.script_for(&scene_id).is_none());
     }
 
     #[test]

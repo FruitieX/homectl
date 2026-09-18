@@ -435,6 +435,16 @@ impl JsWorkerPool {
         self.run_request(request).await
     }
 
+    /// Execute a legacy (v1) scene expression and return its raw JSON result.
+    pub async fn execute_legacy_scene(
+        &self,
+        script: &str,
+        context: serde_json::Value,
+    ) -> Result<serde_json::Value, WorkerError> {
+        let request = ScriptRequest::execute_legacy_scene(self.next_request_id(), script, context);
+        self.run_request(request).await
+    }
+
     /// Run one request, returning its JSON value or a bounded error.
     ///
     /// This future is cancellation-safe with respect to the pool: dropping it

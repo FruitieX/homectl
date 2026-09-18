@@ -818,8 +818,12 @@ impl AppState {
     /// worker results (S16, Section 6.4).
     pub fn sync_script_owners(&mut self) {
         let legacy_owners = self.rules.legacy_script_owners();
-        self.scripts
-            .sync_owners(self.rules.compiled_v2_routines(), &legacy_owners);
+        let scene_owners = self.scenes.script_revisions();
+        self.scripts.sync_owners(
+            self.rules.compiled_v2_routines(),
+            &legacy_owners,
+            &scene_owners,
+        );
     }
 
     pub async fn refresh_runtime_config_from_db(&mut self) -> Result<()> {

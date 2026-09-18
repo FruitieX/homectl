@@ -23,12 +23,13 @@ pub mod protocol;
 pub mod supervisor;
 
 pub use engine::{
-    execute_legacy_rule_script, execute_script, validate_script, MAX_SCRIPT_RESULT_BYTES,
+    execute_legacy_rule_script, execute_legacy_scene_script, execute_script, validate_script,
+    MAX_SCRIPT_RESULT_BYTES,
 };
 pub use protocol::{
     FrameError, RequestKind, ScriptRequest, ScriptResponse, TestMode, MAX_CONTEXT_BYTES,
     MAX_REQUEST_BYTES, MAX_RESPONSE_BYTES, MAX_RESULT_BYTES, MAX_SCRIPT_BYTES,
-    SUPPORTED_LEGACY_API_VERSION, SUPPORTED_SCRIPT_API_VERSION,
+    SUPPORTED_LEGACY_API_VERSION, SUPPORTED_LEGACY_SCENE_API_VERSION, SUPPORTED_SCRIPT_API_VERSION,
 };
 pub use supervisor::{
     JsWorkerPool, SupervisorConfig, WorkerError, DEFAULT_ADDRESS_SPACE_LIMIT_BYTES,

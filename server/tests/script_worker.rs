@@ -167,6 +167,63 @@ async fn legacy_rule_scripts_keep_v1_semantics_through_the_worker() {
     pool.shutdown().await;
 }
 
+// P08/Section 6.4: the legacy scene invocation format keeps the scene helper
+// prelude, the `devices`/`groups` globals, and the raw JSON output, versioned
+// separately from both the v2 ABI and legacy rule truthiness.
+#[tokio::test]
+async fn legacy_scene_scripts_keep_v1_json_semantics_through_the_worker() {
+    use homectl_server::core::js_worker::protocol::{
+        RequestKind, SUPPORTED_LEGACY_SCENE_API_VERSION, SUPPORTED_SCRIPT_API_VERSION,
+    };
+
+    let pool = test_pool(2).await;
+    let context = json!({
+        "devices": { "mqtt/lamp": { "name": "Lamp" } },
+        "groups": { "room": { "name": "Room", "power": true, "scene_id": "night" } }
+    });
+    let script = "defineSceneScript(function () { return { \
+                  'mqtt/lamp': deviceState({ power: true }), \
+                  'mqtt/other': deviceLink({ device_ref: { integration_id: 'mqtt', device_id: 'lamp' } }) }; })";
+    let value = pool
+        .execute_legacy_scene(script, context.clone())
+        .await
+        .unwrap();
+    assert_eq!(value["mqtt/lamp"]["power"], json!(true));
+    assert_eq!(
+        value["mqtt/other"]["device_ref"]["device_id"],
+        json!("lamp")
+    );
+
+    // Raw JSON completions are returned as-is; the server-side merge treats
+    // non-objects as an empty device map.
+    assert_eq!(
+        pool.execute_legacy_scene("42", context.clone())
+            .await
+            .unwrap(),
+        json!(42)
+    );
+    assert!(pool
+        .execute_legacy_scene("return {};", context.clone())
+        .await
+        .is_err());
+    assert!(pool
+        .execute_legacy_scene("while (true) {}", context.clone())
+        .await
+        .is_err());
+
+    let mut mismatched = ScriptRequest::execute_legacy_scene(1, script, context.clone());
+    assert_eq!(mismatched.kind, RequestKind::ExecuteLegacyScene);
+    assert_eq!(mismatched.api_version, SUPPORTED_LEGACY_SCENE_API_VERSION);
+    mismatched.api_version = SUPPORTED_SCRIPT_API_VERSION + 1;
+    let error = pool.run_request(mismatched).await.unwrap_err();
+    assert!(
+        matches!(error, WorkerError::InvalidRequest { .. }),
+        "{error:?}"
+    );
+
+    pool.shutdown().await;
+}
+
 #[tokio::test]
 async fn s01_hanging_worker_times_out_and_is_replaced() {
     let mut config = test_config(1);

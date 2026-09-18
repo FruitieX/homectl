@@ -462,6 +462,24 @@ impl ScriptCoordinator {
         }
     }
 
+    /// Complete a legacy (v1) scene invocation. There is no strict contract
+    /// parse: the server keeps applying the legacy per-entry parsing and
+    /// skip-on-invalid semantics, so only staleness is enforced here.
+    pub fn complete_legacy_scene(
+        &mut self,
+        token: &InvocationToken,
+        value: &Value,
+    ) -> CompleteResult<Value> {
+        let _entry = match self.begin_completion(token) {
+            Ok(entry) => entry,
+            Err(reason) => return CompleteResult::Stale(reason),
+        };
+        CompleteResult::Applied {
+            value: value.clone(),
+            state_applied: false,
+        }
+    }
+
     pub fn complete_computed_source(
         &mut self,
         token: &InvocationToken,

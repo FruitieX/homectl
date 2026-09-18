@@ -76,6 +76,9 @@ fn handle_script(request: &ScriptRequest, writer: &mut impl Write) {
         RequestKind::ExecuteLegacy => {
             engine::execute_legacy_rule_script(&request.script, &request.context)
         }
+        RequestKind::ExecuteLegacyScene => {
+            engine::execute_legacy_scene_script(&request.script, &request.context)
+        }
     };
 
     let response = match result {

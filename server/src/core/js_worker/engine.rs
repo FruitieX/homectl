@@ -143,6 +143,50 @@ pub fn execute_legacy_rule_script(
     script: &str,
     context: &serde_json::Value,
 ) -> Result<serde_json::Value, String> {
+    let mut realm = legacy_realm(script, context)?;
+
+    let value = realm
+        .eval(Source::from_bytes(script))
+        .map_err(|error| format!("script error: {error}"))?;
+
+    Ok(serde_json::Value::Bool(value.to_boolean()))
+}
+
+/// Execute a legacy (v1) scene expression off-actor.
+///
+/// Same compatibility realm and helper prelude as
+/// [`execute_legacy_rule_script`], but the raw JSON completion value instead of
+/// boolean truthiness, mirroring the retired in-process `eval_json`
+/// (`JSON.stringify` wrapping with a `null` completion fallback). The server
+/// keeps applying the legacy per-entry parsing and skip-on-invalid semantics,
+/// so the strict v2 scene-materializer contract is never applied to v1 scripts.
+pub fn execute_legacy_scene_script(
+    script: &str,
+    context: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    let mut realm = legacy_realm(script, context)?;
+
+    let wrapped = format!("JSON.stringify({script})");
+    let value = realm
+        .eval(Source::from_bytes(&wrapped))
+        .map_err(|error| format!("script error: {error}"))?;
+
+    let json = value
+        .as_string()
+        .map(|value| value.to_std_string_escaped())
+        .unwrap_or_else(|| "null".to_string());
+    if json.len() > MAX_RESULT_BYTES {
+        return Err(format!(
+            "script result exceeds the {MAX_RESULT_BYTES} byte limit"
+        ));
+    }
+
+    serde_json::from_str(&json).map_err(|error| format!("script result is not valid JSON: {error}"))
+}
+
+/// Build the shared legacy compatibility realm: fresh context, the scene
+/// script helper prelude, and the injected `devices`/`groups` globals.
+fn legacy_realm(script: &str, context: &serde_json::Value) -> Result<Context, String> {
     check_script_size(script)?;
 
     let empty = serde_json::Value::Object(serde_json::Map::new());
@@ -159,19 +203,14 @@ pub fn execute_legacy_rule_script(
         ));
     }
 
-    let mut context = fresh_context();
-    context
+    let mut realm = fresh_context();
+    realm
         .eval(Source::from_bytes(SCENE_SCRIPT_HELPERS))
         .map_err(|error| format!("failed to install legacy script helpers: {error}"))?;
-    context
+    realm
         .eval(Source::from_bytes(&injection))
         .map_err(|error| format!("failed to inject legacy script context: {error}"))?;
-
-    let value = context
-        .eval(Source::from_bytes(script))
-        .map_err(|error| format!("script error: {error}"))?;
-
-    Ok(serde_json::Value::Bool(value.to_boolean()))
+    Ok(realm)
 }
 
 /// Result cap used by the worker for script output.
@@ -320,5 +359,48 @@ mod tests {
         // The v2 body ABI must not be accepted: `return` is a syntax error in
         // the legacy raw-expression format.
         assert!(run_legacy("return true;").is_err());
+    }
+
+    fn run_legacy_scene(script: &str) -> Result<serde_json::Value, String> {
+        execute_legacy_scene_script(
+            script,
+            &serde_json::json!({
+                "devices": {
+                    "dummy/lamp": { "state": { "Controllable": { "power": true } } }
+                },
+                "groups": {
+                    "room": { "name": "Room", "power": true, "scene_id": "night" }
+                }
+            }),
+        )
+    }
+
+    // P08/Section 6.4: v1 scene expressions keep the legacy raw-JSON output
+    // (helpers, globals, JSON.stringify completion), not v2 strictness and not
+    // rule truthiness.
+    #[test]
+    fn legacy_scene_scripts_return_raw_json_with_helpers_and_globals() {
+        let value = run_legacy_scene(
+            "defineSceneScript(function () { return { \
+             'dummy/lamp': deviceState({ power: devices['dummy/lamp'] !== undefined }), \
+             'dummy/room': deviceLink({ device_ref: { integration_id: 'dummy', device_id: 'lamp' } }) }; })",
+        )
+        .unwrap();
+        assert_eq!(value["dummy/lamp"]["power"], serde_json::json!(true));
+        assert_eq!(value["dummy/room"]["device_ref"]["device_id"], "lamp");
+
+        // Raw JSON completion, exactly like the legacy `eval_json`: the
+        // server-side merge treats non-objects as an empty device map.
+        assert_eq!(run_legacy_scene("42").unwrap(), serde_json::json!(42));
+        assert_eq!(
+            run_legacy_scene("groups['room'].scene_id").unwrap(),
+            serde_json::json!("night")
+        );
+    }
+
+    #[test]
+    fn legacy_scene_scripts_reject_errors_and_v2_body_syntax() {
+        assert!(run_legacy_scene("throw new Error('boom')").is_err());
+        assert!(run_legacy_scene("return {};").is_err());
     }
 }

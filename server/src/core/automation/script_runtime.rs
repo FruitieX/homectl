@@ -31,6 +31,7 @@ use crate::types::{
     device::{Device, DeviceKey, DeviceRef},
     event::{Event, TxEventChannel},
     rule::RoutineId,
+    scene::SceneId,
 };
 
 use crate::core::js_worker::{JsWorkerPool, SupervisorConfig};
@@ -65,6 +66,15 @@ pub struct PreparedScriptRun {
 #[derive(Clone, Debug)]
 pub struct PreparedLegacyLeaf {
     pub routine_id: RoutineId,
+    pub token: InvocationToken,
+    pub script: String,
+    pub context: Value,
+}
+
+/// One admitted legacy (v1) scene materialization ready for the worker pool.
+#[derive(Clone, Debug)]
+pub struct PreparedSceneMaterialization {
+    pub scene_id: SceneId,
     pub token: InvocationToken,
     pub script: String,
     pub context: Value,
@@ -106,16 +116,20 @@ impl ScriptExecution {
         &mut self.coordinator
     }
 
-    /// Reconcile routine owners with the compiled definitions and legacy
-    /// script-bearing routines. V2 definitions whose revision is unchanged keep
-    /// their generation and pending results; edited definitions bump the
-    /// generation (S16); removed definitions drop their owner state. Legacy
-    /// owners are re-registered on every reconciliation so a configuration
-    /// reload always invalidates in-flight v1 results (Section 6.4).
+    /// Reconcile routine owners with the compiled definitions, legacy
+    /// script-bearing routines, and scene scripts. V2 definitions whose
+    /// revision is unchanged keep their generation and pending results; edited
+    /// definitions bump the generation (S16); removed definitions drop their
+    /// owner state. Legacy routine owners are re-registered on every
+    /// reconciliation so a configuration reload always invalidates in-flight
+    /// v1 results (Section 6.4). Scene owners keep their generation while the
+    /// per-scene revision is unchanged, so an edit rejects in-flight
+    /// materializations without disturbing untouched scenes (SC06).
     pub fn sync_owners(
         &mut self,
         definitions: &BTreeMap<RoutineId, V2Definition>,
         legacy_script_owners: &BTreeSet<RoutineId>,
+        scene_owners: &BTreeMap<SceneId, i64>,
     ) {
         let mut live: BTreeSet<String> = BTreeSet::new();
         for (routine_id, definition) in definitions {
@@ -139,17 +153,27 @@ impl ScriptExecution {
                 .load_owner(&owner, LEGACY_DEFINITION_REVISION, Value::Null);
             live.insert(owner.key());
         }
+        for (scene_id, revision) in scene_owners {
+            let owner = ScriptOwnerId::scene(scene_id.to_string());
+            let current = self.coordinator.definition_revision(&owner);
+            if current != Some(*revision) || !self.coordinator.is_enabled(&owner) {
+                self.coordinator.load_owner(&owner, *revision, Value::Null);
+            }
+            live.insert(owner.key());
+        }
 
         let stale: Vec<ScriptOwnerId> = self
             .coordinator
             .owner_keys()
             .into_iter()
-            .filter(|(key, kind)| *kind == OwnerKind::Routine && !live.contains(key))
-            .map(|(key, _)| ScriptOwnerId {
-                kind: OwnerKind::Routine,
+            .filter(|(key, kind)| {
+                matches!(kind, OwnerKind::Routine | OwnerKind::Scene) && !live.contains(key)
+            })
+            .map(|(key, kind)| ScriptOwnerId {
+                kind,
                 id: key
-                    .split_once(':')
-                    .map(|(_, id)| id.to_string())
+                    .strip_prefix(&format!("{}:", kind.as_str()))
+                    .map(str::to_string)
                     .unwrap_or(key),
             })
             .collect();
@@ -382,6 +406,38 @@ impl ScriptExecution {
             Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
                 Ok(PreparedLegacyLeaf {
                     routine_id: routine_id.clone(),
+                    token,
+                    script,
+                    context,
+                })
+            }
+            Err(error) => Err(admission_error_text(&error)),
+        }
+    }
+
+    /// Admit a legacy (v1) scene materialization. Scene refreshes coalesce to
+    /// the latest revision (current-value recomputation), and admission
+    /// failures are returned as visible reasons without reaching a worker.
+    pub fn prepare_scene_materialization(
+        &mut self,
+        scene_id: &SceneId,
+        definition_revision: i64,
+        script: String,
+        context: Value,
+    ) -> Result<PreparedSceneMaterialization, String> {
+        let invocation = ScriptInvocation {
+            owner: ScriptOwnerId::scene(scene_id.to_string()),
+            definition_revision,
+            contract: super::script_contract::ScriptOutputContract::SceneMaterializer,
+            source_body: script.clone(),
+            context: context.clone(),
+            coalesce: super::script_coordinator::CoalescePolicy::LatestWins,
+            run_id: None,
+        };
+        match self.coordinator.submit(&invocation) {
+            Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
+                Ok(PreparedSceneMaterialization {
+                    scene_id: scene_id.clone(),
                     token,
                     script,
                     context,
@@ -876,7 +932,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        scripts.sync_owners(&owners, &BTreeSet::new());
+        scripts.sync_owners(&owners, &BTreeSet::new(), &BTreeMap::new());
         let owner = ScriptOwnerId::routine("scripted");
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(1));
         assert_eq!(
@@ -888,10 +944,10 @@ mod tests {
 
         let edited: BTreeMap<RoutineId, V2Definition> =
             [definition("scripted", 2, true)].into_iter().collect();
-        scripts.sync_owners(&edited, &BTreeSet::new());
+        scripts.sync_owners(&edited, &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(2));
 
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new());
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
     }
 
@@ -901,7 +957,7 @@ mod tests {
     fn legacy_owners_reload_and_bump_generation() {
         let mut scripts = ScriptExecution::default();
         let legacy: BTreeSet<RoutineId> = [RoutineId("legacy".to_string())].into_iter().collect();
-        scripts.sync_owners(&BTreeMap::new(), &legacy);
+        scripts.sync_owners(&BTreeMap::new(), &legacy, &BTreeMap::new());
 
         let owner = ScriptOwnerId::routine("legacy");
         assert_eq!(
@@ -917,7 +973,7 @@ mod tests {
             .expect("legacy leaf is admitted");
         assert_eq!(prepared.token.owner_generation, 1);
 
-        scripts.sync_owners(&BTreeMap::new(), &legacy);
+        scripts.sync_owners(&BTreeMap::new(), &legacy, &BTreeMap::new());
         let completed = scripts
             .coordinator_mut()
             .complete_condition(&prepared.token, &json!(true));
@@ -927,7 +983,77 @@ mod tests {
             "a reload rejects the in-flight legacy result"
         );
 
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new());
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &BTreeMap::new());
+        assert_eq!(scripts.coordinator().owner_kind(&owner), None);
+    }
+
+    // SC06 direction: scene owners keep their generation while the script
+    // revision is unchanged and reject in-flight results after an edit.
+    #[test]
+    fn scene_owners_track_revisions_and_reject_edited_scripts() {
+        use crate::types::scene::SceneId;
+
+        let mut scripts = ScriptExecution::default();
+        let scene = SceneId::new("evening".to_string());
+        let owners: BTreeMap<SceneId, i64> = [(scene.clone(), 1)].into_iter().collect();
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &owners);
+
+        let owner = ScriptOwnerId::scene("evening");
+        assert_eq!(scripts.coordinator().definition_revision(&owner), Some(1));
+        let prepared = scripts
+            .prepare_scene_materialization(
+                &scene,
+                1,
+                "defineSceneScript(function () { return {}; })".to_string(),
+                json!({"devices": {}, "groups": {}}),
+            )
+            .expect("scene materialization is admitted");
+        assert_eq!(prepared.token.owner_generation, 1);
+        assert_eq!(
+            prepared.token.contract,
+            super::super::script_contract::ScriptOutputContract::SceneMaterializer
+        );
+
+        // Unchanged revision: the generation (and the pending result) survive.
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &owners);
+        let applied = scripts
+            .coordinator_mut()
+            .complete_legacy_scene(&prepared.token, &json!({"dummy/lamp": {"power": true}}));
+        match applied {
+            CompleteResult::Applied {
+                value,
+                state_applied,
+            } => {
+                assert_eq!(value["dummy/lamp"]["power"], json!(true));
+                assert!(!state_applied);
+            }
+            other => panic!("expected applied result, got {other:?}"),
+        }
+
+        // Edited revision: the new owner generation rejects the old token.
+        let edited: BTreeMap<SceneId, i64> = [(scene.clone(), 2)].into_iter().collect();
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &edited);
+        let stale_token = scripts
+            .prepare_scene_materialization(
+                &scene,
+                2,
+                "defineSceneScript(function () { return {}; })".to_string(),
+                json!({"devices": {}, "groups": {}}),
+            )
+            .expect("edited scene is admitted")
+            .token;
+        assert_eq!(stale_token.owner_generation, 2);
+        let stale = scripts
+            .coordinator_mut()
+            .complete_legacy_scene(&prepared.token, &json!({}));
+        assert_eq!(
+            stale,
+            CompleteResult::Stale(StaleReason::DefinitionChanged),
+            "the previous generation's result is rejected after an edit"
+        );
+
+        // Removed scene scripts drop their owner entirely.
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &BTreeMap::new());
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
     }
 }
