@@ -84,6 +84,7 @@ pub enum SceneGroupStates {
     SceneId,
     GroupId,
     Config,
+    SortOrder,
 }
 
 #[derive(Clone, Copy, Iden)]

@@ -1,4 +1,4 @@
-import { TimeSeriesPlot } from './TimeSeriesPlot';
+import { TimeSeriesPlot, type PlotLegendItem } from './TimeSeriesPlot';
 type Point = {
   time: Date;
   temp?: number;
@@ -27,6 +27,16 @@ export function WeatherChart({
 }) {
   const precipitation = chartType === 'precipitation',
     temperature = chartType === 'temperature';
+  const legendItems: PlotLegendItem[] = precipitation
+    ? [
+        {
+          name: 'Possible rain',
+          className: 'text-sky-700 dark:text-sky-300',
+          markerClassName:
+            'inline-block h-2.5 w-3 rounded-sm bg-current opacity-20',
+        },
+      ]
+    : [];
   return (
     <TimeSeriesPlot
       label={`${chartType} forecast`}
@@ -34,6 +44,7 @@ export function WeatherChart({
       width={width}
       height={height}
       zero={!temperature}
+      legendItems={legendItems}
       series={[
         {
           name: temperature

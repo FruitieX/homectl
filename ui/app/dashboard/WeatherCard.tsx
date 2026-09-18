@@ -197,17 +197,22 @@ const buildDailyData = (
 function DailyForecastCard({
   day,
   compact = false,
+  scrollable = false,
 }: {
   day: DailyWeatherData;
   compact?: boolean;
+  scrollable?: boolean;
 }) {
   const today = day.date.toDateString() === new Date().toDateString();
   return (
     <div
       className={clsx(
-        'min-w-0 rounded-xl border border-border/50 bg-muted/35',
+        'rounded-xl border border-border/50 bg-muted/35',
         compact
-          ? 'flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left'
+          ? clsx(
+              'flex items-center gap-2 px-2 py-1.5 text-left',
+              scrollable ? 'min-w-[7.5rem] shrink-0' : 'min-w-0 flex-1',
+            )
           : 'flex min-w-[106px] shrink-0 flex-1 flex-col items-center p-2 text-center md:p-3',
       )}
     >
@@ -506,7 +511,12 @@ function WeatherHourlyPanel({
     <>
       <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
         {dailyData.map((day) => (
-          <DailyForecastCard key={day.date.toISOString()} day={day} compact />
+          <DailyForecastCard
+            key={day.date.toISOString()}
+            day={day}
+            compact
+            scrollable
+          />
         ))}
       </div>
       {hourlyData.map((series, index) => {
@@ -625,10 +635,6 @@ function WeatherLongTermPanel({
 
       <div>
         <h3 className="mb-2 text-sm font-semibold">Precipitation</h3>
-        <p className="mb-2 text-xs text-muted-foreground">
-          Solid bars show expected rain; lighter extensions show the maximum
-          likely amount. Widths represent 1-hour or 6-hour periods.
-        </p>
         <ResponsiveChart
           height={250}
           className="overflow-hidden rounded-2xl bg-muted/40"

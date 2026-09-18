@@ -56,6 +56,8 @@ pub struct SceneRow {
     pub script: Option<String>,
     pub device_states: HashMap<String, serde_json::Value>,
     pub group_states: HashMap<String, serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub group_state_order: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2243,22 +2245,25 @@ async fn scene_from_row<C: ConnectionTrait>(db: &C, row: QueryResult) -> Result<
     })
     .collect::<Result<HashMap<_, _>>>()?;
 
-    let group_states = all(
+    let group_state_rows = all(
         db,
         Query::select()
             .columns([SceneGroupStates::GroupId, SceneGroupStates::Config])
             .from(SceneGroupStates::Table)
             .and_where(Expr::col(SceneGroupStates::SceneId).eq(id.clone()))
+            .order_by(SceneGroupStates::SortOrder, Order::Asc)
+            .order_by(SceneGroupStates::GroupId, Order::Asc)
             .to_owned(),
     )
-    .await?
-    .into_iter()
-    .map(|row| {
+    .await?;
+    let mut group_state_order = Vec::with_capacity(group_state_rows.len());
+    let mut group_states = HashMap::with_capacity(group_state_rows.len());
+    for row in group_state_rows {
         let key: String = row.try_get("", "group_id")?;
         let config: String = row.try_get("", "config")?;
-        Ok((key, parse_json_or_default(&config, "scene group state")))
-    })
-    .collect::<Result<HashMap<_, _>>>()?;
+        group_state_order.push(key.clone());
+        group_states.insert(key, parse_json_or_default(&config, "scene group state"));
+    }
 
     Ok(SceneRow {
         id,
@@ -2267,6 +2272,7 @@ async fn scene_from_row<C: ConnectionTrait>(db: &C, row: QueryResult) -> Result<
         script,
         device_states,
         group_states,
+        group_state_order,
     })
 }
 
@@ -2329,7 +2335,24 @@ async fn upsert_scene_on<C: ConnectionTrait>(db: &C, scene: &SceneRow) -> Result
         .await?;
     }
 
-    for (group_id, config) in &scene.group_states {
+    let mut ordered_group_ids = Vec::with_capacity(scene.group_states.len());
+    let mut seen_group_ids = HashSet::new();
+    for group_id in &scene.group_state_order {
+        if scene.group_states.contains_key(group_id) && seen_group_ids.insert(group_id.clone()) {
+            ordered_group_ids.push(group_id.clone());
+        }
+    }
+    let mut unordered_group_ids: Vec<_> = scene
+        .group_states
+        .keys()
+        .filter(|group_id| !seen_group_ids.contains(*group_id))
+        .cloned()
+        .collect();
+    unordered_group_ids.sort();
+    ordered_group_ids.extend(unordered_group_ids);
+
+    for (sort_order, group_id) in ordered_group_ids.iter().enumerate() {
+        let config = &scene.group_states[group_id];
         execute(
             db,
             Query::insert()
@@ -2338,11 +2361,13 @@ async fn upsert_scene_on<C: ConnectionTrait>(db: &C, scene: &SceneRow) -> Result
                     SceneGroupStates::SceneId,
                     SceneGroupStates::GroupId,
                     SceneGroupStates::Config,
+                    SceneGroupStates::SortOrder,
                 ])
                 .values_panic([
                     Expr::value(scene.id.clone()),
                     Expr::value(group_id.clone()),
                     Expr::value(serde_json::to_string(config)?),
+                    Expr::value(sort_order as i32),
                 ])
                 .to_owned(),
         )

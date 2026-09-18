@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import {
   SceneDeviceConfig,
   SceneDeviceState,
@@ -19,6 +19,7 @@ import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { SceneColorEditor } from '@/ui/SceneColorEditor';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const selectClassName =
   'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -283,6 +284,10 @@ interface SceneTargetConfigEditorProps {
   scenes: Scene[];
   onChange: (config: SceneDeviceConfig) => void;
   onRemove: () => void;
+  position?: number;
+  targetCount?: number;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 function SceneTargetConfigEditor({
@@ -295,6 +300,10 @@ function SceneTargetConfigEditor({
   scenes,
   onChange,
   onRemove,
+  position,
+  targetCount,
+  onMoveUp,
+  onMoveDown,
 }: SceneTargetConfigEditorProps) {
   const configType = getConfigType(config);
 
@@ -313,19 +322,50 @@ function SceneTargetConfigEditor({
   return (
     <Card className="rounded-2xl bg-muted/30">
       <CardContent className="p-4">
-        <div className="flex justify-between items-start">
+        <div className="flex items-start justify-between gap-2">
           <div>
             <h4 className="font-semibold">{targetLabel ?? targetKey}</h4>
             <p className="text-xs text-muted-foreground">{targetKey}</p>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={onRemove}
-          >
-            ✕
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            {position !== undefined && targetCount !== undefined && (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label={`Move ${targetLabel ?? targetKey} earlier`}
+                  title="Move earlier"
+                  disabled={position === 0}
+                  onClick={onMoveUp}
+                >
+                  <ChevronUp />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label={`Move ${targetLabel ?? targetKey} later`}
+                  title="Move later"
+                  disabled={position === targetCount - 1}
+                  onClick={onMoveDown}
+                >
+                  <ChevronDown />
+                </Button>
+              </>
+            )}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onRemove}
+            >
+              ✕
+            </Button>
+          </div>
         </div>
 
         <div className={cn(fieldClassName, 'mt-2')}>
@@ -486,6 +526,8 @@ interface SceneTargetSectionEditorProps {
   targetKind: SceneTargetKind;
   devices: DevicesState;
   onChange: (items: Record<string, SceneDeviceConfig>) => void;
+  order?: string[];
+  onOrderChange?: (order: string[]) => void;
 }
 
 export function SceneTargetSectionEditor({
@@ -500,6 +542,8 @@ export function SceneTargetSectionEditor({
   targetKind,
   devices,
   onChange,
+  order,
+  onOrderChange,
 }: SceneTargetSectionEditorProps) {
   const [showAddTarget, setShowAddTarget] = useState(false);
 
@@ -515,8 +559,11 @@ export function SceneTargetSectionEditor({
       const updated = { ...items };
       delete updated[targetKey];
       onChange(updated);
+      onOrderChange?.(
+        (order ?? Object.keys(items)).filter((key) => key !== targetKey),
+      );
     },
-    [items, onChange],
+    [items, onChange, onOrderChange, order],
   );
 
   const handleAddTarget = useCallback(
@@ -525,8 +572,34 @@ export function SceneTargetSectionEditor({
         ...items,
         [targetKey]: { power: true, brightness: 1 },
       });
+      onOrderChange?.([...(order ?? Object.keys(items)), targetKey]);
     },
-    [items, onChange],
+    [items, onChange, onOrderChange, order],
+  );
+
+  const orderedKeys = useMemo(
+    () => [
+      ...(order ?? []).filter((key) => key in items),
+      ...Object.keys(items).filter((key) => !(order ?? []).includes(key)),
+    ],
+    [items, order],
+  );
+
+  const moveTarget = useCallback(
+    (targetKey: string, direction: -1 | 1) => {
+      const nextOrder = [...orderedKeys];
+      const index = nextOrder.indexOf(targetKey);
+      const nextIndex = index + direction;
+      if (index < 0 || nextIndex < 0 || nextIndex >= nextOrder.length) {
+        return;
+      }
+      [nextOrder[index], nextOrder[nextIndex]] = [
+        nextOrder[nextIndex],
+        nextOrder[index],
+      ];
+      onOrderChange?.(nextOrder);
+    },
+    [onOrderChange, orderedKeys],
   );
 
   const optionLabelByKey = Object.fromEntries(
@@ -549,20 +622,29 @@ export function SceneTargetSectionEditor({
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          {Object.entries(items).map(([targetKey, config]) => (
-            <SceneTargetConfigEditor
-              key={targetKey}
-              targetKey={targetKey}
-              targetLabel={optionLabelByKey[targetKey]}
-              config={config}
-              devices={devices}
-              allScenes={allScenes}
-              targetKind={targetKind}
-              scenes={scenes}
-              onChange={(newConfig) => handleChange(targetKey, newConfig)}
-              onRemove={() => handleRemove(targetKey)}
-            />
-          ))}
+          {orderedKeys.map((targetKey, position) => {
+            const config = items[targetKey];
+            if (!config) return null;
+
+            return (
+              <SceneTargetConfigEditor
+                key={targetKey}
+                targetKey={targetKey}
+                targetLabel={optionLabelByKey[targetKey]}
+                config={config}
+                devices={devices}
+                allScenes={allScenes}
+                targetKind={targetKind}
+                scenes={scenes}
+                onChange={(newConfig) => handleChange(targetKey, newConfig)}
+                onRemove={() => handleRemove(targetKey)}
+                position={onOrderChange ? position : undefined}
+                targetCount={onOrderChange ? orderedKeys.length : undefined}
+                onMoveUp={() => moveTarget(targetKey, -1)}
+                onMoveDown={() => moveTarget(targetKey, 1)}
+              />
+            );
+          })}
         </div>
       )}
 

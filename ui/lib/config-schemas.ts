@@ -96,6 +96,7 @@ export const sceneSchema = z.object({
   script: z.string().optional(),
   device_states: z.record(z.string(), sceneDeviceConfigSchema),
   group_states: z.record(z.string(), sceneDeviceConfigSchema),
+  group_state_order: z.array(z.string()).optional(),
 });
 
 export const routineSchema = z.object({

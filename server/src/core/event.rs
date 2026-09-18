@@ -87,6 +87,12 @@ fn scene_row_from_config(scene_id: &SceneId, config: &SceneConfig) -> config_que
         })
         .unwrap_or_default();
 
+    let group_state_order = config
+        .groups
+        .as_ref()
+        .map(|groups| groups.0.keys().map(ToString::to_string).collect())
+        .unwrap_or_default();
+
     config_queries::SceneRow {
         id: scene_id.to_string(),
         name: config.name.clone(),
@@ -94,6 +100,7 @@ fn scene_row_from_config(scene_id: &SceneId, config: &SceneConfig) -> config_que
         script: config.script.clone(),
         device_states,
         group_states,
+        group_state_order,
     }
 }
 

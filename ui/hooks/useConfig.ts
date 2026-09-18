@@ -34,6 +34,7 @@ export interface Scene {
   script?: string;
   device_states: Record<string, SceneDeviceConfig>;
   group_states: Record<string, SceneDeviceConfig>;
+  group_state_order?: string[];
 }
 
 // Scene device configuration - can be a device link, scene link, or direct state

@@ -20,8 +20,6 @@ use eyre::Result;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
-use crate::db::actions::db_get_scenes;
-
 use super::{devices::Devices, groups::Groups, scripting::ScriptEngine};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
@@ -145,6 +143,7 @@ impl ResolvedSceneDeviceConfig {
 pub struct Scenes {
     db_scenes: ScenesConfig,
     db_scene_overrides: SceneOverridesConfig,
+    group_target_orders: HashMap<SceneId, Vec<GroupId>>,
     flattened_scenes: FlattenedScenesConfig,
     scene_devices_configs: ResolvedSceneDevicesConfigs,
     device_invalidation_map: HashMap<DeviceKey, HashSet<SceneId>>,
@@ -531,6 +530,7 @@ impl Scenes {
     pub fn new(config: ScenesConfig) -> Self {
         Scenes {
             db_scenes: config,
+            group_target_orders: HashMap::new(),
             ..Default::default()
         }
     }
@@ -541,6 +541,7 @@ impl Scenes {
         overrides: SceneOverridesConfig,
     ) {
         let mut db_scenes = ScenesConfig::new();
+        let mut group_target_orders = HashMap::new();
 
         for scene in scenes {
             let devices = if scene.device_states.is_empty() {
@@ -601,6 +602,25 @@ impl Scenes {
                 }
             };
 
+            let mut unordered_group_ids = scene
+                .group_states
+                .keys()
+                .filter(|group_id| !scene.group_state_order.contains(*group_id))
+                .cloned()
+                .collect::<Vec<_>>();
+            unordered_group_ids.sort();
+
+            let group_target_order = scene
+                .group_state_order
+                .iter()
+                .filter(|group_id| scene.group_states.contains_key(*group_id))
+                .map(|group_id| GroupId(group_id.clone()))
+                .chain(unordered_group_ids.into_iter().map(GroupId))
+                .collect::<Vec<_>>();
+            if !group_target_order.is_empty() {
+                group_target_orders.insert(SceneId::new(scene.id.clone()), group_target_order);
+            }
+
             db_scenes.insert(
                 SceneId::new(scene.id.clone()),
                 SceneConfig {
@@ -616,6 +636,7 @@ impl Scenes {
         let valid_scene_ids = db_scenes.keys().cloned().collect::<HashSet<_>>();
 
         self.db_scenes = db_scenes;
+        self.group_target_orders = group_target_orders;
         self.db_scene_overrides = overrides
             .into_iter()
             .filter(|(scene_id, _)| valid_scene_ids.contains(scene_id))
@@ -623,10 +644,11 @@ impl Scenes {
     }
 
     pub async fn refresh_db_scenes(&mut self) {
-        let db_scenes = db_get_scenes().await.unwrap_or_default();
-        self.db_scenes = db_scenes;
+        let scenes = config_queries::db_get_config_scenes()
+            .await
+            .unwrap_or_default();
         let scene_overrides = db_get_scene_overrides().await.unwrap_or_default();
-        self.db_scene_overrides = scene_overrides
+        self.load_config_rows(&scenes, scene_overrides);
     }
 
     pub async fn store_scene_override(
@@ -812,8 +834,32 @@ impl Scenes {
             })
             .unwrap_or_default();
 
-        // Inserts devices from groups
-        let scene_groups = scene.groups.map(|groups| groups.0).unwrap_or_default();
+        // Inserts devices from groups. The order is significant: later group
+        // targets overwrite state already contributed by earlier targets.
+        let scene_groups = scene
+            .groups
+            .as_ref()
+            .map(|groups| {
+                let mut ordered = Vec::with_capacity(groups.0.len());
+                let mut seen = HashSet::new();
+                if let Some(order) = self.group_target_orders.get(scene_id) {
+                    for group_id in order {
+                        if let Some(config) = groups.0.get(group_id) {
+                            if !seen.insert(group_id.clone()) {
+                                continue;
+                            }
+                            ordered.push((group_id.clone(), config.clone()));
+                        }
+                    }
+                }
+                for (group_id, config) in &groups.0 {
+                    if seen.insert(group_id.clone()) {
+                        ordered.push((group_id.clone(), config.clone()));
+                    }
+                }
+                ordered
+            })
+            .unwrap_or_default();
         for (group_id, scene_device_config) in scene_groups {
             let group_devices = groups.find_group_devices(devices.get_state(), &group_id);
 
@@ -1294,6 +1340,7 @@ mod tests {
                 script: None,
                 device_states,
                 group_states,
+                group_state_order: Vec::new(),
             }],
             Default::default(),
         );
@@ -1331,6 +1378,72 @@ mod tests {
                 DeviceId::new("source"),
             )
         );
+    }
+
+    #[test]
+    fn later_group_targets_override_earlier_targets_in_saved_order() {
+        let (mut devices, _event_rx) = test_devices();
+        let target = create_test_device("test", "target");
+        let target_key = target.get_device_key();
+        devices.set_state(&target, true, true);
+
+        let mut groups_config = GroupsConfig::new();
+        for group_id in ["first", "second"] {
+            groups_config.insert(
+                GroupId::from_str(group_id).unwrap(),
+                GroupConfig {
+                    name: group_id.to_string(),
+                    devices: Some(vec![DeviceRef::from(&target_key)]),
+                    groups: None,
+                    hidden: None,
+                },
+            );
+        }
+        let mut groups = Groups::new(groups_config);
+        groups.force_invalidate(&devices);
+
+        let scene_id = SceneId::from_str("ordered-groups").unwrap();
+        let scene = config_queries::SceneRow {
+            id: scene_id.to_string(),
+            name: "Ordered groups".to_string(),
+            hidden: false,
+            script: None,
+            device_states: HashMap::new(),
+            group_states: HashMap::from([
+                (
+                    "first".to_string(),
+                    json!({"power": true, "brightness": 0.2}),
+                ),
+                (
+                    "second".to_string(),
+                    json!({"power": true, "brightness": 0.8}),
+                ),
+            ]),
+            group_state_order: vec!["second".to_string(), "first".to_string()],
+        };
+        let mut scenes = Scenes::new(ScenesConfig::new());
+        scenes.load_config_rows(&[scene], Default::default());
+        scenes.force_invalidate(&devices, &groups);
+
+        let resolved = scenes
+            .find_scene_devices_config(
+                &devices,
+                &groups,
+                &ActivateSceneDescriptor {
+                    scene_id,
+                    mirror_from_group: None,
+                    device_keys: None,
+                    group_keys: None,
+                    use_scene_transition: false,
+                    transition: None,
+                },
+            )
+            .unwrap();
+        let resolved_config = &resolved[&target_key].config;
+        let SceneDeviceConfig::DeviceState(state) = resolved_config else {
+            panic!("expected a device state");
+        };
+        assert_eq!(state.brightness, Some(OrderedFloat(0.2)));
     }
 
     #[test]

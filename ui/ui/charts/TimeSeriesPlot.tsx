@@ -16,6 +16,11 @@ export type PlotSeries = {
   bars?: boolean;
   gapMs?: number;
 };
+export type PlotLegendItem = {
+  name: string;
+  className?: string;
+  markerClassName?: string;
+};
 const palette = [
   'text-sky-700 dark:text-sky-300',
   'text-amber-700 dark:text-amber-300',
@@ -42,6 +47,7 @@ export function TimeSeriesPlot({
   showNow = false,
   showLegend = true,
   showUnit = true,
+  legendItems = [],
 }: {
   series: PlotSeries[];
   width: number;
@@ -52,6 +58,7 @@ export function TimeSeriesPlot({
   showNow?: boolean;
   showLegend?: boolean;
   showUnit?: boolean;
+  legendItems?: PlotLegendItem[];
 }) {
   const id = useId();
   const [keyboardInspect, setKeyboardInspect] = useState(false);
@@ -175,29 +182,46 @@ export function TimeSeriesPlot({
       className="relative min-w-0 overflow-hidden text-foreground"
       style={{ width, height }}
     >
-      {showLegend && <div className="flex h-8 min-w-0 items-center gap-3 overflow-x-auto px-3 text-xs">
-        {clean.map((s, index) => (
-          <button
-            key={s.name}
-            type="button"
-            aria-pressed={!hidden.includes(s.name)}
-            className={`flex shrink-0 items-center gap-1.5 rounded px-1 py-1 ${hidden.includes(s.name) ? 'opacity-40' : ''}`}
-            onClick={() =>
-              setHidden(
-                hidden.includes(s.name)
-                  ? hidden.filter((name) => name !== s.name)
-                  : [...hidden, s.name],
-              )
-            }
-          >
+      {showLegend && (
+        <div className="flex h-8 min-w-0 items-center gap-3 overflow-x-auto px-3 text-xs">
+          {clean.map((s, index) => (
+            <button
+              key={s.name}
+              type="button"
+              aria-pressed={!hidden.includes(s.name)}
+              className={`flex shrink-0 items-center gap-1.5 rounded px-1 py-1 ${hidden.includes(s.name) ? 'opacity-40' : ''}`}
+              onClick={() =>
+                setHidden(
+                  hidden.includes(s.name)
+                    ? hidden.filter((name) => name !== s.name)
+                    : [...hidden, s.name],
+                )
+              }
+            >
+              <span
+                className={`${s.className ?? palette[index % palette.length]} inline-block h-0.5 w-3 bg-current`}
+              />
+              {s.name}
+            </button>
+          ))}
+          {legendItems.map((item) => (
             <span
-              className={`${s.className ?? palette[index % palette.length]} inline-block h-0.5 w-3 bg-current`}
-            />
-            {s.name}
-          </button>
-        ))}
-        {showUnit && <span className="ml-auto shrink-0 text-muted-foreground">{unit}</span>}
-      </div>}
+              key={item.name}
+              className="flex shrink-0 items-center gap-1.5 rounded px-1 py-1"
+            >
+              <span
+                className={`${item.className ?? 'text-foreground'} ${item.markerClassName ?? 'inline-block h-0.5 w-3 bg-current'}`}
+              />
+              {item.name}
+            </span>
+          ))}
+          {showUnit && (
+            <span className="ml-auto shrink-0 text-muted-foreground">
+              {unit}
+            </span>
+          )}
+        </div>
+      )}
       <svg
         width={width}
         height={svgHeight}

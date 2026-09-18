@@ -372,6 +372,7 @@ function SceneTargetsSummary({
   options,
   targetKind,
   title,
+  order,
 }: {
   emptyMessage: string;
   items: Record<string, SceneDeviceConfig>;
@@ -380,11 +381,17 @@ function SceneTargetsSummary({
   options: SceneTargetOption[];
   targetKind: SceneTargetKind;
   title: string;
+  order?: string[];
 }) {
   const optionLabelByKey = Object.fromEntries(
     options.map((option) => [option.key, option.label]),
   );
-  const entries = Object.entries(items);
+  const entries = [
+    ...(order ?? [])
+      .filter((key) => key in items)
+      .map((key) => [key, items[key]] as const),
+    ...Object.entries(items).filter(([key]) => !(order ?? []).includes(key)),
+  ];
 
   return (
     <section className="space-y-3">
@@ -549,6 +556,11 @@ function SceneEditorForm({
   const [script, setScript] = useState(scene.script || '');
   const [deviceStates, setDeviceStates] = useState(scene.device_states || {});
   const [groupStates, setGroupStates] = useState(scene.group_states || {});
+  const [groupStateOrder, setGroupStateOrder] = useState(
+    scene.group_state_order?.length
+      ? scene.group_state_order
+      : Object.keys(scene.group_states || {}),
+  );
   const [editTab, setEditTab] = useState<
     'basics' | 'script' | 'devices' | 'groups'
   >('basics');
@@ -578,6 +590,7 @@ function SceneEditorForm({
         script: script || undefined,
         device_states: deviceStates,
         group_states: groupStates,
+        group_state_order: groupStateOrder,
       });
     } catch (error) {
       setSaveError(
@@ -674,7 +687,7 @@ function SceneEditorForm({
         <TabsContent value="groups" className="mt-4">
           <ConfigFormSection
             title="Group targets"
-            description="Apply shared state to all devices in a group, with optional per-device overrides."
+            description="Apply shared state to groups in order; later targets override earlier ones."
           >
             <SceneTargetSectionEditor
               addLabel="Add Group"
@@ -687,6 +700,8 @@ function SceneEditorForm({
               sectionTitle="Group Targets"
               targetKind="group"
               devices={devices}
+              order={groupStateOrder}
+              onOrderChange={setGroupStateOrder}
               onChange={setGroupStates}
             />
           </ConfigFormSection>
@@ -845,6 +860,7 @@ function SceneCard({
         options={groupOptions}
         targetKind="group"
         title="Group Targets"
+        order={scene.group_state_order}
       />
 
       <div className="mt-2 flex justify-end gap-2">

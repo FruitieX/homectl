@@ -177,6 +177,7 @@ mod tests {
             hidden: false,
             script: None,
             group_states: Default::default(),
+            group_state_order: Vec::new(),
             device_states: ["a", "b", "readonly"]
                 .iter()
                 .map(|id| {

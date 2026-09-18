@@ -3661,6 +3661,7 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
                 }),
                 device_states,
                 group_states,
+                group_state_order: Vec::new(),
             }
         })
         .collect();
@@ -4433,6 +4434,7 @@ devices = [
                     }),
                 )]),
                 group_states: HashMap::new(),
+                group_state_order: Vec::new(),
             }],
             routines: vec![RoutineRow {
                 id: "motion".to_string(),
@@ -4516,6 +4518,7 @@ devices = [
                     }),
                 )]),
                 group_states: HashMap::new(),
+                group_state_order: Vec::new(),
             }],
             routines: vec![RoutineRow {
                 id: "motion".to_string(),
@@ -4587,6 +4590,7 @@ devices = [
                     }),
                 )]),
                 group_states: HashMap::new(),
+                group_state_order: Vec::new(),
             }],
             routines: vec![RoutineRow {
                 id: "motion".to_string(),

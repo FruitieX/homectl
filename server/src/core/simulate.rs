@@ -201,6 +201,7 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
                 &id,
             )
             .await?,
+            group_state_order: Vec::new(),
             id,
         });
     }

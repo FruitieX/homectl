@@ -395,6 +395,7 @@ mod tests {
                     json!({"power": true}),
                 )]),
                 group_states: Default::default(),
+                group_state_order: Vec::new(),
             });
         let before = serde_json::to_value(&*snapshot.devices).unwrap();
         let codes = codes(&snapshot);
@@ -442,6 +443,7 @@ mod tests {
                     ),
                 ]),
                 group_states: Default::default(),
+                group_state_order: Vec::new(),
             });
         let codes = codes(&snapshot);
         assert!(codes.contains(&"missing_scene_link".into()));

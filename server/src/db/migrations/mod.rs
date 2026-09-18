@@ -21,7 +21,46 @@ impl MigratorTrait for Migrator {
             Box::new(M20260913000001SceneTransition),
             Box::new(M20260913000002DashboardFractionalUnits),
             Box::new(M20260916000000UvColorCalibration),
+            Box::new(M20260918000000SceneGroupStateOrder),
         ]
+    }
+}
+
+struct M20260918000000SceneGroupStateOrder;
+
+impl MigrationName for M20260918000000SceneGroupStateOrder {
+    fn name(&self) -> &str {
+        "m20260918000000_scene_group_state_order"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260918000000SceneGroupStateOrder {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(SceneGroupStates::Table)
+                    .add_column(
+                        ColumnDef::new(SceneGroupStates::SortOrder)
+                            .integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(SceneGroupStates::Table)
+                    .drop_column(SceneGroupStates::SortOrder)
+                    .to_owned(),
+            )
+            .await
     }
 }
 

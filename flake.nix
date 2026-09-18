@@ -18,17 +18,19 @@
     in {
       devShells.default = pkgs.mkShell {
         name = "homectl";
-        buildInputs = [
+        nativeBuildInputs = [
           rustToolchain
           pkgs.docker-client
           pkgs.postgresql
           pkgs.stdenv.cc
           pkgs.pkg-config
-          pkgs.openssl.dev
           pkgs.nodejs
           pkgs.pnpm
           pkgs.moon
           pkgs.hurl
+        ];
+        buildInputs = [
+          pkgs.openssl.dev
         ];
         shellHook = ''
           echo "Loaded homectl dev shell (Docker client + psql available for Postgres workflows)"
