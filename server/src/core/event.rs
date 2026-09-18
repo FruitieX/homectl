@@ -1092,6 +1092,7 @@ pub(crate) mod tests {
             enabled: true,
             rules,
             actions,
+            ..Default::default()
         }
     }
 

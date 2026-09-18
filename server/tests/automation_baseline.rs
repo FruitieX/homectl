@@ -279,13 +279,17 @@ fn b04_script_truthiness_is_plain_javascript() {
 async fn b04_malformed_rows_are_quarantined_not_silently_empty() {
     let (event_tx, _rx) = mk_event_channel();
     let mut routines = Routines::new(RoutinesConfig::new(), event_tx);
-    routines.load_config_rows(&[RoutineRow {
-        id: "malformed".to_string(),
-        name: "Malformed".to_string(),
-        enabled: true,
-        rules: json!({ "not": "a rule list" }),
-        actions: json!(42),
-    }]);
+    routines.load_config_rows(
+        &[RoutineRow {
+            id: "malformed".to_string(),
+            name: "Malformed".to_string(),
+            enabled: true,
+            rules: json!({ "not": "a rule list" }),
+            actions: json!(42),
+            ..Default::default()
+        }],
+        &homectl_server::core::automation::ConfigCatalog::default(),
+    );
 
     assert!(
         routines

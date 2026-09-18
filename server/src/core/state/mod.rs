@@ -21,6 +21,7 @@ pub use actor::{spawn_state_actor, StateHandle};
 pub use command::StateCommand;
 
 use super::{
+    automation::ConfigCatalog,
     devices::Devices,
     groups::Groups,
     integrations::Integrations,
@@ -780,7 +781,12 @@ impl AppState {
     }
 
     pub fn apply_runtime_routines(&mut self) {
-        self.rules.load_config_rows(&self.runtime_config.routines);
+        let catalog = ConfigCatalog::new(
+            self.devices.get_state().0.keys().cloned(),
+            &self.runtime_config,
+        );
+        self.rules
+            .load_config_rows(&self.runtime_config.routines, &catalog);
         // E06: reloaded definitions seed transition memory from current state
         // instead of treating already-true predicates as fresh edges.
         self.rules.seed_transitions(&self.devices, &self.groups);
@@ -920,7 +926,11 @@ impl AppState {
     /// Hot-reload routines from the database
     pub async fn reload_routines(&mut self) -> Result<()> {
         info!("Hot-reloading routines from database...");
-        self.rules.reload_from_db().await?;
+        let catalog = ConfigCatalog::new(
+            self.devices.get_state().0.keys().cloned(),
+            &self.runtime_config,
+        );
+        self.rules.reload_from_db(&catalog).await?;
         if let Err(e) = self.refresh_runtime_config_from_db().await {
             warn!("Failed to refresh runtime config snapshot: {e}");
         }

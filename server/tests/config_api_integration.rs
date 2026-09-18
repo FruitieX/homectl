@@ -2876,3 +2876,294 @@ fn device_command_api_applies_patch_and_rejects_unsupported_controls() {
     );
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
+
+// ============================================================================
+// P03: v2 schema, strict version dispatch, invalid drafts
+// ============================================================================
+
+fn v2_manual_timer_definition() -> Value {
+    json!({
+        "triggers": [{ "kind": "manual", "id": "manual_trig" }],
+        "program": {
+            "kind": "native",
+            "steps": [
+                { "action": "cancel_timer", "id": "cancel_timer", "timer": "t1" }
+            ]
+        }
+    })
+}
+
+fn v2_mixed_definition() -> Value {
+    json!({
+        "triggers": [{ "kind": "manual", "id": "manual_trig" }],
+        "condition": {
+            "kind": "group",
+            "group_id": "main",
+            "quantifier": "all",
+            "power": true
+        },
+        "program": {
+            "kind": "native",
+            "steps": [
+                { "action": "activate_scene", "id": "scene_step", "scene_id": "main_on" }
+            ]
+        }
+    })
+}
+
+#[test]
+fn v2_routines_validate_quarantine_drafts_and_preserve_definitions() {
+    let server = TestServer::new().expect("Failed to start test server");
+
+    // A valid enabled v2 routine saves with its definition and semantics marker.
+    let create = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "v2_valid",
+            "name": "V2 Valid",
+            "enabled": true,
+            "semantics_version": 2,
+            "definition_v2": v2_manual_timer_definition(),
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(create.status(), StatusCode::CREATED);
+    let created: Value = create.json().unwrap();
+    assert_eq!(created["data"]["semantics_version"], json!(2));
+    assert_eq!(
+        created["data"]["definition_v2"],
+        v2_manual_timer_definition()
+    );
+
+    // V01/V03: an enabled v2 routine with an unknown device fails with a
+    // path-specific error and is not stored.
+    let invalid_enabled = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "v2_invalid_enabled",
+            "name": "V2 Invalid Enabled",
+            "enabled": true,
+            "semantics_version": 2,
+            "definition_v2": {
+                "triggers": [{
+                    "kind": "report",
+                    "id": "trig_report",
+                    "device": { "integration_id": "dummy", "device_id": "missing" }
+                }],
+                "program": { "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "cancel_timer", "timer": "t1" }
+                ]}
+            },
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(invalid_enabled.status(), StatusCode::BAD_REQUEST);
+    let invalid_body: Value = invalid_enabled.json().unwrap();
+    let invalid_error = invalid_body["error"].as_str().unwrap_or_default();
+    assert!(
+        invalid_error.contains("/triggers/0/device") && invalid_error.contains("dummy/missing"),
+        "unexpected error: {invalid_error}"
+    );
+
+    // V02: invalid script syntax is rejected at save.
+    let invalid_script = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "v2_invalid_script",
+            "name": "V2 Invalid Script",
+            "enabled": true,
+            "semantics_version": 2,
+            "definition_v2": {
+                "triggers": [{ "kind": "manual", "id": "manual_trig" }],
+                "program": { "kind": "script", "spec": {
+                    "api_version": 1,
+                    "source_body": "if (",
+                    "declarations": []
+                }}
+            },
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(invalid_script.status(), StatusCode::BAD_REQUEST);
+    let script_body: Value = invalid_script.json().unwrap();
+    assert!(script_body["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("/program/spec/source_body"));
+
+    // V04: an invalid draft saves only when disabled and stays visible/exported.
+    let draft = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "v2_invalid_draft",
+            "name": "V2 Invalid Draft",
+            "enabled": false,
+            "semantics_version": 2,
+            "definition_v2": {
+                "triggers": [{
+                    "kind": "predicate_transition",
+                    "id": "trig_predicate",
+                    "predicate": { "kind": "all", "conditions": [] }
+                }],
+                "program": { "kind": "native", "steps": [] }
+            },
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(draft.status(), StatusCode::CREATED);
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    let routines_data = routines["data"].as_array().expect("routines array");
+    let stored_draft = routines_data
+        .iter()
+        .find(|routine| routine["id"] == "v2_invalid_draft")
+        .expect("disabled draft stays listed");
+    assert_eq!(stored_draft["enabled"], json!(false));
+    assert_eq!(stored_draft["semantics_version"], json!(2));
+    assert!(stored_draft["definition_v2"]["triggers"].is_array());
+    assert!(!routines_data
+        .iter()
+        .any(|routine| routine["id"] == "v2_invalid_enabled"));
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    assert!(export["data"]["routines"]
+        .as_array()
+        .expect("exported routines")
+        .iter()
+        .any(|routine| routine["id"] == "v2_invalid_draft"
+            && routine["definition_v2"]["triggers"].is_array()));
+
+    // Unknown versions fail visibly and are never treated as v1.
+    let unknown = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "v2_unknown_version",
+            "name": "V2 Unknown",
+            "enabled": false,
+            "semantics_version": 3,
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(unknown.status(), StatusCode::BAD_REQUEST);
+    let unknown_body: Value = unknown.json().unwrap();
+    assert!(unknown_body["error"]
+        .as_str()
+        .unwrap_or_default()
+        .contains("Unsupported routine semantics version 3"));
+
+    // V08: a legacy (v1) editor write to a v2 row preserves the v2 body.
+    let legacy_write = put_json(
+        &server.base_url,
+        "/api/v1/config/routines/v2_valid",
+        &json!({
+            "id": "v2_valid",
+            "name": "V2 Renamed",
+            "enabled": true,
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(legacy_write.status(), StatusCode::OK);
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    let stored = routines["data"]
+        .as_array()
+        .expect("routines array")
+        .iter()
+        .find(|routine| routine["id"] == "v2_valid")
+        .expect("v2 routine still present");
+    assert_eq!(stored["name"], json!("V2 Renamed"));
+    assert_eq!(stored["semantics_version"], json!(2));
+    assert_eq!(stored["definition_v2"], v2_manual_timer_definition());
+    assert_eq!(stored["revision"], json!(2));
+}
+
+#[test]
+fn mixed_semantics_config_round_trips_through_sqlite_database() {
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "homectl_mixed_semantics_{}_{}",
+        std::process::id(),
+        unique_id
+    ));
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir).expect("old test dir should be removable");
+    }
+    std::fs::create_dir_all(&temp_dir).expect("test dir should be created");
+
+    let mut import_payload = sample_config_export();
+    import_payload["routines"] = json!([
+        {
+            "id": "sensor_main_on",
+            "name": "Sensor Main On",
+            "enabled": true,
+            "rules": [
+                {
+                    "integration_id": "dummy",
+                    "device_id": "sensor1",
+                    "state": { "value": true },
+                    "trigger_mode": "pulse"
+                }
+            ],
+            "actions": [
+                {
+                    "action": "ActivateScene",
+                    "scene_id": "main_on",
+                    "rollout": "spatial",
+                    "rollout_source_device_key": "dummy/sensor1",
+                    "rollout_duration_ms": 900
+                }
+            ]
+        },
+        {
+            "id": "v2_mixed",
+            "name": "V2 Mixed",
+            "enabled": true,
+            "semantics_version": 2,
+            "definition_v2": v2_mixed_definition(),
+            "rules": [],
+            "actions": []
+        }
+    ]);
+
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to start mixed-semantics SQLite server");
+
+    let import = post_json(&server.base_url, "/api/v1/config/import", &import_payload);
+    assert_eq!(import.status(), StatusCode::OK);
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    assert_eq!(export["data"]["routines"], import_payload["routines"]);
+
+    server.stop();
+
+    let server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to restart mixed-semantics SQLite server");
+
+    let export_after_restart = get_json(&server.base_url, "/api/v1/config/export");
+    assert_eq!(
+        export_after_restart["data"]["routines"],
+        import_payload["routines"]
+    );
+}

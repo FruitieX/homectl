@@ -22,7 +22,86 @@ impl MigratorTrait for Migrator {
             Box::new(M20260913000002DashboardFractionalUnits),
             Box::new(M20260916000000UvColorCalibration),
             Box::new(M20260918000000SceneGroupStateOrder),
+            Box::new(M20260919000000RoutineV2Semantics),
         ]
+    }
+}
+
+/// Additive v2 routine columns (P03). Legacy `rules`/`actions` columns are
+/// preserved; every existing row becomes an explicit v1 semantics row and is
+/// never converted automatically.
+struct M20260919000000RoutineV2Semantics;
+
+impl MigrationName for M20260919000000RoutineV2Semantics {
+    fn name(&self) -> &str {
+        "m20260919000000_routine_v2_semantics"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260919000000RoutineV2Semantics {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Routines::Table)
+                    .add_column(
+                        ColumnDef::new(Routines::SemanticsVersion)
+                            .integer()
+                            .not_null()
+                            .default(1),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Routines::Table)
+                    .add_column(ColumnDef::new(Routines::DefinitionV2).text().null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Routines::Table)
+                    .add_column(
+                        ColumnDef::new(Routines::Revision)
+                            .big_integer()
+                            .not_null()
+                            .default(1),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Routines::Table)
+                    .drop_column(Routines::Revision)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Routines::Table)
+                    .drop_column(Routines::DefinitionV2)
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .alter_table(
+                Table::alter()
+                    .table(Routines::Table)
+                    .drop_column(Routines::SemanticsVersion)
+                    .to_owned(),
+            )
+            .await
     }
 }
 
@@ -1162,5 +1241,47 @@ mod tests {
                 .unwrap();
             assert_eq!(row.try_get::<i64>("", "count").unwrap(), 0);
         }
+    }
+
+    // M01: the v2 semantics columns are additive; legacy rows stay explicit v1
+    // rows with defaults and are never converted automatically.
+    #[tokio::test]
+    async fn routine_v2_columns_are_additive_and_preserve_legacy_rows() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        // Run every migration except the additive routine-v2 one.
+        Migrator::up(&db, Some(9)).await.unwrap();
+        db.execute(Statement::from_string(
+            DbBackend::Sqlite,
+            "INSERT INTO routines (id, name, enabled, rules, actions) \
+             VALUES ('legacy', 'Legacy', 1, '[{\"rule\":true}]', '[{\"action\":\"noop\"}]')",
+        ))
+        .await
+        .unwrap();
+
+        Migrator::up(&db, None).await.unwrap();
+
+        let row = db
+            .query_one(Statement::from_string(
+                DbBackend::Sqlite,
+                "SELECT semantics_version, revision, definition_v2, rules, actions \
+                 FROM routines WHERE id = 'legacy'",
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(row.try_get::<i32>("", "semantics_version").unwrap(), 1);
+        assert_eq!(row.try_get::<i64>("", "revision").unwrap(), 1);
+        assert!(row
+            .try_get::<Option<String>>("", "definition_v2")
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            row.try_get::<String>("", "rules").unwrap(),
+            "[{\"rule\":true}]"
+        );
+        assert_eq!(
+            row.try_get::<String>("", "actions").unwrap(),
+            "[{\"action\":\"noop\"}]"
+        );
     }
 }

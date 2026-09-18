@@ -341,3 +341,83 @@ fn simulation_prepare_config_accepts_postgres_source_database() {
         .iter()
         .any(|integration| integration.id == "dummy"));
 }
+
+#[test]
+fn postgres_runtime_stores_mixed_semantics_routines() {
+    let container = Postgres::default().start().expect("postgres should start");
+    let port = container
+        .get_host_port_ipv4(5432)
+        .expect("postgres port should be mapped");
+    let database_url = format!("postgres://postgres:postgres@127.0.0.1:{port}/postgres");
+
+    let mut server = TestServer::with_config(TestServerConfig {
+        database_url: Some(database_url.clone()),
+        ..Default::default()
+    })
+    .expect("failed to start postgres-backed server");
+
+    let v1_response = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &serde_json::json!({
+            "id": "pg_v1",
+            "name": "PG v1",
+            "enabled": true,
+            "rules": [
+                {
+                    "state": { "value": true },
+                    "integration_id": "dummy",
+                    "device_id": "sensor1"
+                }
+            ],
+            "actions": []
+        }),
+    );
+    assert_eq!(v1_response.status(), StatusCode::CREATED);
+
+    let v2_response = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &serde_json::json!({
+            "id": "pg_v2",
+            "name": "PG v2",
+            "enabled": true,
+            "semantics_version": 2,
+            "definition_v2": {
+                "triggers": [{ "kind": "manual", "id": "manual_trig" }],
+                "program": { "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "cancel_timer", "timer": "t1" }
+                ]}
+            },
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(v2_response.status(), StatusCode::CREATED);
+
+    server.stop();
+
+    let server = TestServer::with_config(TestServerConfig {
+        database_url: Some(database_url),
+        ..Default::default()
+    })
+    .expect("failed to restart postgres-backed server");
+
+    let routines = get_json(&server.base_url, "/api/v1/config/routines");
+    let routines_data = routines["data"].as_array().expect("routines array");
+
+    let v1 = routines_data
+        .iter()
+        .find(|routine| routine["id"] == "pg_v1")
+        .expect("v1 routine persisted");
+    assert!(v1.get("semantics_version").is_none());
+    assert!(v1.get("definition_v2").is_none());
+    assert_eq!(v1["rules"][0]["device_id"], "sensor1");
+
+    let v2 = routines_data
+        .iter()
+        .find(|routine| routine["id"] == "pg_v2")
+        .expect("v2 routine persisted");
+    assert_eq!(v2["semantics_version"], 2);
+    assert_eq!(v2["definition_v2"]["triggers"][0]["kind"], "manual");
+}

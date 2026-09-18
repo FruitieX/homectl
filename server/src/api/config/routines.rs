@@ -1,29 +1,74 @@
 use super::*;
+use crate::core::automation::{self, ConfigCatalog};
 use crate::core::routine_validation;
+use crate::types::automation_definition::RoutineSemantics;
 
 /// Validate a routine definition before it can be stored as enabled.
 ///
-/// Structural rule/action errors, non-finite values, invalid spatial rollout
-/// configuration, and (parsed, never executed) v1 script syntax all reject the
-/// save. An invalid definition may still be stored as a disabled draft.
-fn validate_enabled_routine(routine: &RoutineRow) -> Result<(), String> {
-    // Validate actions (and their spatial-rollout requirements) before rules so
-    // the established v1 error precedence and messages are preserved.
-    let actions = routine_validation::validate_actions_value(&routine.actions)
-        .map_err(|report| report.summary())?;
-    for action in &actions {
-        validate_action_rollout(action)?;
+/// v1 rows keep the P01 validator (structural rule/action errors, non-finite
+/// values, invalid spatial rollout configuration, and parsed-but-never-run v1
+/// script syntax). v2 rows go through the shared pure compiler. Unknown
+/// semantics versions are always rejected.
+fn validate_enabled_routine(routine: &RoutineRow, catalog: &ConfigCatalog) -> Result<(), String> {
+    match automation::row_semantics(routine) {
+        RoutineSemantics::V1 => {
+            // Validate actions (and their spatial-rollout requirements) before
+            // rules so the established v1 error precedence and messages are
+            // preserved.
+            let actions = routine_validation::validate_actions_value(&routine.actions)
+                .map_err(|report| report.summary())?;
+            for action in &actions {
+                validate_action_rollout(action)?;
+            }
+
+            let rules = routine_validation::validate_rules_value(&routine.rules)
+                .map_err(|report| report.summary())?;
+
+            let script_report = routine_validation::validate_script_syntax(&rules);
+            if !script_report.is_valid() {
+                return Err(script_report.summary());
+            }
+
+            Ok(())
+        }
+        RoutineSemantics::V2 => automation::compile_row(routine, catalog)
+            .map(|_| ())
+            .map_err(|report| report.summary()),
+        RoutineSemantics::Unknown(version) => Err(unsupported_version_message(version)),
     }
+}
 
-    let rules = routine_validation::validate_rules_value(&routine.rules)
-        .map_err(|report| report.summary())?;
+fn unsupported_version_message(version: i32) -> String {
+    format!(
+        "Unsupported routine semantics version {version}; this build supports versions 1 and 2."
+    )
+}
 
-    let script_report = routine_validation::validate_script_syntax(&rules);
-    if !script_report.is_valid() {
-        return Err(script_report.summary());
+/// Reject ambiguous writes before validation: a v2 body requires
+/// semantics_version 2 and a v1 row must not carry a v2 body.
+fn validate_write_shape(routine: &RoutineRow) -> Result<(), String> {
+    match automation::row_semantics(routine) {
+        RoutineSemantics::V1 => {
+            if routine.definition_v2.is_some() {
+                Err("definition_v2 requires semantics_version 2.".to_string())
+            } else {
+                Ok(())
+            }
+        }
+        RoutineSemantics::V2 => {
+            if routine.definition_v2.is_none() {
+                Err("semantics_version 2 requires a definition_v2 body.".to_string())
+            } else {
+                Ok(())
+            }
+        }
+        RoutineSemantics::Unknown(version) => Err(unsupported_version_message(version)),
     }
+}
 
-    Ok(())
+fn catalog_from_snapshot(snapshot: &SnapshotHandle) -> ConfigCatalog {
+    let snap = snapshot.load();
+    ConfigCatalog::new(snap.devices.0.keys().cloned(), &snap.runtime_config)
 }
 
 pub(super) fn routines_routes(
@@ -45,12 +90,14 @@ pub(super) fn routines_routes(
         .and(warp::path::end())
         .and(warp::post())
         .and(warp::body::json())
+        .and(with_snapshot(snapshot))
         .and(with_handle(handle))
         .and_then(create_routine);
 
     let update = warp::path!("routines" / String)
         .and(warp::put())
         .and(warp::body::json())
+        .and(with_snapshot(snapshot))
         .and(with_handle(handle))
         .and_then(update_routine);
 
@@ -85,7 +132,8 @@ pub(super) async fn get_routine(
 }
 
 pub(super) async fn create_routine(
-    routine: RoutineRow,
+    mut routine: RoutineRow,
+    snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let _write_guard = match config_write_lock(&handle).await {
@@ -93,8 +141,15 @@ pub(super) async fn create_routine(
         Err(_) => return Ok(actor_unavailable()),
     };
 
+    routine.revision = 1;
+
+    if let Err(error) = validate_write_shape(&routine) {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    }
+
     if routine.enabled {
-        if let Err(error) = validate_enabled_routine(&routine) {
+        let catalog = catalog_from_snapshot(&snapshot);
+        if let Err(error) = validate_enabled_routine(&routine, &catalog) {
             return Ok(error_response(&error, StatusCode::BAD_REQUEST));
         }
     }
@@ -125,7 +180,8 @@ pub(super) async fn create_routine(
 
 pub(super) async fn update_routine(
     id: String,
-    mut routine: RoutineRow,
+    routine: RoutineRow,
+    snapshot: SnapshotHandle,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let _write_guard = match config_write_lock(&handle).await {
@@ -133,11 +189,17 @@ pub(super) async fn update_routine(
         Err(_) => return Ok(actor_unavailable()),
     };
 
-    if routine.enabled {
-        if let Err(error) = validate_enabled_routine(&routine) {
-            return Ok(error_response(&error, StatusCode::BAD_REQUEST));
-        }
-    }
+    let existing = {
+        let snap = snapshot.load();
+        snap.runtime_config
+            .routines
+            .iter()
+            .find(|existing| existing.id == id)
+            .cloned()
+    };
+    let Some(existing) = existing else {
+        return Ok(not_found("Routine"));
+    };
 
     let requested_id = routine.id.trim().to_string();
     let next_id = if requested_id.is_empty() {
@@ -147,6 +209,26 @@ pub(super) async fn update_routine(
     };
     let renamed = next_id != id;
 
+    let mut routine_for_state = match automation::prepare_write(Some(&existing), routine) {
+        Ok(routine) => routine,
+        Err(error) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    };
+    // V08: a legacy (v1) write to a v2 row keeps the stored v2 body; the
+    // revision still advances so consumers can detect the write.
+    routine_for_state.id = next_id.clone();
+    routine_for_state.revision = automation::next_revision(Some(&existing));
+
+    if let Err(error) = validate_write_shape(&routine_for_state) {
+        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    }
+
+    if routine_for_state.enabled {
+        let catalog = catalog_from_snapshot(&snapshot);
+        if let Err(error) = validate_enabled_routine(&routine_for_state, &catalog) {
+            return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+        }
+    }
+
     enum UpdateOutcome {
         Updated(Vec<RoutineRow>),
         NotFound,
@@ -155,8 +237,7 @@ pub(super) async fn update_routine(
 
     let id_for_state = id.clone();
     let next_id_for_state = next_id.clone();
-    let mut routine_for_state = routine.clone();
-    routine_for_state.id = next_id.clone();
+    let routine_for_state_in = routine_for_state.clone();
 
     let outcome = handle
         .mutate(move |state| {
@@ -180,7 +261,7 @@ pub(super) async fn update_routine(
                     return UpdateOutcome::Conflict;
                 }
 
-                state.runtime_config.routines[existing_index] = routine_for_state.clone();
+                state.runtime_config.routines[existing_index] = routine_for_state_in.clone();
 
                 if renamed {
                     for existing in &mut state.runtime_config.routines {
@@ -193,6 +274,14 @@ pub(super) async fn update_routine(
                             &id_for_state,
                             &next_id_for_state,
                         );
+
+                        if let Some(definition) = &mut existing.definition_v2 {
+                            automation::rewrite_invoked_routine_references(
+                                definition,
+                                &id_for_state,
+                                &next_id_for_state,
+                            );
+                        }
                     }
                 }
 
@@ -224,12 +313,12 @@ pub(super) async fn update_routine(
         }
     };
 
-    routine.id = next_id.clone();
+    let response_routine = routine_for_state;
 
     let database_available = db::is_db_connected();
     let persistence = config_queries::db_replace_routines(&routines_to_persist).await;
     Ok(config_write_response(
-        routine,
+        response_routine,
         persistence,
         database_available,
         StatusCode::OK,

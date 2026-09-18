@@ -10,6 +10,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
+use crate::core::automation::{self, ConfigCatalog};
 use crate::core::snapshot::SnapshotChanges;
 use crate::core::state::{PendingWsUpdate, StateHandle};
 use crate::core::{
@@ -28,6 +29,7 @@ use crate::db::{
 };
 use crate::types::{
     action::{Action, Actions},
+    automation_definition::RoutineSemantics,
     device::{
         ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
     },
@@ -347,6 +349,7 @@ async fn apply_runtime_config_snapshot(
     for row in &runtime_config.device_color_calibrations {
         row.validate().map_err(|error| eyre::eyre!(error))?;
     }
+    validate_imported_routines(handle, &runtime_config).await?;
     let mut integrations = handle
         .mutate(|state| Box::pin(async move { state.integrations.clone() }))
         .await?;
@@ -362,6 +365,62 @@ async fn apply_runtime_config_snapshot(
             })
         })
         .await?;
+    Ok(())
+}
+
+/// Validate imported routine rows before they are committed.
+///
+/// Unknown semantics versions always fail visibly. Enabled v2 rows must
+/// compile; disabled invalid drafts are accepted and stay stored (V04).
+/// Legacy v1 import keeps its historical behavior (quarantine at load).
+async fn validate_imported_routines(
+    handle: &StateHandle,
+    runtime_config: &ConfigExport,
+) -> color_eyre::Result<()> {
+    let device_keys = handle
+        .mutate(|state| {
+            Box::pin(async move {
+                state
+                    .devices
+                    .get_state()
+                    .0
+                    .keys()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
+        })
+        .await?;
+    let catalog = ConfigCatalog::new(device_keys, runtime_config);
+
+    for row in &runtime_config.routines {
+        match automation::row_semantics(row) {
+            RoutineSemantics::V1 => {}
+            RoutineSemantics::V2 => {
+                if row.enabled {
+                    if let Err(report) = automation::compile_row(row, &catalog) {
+                        return Err(eyre::eyre!(
+                            "Routine '{}' is enabled but invalid: {}",
+                            row.id,
+                            report.summary()
+                        ));
+                    }
+                } else if row.definition_v2.is_none() {
+                    return Err(eyre::eyre!(
+                        "Routine '{}' declares semantics_version 2 without a definition_v2 body",
+                        row.id
+                    ));
+                }
+            }
+            RoutineSemantics::Unknown(version) => {
+                return Err(eyre::eyre!(
+                    "Routine '{}' uses unsupported semantics version {}; refusing to import it as v1",
+                    row.id,
+                    version
+                ));
+            }
+        }
+    }
+
     Ok(())
 }
 
@@ -3666,6 +3725,7 @@ pub fn parse_toml_config(toml_str: &str) -> Result<MigratePreviewResult, String>
             enabled: true,
             rules: routine.rules.unwrap_or(serde_json::Value::Array(vec![])),
             actions: routine.actions.unwrap_or(serde_json::Value::Array(vec![])),
+            ..Default::default()
         })
         .collect();
 
@@ -4438,6 +4498,7 @@ devices = [
                     }
                 ]),
                 actions: serde_json::json!([]),
+                ..Default::default()
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
@@ -4522,6 +4583,7 @@ devices = [
                     }
                 ]),
                 actions: serde_json::json!([]),
+                ..Default::default()
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
@@ -4594,6 +4656,7 @@ devices = [
                     }
                 ]),
                 actions: serde_json::json!([]),
+                ..Default::default()
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
@@ -4719,6 +4782,7 @@ devices = [
                     }
                 ]),
                 actions: serde_json::json!([]),
+                ..Default::default()
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,
@@ -4756,6 +4820,7 @@ devices = [
                     }
                 ]),
                 actions: serde_json::json!([]),
+                ..Default::default()
             }],
             core: CoreConfigRow {
                 warmup_time_seconds: 1,

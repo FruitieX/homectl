@@ -2,6 +2,11 @@ use std::path::PathBuf;
 
 use homectl_server::types::{
     action::Action,
+    automation_definition::{
+        ChooseBranch, ConditionExpr, ExecutionPolicy, HelperId, NativeAction, NativeProgram,
+        NodeId, Program, RoutineDefinitionV2, ScheduleSpec, ScriptDeclaration, ScriptSpec,
+        SourceId, TargetSpec, TimerId, TriggerSpec, ValueSource,
+    },
     device::{Device, DevicesState},
     dim::FlattenedDimConfig,
     group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupId},
@@ -29,7 +34,24 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         Action::export_all_to(&output_dir)?;
         homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all_to(&output_dir)?;
         homectl_server::types::config_write::ConfigWriteStatus::export_all_to(&output_dir)?;
+        ChooseBranch::export_all_to(&output_dir)?;
+        ConditionExpr::export_all_to(&output_dir)?;
         Device::export_all_to(&output_dir)?;
+        ExecutionPolicy::export_all_to(&output_dir)?;
+        HelperId::export_all_to(&output_dir)?;
+        NativeAction::export_all_to(&output_dir)?;
+        NativeProgram::export_all_to(&output_dir)?;
+        NodeId::export_all_to(&output_dir)?;
+        Program::export_all_to(&output_dir)?;
+        RoutineDefinitionV2::export_all_to(&output_dir)?;
+        ScheduleSpec::export_all_to(&output_dir)?;
+        ScriptDeclaration::export_all_to(&output_dir)?;
+        ScriptSpec::export_all_to(&output_dir)?;
+        SourceId::export_all_to(&output_dir)?;
+        TargetSpec::export_all_to(&output_dir)?;
+        TimerId::export_all_to(&output_dir)?;
+        TriggerSpec::export_all_to(&output_dir)?;
+        ValueSource::export_all_to(&output_dir)?;
         homectl_server::core::color_calibration::ColorCalibrationProfile::export_all_to(
             &output_dir,
         )?;

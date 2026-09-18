@@ -5,6 +5,7 @@ use homectl_server::api::config::{parse_config_backup, ParsedConfigBackup};
 use homectl_server::api::init_api;
 use homectl_server::core::simulate;
 use homectl_server::core::{
+    automation::ConfigCatalog,
     devices::Devices,
     groups::Groups,
     integrations::Integrations,
@@ -193,7 +194,11 @@ async fn run_event_loop(
     devices.refresh_db_devices(&scenes).await;
 
     let mut rules = Routines::new(Default::default(), event_tx.clone());
-    rules.load_config_rows(&runtime_config.config.routines);
+    let catalog = ConfigCatalog::new(
+        devices.get_state().0.keys().cloned(),
+        &runtime_config.config,
+    );
+    rules.load_config_rows(&runtime_config.config.routines, &catalog);
 
     let ui = Ui::with_state(runtime_config.ui_state);
 

@@ -24,6 +24,7 @@ use std::{
 };
 
 use super::{
+    automation::{self, CompiledDefinition, ConfigCatalog},
     devices::Devices,
     groups::Groups,
     routine_history,
@@ -137,6 +138,10 @@ pub struct Routines {
     /// rows stay in `runtime_config`) but are not runnable, and their errors are
     /// surfaced through `get_runtime_statuses`.
     quarantined: HashMap<RoutineId, RoutineValidationReport>,
+    /// Enabled v2 routines that compiled successfully. P03 validates and
+    /// inventories them but does not execute them (native evaluation lands in
+    /// P04); they remain visibly non-executing via runtime status.
+    compiled_v2: HashMap<RoutineId, CompiledDefinition>,
 }
 
 struct RuleEvaluationContext<'a> {
@@ -249,12 +254,26 @@ impl Routines {
             runtime_statuses: Arc::new(RoutineStatuses::default()),
             prev_edge_triggered: HashSet::new(),
             quarantined: HashMap::new(),
+            compiled_v2: HashMap::new(),
         }
     }
 
-    pub fn load_config_rows(&mut self, routines: &[config_queries::RoutineRow]) {
+    /// Load routines with the authoritative semantics-version dispatch.
+    ///
+    /// v1 rows keep the legacy validator; v2 rows are compiled by the shared
+    /// compiler. Unknown versions are quarantined and never interpreted as v1.
+    /// `catalog` is permissive about devices at runtime load because
+    /// integrations register devices asynchronously.
+    pub fn load_config_rows(
+        &mut self,
+        routines: &[config_queries::RoutineRow],
+        catalog: &ConfigCatalog,
+    ) {
+        use crate::types::automation_definition::RoutineSemantics;
+
         let mut new_config = RoutinesConfig::new();
         let mut quarantined = HashMap::new();
+        let mut compiled_v2 = HashMap::new();
         for routine in routines {
             if !routine.enabled {
                 // Disabled rows stay in `runtime_config` for display/edit and
@@ -262,43 +281,80 @@ impl Routines {
                 continue;
             }
 
-            let rules = match routine_validation::validate_rules_value(&routine.rules) {
-                Ok(rules) => rules,
-                Err(report) => {
-                    warn!(
-                        "Quarantining enabled routine {}: {}",
-                        routine.id,
-                        report.summary()
-                    );
-                    quarantined.insert(RoutineId::from(routine.id.clone()), report);
-                    continue;
-                }
-            };
-            let actions = match routine_validation::validate_actions_value(&routine.actions) {
-                Ok(actions) => actions,
-                Err(report) => {
-                    warn!(
-                        "Quarantining enabled routine {}: {}",
-                        routine.id,
-                        report.summary()
-                    );
-                    quarantined.insert(RoutineId::from(routine.id.clone()), report);
-                    continue;
-                }
-            };
+            match automation::row_semantics(routine) {
+                RoutineSemantics::V1 => {
+                    let rules = match routine_validation::validate_rules_value(&routine.rules) {
+                        Ok(rules) => rules,
+                        Err(report) => {
+                            warn!(
+                                "Quarantining enabled routine {}: {}",
+                                routine.id,
+                                report.summary()
+                            );
+                            quarantined.insert(RoutineId::from(routine.id.clone()), report);
+                            continue;
+                        }
+                    };
+                    let actions = match routine_validation::validate_actions_value(&routine.actions)
+                    {
+                        Ok(actions) => actions,
+                        Err(report) => {
+                            warn!(
+                                "Quarantining enabled routine {}: {}",
+                                routine.id,
+                                report.summary()
+                            );
+                            quarantined.insert(RoutineId::from(routine.id.clone()), report);
+                            continue;
+                        }
+                    };
 
-            new_config.insert(
-                RoutineId::from(routine.id.clone()),
-                Routine {
-                    name: routine.name.clone(),
-                    rules,
-                    actions,
+                    new_config.insert(
+                        RoutineId::from(routine.id.clone()),
+                        Routine {
+                            name: routine.name.clone(),
+                            rules,
+                            actions,
+                        },
+                    );
+                }
+                RoutineSemantics::V2 => match automation::compile_row(routine, catalog) {
+                    Ok(automation::CompiledRoutine::V2(compiled)) => {
+                        compiled_v2.insert(RoutineId::from(routine.id.clone()), *compiled);
+                    }
+                    Ok(automation::CompiledRoutine::V1(_)) => {
+                        unreachable!("v2 row compiled through the v1 validator")
+                    }
+                    Err(report) => {
+                        warn!(
+                            "Quarantining enabled v2 routine {}: {}",
+                            routine.id,
+                            report.summary()
+                        );
+                        quarantined.insert(RoutineId::from(routine.id.clone()), report);
+                    }
                 },
-            );
+                RoutineSemantics::Unknown(version) => {
+                    let mut report = RoutineValidationReport::default();
+                    report.error(
+                        "/semantics_version",
+                        "unsupported_semantics_version",
+                        format!(
+                            "Unsupported routine semantics version {version}; this build supports versions 1 and 2."
+                        ),
+                    );
+                    warn!(
+                        "Quarantining enabled routine {} with unsupported semantics version {version}",
+                        routine.id
+                    );
+                    quarantined.insert(RoutineId::from(routine.id.clone()), report);
+                }
+            }
         }
 
         self.config = new_config;
         self.quarantined = quarantined;
+        self.compiled_v2 = compiled_v2;
         self.runtime_statuses = Arc::new(RoutineStatuses::default());
         self.prev_edge_triggered.clear();
     }
@@ -308,11 +364,16 @@ impl Routines {
         &self.quarantined
     }
 
+    /// Enabled v2 routines that compiled successfully (not executed in P03).
+    pub fn compiled_v2_routines(&self) -> &HashMap<RoutineId, CompiledDefinition> {
+        &self.compiled_v2
+    }
+
     /// Hot-reload routines configuration from the database
-    pub async fn reload_from_db(&mut self) -> Result<()> {
+    pub async fn reload_from_db(&mut self, catalog: &ConfigCatalog) -> Result<()> {
         let db_routines = config_queries::db_get_routines().await?;
 
-        self.load_config_rows(&db_routines);
+        self.load_config_rows(&db_routines, catalog);
 
         Ok(())
     }
@@ -349,6 +410,22 @@ impl Routines {
                             ))
                         })
                         .collect(),
+                },
+            );
+        }
+
+        // Enabled v2 routines compile but are not executed in P03. They must
+        // not silently appear healthy; surface the pending evaluator.
+        for (routine_id, compiled) in &self.compiled_v2 {
+            statuses.0.insert(
+                routine_id.clone(),
+                RoutineRuntimeStatus {
+                    all_conditions_match: false,
+                    will_trigger: false,
+                    rules: vec![RuleRuntimeStatus::from_error(format!(
+                        "semantics_not_executed: v2 definition compiled (fingerprint {}) but native evaluation is not enabled in this build (P04 pending)",
+                        compiled.fingerprint
+                    ))],
                 },
             );
         }
@@ -1380,6 +1457,7 @@ mod tests {
             enabled,
             rules,
             actions,
+            ..Default::default()
         }
     }
 
@@ -1394,7 +1472,7 @@ mod tests {
     fn load(routines: &[config_queries::RoutineRow]) -> Routines {
         let (event_tx, _rx) = mk_event_channel();
         let mut loaded = Routines::new(RoutinesConfig::new(), event_tx);
-        loaded.load_config_rows(routines);
+        loaded.load_config_rows(routines, &super::automation::ConfigCatalog::default());
         loaded
     }
 
@@ -1513,6 +1591,85 @@ mod tests {
         assert!(
             routines.prev_edge_triggered.is_empty(),
             "status refresh must not mutate edge memory"
+        );
+    }
+
+    // P03: v2 rows load through the shared compiler. Valid definitions compile
+    // but are not executed yet; invalid enabled definitions are quarantined;
+    // disabled drafts are untouched (V04).
+    #[test]
+    fn p03_v2_rows_compile_quarantine_and_never_run_as_v1() {
+        fn v2_row(
+            id: &str,
+            enabled: bool,
+            definition: serde_json::Value,
+        ) -> config_queries::RoutineRow {
+            config_queries::RoutineRow {
+                id: id.to_string(),
+                name: id.to_string(),
+                enabled,
+                semantics_version: 2,
+                revision: 1,
+                definition_v2: Some(definition),
+                ..Default::default()
+            }
+        }
+
+        let valid = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [
+                { "action": "cancel_timer", "id": "step_timer", "timer": "t1" }
+            ]}
+        });
+        let mut routines = load(&[
+            v2_row("v2_valid", true, valid),
+            v2_row("v2_invalid", true, json!({ "triggers": [] })),
+            v2_row("v2_disabled", false, json!({ "triggers": "not a list" })),
+        ]);
+
+        assert!(routines
+            .compiled_v2_routines()
+            .contains_key(&RoutineId::from("v2_valid".to_string())));
+        assert!(routines
+            .quarantined_routines()
+            .contains_key(&RoutineId::from("v2_invalid".to_string())));
+        assert!(!routines
+            .quarantined_routines()
+            .contains_key(&RoutineId::from("v2_disabled".to_string())));
+        assert!(
+            routines.config.is_empty(),
+            "v2 rows must never enter the v1 evaluator"
+        );
+
+        let (devices, _rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::default());
+        let history_before = routine_history::recent_routine_history().len();
+        routines.refresh_runtime_statuses(&devices, &groups);
+
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&RoutineId::from("v2_valid".to_string()))
+            .cloned()
+            .expect("compiled v2 routine is visible");
+        assert!(!status.will_trigger);
+        assert!(status.rules.iter().any(|rule| rule
+            .error
+            .as_deref()
+            .is_some_and(|error| { error.contains("semantics_not_executed") })));
+
+        let invalid = routines
+            .get_runtime_statuses()
+            .0
+            .get(&RoutineId::from("v2_invalid".to_string()))
+            .cloned()
+            .expect("quarantined v2 routine is visible");
+        assert!(invalid.rules.iter().all(|rule| rule.error.is_some()));
+
+        assert_eq!(
+            routine_history::recent_routine_history().len(),
+            history_before,
+            "status refresh must not write routine history for v2 rows"
         );
     }
 }

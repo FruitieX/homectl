@@ -206,13 +206,16 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
         });
     }
 
-    let routines = all(
+    let routines = match all(
         db,
         Query::select()
             .columns([
                 Routines::Id,
                 Routines::Name,
                 Routines::Enabled,
+                Routines::SemanticsVersion,
+                Routines::DefinitionV2,
+                Routines::Revision,
                 Routines::Rules,
                 Routines::Actions,
             ])
@@ -220,10 +223,32 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
             .order_by(Routines::Name, Order::Asc)
             .to_owned(),
     )
-    .await?
-    .into_iter()
-    .map(routine_from_row)
-    .collect::<Result<Vec<_>>>()?;
+    .await
+    {
+        Ok(rows) => rows
+            .into_iter()
+            .map(routine_from_row)
+            .collect::<Result<Vec<_>>>()?,
+        // Pre-P03 source databases lack the v2 columns; they hold only v1 rows.
+        Err(_) => all(
+            db,
+            Query::select()
+                .columns([
+                    Routines::Id,
+                    Routines::Name,
+                    Routines::Enabled,
+                    Routines::Rules,
+                    Routines::Actions,
+                ])
+                .from(Routines::Table)
+                .order_by(Routines::Name, Order::Asc)
+                .to_owned(),
+        )
+        .await?
+        .into_iter()
+        .map(routine_from_row)
+        .collect::<Result<Vec<_>>>()?,
+    };
 
     let mut floorplans = legacy_floorplans(db).await?;
     floorplans.retain(|floorplan| !is_empty_default_floorplan_stub(floorplan));
@@ -664,10 +689,28 @@ fn group_device_from_legacy_row(row: QueryResult) -> Result<config_queries::Grou
 fn routine_from_row(row: QueryResult) -> Result<RoutineRow> {
     let rules: String = row.try_get("", "rules")?;
     let actions: String = row.try_get("", "actions")?;
+    let definition_v2_text = row
+        .try_get::<Option<String>>("", "definition_v2")
+        .ok()
+        .flatten();
+    let revision = row
+        .try_get::<Option<i64>>("", "revision")
+        .ok()
+        .flatten()
+        .unwrap_or(1);
+    let semantics_version = row
+        .try_get::<Option<i32>>("", "semantics_version")
+        .ok()
+        .flatten()
+        .unwrap_or(1);
     Ok(RoutineRow {
         id: row.try_get("", "id")?,
         name: row.try_get("", "name")?,
         enabled: get_bool_or_default(&row, "enabled", true),
+        semantics_version,
+        revision,
+        definition_v2: definition_v2_text
+            .map(|text| serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))),
         rules: parse_json_or_default(&rules),
         actions: parse_json_or_default(&actions),
     })
@@ -822,6 +865,43 @@ pub fn convert_mqtt_to_dummy(config: &mut ConfigExport) -> Result<()> {
 
         // 3. Scan routine rules for direct device references under this integration
         for routine in &config.routines {
+            if routine.semantics_version
+                == crate::types::automation_definition::ROUTINE_SEMANTICS_VERSION_V2
+            {
+                let definition = routine
+                    .definition_v2
+                    .as_ref()
+                    .and_then(crate::core::automation::parse_definition);
+                if let Some(definition) = definition {
+                    for device_ref in crate::core::automation::referenced_devices(&definition) {
+                        let crate::types::device::DeviceRef::Id(id_ref) = device_ref;
+                        if id_ref.integration_id.to_string() != mqtt_id {
+                            continue;
+                        }
+                        let device_id = id_ref.device_id.to_string();
+                        let key = format!("{mqtt_id}/{device_id}");
+                        let is_sensor = sensor_keys.contains(&key)
+                            || definition.triggers.iter().any(|trigger| {
+                                matches!(
+                                    trigger,
+                                    crate::types::automation_definition::TriggerSpec::Report {
+                                        device,
+                                        ..
+                                    } if matches!(
+                                        device,
+                                        crate::types::device::DeviceRef::Id(trigger_ref)
+                                            if trigger_ref.integration_id == id_ref.integration_id
+                                                && trigger_ref.device_id == id_ref.device_id
+                                    )
+                                )
+                            });
+                        devices
+                            .entry(device_id.clone())
+                            .or_insert_with(|| build_dummy_device_config(&device_id, is_sensor));
+                    }
+                    continue;
+                }
+            }
             collect_device_refs_from_rules(&routine.rules, &mqtt_id, &sensor_keys, &mut devices);
         }
 

@@ -18,11 +18,18 @@ use crate::types::{
 };
 
 /// One validation problem, addressable by JSON path.
+///
+/// `node_id` and `related_entity` are optional v2 compiler metadata; v1
+/// validation leaves them empty.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RoutineValidationError {
     pub path: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub node_id: Option<String>,
     pub code: String,
     pub message: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related_entity: Option<String>,
 }
 
 /// Ordered set of validation problems.
@@ -40,9 +47,50 @@ impl RoutineValidationReport {
     ) {
         self.errors.push(RoutineValidationError {
             path: path.into(),
+            node_id: None,
             code: code.into(),
             message: message.into(),
+            related_entity: None,
         });
+    }
+
+    /// Record an error tied to a stable definition node ID.
+    pub fn error_at_node(
+        &mut self,
+        path: impl Into<String>,
+        node_id: impl std::fmt::Display,
+        code: impl Into<String>,
+        message: impl Into<String>,
+    ) {
+        self.errors.push(RoutineValidationError {
+            path: path.into(),
+            node_id: Some(node_id.to_string()),
+            code: code.into(),
+            message: message.into(),
+            related_entity: None,
+        });
+    }
+
+    /// Record an error with an optional node ID and a related entity.
+    pub fn error_with_entity(
+        &mut self,
+        path: impl Into<String>,
+        node_id: Option<&str>,
+        code: impl Into<String>,
+        message: impl Into<String>,
+        related_entity: impl Into<String>,
+    ) {
+        self.errors.push(RoutineValidationError {
+            path: path.into(),
+            node_id: node_id.map(ToOwned::to_owned),
+            code: code.into(),
+            message: message.into(),
+            related_entity: Some(related_entity.into()),
+        });
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        self.errors.extend(other.errors);
     }
 
     pub fn is_valid(&self) -> bool {
@@ -201,7 +249,7 @@ fn validate_script_syntax_inner(
     }
 }
 
-fn parse_script(source: &str) -> Result<(), String> {
+pub(crate) fn parse_script(source: &str) -> Result<(), String> {
     let mut context = Context::default();
     Script::parse(Source::from_bytes(source), None, &mut context)
         .map(|_| ())

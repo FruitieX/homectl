@@ -1,3 +1,4 @@
+pub mod automation;
 pub mod automation_baseline;
 pub mod calibration_session;
 pub mod color_calibration;

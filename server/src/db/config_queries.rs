@@ -60,13 +60,67 @@ pub struct SceneRow {
     pub group_state_order: Vec<String>,
 }
 
+/// One stored routine.
+///
+/// `semantics_version` is authoritative: `1` selects the legacy `rules` /
+/// `actions` interpreter, `2` selects the compiled `definition_v2` body.
+/// Unknown versions are rejected/quarantined, never interpreted as v1.
+///
+/// `definition_v2` is kept as raw JSON so unknown/newer fields survive
+/// save/export/import without being dropped. The compiler parses the raw body
+/// into the typed schema.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoutineRow {
     pub id: String,
     pub name: String,
     pub enabled: bool,
+    #[serde(
+        default = "default_routine_semantics_version",
+        skip_serializing_if = "is_v1_semantics_version"
+    )]
+    pub semantics_version: i32,
+    /// Server-managed per-routine revision. Initial revisions are omitted from
+    /// exports so legacy (v1) exports round-trip unchanged.
+    #[serde(
+        default = "default_routine_revision",
+        skip_serializing_if = "is_initial_routine_revision"
+    )]
+    pub revision: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition_v2: Option<serde_json::Value>,
     pub rules: serde_json::Value,
     pub actions: serde_json::Value,
+}
+
+fn default_routine_semantics_version() -> i32 {
+    1
+}
+
+fn is_v1_semantics_version(value: &i32) -> bool {
+    *value == 1
+}
+
+fn default_routine_revision() -> i64 {
+    1
+}
+
+fn is_initial_routine_revision(value: &i64) -> bool {
+    *value == 1
+}
+
+impl Default for RoutineRow {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            enabled: true,
+            semantics_version: default_routine_semantics_version(),
+            revision: default_routine_revision(),
+            definition_v2: None,
+            rules: serde_json::Value::Array(Vec::new()),
+            actions: serde_json::Value::Array(Vec::new()),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -898,6 +952,9 @@ pub async fn db_get_routines() -> Result<Vec<RoutineRow>> {
                 Routines::Id,
                 Routines::Name,
                 Routines::Enabled,
+                Routines::SemanticsVersion,
+                Routines::DefinitionV2,
+                Routines::Revision,
                 Routines::Rules,
                 Routines::Actions,
             ])
@@ -919,6 +976,9 @@ pub async fn db_get_routine(id: &str) -> Result<Option<RoutineRow>> {
                 Routines::Id,
                 Routines::Name,
                 Routines::Enabled,
+                Routines::SemanticsVersion,
+                Routines::DefinitionV2,
+                Routines::Revision,
                 Routines::Rules,
                 Routines::Actions,
             ])
@@ -938,6 +998,10 @@ pub async fn db_upsert_routine(routine: &RoutineRow) -> Result<()> {
 async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> Result<()> {
     let rules = serde_json::to_string(&routine.rules)?;
     let actions = serde_json::to_string(&routine.actions)?;
+    let definition_v2 = match &routine.definition_v2 {
+        Some(definition) => Some(serde_json::to_string(definition)?),
+        None => None,
+    };
 
     execute(
         db,
@@ -947,6 +1011,9 @@ async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> 
                 Routines::Id,
                 Routines::Name,
                 Routines::Enabled,
+                Routines::SemanticsVersion,
+                Routines::DefinitionV2,
+                Routines::Revision,
                 Routines::Rules,
                 Routines::Actions,
             ])
@@ -954,6 +1021,9 @@ async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> 
                 Expr::value(routine.id.clone()),
                 Expr::value(routine.name.clone()),
                 Expr::value(routine.enabled),
+                Expr::value(routine.semantics_version),
+                Expr::value(definition_v2),
+                Expr::value(routine.revision),
                 Expr::value(rules),
                 Expr::value(actions),
             ])
@@ -962,6 +1032,9 @@ async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> 
                     .update_columns([
                         Routines::Name,
                         Routines::Enabled,
+                        Routines::SemanticsVersion,
+                        Routines::DefinitionV2,
+                        Routines::Revision,
                         Routines::Rules,
                         Routines::Actions,
                     ])
@@ -1635,6 +1708,9 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
                 Routines::Id,
                 Routines::Name,
                 Routines::Enabled,
+                Routines::SemanticsVersion,
+                Routines::DefinitionV2,
+                Routines::Revision,
                 Routines::Rules,
                 Routines::Actions,
             ])
@@ -2686,10 +2762,17 @@ fn group_device_from_row(row: QueryResult) -> Result<GroupDeviceRow> {
 fn routine_from_row(row: QueryResult) -> Result<RoutineRow> {
     let rules: String = row.try_get("", "rules")?;
     let actions: String = row.try_get("", "actions")?;
+    let definition_v2_text: Option<String> = row.try_get("", "definition_v2")?;
     Ok(RoutineRow {
         id: row.try_get("", "id")?,
         name: row.try_get("", "name")?,
         enabled: get_bool_or_default(&row, "enabled", true),
+        semantics_version: get_i32_or_default(&row, "semantics_version", 1),
+        revision: get_i64_or_default(&row, "revision", 1),
+        // A malformed body is preserved verbatim as a JSON string so it stays
+        // visible/quarantined and is never silently reinterpreted.
+        definition_v2: definition_v2_text
+            .map(|text| serde_json::from_str(&text).unwrap_or(serde_json::Value::String(text))),
         rules: parse_json_or_default(&rules, "routine rules"),
         actions: parse_json_or_default(&actions, "routine actions"),
     })
@@ -2808,6 +2891,13 @@ fn get_i32_or_default(row: &QueryResult, column: &str, default: i32) -> i32 {
         .unwrap_or(default)
 }
 
+fn get_i64_or_default(row: &QueryResult, column: &str, default: i64) -> i64 {
+    row.try_get::<Option<i64>>("", column)
+        .ok()
+        .flatten()
+        .unwrap_or(default)
+}
+
 fn get_u64(row: &QueryResult, column: &str) -> Option<u64> {
     row.try_get::<Option<i64>>("", column)
         .ok()
@@ -2905,7 +2995,8 @@ mod consistency_tests {
             name: id.into(),
             enabled: true,
             rules: json!([]),
-            actions: json!([{"action":"ForceTriggerRoutine", "routine_id":target}]),
+            actions: json!([{ "action": "ActivateScene", "scene_id": target }]),
+            ..Default::default()
         }
     }
     async fn sql(db: &DatabaseConnection, statement: &str) {
