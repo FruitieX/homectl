@@ -1782,6 +1782,105 @@ mod tests {
         );
     }
 
+    // SC03/SC05/SC06: a dependency change queues a refresh only for the scenes
+    // that depend on it, results only refresh their own scene's targets, and a
+    // result from another scene selection cannot leak across scenes.
+    #[test]
+    fn scene_invalidation_queues_only_dependent_scenes() {
+        let (mut devices, _event_rx) = test_devices();
+        let source = create_test_device("test", "source");
+        let other = create_test_device("test", "other");
+        let target_a = create_test_device("test", "target_a");
+        let target_b = create_test_device("test", "target_b");
+        let source_key = source.get_device_key();
+        let other_key = other.get_device_key();
+        let target_a_key = target_a.get_device_key();
+        let target_b_key = target_b.get_device_key();
+        devices.set_state(&source, true, true);
+        devices.set_state(&other, true, true);
+        devices.set_state(&target_a, true, true);
+        devices.set_state(&target_b, true, true);
+
+        let mut groups_config = GroupsConfig::new();
+        groups_config.insert(
+            GroupId("deps".to_string()),
+            GroupConfig {
+                name: "deps".to_string(),
+                devices: Some(vec![DeviceRef::from(&source_key)]),
+                groups: None,
+                hidden: None,
+            },
+        );
+        groups_config.insert(
+            GroupId("others".to_string()),
+            GroupConfig {
+                name: "others".to_string(),
+                devices: Some(vec![DeviceRef::from(&other_key)]),
+                groups: None,
+                hidden: None,
+            },
+        );
+        let mut groups = Groups::new(groups_config);
+        groups.force_invalidate(&devices);
+
+        let scene_a = SceneId::new("scene_a".to_string());
+        let scene_b = SceneId::new("scene_b".to_string());
+        let scene_row = |id: &SceneId, script: &str| config_queries::SceneRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            hidden: false,
+            script: Some(script.to_string()),
+            device_states: HashMap::new(),
+            group_states: HashMap::new(),
+            group_state_order: Vec::new(),
+        };
+
+        let mut scenes = Scenes::new(ScenesConfig::new());
+        scenes.load_config_rows(
+            &[
+                scene_row(&scene_a, "devices['test/source']"),
+                scene_row(&scene_b, "groups['others']"),
+            ],
+            Default::default(),
+        );
+        scenes.force_invalidate(&devices, &groups);
+        assert_eq!(scenes.take_scene_materialization_requests().len(), 2);
+
+        let invalidated = scenes.invalidate(Some(&source), &source, &devices, &groups);
+        assert_eq!(invalidated, [scene_a.clone()].into_iter().collect());
+        let requests = scenes.take_scene_materialization_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].scene_id, scene_a);
+
+        let result_a = json!({ "test/target_a": { "power": false } });
+        let affected = scenes
+            .apply_scene_script_result(&devices, &groups, &scene_a, 1, Some(&result_a), None)
+            .expect("current revision applies");
+        assert_eq!(affected, [target_a_key.clone()].into_iter().collect());
+        assert!(!affected.contains(&target_b_key));
+
+        let invalidated = scenes.invalidate(Some(&other), &other, &devices, &groups);
+        assert_eq!(invalidated, [scene_b.clone()].into_iter().collect());
+        let requests = scenes.take_scene_materialization_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].scene_id, scene_b);
+
+        let result_b = json!({ "test/target_b": { "power": false } });
+        let affected = scenes
+            .apply_scene_script_result(&devices, &groups, &scene_b, 1, Some(&result_b), None)
+            .expect("current revision applies");
+        assert_eq!(affected, [target_b_key.clone()].into_iter().collect());
+        assert!(
+            scenes
+                .get_device_scene_state(&scene_a, &target_a_key)
+                .is_some(),
+            "scene B's result cannot overwrite scene A's materialization"
+        );
+        assert!(scenes
+            .get_device_scene_state(&scene_a, &target_b_key)
+            .is_none());
+    }
+
     #[test]
     fn later_group_targets_override_earlier_targets_in_saved_order() {
         let (mut devices, _event_rx) = test_devices();
