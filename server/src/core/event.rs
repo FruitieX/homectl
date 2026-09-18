@@ -35,8 +35,8 @@ use super::state::{AppState, PendingWsUpdate};
 use super::{
     automation::{
         guard_suppression, step_status, CompleteResult, ConditionOutcome, FrameContext,
-        InvocationToken, PlanInputs, PlannedStepBody, RoutinePlan, SceneMaterializationCompletion,
-        ScriptOutputContract,
+        InvocationToken, PlanInputs, PlannedStep, PlannedStepBody, RoutinePlan,
+        SceneMaterializationCompletion, ScriptOutputContract,
     },
     groups::Groups,
     integrations::Integrations,
@@ -461,6 +461,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     after: &after_view,
                     groups: &state.groups,
                     helpers: Some(&state.helpers),
+                    fired_timers: &[],
                 };
                 let evaluations = state.rules.handle_v2_frame(&v2_frame);
                 if !evaluations.is_empty() {
@@ -756,6 +757,60 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                         reason.as_str()
                     );
                 }
+            }
+        }
+
+        Event::RoutineTimerOperation {
+            routine_id,
+            definition_revision,
+            operation,
+            causation: _,
+        } => {
+            let current_revision = state
+                .rules
+                .compiled_v2_routines()
+                .get(routine_id)
+                .map(|definition| definition.revision);
+            match current_revision {
+                Some(current) if current == *definition_revision => {
+                    // A relative timer starts when the actor accepts the
+                    // scheduling operation, not when its script frame was
+                    // queued (P09 clock policy).
+                    let now_monotonic_ms = state.clock.monotonic_ms();
+                    let now_wall_ms = state.clock.wall_ms();
+                    if let Err(error) = state.timers.apply(
+                        routine_id,
+                        *definition_revision,
+                        operation,
+                        now_monotonic_ms,
+                        now_wall_ms,
+                    ) {
+                        warn!(
+                            "Timer operation for routine {routine_id} failed: {}",
+                            error.message()
+                        );
+                    }
+                }
+                _ => debug!("Ignoring timer operation for edited or missing routine {routine_id}"),
+            }
+        }
+
+        Event::TimerWakeup {
+            routine_id,
+            definition_revision,
+            timer,
+            generation,
+            due_wall_ms,
+        } => {
+            match state
+                .timers
+                .consume(routine_id, *definition_revision, timer, *generation)
+            {
+                Some(fire) => state.pending_timer_fires.push(fire),
+                None => debug!(
+                    "Ignoring stale timer wakeup for {routine_id}: \
+                     timer={timer} generation={generation} due_at={due_wall_ms}"
+                ),
             }
         }
     }
@@ -1202,6 +1257,40 @@ fn bump_action_intents(state: &mut AppState, action: &Action) {
     }
 }
 
+/// Visible status for a plan rejected before effects because a timer
+/// operation conflicted with live state (P09/X02).
+fn rejected_timer_plan(
+    plan: &RoutinePlan,
+    conflicting: &PlannedStep,
+    error: &crate::core::automation::TimerOperationError,
+) -> PlannedRunStatus {
+    let mut steps = Vec::with_capacity(plan.steps.len() + plan.suppressions.len());
+    let mut dropped = 0u64;
+    for step in &plan.steps {
+        dropped += 1;
+        let reason = if step.action_id == conflicting.action_id {
+            Some(format!(
+                "{} (plan rejected before effects)",
+                error.message()
+            ))
+        } else {
+            Some(format!("plan_rejected: {}", error.code()))
+        };
+        steps.push(step_status(step, StepDisposition::Suppressed, reason));
+    }
+    for suppression in &plan.suppressions {
+        dropped += 1;
+        steps.push(suppression.clone());
+    }
+    PlannedRunStatus {
+        run_id: plan.run_id,
+        definition_revision: plan.definition_revision,
+        accepted: false,
+        steps,
+        dropped,
+    }
+}
+
 impl AppState {
     /// Apply native group/scene derivation for the mutations collected during
     /// the current actor command and evaluate routines per mutation against
@@ -1216,6 +1305,30 @@ impl AppState {
         plan: RoutinePlan,
         causation: EventCausation,
     ) -> PlannedRunStatus {
+        // P09: validate the plan's timer operations against a staged view
+        // before publishing any effect. A conflicting required ScheduleTimer
+        // rejects the plan as a whole (accepted: false) instead of letting it
+        // turn lights on and then fail to install their off timer.
+        let now_monotonic_ms = self.clock.monotonic_ms();
+        let now_wall_ms = self.clock.wall_ms();
+        let mut staged = self.timers.clone();
+        for step in &plan.steps {
+            if guard_suppression(step, &self.intents).is_some() {
+                continue;
+            }
+            if let PlannedStepBody::TimerOperation { operation } = &step.body {
+                if let Err(error) = staged.apply(
+                    &plan.routine_id,
+                    plan.definition_revision,
+                    operation,
+                    now_monotonic_ms,
+                    now_wall_ms,
+                ) {
+                    return rejected_timer_plan(&plan, step, &error);
+                }
+            }
+        }
+
         let mut steps = Vec::with_capacity(plan.steps.len() + plan.suppressions.len());
         let mut dropped = 0u64;
         for step in &plan.steps {
@@ -1232,6 +1345,12 @@ impl AppState {
                 PlannedStepBody::SetHelper { helper, value } => Event::RoutineSetHelper {
                     helper: helper.clone(),
                     value: value.clone(),
+                    causation,
+                },
+                PlannedStepBody::TimerOperation { operation } => Event::RoutineTimerOperation {
+                    routine_id: plan.routine_id.clone(),
+                    definition_revision: plan.definition_revision,
+                    operation: operation.clone(),
                     causation,
                 },
             };
@@ -1397,8 +1516,12 @@ impl AppState {
     }
 
     pub async fn flush_pending_frames(&mut self) -> SnapshotChanges {
+        // P09: the coherent frame freezes the actor's wall clock once; script
+        // contexts derived from it reuse this value instead of sampling live.
+        let evaluation_time_ms = self.clock.wall_ms();
         let pending = self.devices.take_pending_mutations();
-        if pending.is_empty() {
+        let fired_timers = std::mem::take(&mut self.pending_timer_fires);
+        if pending.is_empty() && fired_timers.is_empty() {
             // Invalidation-free commands (scene/group edits through mutate
             // closures) may still have queued materializations.
             self.execute_deferred_scene_materializations().await;
@@ -1449,6 +1572,7 @@ impl AppState {
         }
 
         if self.warming_up {
+            self.pending_timer_fires = fired_timers;
             self.frame_log.record(AutomationFrame {
                 frame_id,
                 origin,
@@ -1511,6 +1635,7 @@ impl AppState {
                     after: &after_view,
                     groups: &self.groups,
                     helpers: Some(&self.helpers),
+                    fired_timers: &fired_timers,
                 };
                 let evaluations = self.rules.handle_v2_frame(&frame);
                 let mut prepared_scripts: Vec<super::automation::PreparedScriptRun> = Vec::new();
@@ -1544,6 +1669,7 @@ impl AppState {
                             frame_id,
                             origin,
                             frame_causation,
+                            evaluation_time_ms,
                         ) {
                             Ok(run) => prepared_scripts.push(run),
                             Err(reason) => self
@@ -1619,7 +1745,7 @@ impl AppState {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::{handle_event, DeferredEventWork};
+    use super::{handle_event, DeferredEventWork, PlannedStep, PlannedStepBody, RoutinePlan};
     use crate::core::{
         devices::Devices,
         groups::Groups,
@@ -1717,6 +1843,9 @@ pub(crate) mod tests {
             helpers: Default::default(),
             intents: Default::default(),
             scripts: Default::default(),
+            timers: Default::default(),
+            pending_timer_fires: Vec::new(),
+            clock: Arc::new(crate::core::clock::ManualClock::new(1_000_000)),
             event_tx,
             ws: WebSockets::default(),
             ui: Ui::new(),
@@ -2670,7 +2799,6 @@ pub(crate) mod tests {
 
         let (mut state, mut event_rx) = test_state();
         state.scripts.worker_binary = Some(script_worker_binary());
-        state.scripts.clock = || 777;
 
         let bulb = lamp("mqtt", "lamp", false, 0.1);
         let bulb_key = bulb.get_device_key();
@@ -3110,5 +3238,232 @@ pub(crate) mod tests {
             run.steps[0].reason
         );
         assert!(event_rx.try_recv().is_err(), "no worker result is expected");
+    }
+
+    fn timer_routine_row(id: &str, timer: &str, power: bool, revision: i64) -> RoutineRow {
+        RoutineRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{ "kind": "timer_fired", "id": "trig", "timer": timer }],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "native", "steps": [
+                    { "action": "set_power", "id": "step",
+                      "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                      "power": power }
+                ]}
+            })),
+            ..Default::default()
+        }
+    }
+
+    // P09/J01/J05: only the current generation of the owning routine's timer
+    // fires, and the expiry frame evaluates current state.
+    #[tokio::test]
+    async fn p09_named_timer_fires_current_generation_against_current_state() {
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, mut event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", true, 0.1);
+        let bulb_key = bulb.get_device_key();
+        state.devices.set_state(&bulb, true, true);
+        state.runtime_config.routines = vec![timer_routine_row("timer_routine", "off", false, 1)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        handle_event(
+            &mut state,
+            &Event::RoutineTimerOperation {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                operation: TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 5_000,
+                },
+                causation: EventCausation::default(),
+            },
+        )
+        .await
+        .unwrap();
+
+        let first = state.timers.wakeups().pop().expect("pending wakeup");
+        handle_event(
+            &mut state,
+            &Event::RoutineTimerOperation {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                operation: TimerOperation::Replace {
+                    timer: timer.clone(),
+                    delay_ms: 10_000,
+                },
+                causation: EventCausation::default(),
+            },
+        )
+        .await
+        .unwrap();
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: first.definition_revision,
+                timer: first.timer.clone(),
+                generation: first.generation,
+                due_wall_ms: first.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            state.pending_timer_fires.is_empty(),
+            "the replaced generation cannot fire"
+        );
+
+        let current = state.timers.wakeups().pop().expect("replacement wakeup");
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: current.definition_revision,
+                timer: current.timer,
+                generation: current.generation,
+                due_wall_ms: current.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&owner)
+            .cloned()
+            .unwrap();
+        let v2 = status.v2.expect("v2 status attached");
+        assert_eq!(
+            v2.matched_trigger_ids,
+            vec![crate::types::automation_definition::NodeId(
+                "trig".to_string()
+            )],
+            "the validated expiry frame fires the TimerFired trigger"
+        );
+
+        let mut processed = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            handle_event(&mut state, &event).await.unwrap();
+            processed += 1;
+            assert!(processed < 8, "dispatch loop should terminate");
+        }
+        state.flush_pending_frames().await;
+
+        assert_eq!(
+            state
+                .devices
+                .get_device(&bulb_key)
+                .and_then(|device| device.is_powered_on()),
+            Some(false),
+            "the timer continuation acted on current state"
+        );
+    }
+
+    // P09: a conflicting required ScheduleTimer rejects the plan before any
+    // effect is published; ordered cancel-then-schedule is valid.
+    #[tokio::test]
+    async fn p09_timer_conflicts_reject_the_plan_before_effects() {
+        use crate::types::automation_definition::{NodeId, TimerId, TimerOperation};
+        use crate::types::automation_trace::StepDisposition;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, mut event_rx) = test_state();
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        state
+            .timers
+            .apply(
+                &owner,
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 1_000,
+                },
+                0,
+                1_000_000,
+            )
+            .unwrap();
+
+        let schedule_step = |delay_ms: u64| PlannedStep {
+            action_id: NodeId("step".to_string()),
+            kind: "schedule_timer",
+            body: PlannedStepBody::TimerOperation {
+                operation: TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms,
+                },
+            },
+            intent_guard: Vec::new(),
+        };
+        let conflicting = RoutinePlan {
+            routine_id: owner.clone(),
+            definition_revision: 1,
+            run_id: 7,
+            steps: vec![schedule_step(5_000)],
+            suppressions: Vec::new(),
+        };
+        let status = state.dispatch_v2_plan(conflicting, EventCausation::default());
+        assert!(!status.accepted);
+        assert_eq!(status.steps[0].disposition, StepDisposition::Suppressed);
+        assert!(
+            status.steps[0]
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("timer_already_pending")),
+            "{:?}",
+            status.steps[0].reason
+        );
+        assert!(
+            event_rx.try_recv().is_err(),
+            "a rejected plan publishes no effects"
+        );
+
+        let cancel_then_schedule = RoutinePlan {
+            routine_id: owner.clone(),
+            definition_revision: 1,
+            run_id: 8,
+            steps: vec![
+                PlannedStep {
+                    action_id: NodeId("cancel".to_string()),
+                    kind: "cancel_timer",
+                    body: PlannedStepBody::TimerOperation {
+                        operation: TimerOperation::Cancel {
+                            timer: timer.clone(),
+                        },
+                    },
+                    intent_guard: Vec::new(),
+                },
+                schedule_step(5_000),
+            ],
+            suppressions: Vec::new(),
+        };
+        let status = state.dispatch_v2_plan(cancel_then_schedule, EventCausation::default());
+        assert!(
+            status.accepted,
+            "cancel-then-schedule is ordered, not a conflict"
+        );
+        assert!(matches!(
+            event_rx.try_recv(),
+            Ok(Event::RoutineTimerOperation { .. })
+        ));
+        assert!(matches!(
+            event_rx.try_recv(),
+            Ok(Event::RoutineTimerOperation { .. })
+        ));
     }
 }

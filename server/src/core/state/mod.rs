@@ -123,6 +123,12 @@ pub struct AppState {
     /// Owner bookkeeping, lazy worker pool, and invocation contexts for v2
     /// script programs (P07).
     pub scripts: crate::core::automation::ScriptExecution,
+    /// Actor-authoritative named timer jobs (P09).
+    pub timers: crate::core::automation::TimerStore,
+    /// Validated timer fires waiting for the next coherent frame (P09).
+    pub pending_timer_fires: Vec<crate::core::automation::TimerFire>,
+    /// Injected wall/monotonic clock used by scheduling (P09).
+    pub clock: Arc<dyn crate::core::clock::Clock>,
     pub event_tx: TxEventChannel,
     pub ws: WebSockets,
     pub ui: Ui,
@@ -803,6 +809,7 @@ impl AppState {
         self.rules
             .load_config_rows(&self.runtime_config.routines, &catalog);
         self.sync_script_owners();
+        self.timers.retain_current(&self.v2_definition_revisions());
         // E06: reloaded definitions seed transition memory from current state
         // instead of treating already-true predicates as fresh edges.
         self.rules
@@ -812,6 +819,22 @@ impl AppState {
             routine_statuses: true,
             ..SnapshotChanges::none()
         });
+    }
+
+    /// Current definition revisions of compiled v2 routines.
+    pub fn v2_definition_revisions(
+        &self,
+    ) -> std::collections::BTreeMap<crate::types::rule::RoutineId, i64> {
+        self.rules
+            .compiled_v2_routines()
+            .iter()
+            .map(|(routine_id, definition)| (routine_id.clone(), definition.revision))
+            .collect()
+    }
+
+    /// Pending named-timer wakeups for the scheduler driver (P09).
+    pub fn timer_wakeups(&self) -> Vec<crate::core::automation::TimerWakeup> {
+        self.timers.wakeups()
     }
 
     /// Reconcile script owner generations with the compiled v2 definitions and

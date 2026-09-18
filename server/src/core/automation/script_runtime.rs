@@ -99,9 +99,6 @@ pub struct ScriptExecution {
     /// Optional worker executable override; `None` resolves `script-worker`
     /// next to the running server binary (tests/alternate deployments).
     pub worker_binary: Option<PathBuf>,
-    /// Single injected wall-clock source. P09 replaces this with a real clock
-    /// abstraction; until then context building must not scatter `SystemTime`.
-    pub clock: fn() -> i64,
     invocation_counter: u64,
 }
 
@@ -112,7 +109,6 @@ impl Default for ScriptExecution {
             pool: None,
             pool_error: None,
             worker_binary: None,
-            clock: system_now_ms,
             invocation_counter: 0,
         }
     }
@@ -233,6 +229,11 @@ impl ScriptExecution {
     /// entities that are not discovered yet are simply absent until they
     /// appear (S13). Helpers are exposed with their declared kind, and owner
     /// memory/revision come from the coordinator (S11/S12/S14/S15).
+    ///
+    /// `now_ms` is the actor clock sampled when this coherent frame was
+    /// created, frozen into the invocation so a queued worker sees frame time
+    /// rather than its own start time (P09).
+    #[allow(clippy::too_many_arguments)]
     pub fn build_handler_context(
         &mut self,
         owner: &ScriptOwnerId,
@@ -241,6 +242,7 @@ impl ScriptExecution {
         frame_id: EventId,
         origin: EventOrigin,
         causation: EventCausation,
+        now_ms: i64,
     ) -> Result<Value, String> {
         let mut broad_reads = false;
         let mut device_keys: BTreeSet<DeviceKey> = BTreeSet::new();
@@ -340,7 +342,7 @@ impl ScriptExecution {
         ));
 
         Ok(serde_json::json!({
-            "now_ms": (self.clock)(),
+            "now_ms": now_ms,
             "seed": seed,
             "event": {
                 "frame_id": frame_id,
@@ -368,10 +370,11 @@ impl ScriptExecution {
         frame_id: EventId,
         origin: EventOrigin,
         causation: EventCausation,
+        now_ms: i64,
     ) -> Result<PreparedScriptRun, String> {
         let owner = ScriptOwnerId::routine(routine_id.0.clone());
         let context =
-            self.build_handler_context(&owner, spec, frame, frame_id, origin, causation)?;
+            self.build_handler_context(&owner, spec, frame, frame_id, origin, causation, now_ms)?;
         let invocation = ScriptInvocation {
             owner,
             definition_revision,
@@ -625,13 +628,6 @@ fn fnv1a(text: &str) -> u64 {
     hash
 }
 
-fn system_now_ms() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as i64)
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -696,10 +692,7 @@ mod tests {
     // of any previous branch; undeclared devices are absent, not observed.
     #[test]
     fn context_exposes_declared_and_mutated_devices_only() {
-        let mut scripts = ScriptExecution {
-            clock: || 1000,
-            ..ScriptExecution::default()
-        };
+        let mut scripts = ScriptExecution::default();
         let before = states(vec![lamp("lamp", false), lamp("other", false)]);
         let after = states(vec![lamp("lamp", true), lamp("other", false)]);
         let mutations = vec![DeviceMutation {
@@ -715,6 +708,7 @@ mod tests {
             after: &after,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let declaration = ScriptDeclaration::Device {
             device: DeviceRef::from(&key("lamp")),
@@ -727,6 +721,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                1000,
             )
             .expect("context builds");
 
@@ -744,10 +739,7 @@ mod tests {
     // current frame instead of narrowing to exact device declarations.
     #[test]
     fn all_state_declaration_opens_the_whole_frame() {
-        let mut scripts = ScriptExecution {
-            clock: || 1000,
-            ..ScriptExecution::default()
-        };
+        let mut scripts = ScriptExecution::default();
         let before = states(vec![lamp("lamp", false), lamp("other", false)]);
         let after = states(vec![lamp("lamp", true), lamp("other", false)]);
         let mutations = vec![DeviceMutation {
@@ -763,6 +755,7 @@ mod tests {
             after: &after,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let context = scripts
             .build_handler_context(
@@ -772,6 +765,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                1000,
             )
             .expect("context builds");
 
@@ -788,10 +782,7 @@ mod tests {
     // leaks into the next one.
     #[test]
     fn context_scope_never_inherits_previous_branch_reads() {
-        let mut scripts = ScriptExecution {
-            clock: || 1000,
-            ..ScriptExecution::default()
-        };
+        let mut scripts = ScriptExecution::default();
         let declaration = ScriptDeclaration::Device {
             device: DeviceRef::from(&key("lamp")),
         };
@@ -811,6 +802,7 @@ mod tests {
             after: &after,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let first = scripts
             .build_handler_context(
@@ -820,6 +812,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                1000,
             )
             .unwrap();
         assert!(
@@ -840,6 +833,7 @@ mod tests {
             after: &after,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let second = scripts
             .build_handler_context(
@@ -849,6 +843,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                1000,
             )
             .unwrap();
         assert!(
@@ -861,10 +856,7 @@ mod tests {
     // (but tracked) until the entity appears in a later frame.
     #[test]
     fn declared_missing_entity_enters_the_context_once_present() {
-        let mut scripts = ScriptExecution {
-            clock: || 1000,
-            ..ScriptExecution::default()
-        };
+        let mut scripts = ScriptExecution::default();
         let declaration = ScriptDeclaration::Device {
             device: DeviceRef::from(&key("future")),
         };
@@ -878,6 +870,7 @@ mod tests {
             after: &after,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let missing = scripts
             .build_handler_context(
@@ -887,6 +880,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                1000,
             )
             .unwrap();
         assert!(
@@ -903,6 +897,7 @@ mod tests {
             after: &discovered_after,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let discovered = scripts
             .build_handler_context(
@@ -912,6 +907,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                1000,
             )
             .unwrap();
         assert!(
@@ -923,10 +919,7 @@ mod tests {
     // S11 direction: the clock and seed are context inputs, not ambient state.
     #[test]
     fn context_clock_and_seed_are_injected() {
-        let mut scripts = ScriptExecution {
-            clock: || 4242,
-            ..ScriptExecution::default()
-        };
+        let mut scripts = ScriptExecution::default();
         let devices = states(vec![lamp("lamp", false)]);
         let mutations = vec![DeviceMutation {
             event_id: EventId::default(),
@@ -941,6 +934,7 @@ mod tests {
             after: &devices,
             groups: &Groups::new(Default::default()),
             helpers: None,
+            fired_timers: &[],
         };
         let first = scripts
             .build_handler_context(
@@ -950,6 +944,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                4242,
             )
             .unwrap();
         let second = scripts
@@ -960,6 +955,7 @@ mod tests {
                 EventId::default(),
                 EventOrigin::Report,
                 EventCausation::default(),
+                4242,
             )
             .unwrap();
         assert_eq!(first["now_ms"], json!(4242));

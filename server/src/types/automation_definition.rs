@@ -80,10 +80,25 @@ impl std::fmt::Display for NodeId {
     }
 }
 
-/// Stable identifier for a named timer key.
+/// Stable identifier for a named timer within its owning routine. Not
+/// globally unique: two routines may each own an `"off"` timer.
 #[derive(TS, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[ts(export)]
 pub struct TimerId(pub String);
+
+/// One timer mutation produced by a plan step (P09). Timer state is
+/// actor-authoritative; the plan only names the operation.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "operation", rename_all = "snake_case")]
+#[ts(export)]
+pub enum TimerOperation {
+    /// Create a named timer, failing when a live generation exists.
+    Schedule { timer: TimerId, delay_ms: u64 },
+    /// Replace the same owner/key and bump its generation.
+    Replace { timer: TimerId, delay_ms: u64 },
+    /// Cancel a named timer; cancelling a missing timer succeeds (J02).
+    Cancel { timer: TimerId },
+}
 
 impl TimerId {
     pub fn as_str(&self) -> &str {

@@ -37,6 +37,8 @@ pub const KIND_LABELS: &[&str] = &[
     "HandleEvent:RoutineScriptResult",
     "HandleEvent:RuleScriptLeafResult",
     "HandleEvent:SceneMaterializedResult",
+    "HandleEvent:RoutineTimerOperation",
+    "HandleEvent:TimerWakeup",
 ];
 
 pub const KIND_MUTATE: usize = 11;
@@ -201,5 +203,7 @@ fn event_kind_index(event: &crate::types::event::Event) -> usize {
         Event::RoutineScriptResult { .. } => 15,
         Event::RuleScriptLeafResult { .. } => 16,
         Event::SceneMaterializedResult { .. } => 17,
+        Event::RoutineTimerOperation { .. } => 18,
+        Event::TimerWakeup { .. } => 19,
     }
 }

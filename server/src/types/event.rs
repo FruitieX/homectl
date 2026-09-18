@@ -176,6 +176,28 @@ pub enum Event {
         error: Option<String>,
     },
 
+    /// A v2 routine dispatched a named timer operation (P09). Timer state is
+    /// actor-authoritative, so the operation is applied by the handler in plan
+    /// order rather than at plan time.
+    RoutineTimerOperation {
+        routine_id: RoutineId,
+        definition_revision: i64,
+        operation: crate::types::automation_definition::TimerOperation,
+        causation: EventCausation,
+    },
+
+    /// The wakeup driver reached a timer deadline (P09). The actor re-validates
+    /// owner revision, key, and generation against the authoritative store
+    /// before any routine can fire; stale wakeups are ignored.
+    TimerWakeup {
+        routine_id: RoutineId,
+        definition_revision: i64,
+        timer: crate::types::automation_definition::TimerId,
+        generation: u64,
+        #[ts(type = "number")]
+        due_wall_ms: i64,
+    },
+
     /// Wait for a bit for devices to come online before starting up.
     StartupCompleted,
 

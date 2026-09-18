@@ -1,6 +1,7 @@
 pub mod automation;
 pub mod automation_baseline;
 pub mod calibration_session;
+pub mod clock;
 pub mod color_calibration;
 pub mod config;
 pub mod config_diagnostics;
@@ -17,6 +18,7 @@ pub mod routine_validation;
 pub mod routines;
 pub mod scene_commands;
 pub mod scenes;
+pub mod scheduler;
 pub mod scripting;
 pub mod simulate;
 pub mod snapshot;

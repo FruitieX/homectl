@@ -67,6 +67,9 @@ pub struct FrameContext<'a> {
     pub after: &'a DevicesState,
     pub groups: &'a Groups,
     pub helpers: Option<&'a crate::core::helpers::Helpers>,
+    /// Named timer fires the actor validated for this frame (P09). Empty for
+    /// ordinary device frames.
+    pub fired_timers: &'a [super::timers::TimerFire],
 }
 
 impl FrameContext<'_> {
@@ -502,16 +505,35 @@ fn evaluate_trigger(
                 unknown_reason: evaluation.unknown_reason,
             }
         }
-        TriggerSpec::Schedule { .. }
-        | TriggerSpec::TimerFired { .. }
-        | TriggerSpec::Startup { .. }
-        | TriggerSpec::Manual { .. } => TriggerOutcome {
-            eligible: false,
-            fired: false,
-            truth: TruthValue::Unknown,
-            error: None,
-            unknown_reason: None,
-        },
+        TriggerSpec::TimerFired { timer, .. } => {
+            // The actor already validated owner revision and generation; the
+            // evaluator only matches this frame's fire to the trigger (J01).
+            let fired = frame.fired_timers.iter().any(|fire| {
+                &fire.routine_id == routine_id
+                    && fire.definition_revision == definition_revision
+                    && &fire.timer == timer
+            });
+            TriggerOutcome {
+                eligible: fired,
+                fired,
+                truth: if fired {
+                    TruthValue::True
+                } else {
+                    TruthValue::Unknown
+                },
+                error: None,
+                unknown_reason: None,
+            }
+        }
+        TriggerSpec::Schedule { .. } | TriggerSpec::Startup { .. } | TriggerSpec::Manual { .. } => {
+            TriggerOutcome {
+                eligible: false,
+                fired: false,
+                truth: TruthValue::Unknown,
+                error: None,
+                unknown_reason: None,
+            }
+        }
     }
 }
 
@@ -1307,6 +1329,7 @@ mod tests {
             after,
             groups,
             helpers: None,
+            fired_timers: &[],
         };
         run(&frame)
     }

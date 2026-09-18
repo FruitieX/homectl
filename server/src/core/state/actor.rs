@@ -180,6 +180,11 @@ pub fn spawn_state_actor(
         Duration::from_secs(METRICS_REPORT_INTERVAL_SECS),
     );
 
+    let scheduler = crate::core::scheduler::SchedulerHandle::spawn(
+        Arc::clone(&app_state.clock),
+        app_state.event_tx.clone(),
+    );
+
     tokio::spawn(run_actor(
         app_state,
         rx,
@@ -188,11 +193,13 @@ pub fn spawn_state_actor(
         watchdog_start,
         watchdog_kind,
         metrics,
+        scheduler,
     ));
     handle
 }
 
 /// Processing loop for the state actor.
+#[allow(clippy::too_many_arguments)]
 async fn run_actor(
     mut app_state: AppState,
     mut rx: mpsc::UnboundedReceiver<(Instant, StateCommand)>,
@@ -201,6 +208,7 @@ async fn run_actor(
     watchdog_start: Arc<AtomicU64>,
     watchdog_kind: Arc<AtomicUsize>,
     metrics: Arc<ActorMetrics>,
+    scheduler: crate::core::scheduler::SchedulerHandle,
 ) -> Result<()> {
     use crate::core::event::handle_event;
 
@@ -353,6 +361,11 @@ async fn run_actor(
             }
         }
 
+        // P09: hand the driver the authoritative pending wakeup set after
+        // every command. Lost/duplicated wakeups re-validate against the
+        // timer store before any routine can fire.
+        scheduler.update(app_state.timer_wakeups());
+
         watchdog_start.store(0, Ordering::SeqCst);
     }
 
@@ -423,5 +436,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::RoutineScriptResult { .. } => "RoutineScriptResult",
         Event::RuleScriptLeafResult { .. } => "RuleScriptLeafResult",
         Event::SceneMaterializedResult { .. } => "SceneMaterializedResult",
+        Event::RoutineTimerOperation { .. } => "RoutineTimerOperation",
+        Event::TimerWakeup { .. } => "TimerWakeup",
     }
 }

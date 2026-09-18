@@ -24,6 +24,7 @@ pub mod runtime;
 pub mod script_contract;
 pub mod script_coordinator;
 pub mod script_runtime;
+pub mod timers;
 
 pub use compile::{
     compile_definition, compile_definition_value, compile_row, definition_fingerprint,
@@ -62,3 +63,4 @@ pub use script_runtime::{
     SceneMaterializationCompletion, ScriptExecution, LEGACY_DEFINITION_REVISION,
     MAX_SCRIPT_ERROR_CHARS,
 };
+pub use timers::{TimerFire, TimerOperationError, TimerStore, TimerWakeup, MAX_TIMERS_PER_OWNER};

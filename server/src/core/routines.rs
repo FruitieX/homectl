@@ -2324,6 +2324,7 @@ mod tests {
             after: &after_view,
             groups: &groups,
             helpers: None,
+            fired_timers: &[],
         };
 
         let evaluations = routines.handle_v2_frame(&frame);
