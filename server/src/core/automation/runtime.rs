@@ -12,8 +12,11 @@
 use std::collections::BTreeMap;
 
 use crate::core::groups::Groups;
+use crate::core::helpers::Helpers;
 use crate::types::{
-    automation_trace::RoutineV2RuntimeStatus, device::DevicesState, rule::RoutineId,
+    automation_trace::{PlannedRunStatus, RoutineV2RuntimeStatus},
+    device::DevicesState,
+    rule::RoutineId,
 };
 
 use super::{
@@ -22,6 +25,7 @@ use super::{
         evaluate_condition, evaluate_routine_frame, seed_routine_memory, EvaluationView,
         FrameContext, RoutineFrameEvaluation, TriggerMemory,
     },
+    plan::{plan_evaluation, PlanInputs, RoutinePlan},
 };
 
 /// One compiled, enabled v2 definition plus its stored revision.
@@ -38,6 +42,7 @@ pub struct V2Runtime {
     memory: TriggerMemory,
     statuses: BTreeMap<RoutineId, RoutineV2RuntimeStatus>,
     group_revision: Option<u64>,
+    next_run_id: u64,
 }
 
 impl V2Runtime {
@@ -79,8 +84,12 @@ impl V2Runtime {
     }
 
     /// Seed transition memory from current state without firing (E06).
-    pub fn seed(&mut self, devices: &DevicesState, groups: &Groups) {
-        let view = EvaluationView { devices, groups };
+    pub fn seed(&mut self, devices: &DevicesState, groups: &Groups, helpers: Option<&Helpers>) {
+        let view = EvaluationView {
+            devices,
+            groups,
+            helpers,
+        };
         for (routine_id, definition) in &self.definitions {
             seed_routine_memory(
                 routine_id,
@@ -126,8 +135,17 @@ impl V2Runtime {
 
     /// Re-evaluate conditions against current state for status displays
     /// without touching transition memory (V05/X01).
-    pub fn refresh_statuses(&mut self, devices: &DevicesState, groups: &Groups) {
-        let view = EvaluationView { devices, groups };
+    pub fn refresh_statuses(
+        &mut self,
+        devices: &DevicesState,
+        groups: &Groups,
+        helpers: Option<&Helpers>,
+    ) {
+        let view = EvaluationView {
+            devices,
+            groups,
+            helpers,
+        };
         for (routine_id, definition) in &self.definitions {
             let condition = evaluate_condition(
                 &definition.compiled.normalized.condition,
@@ -151,10 +169,42 @@ impl V2Runtime {
                             condition,
                             will_trigger: false,
                             execution_pending: true,
+                            last_run: None,
                         },
                     );
                 }
             }
+        }
+    }
+
+    /// Plan every triggered evaluation against acceptance-time state (P05).
+    /// Plans are pure; the caller dispatches them and records the run status.
+    pub fn plan_runs(
+        &mut self,
+        evaluations: &[RoutineFrameEvaluation],
+        inputs: &PlanInputs<'_>,
+    ) -> Vec<RoutinePlan> {
+        let mut plans = Vec::new();
+        for evaluation in evaluations {
+            if !evaluation.will_trigger {
+                continue;
+            }
+            let Some(definition) = self.definitions.get(&evaluation.routine_id) else {
+                continue;
+            };
+            let mut plan = plan_evaluation(evaluation, &definition.compiled, inputs);
+            plan.run_id = self.next_run_id;
+            self.next_run_id = self.next_run_id.wrapping_add(1);
+            plans.push(plan);
+        }
+        plans
+    }
+
+    /// Record the dispatched outcome of one run for status displays (X03).
+    pub fn record_run(&mut self, routine_id: &RoutineId, status: PlannedRunStatus) {
+        if let Some(existing) = self.statuses.get_mut(routine_id) {
+            existing.execution_pending = false;
+            existing.last_run = Some(status);
         }
     }
 }
@@ -286,7 +336,7 @@ mod tests {
         let devices = states(vec![lamp("lamp", true)]);
         let groups = no_groups();
 
-        runtime.seed(&devices, &groups);
+        runtime.seed(&devices, &groups, None);
         assert!(runtime
             .memory()
             .entry_for_test("lamp", 1, "trig")
@@ -300,8 +350,9 @@ mod tests {
             before: &before,
             after: &after,
             groups: &groups,
+            helpers: None,
         };
-        runtime.seed(&before, &groups);
+        runtime.seed(&before, &groups, None);
         let evaluations = runtime.evaluate_frame(&frame);
         assert_eq!(evaluations.len(), 1);
         assert!(!evaluations[0].will_trigger);
@@ -320,12 +371,13 @@ mod tests {
         let after = states(vec![lamp("lamp", true), lamp("other", false)]);
         let mutations = vec![mutation(lamp("lamp", false), lamp("lamp", true))];
         let groups = no_groups();
-        runtime.seed(&before, &groups);
+        runtime.seed(&before, &groups, None);
         let frame = FrameContext {
             mutations: &mutations,
             before: &before,
             after: &after,
             groups: &groups,
+            helpers: None,
         };
         runtime.evaluate_frame(&frame);
         assert!(runtime
@@ -363,6 +415,7 @@ mod tests {
             before: &before,
             after: &after,
             groups: &groups,
+            helpers: None,
         };
         runtime.evaluate_frame(&frame);
         assert!(runtime.memory().entry_for_test("lamp", 1, "trig").is_some());
@@ -373,6 +426,7 @@ mod tests {
             before: &before,
             after: &after,
             groups: &groups,
+            helpers: None,
         };
         runtime.evaluate_frame(&frame);
         assert!(
@@ -391,9 +445,9 @@ mod tests {
         let mut runtime = runtime_with(vec![definition("lamp", 1)]);
         let devices = states(vec![lamp("lamp", true)]);
         let groups = no_groups();
-        runtime.seed(&devices, &groups);
+        runtime.seed(&devices, &groups, None);
         let before = runtime.memory().clone();
-        runtime.refresh_statuses(&devices, &groups);
+        runtime.refresh_statuses(&devices, &groups, None);
         assert_eq!(
             runtime.memory().len(),
             before.len(),

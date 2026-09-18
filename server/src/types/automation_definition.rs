@@ -334,9 +334,15 @@ pub struct NativeProgram {
 #[ts(export)]
 pub enum NativeAction {
     /// Activates a scene. An empty `targets` uses the scene's own targets.
+    /// Exactly one of `scene_id`/`select` must be present.
     ActivateScene {
         id: NodeId,
-        scene_id: SceneId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        scene_id: Option<SceneId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        select: Option<SceneSelection>,
         #[serde(default)]
         targets: TargetSpec,
     },
@@ -419,6 +425,31 @@ pub struct ChooseBranch {
     pub id: NodeId,
     pub condition: ConditionExpr,
     pub steps: Vec<NativeAction>,
+}
+
+/// Decision-time scene selection for a v2 activation. Resolved once at plan
+/// time and frozen into the plan (A01).
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum SceneSelection {
+    /// Map an enum helper's current value to a scene. Unknown values use the
+    /// explicit fallback when present.
+    HelperEnum {
+        helper: HelperId,
+        mapping: std::collections::BTreeMap<String, SceneId>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        fallback_scene_id: Option<SceneId>,
+    },
+    /// Mirror the referenced group's unanimous currently-active scene, using
+    /// only the configured fallback when the group is mixed or unknown (A04).
+    GroupActive {
+        group_id: GroupId,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        fallback_scene_id: Option<SceneId>,
+    },
 }
 
 #[derive(TS, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

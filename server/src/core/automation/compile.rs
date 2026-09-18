@@ -10,10 +10,11 @@ use crate::db::config_queries::{ConfigExport, RoutineRow};
 use crate::types::{
     automation_definition::{
         ConditionExpr, ExecutionPolicy, HelperId, InvokeMode, NativeAction, NodeId, Program,
-        RoutineDefinitionV2, RoutineSemantics, ScheduleSpec, ScriptDeclaration, ScriptSpec,
-        SourceId, StateChangeMode, TargetSpec, TimerId, TriggerSpec, ValueSource,
+        RoutineDefinitionV2, RoutineSemantics, SceneSelection, ScheduleSpec, ScriptDeclaration,
+        ScriptSpec, SourceId, StateChangeMode, TargetSpec, TimerId, TriggerSpec, ValueSource,
         ROUTINE_SEMANTICS_VERSION_V2,
     },
+    automation_value::{HelperDefinition, HelperKind},
     device::{DeviceKey, DeviceRef},
     group::GroupId,
     rule::{RawRuleOperator, RoutineId},
@@ -47,7 +48,7 @@ pub struct ConfigCatalog {
     groups: HashSet<GroupId>,
     scenes: HashSet<SceneId>,
     routines: HashSet<RoutineId>,
-    helpers: HashSet<HelperId>,
+    helpers: BTreeMap<HelperId, HelperDefinition>,
     sources: HashSet<SourceId>,
     group_links: Vec<(GroupId, GroupId)>,
     strict_devices: bool,
@@ -93,22 +94,45 @@ impl ConfigCatalog {
                     .map(|child| (GroupId(group.id.clone()), GroupId(child.clone())))
             })
             .collect();
+        let helpers = export
+            .helpers
+            .iter()
+            .cloned()
+            .map(|definition| (definition.id.clone(), definition))
+            .collect();
 
         Self {
             devices: HashSet::new(),
             groups,
             scenes,
             routines,
-            helpers: HashSet::new(),
+            helpers,
             sources: HashSet::new(),
             group_links,
             strict_devices: false,
         }
     }
 
+    /// Register a helper id with a permissive placeholder definition. Used by
+    /// tests and call sites that only need `SetHelper` references to resolve.
     pub fn with_helper(mut self, helper: HelperId) -> Self {
-        self.helpers.insert(helper);
+        self.helpers.entry(helper.clone()).or_insert_with(|| {
+            HelperDefinition::new(
+                helper.as_str(),
+                helper.as_str(),
+                crate::types::automation_value::HelperKind::String,
+            )
+        });
         self
+    }
+
+    pub fn with_helper_definition(mut self, definition: HelperDefinition) -> Self {
+        self.helpers.insert(definition.id.clone(), definition);
+        self
+    }
+
+    pub fn helper(&self, helper: &HelperId) -> Option<&HelperDefinition> {
+        self.helpers.get(helper)
     }
 
     pub fn with_source(mut self, source: SourceId) -> Self {
@@ -714,7 +738,7 @@ impl Compiler<'_> {
                         self.validate_pointer(pointer, &format!("{path}/source/path"));
                     }
                     ValueSource::Helper { helper } => {
-                        if !self.catalog.helpers.contains(helper) {
+                        if !self.catalog.helpers.contains_key(helper) {
                             self.report.error_with_entity(
                                 format!("{path}/source/helper"),
                                 None,
@@ -837,19 +861,43 @@ impl Compiler<'_> {
 
             match action {
                 NativeAction::ActivateScene {
-                    scene_id, targets, ..
+                    scene_id,
+                    select,
+                    targets,
+                    ..
                 } => {
-                    if !self.catalog.scenes.contains(scene_id) {
-                        self.report.error_with_entity(
-                            format!("{action_path}/scene_id"),
-                            Some(action.id().as_str()),
-                            "unknown_scene",
-                            format!("Unknown scene '{scene_id}'."),
-                            scene_id.to_string(),
-                        );
+                    match (scene_id, select) {
+                        (Some(_), Some(_)) => {
+                            self.report.error_at_node(
+                                &action_path,
+                                action.id(),
+                                "ambiguous_scene_selection",
+                                "ActivateScene must specify exactly one of scene_id or select.",
+                            );
+                        }
+                        (None, None) => {
+                            self.report.error_at_node(
+                                &action_path,
+                                action.id(),
+                                "missing_scene_selection",
+                                "ActivateScene requires scene_id or select.",
+                            );
+                        }
+                        (Some(scene_id), None) => {
+                            self.resolve_scene_id(
+                                scene_id,
+                                &format!("{action_path}/scene_id"),
+                                action.id(),
+                            );
+                        }
+                        (None, Some(selection)) => {
+                            self.compile_scene_selection(
+                                selection,
+                                &format!("{action_path}/select"),
+                                action.id(),
+                            );
+                        }
                     }
-                    self.add_dependency(ResolvedReference::Scene(scene_id.clone()));
-                    self.add_write(WriteKind::Scene, scene_id.to_string());
                     self.compile_targets(targets, &format!("{action_path}/targets"), action.id());
                 }
                 NativeAction::SetPower { device, power, .. } => {
@@ -962,15 +1010,27 @@ impl Compiler<'_> {
                     );
                     self.add_write(WriteKind::Timer, timer.to_string());
                 }
-                NativeAction::SetHelper { helper, .. } => {
-                    if !self.catalog.helpers.contains(helper) {
-                        self.report.error_with_entity(
-                            format!("{action_path}/helper"),
-                            Some(action.id().as_str()),
-                            "unknown_helper",
-                            format!("Unknown helper '{helper}'."),
-                            helper.to_string(),
-                        );
+                NativeAction::SetHelper { helper, value, .. } => {
+                    match self.catalog.helpers.get(helper).cloned() {
+                        Some(definition) => {
+                            if let Err(error) = definition.kind.validate_value(value) {
+                                self.report.error_at_node(
+                                    format!("{action_path}/value"),
+                                    action.id(),
+                                    "invalid_helper_value",
+                                    format!("Value is invalid for helper '{helper}': {error}"),
+                                );
+                            }
+                        }
+                        None => {
+                            self.report.error_with_entity(
+                                format!("{action_path}/helper"),
+                                Some(action.id().as_str()),
+                                "unknown_helper",
+                                format!("Unknown helper '{helper}'."),
+                                helper.to_string(),
+                            );
+                        }
                     }
                     self.add_write(WriteKind::Helper, helper.to_string());
                     self.add_dependency(ResolvedReference::Helper(helper.clone()));
@@ -1142,6 +1202,104 @@ impl Compiler<'_> {
             );
         }
         self.add_dependency(ResolvedReference::Group(group_id.clone()));
+    }
+
+    fn resolve_scene_id(
+        &mut self,
+        scene_id: &SceneId,
+        path: &str,
+        node: &NodeId,
+    ) -> Option<SceneId> {
+        if !self.catalog.scenes.contains(scene_id) {
+            self.report.error_with_entity(
+                path.to_string(),
+                Some(node.as_str()),
+                "unknown_scene",
+                format!("Unknown scene '{scene_id}'."),
+                scene_id.to_string(),
+            );
+            return None;
+        }
+        self.add_dependency(ResolvedReference::Scene(scene_id.clone()));
+        self.add_write(WriteKind::Scene, scene_id.to_string());
+        Some(scene_id.clone())
+    }
+
+    fn compile_scene_selection(&mut self, selection: &SceneSelection, path: &str, node: &NodeId) {
+        match selection {
+            SceneSelection::HelperEnum {
+                helper,
+                mapping,
+                fallback_scene_id,
+            } => {
+                let definition = self.catalog.helpers.get(helper).cloned();
+                match definition {
+                    Some(definition) => {
+                        self.add_dependency(ResolvedReference::Helper(helper.clone()));
+                        match &definition.kind {
+                            HelperKind::Enum { options } => {
+                                for key in mapping.keys() {
+                                    if !options.iter().any(|option| option == key) {
+                                        self.report.error_at_node(
+                                            format!("{path}/mapping/{key}"),
+                                            node,
+                                            "invalid_mapping_key",
+                                            format!(
+                                                "'{key}' is not an option of helper '{helper}'."
+                                            ),
+                                        );
+                                    }
+                                }
+                            }
+                            kind => {
+                                self.report.error_at_node(
+                                    format!("{path}/helper"),
+                                    node,
+                                    "helper_kind_mismatch",
+                                    format!(
+                                        "Scene selection requires an enum helper, but \
+                                         '{helper}' is {}.",
+                                        kind.code()
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                    None => {
+                        self.report.error_with_entity(
+                            format!("{path}/helper"),
+                            Some(node.as_str()),
+                            "unknown_helper",
+                            format!("Unknown helper '{helper}'."),
+                            helper.to_string(),
+                        );
+                    }
+                }
+                if mapping.is_empty() {
+                    self.report.error_at_node(
+                        format!("{path}/mapping"),
+                        node,
+                        "empty_scene_mapping",
+                        "Scene selection requires at least one mapping entry.",
+                    );
+                }
+                for (key, scene_id) in mapping {
+                    self.resolve_scene_id(scene_id, &format!("{path}/mapping/{key}"), node);
+                }
+                if let Some(fallback) = fallback_scene_id {
+                    self.resolve_scene_id(fallback, &format!("{path}/fallback_scene_id"), node);
+                }
+            }
+            SceneSelection::GroupActive {
+                group_id,
+                fallback_scene_id,
+            } => {
+                self.resolve_group(group_id, &format!("{path}/group_id"), Some(node));
+                if let Some(fallback) = fallback_scene_id {
+                    self.resolve_scene_id(fallback, &format!("{path}/fallback_scene_id"), node);
+                }
+            }
+        }
     }
 
     fn validate_schedule(&mut self, schedule: &ScheduleSpec, path: &str, node: &NodeId) {

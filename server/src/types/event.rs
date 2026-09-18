@@ -112,6 +112,14 @@ pub enum Event {
         causation: EventCausation,
     },
 
+    /// A v2 routine wrote a typed helper value (P05). Validated against the
+    /// helper definition and persisted when durable.
+    RoutineSetHelper {
+        helper: crate::types::automation_definition::HelperId,
+        value: serde_json::Value,
+        causation: EventCausation,
+    },
+
     /// Wait for a bit for devices to come online before starting up.
     StartupCompleted,
 
@@ -139,6 +147,7 @@ impl Event {
             | Event::SetInternalState { causation, .. }
             | Event::ApplyDeviceState { causation, .. } => *causation,
             Event::RoutineAction { causation, .. } => Some(*causation),
+            Event::RoutineSetHelper { causation, .. } => Some(*causation),
             _ => None,
         }
     }

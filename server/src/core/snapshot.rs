@@ -16,6 +16,7 @@ use std::sync::Arc;
 use arc_swap::ArcSwap;
 
 use crate::db::config_queries::ConfigExport;
+use crate::types::automation_value::HelperRuntimeStatus;
 use crate::types::device::DevicesState;
 use crate::types::group::FlattenedGroupsConfig;
 use crate::types::routine_status::RoutineStatuses;
@@ -28,6 +29,7 @@ pub struct SnapshotChanges {
     pub flattened_groups: bool,
     pub flattened_scenes: bool,
     pub routine_statuses: bool,
+    pub helper_statuses: bool,
     pub ui_state: bool,
     pub warming_up: bool,
 }
@@ -40,6 +42,7 @@ impl SnapshotChanges {
             flattened_groups: false,
             flattened_scenes: false,
             routine_statuses: false,
+            helper_statuses: false,
             ui_state: false,
             warming_up: false,
         }
@@ -52,6 +55,7 @@ impl SnapshotChanges {
             flattened_groups: true,
             flattened_scenes: true,
             routine_statuses: true,
+            helper_statuses: true,
             ui_state: true,
             warming_up: true,
         }
@@ -106,6 +110,7 @@ impl SnapshotChanges {
         self.flattened_groups |= other.flattened_groups;
         self.flattened_scenes |= other.flattened_scenes;
         self.routine_statuses |= other.routine_statuses;
+        self.helper_statuses |= other.helper_statuses;
         self.ui_state |= other.ui_state;
         self.warming_up |= other.warming_up;
     }
@@ -116,6 +121,7 @@ impl SnapshotChanges {
             && !self.flattened_groups
             && !self.flattened_scenes
             && !self.routine_statuses
+            && !self.helper_statuses
             && !self.ui_state
             && !self.warming_up
     }
@@ -128,6 +134,7 @@ pub struct RuntimeSnapshot {
     pub flattened_groups: Arc<FlattenedGroupsConfig>,
     pub flattened_scenes: Arc<FlattenedScenesConfig>,
     pub routine_statuses: Arc<RoutineStatuses>,
+    pub helper_statuses: Arc<Vec<HelperRuntimeStatus>>,
     pub ui_state: Arc<HashMap<String, serde_json::Value>>,
     pub warming_up: bool,
 }

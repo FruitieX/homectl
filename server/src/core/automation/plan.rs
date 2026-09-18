@@ -1,0 +1,986 @@
+//! Pure native action planning for v2 routines (P05).
+//!
+//! Planning freezes every decision that must not drift between acceptance and
+//! dispatch: resolved scenes (including helper-driven selection and mirrors),
+//! resolved device/group targets, and the manual-intent revisions that guard
+//! them (A01/A03/A04/A05). The planner never touches `AppState`; the actor
+//! dispatches the returned plan.
+//!
+//! Native timers and awaited invocations are recognized but deferred to later
+//! packages; they surface as suppressed steps instead of silent drops.
+
+use std::collections::{BTreeSet, HashMap};
+
+use serde_json::Value;
+
+use super::compile::CompiledDefinition;
+use super::evaluate::{evaluate_condition, EvaluationView};
+use crate::core::groups::Groups;
+use crate::core::helpers::Helpers;
+use crate::types::{
+    action::Action,
+    automation_definition::{
+        HelperId, InvokeMode, NativeAction, NodeId, Program, SceneSelection, TargetSpec,
+    },
+    automation_trace::{PlannedStepStatus, StepDisposition},
+    device::{DeviceData, DeviceKey, DeviceRef, DevicesState},
+    dim::DimDescriptor,
+    group::GroupId,
+    rule::{ForceTriggerRoutineDescriptor, RoutineId},
+    scene::{ActivateSceneActionDescriptor, SceneId},
+};
+
+/// Maximum number of steps one routine run may plan. Mirrors the compiler's
+/// `MAX_EXECUTION_ACTIONS`; the planner is also used for previews of drafts, so
+/// it re-checks the bound.
+pub const MAX_PLANNED_STEPS: usize = 64;
+
+/// A target of manual intent. Plans capture the revision at acceptance and are
+/// suppressed if a newer manual intent arrives first (A03).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum IntentTarget {
+    Device(DeviceKey),
+    Group(GroupId),
+    Scene(SceneId),
+}
+
+impl IntentTarget {
+    pub fn label(&self) -> String {
+        match self {
+            Self::Device(key) => key.to_string(),
+            Self::Group(id) => id.to_string(),
+            Self::Scene(id) => id.to_string(),
+        }
+    }
+}
+
+/// Monotonic revision per intent target. Only manual (`Command` origin)
+/// changes bump revisions; reports and internal derivations do not.
+#[derive(Clone, Debug, Default)]
+pub struct IntentTracker {
+    revisions: HashMap<IntentTarget, u64>,
+}
+
+impl IntentTracker {
+    pub fn revision(&self, target: &IntentTarget) -> u64 {
+        self.revisions.get(target).copied().unwrap_or(0)
+    }
+
+    pub fn bump(&mut self, target: IntentTarget) -> u64 {
+        let revision = self.revisions.entry(target).or_insert(0);
+        *revision += 1;
+        *revision
+    }
+
+    pub fn bump_device(&mut self, key: &DeviceKey) {
+        self.bump(IntentTarget::Device(key.clone()));
+    }
+
+    pub fn bump_group(&mut self, id: &GroupId) {
+        self.bump(IntentTarget::Group(id.clone()));
+    }
+
+    pub fn bump_scene(&mut self, id: &SceneId) {
+        self.bump(IntentTarget::Scene(id.clone()));
+    }
+}
+
+/// Read-only state the planner resolves against.
+pub struct PlanInputs<'a> {
+    pub devices: &'a DevicesState,
+    pub groups: &'a Groups,
+    pub helpers: &'a Helpers,
+    pub intents: &'a IntentTracker,
+}
+
+/// One step ready for dispatch.
+#[derive(Clone, Debug)]
+pub struct PlannedStep {
+    pub action_id: NodeId,
+    pub kind: &'static str,
+    pub body: PlannedStepBody,
+    /// Intent revisions captured at plan time; dispatch re-checks them.
+    pub intent_guard: Vec<(IntentTarget, u64)>,
+}
+
+#[derive(Clone, Debug)]
+pub enum PlannedStepBody {
+    Dispatch(Box<Action>),
+    SetHelper { helper: HelperId, value: Value },
+}
+
+/// Result of planning one routine evaluation.
+#[derive(Clone, Debug)]
+pub struct RoutinePlan {
+    pub routine_id: RoutineId,
+    pub definition_revision: i64,
+    /// Monotonic run id assigned when the runtime accepts the plan.
+    pub run_id: u64,
+    pub steps: Vec<PlannedStep>,
+    /// Steps that were dropped during planning, with visible reasons (X02).
+    pub suppressions: Vec<PlannedStepStatus>,
+}
+
+impl RoutinePlan {
+    pub fn is_empty(&self) -> bool {
+        self.steps.is_empty()
+    }
+}
+
+/// Check a step's intent guard at dispatch time. Returns the suppression
+/// reason when a newer manual intent superseded the plan (A03).
+pub fn guard_suppression(step: &PlannedStep, intents: &IntentTracker) -> Option<String> {
+    step.intent_guard.iter().find_map(|(target, captured)| {
+        let current = intents.revision(target);
+        (current > *captured).then(|| {
+            format!(
+                "superseded_by_newer_intent: {} (revision {current} > {captured})",
+                target.label()
+            )
+        })
+    })
+}
+
+pub fn step_status(
+    step: &PlannedStep,
+    disposition: StepDisposition,
+    reason: Option<String>,
+) -> PlannedStepStatus {
+    PlannedStepStatus {
+        action_id: step.action_id.clone(),
+        kind: step.kind.to_string(),
+        targets: step_targets(step),
+        disposition,
+        reason,
+    }
+}
+
+pub fn step_targets(step: &PlannedStep) -> Vec<String> {
+    let mut targets = Vec::new();
+    let PlannedStepBody::Dispatch(action) = &step.body else {
+        if let PlannedStepBody::SetHelper { helper, .. } = &step.body {
+            targets.push(helper.to_string());
+        }
+        return targets;
+    };
+    match action.as_ref() {
+        Action::ActivateScene(descriptor) => {
+            targets.push(descriptor.scene_id.to_string());
+            if let Some(keys) = &descriptor.device_keys {
+                targets.extend(keys.iter().map(ToString::to_string));
+            }
+            if let Some(keys) = &descriptor.group_keys {
+                targets.extend(keys.iter().map(ToString::to_string));
+            }
+        }
+        Action::Dim(descriptor) => {
+            if let Some(keys) = &descriptor.device_keys {
+                targets.extend(keys.iter().map(ToString::to_string));
+            }
+            if let Some(keys) = &descriptor.group_keys {
+                targets.extend(keys.iter().map(ToString::to_string));
+            }
+        }
+        Action::ForceTriggerRoutine(descriptor) => {
+            targets.push(descriptor.routine_id.to_string());
+        }
+        Action::SetDeviceState(device) => {
+            targets.push(device.get_device_key().to_string());
+        }
+        _ => {}
+    }
+    targets
+}
+
+/// Plan one accepted evaluation. The caller has already established
+/// `will_trigger`; this function resolves the program against acceptance-time
+/// state.
+pub fn plan_evaluation(
+    evaluation: &super::evaluate::RoutineFrameEvaluation,
+    compiled: &CompiledDefinition,
+    inputs: &PlanInputs<'_>,
+) -> RoutinePlan {
+    let mut planner = Planner {
+        inputs,
+        steps: Vec::new(),
+        suppressions: Vec::new(),
+    };
+    match &compiled.normalized.program {
+        Program::Native(program) => planner.plan_steps(&program.steps),
+        Program::Script(_) => planner.suppressions.push(PlannedStepStatus {
+            action_id: NodeId("program".to_string()),
+            kind: "script".to_string(),
+            targets: Vec::new(),
+            disposition: StepDisposition::Suppressed,
+            reason: Some("script_execution_not_implemented".to_string()),
+        }),
+    }
+    RoutinePlan {
+        routine_id: evaluation.routine_id.clone(),
+        definition_revision: evaluation.definition_revision,
+        run_id: 0,
+        steps: planner.steps,
+        suppressions: planner.suppressions,
+    }
+}
+
+struct Planner<'a> {
+    inputs: &'a PlanInputs<'a>,
+    steps: Vec<PlannedStep>,
+    suppressions: Vec<PlannedStepStatus>,
+}
+
+impl Planner<'_> {
+    fn view(&self) -> EvaluationView<'_> {
+        EvaluationView {
+            devices: self.inputs.devices,
+            groups: self.inputs.groups,
+            helpers: Some(self.inputs.helpers),
+        }
+    }
+
+    fn suppress(
+        &mut self,
+        action: &NativeAction,
+        kind: &str,
+        targets: Vec<String>,
+        reason: String,
+    ) {
+        self.suppressions.push(PlannedStepStatus {
+            action_id: action.id().clone(),
+            kind: kind.to_string(),
+            targets,
+            disposition: StepDisposition::Suppressed,
+            reason: Some(reason),
+        });
+    }
+
+    fn push_dispatch(
+        &mut self,
+        action: &NativeAction,
+        kind: &'static str,
+        body: PlannedStepBody,
+        intent_guard: Vec<IntentTarget>,
+    ) {
+        let intent_guard = self.capture_guard(intent_guard);
+        self.steps.push(PlannedStep {
+            action_id: action.id().clone(),
+            kind,
+            body,
+            intent_guard,
+        });
+    }
+
+    fn capture_guard(&self, targets: Vec<IntentTarget>) -> Vec<(IntentTarget, u64)> {
+        targets
+            .into_iter()
+            .map(|target| {
+                let revision = self.inputs.intents.revision(&target);
+                (target, revision)
+            })
+            .collect()
+    }
+
+    fn plan_steps(&mut self, steps: &[NativeAction]) {
+        for action in steps {
+            if self.steps.len() >= MAX_PLANNED_STEPS {
+                self.suppress(
+                    action,
+                    action_kind(action),
+                    Vec::new(),
+                    format!("plan_step_bound_reached: {MAX_PLANNED_STEPS}"),
+                );
+                continue;
+            }
+            self.plan_action(action);
+        }
+    }
+
+    fn plan_action(&mut self, action: &NativeAction) {
+        let kind = action_kind(action);
+        match action {
+            NativeAction::ActivateScene {
+                scene_id,
+                select,
+                targets,
+                ..
+            } => {
+                let Some(scene) = self.resolve_scene(action, scene_id.as_ref(), select.as_ref())
+                else {
+                    return;
+                };
+                let (devices, groups) = resolve_targets(targets);
+                let mut guard = vec![IntentTarget::Scene(scene.clone())];
+                guard.extend(devices.iter().cloned().map(IntentTarget::Device));
+                guard.extend(groups.iter().cloned().map(IntentTarget::Group));
+                let descriptor = ActivateSceneActionDescriptor {
+                    scene_id: scene,
+                    mirror_from_group: None,
+                    device_keys: (!devices.is_empty()).then_some(devices),
+                    group_keys: (!groups.is_empty()).then_some(groups),
+                    include_source_groups: false,
+                    use_scene_transition: true,
+                    transition: None,
+                    rollout: None,
+                    rollout_source_device_key: None,
+                    rollout_duration_ms: None,
+                };
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Dispatch(Box::new(Action::ActivateScene(descriptor))),
+                    guard,
+                );
+            }
+            NativeAction::SetPower { device, power, .. } => {
+                let key = device_key(device);
+                let Some(current) = self.inputs.devices.0.get(&key) else {
+                    self.suppress(
+                        action,
+                        kind,
+                        vec![key.to_string()],
+                        format!("unknown_device: {key}"),
+                    );
+                    return;
+                };
+                let mut next = current.clone();
+                let DeviceData::Controllable(controllable) = &mut next.data else {
+                    self.suppress(
+                        action,
+                        kind,
+                        vec![key.to_string()],
+                        format!("not_controllable: {key}"),
+                    );
+                    return;
+                };
+                controllable.state.power = *power;
+                controllable.scene_id = None;
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Dispatch(Box::new(Action::SetDeviceState(next))),
+                    vec![IntentTarget::Device(key)],
+                );
+            }
+            NativeAction::Dim {
+                targets,
+                step,
+                transition_ms,
+                ..
+            } => {
+                let _ = transition_ms;
+                let (devices, groups) = resolve_targets(targets);
+                if devices.is_empty() && groups.is_empty() {
+                    self.suppress(action, kind, Vec::new(), "missing_targets".to_string());
+                    return;
+                }
+                let mut guard: Vec<IntentTarget> =
+                    devices.iter().cloned().map(IntentTarget::Device).collect();
+                guard.extend(groups.iter().cloned().map(IntentTarget::Group));
+                let descriptor = DimDescriptor {
+                    device_keys: (!devices.is_empty()).then_some(devices),
+                    group_keys: (!groups.is_empty()).then_some(groups),
+                    include_source_groups: false,
+                    step: Some(*step),
+                };
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Dispatch(Box::new(Action::Dim(descriptor))),
+                    guard,
+                );
+            }
+            NativeAction::Choose { branches, .. } => {
+                for branch in branches {
+                    let condition = evaluate_condition(
+                        &branch.condition,
+                        self.view(),
+                        &format!("/program/choose/{}/condition", branch.id),
+                    );
+                    match condition.truth {
+                        crate::types::automation_trace::TruthValue::True => {
+                            self.plan_steps(&branch.steps);
+                            return;
+                        }
+                        crate::types::automation_trace::TruthValue::Unknown => {
+                            let reason = condition
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "choose_condition_unknown".to_string());
+                            self.suppress(action, kind, Vec::new(), reason);
+                            return;
+                        }
+                        crate::types::automation_trace::TruthValue::False => {}
+                    }
+                }
+                self.suppress(action, kind, Vec::new(), "no_matching_branch".to_string());
+            }
+            NativeAction::ScheduleTimer { timer, .. }
+            | NativeAction::ReplaceTimer { timer, .. }
+            | NativeAction::CancelTimer { timer, .. } => {
+                self.suppress(
+                    action,
+                    kind,
+                    vec![timer.to_string()],
+                    "timers_not_implemented_until_p09".to_string(),
+                );
+            }
+            NativeAction::SetHelper { helper, value, .. } => {
+                match self.inputs.helpers.definition(helper) {
+                    None => {
+                        self.suppress(
+                            action,
+                            kind,
+                            vec![helper.to_string()],
+                            format!("unknown_helper: {helper}"),
+                        );
+                    }
+                    Some(definition) => {
+                        if let Err(error) = definition.kind.validate_value(value) {
+                            self.suppress(
+                                action,
+                                kind,
+                                vec![helper.to_string()],
+                                format!("invalid_helper_value: {error}"),
+                            );
+                            return;
+                        }
+                        self.push_dispatch(
+                            action,
+                            kind,
+                            PlannedStepBody::SetHelper {
+                                helper: helper.clone(),
+                                value: value.clone(),
+                            },
+                            Vec::new(),
+                        );
+                    }
+                }
+            }
+            NativeAction::InvokeRoutine {
+                routine_id, mode, ..
+            } => {
+                if *mode == InvokeMode::AwaitCompletion {
+                    self.suppress(
+                        action,
+                        kind,
+                        vec![routine_id.to_string()],
+                        "await_completion_not_implemented".to_string(),
+                    );
+                    return;
+                }
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Dispatch(Box::new(Action::ForceTriggerRoutine(
+                        ForceTriggerRoutineDescriptor {
+                            routine_id: routine_id.clone(),
+                        },
+                    ))),
+                    Vec::new(),
+                );
+            }
+        }
+    }
+
+    fn resolve_scene(
+        &mut self,
+        action: &NativeAction,
+        scene_id: Option<&SceneId>,
+        select: Option<&SceneSelection>,
+    ) -> Option<SceneId> {
+        let kind = action_kind(action);
+        if let Some(scene_id) = scene_id {
+            return Some(scene_id.clone());
+        }
+        let Some(selection) = select else {
+            self.suppress(
+                action,
+                kind,
+                Vec::new(),
+                "missing_scene_selection".to_string(),
+            );
+            return None;
+        };
+        match selection {
+            SceneSelection::HelperEnum {
+                helper,
+                mapping,
+                fallback_scene_id,
+            } => {
+                let value = self
+                    .inputs
+                    .helpers
+                    .value(helper)
+                    .and_then(|value| value.as_str().map(str::to_string));
+                let selected = value
+                    .as_deref()
+                    .and_then(|value| mapping.get(value))
+                    .cloned()
+                    .or_else(|| fallback_scene_id.clone());
+                match selected {
+                    Some(scene) => Some(scene),
+                    None => {
+                        self.suppress(
+                            action,
+                            kind,
+                            vec![helper.to_string()],
+                            format!(
+                                "scene_selection_unresolved: helper '{helper}' value '{}' has no \
+                                 mapping and no fallback",
+                                value.unwrap_or_else(|| "<unknown>".to_string())
+                            ),
+                        );
+                        None
+                    }
+                }
+            }
+            SceneSelection::GroupActive {
+                group_id,
+                fallback_scene_id,
+            } => {
+                let selected = self
+                    .inputs
+                    .groups
+                    .get_group_scene_id(self.inputs.devices, group_id)
+                    .or_else(|| fallback_scene_id.clone());
+                match selected {
+                    Some(scene) => Some(scene),
+                    None => {
+                        self.suppress(
+                            action,
+                            kind,
+                            vec![group_id.to_string()],
+                            format!(
+                                "group_scene_unresolved: group '{group_id}' has no unanimous \
+                                 active scene and no fallback"
+                            ),
+                        );
+                        None
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn resolve_targets(targets: &TargetSpec) -> (Vec<DeviceKey>, Vec<GroupId>) {
+    let devices: BTreeSet<DeviceKey> = targets.devices.iter().map(device_key).collect();
+    let groups: BTreeSet<GroupId> = targets.groups.iter().cloned().collect();
+    (devices.into_iter().collect(), groups.into_iter().collect())
+}
+
+fn device_key(reference: &DeviceRef) -> DeviceKey {
+    let DeviceRef::Id(id_ref) = reference;
+    id_ref.clone().into_device_key()
+}
+
+pub fn action_kind(action: &NativeAction) -> &'static str {
+    match action {
+        NativeAction::ActivateScene { .. } => "activate_scene",
+        NativeAction::SetPower { .. } => "set_power",
+        NativeAction::Dim { .. } => "dim",
+        NativeAction::Choose { .. } => "choose",
+        NativeAction::ScheduleTimer { .. } => "schedule_timer",
+        NativeAction::ReplaceTimer { .. } => "replace_timer",
+        NativeAction::CancelTimer { .. } => "cancel_timer",
+        NativeAction::SetHelper { .. } => "set_helper",
+        NativeAction::InvokeRoutine { .. } => "invoke_routine",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::types::{
+        automation_definition::HelperId,
+        automation_value::{HelperDefinition, HelperKind, HelperPersistence},
+        color::Capabilities,
+        device::{ControllableDevice, DeviceData, DeviceId, ManageKind},
+        group::{GroupConfig, GroupsConfig},
+        integration::IntegrationId,
+    };
+
+    use super::super::compile::{compile_definition_value, ConfigCatalog};
+    use super::super::evaluate::{evaluate_condition, EvaluationView, RoutineFrameEvaluation};
+    use super::*;
+
+    fn key(id: &str) -> DeviceKey {
+        DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
+    }
+
+    fn lamp(id: &str, scene: Option<&str>, power: bool) -> crate::types::device::Device {
+        crate::types::device::Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new(id),
+            id.to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                scene.map(|scene| SceneId::from(scene.to_string())),
+                power,
+                None,
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Full,
+            )),
+            None,
+        )
+    }
+
+    fn states(devices: Vec<crate::types::device::Device>) -> DevicesState {
+        DevicesState(
+            devices
+                .into_iter()
+                .map(|device| (device.get_device_key(), device))
+                .collect(),
+        )
+    }
+
+    fn room_group(members: &[&str]) -> Groups {
+        let mut config = GroupsConfig::new();
+        config.insert(
+            GroupId("room".to_string()),
+            GroupConfig {
+                name: "Room".to_string(),
+                devices: Some(members.iter().map(|id| DeviceRef::from(&key(id))).collect()),
+                groups: None,
+                hidden: None,
+            },
+        );
+        Groups::new(config)
+    }
+
+    fn helpers_with_mode(value: &str) -> Helpers {
+        let mut helpers = Helpers::default();
+        helpers
+            .upsert_definition(HelperDefinition {
+                id: HelperId("mode".to_string()),
+                name: "Mode".to_string(),
+                kind: HelperKind::Enum {
+                    options: vec!["evening".to_string(), "night".to_string()],
+                },
+                initial_value: json!(value),
+                persistence: HelperPersistence::Durable,
+                hidden: None,
+            })
+            .expect("helper definition is valid");
+        helpers
+    }
+
+    fn catalog() -> ConfigCatalog {
+        ConfigCatalog::default()
+            .with_device(key("lamp"))
+            .with_device(key("second"))
+            .with_scene(SceneId::from("evening".to_string()))
+            .with_scene(SceneId::from("night".to_string()))
+            .with_scene(SceneId::from("fallback".to_string()))
+            .with_group(GroupId("room".to_string()))
+            .with_helper_definition(HelperDefinition {
+                id: HelperId("mode".to_string()),
+                name: "Mode".to_string(),
+                kind: HelperKind::Enum {
+                    options: vec!["evening".to_string(), "night".to_string()],
+                },
+                initial_value: json!("evening"),
+                persistence: HelperPersistence::Durable,
+                hidden: None,
+            })
+    }
+
+    fn evaluation(
+        compiled: &CompiledDefinition,
+        devices: &DevicesState,
+        groups: &Groups,
+        helpers: &Helpers,
+    ) -> RoutineFrameEvaluation {
+        let condition = evaluate_condition(
+            &compiled.normalized.condition,
+            EvaluationView {
+                devices,
+                groups,
+                helpers: Some(helpers),
+            },
+            "/condition",
+        );
+        RoutineFrameEvaluation {
+            routine_id: RoutineId("routine".to_string()),
+            definition_revision: 1,
+            matched_trigger_ids: Vec::new(),
+            triggers: Vec::new(),
+            condition,
+            will_trigger: true,
+        }
+    }
+
+    fn scene_selection_definition() -> serde_json::Value {
+        json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                {
+                    "action": "activate_scene",
+                    "id": "step",
+                    "select": {
+                        "kind": "helper_enum",
+                        "helper": "mode",
+                        "mapping": { "evening": "evening", "night": "night" },
+                        "fallback_scene_id": "fallback"
+                    },
+                    "targets": { "devices": [{ "integration_id": "dummy", "device_id": "lamp" }] }
+                }
+            ]}
+        })
+    }
+
+    fn planned_scene(plan: &RoutinePlan) -> SceneId {
+        let step = plan.steps.first().expect("one dispatch step");
+        match &step.body {
+            PlannedStepBody::Dispatch(action) => match action.as_ref() {
+                Action::ActivateScene(descriptor) => descriptor.scene_id.clone(),
+                other => panic!("expected scene dispatch, got {other:?}"),
+            },
+            other => panic!("expected scene dispatch, got {other:?}"),
+        }
+    }
+
+    // A01: helper-driven scene choice is resolved at plan time and frozen into
+    // the plan; changing the helper afterwards cannot alter the planned scene.
+    #[test]
+    fn helper_scene_selection_is_frozen_at_plan_time() {
+        let compiled = compile_definition_value(&scene_selection_definition(), &catalog())
+            .expect("definition compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        assert_eq!(planned_scene(&plan), SceneId::from("night".to_string()));
+
+        let mut changed = helpers_with_mode("evening");
+        changed
+            .set_value(&HelperId("mode".to_string()), json!("evening"))
+            .unwrap();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &changed,
+            intents: &IntentTracker::default(),
+        };
+        let replanned = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &changed),
+            &compiled,
+            &inputs,
+        );
+        assert_eq!(
+            planned_scene(&replanned),
+            SceneId::from("evening".to_string()),
+            "a new decision uses the new helper value; the earlier plan keeps its own"
+        );
+        assert_eq!(planned_scene(&plan), SceneId::from("night".to_string()));
+    }
+
+    // A03: newer manual intent suppresses a stale plan at dispatch time.
+    #[test]
+    fn newer_manual_intent_suppresses_stale_plan() {
+        let compiled = compile_definition_value(&scene_selection_definition(), &catalog())
+            .expect("definition compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let mut intents = IntentTracker::default();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &intents,
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        assert!(guard_suppression(&plan.steps[0], &intents).is_none());
+
+        intents.bump_device(&key("lamp"));
+        let reason = guard_suppression(&plan.steps[0], &intents).expect("superseded");
+        assert!(reason.contains("superseded_by_newer_intent"), "{reason}");
+    }
+
+    // A04: a mixed group uses only the configured fallback; without a fallback
+    // the activation is suppressed with a visible reason.
+    #[test]
+    fn mixed_group_mirror_uses_fallback_or_suppresses() {
+        let definition = json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "activate_scene", "id": "step",
+                  "select": { "kind": "group_active", "group_id": "room", "fallback_scene_id": "fallback" },
+                  "targets": {} }
+            ]}
+        });
+        let compiled = compile_definition_value(&definition, &catalog()).expect("compiles");
+        let devices = states(vec![
+            lamp("lamp", Some("evening"), false),
+            lamp("second", Some("night"), false),
+        ]);
+        let groups = room_group(&["lamp", "second"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        assert_eq!(planned_scene(&plan), SceneId::from("fallback".to_string()));
+
+        let no_fallback = json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "activate_scene", "id": "step",
+                  "select": { "kind": "group_active", "group_id": "room" },
+                  "targets": {} }
+            ]}
+        });
+        let compiled =
+            compile_definition_value(&no_fallback, &catalog()).expect("compiles without fallback");
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        assert!(plan.steps.is_empty());
+        assert_eq!(plan.suppressions.len(), 1);
+        assert!(
+            plan.suppressions[0]
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("group_scene_unresolved")),
+            "{:?}",
+            plan.suppressions[0].reason
+        );
+    }
+
+    // A05: duplicate source-derived targets are deduplicated and frozen.
+    #[test]
+    fn duplicate_targets_are_deduplicated() {
+        let definition = json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "activate_scene", "id": "step", "scene_id": "evening",
+                  "targets": { "devices": [
+                      { "integration_id": "dummy", "device_id": "lamp" },
+                      { "integration_id": "dummy", "device_id": "lamp" }
+                  ]}}
+            ]}
+        });
+        let compiled = compile_definition_value(&definition, &catalog()).expect("compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        let PlannedStepBody::Dispatch(action) = &plan.steps[0].body else {
+            panic!("expected scene dispatch");
+        };
+        let Action::ActivateScene(descriptor) = action.as_ref() else {
+            panic!("expected scene dispatch");
+        };
+        assert_eq!(
+            descriptor.device_keys.as_deref(),
+            Some([key("lamp")].as_slice())
+        );
+    }
+
+    // Timers are recognized but deferred; suppression is visible instead of a
+    // silent drop.
+    #[test]
+    fn timer_actions_are_visibly_deferred() {
+        let definition = json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "schedule_timer", "id": "step", "timer": "t1", "delay_ms": 1000 }
+            ]}
+        });
+        let compiled = compile_definition_value(&definition, &catalog()).expect("compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        assert!(plan.steps.is_empty());
+        assert_eq!(plan.suppressions.len(), 1);
+        assert_eq!(
+            plan.suppressions[0].reason.as_deref(),
+            Some("timers_not_implemented_until_p09")
+        );
+    }
+
+    // Stale catalogs surface as suppressions rather than runtime failures.
+    #[test]
+    fn missing_helper_definition_suppresses_set_helper() {
+        let definition = json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "set_helper", "id": "step", "helper": "mode", "value": "night" }
+            ]}
+        });
+        let compiled = compile_definition_value(&definition, &catalog()).expect("compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = Helpers::default();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+        assert!(plan.steps.is_empty());
+        assert!(plan.suppressions[0]
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.starts_with("unknown_helper")));
+    }
+}

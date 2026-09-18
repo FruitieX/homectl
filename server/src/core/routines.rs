@@ -7,7 +7,7 @@ use crate::db::config_queries;
 use crate::types::{
     action::{Action, Actions},
     automation_event::{DeviceMutation, EventCausation, EventId, EventOrigin, MAX_CAUSATION_DEPTH},
-    automation_trace::TruthValue,
+    automation_trace::{PlannedRunStatus, TruthValue},
     device::{Device, DeviceKey, DeviceRef, DevicesState, SensorDevice},
     dim::DimDescriptor,
     event::{Event, TxEventChannel},
@@ -26,10 +26,12 @@ use std::{
 
 use super::{
     automation::{
-        self, ConfigCatalog, FrameContext, RoutineFrameEvaluation, V2Definition, V2Runtime,
+        self, ConfigCatalog, FrameContext, PlanInputs, RoutineFrameEvaluation, RoutinePlan,
+        V2Definition, V2Runtime,
     },
     devices::Devices,
     groups::Groups,
+    helpers::Helpers,
     routine_history,
     routine_validation::{self, RoutineValidationReport},
     scripting::ScriptEngine,
@@ -387,7 +389,12 @@ impl Routines {
         Ok(())
     }
 
-    pub fn refresh_runtime_statuses(&mut self, devices: &Devices, groups: &Groups) {
+    pub fn refresh_runtime_statuses(
+        &mut self,
+        devices: &Devices,
+        groups: &Groups,
+        helpers: Option<&Helpers>,
+    ) {
         let ctx = RuleEvaluationContext {
             event_source: None,
             old_event_source: None,
@@ -426,7 +433,8 @@ impl Routines {
 
         // P04: v2 conditions are evaluated against current state for status
         // display; transition memory and matched triggers are untouched.
-        self.v2.refresh_statuses(devices.get_state(), groups);
+        self.v2
+            .refresh_statuses(devices.get_state(), groups, helpers);
         for (routine_id, v2_status) in self.v2.statuses() {
             statuses.0.insert(
                 routine_id.clone(),
@@ -525,7 +533,7 @@ impl Routines {
                 suppressed: 0,
             }
         } else {
-            self.refresh_runtime_statuses(devices, groups);
+            self.refresh_runtime_statuses(devices, groups, None);
             RoutineDispatchSummary::default()
         }
     }
@@ -534,7 +542,12 @@ impl Routines {
     /// startup and configuration reload so an already-true predicate is not
     /// treated as a fresh edge (E06). Does not touch runtime statuses or
     /// history.
-    pub fn seed_transitions(&mut self, devices: &Devices, groups: &Groups) {
+    pub fn seed_transitions(
+        &mut self,
+        devices: &Devices,
+        groups: &Groups,
+        helpers: Option<&Helpers>,
+    ) {
         let ctx = RuleEvaluationContext {
             event_source: None,
             old_event_source: None,
@@ -548,11 +561,12 @@ impl Routines {
             seed_only: true,
         };
         let _ = self.evaluate_routines(&ctx);
-        self.v2.seed(devices.get_state(), groups);
+        self.v2.seed(devices.get_state(), groups, helpers);
     }
 
     /// Evaluate all v2 routines against one coherent actor frame. P04 records
-    /// decisions and per-trigger memory; action dispatch is P05.
+    /// decisions and per-trigger memory; P05 plans and dispatches actions from
+    /// the returned evaluations.
     pub fn handle_v2_frame(&mut self, frame: &FrameContext<'_>) -> Vec<RoutineFrameEvaluation> {
         if self.v2.is_empty() {
             return Vec::new();
@@ -561,7 +575,7 @@ impl Routines {
         for evaluation in &evaluations {
             if evaluation.will_trigger {
                 info!(
-                    "v2 routine matched (execution pending P05): id={} triggers={:?}",
+                    "v2 routine matched: id={} triggers={:?}",
                     evaluation.routine_id.0,
                     evaluation
                         .matched_trigger_ids
@@ -572,6 +586,21 @@ impl Routines {
             }
         }
         evaluations
+    }
+
+    /// Plan every triggered evaluation against acceptance-time state. The
+    /// returned plans are pure; the actor dispatches them (P05).
+    pub fn plan_v2_runs(
+        &mut self,
+        evaluations: &[RoutineFrameEvaluation],
+        inputs: &PlanInputs<'_>,
+    ) -> Vec<RoutinePlan> {
+        self.v2.plan_runs(evaluations, inputs)
+    }
+
+    /// Record the dispatched outcome of one v2 run for status displays (X03).
+    pub fn record_v2_run(&mut self, routine_id: &RoutineId, status: PlannedRunStatus) {
+        self.v2.record_run(routine_id, status);
     }
 
     pub fn force_trigger_routine(
@@ -1539,7 +1568,7 @@ mod tests {
 
         let (devices, _rx) = test_devices();
         let groups = Groups::new(GroupsConfig::default());
-        routines.refresh_runtime_statuses(&devices, &groups);
+        routines.refresh_runtime_statuses(&devices, &groups, None);
 
         let status = routines
             .get_runtime_statuses()
@@ -1614,7 +1643,7 @@ mod tests {
         devices.set_state(&lamp, true, true);
 
         // Sanity: the level routine is eligible to trigger on refresh.
-        routines.refresh_runtime_statuses(&devices, &groups);
+        routines.refresh_runtime_statuses(&devices, &groups, None);
         let status = routines
             .get_runtime_statuses()
             .0
@@ -1625,7 +1654,7 @@ mod tests {
 
         let history_before = routine_history::recent_routine_history().len();
         for _ in 0..3 {
-            routines.refresh_runtime_statuses(&devices, &groups);
+            routines.refresh_runtime_statuses(&devices, &groups, None);
         }
         assert_eq!(
             routine_history::recent_routine_history().len(),
@@ -1688,7 +1717,7 @@ mod tests {
         let (devices, _rx) = test_devices();
         let groups = Groups::new(GroupsConfig::default());
         let history_before = routine_history::recent_routine_history().len();
-        routines.refresh_runtime_statuses(&devices, &groups);
+        routines.refresh_runtime_statuses(&devices, &groups, None);
 
         let status = routines
             .get_runtime_statuses()
@@ -1770,6 +1799,7 @@ mod tests {
             before: &before_view,
             after: &after_view,
             groups: &groups,
+            helpers: None,
         };
 
         let evaluations = routines.handle_v2_frame(&frame);
@@ -1777,7 +1807,7 @@ mod tests {
         assert!(evaluations[0].will_trigger);
         assert_eq!(evaluations[0].matched_trigger_ids.len(), 1);
 
-        routines.refresh_runtime_statuses(&devices, &groups);
+        routines.refresh_runtime_statuses(&devices, &groups, None);
         let status = routines
             .get_runtime_statuses()
             .0

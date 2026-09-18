@@ -53,6 +53,9 @@ pub const MAX_TRACE_NODES: usize = 256;
 pub struct EvaluationView<'a> {
     pub devices: &'a DevicesState,
     pub groups: &'a Groups,
+    /// Typed helper values. `None` means helper sources resolve to unknown
+    /// (used by pre-P05 call sites and diagnostics that do not load helpers).
+    pub helpers: Option<&'a crate::core::helpers::Helpers>,
 }
 
 /// Coherent frame handed to trigger evaluation. `before` and `after` describe
@@ -63,6 +66,7 @@ pub struct FrameContext<'a> {
     pub before: &'a DevicesState,
     pub after: &'a DevicesState,
     pub groups: &'a Groups,
+    pub helpers: Option<&'a crate::core::helpers::Helpers>,
 }
 
 impl FrameContext<'_> {
@@ -70,6 +74,7 @@ impl FrameContext<'_> {
         EvaluationView {
             devices: self.before,
             groups: self.groups,
+            helpers: self.helpers,
         }
     }
 
@@ -77,6 +82,7 @@ impl FrameContext<'_> {
         EvaluationView {
             devices: self.after,
             groups: self.groups,
+            helpers: self.helpers,
         }
     }
 
@@ -256,6 +262,7 @@ impl RoutineFrameEvaluation {
             condition: self.condition,
             will_trigger: self.will_trigger,
             execution_pending: true,
+            last_run: None,
         }
     }
 }
@@ -767,11 +774,20 @@ pub fn resolve_value(source: &ValueSource, view: EvaluationView<'_>) -> Resolved
         ValueSource::Device { device, path } => {
             resolve_device_path(&device_key(device), path, view)
         }
-        ValueSource::Helper { helper } => {
-            ResolvedValue::unknown(UnknownReason::UnknownSourceValue {
+        ValueSource::Helper { helper } => match view
+            .helpers
+            .and_then(|helpers| helpers.definition(helper).map(|_| helpers))
+        {
+            Some(helpers) => match helpers.value(helper) {
+                Some(value) => ResolvedValue::known(value.clone()),
+                None => ResolvedValue::unknown(UnknownReason::UnknownSourceValue {
+                    source: helper.to_string(),
+                }),
+            },
+            None => ResolvedValue::unknown(UnknownReason::UnknownSourceValue {
                 source: helper.to_string(),
-            })
-        }
+            }),
+        },
         ValueSource::ComputedSource { source } => {
             ResolvedValue::unknown(UnknownReason::UnknownSourceValue {
                 source: source.to_string(),
@@ -1290,6 +1306,7 @@ mod tests {
             before,
             after,
             groups,
+            helpers: None,
         };
         run(&frame)
     }
@@ -1315,7 +1332,15 @@ mod tests {
         devices: &DevicesState,
         groups: &Groups,
     ) -> ConditionEvaluation {
-        evaluate_condition(condition, EvaluationView { devices, groups }, "/condition")
+        evaluate_condition(
+            condition,
+            EvaluationView {
+                devices,
+                groups,
+                helpers: None,
+            },
+            "/condition",
+        )
     }
 
     fn comparison(

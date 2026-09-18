@@ -302,7 +302,7 @@ async fn b04_malformed_rows_are_quarantined_not_silently_empty() {
     let (device_tx, _device_rx) = mk_event_channel();
     let devices = homectl_server::core::devices::Devices::new(device_tx, &cli);
     let groups = homectl_server::core::groups::Groups::new(Default::default());
-    routines.refresh_runtime_statuses(&devices, &groups);
+    routines.refresh_runtime_statuses(&devices, &groups, None);
 
     let status = routines
         .get_runtime_statuses()

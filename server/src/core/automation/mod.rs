@@ -19,6 +19,7 @@
 pub mod compile;
 pub mod evaluate;
 pub mod groups;
+pub mod plan;
 pub mod runtime;
 
 pub use compile::{
@@ -36,4 +37,8 @@ pub use evaluate::{
     TriggerMemoryKey,
 };
 pub use groups::{evaluate_group, MAX_GROUP_EVAL_MEMBERS};
+pub use plan::{
+    action_kind, guard_suppression, plan_evaluation, step_status, step_targets, IntentTarget,
+    IntentTracker, PlanInputs, PlannedStep, PlannedStepBody, RoutinePlan, MAX_PLANNED_STEPS,
+};
 pub use runtime::{V2Definition, V2Runtime};

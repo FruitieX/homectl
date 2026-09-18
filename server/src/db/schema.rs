@@ -110,6 +110,25 @@ pub enum Routines {
 }
 
 #[derive(Clone, Copy, Iden)]
+pub enum AutomationValues {
+    Table,
+    Id,
+    Name,
+    Kind,
+    InitialValue,
+    Persistence,
+    Hidden,
+}
+
+#[derive(Clone, Copy, Iden)]
+pub enum AutomationValueState {
+    Table,
+    HelperId,
+    Value,
+    Revision,
+}
+
+#[derive(Clone, Copy, Iden)]
 pub enum Floorplans {
     Table,
     Id,

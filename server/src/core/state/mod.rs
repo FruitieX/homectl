@@ -116,6 +116,10 @@ pub struct AppState {
     pub scenes: Scenes,
     pub devices: Devices,
     pub rules: Routines,
+    /// Typed helper definitions and current values (P05).
+    pub helpers: crate::core::helpers::Helpers,
+    /// Manual-intent revisions used to reject stale v2 plans (A03).
+    pub intents: crate::core::automation::IntentTracker,
     pub event_tx: TxEventChannel,
     pub ws: WebSockets,
     pub ui: Ui,
@@ -182,6 +186,11 @@ impl AppState {
                 self.rules.get_runtime_statuses()
             } else {
                 Arc::clone(&previous.routine_statuses)
+            },
+            helper_statuses: if changes.helper_statuses {
+                Arc::new(self.helpers.statuses())
+            } else {
+                Arc::clone(&previous.helper_statuses)
             },
             ui_state: if changes.ui_state {
                 Arc::new(self.ui.get_state().clone())
@@ -674,6 +683,7 @@ impl AppState {
         self.runtime_config = runtime_config;
         self.integrations = integrations;
         let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
+        self.apply_runtime_helpers();
         self.apply_runtime_groups();
         self.apply_runtime_scenes();
         self.apply_runtime_routines();
@@ -713,6 +723,7 @@ impl AppState {
 
     pub async fn apply_runtime_config(&mut self) -> Result<()> {
         self.apply_runtime_integrations().await?;
+        self.apply_runtime_helpers();
         self.apply_runtime_groups();
         self.apply_runtime_scenes();
         self.apply_runtime_routines();
@@ -789,7 +800,8 @@ impl AppState {
             .load_config_rows(&self.runtime_config.routines, &catalog);
         // E06: reloaded definitions seed transition memory from current state
         // instead of treating already-true predicates as fresh edges.
-        self.rules.seed_transitions(&self.devices, &self.groups);
+        self.rules
+            .seed_transitions(&self.devices, &self.groups, Some(&self.helpers));
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast(SnapshotChanges {
             routine_statuses: true,
@@ -804,7 +816,33 @@ impl AppState {
 
     pub fn refresh_routine_statuses(&mut self) {
         self.rules
-            .refresh_runtime_statuses(&self.devices, &self.groups);
+            .refresh_runtime_statuses(&self.devices, &self.groups, Some(&self.helpers));
+    }
+
+    /// Reload typed helper definitions and durable values from the runtime
+    /// config, then republish statuses. Helper definitions are validated at
+    /// save/import; invalid rows are surfaced through plan suppression at use.
+    pub fn apply_runtime_helpers(&mut self) {
+        let definitions = self.runtime_config.helpers.clone();
+        let durable = self
+            .runtime_config
+            .helper_values
+            .iter()
+            .map(|row| {
+                (
+                    crate::types::automation_definition::HelperId(row.id.clone()),
+                    row.value.clone(),
+                    row.revision,
+                )
+            })
+            .collect();
+        self.helpers.load_rows(definitions, durable);
+        self.refresh_routine_statuses();
+        self.schedule_ws_broadcast(SnapshotChanges {
+            helper_statuses: true,
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
     }
 
     /// Schedule a debounced WebSocket broadcast.
@@ -934,7 +972,8 @@ impl AppState {
         if let Err(e) = self.refresh_runtime_config_from_db().await {
             warn!("Failed to refresh runtime config snapshot: {e}");
         }
-        self.rules.seed_transitions(&self.devices, &self.groups);
+        self.rules
+            .seed_transitions(&self.devices, &self.groups, Some(&self.helpers));
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast(SnapshotChanges {
             routine_statuses: true,

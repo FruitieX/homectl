@@ -5,8 +5,10 @@ import type { DeviceKey } from "./DeviceKey";
 import type { EventCausation } from "./EventCausation";
 import type { EventId } from "./EventId";
 import type { EventOrigin } from "./EventOrigin";
+import type { HelperId } from "./HelperId";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
+import type { JsonValue } from "./serde_json/JsonValue";
 
 export type Event = { "DeviceAvailability": { device_key: DeviceKey, online: boolean, observed_at_ms: number, 
 /**
@@ -65,4 +67,4 @@ origin: EventOrigin | null,
 /**
  * Causation metadata when this state change was derived from a routine.
  */
-causation: EventCausation | null, } } | { "RoutineAction": { action: Action, causation: EventCausation, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };
+causation: EventCausation | null, } } | { "RoutineAction": { action: Action, causation: EventCausation, } } | { "RoutineSetHelper": { helper: HelperId, value: JsonValue, causation: EventCausation, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };

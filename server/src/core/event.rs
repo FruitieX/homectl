@@ -10,6 +10,8 @@ use crate::types::{
         AutomationFrame, DeviceMutation, EventCausation, EventOrigin, FrameDisposition,
         MAX_CAUSATION_DEPTH, MAX_DERIVATION_STEPS,
     },
+    automation_trace::{PlannedRunStatus, StepDisposition},
+    automation_value::HelperPersistence,
     color::DeviceColor,
     device::{Device, DeviceData, DeviceKey, DevicesState},
     dim::DimDescriptor,
@@ -29,7 +31,13 @@ use crate::db::config_queries;
 use super::devices::ActivateSceneRequest;
 use super::snapshot::SnapshotChanges;
 use super::state::{AppState, PendingWsUpdate};
-use super::{automation::FrameContext, groups::Groups, integrations::Integrations};
+use super::{
+    automation::{
+        guard_suppression, step_status, FrameContext, PlanInputs, PlannedStepBody, RoutinePlan,
+    },
+    groups::Groups,
+    integrations::Integrations,
+};
 
 /// Resolves the effective scene id for an action that may reference the
 /// currently active scene of another group. Falls back to `fallback_scene_id`
@@ -156,6 +164,11 @@ pub enum DeferredEventWork {
         key: String,
         value: serde_json::Value,
     },
+    PersistHelperValue {
+        helper: crate::types::automation_definition::HelperId,
+        value: serde_json::Value,
+        revision: i64,
+    },
 }
 
 impl DeferredEventWork {
@@ -202,6 +215,20 @@ impl DeferredEventWork {
             DeferredEventWork::StoreUiState { key, value } => {
                 if let Err(error) = db_store_ui_state(&key, &value).await {
                     warn!("DB not available when storing UI state '{key}': {error}");
+                }
+
+                Ok(())
+            }
+            DeferredEventWork::PersistHelperValue {
+                helper,
+                value,
+                revision,
+            } => {
+                if let Err(error) =
+                    config_queries::db_upsert_helper_state(&helper.to_string(), &value, revision)
+                        .await
+                {
+                    warn!("DB not available when storing helper '{helper}': {error}");
                 }
 
                 Ok(())
@@ -340,7 +367,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
 
             // E06: an already-true predicate at startup is seeded as already
             // matched rather than treated as a fresh edge.
-            state.rules.seed_transitions(&state.devices, &state.groups);
+            state
+                .rules
+                .seed_transitions(&state.devices, &state.groups, Some(&state.helpers));
             state.refresh_routine_statuses();
             let changes = SnapshotChanges::startup_completed();
             state.schedule_ws_broadcast(changes);
@@ -423,8 +452,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     before: &before_view,
                     after: &after_view,
                     groups: &state.groups,
+                    helpers: Some(&state.helpers),
                 };
-                let _evaluations = state.rules.handle_v2_frame(&v2_frame);
+                let evaluations = state.rules.handle_v2_frame(&v2_frame);
+                if !evaluations.is_empty() {
+                    state.refresh_routine_statuses();
+                }
             }
 
             let mut changes = SnapshotChanges {
@@ -489,6 +522,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 skip_db_update.unwrap_or(true),
                 origin.unwrap_or(EventOrigin::Command),
             );
+            if origin.unwrap_or(EventOrigin::Command) == EventOrigin::Command {
+                state.intents.bump_device(&device.get_device_key());
+            }
             outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::SetExternalState { device } => {
@@ -519,6 +555,9 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 skip_db_update.unwrap_or_default(),
                 origin.unwrap_or(EventOrigin::Derived),
             );
+            if *origin == Some(EventOrigin::Command) {
+                state.intents.bump_device(&device.get_device_key());
+            }
             outcome.mark_snapshot_changes(SnapshotChanges::devices());
         }
         Event::DbStoreScene { scene_id, config } => {
@@ -578,14 +617,52 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             }
         }
         Event::Action(action) => {
-            handle_action(state, action, &mut outcome).await?;
+            handle_action(state, action, &mut outcome, true).await?;
         }
         Event::RoutineAction { action, .. } => {
-            handle_action(state, action, &mut outcome).await?;
+            handle_action(state, action, &mut outcome, false).await?;
+        }
+        Event::RoutineSetHelper { helper, value, .. } => {
+            apply_helper_write(state, helper, value, &mut outcome);
         }
     }
 
     Ok(outcome)
+}
+
+/// Apply a validated v2 helper write and schedule durable persistence.
+fn apply_helper_write(
+    state: &mut AppState,
+    helper: &crate::types::automation_definition::HelperId,
+    value: &serde_json::Value,
+    outcome: &mut EventOutcome,
+) {
+    match state.helpers.set_value(helper, value.clone()) {
+        Ok(updated) => {
+            let durable = state
+                .helpers
+                .definition(helper)
+                .is_some_and(|definition| definition.persistence == HelperPersistence::Durable);
+            if durable {
+                outcome.push(DeferredEventWork::PersistHelperValue {
+                    helper: helper.clone(),
+                    value: value.clone(),
+                    revision: updated.revision,
+                });
+            }
+            state.refresh_routine_statuses();
+            let changes = SnapshotChanges {
+                helper_statuses: true,
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            };
+            state.schedule_ws_broadcast(changes);
+            outcome.mark_snapshot_changes(changes);
+        }
+        Err(error) => {
+            warn!("Rejected helper write from v2 routine: {error}");
+        }
+    }
 }
 
 /// Dispatch a routine or user action against the actor-owned state. Kept
@@ -595,7 +672,11 @@ async fn handle_action(
     state: &mut AppState,
     action: &Action,
     outcome: &mut EventOutcome,
+    manual: bool,
 ) -> Result<()> {
+    if manual {
+        bump_action_intents(state, action);
+    }
     match action {
         Action::ActivateScene(ActivateSceneActionDescriptor {
             scene_id,
@@ -831,11 +912,93 @@ async fn handle_action(
     Ok(())
 }
 
+/// Record manual intent for the targets of a user-originated action. v2 plans
+/// capture these revisions and are suppressed if a newer intent arrives before
+/// dispatch (A03). Reports and routine-derived actions never bump.
+fn bump_action_intents(state: &mut AppState, action: &Action) {
+    match action {
+        Action::ActivateScene(descriptor) => {
+            state.intents.bump_scene(&descriptor.scene_id);
+            for key in descriptor.device_keys.iter().flatten() {
+                state.intents.bump_device(key);
+            }
+            for group in descriptor.group_keys.iter().flatten() {
+                state.intents.bump_group(group);
+            }
+        }
+        Action::CycleScenes(descriptor) => {
+            for scene in &descriptor.scenes {
+                state.intents.bump_scene(&scene.scene_id);
+            }
+            for key in descriptor.device_keys.iter().flatten() {
+                state.intents.bump_device(key);
+            }
+            for group in descriptor.group_keys.iter().flatten() {
+                state.intents.bump_group(group);
+            }
+        }
+        Action::Dim(descriptor) => {
+            for key in descriptor.device_keys.iter().flatten() {
+                state.intents.bump_device(key);
+            }
+            for group in descriptor.group_keys.iter().flatten() {
+                state.intents.bump_group(group);
+            }
+        }
+        Action::SetDeviceState(device) => {
+            state.intents.bump_device(&device.get_device_key());
+        }
+        _ => {}
+    }
+}
+
 impl AppState {
     /// Apply native group/scene derivation for the mutations collected during
     /// the current actor command and evaluate routines per mutation against
     /// the transaction's own frame. Returns the reader-snapshot fields that
     /// changed as a result.
+    /// Dispatch one accepted v2 plan: re-check intent guards, send every step
+    /// to the actor's own event channel in order (A07), and return the visible
+    /// run status (X03). Steps suppressed here or at plan time remain in the
+    /// status so nothing drops silently (X02).
+    fn dispatch_v2_plan(&mut self, plan: RoutinePlan) -> PlannedRunStatus {
+        let causation =
+            EventCausation::child_of(self.devices.frame_id(), self.devices.mutation_causation());
+        let mut steps = Vec::with_capacity(plan.steps.len() + plan.suppressions.len());
+        let mut dropped = 0u64;
+        for step in &plan.steps {
+            if let Some(reason) = guard_suppression(step, &self.intents) {
+                dropped += 1;
+                steps.push(step_status(step, StepDisposition::Suppressed, Some(reason)));
+                continue;
+            }
+            let event = match &step.body {
+                PlannedStepBody::Dispatch(action) => Event::RoutineAction {
+                    action: action.as_ref().clone(),
+                    causation,
+                },
+                PlannedStepBody::SetHelper { helper, value } => Event::RoutineSetHelper {
+                    helper: helper.clone(),
+                    value: value.clone(),
+                    causation,
+                },
+            };
+            self.event_tx.send(event);
+            steps.push(step_status(step, StepDisposition::Dispatched, None));
+        }
+        for suppression in &plan.suppressions {
+            dropped += 1;
+            steps.push(suppression.clone());
+        }
+        PlannedRunStatus {
+            run_id: plan.run_id,
+            definition_revision: plan.definition_revision,
+            accepted: true,
+            steps,
+            dropped,
+        }
+    }
+
     pub async fn flush_pending_frames(&mut self) -> SnapshotChanges {
         let pending = self.devices.take_pending_mutations();
         if pending.is_empty() {
@@ -936,8 +1099,28 @@ impl AppState {
                 before: &before_view,
                 after: &after_view,
                 groups: &self.groups,
+                helpers: Some(&self.helpers),
             };
-            let _evaluations = self.rules.handle_v2_frame(&frame);
+            let evaluations = self.rules.handle_v2_frame(&frame);
+            if !evaluations.is_empty() {
+                let plans = {
+                    let inputs = PlanInputs {
+                        devices: &after_view,
+                        groups: &self.groups,
+                        helpers: &self.helpers,
+                        intents: &self.intents,
+                    };
+                    self.rules.plan_v2_runs(&evaluations, &inputs)
+                };
+                for plan in plans {
+                    let routine_id = plan.routine_id.clone();
+                    let status = self.dispatch_v2_plan(plan);
+                    self.rules.record_v2_run(&routine_id, status);
+                }
+                // Republish the statuses Arc with this frame's decisions and
+                // run outcomes (P05/X03).
+                self.refresh_routine_statuses();
+            }
         }
 
         let disposition = if suppressed > 0 {
@@ -980,7 +1163,8 @@ impl AppState {
             self.devices.begin_command(EventCausation::default());
             self.flush_pending_frames().await;
         }
-        self.rules.seed_transitions(&self.devices, &self.groups);
+        self.rules
+            .seed_transitions(&self.devices, &self.groups, Some(&self.helpers));
     }
 }
 
@@ -1041,6 +1225,8 @@ pub(crate) mod tests {
             groups: Vec::new(),
             scenes: Vec::new(),
             routines: Vec::new(),
+            helpers: Vec::new(),
+            helper_values: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
             group_positions: Vec::new(),
@@ -1066,6 +1252,7 @@ pub(crate) mod tests {
             flattened_groups: Arc::new(Default::default()),
             flattened_scenes: Arc::new(Default::default()),
             routine_statuses: Arc::new(Default::default()),
+            helper_statuses: Arc::new(Default::default()),
             ui_state: Arc::new(Default::default()),
             warming_up: false,
         });
@@ -1078,6 +1265,8 @@ pub(crate) mod tests {
             scenes: Scenes::new(Default::default()),
             devices,
             rules: Routines::new(Default::default(), event_tx.clone()),
+            helpers: Default::default(),
+            intents: Default::default(),
             event_tx,
             ws: WebSockets::default(),
             ui: Ui::new(),
@@ -1845,5 +2034,128 @@ pub(crate) mod tests {
                 .count(),
             1
         );
+    }
+
+    // P05 staircase vertical slice: a typed enum helper selects the scene at
+    // plan time, the plan is accepted through the actor, the dispatched action
+    // applies the scene, and the run status separates match/accept/dispatch.
+    #[tokio::test]
+    async fn p05_helper_mode_selects_scene_through_the_actor() {
+        use crate::types::{
+            automation_definition::{HelperId, RoutineDefinitionV2},
+            automation_trace::{StepDisposition, TruthValue},
+            automation_value::{HelperDefinition, HelperKind, HelperPersistence},
+        };
+
+        let (mut state, mut event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        let bulb_key = bulb.get_device_key();
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        state.runtime_config.scenes = vec![SceneRow {
+            id: "night".to_string(),
+            name: "Night".to_string(),
+            hidden: false,
+            script: None,
+            device_states: HashMap::from([(
+                "mqtt/lamp".to_string(),
+                serde_json::json!({ "power": true, "brightness": 0.2 }),
+            )]),
+            group_states: HashMap::new(),
+            group_state_order: Vec::new(),
+        }];
+        state.runtime_config.helpers = vec![HelperDefinition {
+            id: HelperId("mode".to_string()),
+            name: "Mode".to_string(),
+            kind: HelperKind::Enum {
+                options: vec!["day".to_string(), "night".to_string()],
+            },
+            initial_value: serde_json::json!("night"),
+            persistence: HelperPersistence::Session,
+            hidden: None,
+        }];
+        state.apply_runtime_helpers();
+        state.apply_runtime_scenes();
+
+        let definition = serde_json::from_value::<RoutineDefinitionV2>(serde_json::json!({
+            "triggers": [{ "kind": "state_change", "id": "trig", "device": {
+                "integration_id": "mqtt", "device_id": "lamp"
+            }}],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "activate_scene", "id": "step",
+                  "select": { "kind": "helper_enum", "helper": "mode",
+                    "mapping": { "night": "night" }, "fallback_scene_id": "night" },
+                  "targets": {} }
+            ]}
+        }))
+        .expect("definition decodes");
+        state.runtime_config.routines = vec![RoutineRow {
+            id: "staircase".to_string(),
+            name: "Staircase".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(serde_json::to_value(&definition).unwrap()),
+            ..Default::default()
+        }];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&crate::types::rule::RoutineId("staircase".to_string()))
+            .cloned()
+            .expect("v2 status visible");
+        let v2 = status.v2.expect("v2 detail attached");
+        assert!(!v2.execution_pending, "P05 completes execution");
+        let run = v2.last_run.expect("run status recorded");
+        assert!(run.accepted);
+        assert_eq!(run.steps.len(), 1);
+        assert_eq!(run.steps[0].kind, "activate_scene");
+        assert_eq!(run.steps[0].disposition, StepDisposition::Dispatched);
+        assert!(run.steps[0].targets.contains(&"night".to_string()));
+        assert_eq!(v2.condition.truth, TruthValue::True);
+
+        // The actor normally feeds dispatched events back into itself; the
+        // test drains the channel explicitly and applies them in order.
+        let mut processed = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            handle_event(&mut state, &event).await.unwrap();
+            processed += 1;
+            assert!(processed < 8, "dispatch loop should terminate");
+        }
+        state.flush_pending_frames().await;
+
+        let applied = state.devices.get_device(&bulb_key).expect("lamp exists");
+        assert_eq!(
+            applied.get_scene_id(),
+            Some(SceneId::new("night".to_string()))
+        );
+        assert!(applied
+            .get_controllable_state()
+            .is_some_and(|state| state.power));
     }
 }

@@ -2,6 +2,7 @@ pub mod action;
 pub mod automation_definition;
 pub mod automation_event;
 pub mod automation_trace;
+pub mod automation_value;
 pub mod color;
 pub mod config_diagnostics;
 pub mod device;

@@ -6,6 +6,7 @@ import type { InvokeMode } from "./InvokeMode";
 import type { NodeId } from "./NodeId";
 import type { RoutineId } from "./RoutineId";
 import type { SceneId } from "./SceneId";
+import type { SceneSelection } from "./SceneSelection";
 import type { TargetSpec } from "./TargetSpec";
 import type { TimerId } from "./TimerId";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -13,4 +14,4 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * One typed native action with a stable node ID.
  */
-export type NativeAction = { "action": "activate_scene", id: NodeId, scene_id: SceneId, targets: TargetSpec, } | { "action": "set_power", id: NodeId, device: DeviceRef, power: boolean, } | { "action": "dim", id: NodeId, targets: TargetSpec, step: number, transition_ms?: bigint, } | { "action": "choose", id: NodeId, branches: Array<ChooseBranch>, } | { "action": "schedule_timer", id: NodeId, timer: TimerId, delay_ms: bigint, } | { "action": "replace_timer", id: NodeId, timer: TimerId, delay_ms: bigint, } | { "action": "cancel_timer", id: NodeId, timer: TimerId, } | { "action": "set_helper", id: NodeId, helper: HelperId, value: JsonValue, } | { "action": "invoke_routine", id: NodeId, routine_id: RoutineId, mode: InvokeMode, };
+export type NativeAction = { "action": "activate_scene", id: NodeId, scene_id?: SceneId, select?: SceneSelection, targets: TargetSpec, } | { "action": "set_power", id: NodeId, device: DeviceRef, power: boolean, } | { "action": "dim", id: NodeId, targets: TargetSpec, step: number, transition_ms?: bigint, } | { "action": "choose", id: NodeId, branches: Array<ChooseBranch>, } | { "action": "schedule_timer", id: NodeId, timer: TimerId, delay_ms: bigint, } | { "action": "replace_timer", id: NodeId, timer: TimerId, delay_ms: bigint, } | { "action": "cancel_timer", id: NodeId, timer: TimerId, } | { "action": "set_helper", id: NodeId, helper: HelperId, value: JsonValue, } | { "action": "invoke_routine", id: NodeId, routine_id: RoutineId, mode: InvokeMode, };

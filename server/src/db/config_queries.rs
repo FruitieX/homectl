@@ -9,12 +9,14 @@ use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
-    ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides,
-    DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
-    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes,
-    WidgetSettings,
+    AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
+    DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
+    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines, SceneDeviceStates,
+    SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
+use crate::types::automation_definition::HelperId;
+use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
 use sea_orm::{ConnectionTrait, QueryResult, Statement, StatementBuilder, TransactionTrait};
@@ -243,6 +245,18 @@ pub struct DeviceSensorConfigRow {
     pub config: serde_json::Value,
 }
 
+/// Current value of a durable helper as carried through `ConfigExport`.
+///
+/// Session helper values are runtime-only and are never exported. Unknown
+/// fields are ignored and missing fields default so older exports import
+/// unchanged.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HelperValueExportRow {
+    pub id: String,
+    pub value: serde_json::Value,
+    pub revision: i64,
+}
+
 /// Full config export structure.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConfigExport {
@@ -252,6 +266,10 @@ pub struct ConfigExport {
     pub groups: Vec<GroupRow>,
     pub scenes: Vec<SceneRow>,
     pub routines: Vec<RoutineRow>,
+    #[serde(default)]
+    pub helpers: Vec<crate::types::automation_value::HelperDefinition>,
+    #[serde(default)]
+    pub helper_values: Vec<HelperValueExportRow>,
     pub floorplan: Option<FloorplanRow>,
     #[serde(default)]
     pub floorplans: Vec<FloorplanExportRow>,
@@ -1080,6 +1098,186 @@ pub async fn db_delete_routine(id: &str) -> Result<bool> {
 }
 
 // ============================================================================
+// Automation helpers
+// ============================================================================
+
+pub async fn db_get_helpers() -> Result<Vec<HelperDefinition>> {
+    helpers_on(get_db_connection()?).await
+}
+
+async fn helpers_on<C: ConnectionTrait>(db: &C) -> Result<Vec<HelperDefinition>> {
+    all(
+        db,
+        Query::select()
+            .columns([
+                AutomationValues::Id,
+                AutomationValues::Name,
+                AutomationValues::Kind,
+                AutomationValues::InitialValue,
+                AutomationValues::Persistence,
+                AutomationValues::Hidden,
+            ])
+            .from(AutomationValues::Table)
+            .order_by(AutomationValues::Id, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(helper_from_row)
+    .collect()
+}
+
+pub async fn db_upsert_helper(helper: &HelperDefinition) -> Result<()> {
+    upsert_helper_on(get_db_connection()?, helper).await
+}
+
+async fn upsert_helper_on<C: ConnectionTrait>(db: &C, helper: &HelperDefinition) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(AutomationValues::Table)
+            .columns([
+                AutomationValues::Id,
+                AutomationValues::Name,
+                AutomationValues::Kind,
+                AutomationValues::InitialValue,
+                AutomationValues::Persistence,
+                AutomationValues::Hidden,
+            ])
+            .values_panic([
+                Expr::value(helper.id.as_str().to_string()),
+                Expr::value(helper.name.clone()),
+                Expr::value(serde_json::to_string(&helper.kind)?),
+                Expr::value(serde_json::to_string(&helper.initial_value)?),
+                Expr::value(helper_persistence_as_str(helper.persistence).to_string()),
+                Expr::value(helper.hidden),
+            ])
+            .on_conflict(
+                OnConflict::column(AutomationValues::Id)
+                    .update_columns([
+                        AutomationValues::Name,
+                        AutomationValues::Kind,
+                        AutomationValues::InitialValue,
+                        AutomationValues::Persistence,
+                        AutomationValues::Hidden,
+                    ])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Delete a helper definition together with its durable state row.
+pub async fn db_delete_helper(id: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+    let txn = db.begin().await?;
+    delete_by_string_key(
+        &txn,
+        AutomationValueState::Table,
+        AutomationValueState::HelperId,
+        id,
+    )
+    .await?;
+    let deleted =
+        delete_by_string_key(&txn, AutomationValues::Table, AutomationValues::Id, id).await?;
+    txn.commit().await?;
+    Ok(deleted)
+}
+
+/// Current values for durable helpers only. Session helper values are
+/// runtime-only and are never persisted or exported.
+pub async fn db_get_helper_states() -> Result<Vec<HelperValueExportRow>> {
+    let db = get_db_connection()?;
+    let helpers = helpers_on(db).await?;
+    helper_states_on(db, &helpers).await
+}
+
+async fn helper_states_on<C: ConnectionTrait>(
+    db: &C,
+    helpers: &[HelperDefinition],
+) -> Result<Vec<HelperValueExportRow>> {
+    let durable_ids: HashSet<&str> = helpers
+        .iter()
+        .filter(|helper| helper.persistence == HelperPersistence::Durable)
+        .map(|helper| helper.id.as_str())
+        .collect();
+
+    Ok(all(
+        db,
+        Query::select()
+            .columns([
+                AutomationValueState::HelperId,
+                AutomationValueState::Value,
+                AutomationValueState::Revision,
+            ])
+            .from(AutomationValueState::Table)
+            .order_by(AutomationValueState::HelperId, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(helper_state_from_row)
+    .collect::<Result<Vec<_>>>()?
+    .into_iter()
+    .filter(|row| durable_ids.contains(row.id.as_str()))
+    .collect())
+}
+
+pub async fn db_upsert_helper_state(
+    helper_id: &str,
+    value: &serde_json::Value,
+    revision: i64,
+) -> Result<()> {
+    upsert_helper_state_on(get_db_connection()?, helper_id, value, revision).await
+}
+
+async fn upsert_helper_state_on<C: ConnectionTrait>(
+    db: &C,
+    helper_id: &str,
+    value: &serde_json::Value,
+    revision: i64,
+) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(AutomationValueState::Table)
+            .columns([
+                AutomationValueState::HelperId,
+                AutomationValueState::Value,
+                AutomationValueState::Revision,
+            ])
+            .values_panic([
+                Expr::value(helper_id.to_string()),
+                Expr::value(serde_json::to_string(value)?),
+                Expr::value(revision),
+            ])
+            .on_conflict(
+                OnConflict::column(AutomationValueState::HelperId)
+                    .update_columns([AutomationValueState::Value, AutomationValueState::Revision])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_helper_state(helper_id: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+    delete_by_string_key(
+        db,
+        AutomationValueState::Table,
+        AutomationValueState::HelperId,
+        helper_id,
+    )
+    .await
+}
+
+// ============================================================================
 // Floorplan
 // ============================================================================
 
@@ -1723,6 +1921,9 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     .map(routine_from_row)
     .collect::<Result<Vec<_>>>()?;
 
+    let helpers = helpers_on(db).await?;
+    let helper_values = helper_states_on(db, &helpers).await?;
+
     let floorplan = one(
         db,
         Query::select()
@@ -1879,6 +2080,8 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         groups,
         scenes,
         routines,
+        helpers,
+        helper_values,
         floorplan,
         floorplans,
         group_positions,
@@ -1955,6 +2158,25 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     for routine in &config.routines {
         db_upsert_routine(routine).await?;
     }
+    for helper in &config.helpers {
+        db_upsert_helper(helper).await?;
+    }
+    let durable_helper_ids: HashSet<&str> = config
+        .helpers
+        .iter()
+        .filter(|helper| helper.persistence == HelperPersistence::Durable)
+        .map(|helper| helper.id.as_str())
+        .collect();
+    for state in &config.helper_values {
+        if !durable_helper_ids.contains(state.id.as_str()) {
+            warn!(
+                "Skipping value for non-durable or undefined helper '{}'",
+                state.id
+            );
+            continue;
+        }
+        db_upsert_helper_state(&state.id, &state.value, state.revision).await?;
+    }
     if !config.floorplans.is_empty() {
         for (sort_order, floorplan) in config.floorplans.iter().enumerate() {
             db_upsert_floorplan_export(floorplan, sort_order as i32).await?;
@@ -2018,6 +2240,7 @@ pub async fn db_has_config() -> Result<bool> {
         || !db_get_groups().await?.is_empty()
         || !db_get_config_scenes().await?.is_empty()
         || !db_get_routines().await?.is_empty()
+        || !db_get_helpers().await?.is_empty()
         || !db_get_group_positions().await?.is_empty()
         || !db_get_device_display_overrides().await?.is_empty()
         || !calibration::profiles(get_db_connection()?)
@@ -2778,6 +3001,52 @@ fn routine_from_row(row: QueryResult) -> Result<RoutineRow> {
     })
 }
 
+fn helper_from_row(row: QueryResult) -> Result<HelperDefinition> {
+    let id: String = row.try_get("", "id")?;
+    let kind_json: String = row.try_get("", "kind")?;
+    let initial_value_json: String = row.try_get("", "initial_value")?;
+    let persistence: String = row.try_get("", "persistence")?;
+
+    let kind: HelperKind = serde_json::from_str(&kind_json)
+        .map_err(|error| eyre!("Failed to parse helper kind for '{id}': {error}"))?;
+    // Preserve a malformed initial value verbatim so it stays visible instead
+    // of being silently replaced during export/import round-trips.
+    let initial_value: serde_json::Value = serde_json::from_str(&initial_value_json)
+        .unwrap_or(serde_json::Value::String(initial_value_json));
+
+    Ok(HelperDefinition {
+        id: HelperId(id),
+        name: row.try_get("", "name")?,
+        kind,
+        initial_value,
+        persistence: parse_helper_persistence(&persistence),
+        hidden: row.try_get::<Option<bool>>("", "hidden")?,
+    })
+}
+
+fn helper_state_from_row(row: QueryResult) -> Result<HelperValueExportRow> {
+    let value: String = row.try_get("", "value")?;
+    Ok(HelperValueExportRow {
+        id: row.try_get("", "helper_id")?,
+        value: parse_json_or_default(&value, "helper state value"),
+        revision: get_i64_or_default(&row, "revision", 0),
+    })
+}
+
+fn helper_persistence_as_str(persistence: HelperPersistence) -> &'static str {
+    match persistence {
+        HelperPersistence::Durable => "durable",
+        HelperPersistence::Session => "session",
+    }
+}
+
+fn parse_helper_persistence(value: &str) -> HelperPersistence {
+    match value {
+        "session" => HelperPersistence::Session,
+        _ => HelperPersistence::Durable,
+    }
+}
+
 fn floorplan_from_row(row: QueryResult) -> Result<FloorplanRow> {
     Ok(FloorplanRow {
         image_data: row.try_get("", "image_data")?,
@@ -2989,6 +3258,80 @@ mod consistency_tests {
             .device_color_calibrations
             .is_empty());
     }
+    // P05: helper definitions and durable values survive export/import, and
+    // session values never leave the process. Omitting the new fields in an
+    // older export stays backward compatible.
+    #[tokio::test]
+    async fn helper_definitions_and_durable_values_round_trip() {
+        let source = database().await;
+        let mode = HelperDefinition {
+            id: HelperId("mode".to_string()),
+            name: "Mode".to_string(),
+            kind: HelperKind::Enum {
+                options: vec!["day".to_string(), "night".to_string()],
+            },
+            initial_value: json!("day"),
+            persistence: HelperPersistence::Durable,
+            hidden: None,
+        };
+        let scratch = HelperDefinition {
+            id: HelperId("scratch".to_string()),
+            name: "Scratch".to_string(),
+            kind: HelperKind::String,
+            initial_value: json!(""),
+            persistence: HelperPersistence::Session,
+            hidden: None,
+        };
+        for helper in [&mode, &scratch] {
+            upsert_helper_on(&source, helper).await.unwrap();
+        }
+        upsert_helper_state_on(&source, "mode", &json!("night"), 4)
+            .await
+            .unwrap();
+        upsert_helper_state_on(&source, "scratch", &json!("temporary"), 1)
+            .await
+            .unwrap();
+
+        let export = db_export_config_from_connection(&source).await.unwrap();
+        assert_eq!(export.helpers.len(), 2);
+        assert_eq!(export.helper_values.len(), 1);
+        assert_eq!(export.helper_values[0].id, "mode");
+        assert_eq!(export.helper_values[0].value, json!("night"));
+        assert_eq!(export.helper_values[0].revision, 4);
+
+        let target = database().await;
+        for helper in &export.helpers {
+            upsert_helper_on(&target, helper).await.unwrap();
+        }
+        for state in &export.helper_values {
+            upsert_helper_state_on(&target, &state.id, &state.value, state.revision)
+                .await
+                .unwrap();
+        }
+        let reexport = db_export_config_from_connection(&target).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&reexport.helpers).unwrap(),
+            serde_json::to_value(&export.helpers).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(&reexport.helper_values).unwrap(),
+            serde_json::to_value(&export.helper_values).unwrap()
+        );
+        assert_eq!(
+            helpers_on(&target).await.unwrap().len(),
+            2,
+            "definitions are queryable"
+        );
+
+        let mut legacy = serde_json::to_value(&export).unwrap();
+        let object = legacy.as_object_mut().unwrap();
+        object.remove("helpers");
+        object.remove("helper_values");
+        let legacy: ConfigExport = serde_json::from_value(legacy).unwrap();
+        assert!(legacy.helpers.is_empty());
+        assert!(legacy.helper_values.is_empty());
+    }
+
     fn routine(id: &str, target: &str) -> RoutineRow {
         RoutineRow {
             id: id.into(),

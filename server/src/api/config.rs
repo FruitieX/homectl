@@ -29,7 +29,8 @@ use crate::db::{
 };
 use crate::types::{
     action::{Action, Actions},
-    automation_definition::RoutineSemantics,
+    automation_definition::{HelperId, RoutineSemantics},
+    automation_value::HelperDefinition,
     device::{
         ControllableState, Device, DeviceData, DeviceKey, DeviceRef, DevicesState, SensorDevice,
     },
@@ -1642,6 +1643,7 @@ pub fn config(
             .or(groups_routes(snapshot, handle))
             .or(scenes_routes(snapshot, handle))
             .or(routines_routes(snapshot, handle))
+            .or(helpers_routes(snapshot, handle))
             .or(floorplans_routes(snapshot, handle))
             .or(floorplan_routes(snapshot, handle))
             .or(dashboard_routes(snapshot, handle))
@@ -1893,6 +1895,228 @@ async fn update_core_config(
     let persistence = config_queries::db_update_core_settings(&core, &widgets).await;
     Ok(config_write_response(
         response,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
+fn helpers_routes(
+    snapshot: &SnapshotHandle,
+    handle: &StateHandle,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let list = warp::path("helpers")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .and_then(list_helpers);
+
+    let upsert = warp::path!("helpers" / String)
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(upsert_helper);
+
+    let delete = warp::path!("helpers" / String)
+        .and(warp::delete())
+        .and(with_handle(handle))
+        .and_then(delete_helper);
+
+    let set_value = warp::path!("helpers" / String / "value")
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(set_helper_value);
+
+    list.or(upsert).or(delete).or(set_value)
+}
+
+async fn list_helpers(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snap = snapshot.load();
+    Ok(ApiResponse::success(snap.helper_statuses.as_ref().clone()))
+}
+
+async fn upsert_helper(
+    id: String,
+    definition: HelperDefinition,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    if definition.id.0 != id {
+        return Ok(error_response(
+            "Helper id in the path does not match the body.",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                definition.validate()?;
+                let id = definition.id.clone();
+                state.helpers.upsert_definition(definition.clone())?;
+                if let Some(existing) = state
+                    .runtime_config
+                    .helpers
+                    .iter_mut()
+                    .find(|existing| existing.id == id)
+                {
+                    *existing = definition.clone();
+                } else {
+                    state.runtime_config.helpers.push(definition.clone());
+                    state
+                        .runtime_config
+                        .helpers
+                        .sort_by(|left, right| left.id.0.cmp(&right.id.0));
+                }
+                state.refresh_routine_statuses();
+                state.schedule_ws_broadcast(SnapshotChanges {
+                    helper_statuses: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                });
+                Ok::<_, String>(definition)
+            })
+        })
+        .await;
+    let definition = match result {
+        Ok(Ok(definition)) => definition,
+        Ok(Err(error)) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_helper(&definition).await;
+    Ok(config_write_response(
+        serde_json::json!({ "id": definition.id.0 }),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
+async fn delete_helper(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let helper_id = HelperId(id.clone());
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let removed = state.helpers.remove_definition(&helper_id);
+                state
+                    .runtime_config
+                    .helpers
+                    .retain(|definition| definition.id != helper_id);
+                state
+                    .runtime_config
+                    .helper_values
+                    .retain(|row| row.id != helper_id.0);
+                state.refresh_routine_statuses();
+                state.schedule_ws_broadcast(SnapshotChanges {
+                    helper_statuses: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                });
+                Ok::<_, String>(removed)
+            })
+        })
+        .await;
+    let removed = match result {
+        Ok(Ok(removed)) => removed,
+        Ok(Err(error)) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_helper(&id).await.map(|_| ());
+    Ok(config_write_response(
+        serde_json::json!({ "deleted": removed }),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
+#[derive(Deserialize)]
+struct SetHelperValueRequest {
+    value: serde_json::Value,
+}
+
+async fn set_helper_value(
+    id: String,
+    body: SetHelperValueRequest,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let helper_id = HelperId(id);
+    let value = body.value;
+    let result = handle
+        .mutate({
+            let helper_id = helper_id.clone();
+            let value = value.clone();
+            move |state| {
+                Box::pin(async move {
+                    let updated = state
+                        .helpers
+                        .set_value(&helper_id, value.clone())
+                        .map_err(|error| error.to_string())?;
+                    let durable = state
+                        .helpers
+                        .definition(&helper_id)
+                        .is_some_and(|definition| {
+                            definition.persistence
+                                == crate::types::automation_value::HelperPersistence::Durable
+                        });
+                    if durable {
+                        let row = config_queries::HelperValueExportRow {
+                            id: helper_id.0.clone(),
+                            value: value.clone(),
+                            revision: updated.revision,
+                        };
+                        if let Some(existing) = state
+                            .runtime_config
+                            .helper_values
+                            .iter_mut()
+                            .find(|existing| existing.id == row.id)
+                        {
+                            *existing = row;
+                        } else {
+                            state.runtime_config.helper_values.push(row);
+                            state
+                                .runtime_config
+                                .helper_values
+                                .sort_by(|left, right| left.id.cmp(&right.id));
+                        }
+                    }
+                    state.refresh_routine_statuses();
+                    state.schedule_ws_broadcast(SnapshotChanges {
+                        helper_statuses: true,
+                        routine_statuses: true,
+                        ..SnapshotChanges::none()
+                    });
+                    Ok::<_, String>((updated.revision, durable))
+                })
+            }
+        })
+        .await;
+    let (revision, durable) = match result {
+        Ok(Ok(result)) => result,
+        Ok(Err(error)) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    let database_available = db::is_db_connected();
+    let persistence = if durable {
+        config_queries::db_upsert_helper_state(&helper_id.0, &value, revision).await
+    } else {
+        Ok(())
+    };
+    Ok(config_write_response(
+        serde_json::json!({ "id": helper_id.0, "value": value, "revision": revision }),
         persistence,
         database_available,
         StatusCode::OK,
@@ -3414,6 +3638,8 @@ impl MigratePreviewResult {
             groups: self.groups.clone(),
             scenes: self.scenes.clone(),
             routines: self.routines.clone(),
+            helpers: Vec::new(),
+            helper_values: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
             group_positions: Vec::new(),
@@ -4705,6 +4931,8 @@ devices = [
             groups: Vec::new(),
             scenes: Vec::new(),
             routines: Vec::new(),
+            helpers: Vec::new(),
+            helper_values: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
             group_positions: Vec::new(),

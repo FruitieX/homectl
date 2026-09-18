@@ -1,8 +1,8 @@
 use crate::db::schema::{
-    ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets, DeviceColorCalibrations,
-    DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
-    GroupPositions, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
-    SceneOverrides, Scenes, UiState, WidgetSettings,
+    AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
+    DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs,
+    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines,
+    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -23,7 +23,85 @@ impl MigratorTrait for Migrator {
             Box::new(M20260916000000UvColorCalibration),
             Box::new(M20260918000000SceneGroupStateOrder),
             Box::new(M20260919000000RoutineV2Semantics),
+            Box::new(M20260920000000AutomationHelpers),
         ]
+    }
+}
+
+/// P05 typed helper definitions and their durable current values. Session
+/// helper values are runtime-only and never stored here.
+struct M20260920000000AutomationHelpers;
+
+impl MigrationName for M20260920000000AutomationHelpers {
+    fn name(&self) -> &str {
+        "m20260920000000_automation_helpers"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260920000000AutomationHelpers {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AutomationValues::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AutomationValues::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(AutomationValues::Name).text().not_null())
+                    .col(ColumnDef::new(AutomationValues::Kind).text().not_null())
+                    .col(
+                        ColumnDef::new(AutomationValues::InitialValue)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationValues::Persistence)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(AutomationValues::Hidden).boolean().null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_table(
+                Table::create()
+                    .table(AutomationValueState::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AutomationValueState::HelperId)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationValueState::Value)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationValueState::Revision)
+                            .big_integer()
+                            .not_null()
+                            .default(0),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AutomationValueState::Table).to_owned())
+            .await?;
+        manager
+            .drop_table(Table::drop().table(AutomationValues::Table).to_owned())
+            .await
     }
 }
 

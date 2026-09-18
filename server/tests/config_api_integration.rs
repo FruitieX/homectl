@@ -669,6 +669,8 @@ fn sample_config_export() -> Value {
                 ]
             }
         ],
+        "helpers": [],
+        "helper_values": [],
         "floorplan": {
             "image_data": null,
             "image_mime_type": null,
@@ -3165,5 +3167,96 @@ fn mixed_semantics_config_round_trips_through_sqlite_database() {
     assert_eq!(
         export_after_restart["data"]["routines"],
         import_payload["routines"]
+    );
+}
+
+// P05: helper definitions and values are editable through the API, validated
+// against the declared kind, exported for backup, and restored on restart.
+#[test]
+fn helper_api_validates_and_persists_values() {
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "homectl_helpers_{}_{}",
+        std::process::id(),
+        unique_id
+    ));
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir).expect("old test dir should be removable");
+    }
+    std::fs::create_dir_all(&temp_dir).expect("test dir should be created");
+
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to start helpers SQLite server");
+
+    let definition = json!({
+        "id": "mode",
+        "name": "Mode",
+        "kind": { "kind": "enum", "options": ["day", "night"] },
+        "initial_value": "day",
+        "persistence": "durable"
+    });
+    let created = put_json(&server.base_url, "/api/v1/config/helpers/mode", &definition);
+    assert_eq!(created.status(), StatusCode::OK);
+
+    let list = get_json(&server.base_url, "/api/v1/config/helpers");
+    let mode = list["data"]
+        .as_array()
+        .expect("helpers array")
+        .iter()
+        .find(|helper| helper["id"] == "mode")
+        .expect("mode helper visible");
+    assert_eq!(mode["value"], json!("day"));
+    assert_eq!(mode["revision"], json!(0));
+
+    let invalid = put_json(
+        &server.base_url,
+        "/api/v1/config/helpers/mode/value",
+        &json!({ "value": "noon" }),
+    );
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+
+    let updated = put_json(
+        &server.base_url,
+        "/api/v1/config/helpers/mode/value",
+        &json!({ "value": "night" }),
+    );
+    assert_eq!(updated.status(), StatusCode::OK);
+    let updated: Value = updated.json().expect("update response is JSON");
+    assert_eq!(updated["data"]["value"], json!("night"));
+    assert_eq!(updated["data"]["revision"], json!(1));
+
+    let export = get_json(&server.base_url, "/api/v1/config/export");
+    assert_eq!(export["data"]["helpers"][0]["id"], json!("mode"));
+    assert_eq!(export["data"]["helper_values"][0]["value"], json!("night"));
+    assert_eq!(export["data"]["helper_values"][0]["revision"], json!(1));
+
+    let deleted = delete(&server.base_url, "/api/v1/config/helpers/mode");
+    assert_eq!(deleted.status(), StatusCode::OK);
+    let list = get_json(&server.base_url, "/api/v1/config/helpers");
+    assert!(list["data"]
+        .as_array()
+        .expect("helpers array")
+        .iter()
+        .all(|helper| helper["id"] != "mode"));
+
+    server.stop();
+
+    let server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to restart helpers SQLite server");
+    let list = get_json(&server.base_url, "/api/v1/config/helpers");
+    assert!(
+        list["data"].as_array().expect("helpers array").is_empty(),
+        "deleted helper does not return after restart"
     );
 }

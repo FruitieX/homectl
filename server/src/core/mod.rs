@@ -8,6 +8,7 @@ pub mod deferred;
 pub mod devices;
 pub mod event;
 pub mod groups;
+pub mod helpers;
 pub mod integrations;
 pub mod logs;
 pub mod routine_history;

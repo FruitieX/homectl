@@ -9,9 +9,10 @@ use homectl_server::types::{
     },
     automation_trace::{
         ConditionEvaluation, ConditionTraceNode, GroupEvaluation, GroupMemberEvaluation,
-        GroupSceneSummary, GroupSceneSummaryKind, RoutineV2RuntimeStatus, TriggerRuntimeStatus,
-        TruthValue, UnknownReason,
+        GroupSceneSummary, GroupSceneSummaryKind, PlannedRunStatus, PlannedStepStatus,
+        RoutineV2RuntimeStatus, StepDisposition, TriggerRuntimeStatus, TruthValue, UnknownReason,
     },
+    automation_value::{HelperDefinition, HelperKind, HelperPersistence, HelperRuntimeStatus},
     device::{Device, DevicesState},
     dim::FlattenedDimConfig,
     group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupId},
@@ -50,6 +51,13 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         GroupSceneSummary::export_all_to(&output_dir)?;
         GroupSceneSummaryKind::export_all_to(&output_dir)?;
         HelperId::export_all_to(&output_dir)?;
+        HelperDefinition::export_all_to(&output_dir)?;
+        HelperKind::export_all_to(&output_dir)?;
+        HelperPersistence::export_all_to(&output_dir)?;
+        HelperRuntimeStatus::export_all_to(&output_dir)?;
+        PlannedRunStatus::export_all_to(&output_dir)?;
+        PlannedStepStatus::export_all_to(&output_dir)?;
+        StepDisposition::export_all_to(&output_dir)?;
         NativeAction::export_all_to(&output_dir)?;
         NativeProgram::export_all_to(&output_dir)?;
         NodeId::export_all_to(&output_dir)?;

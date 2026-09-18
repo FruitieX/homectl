@@ -240,4 +240,51 @@ pub struct RoutineV2RuntimeStatus {
     pub will_trigger: bool,
     /// P04 evaluates decisions; action planning and dispatch land in P05.
     pub execution_pending: bool,
+    /// Outcome of the most recent accepted plan for this routine (P05/X03).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub last_run: Option<PlannedRunStatus>,
+}
+
+/// Disposition of one planned step.
+#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum StepDisposition {
+    /// Dispatched to the actor for application.
+    Dispatched,
+    /// Dropped before dispatch; `reason` explains why.
+    Suppressed,
+}
+
+/// Observable outcome of one planned native step (X02).
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct PlannedStepStatus {
+    pub action_id: NodeId,
+    /// Native action kind, e.g. `activate_scene`.
+    pub kind: String,
+    /// Fully resolved targets as stable strings (device keys, group/scene IDs,
+    /// or helper IDs). Frozen at plan time.
+    pub targets: Vec<String>,
+    pub disposition: StepDisposition,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reason: Option<String>,
+}
+
+/// Observable outcome of accepting and dispatching one routine run (X03).
+/// Matching ([`TriggerRuntimeStatus`]) is separate from acceptance (this type)
+/// and from per-step dispatch ([`PlannedStepStatus`]).
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct PlannedRunStatus {
+    /// Monotonic run id within this process.
+    pub run_id: u64,
+    pub definition_revision: i64,
+    /// Whether the plan was accepted (triggers matched and condition passed).
+    pub accepted: bool,
+    pub steps: Vec<PlannedStepStatus>,
+    /// Steps dropped by the bounded execution queue (A08).
+    pub dropped: u64,
 }
