@@ -671,17 +671,6 @@ pub(crate) fn validate_action_rollout(action: &Action) -> Result<(), String> {
     }
 }
 
-fn validate_routine_actions(actions: &serde_json::Value) -> Result<(), String> {
-    let parsed_actions: Actions = serde_json::from_value(actions.clone())
-        .map_err(|error| format!("Invalid routine actions payload: {error}"))?;
-
-    for action in &parsed_actions {
-        validate_action_rollout(action)?;
-    }
-
-    Ok(())
-}
-
 fn rewrite_scene_action_descriptor(
     descriptor: &mut ActivateSceneActionDescriptor,
     source: &DeviceConfigTarget,

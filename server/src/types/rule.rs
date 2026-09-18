@@ -29,8 +29,15 @@ pub enum TriggerMode {
     /// Unlike pulse, this won't re-trigger if the same value is sent again.
     Edge,
 
-    /// Trigger while the state matches (current behavior).
-    /// The routine fires on transition from not-triggered to triggered.
+    /// Trigger whenever the state matches and the rule is evaluated.
+    ///
+    /// The v1 evaluator reports `trigger_match = true` for a level rule on
+    /// every eligible internal state update, not only on a false -> true
+    /// transition. As a result a matching level routine can fire again on an
+    /// unrelated eligible update while its state stays matched. Automation v2
+    /// replaces this with explicit `predicate_transition`/`report` triggers
+    /// (see docs/adr/0002-triggers-and-temporal-behavior.md); v1 behavior is
+    /// preserved until migration.
     Level,
 }
 

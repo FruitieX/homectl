@@ -22,7 +22,13 @@ use std::{
     sync::Arc,
 };
 
-use super::{devices::Devices, groups::Groups, routine_history, scripting::ScriptEngine};
+use super::{
+    devices::Devices,
+    groups::Groups,
+    routine_history,
+    routine_validation::{self, RoutineValidationReport},
+    scripting::ScriptEngine,
+};
 
 const TRIGGERING_DEVICE_ROLLOUT_SOURCE: &str = "__homectl_runtime__/triggering_device";
 
@@ -126,6 +132,10 @@ pub struct Routines {
     /// Tracks which (routine_id, device_key) pairs have been triggered.
     /// Used for edge-triggered rules to prevent re-triggering until state changes away.
     prev_edge_triggered: HashSet<(RoutineId, DeviceKey)>,
+    /// Enabled routine rows that failed validation. They are retained (the raw
+    /// rows stay in `runtime_config`) but are not runnable, and their errors are
+    /// surfaced through `get_runtime_statuses`.
+    quarantined: HashMap<RoutineId, RoutineValidationReport>,
 }
 
 struct RuleEvaluationContext<'a> {
@@ -134,6 +144,9 @@ struct RuleEvaluationContext<'a> {
     devices: &'a Devices,
     groups: &'a Groups,
     update_edge_state: bool,
+    /// Whether this evaluation is an actual dispatch and may record routine
+    /// history. Status refresh/preview passes must not write history.
+    record_history: bool,
 }
 
 impl RuleEvaluationContext<'_> {
@@ -192,20 +205,44 @@ impl Routines {
             event_tx,
             runtime_statuses: Arc::new(RoutineStatuses::default()),
             prev_edge_triggered: HashSet::new(),
+            quarantined: HashMap::new(),
         }
     }
 
     pub fn load_config_rows(&mut self, routines: &[config_queries::RoutineRow]) {
         let mut new_config = RoutinesConfig::new();
+        let mut quarantined = HashMap::new();
         for routine in routines {
             if !routine.enabled {
+                // Disabled rows stay in `runtime_config` for display/edit and
+                // are deliberately not validated or run.
                 continue;
             }
 
-            let rules: Vec<Rule> =
-                serde_json::from_value(routine.rules.clone()).unwrap_or_default();
-            let actions: Actions =
-                serde_json::from_value(routine.actions.clone()).unwrap_or_default();
+            let rules = match routine_validation::validate_rules_value(&routine.rules) {
+                Ok(rules) => rules,
+                Err(report) => {
+                    warn!(
+                        "Quarantining enabled routine {}: {}",
+                        routine.id,
+                        report.summary()
+                    );
+                    quarantined.insert(RoutineId::from(routine.id.clone()), report);
+                    continue;
+                }
+            };
+            let actions = match routine_validation::validate_actions_value(&routine.actions) {
+                Ok(actions) => actions,
+                Err(report) => {
+                    warn!(
+                        "Quarantining enabled routine {}: {}",
+                        routine.id,
+                        report.summary()
+                    );
+                    quarantined.insert(RoutineId::from(routine.id.clone()), report);
+                    continue;
+                }
+            };
 
             new_config.insert(
                 RoutineId::from(routine.id.clone()),
@@ -218,8 +255,14 @@ impl Routines {
         }
 
         self.config = new_config;
+        self.quarantined = quarantined;
         self.runtime_statuses = Arc::new(RoutineStatuses::default());
         self.prev_edge_triggered.clear();
+    }
+
+    /// Enabled routines that failed validation and are therefore not runnable.
+    pub fn quarantined_routines(&self) -> &HashMap<RoutineId, RoutineValidationReport> {
+        &self.quarantined
     }
 
     /// Hot-reload routines configuration from the database
@@ -238,9 +281,32 @@ impl Routines {
             devices,
             groups,
             update_edge_state: false,
+            record_history: false,
         };
-        let evaluation = self.evaluate_routines(&ctx);
-        self.runtime_statuses = Arc::new(evaluation.statuses);
+        let mut statuses = self.evaluate_routines(&ctx).statuses;
+
+        // Surface quarantined routines as visible, non-runnable errors.
+        for (routine_id, report) in &self.quarantined {
+            statuses.0.insert(
+                routine_id.clone(),
+                RoutineRuntimeStatus {
+                    all_conditions_match: false,
+                    will_trigger: false,
+                    rules: report
+                        .errors
+                        .iter()
+                        .map(|error| {
+                            RuleRuntimeStatus::from_error(format!(
+                                "{}: {}",
+                                error.path, error.message
+                            ))
+                        })
+                        .collect(),
+                },
+            );
+        }
+
+        self.runtime_statuses = Arc::new(statuses);
     }
 
     pub fn get_runtime_statuses(&self) -> Arc<RoutineStatuses> {
@@ -266,6 +332,7 @@ impl Routines {
                 devices,
                 groups,
                 update_edge_state: true,
+                record_history: true,
             };
             let evaluation = self.evaluate_routines(&ctx);
             self.runtime_statuses = Arc::new(evaluation.statuses);
@@ -325,13 +392,17 @@ impl Routines {
                     routine.actions.len(),
                     ctx.event_source,
                 );
-                routine_history::record_rule_match(
-                    &routine_id,
-                    &routine.name,
-                    ctx.event_source,
-                    routine.actions.len(),
-                    &status,
-                );
+                // Only real dispatch records history. Status refresh/preview
+                // evaluations must not advance the fired-history log.
+                if ctx.record_history {
+                    routine_history::record_rule_match(
+                        &routine_id,
+                        &routine.name,
+                        ctx.event_source,
+                        routine.actions.len(),
+                        &status,
+                    );
+                }
                 triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
                     expand_action_source_context(action, ctx.event_source, ctx.groups)
                 }));
@@ -830,14 +901,18 @@ mod tests {
     use super::{
         evaluate_raw_rule_match, expand_action_source_context, Routines, RuleEvaluationContext,
     };
-    use crate::core::{devices::Devices, groups::Groups};
+    use crate::core::{devices::Devices, groups::Groups, routine_history};
+    use crate::db::config_queries;
     use crate::types::action::{Action, Actions};
-    use crate::types::device::{Device, DeviceData, DeviceId, DeviceKey, DeviceRef, SensorDevice};
+    use crate::types::device::{
+        ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, DeviceRef, ManageKind,
+        SensorDevice,
+    };
     use crate::types::event::{mk_event_channel, RxEventChannel};
     use crate::types::group::GroupsConfig;
     use crate::types::integration::IntegrationId;
     use crate::types::rule::{
-        RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule, TriggerMode,
+        DeviceRule, RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule, TriggerMode,
     };
     use crate::utils::cli::Cli;
     use jsonptr::PointerBuf;
@@ -919,6 +994,7 @@ mod tests {
             devices,
             groups,
             update_edge_state: true,
+            record_history: true,
         }
     }
 
@@ -1143,5 +1219,157 @@ mod tests {
         };
 
         assert_eq!(descriptor.rollout_source_device_key, Some(switch_key));
+    }
+
+    // ------------------------------------------------------------------
+    // P01: validation quarantine and truthful history
+    // ------------------------------------------------------------------
+
+    fn row(
+        id: &str,
+        enabled: bool,
+        rules: serde_json::Value,
+        actions: serde_json::Value,
+    ) -> config_queries::RoutineRow {
+        config_queries::RoutineRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled,
+            rules,
+            actions,
+        }
+    }
+
+    fn valid_rules_json() -> serde_json::Value {
+        json!([{
+            "state": { "value": true },
+            "integration_id": "mqtt",
+            "device_id": "sensor"
+        }])
+    }
+
+    fn load(routines: &[config_queries::RoutineRow]) -> Routines {
+        let (event_tx, _rx) = mk_event_channel();
+        let mut loaded = Routines::new(RoutinesConfig::new(), event_tx);
+        loaded.load_config_rows(routines);
+        loaded
+    }
+
+    #[test]
+    fn v01_enabled_invalid_routine_is_quarantined_and_visible() {
+        let mut routines = load(&[
+            row("bad", true, json!({ "not": "a list" }), json!([])),
+            row("good", true, valid_rules_json(), json!([])),
+        ]);
+
+        assert!(routines
+            .config
+            .contains_key(&RoutineId::from("good".to_string())));
+        assert!(!routines
+            .config
+            .contains_key(&RoutineId::from("bad".to_string())));
+        assert!(routines
+            .quarantined_routines()
+            .contains_key(&RoutineId::from("bad".to_string())));
+
+        let (devices, _rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::default());
+        routines.refresh_runtime_statuses(&devices, &groups);
+
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&RoutineId::from("bad".to_string()))
+            .cloned()
+            .expect("quarantined routine must still be visible");
+        assert!(!status.will_trigger);
+        assert!(status.rules.iter().all(|rule| rule.error.is_some()));
+    }
+
+    #[test]
+    fn v04_disabled_invalid_row_is_left_untouched() {
+        let routines = load(&[
+            row("disabled_bad", false, json!({ "not": "a list" }), json!(42)),
+            row("enabled_bad", true, json!({ "not": "a list" }), json!(42)),
+        ]);
+
+        assert!(!routines
+            .config
+            .contains_key(&RoutineId::from("disabled_bad".to_string())));
+        assert!(!routines
+            .quarantined_routines()
+            .contains_key(&RoutineId::from("disabled_bad".to_string())));
+        assert!(routines
+            .quarantined_routines()
+            .contains_key(&RoutineId::from("enabled_bad".to_string())));
+    }
+
+    #[test]
+    fn v05_status_refresh_does_not_record_history_or_edges() {
+        let lamp_ref = DeviceRef::new_with_id(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("lamp"),
+        );
+        let rule = Rule::Device(DeviceRule {
+            power: Some(true),
+            scene: None,
+            trigger_mode: TriggerMode::Level,
+            device_ref: lamp_ref,
+        });
+        let mut config = RoutinesConfig::new();
+        config.insert(
+            RoutineId::from("level".to_string()),
+            Routine {
+                name: "Level".to_string(),
+                rules: vec![rule],
+                actions: Actions::default(),
+            },
+        );
+
+        let (event_tx, _rx) = mk_event_channel();
+        let mut routines = Routines::new(config, event_tx);
+        let (mut devices, _devrx) = test_devices();
+        let groups = Groups::new(GroupsConfig::default());
+
+        let lamp = Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("lamp"),
+            "Lamp".to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                None,
+                None,
+                None,
+                Default::default(),
+                ManageKind::Unmanaged,
+            )),
+            None,
+        );
+        devices.set_state(&lamp, true, true);
+
+        // Sanity: the level routine is eligible to trigger on refresh.
+        routines.refresh_runtime_statuses(&devices, &groups);
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&RoutineId::from("level".to_string()))
+            .cloned()
+            .expect("status");
+        assert!(status.will_trigger);
+
+        let history_before = routine_history::recent_routine_history().len();
+        for _ in 0..3 {
+            routines.refresh_runtime_statuses(&devices, &groups);
+        }
+        assert_eq!(
+            routine_history::recent_routine_history().len(),
+            history_before,
+            "status refresh must not write routine history"
+        );
+        assert!(
+            routines.prev_edge_triggered.is_empty(),
+            "status refresh must not mutate edge memory"
+        );
     }
 }

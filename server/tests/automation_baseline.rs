@@ -272,8 +272,11 @@ fn b04_script_truthiness_is_plain_javascript() {
     assert!(!engine.eval_boolean("var x = 1;").unwrap());
 }
 
+// P01 changes the P00 B04 expectation: malformed enabled rows are no longer
+// silently decoded to an empty (always-false) routine. They are quarantined as
+// non-runnable and their validation errors are surfaced through status reads.
 #[tokio::test]
-async fn b04_malformed_rows_silently_become_empty_routines() {
+async fn b04_malformed_rows_are_quarantined_not_silently_empty() {
     let (event_tx, _rx) = mk_event_channel();
     let mut routines = Routines::new(RoutinesConfig::new(), event_tx);
     routines.load_config_rows(&[RoutineRow {
@@ -283,6 +286,13 @@ async fn b04_malformed_rows_silently_become_empty_routines() {
         rules: json!({ "not": "a rule list" }),
         actions: json!(42),
     }]);
+
+    assert!(
+        routines
+            .quarantined_routines()
+            .contains_key(&RoutineId::from("malformed".to_string())),
+        "malformed enabled row is quarantined"
+    );
 
     let cli = homectl_server::core::automation_baseline::test_cli();
     let (device_tx, _device_rx) = mk_event_channel();
@@ -295,16 +305,16 @@ async fn b04_malformed_rows_silently_become_empty_routines() {
         .0
         .get(&RoutineId::from("malformed".to_string()))
         .cloned()
-        .expect("malformed row is still registered");
-    assert!(
-        status.rules.is_empty(),
-        "malformed rules silently decode to an empty rule list"
-    );
-    assert!(
-        !status.will_trigger,
-        "empty rule list means the routine can never trigger"
-    );
+        .expect("quarantined row is still visible in status reads");
+    assert!(!status.will_trigger, "quarantined routines never run");
     assert!(!status.all_conditions_match);
+    assert!(
+        status
+            .rules
+            .iter()
+            .all(|rule| rule.error.as_deref().is_some_and(|e| e.contains("/rules"))),
+        "validation errors are surfaced instead of an empty rule list"
+    );
 }
 
 #[test]

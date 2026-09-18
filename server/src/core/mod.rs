@@ -10,6 +10,7 @@ pub mod groups;
 pub mod integrations;
 pub mod logs;
 pub mod routine_history;
+pub mod routine_validation;
 pub mod routines;
 pub mod scene_commands;
 pub mod scenes;

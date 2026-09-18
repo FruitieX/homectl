@@ -1,4 +1,30 @@
 use super::*;
+use crate::core::routine_validation;
+
+/// Validate a routine definition before it can be stored as enabled.
+///
+/// Structural rule/action errors, non-finite values, invalid spatial rollout
+/// configuration, and (parsed, never executed) v1 script syntax all reject the
+/// save. An invalid definition may still be stored as a disabled draft.
+fn validate_enabled_routine(routine: &RoutineRow) -> Result<(), String> {
+    // Validate actions (and their spatial-rollout requirements) before rules so
+    // the established v1 error precedence and messages are preserved.
+    let actions = routine_validation::validate_actions_value(&routine.actions)
+        .map_err(|report| report.summary())?;
+    for action in &actions {
+        validate_action_rollout(action)?;
+    }
+
+    let rules = routine_validation::validate_rules_value(&routine.rules)
+        .map_err(|report| report.summary())?;
+
+    let script_report = routine_validation::validate_script_syntax(&rules);
+    if !script_report.is_valid() {
+        return Err(script_report.summary());
+    }
+
+    Ok(())
+}
 
 pub(super) fn routines_routes(
     snapshot: &SnapshotHandle,
@@ -67,8 +93,10 @@ pub(super) async fn create_routine(
         Err(_) => return Ok(actor_unavailable()),
     };
 
-    if let Err(error) = validate_routine_actions(&routine.actions) {
-        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    if routine.enabled {
+        if let Err(error) = validate_enabled_routine(&routine) {
+            return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+        }
     }
 
     let routine_for_state = routine.clone();
@@ -105,8 +133,10 @@ pub(super) async fn update_routine(
         Err(_) => return Ok(actor_unavailable()),
     };
 
-    if let Err(error) = validate_routine_actions(&routine.actions) {
-        return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+    if routine.enabled {
+        if let Err(error) = validate_enabled_routine(&routine) {
+            return Ok(error_response(&error, StatusCode::BAD_REQUEST));
+        }
     }
 
     let requested_id = routine.id.trim().to_string();

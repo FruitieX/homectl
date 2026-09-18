@@ -2683,7 +2683,14 @@ fn config_api_updates_routine_id_and_force_trigger_references() {
             "id": "routine_a",
             "name": "Routine A",
             "enabled": true,
-            "rules": [],
+            "rules": [
+                {
+                    "integration_id": "dummy",
+                    "device_id": "sensor1",
+                    "state": { "value": true },
+                    "trigger_mode": "pulse"
+                }
+            ],
             "actions": []
         }),
     );
@@ -2696,7 +2703,14 @@ fn config_api_updates_routine_id_and_force_trigger_references() {
             "id": "routine_b",
             "name": "Routine B",
             "enabled": true,
-            "rules": [],
+            "rules": [
+                {
+                    "integration_id": "dummy",
+                    "device_id": "sensor1",
+                    "state": { "value": true },
+                    "trigger_mode": "pulse"
+                }
+            ],
             "actions": [
                 {
                     "action": "ForceTriggerRoutine",
@@ -2714,7 +2728,14 @@ fn config_api_updates_routine_id_and_force_trigger_references() {
             "id": "routine_a_renamed",
             "name": "Routine A Renamed",
             "enabled": true,
-            "rules": [],
+            "rules": [
+                {
+                    "integration_id": "dummy",
+                    "device_id": "sensor1",
+                    "state": { "value": true },
+                    "trigger_mode": "pulse"
+                }
+            ],
             "actions": []
         }),
     );
