@@ -14,7 +14,10 @@ use std::collections::BTreeMap;
 use crate::core::groups::Groups;
 use crate::core::helpers::Helpers;
 use crate::types::{
-    automation_trace::{PlannedRunStatus, RoutineV2RuntimeStatus},
+    automation_definition::{NativeAction, NodeId, Program},
+    automation_trace::{
+        PlannedRunStatus, PlannedStepStatus, RoutineV2RuntimeStatus, StepDisposition,
+    },
     device::DevicesState,
     rule::RoutineId,
 };
@@ -25,7 +28,7 @@ use super::{
         evaluate_condition, evaluate_routine_frame, seed_routine_memory, EvaluationView,
         FrameContext, RoutineFrameEvaluation, TriggerMemory,
     },
-    plan::{plan_evaluation, PlanInputs, RoutinePlan},
+    plan::{plan_evaluation, plan_script_actions, PlanInputs, RoutinePlan},
 };
 
 /// One compiled, enabled v2 definition plus its stored revision.
@@ -179,6 +182,10 @@ impl V2Runtime {
 
     /// Plan every triggered evaluation against acceptance-time state (P05).
     /// Plans are pure; the caller dispatches them and records the run status.
+    ///
+    /// Script programs are skipped here: their typed actions arrive later from
+    /// the worker and are planned at result-acceptance time via
+    /// [`Self::plan_script_run`].
     pub fn plan_runs(
         &mut self,
         evaluations: &[RoutineFrameEvaluation],
@@ -192,6 +199,9 @@ impl V2Runtime {
             let Some(definition) = self.definitions.get(&evaluation.routine_id) else {
                 continue;
             };
+            if matches!(definition.compiled.normalized.program, Program::Script(_)) {
+                continue;
+            }
             let mut plan = plan_evaluation(evaluation, &definition.compiled, inputs);
             plan.run_id = self.next_run_id;
             self.next_run_id = self.next_run_id.wrapping_add(1);
@@ -200,11 +210,73 @@ impl V2Runtime {
         plans
     }
 
+    /// Plan the actions a script handler returned. The plan is resolved against
+    /// state at result-acceptance time and shares the native planner (A09/X05).
+    pub fn plan_script_run(
+        &mut self,
+        routine_id: &RoutineId,
+        actions: &[NativeAction],
+        inputs: &PlanInputs<'_>,
+    ) -> Option<RoutinePlan> {
+        let definition_revision = self.definitions.get(routine_id)?.revision;
+        let mut plan = plan_script_actions(routine_id, definition_revision, actions, inputs);
+        plan.run_id = self.next_run_id;
+        self.next_run_id = self.next_run_id.wrapping_add(1);
+        Some(plan)
+    }
+
     /// Record the dispatched outcome of one run for status displays (X03).
     pub fn record_run(&mut self, routine_id: &RoutineId, status: PlannedRunStatus) {
         if let Some(existing) = self.statuses.get_mut(routine_id) {
             existing.execution_pending = false;
             existing.last_run = Some(status);
+        }
+    }
+
+    /// Record a visible rejected script run (worker failure, stale result, or
+    /// contract error). Nothing is dispatched and the pending flag clears so a
+    /// stuck pending state cannot masquerade as success (X03).
+    pub fn record_script_failure(&mut self, routine_id: &RoutineId, reason: String) {
+        let Some(definition) = self.definitions.get(routine_id) else {
+            return;
+        };
+        let revision = definition.revision;
+        let fingerprint = definition.compiled.fingerprint.clone();
+        let run_id = self.next_run_id;
+        self.next_run_id = self.next_run_id.wrapping_add(1);
+        let status = PlannedRunStatus {
+            run_id,
+            definition_revision: revision,
+            accepted: false,
+            steps: vec![PlannedStepStatus {
+                action_id: NodeId("script".to_string()),
+                kind: "script".to_string(),
+                targets: Vec::new(),
+                disposition: StepDisposition::Suppressed,
+                reason: Some(reason),
+            }],
+            dropped: 1,
+        };
+        match self.statuses.get_mut(routine_id) {
+            Some(existing) => {
+                existing.execution_pending = false;
+                existing.last_run = Some(status);
+            }
+            None => {
+                self.statuses.insert(
+                    routine_id.clone(),
+                    RoutineV2RuntimeStatus {
+                        definition_revision: revision,
+                        fingerprint,
+                        matched_trigger_ids: Vec::new(),
+                        triggers: Vec::new(),
+                        condition: Default::default(),
+                        will_trigger: false,
+                        execution_pending: false,
+                        last_run: Some(status),
+                    },
+                );
+            }
         }
     }
 }

@@ -4,6 +4,7 @@ use ts_rs::TS;
 
 use super::automation_event::{EventCausation, EventId, EventOrigin};
 use super::device::Device;
+use super::rule::RoutineId;
 use super::scene::{SceneConfig, SceneId};
 
 use super::{action::Action, device::DeviceKey};
@@ -120,6 +121,25 @@ pub enum Event {
         causation: EventCausation,
     },
 
+    /// A supervised worker finished a v2 script handler invocation (P07). The
+    /// actor completes owner admission, plans the returned typed actions at
+    /// result-acceptance time, and dispatches them through the shared path.
+    RoutineScriptResult {
+        routine_id: RoutineId,
+        request_id: u64,
+        owner_key: String,
+        owner_generation: u64,
+        definition_revision: i64,
+        state_revision: u64,
+        causation: EventCausation,
+        /// Strictly serialized worker result when the invocation succeeded.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+        /// Bounded failure message when the worker reported an error.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+
     /// Wait for a bit for devices to come online before starting up.
     StartupCompleted,
 
@@ -148,6 +168,11 @@ impl Event {
             | Event::ApplyDeviceState { causation, .. } => *causation,
             Event::RoutineAction { causation, .. } => Some(*causation),
             Event::RoutineSetHelper { causation, .. } => Some(*causation),
+            // Script results carry their originating frame's causation for the
+            // actions they later dispatch, but the result event itself is not a
+            // mutation frame: it must complete owner admission even when the
+            // originating chain is already at the causal bound (the actions it
+            // plans are rejected at dispatch by the same bound as native plans).
             _ => None,
         }
     }
@@ -194,6 +219,12 @@ pub struct Sender<T> {
 impl<T: std::fmt::Debug> Sender<T> {
     pub fn send(&self, event: T) {
         self.tx.send(event).expect("Receiver end of channel closed");
+    }
+
+    /// Fallible send for detached tasks that can outlive the actor (for
+    /// example a supervised script worker finishing during shutdown).
+    pub fn try_send(&self, event: T) -> Result<(), T> {
+        self.tx.send(event).map_err(|error| error.0)
     }
 }
 

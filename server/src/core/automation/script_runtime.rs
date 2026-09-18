@@ -1,0 +1,613 @@
+//! P07 v2 script execution: lazy supervised pool, owner contexts, and result
+//! delivery.
+//!
+//! Script work never runs on the state actor. The actor only:
+//!
+//! * lazily creates the supervised worker pool when an enabled script program
+//!   actually has work (a missing `script-worker` binary degrades to a visible
+//!   failure instead of blocking startup),
+//! * builds an immutable, declaration-scoped `ctx` from the coherent frame,
+//! * submits the invocation to the owner coordinator, and
+//! * receives the typed result back as an actor event for planning/dispatch.
+//!
+//! The invocation context deliberately exposes only devices the routine
+//! declared (plus the devices mutated by the triggering frame), so undeclared
+//! reads are absent instead of silently observed; the exposed set never
+//! depends on which branch a previous invocation took (S14/S15).
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use serde_json::{Map, Value};
+
+use crate::types::{
+    automation_definition::{ScriptDeclaration, ScriptSpec},
+    automation_event::{EventCausation, EventId, EventOrigin},
+    device::{Device, DeviceKey, DeviceRef},
+    event::{Event, TxEventChannel},
+    rule::RoutineId,
+};
+
+use crate::core::js_worker::{JsWorkerPool, SupervisorConfig};
+
+use super::evaluate::FrameContext;
+use super::runtime::V2Definition;
+use super::script_coordinator::{
+    Admission, AdmissionError, InvocationToken, OwnerKind, ScriptCoordinator, ScriptInvocation,
+    ScriptOwnerId,
+};
+
+/// Maximum characters retained from a worker failure in a visible status.
+pub const MAX_SCRIPT_ERROR_CHARS: usize = 512;
+
+/// One admitted handler invocation ready to be handed to the worker pool.
+#[derive(Clone, Debug)]
+pub struct PreparedScriptRun {
+    pub routine_id: RoutineId,
+    pub token: InvocationToken,
+    pub source_body: String,
+    pub context: Value,
+    pub causation: EventCausation,
+}
+
+/// Owner state for script programs owned by the state actor.
+pub struct ScriptExecution {
+    coordinator: ScriptCoordinator,
+    pool: Option<Arc<JsWorkerPool>>,
+    pool_error: Option<String>,
+    /// Optional worker executable override; `None` resolves `script-worker`
+    /// next to the running server binary (tests/alternate deployments).
+    pub worker_binary: Option<PathBuf>,
+    /// Single injected wall-clock source. P09 replaces this with a real clock
+    /// abstraction; until then context building must not scatter `SystemTime`.
+    pub clock: fn() -> i64,
+    invocation_counter: u64,
+}
+
+impl Default for ScriptExecution {
+    fn default() -> Self {
+        Self {
+            coordinator: ScriptCoordinator::new(),
+            pool: None,
+            pool_error: None,
+            worker_binary: None,
+            clock: system_now_ms,
+            invocation_counter: 0,
+        }
+    }
+}
+
+impl ScriptExecution {
+    pub fn coordinator(&self) -> &ScriptCoordinator {
+        &self.coordinator
+    }
+
+    pub fn coordinator_mut(&mut self) -> &mut ScriptCoordinator {
+        &mut self.coordinator
+    }
+
+    /// Reconcile routine owners with the compiled definitions. Definitions
+    /// whose revision is unchanged keep their generation and pending results;
+    /// edited definitions bump the generation (S16); removed definitions drop
+    /// their owner state.
+    pub fn sync_owners(&mut self, definitions: &BTreeMap<RoutineId, V2Definition>) {
+        let mut live: BTreeSet<String> = BTreeSet::new();
+        for (routine_id, definition) in definitions {
+            if !matches!(
+                definition.compiled.normalized.program,
+                crate::types::automation_definition::Program::Script(_)
+            ) {
+                continue;
+            }
+            let owner = ScriptOwnerId::routine(routine_id.0.clone());
+            let current = self.coordinator.definition_revision(&owner);
+            if current != Some(definition.revision) || !self.coordinator.is_enabled(&owner) {
+                self.coordinator
+                    .load_owner(&owner, definition.revision, Value::Null);
+            }
+            live.insert(owner.key());
+        }
+
+        let stale: Vec<ScriptOwnerId> = self
+            .coordinator
+            .owner_keys()
+            .into_iter()
+            .filter(|(key, kind)| *kind == OwnerKind::Routine && !live.contains(key))
+            .map(|(key, _)| ScriptOwnerId {
+                kind: OwnerKind::Routine,
+                id: key
+                    .split_once(':')
+                    .map(|(_, id)| id.to_string())
+                    .unwrap_or(key),
+            })
+            .collect();
+        for owner in stale {
+            self.coordinator.remove_owner(&owner);
+        }
+
+        // Configuration reload is the retry point for a missing worker.
+        self.pool_error = None;
+    }
+
+    /// Lazily create the worker pool. The first failure is cached so a missing
+    /// binary degrades to a visible per-run failure instead of spawning on
+    /// every frame; a configuration reload clears the cached error.
+    pub async fn ensure_pool(&mut self) -> Result<Arc<JsWorkerPool>, String> {
+        if let Some(pool) = &self.pool {
+            return Ok(Arc::clone(pool));
+        }
+        if let Some(error) = &self.pool_error {
+            return Err(error.clone());
+        }
+        let config = SupervisorConfig {
+            worker_binary: self.worker_binary.clone(),
+            ..SupervisorConfig::default()
+        };
+        match JsWorkerPool::new(config).await {
+            Ok(pool) => {
+                let pool = Arc::new(pool);
+                self.pool = Some(Arc::clone(&pool));
+                Ok(pool)
+            }
+            Err(error) => {
+                let message = format!("script worker pool unavailable: {error}");
+                self.pool_error = Some(message.clone());
+                Err(message)
+            }
+        }
+    }
+
+    /// Build the immutable handler context for one invocation.
+    ///
+    /// `ctx.event` carries the coherent frame identify and mutations;
+    /// `ctx.before`/`ctx.after` expose only declared and mutated devices, so an
+    /// undeclared read is absent rather than silently observed. Helpers are
+    /// exposed with their declared kind, and owner memory/revision come from
+    /// the coordinator (S11/S12/S14/S15).
+    pub fn build_handler_context(
+        &mut self,
+        owner: &ScriptOwnerId,
+        spec: &ScriptSpec,
+        frame: &FrameContext<'_>,
+        frame_id: EventId,
+        origin: EventOrigin,
+        causation: EventCausation,
+    ) -> Result<Value, String> {
+        let mut device_keys: BTreeSet<DeviceKey> = BTreeSet::new();
+        for declaration in &spec.declarations {
+            match declaration {
+                ScriptDeclaration::Device { device } => {
+                    let DeviceRef::Id(id_ref) = device;
+                    device_keys.insert(id_ref.clone().into_device_key());
+                }
+                ScriptDeclaration::Group { group_id } => {
+                    for device in frame.groups.find_group_devices(frame.after, group_id) {
+                        device_keys.insert(device.get_device_key());
+                    }
+                }
+                ScriptDeclaration::Timer { .. } => {}
+            }
+        }
+        for mutation in frame.mutations {
+            device_keys.insert(mutation.device_key.clone());
+        }
+
+        let mut before_devices = Map::new();
+        let mut after_devices = Map::new();
+        for key in &device_keys {
+            if let Some(device) = frame.before.0.get(key) {
+                before_devices.insert(key.to_string(), device_json(device)?);
+            }
+            if let Some(device) = frame.after.0.get(key) {
+                after_devices.insert(key.to_string(), device_json(device)?);
+            }
+        }
+
+        let mut event_mutations = Vec::with_capacity(frame.mutations.len());
+        for mutation in frame.mutations {
+            let mut entry = Map::new();
+            entry.insert(
+                "device".to_string(),
+                Value::String(mutation.device_key.to_string()),
+            );
+            entry.insert(
+                "origin".to_string(),
+                serde_json::to_value(mutation.origin)
+                    .map_err(|error| format!("mutation origin is not serializable: {error}"))?,
+            );
+            entry.insert(
+                "before".to_string(),
+                match frame.before.0.get(&mutation.device_key) {
+                    Some(device) => device_json(device)?,
+                    None => Value::Null,
+                },
+            );
+            entry.insert(
+                "after".to_string(),
+                match frame.after.0.get(&mutation.device_key) {
+                    Some(device) => device_json(device)?,
+                    None => Value::Null,
+                },
+            );
+            event_mutations.push(Value::Object(entry));
+        }
+
+        let mut helpers = Map::new();
+        if let Some(helpers_state) = frame.helpers {
+            for status in helpers_state.statuses() {
+                helpers.insert(
+                    status.id.to_string(),
+                    serde_json::json!({
+                        "kind": status.kind.code(),
+                        "value": status.value,
+                    }),
+                );
+            }
+        }
+
+        let memory = self
+            .coordinator
+            .memory(owner)
+            .cloned()
+            .unwrap_or(Value::Null);
+        let revision = self.coordinator.state_revision(owner).unwrap_or(0);
+
+        self.invocation_counter = self.invocation_counter.wrapping_add(1);
+        let seed = fnv1a(&format!(
+            "{}:{}:{}",
+            owner.key(),
+            revision,
+            self.invocation_counter
+        ));
+
+        Ok(serde_json::json!({
+            "now_ms": (self.clock)(),
+            "seed": seed,
+            "event": {
+                "frame_id": frame_id,
+                "origin": origin,
+                "causation": causation,
+                "mutations": event_mutations,
+            },
+            "before": { "devices": before_devices },
+            "after": { "devices": after_devices },
+            "values": { "helpers": helpers },
+            "state": { "memory": memory, "revision": revision },
+        }))
+    }
+
+    /// Build the context and admit a handler invocation. Admission failures
+    /// (unknown owner, disabled owner, revision mismatch, queue bound) are
+    /// returned as visible reasons; no worker is involved yet.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_handler_invocation(
+        &mut self,
+        routine_id: &RoutineId,
+        definition_revision: i64,
+        spec: &ScriptSpec,
+        frame: &FrameContext<'_>,
+        frame_id: EventId,
+        origin: EventOrigin,
+        causation: EventCausation,
+    ) -> Result<PreparedScriptRun, String> {
+        let owner = ScriptOwnerId::routine(routine_id.0.clone());
+        let context =
+            self.build_handler_context(&owner, spec, frame, frame_id, origin, causation)?;
+        let invocation = ScriptInvocation {
+            owner,
+            definition_revision,
+            contract: super::script_contract::ScriptOutputContract::RoutineHandler,
+            source_body: spec.source_body.clone(),
+            context: context.clone(),
+            coalesce: super::script_coordinator::CoalescePolicy::Queue,
+            run_id: None,
+        };
+        match self.coordinator.submit(&invocation) {
+            Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
+                Ok(PreparedScriptRun {
+                    routine_id: routine_id.clone(),
+                    token,
+                    source_body: spec.source_body.clone(),
+                    context,
+                    causation,
+                })
+            }
+            Err(error) => Err(admission_error_text(&error)),
+        }
+    }
+
+    /// Deliver a handler result as an actor event. The spawned task only owns
+    /// the shared pool and the event sender; it never touches `AppState`.
+    pub fn spawn_handler_execution(
+        &self,
+        pool: Arc<JsWorkerPool>,
+        event_tx: TxEventChannel,
+        routine_id: RoutineId,
+        token: InvocationToken,
+        source_body: String,
+        context: Value,
+        causation: EventCausation,
+    ) {
+        tokio::spawn(async move {
+            let outcome = pool.execute(&source_body, context).await;
+            let (value, error) = match outcome {
+                Ok(value) => (Some(value), None),
+                Err(error) => (None, Some(bounded_text(&error.to_string()))),
+            };
+            event_tx
+                .try_send(Event::RoutineScriptResult {
+                    routine_id,
+                    request_id: token.request_id,
+                    owner_key: token.owner_key,
+                    owner_generation: token.owner_generation,
+                    definition_revision: token.definition_revision,
+                    state_revision: token.state_revision,
+                    causation,
+                    value,
+                    error,
+                })
+                .ok();
+        });
+    }
+}
+
+fn device_json(device: &Device) -> Result<Value, String> {
+    serde_json::to_value(device).map_err(|error| format!("device is not serializable: {error}"))
+}
+
+fn admission_error_text(error: &AdmissionError) -> String {
+    match error {
+        AdmissionError::UnknownOwner => "script_admission_failed: owner not loaded".to_string(),
+        AdmissionError::Disabled => "script_admission_failed: owner disabled".to_string(),
+        AdmissionError::WrongRevision { expected } => {
+            format!("script_admission_failed: definition revision mismatch (loaded {expected})")
+        }
+        AdmissionError::QueueFull { limit } => {
+            format!("script_admission_failed: pending queue full (limit {limit})")
+        }
+    }
+}
+
+pub fn bounded_text(text: &str) -> String {
+    if text.chars().count() <= MAX_SCRIPT_ERROR_CHARS {
+        return text.to_string();
+    }
+    let mut bounded: String = text.chars().take(MAX_SCRIPT_ERROR_CHARS).collect();
+    bounded.push_str("... (truncated)");
+    bounded
+}
+
+fn fnv1a(text: &str) -> u64 {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.as_bytes() {
+        hash ^= u64::from(*byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    hash
+}
+
+fn system_now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as i64)
+        .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::types::{
+        automation_definition::{ScriptDeclaration, ScriptSpec},
+        automation_event::{DeviceMutation, EventId, EventOrigin},
+        color::Capabilities,
+        device::{
+            ControllableDevice, DeviceData, DeviceId, DeviceKey, DeviceRef, DevicesState,
+            ManageKind,
+        },
+        integration::IntegrationId,
+    };
+
+    use super::super::evaluate::FrameContext;
+    use super::*;
+    use crate::core::groups::Groups;
+
+    fn key(id: &str) -> DeviceKey {
+        DeviceKey::new(IntegrationId::from("dummy".to_string()), DeviceId::new(id))
+    }
+
+    fn lamp(id: &str, power: bool) -> Device {
+        Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new(id),
+            id.to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                power,
+                None,
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Full,
+            )),
+            None,
+        )
+    }
+
+    fn states(devices: Vec<Device>) -> DevicesState {
+        DevicesState(
+            devices
+                .into_iter()
+                .map(|device| (device.get_device_key(), device))
+                .collect(),
+        )
+    }
+
+    fn spec(declarations: Vec<ScriptDeclaration>) -> ScriptSpec {
+        ScriptSpec {
+            api_version: 1,
+            source_body: "return true;".to_string(),
+            declarations,
+            limits_profile: "default".to_string(),
+        }
+    }
+
+    // S14/S15: the exposed device view is declaration-derived and independent
+    // of any previous branch; undeclared devices are absent, not observed.
+    #[test]
+    fn context_exposes_declared_and_mutated_devices_only() {
+        let mut scripts = ScriptExecution {
+            clock: || 1000,
+            ..ScriptExecution::default()
+        };
+        let before = states(vec![lamp("lamp", false), lamp("other", false)]);
+        let after = states(vec![lamp("lamp", true), lamp("other", false)]);
+        let mutations = vec![DeviceMutation {
+            event_id: EventId::default(),
+            device_key: key("lamp"),
+            before: Some(lamp("lamp", false)),
+            after: lamp("lamp", true),
+            origin: EventOrigin::Report,
+        }];
+        let frame = FrameContext {
+            mutations: &mutations,
+            before: &before,
+            after: &after,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let declaration = ScriptDeclaration::Device {
+            device: DeviceRef::from(&key("lamp")),
+        };
+        let context = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(vec![declaration]),
+                &frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .expect("context builds");
+
+        assert_eq!(context["now_ms"], json!(1000));
+        assert!(context["after"]["devices"]["dummy/lamp"].is_object());
+        assert!(
+            context["after"]["devices"].get("dummy/other").is_none(),
+            "undeclared devices are not exposed"
+        );
+        assert!(context["before"]["devices"]["dummy/lamp"].is_object());
+        assert_eq!(context["event"]["mutations"].as_array().unwrap().len(), 1);
+    }
+
+    // S11 direction: the clock and seed are context inputs, not ambient state.
+    #[test]
+    fn context_clock_and_seed_are_injected() {
+        let mut scripts = ScriptExecution {
+            clock: || 4242,
+            ..ScriptExecution::default()
+        };
+        let devices = states(vec![lamp("lamp", false)]);
+        let mutations = vec![DeviceMutation {
+            event_id: EventId::default(),
+            device_key: key("lamp"),
+            before: Some(lamp("lamp", false)),
+            after: lamp("lamp", false),
+            origin: EventOrigin::Report,
+        }];
+        let frame = FrameContext {
+            mutations: &mutations,
+            before: &devices,
+            after: &devices,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let first = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(Vec::new()),
+                &frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .unwrap();
+        let second = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(Vec::new()),
+                &frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .unwrap();
+        assert_eq!(first["now_ms"], json!(4242));
+        assert_ne!(
+            first["seed"], second["seed"],
+            "each invocation gets its own deterministic seed input"
+        );
+    }
+
+    #[test]
+    fn sync_owners_tracks_revisions_and_removals() {
+        use std::collections::BTreeMap;
+
+        use super::super::runtime::V2Definition;
+
+        fn definition(id: &str, revision: i64, script: bool) -> (RoutineId, V2Definition) {
+            let program = if script {
+                json!({ "kind": "script", "spec": {
+                    "api_version": 1,
+                    "source_body": "return true;",
+                    "declarations": [],
+                    "limits_profile": "default"
+                }})
+            } else {
+                json!({ "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "step", "timer": "t" }
+                ]})
+            };
+            let compiled = super::super::compile::compile_definition_value(
+                &json!({
+                    "triggers": [{ "kind": "state_change", "id": "trig",
+                        "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+                    "condition": { "kind": "literal", "value": true },
+                    "program": program,
+                }),
+                &super::super::compile::ConfigCatalog::default(),
+            )
+            .expect("definition compiles");
+            (
+                RoutineId(id.to_string()),
+                V2Definition { revision, compiled },
+            )
+        }
+
+        let mut scripts = ScriptExecution::default();
+        let owners: BTreeMap<RoutineId, V2Definition> = [
+            definition("scripted", 1, true),
+            definition("native", 1, false),
+        ]
+        .into_iter()
+        .collect();
+        scripts.sync_owners(&owners);
+        let owner = ScriptOwnerId::routine("scripted");
+        assert_eq!(scripts.coordinator().definition_revision(&owner), Some(1));
+        assert_eq!(
+            scripts
+                .coordinator()
+                .owner_kind(&ScriptOwnerId::routine("native")),
+            None
+        );
+
+        let edited: BTreeMap<RoutineId, V2Definition> =
+            [definition("scripted", 2, true)].into_iter().collect();
+        scripts.sync_owners(&edited);
+        assert_eq!(scripts.coordinator().definition_revision(&owner), Some(2));
+
+        scripts.sync_owners(&BTreeMap::new());
+        assert_eq!(scripts.coordinator().owner_kind(&owner), None);
+    }
+}

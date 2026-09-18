@@ -275,6 +275,21 @@ impl ScriptCoordinator {
         self.owners.get(&owner.key()).map(|entry| entry.kind)
     }
 
+    /// All registered owners with their kind, for lifecycle reconciliation.
+    pub fn owner_keys(&self) -> Vec<(String, OwnerKind)> {
+        self.owners
+            .iter()
+            .map(|(key, entry)| (key.clone(), entry.kind))
+            .collect()
+    }
+
+    /// Loaded definition revision for an owner, if registered.
+    pub fn definition_revision(&self, owner: &ScriptOwnerId) -> Option<i64> {
+        self.owners
+            .get(&owner.key())
+            .map(|entry| entry.definition_revision)
+    }
+
     pub fn is_enabled(&self, owner: &ScriptOwnerId) -> bool {
         self.owners
             .get(&owner.key())

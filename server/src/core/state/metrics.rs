@@ -34,6 +34,7 @@ pub const KIND_LABELS: &[&str] = &[
     "ControlDevice",
     "ActivateScene",
     "HandleEvent:RoutineSetHelper",
+    "HandleEvent:RoutineScriptResult",
 ];
 
 pub const KIND_MUTATE: usize = 11;
@@ -195,5 +196,6 @@ fn event_kind_index(event: &crate::types::event::Event) -> usize {
         Event::Action(_) => 9,
         Event::RoutineAction { .. } => 10,
         Event::RoutineSetHelper { .. } => 14,
+        Event::RoutineScriptResult { .. } => 15,
     }
 }

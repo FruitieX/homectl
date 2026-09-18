@@ -420,5 +420,6 @@ fn event_kind(event: &Event) -> &'static str {
         Event::Action(_) => "Action",
         Event::RoutineAction { .. } => "RoutineAction",
         Event::RoutineSetHelper { .. } => "RoutineSetHelper",
+        Event::RoutineScriptResult { .. } => "RoutineScriptResult",
     }
 }

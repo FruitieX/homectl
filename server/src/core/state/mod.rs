@@ -120,6 +120,9 @@ pub struct AppState {
     pub helpers: crate::core::helpers::Helpers,
     /// Manual-intent revisions used to reject stale v2 plans (A03).
     pub intents: crate::core::automation::IntentTracker,
+    /// Owner bookkeeping, lazy worker pool, and invocation contexts for v2
+    /// script programs (P07).
+    pub scripts: crate::core::automation::ScriptExecution,
     pub event_tx: TxEventChannel,
     pub ws: WebSockets,
     pub ui: Ui,
@@ -798,6 +801,7 @@ impl AppState {
         );
         self.rules
             .load_config_rows(&self.runtime_config.routines, &catalog);
+        self.sync_script_owners();
         // E06: reloaded definitions seed transition memory from current state
         // instead of treating already-true predicates as fresh edges.
         self.rules
@@ -807,6 +811,12 @@ impl AppState {
             routine_statuses: true,
             ..SnapshotChanges::none()
         });
+    }
+
+    /// Reconcile script owner generations with the compiled v2 definitions so
+    /// an edit/disable rejects pending worker results (S16).
+    pub fn sync_script_owners(&mut self) {
+        self.scripts.sync_owners(self.rules.compiled_v2_routines());
     }
 
     pub async fn refresh_runtime_config_from_db(&mut self) -> Result<()> {
@@ -972,6 +982,7 @@ impl AppState {
         if let Err(e) = self.refresh_runtime_config_from_db().await {
             warn!("Failed to refresh runtime config snapshot: {e}");
         }
+        self.sync_script_owners();
         self.rules
             .seed_transitions(&self.devices, &self.groups, Some(&self.helpers));
         self.refresh_routine_statuses();

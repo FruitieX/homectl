@@ -229,6 +229,7 @@ async fn run_event_loop(
         rules,
         helpers: Default::default(),
         intents: Default::default(),
+        scripts: Default::default(),
         event_tx: event_tx.clone(),
         ui,
         ws: Default::default(),
@@ -241,6 +242,7 @@ async fn run_event_loop(
 
     // Startup discovery/restore mutations are seeded as startup frames and
     // must not fire routines (E06).
+    state.sync_script_owners();
     state.seed_startup_state().await;
 
     let ws_handle = state.ws.clone();

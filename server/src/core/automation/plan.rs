@@ -207,17 +207,39 @@ pub fn plan_evaluation(
     };
     match &compiled.normalized.program {
         Program::Native(program) => planner.plan_steps(&program.steps),
-        Program::Script(_) => planner.suppressions.push(PlannedStepStatus {
-            action_id: NodeId("program".to_string()),
-            kind: "script".to_string(),
-            targets: Vec::new(),
-            disposition: StepDisposition::Suppressed,
-            reason: Some("script_execution_not_implemented".to_string()),
-        }),
+        // Script programs have no steps to plan until the worker returns typed
+        // actions; `V2Runtime::plan_runs` skips them and the result path plans
+        // the returned actions with `plan_script_actions`.
+        Program::Script(_) => {}
     }
     RoutinePlan {
         routine_id: evaluation.routine_id.clone(),
         definition_revision: evaluation.definition_revision,
+        run_id: 0,
+        steps: planner.steps,
+        suppressions: planner.suppressions,
+    }
+}
+
+/// Plan the typed actions returned by a script handler at result-acceptance
+/// time. Uses the same resolver, target/scene freezing, dedupe, and intent
+/// guards as native programs so script and native fixtures produce equivalent
+/// plans (A09/X05).
+pub fn plan_script_actions(
+    routine_id: &RoutineId,
+    definition_revision: i64,
+    actions: &[NativeAction],
+    inputs: &PlanInputs<'_>,
+) -> RoutinePlan {
+    let mut planner = Planner {
+        inputs,
+        steps: Vec::new(),
+        suppressions: Vec::new(),
+    };
+    planner.plan_steps(actions);
+    RoutinePlan {
+        routine_id: routine_id.clone(),
+        definition_revision,
         run_id: 0,
         steps: planner.steps,
         suppressions: planner.suppressions,
@@ -982,5 +1004,77 @@ mod tests {
             .reason
             .as_deref()
             .is_some_and(|reason| reason.starts_with("unknown_helper")));
+    }
+
+    // X05/A09: a script handler returning the same typed actions as a native
+    // program yields the same planned command bodies, resolved targets, and
+    // intent guards through the shared planner.
+    #[test]
+    fn script_and_native_actions_plan_equivalently() {
+        let native_definition = json!({
+            "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "set_power", "id": "native-step",
+                  "device": { "integration_id": "dummy", "device_id": "lamp" }, "power": true },
+                { "action": "activate_scene", "id": "native-scene", "scene_id": "evening",
+                  "targets": { "groups": ["room"] } }
+            ]}
+        });
+        let compiled =
+            compile_definition_value(&native_definition, &catalog()).expect("native compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let intents = IntentTracker::default();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &intents,
+        };
+        let native_plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+
+        let script_value = json!({
+            "actions": [
+                { "action": "set_power",
+                  "device": { "integration_id": "dummy", "device_id": "lamp" }, "power": true },
+                { "action": "activate_scene", "scene_id": "evening",
+                  "targets": { "groups": ["room"] } }
+            ]
+        });
+        let outcome = super::super::script_contract::parse_routine_handler_outcome(
+            &script_value,
+            super::super::script_contract::MAX_SCRIPT_STATE_BYTES,
+        )
+        .expect("script outcome parses");
+        let script_plan = plan_script_actions(
+            &RoutineId("routine".to_string()),
+            1,
+            &outcome.actions,
+            &inputs,
+        );
+
+        let normalize = |plan: &RoutinePlan| {
+            plan.steps
+                .iter()
+                .map(|step| {
+                    (
+                        step.kind.to_string(),
+                        step_targets(step),
+                        format!("{:?}", step.body),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(normalize(&native_plan), normalize(&script_plan));
+        assert_eq!(
+            native_plan.suppressions.len(),
+            script_plan.suppressions.len()
+        );
     }
 }

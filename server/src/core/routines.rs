@@ -603,6 +603,35 @@ impl Routines {
         self.v2.record_run(routine_id, status);
     }
 
+    /// The declared script spec for a compiled v2 script program, if any.
+    pub fn script_spec(
+        &self,
+        routine_id: &RoutineId,
+    ) -> Option<&crate::types::automation_definition::ScriptSpec> {
+        let definition = self.v2.definitions().get(routine_id)?;
+        match &definition.compiled.normalized.program {
+            crate::types::automation_definition::Program::Script(program) => Some(&program.spec),
+            crate::types::automation_definition::Program::Native(_) => None,
+        }
+    }
+
+    /// Plan the typed actions returned by a script handler at result-acceptance
+    /// time (P07).
+    pub fn plan_v2_script_run(
+        &mut self,
+        routine_id: &RoutineId,
+        actions: &[crate::types::automation_definition::NativeAction],
+        inputs: &PlanInputs<'_>,
+    ) -> Option<RoutinePlan> {
+        self.v2.plan_script_run(routine_id, actions, inputs)
+    }
+
+    /// Record a visible rejected script run (worker failure, stale result, or
+    /// contract error) for status displays.
+    pub fn record_v2_script_failure(&mut self, routine_id: &RoutineId, reason: String) {
+        self.v2.record_script_failure(routine_id, reason);
+    }
+
     pub fn force_trigger_routine(
         &self,
         routine_id: &RoutineId,

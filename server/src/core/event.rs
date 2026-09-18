@@ -18,7 +18,7 @@ use crate::types::{
     event::*,
     group::GroupId,
     integration::CustomActionDescriptor,
-    rule::ForceTriggerRoutineDescriptor,
+    rule::{ForceTriggerRoutineDescriptor, RoutineId},
     scene::{
         ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor, SceneConfig,
         SceneDevicesConfig, SceneId,
@@ -33,7 +33,8 @@ use super::snapshot::SnapshotChanges;
 use super::state::{AppState, PendingWsUpdate};
 use super::{
     automation::{
-        guard_suppression, step_status, FrameContext, PlanInputs, PlannedStepBody, RoutinePlan,
+        guard_suppression, step_status, CompleteResult, FrameContext, InvocationToken, PlanInputs,
+        PlannedStepBody, RoutinePlan, ScriptOutputContract,
     },
     groups::Groups,
     integrations::Integrations,
@@ -625,6 +626,38 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         Event::RoutineSetHelper { helper, value, .. } => {
             apply_helper_write(state, helper, value, &mut outcome);
         }
+        Event::RoutineScriptResult {
+            routine_id,
+            request_id,
+            owner_key,
+            owner_generation,
+            definition_revision,
+            state_revision,
+            causation,
+            value,
+            error,
+        } => {
+            let token = InvocationToken {
+                request_id: *request_id,
+                owner_key: owner_key.clone(),
+                owner_generation: *owner_generation,
+                definition_revision: *definition_revision,
+                state_revision: *state_revision,
+                contract: ScriptOutputContract::RoutineHandler,
+            };
+            apply_script_result(
+                state,
+                routine_id,
+                &token,
+                *causation,
+                value.clone(),
+                error.clone(),
+            );
+            outcome.mark_snapshot_changes(SnapshotChanges {
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            });
+        }
     }
 
     Ok(outcome)
@@ -663,6 +696,75 @@ fn apply_helper_write(
             warn!("Rejected helper write from v2 routine: {error}");
         }
     }
+}
+
+/// Complete one supervised script handler result (P07). The result is only
+/// accepted for the current owner generation and memory revision; accepted
+/// actions are planned against acceptance-time state and dispatched through
+/// the same path as native programs. Rejections remain visible in
+/// `last_run` and dispatch nothing (S16/X03/X05).
+fn apply_script_result(
+    state: &mut AppState,
+    routine_id: &RoutineId,
+    token: &InvocationToken,
+    causation: EventCausation,
+    value: Option<serde_json::Value>,
+    error: Option<String>,
+) {
+    if let Some(message) = error {
+        state.rules.record_v2_script_failure(
+            routine_id,
+            format!(
+                "script_worker_error: {}",
+                super::automation::bounded_text(&message)
+            ),
+        );
+        state.refresh_routine_statuses();
+        return;
+    }
+
+    let value = value.unwrap_or(serde_json::Value::Null);
+    match state
+        .scripts
+        .coordinator_mut()
+        .complete_handler(token, &value)
+    {
+        CompleteResult::Applied { value: outcome, .. } => {
+            let plan = {
+                let inputs = PlanInputs {
+                    devices: state.devices.get_state(),
+                    groups: &state.groups,
+                    helpers: &state.helpers,
+                    intents: &state.intents,
+                };
+                state
+                    .rules
+                    .plan_v2_script_run(routine_id, &outcome.actions, &inputs)
+            };
+            match plan {
+                Some(plan) => {
+                    let status = state.dispatch_v2_plan(plan, causation);
+                    state.rules.record_v2_run(routine_id, status);
+                }
+                None => state.rules.record_v2_script_failure(
+                    routine_id,
+                    "script_result_owner_missing".to_string(),
+                ),
+            }
+        }
+        CompleteResult::Stale(reason) => state.rules.record_v2_script_failure(
+            routine_id,
+            format!("script_result_stale: {}", reason.as_str()),
+        ),
+        CompleteResult::ContractError { message } => state.rules.record_v2_script_failure(
+            routine_id,
+            format!(
+                "script_contract_error: {}",
+                super::automation::bounded_text(&message)
+            ),
+        ),
+    }
+    state.refresh_routine_statuses();
 }
 
 /// Dispatch a routine or user action against the actor-owned state. Kept
@@ -961,9 +1063,11 @@ impl AppState {
     /// to the actor's own event channel in order (A07), and return the visible
     /// run status (X03). Steps suppressed here or at plan time remain in the
     /// status so nothing drops silently (X02).
-    fn dispatch_v2_plan(&mut self, plan: RoutinePlan) -> PlannedRunStatus {
-        let causation =
-            EventCausation::child_of(self.devices.frame_id(), self.devices.mutation_causation());
+    fn dispatch_v2_plan(
+        &mut self,
+        plan: RoutinePlan,
+        causation: EventCausation,
+    ) -> PlannedRunStatus {
         let mut steps = Vec::with_capacity(plan.steps.len() + plan.suppressions.len());
         let mut dropped = 0u64;
         for step in &plan.steps {
@@ -996,6 +1100,38 @@ impl AppState {
             accepted: true,
             steps,
             dropped,
+        }
+    }
+
+    /// Hand admitted script invocations to the supervised pool. A missing or
+    /// failed pool records a visible rejected run for every admitted
+    /// invocation instead of leaving them pending forever.
+    async fn execute_prepared_scripts(
+        &mut self,
+        prepared: Vec<super::automation::PreparedScriptRun>,
+    ) {
+        let pool = match self.scripts.ensure_pool().await {
+            Ok(pool) => pool,
+            Err(message) => {
+                for run in &prepared {
+                    self.rules
+                        .record_v2_script_failure(&run.routine_id, message.clone());
+                }
+                warn!("{message}");
+                self.refresh_routine_statuses();
+                return;
+            }
+        };
+        for run in prepared {
+            self.scripts.spawn_handler_execution(
+                std::sync::Arc::clone(&pool),
+                self.event_tx.clone(),
+                run.routine_id,
+                run.token,
+                run.source_body,
+                run.context,
+                run.causation,
+            );
         }
     }
 
@@ -1094,32 +1230,72 @@ impl AppState {
                     }
                 }
             }
-            let frame = FrameContext {
-                mutations: &mutations,
-                before: &before_view,
-                after: &after_view,
-                groups: &self.groups,
-                helpers: Some(&self.helpers),
-            };
-            let evaluations = self.rules.handle_v2_frame(&frame);
-            if !evaluations.is_empty() {
-                let plans = {
+            let frame_causation = EventCausation::child_of(frame_id, causation);
+            let (evaluations, native_plans, prepared_scripts) = {
+                let frame = FrameContext {
+                    mutations: &mutations,
+                    before: &before_view,
+                    after: &after_view,
+                    groups: &self.groups,
+                    helpers: Some(&self.helpers),
+                };
+                let evaluations = self.rules.handle_v2_frame(&frame);
+                let mut prepared_scripts: Vec<super::automation::PreparedScriptRun> = Vec::new();
+                let mut native_plans: Vec<RoutinePlan> = Vec::new();
+                if !evaluations.is_empty() {
                     let inputs = PlanInputs {
                         devices: &after_view,
                         groups: &self.groups,
                         helpers: &self.helpers,
                         intents: &self.intents,
                     };
-                    self.rules.plan_v2_runs(&evaluations, &inputs)
-                };
-                for plan in plans {
-                    let routine_id = plan.routine_id.clone();
-                    let status = self.dispatch_v2_plan(plan);
-                    self.rules.record_v2_run(&routine_id, status);
+                    native_plans = self.rules.plan_v2_runs(&evaluations, &inputs);
+
+                    // P07: script programs are submitted to the supervised
+                    // worker while the actor keeps running. Context building
+                    // and owner admission happen against this coherent frame;
+                    // the result event plans the returned actions at
+                    // acceptance time.
+                    for evaluation in evaluations
+                        .iter()
+                        .filter(|evaluation| evaluation.will_trigger)
+                    {
+                        let Some(spec) = self.rules.script_spec(&evaluation.routine_id) else {
+                            continue;
+                        };
+                        match self.scripts.prepare_handler_invocation(
+                            &evaluation.routine_id,
+                            evaluation.definition_revision,
+                            spec,
+                            &frame,
+                            frame_id,
+                            origin,
+                            frame_causation,
+                        ) {
+                            Ok(run) => prepared_scripts.push(run),
+                            Err(reason) => self
+                                .rules
+                                .record_v2_script_failure(&evaluation.routine_id, reason),
+                        }
+                    }
                 }
+                (evaluations, native_plans, prepared_scripts)
+            };
+
+            for plan in native_plans {
+                let routine_id = plan.routine_id.clone();
+                let status = self.dispatch_v2_plan(plan, frame_causation);
+                self.rules.record_v2_run(&routine_id, status);
+            }
+            if !evaluations.is_empty() {
                 // Republish the statuses Arc with this frame's decisions and
-                // run outcomes (P05/X03).
+                // run outcomes (P05/X03). Script runs stay visibly pending
+                // until their result event arrives.
                 self.refresh_routine_statuses();
+            }
+
+            if !prepared_scripts.is_empty() {
+                self.execute_prepared_scripts(prepared_scripts).await;
             }
         }
 
@@ -1267,6 +1443,7 @@ pub(crate) mod tests {
             rules: Routines::new(Default::default(), event_tx.clone()),
             helpers: Default::default(),
             intents: Default::default(),
+            scripts: Default::default(),
             event_tx,
             ws: WebSockets::default(),
             ui: Ui::new(),
@@ -2157,5 +2334,292 @@ pub(crate) mod tests {
         assert!(applied
             .get_controllable_state()
             .is_some_and(|state| state.power));
+    }
+
+    /// Worker binary built next to the test executable's profile directory.
+    fn script_worker_binary() -> std::path::PathBuf {
+        let mut directory = std::env::current_exe().expect("test executable path");
+        directory.pop();
+        directory.pop();
+        directory.join("script-worker")
+    }
+
+    fn scripted_routine_row(source_body: &str, revision: i64) -> RoutineRow {
+        RoutineRow {
+            id: "scripted".to_string(),
+            name: "Scripted".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{ "kind": "state_change", "id": "trig", "device": {
+                    "integration_id": "mqtt", "device_id": "lamp"
+                }}],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "script", "spec": {
+                    "api_version": 1,
+                    "source_body": source_body,
+                    "declarations": [{ "kind": "device", "device": {
+                        "integration_id": "mqtt", "device_id": "lamp"
+                    }}],
+                    "limits_profile": "default"
+                }}
+            })),
+            rules: serde_json::Value::Null,
+            actions: serde_json::Value::Null,
+        }
+    }
+
+    async fn next_script_result(
+        state: &mut AppState,
+        event_rx: &mut crate::types::event::RxEventChannel,
+    ) -> Event {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let event = event_rx.recv().await.expect("event channel open");
+                if matches!(event, Event::RoutineScriptResult { .. }) {
+                    return event;
+                }
+                handle_event(state, &event).await.unwrap();
+                state.flush_pending_frames().await;
+            }
+        })
+        .await
+        .expect("script result arrives within the test budget")
+    }
+
+    // P07 vertical slice: a v2 script program is submitted off-actor, its
+    // typed result is planned at acceptance time, dispatched through the same
+    // path as native plans, and made visible as pending until then (X03/X05).
+    #[tokio::test]
+    async fn p07_script_program_executes_off_actor_and_dispatches_typed_actions() {
+        use crate::types::automation_trace::StepDisposition;
+
+        let (mut state, mut event_rx) = test_state();
+        state.scripts.worker_binary = Some(script_worker_binary());
+        state.scripts.clock = || 777;
+
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        let bulb_key = bulb.get_device_key();
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        let source_body = r#"
+            var step = 0;
+            if (ctx.state.memory && typeof ctx.state.memory.step === 'number') {
+                step = ctx.state.memory.step;
+            }
+            if (step >= 1) { return { actions: [] }; }
+            return {
+                actions: [api.actions.setPower({
+                    device: { integration_id: 'mqtt', device_id: 'lamp' },
+                    power: false
+                })],
+                next_state: { step: 1 }
+            };
+        "#;
+        state.runtime_config.routines = vec![scripted_routine_row(source_body, 1)];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let routine_id = crate::types::rule::RoutineId("scripted".to_string());
+        let pending = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("status visible");
+        let pending_v2 = pending.v2.expect("v2 detail attached");
+        assert!(pending_v2.will_trigger);
+        assert!(
+            pending_v2.execution_pending,
+            "script runs stay visibly pending until the worker result arrives"
+        );
+        assert!(pending_v2.last_run.is_none());
+
+        let result = next_script_result(&mut state, &mut event_rx).await;
+        handle_event(&mut state, &result).await.unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("status visible");
+        let v2 = status.v2.expect("v2 detail attached");
+        assert!(!v2.execution_pending);
+        let run = v2.last_run.expect("run status recorded");
+        assert!(run.accepted, "{run:?}");
+        assert_eq!(run.steps.len(), 1);
+        assert_eq!(run.steps[0].kind, "set_power");
+        assert_eq!(run.steps[0].disposition, StepDisposition::Dispatched);
+        assert!(run.steps[0].targets.contains(&"mqtt/lamp".to_string()));
+        assert_eq!(
+            state
+                .scripts
+                .coordinator()
+                .memory(&crate::core::automation::ScriptOwnerId::routine("scripted")),
+            Some(&serde_json::json!({"step": 1}))
+        );
+
+        // The actor normally feeds dispatched events back into itself; the
+        // test drains the channel explicitly and applies them in order. The
+        // change caused by the scripted action can trigger at most one more
+        // invocation, which returns no actions.
+        let mut processed = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            handle_event(&mut state, &event).await.unwrap();
+            processed += 1;
+            assert!(processed < 32, "dispatch loop should terminate");
+        }
+        state.flush_pending_frames().await;
+
+        let applied = state.devices.get_device(&bulb_key).expect("lamp exists");
+        assert!(
+            !applied
+                .get_controllable_state()
+                .is_some_and(|state| state.power),
+            "the scripted action reached the device"
+        );
+    }
+
+    // S16: editing a script owner after submission rejects the late worker
+    // result visibly and dispatches nothing.
+    #[tokio::test]
+    async fn p07_edited_script_owner_rejects_late_result_visibly() {
+        use crate::types::automation_trace::StepDisposition;
+
+        let (mut state, mut event_rx) = test_state();
+        state.scripts.worker_binary = Some(script_worker_binary());
+
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        state.runtime_config.routines = vec![scripted_routine_row("return { actions: [] };", 1)];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        state.runtime_config.routines = vec![scripted_routine_row("return { actions: [] };", 2)];
+        state.apply_runtime_routines();
+
+        let result = next_script_result(&mut state, &mut event_rx).await;
+        handle_event(&mut state, &result).await.unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&crate::types::rule::RoutineId("scripted".to_string()))
+            .cloned()
+            .expect("status visible");
+        let v2 = status.v2.expect("v2 detail attached");
+        assert!(!v2.execution_pending);
+        let run = v2.last_run.expect("rejected run is still visible");
+        assert!(!run.accepted, "{run:?}");
+        let reason = run.steps[0].reason.clone().unwrap_or_default();
+        assert!(
+            reason.contains("definition_changed"),
+            "unexpected rejection reason: {reason}"
+        );
+        assert_eq!(run.steps[0].disposition, StepDisposition::Suppressed);
+    }
+
+    // A missing worker binary degrades to a visible rejected run, not a
+    // blocked actor or a silently pending invocation.
+    #[tokio::test]
+    async fn p07_missing_worker_is_visible_and_does_not_block() {
+        let (mut state, mut event_rx) = test_state();
+        state.scripts.worker_binary = Some(std::path::PathBuf::from("/nonexistent/script-worker"));
+
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        state.runtime_config.routines = vec![scripted_routine_row("return { actions: [] };", 1)];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&crate::types::rule::RoutineId("scripted".to_string()))
+            .cloned()
+            .expect("status visible");
+        let v2 = status.v2.expect("v2 detail attached");
+        assert!(!v2.execution_pending);
+        let run = v2.last_run.expect("failure recorded");
+        assert!(!run.accepted);
+        assert!(
+            run.steps[0]
+                .reason
+                .as_deref()
+                .is_some_and(|reason| reason.contains("worker pool unavailable")),
+            "{:?}",
+            run.steps[0].reason
+        );
+        assert!(event_rx.try_recv().is_err(), "no worker result is expected");
     }
 }

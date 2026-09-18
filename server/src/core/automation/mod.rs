@@ -23,6 +23,7 @@ pub mod plan;
 pub mod runtime;
 pub mod script_contract;
 pub mod script_coordinator;
+pub mod script_runtime;
 
 pub use compile::{
     compile_definition, compile_definition_value, compile_row, definition_fingerprint,
@@ -40,8 +41,9 @@ pub use evaluate::{
 };
 pub use groups::{evaluate_group, MAX_GROUP_EVAL_MEMBERS};
 pub use plan::{
-    action_kind, guard_suppression, plan_evaluation, step_status, step_targets, IntentTarget,
-    IntentTracker, PlanInputs, PlannedStep, PlannedStepBody, RoutinePlan, MAX_PLANNED_STEPS,
+    action_kind, guard_suppression, plan_evaluation, plan_script_actions, step_status,
+    step_targets, IntentTarget, IntentTracker, PlanInputs, PlannedStep, PlannedStepBody,
+    RoutinePlan, MAX_PLANNED_STEPS,
 };
 pub use runtime::{V2Definition, V2Runtime};
 pub use script_contract::{
@@ -54,4 +56,7 @@ pub use script_coordinator::{
     Admission, AdmissionError, CoalescePolicy, CompleteResult, InvocationToken, OwnerKind,
     ScriptCoordinator, ScriptInvocation, ScriptOwnerId, StaleReason,
     MAX_PENDING_INVOCATIONS_PER_OWNER,
+};
+pub use script_runtime::{
+    bounded_text, PreparedScriptRun, ScriptExecution, MAX_SCRIPT_ERROR_CHARS,
 };
