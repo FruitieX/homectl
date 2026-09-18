@@ -371,6 +371,11 @@ impl DeviceData {
     }
 }
 
+/// Maximum CIE 1976 u′v′ chromaticity distance treated as the same color.
+/// Comparable to the old per-component xy tolerance, but uniformly perceptual
+/// and independent of the color mode a device used to report the same color.
+const CHROMATICITY_UV_DELTA: f32 = 0.0075;
+
 /// Compares light colors in the color mode as preferred by the device, allowing
 /// slight deltas to account for rounding errors.
 ///
@@ -421,7 +426,7 @@ fn cmp_light_color(
     let xy_delta = 0.01 + f32::EPSILON;
     let cct_delta = 10;
 
-    match (incoming, expected_converted) {
+    let components_match = match (incoming, &expected_converted) {
         (Some(DeviceColor::Xy(a)), Some(DeviceColor::Xy(b))) => {
             // Light state is equal if all components differ by less than a given delta
             (f32::abs(*a.x - *b.x) <= xy_delta) && (f32::abs(*a.y - *b.y) <= xy_delta)
@@ -437,7 +442,23 @@ fn cmp_light_color(
             u64::abs_diff(a.ct, b.ct) <= cct_delta
         }
         (_, _) => false,
+    };
+    if components_match {
+        return true;
     }
+
+    // Final fallback: compare in the perceptually uniform CIE 1976 u′v′ plane.
+    // Devices that map a received HS/CT command through their own gamut model
+    // report an equivalent chromaticity in a different representation, which
+    // should not be treated as drift.
+    if let (Some(a), Some(b)) = (
+        incoming.as_ref().and_then(DeviceColor::to_xy),
+        expected_converted.as_ref().and_then(DeviceColor::to_xy),
+    ) {
+        return DeviceColor::uv_distance(&a, &b) <= CHROMATICITY_UV_DELTA;
+    }
+
+    false
 }
 
 /// Compares the state of a ControllableDevice to some given ControllableState.
@@ -902,6 +923,35 @@ mod tests {
         assert!(device.last_report.as_ref().unwrap().matches_requested);
         reported.state.brightness = Some(OrderedFloat(0.6));
         assert!(!cmp_device_states(&reported, &device.state));
+    }
+
+    #[test]
+    fn perceptual_uv_fallback_absorbs_rounding_but_rejects_visible_drift() {
+        let capabilities = Capabilities {
+            brightness: Some(true),
+            xy: true,
+            ..Default::default()
+        };
+        let expected = Some(DeviceColor::new_from_xy(0.35, 0.36));
+        // Just outside the per-component xy tolerance, but perceptually the
+        // same chromaticity (CIE 1976 u'v' distance ~0.006).
+        let close = Some(DeviceColor::new_from_xy(0.35, 0.36 + 0.0101));
+        assert!(cmp_light_color(
+            &capabilities,
+            &close,
+            &Some(1.0),
+            &expected,
+            &Some(1.0)
+        ));
+        // Hue-style HS interpretation of hs(35,0.2): visibly different.
+        let far = Some(DeviceColor::new_from_xy(0.4168, 0.3826));
+        assert!(!cmp_light_color(
+            &capabilities,
+            &far,
+            &Some(1.0),
+            &expected,
+            &Some(1.0)
+        ));
     }
 
     #[test]

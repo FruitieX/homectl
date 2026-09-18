@@ -484,6 +484,11 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     group_keys,
                     use_scene_transition: *use_scene_transition,
                     transition,
+                    default_transition: state
+                        .runtime_config
+                        .core
+                        .scene_transition_ms
+                        .map(|ms| ordered_float::OrderedFloat(ms as f32 / 1000.0)),
                     rollout,
                     rollout_source_device_key,
                     rollout_duration_ms,
@@ -536,6 +541,11 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     rollout_source_device_key,
                     rollout_duration_ms,
                     &device_positions,
+                    state
+                        .runtime_config
+                        .core
+                        .scene_transition_ms
+                        .map(|ms| ordered_float::OrderedFloat(ms as f32 / 1000.0)),
                     &state.scenes,
                 )
                 .await;

@@ -24,6 +24,9 @@ use std::sync::{
 use std::time::Duration;
 
 const DEVICE_DB_WRITE_DEBOUNCE_MS: u64 = 100;
+/// Extra time after a requested transition during which reports are treated as
+/// in-flight instead of as drift that needs correcting.
+const DEVICE_CORRECTION_SETTLE_MARGIN_MS: i64 = 500;
 
 #[derive(Debug, PartialEq, Eq)]
 struct SpatialRolloutPlan {
@@ -37,6 +40,9 @@ pub struct ActivateSceneRequest<'a> {
     pub group_keys: &'a Option<Vec<GroupId>>,
     pub use_scene_transition: bool,
     pub transition: &'a Option<OrderedFloat<f32>>,
+    /// System-wide automation fallback used when neither an explicit
+    /// transition nor scene-stored transitions apply.
+    pub default_transition: Option<OrderedFloat<f32>>,
     pub rollout: &'a Option<RolloutStyle>,
     pub rollout_source_device_key: &'a Option<DeviceKey>,
     pub rollout_duration_ms: &'a Option<u64>,
@@ -434,23 +440,52 @@ impl Devices {
                 self.state.0.insert(device_key, incoming.clone());
             }
         } else {
-            // Device state does not match internal state, maybe the device
-            // missed a state update or forgot its state? We will try fixing
-            // this by emitting a SetExternalState event back to integration
+            // Device state does not match internal state. During a requested
+            // transition the device reports intermediate values; correcting
+            // those would restart the fade every report and flood the
+            // integration queue, so only correct once the transition settled.
+            let correction_in_flight = if let DeviceData::Controllable(data) = &current.data {
+                let settle_ms = data
+                    .state
+                    .transition
+                    .map(|transition| {
+                        ((transition.0.max(0.0) * 1000.0) as i64)
+                            .saturating_add(DEVICE_CORRECTION_SETTLE_MARGIN_MS)
+                    })
+                    .unwrap_or(0);
+                settle_ms > 0
+                    && data.requested_at_ms.is_some_and(|requested_at| {
+                        let elapsed = chrono::Utc::now().timestamp_millis() - requested_at;
+                        elapsed >= 0 && elapsed < settle_ms
+                    })
+            } else {
+                false
+            };
 
-            let expected_converted =
-                physical_expected.color_to_device_preferred_mode(&incoming_state.capabilities);
+            if correction_in_flight {
+                debug!(
+                    "{integration_id}/{name} report arrived while a transition is in flight; deferring drift correction",
+                    integration_id = incoming.integration_id,
+                    name = incoming.name,
+                );
+            } else {
+                // Maybe the device missed a state update or forgot its state?
+                // We will try fixing this by emitting a SetExternalState event
+                // back to the integration.
+                let expected_converted =
+                    physical_expected.color_to_device_preferred_mode(&incoming_state.capabilities);
 
-            info!(
-                "{integration_id}/{name} state mismatch detected:\nwas:      {}\nexpected: {}\n",
-                incoming_state.state,
-                expected_converted,
-                integration_id = incoming.integration_id,
-                name = incoming.name,
-            );
+                info!(
+                    "{integration_id}/{name} state mismatch detected:\nwas:      {}\nexpected: {}\n",
+                    incoming_state.state,
+                    expected_converted,
+                    integration_id = incoming.integration_id,
+                    name = incoming.name,
+                );
 
-            self.event_tx
-                .send(Event::SetExternalState { device: current });
+                self.event_tx
+                    .send(Event::SetExternalState { device: current });
+            }
         }
 
         // Always make sure device raw state is up to date, note that set_raw
@@ -729,7 +764,11 @@ impl Devices {
                 if let Some(transition) = request.transition {
                     scene_device.set_transition(Some(transition.0))
                 } else if request.use_scene_transition {
+                    // Scene-stored transitions are an explicit per-scene choice
+                    // and win over the system-wide automation fallback.
                     scene_device
+                } else if let Some(default_transition) = request.default_transition {
+                    scene_device.set_transition(Some(default_transition.0))
                 } else {
                     scene_device.set_transition(None)
                 }
@@ -930,6 +969,7 @@ impl Devices {
         rollout_source_device_key: &Option<DeviceKey>,
         rollout_duration_ms: &Option<u64>,
         device_positions: &[DevicePositionRow],
+        default_transition: Option<OrderedFloat<f32>>,
         scenes: &Scenes,
     ) -> Option<()> {
         let next_scene = {
@@ -950,6 +990,7 @@ impl Devices {
             group_keys: &next_scene.group_keys,
             use_scene_transition: next_scene.use_scene_transition,
             transition: &next_scene.transition,
+            default_transition,
             rollout,
             rollout_source_device_key,
             rollout_duration_ms,
@@ -1097,6 +1138,61 @@ mod tests {
                 current.get_controllable_state().unwrap().color
             );
         }
+    }
+
+    #[tokio::test]
+    async fn in_flight_transition_defers_drift_correction() {
+        let (mut devices, mut rx) = test_devices();
+
+        let mut in_flight = managed_controllable_device("lamp", "Lamp");
+        if let DeviceData::Controllable(data) = &mut in_flight.data {
+            data.state.brightness = Some(OrderedFloat(0.5));
+            data.state.transition = Some(OrderedFloat(2.0));
+            data.requested_at_ms = Some(chrono::Utc::now().timestamp_millis());
+        }
+        devices.set_state(&in_flight, true, true);
+        while rx.try_recv().is_ok() {}
+
+        let mut incoming = in_flight.clone();
+        if let DeviceData::Controllable(data) = &mut incoming.data {
+            data.state.brightness = Some(OrderedFloat(0.1));
+            data.state.transition = None;
+        }
+        let DeviceData::Controllable(incoming_state) = &incoming.data else {
+            panic!("expected controllable device");
+        };
+        devices
+            .handle_controllable_update_calibrated(
+                in_flight.clone(),
+                &incoming,
+                incoming_state,
+                None,
+            )
+            .await
+            .unwrap();
+        while let Ok(event) = rx.try_recv() {
+            assert!(
+                !matches!(event, crate::types::event::Event::SetExternalState { .. }),
+                "correction must be deferred while the transition is in flight"
+            );
+        }
+
+        let mut settled = in_flight.clone();
+        if let DeviceData::Controllable(data) = &mut settled.data {
+            data.requested_at_ms = Some(chrono::Utc::now().timestamp_millis() - 10_000);
+        }
+        devices.set_state(&settled, true, true);
+        while rx.try_recv().is_ok() {}
+        devices
+            .handle_controllable_update_calibrated(settled, &incoming, incoming_state, None)
+            .await
+            .unwrap();
+        let corrected = std::iter::from_fn(|| rx.try_recv().ok())
+            .any(|event| matches!(event, crate::types::event::Event::SetExternalState { .. }));
+        assert!(
+            corrected,
+            "drift must be corrected once the transition window has elapsed"
+        );
     }
 
     fn placeholder_sensor(id: &str, name: &str, raw: Option<serde_json::Value>) -> Device {
@@ -1479,6 +1575,7 @@ mod tests {
                 group_keys: &None,
                 use_scene_transition: false,
                 transition: &Some(OrderedFloat(1.5)),
+                default_transition: None,
                 rollout: &None,
                 rollout_source_device_key: &None,
                 rollout_duration_ms: &None,
@@ -1497,6 +1594,116 @@ mod tests {
 
         assert_eq!(data.state.transition, Some(OrderedFloat(1.5)));
         assert_eq!(data.state.brightness, Some(OrderedFloat(0.7)));
+    }
+
+    #[tokio::test]
+    async fn activate_scene_falls_back_to_default_transition() {
+        let (mut devices, _event_rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
+        let target = managed_controllable_device("lamp1", "Lamp 1");
+        let target_key = target.get_device_key();
+        devices.set_state(&target, true, true);
+
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Focus".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        color: None,
+                        brightness: Some(OrderedFloat(0.7)),
+                        transition: None,
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        devices
+            .activate_scene(ActivateSceneRequest {
+                scene_id: &scene_id,
+                device_keys: &None,
+                group_keys: &None,
+                use_scene_transition: false,
+                transition: &None,
+                default_transition: Some(OrderedFloat(1.0)),
+                rollout: &None,
+                rollout_source_device_key: &None,
+                rollout_duration_ms: &None,
+                device_positions: &[],
+                groups: &groups,
+                scenes: &scenes,
+            })
+            .await;
+
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+        assert_eq!(data.state.transition, Some(OrderedFloat(1.0)));
+    }
+
+    #[tokio::test]
+    async fn scene_stored_transition_wins_over_default_transition() {
+        let (mut devices, _event_rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let scene_id = crate::types::scene::SceneId::from_str("focus").unwrap();
+        let target = managed_controllable_device("lamp1", "Lamp 1");
+        let target_key = target.get_device_key();
+        devices.set_state(&target, true, true);
+
+        let mut scenes_config = ScenesConfig::new();
+        scenes_config.insert(
+            scene_id.clone(),
+            SceneConfig {
+                name: "Focus".to_string(),
+                devices: Some(create_scene_device_config(
+                    &target_key.to_string(),
+                    SceneDeviceConfig::DeviceState(SceneDeviceState {
+                        power: Some(true),
+                        color: None,
+                        brightness: Some(OrderedFloat(0.7)),
+                        transition: Some(OrderedFloat(0.2)),
+                    }),
+                )),
+                groups: None,
+                hidden: None,
+                script: None,
+            },
+        );
+        let mut scenes = Scenes::new(scenes_config);
+        scenes.force_invalidate(&devices, &groups);
+
+        devices
+            .activate_scene(ActivateSceneRequest {
+                scene_id: &scene_id,
+                device_keys: &None,
+                group_keys: &None,
+                use_scene_transition: true,
+                transition: &None,
+                default_transition: Some(OrderedFloat(1.0)),
+                rollout: &None,
+                rollout_source_device_key: &None,
+                rollout_duration_ms: &None,
+                device_positions: &[],
+                groups: &groups,
+                scenes: &scenes,
+            })
+            .await;
+
+        let stored = devices.get_device(&target_key).unwrap();
+        let DeviceData::Controllable(data) = &stored.data else {
+            panic!("expected controllable device");
+        };
+        assert_eq!(data.state.transition, Some(OrderedFloat(0.2)));
     }
 
     #[tokio::test]
@@ -1538,6 +1745,7 @@ mod tests {
                 group_keys: &None,
                 use_scene_transition: false,
                 transition: &None,
+                default_transition: None,
                 rollout: &None,
                 rollout_source_device_key: &None,
                 rollout_duration_ms: &None,
@@ -1604,6 +1812,7 @@ mod tests {
                 group_keys: &None,
                 use_scene_transition: false,
                 transition: &None,
+                default_transition: None,
                 rollout: &None,
                 rollout_source_device_key: &None,
                 rollout_duration_ms: &None,
@@ -1669,6 +1878,7 @@ mod tests {
                 group_keys: &None,
                 use_scene_transition: true,
                 transition: &None,
+                default_transition: None,
                 rollout: &None,
                 rollout_source_device_key: &None,
                 rollout_duration_ms: &None,

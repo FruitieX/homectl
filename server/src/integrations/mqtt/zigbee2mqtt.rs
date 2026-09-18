@@ -266,9 +266,18 @@ pub(super) fn encode(device: &Device) -> Result<Value> {
         }
     }
     if let Some(color) = &data.state.color {
-        let color = color
-            .to_device_preferred_mode(&data.capabilities)
-            .ok_or_else(|| eyre!("Unsupported color"))?;
+        // Hue (and other) lights map HS through their own gamut model, so the
+        // XY they report back never matches our HS->XY conversion. When the
+        // device accepts XY, send XY so the reported chromaticity is exactly
+        // what we requested and drift correction can compare like with like.
+        // CT stays in its native mode.
+        let color = if data.capabilities.xy && !matches!(color, DeviceColor::Ct(_)) {
+            DeviceColor::Xy(color.to_xy().ok_or_else(|| eyre!("Unsupported color"))?)
+        } else {
+            color
+                .to_device_preferred_mode(&data.capabilities)
+                .ok_or_else(|| eyre!("Unsupported color"))?
+        };
         match color {
             DeviceColor::Ct(ct) => {
                 let range = data
@@ -388,15 +397,22 @@ mod tests {
     }
 
     #[test]
-    fn hs_is_scaled_and_readonly_temperature_is_not_advertised() {
+    fn hs_reports_are_scaled_and_encoded_as_xy_when_supported() {
         let mut inventory = inventory();
         inventory[0]["definition"]["exposes"][0]["features"][2]["access"] = json!(1);
         let meta = metadata(&inventory[0]).unwrap();
         assert!(meta.capabilities.ct.is_none());
         let device = decode(json!({"state":"ON","color_mode":"hs","color":{"hue":120,"saturation":50,"x":0.3,"y":0.3},"color_temp":250}), &meta, &"zigbee".parse().unwrap(), &MqttConfig::default()).unwrap();
+        let DeviceData::Controllable(data) = &device.data else {
+            panic!()
+        };
+        assert_eq!(data.state.color, Some(DeviceColor::new_from_hs(120, 0.5)));
+        // Hue-style bulbs map HS through their own gamut model; send XY so the
+        // reported chromaticity matches our conversion exactly.
+        let expected = DeviceColor::new_from_hs(120, 0.5).to_xy().unwrap();
         assert_eq!(
             encode(&device).unwrap()["color"],
-            json!({"hue":120,"saturation":50.0})
+            json!({"x": expected.x, "y": expected.y})
         );
     }
 

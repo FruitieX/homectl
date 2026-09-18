@@ -224,6 +224,23 @@ impl DeviceColor {
         }
     }
 
+    /// Perceptual chromaticity distance in CIE 1976 u′v′. This is the same
+    /// space used by device color calibration and is far more uniform than
+    /// raw CIE 1931 xy deltas.
+    pub fn uv_distance(a: &Xy, b: &Xy) -> f32 {
+        let to_uv = |xy: &Xy| -> (f32, f32) {
+            let denominator = -2.0 * *xy.x + 12.0 * *xy.y + 3.0;
+            if !denominator.is_finite() || denominator.abs() <= f32::EPSILON {
+                let d65 = -2.0 * Self::D65_X + 12.0 * Self::D65_Y + 3.0;
+                return (4.0 * Self::D65_X / d65, 9.0 * Self::D65_Y / d65);
+            }
+            (4.0 * *xy.x / denominator, 9.0 * *xy.y / denominator)
+        };
+        let (au, av) = to_uv(a);
+        let (bu, bv) = to_uv(b);
+        ((au - bu).powi(2) + (av - bv).powi(2)).sqrt()
+    }
+
     pub fn to_hs(&self) -> Option<Hs> {
         match self {
             DeviceColor::Hs(hs) => Some(hs.clone()),
@@ -423,5 +440,24 @@ mod tests {
                 assert!((round_trip.s.into_inner() - saturation).abs() <= 0.03);
             }
         }
+    }
+
+    #[test]
+    fn uv_distance_is_small_for_rounding_and_large_for_different_colors() {
+        let reference = Xy {
+            x: OrderedFloat(0.4168),
+            y: OrderedFloat(0.3826),
+        };
+        let rounded = Xy {
+            x: OrderedFloat(0.4167849),
+            y: OrderedFloat(0.38260472),
+        };
+        assert!(DeviceColor::uv_distance(&reference, &rounded) < 1e-4);
+
+        let shifted = Xy {
+            x: OrderedFloat(0.3469),
+            y: OrderedFloat(0.3590),
+        };
+        assert!(DeviceColor::uv_distance(&reference, &shifted) > 0.03);
     }
 }

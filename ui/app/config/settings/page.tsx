@@ -345,7 +345,7 @@ export default function SettingsPage() {
                     render={({ field }) => (
                       <FormItem className="mt-6">
                         <FormLabel>
-                          Scene application transition (milliseconds)
+                          Scene activation transition (milliseconds)
                         </FormLabel>
                         <FormControl>
                           <Input
@@ -369,9 +369,10 @@ export default function SettingsPage() {
                           />
                         </FormControl>
                         <FormDescription>
-                          Used when applying scenes from the UI. A configured
-                          value overrides scene-stored transition defaults;
-                          leave empty to preserve existing scene behavior.
+                          Default transition for scene activations without an
+                          explicit or scene-stored transition, including
+                          routines and their rollouts. Set this to 1000 for one
+                          second; leave empty to use integration defaults.
                         </FormDescription>
                         <FormMessage />
                       </FormItem>
