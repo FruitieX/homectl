@@ -34,6 +34,8 @@ ENV HOMECTL_UI_DIST_DIR=/app/ui/dist
 WORKDIR /app
 
 COPY --from=server-builder /app/target/release/homectl-server /usr/local/bin/homectl-server
+COPY --from=server-builder /app/target/release/script-worker /usr/local/bin/script-worker
+RUN /usr/local/bin/script-worker </dev/null
 COPY --from=ui-builder /app/ui/dist /app/ui/dist
 
 EXPOSE 45289

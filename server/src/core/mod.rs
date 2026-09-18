@@ -10,6 +10,7 @@ pub mod event;
 pub mod groups;
 pub mod helpers;
 pub mod integrations;
+pub mod js_worker;
 pub mod logs;
 pub mod routine_history;
 pub mod routine_validation;

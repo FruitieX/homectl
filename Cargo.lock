@@ -1754,6 +1754,7 @@ dependencies = [
  "ical",
  "itertools 0.14.0",
  "jsonptr",
+ "libc",
  "log",
  "macro-attr",
  "newtype_derive",
