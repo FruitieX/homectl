@@ -231,10 +231,14 @@ async fn run_actor(
                 let handle_started_at = Instant::now();
                 let outcome = handle_event(&mut app_state, &event).await;
                 let handle_elapsed = handle_started_at.elapsed();
-                let snapshot_changes = outcome
+                let mut snapshot_changes = outcome
                     .as_ref()
                     .map(|outcome| outcome.snapshot_changes())
                     .unwrap_or_else(|_| SnapshotChanges::all());
+
+                // Evaluate the mutations this command collected and merge any
+                // routine/derivation changes into the published snapshot.
+                snapshot_changes.include(app_state.flush_pending_frames().await);
 
                 let publish_started_at = Instant::now();
                 app_state.publish_snapshot(snapshot_changes);
@@ -271,7 +275,9 @@ async fn run_actor(
                 let result =
                     crate::core::scene_commands::apply_scene_command(&mut app_state, &command);
                 if result.is_ok() {
-                    app_state.publish_snapshot(SnapshotChanges::devices());
+                    let mut changes = SnapshotChanges::devices();
+                    changes.include(app_state.flush_pending_frames().await);
+                    app_state.publish_snapshot(changes);
                 }
                 metrics.record(
                     kind_idx,
@@ -296,11 +302,15 @@ async fn run_actor(
                     Err(error) => Err(error),
                     Ok(event) => match handle_event(&mut app_state, &event).await {
                         Err(error) => {
-                            app_state.publish_snapshot(SnapshotChanges::all());
+                            let mut changes = SnapshotChanges::all();
+                            changes.include(app_state.flush_pending_frames().await);
+                            app_state.publish_snapshot(changes);
                             Err(error.to_string())
                         }
                         Ok(outcome) => {
-                            app_state.publish_snapshot(outcome.snapshot_changes());
+                            let mut changes = outcome.snapshot_changes();
+                            changes.include(app_state.flush_pending_frames().await);
+                            app_state.publish_snapshot(changes);
                             for work in outcome.into_deferred_work() {
                                 if deferred_work_tx.send(work).is_err() {
                                     warn!("Deferred event worker channel closed");
@@ -327,6 +337,7 @@ async fn run_actor(
                 let mutate_elapsed = mutate_started_at.elapsed();
 
                 let publish_started_at = Instant::now();
+                app_state.flush_pending_frames().await;
                 app_state.publish_snapshot(SnapshotChanges::all());
                 let publish_elapsed = publish_started_at.elapsed();
 
@@ -407,5 +418,6 @@ fn event_kind(event: &Event) -> &'static str {
         Event::DbEditScene { .. } => "DbEditScene",
         Event::DbDeleteScene { .. } => "DbDeleteScene",
         Event::Action(_) => "Action",
+        Event::RoutineAction { .. } => "RoutineAction",
     }
 }

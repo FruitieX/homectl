@@ -72,7 +72,10 @@ impl Integration for Random {
     async fn register(&mut self) -> Result<()> {
         let device = mk_random_device(self);
 
-        self.event_tx.send(Event::ExternalStateUpdate { device });
+        self.event_tx.send(Event::ExternalStateUpdate {
+            device,
+            integration_epoch: None,
+        });
 
         Ok(())
     }
@@ -135,7 +138,10 @@ async fn poll_sensor(random: Random) {
 
         let device = mk_random_device(&random);
 
-        event_tx.send(Event::ExternalStateUpdate { device });
+        event_tx.send(Event::ExternalStateUpdate {
+            device,
+            integration_epoch: None,
+        });
     }
 }
 

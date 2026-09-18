@@ -4,20 +4,20 @@ import type { IntegrationConfigFieldOption } from "./IntegrationConfigFieldOptio
 import type { IntegrationConfigFieldVisibility } from "./IntegrationConfigFieldVisibility";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type IntegrationConfigFieldSchema = {
+export type IntegrationConfigFieldSchema = { 
 /**
  * Dot-separated config path, for example
  * `outbound_device_updates.min_interval_ms`.
  */
-key: string, label: string, kind: IntegrationConfigFieldKind, required: boolean, description: string | null, placeholder: string | null, options?: Array<IntegrationConfigFieldOption>, default_value: JsonValue | null, min: number | null, max: number | null, step: number | null, help_text: string | null,
+key: string, label: string, kind: IntegrationConfigFieldKind, required: boolean, description: string | null, placeholder: string | null, options?: Array<IntegrationConfigFieldOption>, default_value: JsonValue | null, min: number | null, max: number | null, step: number | null, help_text: string | null, 
 /**
  * Optional visual section/group for schema-driven configuration forms.
  */
-section: string | null,
+section: string | null, 
 /**
  * Obscure settings are hidden in the form's collapsed advanced section.
  */
-advanced: boolean,
+advanced: boolean, 
 /**
  * Only show this field when another config value equals the given value.
  */

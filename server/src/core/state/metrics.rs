@@ -29,12 +29,13 @@ pub const KIND_LABELS: &[&str] = &[
     "HandleEvent:DbEditScene",
     "HandleEvent:DbDeleteScene",
     "HandleEvent:Action",
+    "HandleEvent:RoutineAction",
     "Mutate",
     "ControlDevice",
     "ActivateScene",
 ];
 
-pub const KIND_MUTATE: usize = 10;
+pub const KIND_MUTATE: usize = 11;
 
 /// Aggregated counters for the state actor. One entry per
 /// [`KIND_LABELS`] slot.
@@ -173,8 +174,8 @@ pub fn kind_index_for_command(cmd: &StateCommand) -> usize {
     match cmd {
         StateCommand::HandleEvent { event, .. } => event_kind_index(event),
         StateCommand::Mutate(_) => KIND_MUTATE,
-        StateCommand::ControlDevice { .. } => 11,
-        StateCommand::ActivateScene { .. } => 12,
+        StateCommand::ControlDevice { .. } => 12,
+        StateCommand::ActivateScene { .. } => 13,
     }
 }
 
@@ -191,5 +192,6 @@ fn event_kind_index(event: &crate::types::event::Event) -> usize {
         Event::DbEditScene { .. } => 7,
         Event::DbDeleteScene { .. } => 8,
         Event::Action(_) => 9,
+        Event::RoutineAction { .. } => 10,
     }
 }

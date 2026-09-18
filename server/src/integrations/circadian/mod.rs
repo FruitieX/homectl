@@ -67,7 +67,10 @@ impl Integration for Circadian {
     async fn register(&mut self) -> Result<()> {
         let device = mk_circadian_device(self);
 
-        self.event_tx.send(Event::ExternalStateUpdate { device });
+        self.event_tx.send(Event::ExternalStateUpdate {
+            device,
+            integration_epoch: None,
+        });
 
         Ok(())
     }
@@ -211,6 +214,9 @@ async fn poll_sensor(circadian: Circadian) {
             device,
             skip_external_update: None,
             skip_db_update: None,
+            origin: Some(crate::types::automation_event::EventOrigin::Derived),
+            causation: None,
+            integration_epoch: None,
         });
     }
 }

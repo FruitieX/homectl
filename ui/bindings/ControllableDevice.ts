@@ -10,7 +10,7 @@ import type { SceneId } from "./SceneId";
 /**
  * Requested state and the latest separately observed integration report.
  */
-export type ControllableDevice = {
+export type ControllableDevice = { 
 /**
  * Projection of the integration's database-backed disabled_device_ids policy.
  */

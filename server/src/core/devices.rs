@@ -10,7 +10,7 @@ use super::scenes::{get_next_cycled_scene, Scenes};
 use crate::types::device::{cmp_device_states, ControllableDevice, DeviceRef, ManageKind};
 use crate::types::group::GroupId;
 use crate::types::{
-    automation_event::{EventOrigin, EventSequencer},
+    automation_event::{DeviceMutation, EventCausation, EventId, EventOrigin, EventSequencer},
     device::{Device, DeviceData, DeviceKey, DevicesState},
     event::{Event, TxEventChannel},
     scene::{ActivateSceneDescriptor, RolloutStyle, SceneId},
@@ -171,6 +171,14 @@ pub struct Devices {
     pending_db_updates: Arc<Mutex<BTreeMap<DeviceKey, Device>>>,
     db_write_flush_pending: Arc<AtomicBool>,
     event_sequencer: Arc<EventSequencer>,
+    /// Device mutations applied since the last actor-command flush. Collected
+    /// instead of pushing an `InternalStateUpdate` back through the general
+    /// event queue, so one command's changes form one coherent frame.
+    pending_mutations: Vec<DeviceMutation>,
+    /// Causation metadata of the command currently being handled.
+    mutation_causation: EventCausation,
+    /// Lazily allocated frame id for the command currently being handled.
+    current_frame_id: Option<EventId>,
 }
 
 impl Devices {
@@ -182,7 +190,42 @@ impl Devices {
             pending_db_updates: Default::default(),
             db_write_flush_pending: Arc::new(AtomicBool::new(false)),
             event_sequencer: Arc::new(EventSequencer::new()),
+            pending_mutations: Vec::new(),
+            mutation_causation: EventCausation::default(),
+            current_frame_id: None,
         }
+    }
+
+    /// Start collecting mutations for one actor command with the given
+    /// causation. Called by the actor (and by tests) before handling an event.
+    pub fn begin_command(&mut self, causation: EventCausation) {
+        self.mutation_causation = causation;
+        self.current_frame_id = None;
+    }
+
+    pub fn mutation_causation(&self) -> EventCausation {
+        self.mutation_causation
+    }
+
+    /// Frame identity for the command currently being handled. Allocated on
+    /// first use so commands that produce no effects allocate nothing.
+    pub fn frame_id(&mut self) -> EventId {
+        if let Some(frame_id) = self.current_frame_id {
+            return frame_id;
+        }
+
+        let frame_id = self.event_sequencer.next();
+        self.current_frame_id = Some(frame_id);
+        frame_id
+    }
+
+    /// Drain the mutations collected since the last flush.
+    pub fn take_pending_mutations(&mut self) -> Vec<DeviceMutation> {
+        std::mem::take(&mut self.pending_mutations)
+    }
+
+    pub fn pending_mutation_count(&self) -> usize {
+        self.pending_mutations.len()
     }
 
     fn schedule_db_update(&self, device: Device) {
@@ -303,7 +346,7 @@ impl Devices {
 
                     let device = db_device;
 
-                    self.set_state(&device, true, true);
+                    self.set_state_with_origin(&device, true, true, EventOrigin::Startup);
                 }
                 info!("Restored devices from DB");
             }
@@ -409,7 +452,7 @@ impl Devices {
                     }
                 }
             }
-            self.set_state(&logical, true, false);
+            self.set_state_with_origin(&logical, true, false, EventOrigin::Report);
 
             return Ok(());
         }
@@ -693,12 +736,14 @@ impl Devices {
         let old = old.cloned();
         self.state.0.insert(device_key.clone(), device.clone());
 
-        self.event_tx.send(Event::InternalStateUpdate {
+        // Collect rather than queue: the actor evaluates this mutation inside
+        // the command that produced it, against this transaction's own frame.
+        self.pending_mutations.push(DeviceMutation {
+            event_id: self.event_sequencer.next(),
             device_key,
-            old,
-            new: device.clone(),
-            event_id: Some(self.event_sequencer.next()),
-            origin: Some(origin),
+            before: old,
+            after: device.clone(),
+            origin,
         });
 
         if !skip_external_update && !device.is_sensor() {
@@ -754,7 +799,8 @@ impl Devices {
         }
 
         if emit_internal_state_update {
-            self.set_state(&device, true, true);
+            // Raw refreshes are part of an integration report path.
+            self.set_state_with_origin(&device, true, true, EventOrigin::Report);
         } else {
             self.state.0.insert(device.get_device_key(), device);
         }
@@ -881,6 +927,9 @@ impl Devices {
 
         self.apply_devices_immediately(immediate_devices);
 
+        // Delayed steps are separate timed batches that keep the source/cause
+        // metadata of the command that scheduled them.
+        let causation = self.mutation_causation;
         for (delay_ms, device) in delayed_devices {
             let event_tx = self.event_tx.clone();
 
@@ -890,6 +939,8 @@ impl Devices {
                     device,
                     skip_external_update: Some(false),
                     skip_db_update: Some(false),
+                    origin: Some(EventOrigin::Derived),
+                    causation: Some(causation),
                 });
             });
         }
@@ -1510,7 +1561,7 @@ mod tests {
 
     #[tokio::test]
     async fn placeholder_sensor_update_does_not_emit_internal_state_update() {
-        let (mut devices, mut event_rx) = test_devices();
+        let (mut devices, _event_rx) = test_devices();
         let scenes = Scenes::default();
         let current = boolean_sensor(
             "device1",
@@ -1521,18 +1572,21 @@ mod tests {
         let incoming = placeholder_sensor("device1", "device1", Some(json!({ "linkquality": 87 })));
 
         devices.set_state(&current, true, true);
-        let _ = event_rx
-            .try_recv()
-            .expect("initial sensor state should emit one event");
+        assert_eq!(
+            devices.take_pending_mutations().len(),
+            1,
+            "initial sensor state should collect one mutation"
+        );
 
         devices
             .handle_external_state_update(&incoming, &scenes)
             .await
             .unwrap();
 
-        assert!(
-            event_rx.try_recv().is_err(),
-            "placeholder metadata update should not emit a fresh internal state update"
+        assert_eq!(
+            devices.take_pending_mutations().len(),
+            0,
+            "placeholder metadata update should not collect a fresh mutation"
         );
 
         let stored = devices.get_device(&current.get_device_key()).unwrap();

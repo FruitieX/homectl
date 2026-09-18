@@ -446,6 +446,7 @@ impl Integration for Mqtt {
                                             } else {
                                                 chrono::Utc::now().timestamp_millis()
                                             },
+                                            integration_epoch: None,
                                         });
                                     }
                                 }
@@ -472,6 +473,7 @@ impl Integration for Mqtt {
                                         ),
                                         online,
                                         observed_at_ms,
+                                        integration_epoch: None,
                                     });
                                 }
                             }
@@ -496,7 +498,10 @@ impl Integration for Mqtt {
                                             matches_requested: false,
                                         }));
                                 }
-                                let event = Event::ExternalStateUpdate { device };
+                                let event = Event::ExternalStateUpdate {
+                                    device,
+                                    integration_epoch: None,
+                                };
                                 event_tx.send(event);
                             }
                         }

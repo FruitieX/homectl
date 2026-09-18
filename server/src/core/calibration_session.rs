@@ -105,9 +105,15 @@ mod tests {
                 );
             }
         }
-        handle_event(&mut state, &Event::ExternalStateUpdate { device: physical })
-            .await
-            .unwrap();
+        handle_event(
+            &mut state,
+            &Event::ExternalStateUpdate {
+                device: physical,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
         assert_eq!(
             state.devices.get_device(&target.get_device_key()).unwrap(),
             &target

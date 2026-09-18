@@ -23,6 +23,10 @@ use color_eyre::Result;
 use eyre::eyre;
 use serde_json::json;
 use std::collections::HashMap;
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc, Mutex,
+};
 
 pub type CustomIntegrationsMap = HashMap<IntegrationId, IntegrationHandle>;
 
@@ -33,6 +37,13 @@ pub struct Integrations {
     custom_integrations: CustomIntegrationsMap,
     event_tx: TxEventChannel,
     cli: Cli,
+    /// Current lifecycle epoch per integration instance. Shared across clones so
+    /// a reload performed on a staged copy immediately invalidates events from
+    /// the superseded instance (E07).
+    event_epochs: Arc<Mutex<HashMap<IntegrationId, u64>>>,
+    /// Monotonic epoch source. Epochs are never reused, even after an
+    /// integration is removed and re-added within the same process.
+    next_epoch: Arc<AtomicU64>,
 }
 
 impl Integrations {
@@ -41,7 +52,42 @@ impl Integrations {
             custom_integrations: Default::default(),
             event_tx,
             cli: cli.clone(),
+            event_epochs: Default::default(),
+            next_epoch: Default::default(),
         }
+    }
+
+    /// Next lifecycle epoch value. Epochs are process-unique and only compared
+    /// for equality, so a simple counter is sufficient.
+    fn next_event_epoch(&self) -> u64 {
+        self.next_epoch.fetch_add(1, Ordering::Relaxed) + 1
+    }
+
+    fn install_event_epoch(&mut self, integration_id: &IntegrationId) -> u64 {
+        let epoch = self.next_event_epoch();
+        self.event_epochs
+            .lock()
+            .expect("integration epoch lock poisoned")
+            .insert(integration_id.clone(), epoch);
+        epoch
+    }
+
+    /// Give an integration instance its own event channel. A forwarder stamps
+    /// device data-plane events with the instance's epoch before they reach the
+    /// shared event queue, so events from a superseded instance can be rejected
+    /// after reload/cutover (E07).
+    fn spawn_epoch_forwarder(&self, epoch: u64) -> TxEventChannel {
+        let (integration_tx, mut rx) = crate::types::event::mk_event_channel();
+        let global_tx = self.event_tx.clone();
+
+        tokio::spawn(async move {
+            while let Some(mut event) = rx.recv().await {
+                event.stamp_integration_epoch(epoch);
+                global_tx.send(event);
+            }
+        });
+
+        integration_tx
     }
 
     pub async fn load_integration(
@@ -53,7 +99,8 @@ impl Integrations {
     ) -> Result<()> {
         info!("loading integration with module_name {module_name}");
 
-        let event_tx = self.event_tx.clone();
+        let epoch = self.install_event_epoch(integration_id);
+        let event_tx = self.spawn_epoch_forwarder(epoch);
         let integration =
             load_custom_integration(module_name, integration_id, config, cli, event_tx)?;
         let device_update_policy = OutboundDeviceUpdatePolicy::from_config(config)?;
@@ -64,6 +111,7 @@ impl Integrations {
             module_name.to_string(),
             config.clone(),
             device_update_policy,
+            Some(epoch),
         );
 
         self.custom_integrations
@@ -94,6 +142,34 @@ impl Integrations {
         }
 
         Ok(())
+    }
+
+    /// Current lifecycle epoch of a loaded integration instance, if any.
+    pub fn event_epoch(&self, integration_id: &IntegrationId) -> Option<u64> {
+        self.event_epochs
+            .lock()
+            .expect("integration epoch lock poisoned")
+            .get(integration_id)
+            .copied()
+    }
+
+    /// Whether an event stamped with `epoch` still belongs to the live
+    /// instance of `integration_id`. Unstamped (legacy/test) events are
+    /// accepted for compatibility.
+    pub fn accepts_integration_epoch(
+        &self,
+        integration_id: &IntegrationId,
+        epoch: Option<u64>,
+    ) -> bool {
+        match epoch {
+            None => true,
+            Some(epoch) => self
+                .event_epochs
+                .lock()
+                .expect("integration epoch lock poisoned")
+                .get(integration_id)
+                .is_some_and(|current| *current == epoch),
+        }
     }
 
     pub async fn set_integration_device_state(&self, device: Device) -> Result<()> {
@@ -204,13 +280,12 @@ impl Integrations {
                 .map(|old| old.module_name != row.plugin || old.config != row.config)
                 .unwrap_or(true);
             if changed {
-                let integration = load_custom_integration(
-                    &row.plugin,
-                    id,
-                    &row.config,
-                    &self.cli,
-                    self.event_tx.clone(),
-                )?;
+                // Installing the epoch before the old instance is stopped means
+                // events from the superseded instance are rejected immediately.
+                let epoch = self.install_event_epoch(id);
+                let event_tx = self.spawn_epoch_forwarder(epoch);
+                let integration =
+                    load_custom_integration(&row.plugin, id, &row.config, &self.cli, event_tx)?;
                 let policy = OutboundDeviceUpdatePolicy::from_config(&row.config)?;
                 replacements.insert(
                     id.clone(),
@@ -220,6 +295,7 @@ impl Integrations {
                         row.plugin.clone(),
                         row.config.clone(),
                         policy,
+                        Some(epoch),
                     ),
                 );
             }
@@ -268,6 +344,13 @@ impl Integrations {
         self.custom_integrations
             .retain(|id, _| desired.contains_key(id));
         self.custom_integrations.extend(replacements);
+        {
+            let mut epochs = self
+                .event_epochs
+                .lock()
+                .expect("integration epoch lock poisoned");
+            epochs.retain(|id, _| desired.contains_key(id));
+        }
         Ok(removed_ids)
     }
 
@@ -1006,6 +1089,7 @@ mod tests {
                 "test".into(),
                 json!({}),
                 Default::default(),
+                None,
             ),
         );
         let error = state

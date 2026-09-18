@@ -72,6 +72,9 @@ pub fn prepare_device_command(state: &AppState, command: &DeviceCommand) -> Resu
         device,
         skip_external_update: Some(false),
         skip_db_update: None,
+        origin: Some(crate::types::automation_event::EventOrigin::Command),
+        causation: None,
+        integration_epoch: None,
     })
 }
 

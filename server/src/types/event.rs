@@ -2,10 +2,15 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use ts_rs::TS;
 
-use super::automation_event::{EventId, EventOrigin};
+use super::automation_event::{EventCausation, EventId, EventOrigin};
+use super::device::Device;
 use super::scene::{SceneConfig, SceneId};
 
-use super::{action::Action, device::Device, device::DeviceKey};
+use super::{action::Action, device::DeviceKey};
+
+/// Process-unique stamp identifying the integration instance that produced an
+/// event. Events from a superseded instance are rejected after reload/cutover.
+pub type IntegrationEpoch = u64;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(TS, Clone, Debug, Deserialize, Serialize)]
@@ -16,14 +21,27 @@ pub enum Event {
         online: bool,
         #[ts(type = "number")]
         observed_at_ms: i64,
+        /// Integration instance that observed the availability change.
+        #[serde(default)]
+        integration_epoch: Option<IntegrationEpoch>,
     },
     /// An integration has informed us of current device state. We'll want to
     /// check if this matches with our internal "expected" state. If there's a
     /// mismatch, we'll try to correct it.
-    ExternalStateUpdate { device: Device },
+    ExternalStateUpdate {
+        device: Device,
+        /// Integration instance that produced the report.
+        #[serde(default)]
+        integration_epoch: Option<IntegrationEpoch>,
+    },
 
     /// Internal device state update has taken place, need to take appropriate
     /// actions such as checking (and possibly triggering) routines.
+    ///
+    /// Deprecated as a *producer*: mutations are collected by `Devices` and
+    /// evaluated inside the actor command that performed them (P02). The
+    /// variant is retained so previously queued/serialized events still decode
+    /// and evaluate coherently.
     InternalStateUpdate {
         device_key: DeviceKey,
         old: Option<Device>,
@@ -35,6 +53,9 @@ pub enum Event {
         /// Classification of the mutation origin.
         #[serde(default)]
         origin: Option<EventOrigin>,
+        /// Causation metadata when this update was derived from a routine.
+        #[serde(default)]
+        causation: Option<EventCausation>,
     },
 
     /// Tell integration to trigger state change for a device.
@@ -49,6 +70,18 @@ pub enum Event {
 
         /// Whether to skip persisting the device state to DB as a result of this state update.
         skip_db_update: Option<bool>,
+
+        /// Mutation origin. Defaults to [`EventOrigin::Derived`] when omitted.
+        #[serde(default)]
+        origin: Option<EventOrigin>,
+
+        /// Causation metadata when this command was derived from a routine.
+        #[serde(default)]
+        causation: Option<EventCausation>,
+
+        /// Integration instance that produced this state publication.
+        #[serde(default)]
+        integration_epoch: Option<IntegrationEpoch>,
     },
 
     /// Applies a fully resolved device state without re-evaluating scenes or
@@ -61,6 +94,22 @@ pub enum Event {
 
         /// Whether to skip persisting the device state to DB as a result of this state update.
         skip_db_update: Option<bool>,
+
+        /// Mutation origin. Defaults to [`EventOrigin::Derived`] when omitted.
+        #[serde(default)]
+        origin: Option<EventOrigin>,
+
+        /// Causation metadata when this state change was derived from a routine.
+        #[serde(default)]
+        causation: Option<EventCausation>,
+    },
+
+    /// A routine dispatched one of its configured actions. Distinguished from
+    /// [`Event::Action`] so action provenance (root frame, causal depth) is not
+    /// lost when mapping desired changes to device mutations.
+    RoutineAction {
+        action: Action,
+        causation: EventCausation,
     },
 
     /// Wait for a bit for devices to come online before starting up.
@@ -80,6 +129,52 @@ pub enum Event {
 
     /// Various actions that can be triggered by rules.
     Action(Action),
+}
+
+impl Event {
+    /// Causation stamped on the event, if any.
+    pub fn causation(&self) -> Option<EventCausation> {
+        match self {
+            Event::InternalStateUpdate { causation, .. }
+            | Event::SetInternalState { causation, .. }
+            | Event::ApplyDeviceState { causation, .. } => *causation,
+            Event::RoutineAction { causation, .. } => Some(*causation),
+            _ => None,
+        }
+    }
+
+    /// Integration instance stamp, if any.
+    pub fn integration_epoch(&self) -> Option<IntegrationEpoch> {
+        match self {
+            Event::DeviceAvailability {
+                integration_epoch, ..
+            }
+            | Event::ExternalStateUpdate {
+                integration_epoch, ..
+            }
+            | Event::SetInternalState {
+                integration_epoch, ..
+            } => *integration_epoch,
+            _ => None,
+        }
+    }
+
+    /// Stamp the event with the integration instance that produced it. Events
+    /// that are not integration data-plane updates are left untouched.
+    pub fn stamp_integration_epoch(&mut self, epoch: IntegrationEpoch) {
+        match self {
+            Event::DeviceAvailability {
+                integration_epoch, ..
+            }
+            | Event::ExternalStateUpdate {
+                integration_epoch, ..
+            }
+            | Event::SetInternalState {
+                integration_epoch, ..
+            } => *integration_epoch = Some(epoch),
+            _ => {}
+        }
+    }
 }
 
 #[derive(Clone)]

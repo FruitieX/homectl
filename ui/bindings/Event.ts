@@ -2,12 +2,21 @@
 import type { Action } from "./Action";
 import type { Device } from "./Device";
 import type { DeviceKey } from "./DeviceKey";
+import type { EventCausation } from "./EventCausation";
 import type { EventId } from "./EventId";
 import type { EventOrigin } from "./EventOrigin";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
 
-export type Event = { "DeviceAvailability": { device_key: DeviceKey, online: boolean, observed_at_ms: number, } } | { "ExternalStateUpdate": { device: Device, } } | { "InternalStateUpdate": { device_key: DeviceKey, old: Device | null, new: Device, 
+export type Event = { "DeviceAvailability": { device_key: DeviceKey, online: boolean, observed_at_ms: number, 
+/**
+ * Integration instance that observed the availability change.
+ */
+integration_epoch: bigint | null, } } | { "ExternalStateUpdate": { device: Device, 
+/**
+ * Integration instance that produced the report.
+ */
+integration_epoch: bigint | null, } } | { "InternalStateUpdate": { device_key: DeviceKey, old: Device | null, new: Device, 
 /**
  * Process-unique identity for this event. Optional for backward
  * compatibility with older persisted/serialized events.
@@ -16,7 +25,11 @@ event_id: EventId | null,
 /**
  * Classification of the mutation origin.
  */
-origin: EventOrigin | null, } } | { "SetExternalState": { device: Device, } } | { "SetInternalState": { device: Device, 
+origin: EventOrigin | null, 
+/**
+ * Causation metadata when this update was derived from a routine.
+ */
+causation: EventCausation | null, } } | { "SetExternalState": { device: Device, } } | { "SetInternalState": { device: Device, 
 /**
  * Whether to skip sending [Event::SetExternalState] as a result of this state update.
  */
@@ -24,7 +37,19 @@ skip_external_update: boolean | null,
 /**
  * Whether to skip persisting the device state to DB as a result of this state update.
  */
-skip_db_update: boolean | null, } } | { "ApplyDeviceState": { device: Device, 
+skip_db_update: boolean | null, 
+/**
+ * Mutation origin. Defaults to [`EventOrigin::Derived`] when omitted.
+ */
+origin: EventOrigin | null, 
+/**
+ * Causation metadata when this command was derived from a routine.
+ */
+causation: EventCausation | null, 
+/**
+ * Integration instance that produced this state publication.
+ */
+integration_epoch: bigint | null, } } | { "ApplyDeviceState": { device: Device, 
 /**
  * Whether to skip sending [Event::SetExternalState] as a result of this state update.
  */
@@ -32,4 +57,12 @@ skip_external_update: boolean | null,
 /**
  * Whether to skip persisting the device state to DB as a result of this state update.
  */
-skip_db_update: boolean | null, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };
+skip_db_update: boolean | null, 
+/**
+ * Mutation origin. Defaults to [`EventOrigin::Derived`] when omitted.
+ */
+origin: EventOrigin | null, 
+/**
+ * Causation metadata when this state change was derived from a routine.
+ */
+causation: EventCausation | null, } } | { "RoutineAction": { action: Action, causation: EventCausation, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };

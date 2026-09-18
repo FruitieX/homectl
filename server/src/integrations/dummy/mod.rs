@@ -72,7 +72,10 @@ impl Integration for Dummy {
                 state,
                 None,
             );
-            self.event_tx.send(Event::ExternalStateUpdate { device });
+            self.event_tx.send(Event::ExternalStateUpdate {
+                device,
+                integration_epoch: None,
+            });
         }
 
         Ok(())

@@ -87,7 +87,10 @@ impl Integration for Cron {
                 let mut devices = self.devices.write().await;
                 devices.insert(id.clone(), device.clone());
             }
-            self.event_tx.send(Event::ExternalStateUpdate { device });
+            self.event_tx.send(Event::ExternalStateUpdate {
+                device,
+                integration_epoch: None,
+            });
         }
 
         Ok(())
@@ -240,7 +243,7 @@ mod tests {
 
         let mut powers = std::collections::HashMap::new();
         while let Ok(event) = rx.try_recv() {
-            if let Event::ExternalStateUpdate { device } = event {
+            if let Event::ExternalStateUpdate { device, .. } = event {
                 powers.insert(device.name.clone(), device.is_powered_on());
             }
         }

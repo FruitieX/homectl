@@ -39,6 +39,9 @@ pub struct IntegrationHandle {
     tx: mpsc::UnboundedSender<IntegrationCmd>,
     pub module_name: String,
     pub config: serde_json::Value,
+    /// Lifecycle epoch of the integration instance behind this handle. Events
+    /// stamped with a different epoch are rejected after reload/cutover (E07).
+    pub event_epoch: Option<u64>,
 }
 
 impl IntegrationHandle {
@@ -48,6 +51,7 @@ impl IntegrationHandle {
         module_name: String,
         config: serde_json::Value,
         device_update_policy: OutboundDeviceUpdatePolicy,
+        event_epoch: Option<u64>,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded_channel::<IntegrationCmd>();
         tokio::spawn(run_integration_actor(
@@ -60,6 +64,7 @@ impl IntegrationHandle {
             tx,
             module_name,
             config,
+            event_epoch,
         }
     }
 
@@ -410,6 +415,7 @@ mod tests {
             tx,
             module_name: "mqtt".into(),
             config: serde_json::json!({"disabled_device_ids":["broken"]}),
+            event_epoch: None,
         };
         handle.set_device_state(test_device("broken", true));
         assert!(rx.try_recv().is_err());

@@ -26,6 +26,7 @@ use tokio::sync::mpsc::error::TryRecvError;
 use crate::core::{devices::Devices, groups::Groups, routines::Routines};
 use crate::types::{
     action::{Action, Actions},
+    automation_event::{EventCausation, EventOrigin},
     device::{Device, DevicesState},
     event::{mk_event_channel, Event, RxEventChannel},
     group::{FlattenedGroupsConfig, GroupsConfig},
@@ -173,43 +174,50 @@ impl BaselineHarness {
         Self::new(fixture.groups.clone(), routines)
     }
 
-    /// Apply a report to the in-memory state. Queues an `InternalStateUpdate`
-    /// on the event channel but does not evaluate routines.
+    /// Apply a report to the in-memory state. Records a coherent device
+    /// mutation; it does not evaluate routines until [`Self::flush`].
     pub fn queue_report(&mut self, device: &Device) {
-        self.devices.set_state(device, false, true);
+        self.devices
+            .set_state_with_origin(device, false, true, EventOrigin::Report);
     }
 
-    /// Evaluate every queued internal update in order against the current
-    /// device/group snapshot, recording any actions the v1 evaluator emits.
-    /// Returns the number of internal updates processed.
+    /// Apply a desired-state command to the in-memory state.
+    pub fn queue_command(&mut self, device: &Device) {
+        self.devices
+            .set_state_with_origin(device, false, true, EventOrigin::Command);
+    }
+
+    /// Evaluate every queued mutation in order against the coherent state
+    /// snapshot, recording any actions the v1 evaluator emits. Returns the
+    /// number of mutations processed.
     pub async fn flush(&mut self) -> usize {
         self.groups.force_invalidate(&self.devices);
         let processed_before = self.processed_internal;
+        self.devices.begin_command(EventCausation::default());
+        let pending = self.devices.take_pending_mutations();
+        let frame_id = self.devices.frame_id();
+        let causation = self.devices.mutation_causation();
+
+        for mutation in &pending {
+            self.captured_event_ids.push(mutation.event_id);
+            self.routines
+                .handle_internal_state_update(
+                    mutation,
+                    &self.devices,
+                    &self.groups,
+                    mutation.origin,
+                    causation,
+                    Some(frame_id),
+                )
+                .await;
+            self.processed_internal += 1;
+        }
 
         loop {
             match self.rx.try_recv() {
-                Ok(Event::InternalStateUpdate {
-                    device_key,
-                    old,
-                    new,
-                    event_id,
-                    ..
-                }) => {
-                    if let Some(event_id) = event_id {
-                        self.captured_event_ids.push(event_id);
-                    }
-                    self.routines
-                        .handle_internal_state_update(
-                            &device_key,
-                            old.as_ref(),
-                            &new,
-                            &self.devices,
-                            &self.groups,
-                        )
-                        .await;
-                    self.processed_internal += 1;
+                Ok(Event::RoutineAction { action, .. }) | Ok(Event::Action(action)) => {
+                    self.captured_actions.push(action)
                 }
-                Ok(Event::Action(action)) => self.captured_actions.push(action),
                 Ok(_) => {}
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => break,

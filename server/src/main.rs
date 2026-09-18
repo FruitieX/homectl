@@ -210,7 +210,7 @@ async fn run_event_loop(
         warming_up: true,
     });
 
-    let state = AppState {
+    let mut state = AppState {
         calibration_sessions: Default::default(),
         warming_up: true,
         runtime_config: runtime_config.config.clone(),
@@ -226,7 +226,12 @@ async fn run_event_loop(
         pending_ws_update: Arc::new(std::sync::Mutex::new(Default::default())),
         runtime_apply_lock: Arc::new(Mutex::new(())),
         snapshot: snapshot.clone(),
+        frame_log: Default::default(),
     };
+
+    // Startup discovery/restore mutations are seeded as startup frames and
+    // must not fire routines (E06).
+    state.seed_startup_state().await;
 
     let ws_handle = state.ws.clone();
 

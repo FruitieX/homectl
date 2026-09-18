@@ -122,6 +122,8 @@ pub struct AppState {
     pub pending_ws_update: Arc<StdMutex<PendingWsUpdate>>,
     pub runtime_apply_lock: Arc<Mutex<()>>,
     pub snapshot: SnapshotHandle,
+    /// Bounded record of recent actor-command frames for diagnostics (P02).
+    pub frame_log: crate::types::automation_event::FrameLog,
 }
 
 impl AppState {
@@ -779,6 +781,9 @@ impl AppState {
 
     pub fn apply_runtime_routines(&mut self) {
         self.rules.load_config_rows(&self.runtime_config.routines);
+        // E06: reloaded definitions seed transition memory from current state
+        // instead of treating already-true predicates as fresh edges.
+        self.rules.seed_transitions(&self.devices, &self.groups);
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast(SnapshotChanges {
             routine_statuses: true,
@@ -919,6 +924,7 @@ impl AppState {
         if let Err(e) = self.refresh_runtime_config_from_db().await {
             warn!("Failed to refresh runtime config snapshot: {e}");
         }
+        self.rules.seed_transitions(&self.devices, &self.groups);
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast(SnapshotChanges {
             routine_statuses: true,

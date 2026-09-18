@@ -6,6 +6,7 @@ use serde_json::Value;
 use crate::db::config_queries;
 use crate::types::{
     action::{Action, Actions},
+    automation_event::{DeviceMutation, EventCausation, EventId, EventOrigin, MAX_CAUSATION_DEPTH},
     device::{Device, DeviceKey, DeviceRef, DevicesState, SensorDevice},
     dim::DimDescriptor,
     event::{Event, TxEventChannel},
@@ -150,6 +151,16 @@ struct RuleEvaluationContext<'a> {
     /// Whether this evaluation is an actual dispatch and may record routine
     /// history. Status refresh/preview passes must not write history.
     record_history: bool,
+    /// P02: origin of the frame being evaluated, for trace/status metadata.
+    origin: EventOrigin,
+    /// P02: causation reaching this frame. Actions dispatched here get a child
+    /// causation pointing at `frame_id`.
+    causation: EventCausation,
+    /// P02: identity of the frame being evaluated, if any.
+    frame_id: Option<EventId>,
+    /// P02: seed transition memory from current state without firing. Used at
+    /// startup and configuration reload (E06).
+    seed_only: bool,
 }
 
 impl RuleEvaluationContext<'_> {
@@ -158,6 +169,14 @@ impl RuleEvaluationContext<'_> {
             self.old_event_source
         } else {
             self.devices_state.0.get(device_key)
+        }
+    }
+
+    /// Causation to stamp on actions dispatched while evaluating this frame.
+    fn child_causation(&self) -> EventCausation {
+        match self.frame_id {
+            Some(frame_id) => EventCausation::child_of(frame_id, self.causation),
+            None => self.causation,
         }
     }
 }
@@ -173,6 +192,20 @@ fn device_by_ref<'a>(state: &'a DevicesState, device_ref: &DeviceRef) -> Option<
 struct EvaluationResult {
     actions: Actions,
     statuses: RoutineStatuses,
+}
+
+/// Outcome of evaluating one mutation: how many routine actions were
+/// dispatched, and how many were suppressed by the causal depth bound.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct RoutineDispatchSummary {
+    pub dispatched: usize,
+    pub suppressed: usize,
+}
+
+impl RoutineDispatchSummary {
+    pub fn is_empty(&self) -> bool {
+        self.dispatched == 0 && self.suppressed == 0
+    }
 }
 
 impl RuleRuntimeStatus {
@@ -292,6 +325,10 @@ impl Routines {
             groups,
             update_edge_state: false,
             record_history: false,
+            origin: EventOrigin::Derived,
+            causation: EventCausation::default(),
+            frame_id: None,
+            seed_only: false,
         };
         let mut statuses = self.evaluate_routines(&ctx).statuses;
 
@@ -323,46 +360,105 @@ impl Routines {
         Arc::clone(&self.runtime_statuses)
     }
 
-    /// An internal state update has occurred, we need to check if any routines
-    /// are triggered by this change and run actions of triggered rules.
+    /// Evaluate one coherent mutation from an actor transaction. The mutation's
+    /// own `before`/`after` supplies the event source frame even when newer
+    /// reports have already landed in `devices` (P02 E01 coherence).
+    /// Returns whether actions were dispatched or suppressed by the causal
+    /// depth bound.
     pub async fn handle_internal_state_update(
         &mut self,
-        event_source_key: &DeviceKey,
-        old: Option<&Device>,
-        event_source: &Device,
+        mutation: &DeviceMutation,
         devices: &Devices,
         groups: &Groups,
-    ) {
+        origin: EventOrigin,
+        causation: EventCausation,
+        frame_id: Option<EventId>,
+    ) -> RoutineDispatchSummary {
+        let event_source_key = &mutation.device_key;
+        let event_source = &mutation.after;
+
         // For sensors in pulse mode, we need to process even when the device
-        // already exists and state hasn't changed. Skip only for truly new devices.
-        if old.is_some() || event_source.is_sensor() {
-            // Evaluate against the event's own frame: the source device is the
-            // event's `after` state, even if a newer report has already landed
-            // in `devices`. This is the P02 coherence correction for E01.
+        // already exists and state hasn't changed. Skip only for truly new
+        // non-sensor devices.
+        if mutation.before.is_some() || event_source.is_sensor() {
             let mut coherent_state = devices.get_state().clone();
             coherent_state
                 .0
                 .insert(event_source_key.clone(), event_source.clone());
+            let suppressed = causation.depth > MAX_CAUSATION_DEPTH;
             let ctx = RuleEvaluationContext {
                 event_source: Some(event_source_key),
-                old_event_source: old,
+                old_event_source: mutation.before.as_ref(),
                 devices_state: &coherent_state,
                 groups,
                 update_edge_state: true,
                 record_history: true,
+                origin,
+                causation,
+                frame_id,
+                seed_only: false,
             };
             let evaluation = self.evaluate_routines(&ctx);
             self.runtime_statuses = Arc::new(evaluation.statuses);
 
+            if suppressed {
+                if !evaluation.actions.is_empty() {
+                    warn!(
+                        "Causation limit {MAX_CAUSATION_DEPTH} reached at routine evaluation; \
+                         suppressing {} action(s) (origin={origin:?}, cause={:?})",
+                        evaluation.actions.len(),
+                        causation.cause_id
+                    );
+                }
+                return RoutineDispatchSummary {
+                    dispatched: 0,
+                    suppressed: evaluation.actions.len(),
+                };
+            }
+
+            let dispatched = evaluation.actions.len();
             for action in evaluation.actions {
-                self.event_tx.send(Event::Action(action.clone()));
+                self.event_tx.send(Event::RoutineAction {
+                    action: action.clone(),
+                    causation: ctx.child_causation(),
+                });
+            }
+
+            RoutineDispatchSummary {
+                dispatched,
+                suppressed: 0,
             }
         } else {
             self.refresh_runtime_statuses(devices, groups);
+            RoutineDispatchSummary::default()
         }
     }
 
-    pub fn force_trigger_routine(&self, routine_id: &RoutineId) -> Result<()> {
+    /// Seed transition memory from current state without firing. Called at
+    /// startup and configuration reload so an already-true predicate is not
+    /// treated as a fresh edge (E06). Does not touch runtime statuses or
+    /// history.
+    pub fn seed_transitions(&mut self, devices: &Devices, groups: &Groups) {
+        let ctx = RuleEvaluationContext {
+            event_source: None,
+            old_event_source: None,
+            devices_state: devices.get_state(),
+            groups,
+            update_edge_state: false,
+            record_history: false,
+            origin: EventOrigin::Startup,
+            causation: EventCausation::default(),
+            frame_id: None,
+            seed_only: true,
+        };
+        let _ = self.evaluate_routines(&ctx);
+    }
+
+    pub fn force_trigger_routine(
+        &self,
+        routine_id: &RoutineId,
+        causation: Option<EventCausation>,
+    ) -> Result<()> {
         let routine = self
             .config
             .get(routine_id)
@@ -384,8 +480,12 @@ impl Routines {
             self.runtime_statuses.0.get(routine_id),
         );
 
+        let causation = causation.unwrap_or_default();
         for action in routine_actions {
-            self.event_tx.send(Event::Action(action.clone()));
+            self.event_tx.send(Event::RoutineAction {
+                action: action.clone(),
+                causation,
+            });
         }
 
         Ok(())
@@ -402,16 +502,17 @@ impl Routines {
             let status = self.evaluate_routine_status(&routine_id, &routine, ctx);
 
             if status.will_trigger {
-                info!(
-                    "Routine triggered: id={} name={:?} actions={} event_source={:?}",
-                    routine_id.0,
-                    routine.name,
-                    routine.actions.len(),
-                    ctx.event_source,
-                );
                 // Only real dispatch records history. Status refresh/preview
                 // evaluations must not advance the fired-history log.
                 if ctx.record_history {
+                    info!(
+                        "Routine triggered: id={} name={:?} actions={} event_source={:?} origin={:?}",
+                        routine_id.0,
+                        routine.name,
+                        routine.actions.len(),
+                        ctx.event_source,
+                        ctx.origin,
+                    );
                     routine_history::record_rule_match(
                         &routine_id,
                         &routine.name,
@@ -420,9 +521,11 @@ impl Routines {
                         &status,
                     );
                 }
-                triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
-                    expand_action_source_context(action, ctx.event_source, ctx.groups)
-                }));
+                if !ctx.seed_only {
+                    triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
+                        expand_action_source_context(action, ctx.event_source, ctx.groups)
+                    }));
+                }
             }
 
             routine_statuses.insert(routine_id, status);
@@ -553,6 +656,14 @@ impl Routines {
             return Ok(RuleRuntimeStatus::from_match(false, false));
         }
 
+        if ctx.seed_only {
+            if rule.trigger_mode == TriggerMode::Edge {
+                self.prev_edge_triggered
+                    .insert((routine_id.clone(), device_key.clone()));
+            }
+            return Ok(RuleRuntimeStatus::from_match(true, false));
+        }
+
         let trigger_match = match rule.trigger_mode {
             TriggerMode::Pulse => ctx
                 .event_source
@@ -624,6 +735,14 @@ impl Routines {
             return Ok(RuleRuntimeStatus::from_match(false, false));
         }
 
+        if ctx.seed_only {
+            if rule.trigger_mode == TriggerMode::Edge {
+                self.prev_edge_triggered
+                    .insert((routine_id.clone(), device_key.clone()));
+            }
+            return Ok(RuleRuntimeStatus::from_match(true, false));
+        }
+
         let trigger_match = match rule.trigger_mode {
             TriggerMode::Pulse => ctx
                 .event_source
@@ -683,6 +802,14 @@ impl Routines {
                     .remove(&(routine_id.clone(), device_key));
             }
             return Ok(RuleRuntimeStatus::from_match(false, false));
+        }
+
+        if ctx.seed_only {
+            if rule.trigger_mode == TriggerMode::Edge {
+                self.prev_edge_triggered
+                    .insert((routine_id.clone(), device_key.clone()));
+            }
+            return Ok(RuleRuntimeStatus::from_match(true, false));
         }
 
         let trigger_match = match rule.trigger_mode {
@@ -915,6 +1042,7 @@ mod tests {
     use crate::core::{devices::Devices, groups::Groups, routine_history};
     use crate::db::config_queries;
     use crate::types::action::{Action, Actions};
+    use crate::types::automation_event::{EventCausation, EventOrigin};
     use crate::types::device::{
         ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, DeviceRef, ManageKind,
         SensorDevice,
@@ -1006,6 +1134,10 @@ mod tests {
             groups,
             update_edge_state: true,
             record_history: true,
+            origin: EventOrigin::Report,
+            causation: EventCausation::default(),
+            frame_id: None,
+            seed_only: false,
         }
     }
 
