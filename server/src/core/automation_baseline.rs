@@ -128,6 +128,7 @@ pub struct BaselineHarness {
     pub routines: Routines,
     rx: RxEventChannel,
     captured_actions: Vec<Action>,
+    captured_event_ids: Vec<crate::types::automation_event::EventId>,
     processed_internal: usize,
 }
 
@@ -147,6 +148,7 @@ impl BaselineHarness {
             routines,
             rx,
             captured_actions: Vec::new(),
+            captured_event_ids: Vec::new(),
             processed_internal: 0,
         }
     }
@@ -190,7 +192,12 @@ impl BaselineHarness {
                     device_key,
                     old,
                     new,
+                    event_id,
+                    ..
                 }) => {
+                    if let Some(event_id) = event_id {
+                        self.captured_event_ids.push(event_id);
+                    }
                     self.routines
                         .handle_internal_state_update(
                             &device_key,
@@ -224,6 +231,11 @@ impl BaselineHarness {
 
     pub fn actions(&self) -> &[Action] {
         &self.captured_actions
+    }
+
+    /// Event IDs observed for processed internal updates, in order.
+    pub fn event_ids(&self) -> &[crate::types::automation_event::EventId] {
+        &self.captured_event_ids
     }
 
     pub fn statuses(&self) -> Arc<RoutineStatuses> {

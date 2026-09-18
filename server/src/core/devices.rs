@@ -10,6 +10,7 @@ use super::scenes::{get_next_cycled_scene, Scenes};
 use crate::types::device::{cmp_device_states, ControllableDevice, DeviceRef, ManageKind};
 use crate::types::group::GroupId;
 use crate::types::{
+    automation_event::{EventOrigin, EventSequencer},
     device::{Device, DeviceData, DeviceKey, DevicesState},
     event::{Event, TxEventChannel},
     scene::{ActivateSceneDescriptor, RolloutStyle, SceneId},
@@ -169,6 +170,7 @@ pub struct Devices {
     cli: Cli,
     pending_db_updates: Arc<Mutex<BTreeMap<DeviceKey, Device>>>,
     db_write_flush_pending: Arc<AtomicBool>,
+    event_sequencer: Arc<EventSequencer>,
 }
 
 impl Devices {
@@ -179,6 +181,7 @@ impl Devices {
             cli: cli.clone(),
             pending_db_updates: Default::default(),
             db_write_flush_pending: Arc::new(AtomicBool::new(false)),
+            event_sequencer: Arc::new(EventSequencer::new()),
         }
     }
 
@@ -354,7 +357,7 @@ impl Devices {
         info!("Discovered device: {device}");
         let device = device.set_scene(device.get_scene_id().as_ref(), scenes, self);
 
-        self.set_state(&device, !device.is_managed(), false);
+        self.set_state_with_origin(&device, !device.is_managed(), false, EventOrigin::Report);
     }
 
     /// Handles an incoming state update for a controllable device.
@@ -557,7 +560,7 @@ impl Devices {
 
             // Previously seen sensor, state is always updated
             (DeviceData::Sensor(_), _) => {
-                self.set_state(incoming, false, false);
+                self.set_state_with_origin(incoming, false, false, EventOrigin::Report);
             }
 
             // Previously seen controllable device
@@ -577,8 +580,28 @@ impl Devices {
         Ok(())
     }
 
-    /// Sets internal (and possibly external) state for given device
+    /// Sets internal (and possibly external) state for given device.
+    ///
+    /// The mutation is classified as [`EventOrigin::Derived`]; callers that
+    /// know they are handling a raw report should use
+    /// [`Devices::set_state_with_origin`] instead.
     pub fn set_state(&mut self, device: &Device, skip_external_update: bool, skip_db_update: bool) {
+        self.set_state_with_origin(
+            device,
+            skip_external_update,
+            skip_db_update,
+            EventOrigin::Derived,
+        );
+    }
+
+    /// Sets internal (and possibly external) state, recording the origin.
+    pub fn set_state_with_origin(
+        &mut self,
+        device: &Device,
+        skip_external_update: bool,
+        skip_db_update: bool,
+        origin: EventOrigin,
+    ) {
         let device_key = device.get_device_key();
 
         let mut normalized = device.clone();
@@ -674,6 +697,8 @@ impl Devices {
             device_key,
             old,
             new: device.clone(),
+            event_id: Some(self.event_sequencer.next()),
+            origin: Some(origin),
         });
 
         if !skip_external_update && !device.is_sensor() {

@@ -1,4 +1,5 @@
 pub mod action;
+pub mod automation_event;
 pub mod color;
 pub mod config_diagnostics;
 pub mod device;

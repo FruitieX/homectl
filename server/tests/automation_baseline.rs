@@ -395,14 +395,14 @@ async fn b05_group_scene_is_unanimous_or_unknown() {
 }
 
 // ---------------------------------------------------------------------------
-// E01: queue true then false before handling derived work. Required v2
-// behavior is that the first decision sees its own true frame and the second
-// its false frame. The current implementation instead evaluates both queued
-// updates against the latest device snapshot.
+// E01: queue true then false before handling derived work. The first decision
+// sees its own true frame and the second its false frame. P02 fixed the P00
+// queue-order hazard by evaluating each internal update against a coherent
+// view where the event source device is the event's `after` state.
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn e01_queued_pulse_reports_evaluate_against_latest_snapshot() {
+async fn e01_queued_pulse_reports_keep_their_own_frame() {
     let rule = Rule::Sensor(SensorRule {
         state: SensorDevice::Boolean { value: true },
         trigger_mode: TriggerMode::Pulse,
@@ -415,25 +415,50 @@ async fn e01_queued_pulse_reports_evaluate_against_latest_snapshot() {
     let processed = harness.flush().await;
     assert_eq!(processed, 2, "both queued reports are evaluated");
 
-    // Recorded current behavior: the true pulse is lost because both
-    // evaluations read the final `false` device state. P02 must change this to
-    // observe each event's own before/after frame, at which point this
-    // expectation becomes one trigger.
-    assert!(
-        harness.actions().is_empty(),
-        "current queue-order behavior loses the true pulse; v2 must fix this"
+    assert_eq!(
+        action_counts(harness.actions()).get("force_trigger_routine"),
+        Some(&1),
+        "the first queued report sees its own true frame and fires; the second sees false"
     );
+}
+
+// ---------------------------------------------------------------------------
+// E02: repeated identical sensor/button reports are distinct events and
+// preserve pulse counts. They must not be deduplicated by value.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn e02_repeated_identical_reports_have_distinct_ids_and_pulses() {
+    let rule = Rule::Sensor(SensorRule {
+        state: SensorDevice::Boolean { value: true },
+        trigger_mode: TriggerMode::Pulse,
+        device_ref: sensor_ref("button"),
+    });
+    let mut harness = harness_with(vec![rule], vec![noop_action()]);
+
+    harness.report(&sensor_device("button", true)).await;
+    harness.report(&sensor_device("button", true)).await;
+
+    assert_eq!(
+        action_counts(harness.actions()).get("force_trigger_routine"),
+        Some(&2),
+        "identical repeated pulses both fire"
+    );
+
+    let ids = harness.event_ids();
+    assert_eq!(ids.len(), 2, "two internal events were processed");
+    assert_ne!(ids[0], ids[1], "identical reports have distinct event IDs");
 }
 
 /// The serializable replay fixture format round-trips from disk and replays
 /// with no live sinks. This is the artifact later packages extend.
 #[tokio::test]
 async fn fixture_format_round_trips_and_replays() {
-    let raw = include_str!("fixtures/baseline_pulse_lost.json");
+    let raw = include_str!("fixtures/baseline_pulse_framed.json");
     let fixture: ReplayFixture = serde_json::from_str(raw).expect("fixture should deserialize");
 
     assert_eq!(fixture.baseline_revision, BASELINE_REVISION);
-    assert_eq!(fixture.id, "baseline_pulse_lost");
+    assert_eq!(fixture.id, "baseline_pulse_framed");
 
     let round_tripped = serde_json::to_string(&fixture).unwrap();
     let decoded: ReplayFixture = serde_json::from_str(&round_tripped).unwrap();
@@ -441,11 +466,12 @@ async fn fixture_format_round_trips_and_replays() {
     assert_eq!(decoded.steps.len(), 3);
 
     let run = run_fixture(&fixture).await;
-    assert_eq!(run.fixture_id, "baseline_pulse_lost");
+    assert_eq!(run.fixture_id, "baseline_pulse_framed");
     assert_eq!(run.steps.len(), 1, "one flush step");
-    assert!(
-        run.steps[0].actions.is_empty(),
-        "E01: v1 loses the pulse, so the fixture records zero actions"
+    assert_eq!(
+        run.steps[0].actions.len(),
+        1,
+        "E01 fix: the first queued report keeps its own true frame and fires"
     );
     assert_eq!(
         run.final_devices

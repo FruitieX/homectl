@@ -1,6 +1,6 @@
 {
-  "id": "baseline_pulse_lost",
-  "description": "P00 E01 characterization: two queued reports are both evaluated against the latest snapshot, so the true pulse is lost in v1.",
+  "id": "baseline_pulse_framed",
+  "description": "P02 E01: two queued reports are evaluated against their own coherent frame, so the first (true) pulse fires and the second (false) does not.",
   "baseline_revision": "5aef129c",
   "groups": {},
   "routines": [

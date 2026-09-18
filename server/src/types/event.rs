@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use ts_rs::TS;
 
+use super::automation_event::{EventId, EventOrigin};
 use super::scene::{SceneConfig, SceneId};
 
 use super::{action::Action, device::Device, device::DeviceKey};
@@ -27,6 +28,13 @@ pub enum Event {
         device_key: DeviceKey,
         old: Option<Device>,
         new: Device,
+        /// Process-unique identity for this event. Optional for backward
+        /// compatibility with older persisted/serialized events.
+        #[serde(default)]
+        event_id: Option<EventId>,
+        /// Classification of the mutation origin.
+        #[serde(default)]
+        origin: Option<EventOrigin>,
     },
 
     /// Tell integration to trigger state change for a device.

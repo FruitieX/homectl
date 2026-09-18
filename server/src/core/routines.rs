@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::db::config_queries;
 use crate::types::{
     action::{Action, Actions},
-    device::{Device, DeviceKey, SensorDevice},
+    device::{Device, DeviceKey, DeviceRef, DevicesState, SensorDevice},
     dim::DimDescriptor,
     event::{Event, TxEventChannel},
     group::GroupId,
@@ -141,7 +141,10 @@ pub struct Routines {
 struct RuleEvaluationContext<'a> {
     event_source: Option<&'a DeviceKey>,
     old_event_source: Option<&'a Device>,
-    devices: &'a Devices,
+    /// The coherent device view for this evaluation. For a queued internal
+    /// update this is the transaction's own `after` state for the event source
+    /// device, not necessarily the latest `Devices` snapshot. See `P02`.
+    devices_state: &'a DevicesState,
     groups: &'a Groups,
     update_edge_state: bool,
     /// Whether this evaluation is an actual dispatch and may record routine
@@ -154,9 +157,16 @@ impl RuleEvaluationContext<'_> {
         if self.event_source == Some(device_key) {
             self.old_event_source
         } else {
-            self.devices.get_device(device_key)
+            self.devices_state.0.get(device_key)
         }
     }
+}
+
+fn device_by_ref<'a>(state: &'a DevicesState, device_ref: &DeviceRef) -> Option<&'a Device> {
+    let device_key = match device_ref {
+        DeviceRef::Id(id_ref) => id_ref.clone().into_device_key(),
+    };
+    state.0.get(&device_key)
 }
 
 #[derive(Default)]
@@ -278,7 +288,7 @@ impl Routines {
         let ctx = RuleEvaluationContext {
             event_source: None,
             old_event_source: None,
-            devices,
+            devices_state: devices.get_state(),
             groups,
             update_edge_state: false,
             record_history: false,
@@ -326,10 +336,17 @@ impl Routines {
         // For sensors in pulse mode, we need to process even when the device
         // already exists and state hasn't changed. Skip only for truly new devices.
         if old.is_some() || event_source.is_sensor() {
+            // Evaluate against the event's own frame: the source device is the
+            // event's `after` state, even if a newer report has already landed
+            // in `devices`. This is the P02 coherence correction for E01.
+            let mut coherent_state = devices.get_state().clone();
+            coherent_state
+                .0
+                .insert(event_source_key.clone(), event_source.clone());
             let ctx = RuleEvaluationContext {
                 event_source: Some(event_source_key),
                 old_event_source: old,
-                devices,
+                devices_state: &coherent_state,
                 groups,
                 update_edge_state: true,
                 record_history: true,
@@ -489,7 +506,7 @@ impl Routines {
             )),
             Rule::Script(ScriptRule { script }) => {
                 let mut engine = ScriptEngine::new();
-                let device_state = ctx.devices.get_state();
+                let device_state = ctx.devices_state;
                 let flattened_groups = ctx.groups.get_flattened_groups();
                 match engine.eval_rule_script(script, device_state, flattened_groups) {
                     Ok(result) => Ok(RuleRuntimeStatus::from_match(result, result)),
@@ -505,9 +522,7 @@ impl Routines {
         rule: &SensorRule,
         ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let device = ctx
-            .devices
-            .get_device_by_ref(&rule.device_ref)
+        let device = device_by_ref(ctx.devices_state, &rule.device_ref)
             .ok_or_else(|| eyre!("Could not find matching sensor for rule: {:?}", rule))?;
 
         let device_key = device.get_device_key();
@@ -595,9 +610,7 @@ impl Routines {
         rule: &RawRule,
         ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let device = ctx
-            .devices
-            .get_device_by_ref(&rule.device_ref)
+        let device = device_by_ref(ctx.devices_state, &rule.device_ref)
             .ok_or_else(|| eyre!("Could not find matching device for raw rule: {:?}", rule))?;
 
         let device_key = device.get_device_key();
@@ -657,9 +670,7 @@ impl Routines {
         rule: &DeviceRule,
         ctx: &RuleEvaluationContext<'_>,
     ) -> Result<RuleRuntimeStatus> {
-        let device = ctx
-            .devices
-            .get_device_by_ref(&rule.device_ref)
+        let device = device_by_ref(ctx.devices_state, &rule.device_ref)
             .ok_or_else(|| eyre!("Could not find matching device for rule: {:?}", rule))?;
 
         let device_key = device.get_device_key();
@@ -719,7 +730,7 @@ impl Routines {
     ) -> Result<RuleRuntimeStatus> {
         let group_devices = ctx
             .groups
-            .find_group_devices(ctx.devices.get_state(), &rule.group_id);
+            .find_group_devices(ctx.devices_state, &rule.group_id);
 
         if group_devices.is_empty() {
             return Ok(RuleRuntimeStatus::from_match(false, false));
@@ -991,7 +1002,7 @@ mod tests {
         RuleEvaluationContext {
             event_source: Some(device_key),
             old_event_source,
-            devices,
+            devices_state: devices.get_state(),
             groups,
             update_edge_state: true,
             record_history: true,

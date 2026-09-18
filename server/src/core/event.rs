@@ -287,6 +287,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             device_key,
             old,
             new,
+            ..
         } => {
             if state.warming_up {
                 return Ok(outcome);
