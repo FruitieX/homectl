@@ -480,6 +480,13 @@ impl ScriptCoordinator {
         }
     }
 
+    /// Release an invocation without applying a value (worker failure). The
+    /// same staleness checks apply, so a failure for a superseded owner is
+    /// ignored rather than marking the current owner failed.
+    pub fn abandon(&mut self, token: &InvocationToken) -> Result<(), StaleReason> {
+        self.begin_completion(token).map(|_| ())
+    }
+
     pub fn complete_computed_source(
         &mut self,
         token: &InvocationToken,

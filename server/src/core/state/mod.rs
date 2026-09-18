@@ -761,6 +761,7 @@ impl AppState {
         let overrides = self.scenes.get_scene_overrides();
         self.scenes
             .load_config_rows(&self.runtime_config.scenes, overrides);
+        self.sync_script_owners();
         self.scenes.force_invalidate(&self.devices, &self.groups);
         self.refresh_routine_statuses();
         self.schedule_ws_broadcast(SnapshotChanges {

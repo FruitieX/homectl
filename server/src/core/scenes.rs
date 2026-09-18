@@ -20,7 +20,7 @@ use eyre::Result;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
-use super::{devices::Devices, groups::Groups, scripting::ScriptEngine};
+use super::{devices::Devices, groups::Groups, scripting::legacy_rule_context};
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 fn extract_bracket_string_refs(script: &str, object_name: &str) -> HashSet<String> {
@@ -139,6 +139,37 @@ impl ResolvedSceneDeviceConfig {
     }
 }
 
+/// One pending off-actor scene script materialization, built under actor
+/// ownership from a coherent frame.
+#[derive(Clone, Debug)]
+pub struct SceneMaterializationRequest {
+    pub scene_id: SceneId,
+    pub revision: i64,
+    pub script: String,
+    pub context: serde_json::Value,
+}
+
+/// Quality of the script contribution to a scene's current materialization.
+/// Script errors keep the last-good contribution and record why (SC02).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum SceneScriptQuality {
+    #[default]
+    Fresh,
+    Refreshing,
+    Error(String),
+}
+
+/// Last-good script overrides for one scene plus the current quality.
+#[derive(Clone, Debug)]
+struct SceneScriptState {
+    revision: i64,
+    /// Parsed, normalized per-device configs keyed by the raw `integration/id`
+    /// string the script returned. Device existence and activation filters are
+    /// still applied at merge time.
+    overrides: HashMap<String, SceneDeviceConfig>,
+    quality: SceneScriptQuality,
+}
+
 #[derive(Clone, Default, Debug)]
 pub struct Scenes {
     db_scenes: ScenesConfig,
@@ -153,6 +184,12 @@ pub struct Scenes {
     /// Per-scene script revision; script owners are re-registered when it
     /// changes so in-flight materializations are rejected (SC06).
     script_revisions: HashMap<SceneId, i64>,
+    /// Last-good script materialization (and quality) per scene. Off-actor
+    /// results update this cache; activation and invalidation only read it.
+    scene_scripts: HashMap<SceneId, SceneScriptState>,
+    /// Pending materialization requests, drained by the state actor and
+    /// submitted to the worker pool off-actor.
+    new_scene_requests: Vec<SceneMaterializationRequest>,
 }
 
 /// Evaluates current state of given device in some given scene
@@ -324,6 +361,33 @@ pub(crate) fn normalize_scene_config_value(value: serde_json::Value) -> serde_js
 
 fn normalize_scene_script_config_value(value: serde_json::Value) -> serde_json::Value {
     normalize_scene_config_value(value)
+}
+
+/// Parse a legacy scene script's raw JSON result into per-device configs,
+/// keeping the old skip-on-invalid semantics: malformed entries are warned
+/// about and dropped while the rest of the result is kept. Device existence
+/// and activation filters are applied later, at merge time.
+fn parse_scene_script_overrides(
+    scene_id: &SceneId,
+    value: &serde_json::Value,
+) -> HashMap<String, SceneDeviceConfig> {
+    let serde_json::Value::Object(map) = value else {
+        return HashMap::new();
+    };
+    map.iter()
+        .filter_map(|(device_key, config_value)| {
+            let normalized = normalize_scene_script_config_value(config_value.clone());
+            match serde_json::from_value::<SceneDeviceConfig>(normalized) {
+                Ok(config) => Some((device_key.clone(), config)),
+                Err(error) => {
+                    warn!(
+                        "Scene script for {scene_id} returned an invalid config for {device_key}: {error}",
+                    );
+                    None
+                }
+            }
+        })
+        .collect()
 }
 
 fn warn_scene_config_compatibility(
@@ -672,6 +736,13 @@ impl Scenes {
         }
         self.script_sources = sources;
         self.script_revisions = revisions;
+
+        // Drop materializations for removed scenes and for scripts whose
+        // source changed: another script's output must not be served as
+        // last-good for an edited script (SC03/SC06).
+        let revisions = &self.script_revisions;
+        self.scene_scripts
+            .retain(|scene_id, state| revisions.get(scene_id) == Some(&state.revision));
     }
 
     /// Current per-scene script revisions for scenes that have a script.
@@ -808,73 +879,50 @@ impl Scenes {
             true
         };
 
-        let script_device_configs = scene
-            .script
-            .as_deref()
-            .map(|script| {
-                let mut engine = ScriptEngine::new();
-                let result = engine.eval_scene_script(
-                    script,
-                    devices.get_state(),
-                    groups.get_flattened_groups(),
-                );
-
-                match result {
-                    Ok(configs) => configs
-                        .into_iter()
-                        .filter_map(|(device_key, config_value)| {
-                            let normalized_config_value =
-                                normalize_scene_script_config_value(config_value);
-                            let config = match serde_json::from_value::<SceneDeviceConfig>(
-                                normalized_config_value,
-                            ) {
-                                Ok(config) => config,
-                                Err(error) => {
-                                    warn!(
-                                        "Scene script for {scene_id} returned an invalid config for {device_key}: {error}",
-                                    );
-                                    return None;
-                                }
-                            };
-
-                            let Some((integration_id, device_id)) = device_key.split_once('/') else {
-                                warn!(
-                                    "Scene script for {scene_id} returned an invalid device key: {device_key}",
-                                );
-                                return None;
-                            };
-
-                            let device_key = DeviceKey::new(
-                                integration_id.to_string().into(),
-                                device_id.to_string().into(),
+        // P08: script execution is off-actor. The last-good materialization
+        // cached here is used as-is; a refresh is queued by the invalidation
+        // paths instead of running the engine inside the actor.
+        let script_device_configs: ResolvedSceneDevicesConfig = self
+            .scene_scripts
+            .get(scene_id)
+            .map(|state| {
+                state
+                    .overrides
+                    .iter()
+                    .filter_map(|(device_key, config)| {
+                        let Some((integration_id, device_id)) = device_key.split_once('/') else {
+                            warn!(
+                                "Scene script for {scene_id} returned an invalid device key: {device_key}",
                             );
+                            return None;
+                        };
 
-                            if devices.get_device(&device_key).is_none() {
-                                warn!(
-                                    "Scene script for {scene_id} referenced an unknown device key: {device_key}",
-                                );
-                                return None;
-                            }
+                        let device_key = DeviceKey::new(
+                            integration_id.to_string().into(),
+                            device_id.to_string().into(),
+                        );
 
-                            if !filter_device_by_keys(&device_key) {
-                                return None;
-                            }
+                        if devices.get_device(&device_key).is_none() {
+                            warn!(
+                                "Scene script for {scene_id} referenced an unknown device key: {device_key}",
+                            );
+                            return None;
+                        }
 
-                            Some((
-                                device_key,
-                                ResolvedSceneDeviceConfig::new(
-                                    config,
-                                    DeviceStateSourceScope::Script,
-                                    None,
-                                ),
-                            ))
-                        })
-                        .collect::<ResolvedSceneDevicesConfig>(),
-                    Err(error) => {
-                        warn!("Error evaluating scene script for {scene_id}: {error}");
-                        ResolvedSceneDevicesConfig::new()
-                    }
-                }
+                        if !filter_device_by_keys(&device_key) {
+                            return None;
+                        }
+
+                        Some((
+                            device_key,
+                            ResolvedSceneDeviceConfig::new(
+                                config.clone(),
+                                DeviceStateSourceScope::Script,
+                                None,
+                            ),
+                        ))
+                    })
+                    .collect()
             })
             .unwrap_or_default();
 
@@ -1088,6 +1136,129 @@ impl Scenes {
         &self.flattened_scenes
     }
 
+    /// Drain pending off-actor materialization requests. The actor admits and
+    /// submits them to the worker pool; scenes keep serving their last-good
+    /// contribution until a result lands.
+    pub fn take_scene_materialization_requests(&mut self) -> Vec<SceneMaterializationRequest> {
+        std::mem::take(&mut self.new_scene_requests)
+    }
+
+    /// Current script quality for one scene (`Fresh`, `Refreshing`, or the
+    /// last error while serving stale last-good output) (SC02).
+    pub fn scene_script_quality(&self, scene_id: &SceneId) -> Option<&SceneScriptQuality> {
+        self.scene_scripts.get(scene_id).map(|state| &state.quality)
+    }
+
+    /// Record a materialization failure that never reached the coordinator
+    /// (missing worker, admission rejection). Last-good output is kept (SC02).
+    pub fn record_scene_script_error(&mut self, scene_id: &SceneId, message: &str) {
+        let revision = self.script_revisions.get(scene_id).copied().unwrap_or(0);
+        let state = self
+            .scene_scripts
+            .entry(scene_id.clone())
+            .or_insert_with(|| SceneScriptState {
+                revision,
+                overrides: HashMap::new(),
+                quality: SceneScriptQuality::Fresh,
+            });
+        state.quality = SceneScriptQuality::Error(message.to_string());
+    }
+
+    /// Queue refresh requests for scripted scenes. Called from the
+    /// invalidation paths when a scene's dependencies changed; duplicates are
+    /// coalesced by the coordinator's latest-wins policy.
+    fn queue_scene_script_refreshes(
+        &mut self,
+        scene_ids: &HashSet<SceneId>,
+        devices: &Devices,
+        groups: &Groups,
+    ) {
+        for scene_id in scene_ids {
+            let Some(script) = self.script_for(scene_id) else {
+                continue;
+            };
+            let revision = self.script_revisions.get(scene_id).copied().unwrap_or(1);
+            let context =
+                match legacy_rule_context(devices.get_state(), groups.get_flattened_groups()) {
+                    Ok(context) => context,
+                    Err(error) => {
+                        warn!("Scene script context for {scene_id} could not be built: {error}");
+                        continue;
+                    }
+                };
+            self.scene_scripts
+                .entry(scene_id.clone())
+                .and_modify(|state| state.quality = SceneScriptQuality::Refreshing)
+                .or_insert_with(|| SceneScriptState {
+                    revision,
+                    overrides: HashMap::new(),
+                    quality: SceneScriptQuality::Refreshing,
+                });
+            self.new_scene_requests.push(SceneMaterializationRequest {
+                scene_id: scene_id.clone(),
+                revision,
+                script,
+                context,
+            });
+        }
+    }
+
+    /// Apply one off-actor materialization result. Returns the scene's target
+    /// device keys so the actor can refresh active devices in that scene; an
+    /// outdated revision is rejected without touching the cache (SC03/SC06).
+    pub fn apply_scene_script_result(
+        &mut self,
+        devices: &Devices,
+        groups: &Groups,
+        scene_id: &SceneId,
+        revision: i64,
+        value: Option<&serde_json::Value>,
+        error: Option<&str>,
+    ) -> Option<HashSet<DeviceKey>> {
+        let current_revision = self.script_revisions.get(scene_id).copied()?;
+        if revision != current_revision {
+            return None;
+        }
+
+        match (value, error) {
+            (Some(value), _) => {
+                let overrides = parse_scene_script_overrides(scene_id, value);
+                self.scene_scripts.insert(
+                    scene_id.clone(),
+                    SceneScriptState {
+                        revision,
+                        overrides,
+                        quality: SceneScriptQuality::Fresh,
+                    },
+                );
+            }
+            (None, Some(message)) => {
+                warn!("Scene script for {scene_id} failed: {message}");
+                let state = self
+                    .scene_scripts
+                    .entry(scene_id.clone())
+                    .or_insert_with(|| SceneScriptState {
+                        revision,
+                        overrides: HashMap::new(),
+                        quality: SceneScriptQuality::Fresh,
+                    });
+                state.quality = SceneScriptQuality::Error(message.to_string());
+                return Some(HashSet::new());
+            }
+            (None, None) => return None,
+        }
+
+        let invalidated: HashSet<SceneId> = [scene_id.clone()].into_iter().collect();
+        self.scene_devices_configs = self.mk_scene_devices_configs(devices, groups, &invalidated);
+        self.flattened_scenes = self.mk_flattened_scenes(devices, &invalidated);
+        Some(
+            self.scene_devices_configs
+                .get(scene_id)
+                .map(|(_, config)| config.keys().cloned().collect())
+                .unwrap_or_default(),
+        )
+    }
+
     pub fn get_device_scene_state(
         &self,
         scene_id: &SceneId,
@@ -1201,6 +1372,7 @@ impl Scenes {
                 }
             });
 
+        self.queue_scene_script_refreshes(&invalidated_scenes, devices, groups);
         self.scene_devices_configs =
             self.mk_scene_devices_configs(devices, groups, &invalidated_scenes);
         self.flattened_scenes = self.mk_flattened_scenes(devices, &invalidated_scenes);
@@ -1218,6 +1390,7 @@ impl Scenes {
             .get_scene_ids()
             .into_iter()
             .collect::<HashSet<SceneId>>();
+        self.queue_scene_script_refreshes(&invalidated_scenes, devices, groups);
         self.scene_devices_configs =
             self.mk_scene_devices_configs(devices, groups, &invalidated_scenes);
         self.flattened_scenes = self.mk_flattened_scenes(devices, &invalidated_scenes);
@@ -1255,7 +1428,10 @@ mod tests {
         utils::cli::Cli,
     };
 
-    use super::{extract_bracket_string_refs, normalize_scene_script_config_value, Scenes};
+    use super::{
+        extract_bracket_string_refs, normalize_scene_script_config_value, SceneScriptQuality,
+        Scenes,
+    };
     use serde_json::json;
 
     fn test_cli() -> Cli {
@@ -1472,6 +1648,138 @@ mod tests {
         scenes.load_config_rows(&[scene_row(None)], Default::default());
         assert!(scenes.script_revisions().is_empty());
         assert!(scenes.script_for(&scene_id).is_none());
+    }
+
+    // SC01/SC03: results populate last-good output, refresh the affected
+    // target devices, and stale revisions never touch the cache.
+    #[test]
+    fn scene_script_materialization_populates_last_good_and_rejects_stale_revisions() {
+        let (mut devices, _event_rx) = test_devices();
+        let target = create_test_device("test", "target");
+        let target_key = target.get_device_key();
+        devices.set_state(&target, true, true);
+
+        let mut groups = Groups::new(GroupsConfig::new());
+        groups.force_invalidate(&devices);
+
+        let scene_id = SceneId::new("scripted".to_string());
+        let scene_row = config_queries::SceneRow {
+            id: scene_id.to_string(),
+            name: "Scripted".to_string(),
+            hidden: false,
+            script: Some("defineSceneScript(function () { return {}; })".to_string()),
+            device_states: HashMap::new(),
+            group_states: HashMap::new(),
+            group_state_order: Vec::new(),
+        };
+
+        let mut scenes = Scenes::new(ScenesConfig::new());
+        scenes.load_config_rows(&[scene_row], Default::default());
+        scenes.force_invalidate(&devices, &groups);
+
+        let requests = scenes.take_scene_materialization_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].scene_id, scene_id);
+        assert_eq!(requests[0].revision, 1);
+        assert_eq!(
+            scenes.scene_script_quality(&scene_id),
+            Some(&SceneScriptQuality::Refreshing)
+        );
+
+        let result = json!({ "test/target": { "power": false } });
+        let affected = scenes
+            .apply_scene_script_result(&devices, &groups, &scene_id, 1, Some(&result), None)
+            .expect("current revision applies");
+        assert!(affected.contains(&target_key));
+        assert_eq!(
+            scenes.scene_script_quality(&scene_id),
+            Some(&SceneScriptQuality::Fresh)
+        );
+        let state = scenes
+            .get_device_scene_state(&scene_id, &target_key)
+            .expect("script override lands in the flattened scene");
+        assert!(!state.power);
+
+        assert!(
+            scenes
+                .apply_scene_script_result(&devices, &groups, &scene_id, 0, Some(&result), None)
+                .is_none(),
+            "stale revisions are rejected"
+        );
+        assert_eq!(
+            scenes.scene_script_quality(&scene_id),
+            Some(&SceneScriptQuality::Fresh),
+            "a stale result never changes quality"
+        );
+    }
+
+    // SC02/SC06: failures keep serving last-good output with an error quality,
+    // and editing the script drops last-good plus any in-flight result.
+    #[test]
+    fn scene_script_failures_keep_last_good_and_edits_drop_it() {
+        let (mut devices, _event_rx) = test_devices();
+        let target = create_test_device("test", "target");
+        let target_key = target.get_device_key();
+        devices.set_state(&target, true, true);
+
+        let mut groups = Groups::new(GroupsConfig::new());
+        groups.force_invalidate(&devices);
+
+        let scene_id = SceneId::new("scripted".to_string());
+        let scene_row = |script: &str| config_queries::SceneRow {
+            id: scene_id.to_string(),
+            name: "Scripted".to_string(),
+            hidden: false,
+            script: Some(script.to_string()),
+            device_states: HashMap::new(),
+            group_states: HashMap::new(),
+            group_state_order: Vec::new(),
+        };
+        let result = json!({ "test/target": { "power": false } });
+
+        let mut scenes = Scenes::new(ScenesConfig::new());
+        scenes.load_config_rows(
+            &[scene_row("defineSceneScript(function () { return {}; })")],
+            Default::default(),
+        );
+        scenes.force_invalidate(&devices, &groups);
+        scenes.take_scene_materialization_requests();
+        scenes
+            .apply_scene_script_result(&devices, &groups, &scene_id, 1, Some(&result), None)
+            .expect("current revision applies");
+
+        let affected = scenes
+            .apply_scene_script_result(&devices, &groups, &scene_id, 1, None, Some("boom"))
+            .expect("current revision still completes");
+        assert!(affected.is_empty());
+        assert_eq!(
+            scenes.scene_script_quality(&scene_id),
+            Some(&SceneScriptQuality::Error("boom".to_string()))
+        );
+        assert!(
+            scenes
+                .get_device_scene_state(&scene_id, &target_key)
+                .is_some(),
+            "last-good output survives a failed refresh"
+        );
+
+        scenes.load_config_rows(
+            &[scene_row(
+                "defineSceneScript(function () { return { 'test/target': { 'power': true } }; })",
+            )],
+            Default::default(),
+        );
+        assert_eq!(scenes.script_revisions().get(&scene_id), Some(&2));
+        assert!(
+            scenes.scene_script_quality(&scene_id).is_none(),
+            "an edited script drops last-good and its quality"
+        );
+        assert!(
+            scenes
+                .apply_scene_script_result(&devices, &groups, &scene_id, 1, Some(&result), None)
+                .is_none(),
+            "the in-flight result of the replaced script is rejected"
+        );
     }
 
     #[test]

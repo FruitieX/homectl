@@ -158,6 +158,24 @@ pub enum Event {
         error: Option<String>,
     },
 
+    /// A supervised worker finished a legacy (v1) scene materialization (P08).
+    /// The actor commits the result only when it matches the scene's current
+    /// script revision, then refreshes devices assigned to that scene.
+    SceneMaterializedResult {
+        scene_id: SceneId,
+        request_id: u64,
+        owner_key: String,
+        owner_generation: u64,
+        definition_revision: i64,
+        state_revision: u64,
+        /// Raw legacy JSON result when the invocation succeeded.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+        /// Bounded failure message when the worker reported an error.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+
     /// Wait for a bit for devices to come online before starting up.
     StartupCompleted,
 

@@ -39,8 +39,8 @@ use crate::core::js_worker::{JsWorkerPool, SupervisorConfig};
 use super::evaluate::FrameContext;
 use super::runtime::V2Definition;
 use super::script_coordinator::{
-    Admission, AdmissionError, InvocationToken, OwnerKind, ScriptCoordinator, ScriptInvocation,
-    ScriptOwnerId,
+    Admission, AdmissionError, CompleteResult, InvocationToken, OwnerKind, ScriptCoordinator,
+    ScriptInvocation, ScriptOwnerId, StaleReason,
 };
 
 /// Maximum characters retained from a worker failure in a visible status.
@@ -78,6 +78,17 @@ pub struct PreparedSceneMaterialization {
     pub token: InvocationToken,
     pub script: String,
     pub context: Value,
+}
+
+/// Outcome of completing one scene materialization event.
+#[derive(Debug)]
+pub enum SceneMaterializationCompletion {
+    /// The result was current and carries the raw legacy JSON value.
+    Applied(Value),
+    /// The result belongs to an edited/removed owner; it must be ignored.
+    Stale(StaleReason),
+    /// The worker failed while the owner was current; last-good stays served.
+    Failed(String),
 }
 
 /// Owner state for script programs owned by the state actor.
@@ -445,6 +456,74 @@ impl ScriptExecution {
             }
             Err(error) => Err(admission_error_text(&error)),
         }
+    }
+
+    /// Complete one scene materialization event against the coordinator.
+    #[allow(clippy::too_many_arguments)]
+    pub fn complete_scene_materialization(
+        &mut self,
+        request_id: u64,
+        owner_key: String,
+        owner_generation: u64,
+        definition_revision: i64,
+        state_revision: u64,
+        value: Option<Value>,
+        error: Option<String>,
+    ) -> SceneMaterializationCompletion {
+        let token = InvocationToken {
+            request_id,
+            owner_key,
+            owner_generation,
+            definition_revision,
+            state_revision,
+            contract: super::script_contract::ScriptOutputContract::SceneMaterializer,
+        };
+        match (value, error) {
+            (Some(value), _) => match self.coordinator.complete_legacy_scene(&token, &value) {
+                CompleteResult::Applied { value, .. } => {
+                    SceneMaterializationCompletion::Applied(value)
+                }
+                CompleteResult::Stale(reason) => SceneMaterializationCompletion::Stale(reason),
+                CompleteResult::ContractError { message } => {
+                    SceneMaterializationCompletion::Failed(message)
+                }
+            },
+            (None, Some(message)) => match self.coordinator.abandon(&token) {
+                Ok(()) => SceneMaterializationCompletion::Failed(message),
+                Err(reason) => SceneMaterializationCompletion::Stale(reason),
+            },
+            (None, None) => SceneMaterializationCompletion::Failed(
+                "scene worker returned no result".to_string(),
+            ),
+        }
+    }
+
+    /// Deliver a scene materialization result as an actor event.
+    pub fn spawn_scene_materialization(
+        &self,
+        pool: Arc<JsWorkerPool>,
+        event_tx: TxEventChannel,
+        run: PreparedSceneMaterialization,
+    ) {
+        tokio::spawn(async move {
+            let outcome = pool.execute_legacy_scene(&run.script, run.context).await;
+            let (value, error) = match outcome {
+                Ok(value) => (Some(value), None),
+                Err(error) => (None, Some(bounded_text(&error.to_string()))),
+            };
+            event_tx
+                .try_send(Event::SceneMaterializedResult {
+                    scene_id: run.scene_id,
+                    request_id: run.token.request_id,
+                    owner_key: run.token.owner_key,
+                    owner_generation: run.token.owner_generation,
+                    definition_revision: run.token.definition_revision,
+                    state_revision: run.token.state_revision,
+                    value,
+                    error,
+                })
+                .ok();
+        });
     }
 
     /// Deliver a legacy leaf result as an actor event.

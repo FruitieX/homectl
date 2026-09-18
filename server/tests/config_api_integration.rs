@@ -2540,17 +2540,17 @@ fn config_api_executes_scene_scripts_against_live_device_state() {
     );
     assert_eq!(create_scene_response.status(), StatusCode::CREATED);
 
-    let first_activation = post_json(
-        &server.base_url,
-        "/api/v1/actions/trigger",
-        &json!({
-            "action": "ActivateScene",
-            "scene_id": "scripted_scene"
-        }),
-    );
-    assert_eq!(first_activation.status(), StatusCode::OK);
-
     wait_for("scene script to power on the target light", || {
+        let activation = post_json(
+            &server.base_url,
+            "/api/v1/actions/trigger",
+            &json!({
+                "action": "ActivateScene",
+                "scene_id": "scripted_scene"
+            }),
+        );
+        assert_eq!(activation.status(), StatusCode::OK);
+
         let devices = get_json(&server.base_url, "/api/v1/devices");
         device_power(&devices, "Script Target") == Some(true)
     });

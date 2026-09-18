@@ -422,5 +422,6 @@ fn event_kind(event: &Event) -> &'static str {
         Event::RoutineSetHelper { .. } => "RoutineSetHelper",
         Event::RoutineScriptResult { .. } => "RoutineScriptResult",
         Event::RuleScriptLeafResult { .. } => "RuleScriptLeafResult",
+        Event::SceneMaterializedResult { .. } => "SceneMaterializedResult",
     }
 }

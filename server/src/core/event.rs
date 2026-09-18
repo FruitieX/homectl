@@ -1,5 +1,5 @@
 use rand::Rng;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use color_eyre::Result;
 
@@ -35,7 +35,8 @@ use super::state::{AppState, PendingWsUpdate};
 use super::{
     automation::{
         guard_suppression, step_status, CompleteResult, ConditionOutcome, FrameContext,
-        InvocationToken, PlanInputs, PlannedStepBody, RoutinePlan, ScriptOutputContract,
+        InvocationToken, PlanInputs, PlannedStepBody, RoutinePlan, SceneMaterializationCompletion,
+        ScriptOutputContract,
     },
     groups::Groups,
     integrations::Integrations,
@@ -695,6 +696,68 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 ..SnapshotChanges::none()
             });
         }
+
+        Event::SceneMaterializedResult {
+            scene_id,
+            request_id,
+            owner_key,
+            owner_generation,
+            definition_revision,
+            state_revision,
+            value,
+            error,
+        } => {
+            let completion = state.scripts.complete_scene_materialization(
+                *request_id,
+                owner_key.clone(),
+                *owner_generation,
+                *definition_revision,
+                *state_revision,
+                value.clone(),
+                error.clone(),
+            );
+            match completion {
+                SceneMaterializationCompletion::Applied(value) => {
+                    if let Some(affected) = state.scenes.apply_scene_script_result(
+                        &state.devices,
+                        &state.groups,
+                        scene_id,
+                        *definition_revision,
+                        Some(&value),
+                        None,
+                    ) {
+                        let positions = state.effective_device_positions();
+                        let scene_ids: HashSet<SceneId> = [scene_id.clone()].into_iter().collect();
+                        for device_key in affected {
+                            state.devices.invalidate(
+                                &device_key,
+                                &scene_ids,
+                                &state.scenes,
+                                &positions,
+                            );
+                        }
+                        outcome.mark_snapshot_changes(SnapshotChanges {
+                            devices: true,
+                            flattened_scenes: true,
+                            ..SnapshotChanges::none()
+                        });
+                    }
+                }
+                SceneMaterializationCompletion::Failed(message) => {
+                    state.scenes.record_scene_script_error(scene_id, &message);
+                    outcome.mark_snapshot_changes(SnapshotChanges {
+                        flattened_scenes: true,
+                        ..SnapshotChanges::none()
+                    });
+                }
+                SceneMaterializationCompletion::Stale(reason) => {
+                    debug!(
+                        "Ignoring stale scene materialization for {scene_id}: {}",
+                        reason.as_str()
+                    );
+                }
+            }
+        }
     }
 
     Ok(outcome)
@@ -1292,9 +1355,53 @@ impl AppState {
         }
     }
 
+    /// Submit queued scene script materializations off-actor. Scenes keep
+    /// serving their last-good contribution while a refresh is in flight; a
+    /// missing worker or a rejected admission records a visible error on the
+    /// scene instead of stalling (P08/SC02).
+    async fn execute_deferred_scene_materializations(&mut self) {
+        let requests = self.scenes.take_scene_materialization_requests();
+        if requests.is_empty() {
+            return;
+        }
+
+        let pool = match self.scripts.ensure_pool().await {
+            Ok(pool) => pool,
+            Err(message) => {
+                for request in requests {
+                    self.scenes
+                        .record_scene_script_error(&request.scene_id, &message);
+                }
+                warn!("{message}");
+                return;
+            }
+        };
+
+        for request in requests {
+            match self.scripts.prepare_scene_materialization(
+                &request.scene_id,
+                request.revision,
+                request.script,
+                request.context,
+            ) {
+                Ok(run) => self.scripts.spawn_scene_materialization(
+                    std::sync::Arc::clone(&pool),
+                    self.event_tx.clone(),
+                    run,
+                ),
+                Err(reason) => self
+                    .scenes
+                    .record_scene_script_error(&request.scene_id, &reason),
+            }
+        }
+    }
+
     pub async fn flush_pending_frames(&mut self) -> SnapshotChanges {
         let pending = self.devices.take_pending_mutations();
         if pending.is_empty() {
+            // Invalidation-free commands (scene/group edits through mutate
+            // closures) may still have queued materializations.
+            self.execute_deferred_scene_materializations().await;
             return SnapshotChanges::none();
         }
 
@@ -1373,6 +1480,10 @@ impl AppState {
         // are submitted off-actor; their results finalize the frozen decisions
         // as actor events.
         self.execute_deferred_legacy_scripts().await;
+
+        // P08: scene script refreshes triggered by this frame's invalidations
+        // are submitted off-actor; scenes keep serving last-good output.
+        self.execute_deferred_scene_materializations().await;
 
         // P04: v2 routines evaluate once per coherent frame. The before view
         // rolls back every mutation in the transaction, so a multi-device
