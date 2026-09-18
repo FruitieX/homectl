@@ -818,6 +818,29 @@ pub(crate) mod tests {
         assert!(state.runtime_config.scenes.is_empty());
     }
 
+    /// B05: legacy dispatch-time mirroring falls back to the configured scene
+    /// whenever the referenced group has no unanimous active scene (including
+    /// an unknown/empty group).
+    #[test]
+    fn b05_mirror_from_group_falls_back_when_not_unanimous() {
+        use crate::types::group::GroupId;
+        use std::str::FromStr;
+
+        let groups = Groups::new(Default::default());
+        let devices = Default::default();
+        let fallback = SceneId::from("fallback".to_string());
+        let group_id = GroupId::from_str("missing").unwrap();
+
+        assert_eq!(
+            super::resolve_mirrored_scene_id(&fallback, Some(&group_id), &groups, &devices),
+            fallback
+        );
+        assert_eq!(
+            super::resolve_mirrored_scene_id(&fallback, None, &groups, &devices),
+            fallback
+        );
+    }
+
     #[tokio::test]
     async fn set_external_state_is_deferred() {
         let (mut state, _event_rx) = test_state();

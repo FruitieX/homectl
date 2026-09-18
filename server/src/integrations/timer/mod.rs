@@ -113,6 +113,45 @@ fn mk_timer_device(
 mod tests {
     use super::*;
 
+    /// B06: pin the shape of the synthetic timer device and its raw metadata
+    /// so the v1 adapter contract is recorded before core ownership migrates.
+    #[test]
+    fn b06_timer_synthetic_device_shape() {
+        let id = IntegrationId::from("timer".to_string());
+        let config = TimerConfig {
+            device_name: "Timer".into(),
+        };
+
+        let device = mk_timer_device(
+            &id,
+            &config,
+            true,
+            Some(Duration::from_millis(1234)),
+            Some(2000),
+        );
+
+        assert_eq!(device.id, DeviceId::new("timer"));
+        assert_eq!(device.integration_id, id);
+        assert_eq!(
+            device.get_sensor_state(),
+            Some(&SensorDevice::Boolean { value: true })
+        );
+        assert_eq!(
+            device.raw,
+            Some(json!({ "timeout_ms": 2000, "started_at": 1234 }))
+        );
+
+        let inactive = mk_timer_device(&id, &config, false, None, None);
+        assert_eq!(
+            inactive.get_sensor_state(),
+            Some(&SensorDevice::Boolean { value: false })
+        );
+        assert_eq!(
+            inactive.raw,
+            Some(json!({ "timeout_ms": null, "started_at": null }))
+        );
+    }
+
     #[tokio::test]
     async fn stop_cancels_timer_expiration() {
         let (state, mut rx) = crate::core::event::tests::test_state();

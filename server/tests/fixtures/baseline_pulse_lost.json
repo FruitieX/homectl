@@ -1,0 +1,46 @@
+{
+  "id": "baseline_pulse_lost",
+  "description": "P00 E01 characterization: two queued reports are both evaluated against the latest snapshot, so the true pulse is lost in v1.",
+  "baseline_revision": "5aef129c",
+  "groups": {},
+  "routines": [
+    {
+      "id": "pulse",
+      "name": "Pulse",
+      "rules": [
+        {
+          "state": { "value": true },
+          "trigger_mode": "pulse",
+          "integration_id": "test",
+          "device_id": "button"
+        }
+      ],
+      "actions": [
+        { "action": "ForceTriggerRoutine", "routine_id": "noop" }
+      ]
+    }
+  ],
+  "steps": [
+    {
+      "step": "queue_report",
+      "device": {
+        "id": "button",
+        "name": "Button",
+        "integration_id": "test",
+        "data": { "Sensor": { "value": true } },
+        "raw": null
+      }
+    },
+    {
+      "step": "queue_report",
+      "device": {
+        "id": "button",
+        "name": "Button",
+        "integration_id": "test",
+        "data": { "Sensor": { "value": false } },
+        "raw": null
+      }
+    },
+    { "step": "flush" }
+  ]
+}

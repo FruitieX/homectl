@@ -161,3 +161,96 @@ impl Integration for Cron {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::event::mk_event_channel;
+    use chrono::{Local, TimeZone};
+
+    fn test_cli() -> Cli {
+        Cli {
+            dry_run: true,
+            port: 45289,
+            database_url: None,
+            config: None,
+            warmup_time: None,
+            command: None,
+        }
+    }
+
+    /// B06: pin the supported cron grammar and its next-occurrence behavior
+    /// against the pinned croner parser. This is the compatibility baseline for
+    /// the v2 schedule trigger.
+    #[test]
+    fn b06_cron_parser_next_occurrence_is_pinned() {
+        let cron = croner::Cron::new("0 0 * * *").parse().unwrap();
+        let from = Local.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
+
+        let next = cron.find_next_occurrence(&from, false).unwrap();
+        assert_eq!(next, Local.with_ymd_and_hms(2024, 1, 2, 0, 0, 0).unwrap());
+
+        // Day-of-month and day-of-week both set. The pinned croner parser
+        // implements OR semantics (next is the Monday, not the 1st), matching
+        // Vixie cron. This is the grammar the v2 schedule compiler must expose.
+        let dom_dow = croner::Cron::new("0 0 1 * 1").parse().unwrap();
+        let next = dom_dow.find_next_occurrence(&from, false).unwrap();
+        assert_eq!(
+            next,
+            Local.with_ymd_and_hms(2024, 1, 8, 0, 0, 0).unwrap(),
+            "croner uses OR semantics for restricted day-of-month and day-of-week"
+        );
+    }
+
+    /// B06: the cron compatibility device's power gates the dispatch, and the
+    /// initial enabled flag comes from `init_enabled` (defaulting to true).
+    #[tokio::test]
+    async fn b06_cron_register_respects_init_enabled() {
+        let (tx, mut rx) = mk_event_channel();
+        let config = serde_json::json!({
+            "schedules": {
+                "on": {
+                    "name": "On",
+                    "schedule": "0 0 * * *",
+                    "init_enabled": true,
+                    "action": { "action": "Dim", "device_keys": null, "group_keys": null, "step": -0.1 }
+                },
+                "off": {
+                    "name": "Off",
+                    "schedule": "0 0 * * *",
+                    "init_enabled": false,
+                    "action": { "action": "Dim", "device_keys": null, "group_keys": null, "step": -0.1 }
+                },
+                "defaulted": {
+                    "name": "Defaulted",
+                    "schedule": "0 0 * * *",
+                    "action": { "action": "Dim", "device_keys": null, "group_keys": null, "step": -0.1 }
+                }
+            }
+        });
+
+        let mut cron = Cron::new(
+            &IntegrationId::from("cron".to_string()),
+            &config,
+            &test_cli(),
+            tx,
+        )
+        .unwrap();
+        cron.register().await.unwrap();
+
+        let mut powers = std::collections::HashMap::new();
+        while let Ok(event) = rx.try_recv() {
+            if let Event::ExternalStateUpdate { device } = event {
+                powers.insert(device.name.clone(), device.is_powered_on());
+            }
+        }
+
+        assert_eq!(powers.get("On"), Some(&Some(true)));
+        assert_eq!(powers.get("Off"), Some(&Some(false)));
+        assert_eq!(
+            powers.get("Defaulted"),
+            Some(&Some(true)),
+            "init_enabled defaults to true"
+        );
+    }
+}
