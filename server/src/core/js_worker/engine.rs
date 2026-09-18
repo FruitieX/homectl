@@ -21,6 +21,11 @@ pub const RECURSION_LIMIT: usize = 64;
 /// In-engine VM stack size limit (legacy limit, kept until compatibility review).
 pub const STACK_SIZE_LIMIT: usize = 4096;
 
+/// Fixed, versioned script ABI asset: deterministic time/randomness, immutable
+/// `ctx`, three-valued helpers, and pure action/timer builders. It performs no
+/// I/O and is injected into every fresh invocation realm.
+const SCRIPT_PRELUDE: &str = include_str!("../automation/script_prelude.js");
+
 fn fresh_context() -> Context {
     let mut context = Context::default();
     context
@@ -100,6 +105,9 @@ pub fn execute_script(
     context
         .eval(Source::from_bytes(&format!("var ctx = {context_json};")))
         .map_err(|error| format!("failed to inject invocation context: {error}"))?;
+    context
+        .eval(Source::from_bytes(SCRIPT_PRELUDE))
+        .map_err(|error| format!("failed to install the script ABI prelude: {error}"))?;
 
     let value = context
         .eval(Source::from_bytes(&strict_evaluation_source(script)))

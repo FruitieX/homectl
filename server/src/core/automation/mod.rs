@@ -21,6 +21,8 @@ pub mod evaluate;
 pub mod groups;
 pub mod plan;
 pub mod runtime;
+pub mod script_contract;
+pub mod script_coordinator;
 
 pub use compile::{
     compile_definition, compile_definition_value, compile_row, definition_fingerprint,
@@ -42,3 +44,14 @@ pub use plan::{
     IntentTracker, PlanInputs, PlannedStep, PlannedStepBody, RoutinePlan, MAX_PLANNED_STEPS,
 };
 pub use runtime::{V2Definition, V2Runtime};
+pub use script_contract::{
+    parse_computed_source_outcome, parse_condition_outcome, parse_routine_handler_outcome,
+    parse_scene_materializer_outcome, ComputedSourceOutcome, ConditionOutcome,
+    RoutineHandlerOutcome, SceneMaterializerOutcome, ScriptOutputContract,
+    MAX_SCENE_MATERIALIZED_DEVICES, MAX_SCRIPT_ACTION_NODES, MAX_SCRIPT_STATE_BYTES,
+};
+pub use script_coordinator::{
+    Admission, AdmissionError, CoalescePolicy, CompleteResult, InvocationToken, OwnerKind,
+    ScriptCoordinator, ScriptInvocation, ScriptOwnerId, StaleReason,
+    MAX_PENDING_INVOCATIONS_PER_OWNER,
+};
