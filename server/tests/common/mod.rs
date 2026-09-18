@@ -226,14 +226,19 @@ impl TestServer {
     }
 }
 
-/// Wait for the server to become ready by polling the health endpoint.
+/// Wait for the server to become ready.
+///
+/// The liveness endpoint answers immediately, but the server ignores device
+/// state updates and routine evaluation until warmup completes (see
+/// `AppState::warming_up`). Polling readiness instead of liveness ensures
+/// tests never race the warmup window.
 fn wait_for_ready(
     child: &mut Child,
     base_url: &str,
     timeout: Duration,
 ) -> Result<(), TestServerError> {
     let start_time = Instant::now();
-    let health_url = format!("{}/health/live", base_url);
+    let health_url = format!("{}/health/ready", base_url);
 
     eprintln!("[test] Waiting for server at {}", health_url);
 
