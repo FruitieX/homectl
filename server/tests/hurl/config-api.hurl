@@ -143,7 +143,13 @@ Content-Type: application/json
     "id": "test-hurl-routine",
     "name": "Test Hurl Routine",
     "enabled": true,
-    "rules": [],
+    "rules": [
+        {
+            "integration_id": "dummy",
+            "device_id": "sensor1",
+            "state": { "value": true }
+        }
+    ],
     "actions": []
 }
 HTTP 201

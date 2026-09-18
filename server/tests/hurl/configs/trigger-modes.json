@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "core": { "warmup_time_seconds": 0, "default_transition_ms": null, "scene_transition_ms": null },
+  "integrations": [
+    { "id": "dummy", "plugin": "dummy", "enabled": true, "config": { "devices": {} } }
+  ],
+  "groups": [
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "hidden": false,
+      "devices": [
+        { "integration_id": "dummy", "device_id": "bed_light_1" },
+        { "integration_id": "dummy", "device_id": "bed_light_2" }
+      ],
+      "linked_groups": []
+    }
+  ],
+  "scenes": [
+    {
+      "id": "bright",
+      "name": "Bright",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": { "bedroom": { "power": true, "brightness": 1.0 } }
+    },
+    {
+      "id": "dim",
+      "name": "Dim",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": { "bedroom": { "power": true, "brightness": 0.3 } }
+    },
+    {
+      "id": "off",
+      "name": "Off",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": { "bedroom": { "power": false } }
+    }
+  ],
+  "routines": [
+    {
+      "id": "pulse_button",
+      "name": "Pulse Button",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "pulse_switch", "state": { "value": "press" } }
+      ],
+      "actions": [
+        {
+          "action": "CycleScenes",
+          "scenes": [
+            { "scene_id": "bright" },
+            { "scene_id": "dim" },
+            { "scene_id": "off" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "edge_button",
+      "name": "Edge Button",
+      "enabled": true,
+      "rules": [
+        {
+          "integration_id": "dummy",
+          "device_id": "edge_switch",
+          "state": { "value": "press" },
+          "trigger_mode": "edge"
+        }
+      ],
+      "actions": [{ "action": "ActivateScene", "scene_id": "bright" }]
+    }
+  ],
+  "floorplan": null,
+  "floorplans": [],
+  "group_positions": [],
+  "device_display_overrides": [],
+  "device_color_calibrations": [],
+  "color_calibration_profiles": [],
+  "color_calibration_assignments": [],
+  "device_sensor_configs": [],
+  "widget_settings": [],
+  "dashboard_layouts": [],
+  "dashboard_widgets": []
+}

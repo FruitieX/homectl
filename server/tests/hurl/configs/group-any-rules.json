@@ -1,0 +1,115 @@
+{
+  "version": 1,
+  "core": { "warmup_time_seconds": 0, "default_transition_ms": null, "scene_transition_ms": null },
+  "integrations": [
+    { "id": "dummy", "plugin": "dummy", "enabled": true, "config": { "devices": {} } }
+  ],
+  "groups": [
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "hidden": false,
+      "devices": [
+        { "integration_id": "dummy", "device_id": "bedroom_lamp" },
+        { "integration_id": "dummy", "device_id": "bedroom_lamp_2" }
+      ],
+      "linked_groups": []
+    },
+    {
+      "id": "kitchen",
+      "name": "Kitchen",
+      "hidden": false,
+      "devices": [{ "integration_id": "dummy", "device_id": "kitchen_lamp" }],
+      "linked_groups": []
+    }
+  ],
+  "scenes": [
+    {
+      "id": "normal",
+      "name": "Normal",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 },
+        "kitchen": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 }
+      }
+    },
+    {
+      "id": "dark",
+      "name": "Dark",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 },
+        "kitchen": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 }
+      }
+    },
+    {
+      "id": "night",
+      "name": "Night",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": false },
+        "kitchen": { "power": false }
+      }
+    }
+  ],
+  "routines": [
+    {
+      "id": "any_switch_night",
+      "name": "Any switch activates night",
+      "enabled": true,
+      "rules": [
+        {
+          "any": [
+            { "integration_id": "dummy", "device_id": "bedroom_switch", "state": { "value": "off_press" } },
+            { "integration_id": "dummy", "device_id": "kitchen_switch", "state": { "value": "off_press" } },
+            { "integration_id": "dummy", "device_id": "bathroom_switch", "state": { "value": "off_press" } }
+          ]
+        }
+      ],
+      "actions": [{ "action": "ActivateScene", "scene_id": "night" }]
+    },
+    {
+      "id": "conditional_wake",
+      "name": "Conditional wake",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "motion_sensor", "state": { "value": true } },
+        {
+          "any": [
+            { "group_id": "bedroom", "scene": "dark" },
+            { "group_id": "bedroom", "scene": "night" }
+          ]
+        }
+      ],
+      "actions": [{ "action": "ActivateScene", "scene_id": "dark", "group_keys": ["kitchen"] }]
+    },
+    {
+      "id": "normal_wake",
+      "name": "Normal wake",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "motion_sensor", "state": { "value": true } },
+        { "group_id": "bedroom", "scene": "normal" },
+        { "group_id": "kitchen", "power": false }
+      ],
+      "actions": [{ "action": "ActivateScene", "scene_id": "normal", "group_keys": ["kitchen"] }]
+    }
+  ],
+  "floorplan": null,
+  "floorplans": [],
+  "group_positions": [],
+  "device_display_overrides": [],
+  "device_color_calibrations": [],
+  "color_calibration_profiles": [],
+  "color_calibration_assignments": [],
+  "device_sensor_configs": [],
+  "widget_settings": [],
+  "dashboard_layouts": [],
+  "dashboard_widgets": []
+}

@@ -1,0 +1,141 @@
+{
+  "version": 1,
+  "core": { "warmup_time_seconds": 0, "default_transition_ms": null, "scene_transition_ms": null },
+  "integrations": [
+    { "id": "dummy", "plugin": "dummy", "enabled": true, "config": { "devices": {} } }
+  ],
+  "groups": [
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "hidden": false,
+      "devices": [
+        { "integration_id": "dummy", "device_id": "bedroom_lamp" },
+        { "integration_id": "dummy", "device_id": "bedroom_lamp_2" }
+      ],
+      "linked_groups": []
+    },
+    {
+      "id": "bathroom",
+      "name": "Bathroom",
+      "hidden": false,
+      "devices": [{ "integration_id": "dummy", "device_id": "bathroom_lamp" }],
+      "linked_groups": []
+    }
+  ],
+  "scenes": [
+    {
+      "id": "normal",
+      "name": "Normal",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 },
+        "bathroom": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 }
+      }
+    },
+    {
+      "id": "dark",
+      "name": "Dark",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 },
+        "bathroom": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 }
+      }
+    },
+    {
+      "id": "night",
+      "name": "Night",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": false },
+        "bathroom": { "power": false }
+      }
+    },
+    {
+      "id": "bright",
+      "name": "Bright",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "bedroom": { "power": true, "color": { "h": 0, "s": 0 }, "brightness": 1.0 },
+        "bathroom": { "power": true, "color": { "h": 0, "s": 0 }, "brightness": 1.0 }
+      }
+    }
+  ],
+  "routines": [
+    {
+      "id": "bedroom_down",
+      "name": "Bedroom down",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "bedroom_switch", "state": { "value": "down_press" } }
+      ],
+      "actions": [
+        {
+          "action": "CycleScenes",
+          "nowrap": true,
+          "scenes": [
+            { "scene_id": "normal", "group_keys": ["bedroom"] },
+            { "scene_id": "dark", "group_keys": ["bedroom"] },
+            { "scene_id": "night", "group_keys": ["bedroom"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bedroom_up",
+      "name": "Bedroom up",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "bedroom_switch", "state": { "value": "up_press" } }
+      ],
+      "actions": [
+        {
+          "action": "CycleScenes",
+          "nowrap": true,
+          "scenes": [
+            { "scene_id": "dark", "group_keys": ["bedroom"] },
+            { "scene_id": "normal", "group_keys": ["bedroom"] },
+            { "scene_id": "bright", "group_keys": ["bedroom"] }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "bathroom_cycle",
+      "name": "Bathroom cycle",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "bathroom_switch", "state": { "value": "press" } }
+      ],
+      "actions": [
+        {
+          "action": "CycleScenes",
+          "scenes": [
+            { "scene_id": "normal", "group_keys": ["bathroom"] },
+            { "scene_id": "dark", "group_keys": ["bathroom"] },
+            { "scene_id": "night", "group_keys": ["bathroom"] }
+          ]
+        }
+      ]
+    }
+  ],
+  "floorplan": null,
+  "floorplans": [],
+  "group_positions": [],
+  "device_display_overrides": [],
+  "device_color_calibrations": [],
+  "color_calibration_profiles": [],
+  "color_calibration_assignments": [],
+  "device_sensor_configs": [],
+  "widget_settings": [],
+  "dashboard_layouts": [],
+  "dashboard_widgets": []
+}

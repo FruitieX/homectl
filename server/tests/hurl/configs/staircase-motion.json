@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "core": { "warmup_time_seconds": 0, "default_transition_ms": null, "scene_transition_ms": null },
+  "integrations": [
+    { "id": "dummy", "plugin": "dummy", "enabled": true, "config": { "devices": {} } }
+  ],
+  "groups": [
+    {
+      "id": "upstairs",
+      "name": "Upstairs lights",
+      "hidden": false,
+      "devices": [
+        { "integration_id": "dummy", "device_id": "staircase_lamp" },
+        { "integration_id": "dummy", "device_id": "bedroom_lamp" }
+      ],
+      "linked_groups": []
+    },
+    {
+      "id": "bedroom",
+      "name": "Bedroom",
+      "hidden": false,
+      "devices": [{ "integration_id": "dummy", "device_id": "bedroom_lamp" }],
+      "linked_groups": []
+    },
+    {
+      "id": "downstairs",
+      "name": "Downstairs lights",
+      "hidden": false,
+      "devices": [
+        { "integration_id": "dummy", "device_id": "living_room_lamp" },
+        { "integration_id": "dummy", "device_id": "kitchen_lamp" }
+      ],
+      "linked_groups": []
+    },
+    {
+      "id": "kids_room",
+      "name": "Kids room",
+      "hidden": false,
+      "devices": [{ "integration_id": "dummy", "device_id": "kids_room_lamp" }],
+      "linked_groups": []
+    }
+  ],
+  "scenes": [
+    {
+      "id": "normal",
+      "name": "Normal",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "upstairs": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 },
+        "downstairs": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 },
+        "kids_room": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 }
+      }
+    },
+    {
+      "id": "dark",
+      "name": "Dark",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "upstairs": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 },
+        "downstairs": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 },
+        "kids_room": { "power": true, "color": { "h": 25, "s": 0.95 }, "brightness": 0.25 }
+      }
+    },
+    {
+      "id": "night",
+      "name": "Night",
+      "hidden": false,
+      "script": null,
+      "device_states": {
+        "dummy/staircase_lamp": {
+          "power": true,
+          "color": { "h": 22, "s": 1 },
+          "brightness": 0.15
+        }
+      },
+      "group_states": {
+        "upstairs": { "power": false },
+        "downstairs": { "power": false },
+        "kids_room": { "power": false }
+      }
+    },
+    {
+      "id": "kids_room_normal",
+      "name": "Kids room normal",
+      "hidden": false,
+      "script": null,
+      "device_states": {},
+      "group_states": {
+        "kids_room": { "power": true, "color": { "h": 30, "s": 0.5 }, "brightness": 1.0 }
+      }
+    }
+  ],
+  "routines": [
+    {
+      "id": "staircase_upstairs",
+      "name": "Staircase (upstairs)",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "staircase_motion", "state": { "value": true } },
+        { "group_id": "upstairs", "power": false },
+        { "group_id": "kids_room", "power": false }
+      ],
+      "actions": [
+        { "action": "ActivateScene", "scene_id": "normal", "group_keys": ["upstairs"] },
+        { "action": "ActivateScene", "scene_id": "kids_room_normal" }
+      ]
+    },
+    {
+      "id": "staircase_downstairs",
+      "name": "Staircase (downstairs)",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "staircase_motion", "state": { "value": true } },
+        { "group_id": "downstairs", "power": false },
+        { "group_id": "bedroom", "scene": "normal" }
+      ],
+      "actions": [
+        { "action": "ActivateScene", "scene_id": "normal", "group_keys": ["downstairs"] }
+      ]
+    },
+    {
+      "id": "staircase_downstairs_dark",
+      "name": "Staircase (downstairs, dark)",
+      "enabled": true,
+      "rules": [
+        { "integration_id": "dummy", "device_id": "staircase_motion", "state": { "value": true } },
+        { "group_id": "downstairs", "power": false },
+        {
+          "any": [
+            { "group_id": "bedroom", "scene": "dark" },
+            { "group_id": "bedroom", "scene": "night" }
+          ]
+        }
+      ],
+      "actions": [
+        { "action": "ActivateScene", "scene_id": "dark", "group_keys": ["downstairs"] }
+      ]
+    }
+  ],
+  "floorplan": null,
+  "floorplans": [],
+  "group_positions": [],
+  "device_display_overrides": [],
+  "device_color_calibrations": [],
+  "color_calibration_profiles": [],
+  "color_calibration_assignments": [],
+  "device_sensor_configs": [],
+  "widget_settings": [],
+  "dashboard_layouts": [],
+  "dashboard_widgets": []
+}

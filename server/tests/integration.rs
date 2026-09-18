@@ -18,6 +18,8 @@ use std::process::Command;
 struct HurlConfig {
     skip: bool,
     extra_config: Option<String>,
+    /// Path (relative to the hurl file) of a JSON export config fixture.
+    config_file: Option<String>,
 }
 
 /// Parse front-matter configuration from a hurl file's content.
@@ -43,6 +45,8 @@ fn parse_hurl_config(content: &str) -> HurlConfig {
 
         if comment.starts_with("@skip") {
             config.skip = true;
+        } else if comment.starts_with("@configfile") {
+            config.config_file = Some(comment.trim_start_matches("@configfile").trim().to_string());
         } else if comment.starts_with("@config") {
             in_config_block = true;
         } else if comment.starts_with("@endconfig") {
@@ -119,9 +123,32 @@ fn run_hurl_test_inner(path: &Path, content: &str) -> datatest_stable::Result<()
         return Ok(());
     }
 
-    // Build server configuration
+    // Build server configuration. JSON export configs (either inline or via
+    // `@configfile`) are passed verbatim as the `--config` backup file.
+    let (config_content, extra_config) = if let Some(relative) = config.config_file.as_deref() {
+        let config_path = path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(relative);
+        let content = std::fs::read_to_string(&config_path)
+            .map_err(|e| format!("Failed to read config {}: {e}", config_path.display()))?;
+        (Some(content), None)
+    } else {
+        let is_json = config
+            .extra_config
+            .as_deref()
+            .is_some_and(|text| text.trim_start().starts_with('{'));
+        if is_json {
+            (config.extra_config, None)
+        } else {
+            (None, config.extra_config)
+        }
+    };
+
     let server_config = TestServerConfig {
-        extra_config: config.extra_config,
+        config_content,
+        config_file_name: Some("config-backup.json".to_string()),
+        extra_config,
         ..Default::default()
     };
 

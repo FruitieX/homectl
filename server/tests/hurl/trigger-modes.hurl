@@ -5,52 +5,7 @@
 # Edge mode: Only triggers on state transitions (new state != previous state)
 # Level mode (default for device/group rules): Original behavior - triggers when rule becomes true
 #
-# @config
-# [groups.bedroom]
-# name = "Bedroom"
-# devices = [
-#   { integration_id = "dummy", name = "Bedroom Light 1" },
-#   { integration_id = "dummy", name = "Bedroom Light 2" }
-# ]
-#
-# [scenes.bright]
-# name = "Bright"
-# groups.bedroom.power = true
-# groups.bedroom.brightness = 1.0
-#
-# [scenes.dim]
-# name = "Dim"
-# groups.bedroom.power = true
-# groups.bedroom.brightness = 0.3
-#
-# [scenes.off]
-# name = "Off"
-# groups.bedroom.power = false
-#
-# # Pulse mode routine (default for sensors) - triggers on every matching update
-# [routines.pulse_button]
-# name = "Pulse Button"
-# rules = [
-#   { integration_id = "dummy", name = "Pulse Switch", state = { value = "press" } }
-# ]
-# actions = [
-#   { action = "CycleScenes", scenes = [
-#     { scene_id = "bright" },
-#     { scene_id = "dim" },
-#     { scene_id = "off" }
-#   ]}
-# ]
-#
-# # Edge mode routine - only triggers on state transitions
-# [routines.edge_button]
-# name = "Edge Button"
-# rules = [
-#   { integration_id = "dummy", name = "Edge Switch", state = { value = "press" }, trigger_mode = "edge" }
-# ]
-# actions = [
-#   { action = "ActivateScene", scene_id = "bright" }
-# ]
-# @endconfig
+# @configfile configs/trigger-modes.json
 
 # ============================================================================
 # SETUP - Create devices
