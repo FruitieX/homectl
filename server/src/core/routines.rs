@@ -20,7 +20,7 @@ use crate::types::{
     scene::{ActivateSceneActionDescriptor, CycleScenesDescriptor},
 };
 use std::{
-    collections::{BTreeMap, HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::Arc,
 };
 
@@ -34,7 +34,7 @@ use super::{
     helpers::Helpers,
     routine_history,
     routine_validation::{self, RoutineValidationReport},
-    scripting::ScriptEngine,
+    scripting::legacy_rule_context,
 };
 
 const TRIGGERING_DEVICE_ROLLOUT_SOURCE: &str = "__homectl_runtime__/triggering_device";
@@ -131,6 +131,153 @@ fn expand_action_source_context(
     action
 }
 
+/// One legacy script leaf captured from a coherent frame and submitted to the
+/// supervised worker (P07, Section 6.4).
+#[derive(Clone, Debug)]
+pub struct LegacyScriptRequest {
+    pub routine_id: RoutineId,
+    /// Stable path of the leaf inside the rule tree (`rules/{i}/any/{j}`).
+    pub path: String,
+    pub script: String,
+    /// Immutable `{devices, groups}` legacy invocation context for the frame.
+    pub context: Value,
+}
+
+/// A fully resolved legacy routine decision, ready to dispatch the actions
+/// captured with the frame.
+#[derive(Clone, Debug)]
+pub struct FinalizedRuleRun {
+    pub routine_id: RoutineId,
+    pub actions: Actions,
+    pub event_source: Option<DeviceKey>,
+    pub causation: EventCausation,
+}
+
+/// One script leaf awaiting a worker result inside a deferred evaluation.
+#[derive(Clone)]
+struct CapturedScriptLeaf {
+    path: String,
+    script: String,
+    request_id: Option<u64>,
+    result: Option<RuleRuntimeStatus>,
+}
+
+/// A legacy routine decision whose script leaves are being evaluated
+/// off-actor. The native leaf statuses, actions, and event identity are frozen
+/// at capture time; worker results are combined with them, never with a new
+/// live-state evaluation.
+#[derive(Clone)]
+struct DeferredRuleEvaluation {
+    routine_id: RoutineId,
+    routine_name: String,
+    config_generation: u64,
+    captured: BTreeMap<String, RuleRuntimeStatus>,
+    leaves: Vec<CapturedScriptLeaf>,
+    actions: Actions,
+    event_source: Option<DeviceKey>,
+    causation: EventCausation,
+    record_history: bool,
+}
+
+/// Rule-tree traversal scratch: records every leaf status and, on dispatch
+/// passes, the script leaves that must run off-actor.
+struct LeafCollector {
+    defer_scripts: bool,
+    statuses: BTreeMap<String, RuleRuntimeStatus>,
+    script_leaves: Vec<(String, String)>,
+}
+
+impl LeafCollector {
+    fn new(defer_scripts: bool) -> Self {
+        Self {
+            defer_scripts,
+            statuses: BTreeMap::new(),
+            script_leaves: Vec::new(),
+        }
+    }
+
+    fn record(&mut self, path: &str, status: RuleRuntimeStatus) {
+        self.statuses.insert(path.to_string(), status);
+    }
+
+    fn record_script(&mut self, path: &str, script: &str) -> RuleRuntimeStatus {
+        if self.defer_scripts {
+            self.script_leaves
+                .push((path.to_string(), script.to_string()));
+        }
+        RuleRuntimeStatus::from_match(false, false)
+    }
+}
+
+fn script_rule_path(parent: &str, index: usize) -> String {
+    if parent.is_empty() {
+        format!("rules/{index}")
+    } else {
+        format!("{parent}/any/{index}")
+    }
+}
+
+fn rule_contains_script(rule: &Rule) -> bool {
+    match rule {
+        Rule::Script(_) => true,
+        Rule::Any(AnyRule { any }) => any.iter().any(rule_contains_script),
+        _ => false,
+    }
+}
+
+/// Recompute a captured rule status from frozen leaf results. Script leaves
+/// use the worker-provided status; native leaves use the status captured
+/// during the original frame evaluation.
+fn combine_captured_status(
+    rule: &Rule,
+    path: &str,
+    captured: &BTreeMap<String, RuleRuntimeStatus>,
+) -> RuleRuntimeStatus {
+    match rule {
+        Rule::Any(AnyRule { any }) => {
+            let children: Vec<RuleRuntimeStatus> = any
+                .iter()
+                .enumerate()
+                .map(|(index, child)| {
+                    combine_captured_status(child, &script_rule_path(path, index), captured)
+                })
+                .collect();
+            RuleRuntimeStatus::from_children(
+                children.iter().any(|status| status.condition_match),
+                children.iter().any(|status| status.trigger_match),
+                children,
+            )
+        }
+        _ => captured.get(path).cloned().unwrap_or_else(|| {
+            RuleRuntimeStatus::from_error("missing_captured_rule_status".to_string())
+        }),
+    }
+}
+
+/// Recompute a routine's status from frozen leaf results.
+fn combine_captured_routine(
+    rules: &[Rule],
+    captured: &BTreeMap<String, RuleRuntimeStatus>,
+) -> RoutineRuntimeStatus {
+    let rule_statuses: Vec<RuleRuntimeStatus> = rules
+        .iter()
+        .enumerate()
+        .map(|(index, rule)| combine_captured_status(rule, &script_rule_path("", index), captured))
+        .collect();
+
+    let all_conditions_match =
+        !rule_statuses.is_empty() && rule_statuses.iter().all(|status| status.condition_match);
+    let will_trigger =
+        !rule_statuses.is_empty() && rule_statuses.iter().all(|status| status.trigger_match);
+
+    RoutineRuntimeStatus {
+        all_conditions_match,
+        will_trigger,
+        rules: rule_statuses,
+        v2: None,
+    }
+}
+
 #[derive(Clone)]
 pub struct Routines {
     config: RoutinesConfig,
@@ -147,6 +294,20 @@ pub struct Routines {
     /// statuses. Native evaluation runs, but decisions are not executed until
     /// P05 wires the action planner.
     v2: V2Runtime,
+    /// Bumped on every configuration load so a late worker result can never
+    /// finalize a decision computed against a previous configuration.
+    config_generation: u64,
+    /// Legacy routine decisions waiting on off-actor script leaves, in frame
+    /// order per routine. Only the front of each queue may finalize, so
+    /// per-routine dispatch order matches evaluation order.
+    deferred: BTreeMap<RoutineId, VecDeque<DeferredRuleEvaluation>>,
+    /// Index of admitted leaves by request id.
+    deferred_leaf_index: BTreeMap<u64, (RoutineId, String)>,
+    /// Captured decisions for routines whose rules contain script leaves,
+    /// overlaid onto status refresh passes (which cannot execute scripts).
+    captured_statuses: HashMap<RoutineId, RoutineRuntimeStatus>,
+    /// Newly captured leaves that still need admission/submission.
+    new_script_requests: Vec<LegacyScriptRequest>,
 }
 
 struct RuleEvaluationContext<'a> {
@@ -171,6 +332,10 @@ struct RuleEvaluationContext<'a> {
     /// P02: seed transition memory from current state without firing. Used at
     /// startup and configuration reload (E06).
     seed_only: bool,
+    /// P07: whether a legacy script leaf may be captured for off-actor
+    /// execution on this pass. False for refresh/seed and for frames already
+    /// at the causation bound, which must not spawn work that cannot dispatch.
+    allow_deferred_scripts: bool,
 }
 
 impl RuleEvaluationContext<'_> {
@@ -202,6 +367,10 @@ fn device_by_ref<'a>(state: &'a DevicesState, device_ref: &DeviceRef) -> Option<
 struct EvaluationResult {
     actions: Actions,
     statuses: RoutineStatuses,
+    /// Actions belonging to decisions deferred to off-actor script leaves.
+    /// Counted so a frame at the causation bound still reports them as
+    /// suppressed instead of silently dropping them.
+    deferred_actions: usize,
 }
 
 /// Outcome of evaluating one mutation: how many routine actions were
@@ -219,7 +388,7 @@ impl RoutineDispatchSummary {
 }
 
 impl RuleRuntimeStatus {
-    fn from_match(condition_match: bool, trigger_match: bool) -> Self {
+    pub(crate) fn from_match(condition_match: bool, trigger_match: bool) -> Self {
         Self {
             condition_match,
             trigger_match,
@@ -241,7 +410,7 @@ impl RuleRuntimeStatus {
         }
     }
 
-    fn from_error(error: impl Into<String>) -> Self {
+    pub(crate) fn from_error(error: impl Into<String>) -> Self {
         Self {
             condition_match: false,
             trigger_match: false,
@@ -260,6 +429,11 @@ impl Routines {
             prev_edge_triggered: HashSet::new(),
             quarantined: HashMap::new(),
             v2: V2Runtime::default(),
+            config_generation: 0,
+            deferred: BTreeMap::new(),
+            deferred_leaf_index: BTreeMap::new(),
+            captured_statuses: HashMap::new(),
+            new_script_requests: Vec::new(),
         }
     }
 
@@ -368,6 +542,22 @@ impl Routines {
         self.v2.load(compiled_v2);
         self.runtime_statuses = Arc::new(RoutineStatuses::default());
         self.prev_edge_triggered.clear();
+        self.config_generation = self.config_generation.wrapping_add(1);
+        self.deferred.clear();
+        self.deferred_leaf_index.clear();
+        self.captured_statuses.clear();
+        self.new_script_requests.clear();
+    }
+
+    /// Routine ids whose v1 rules contain at least one script leaf. These
+    /// owners are registered with the script coordinator so legacy leaves can
+    /// be admitted (P07).
+    pub fn legacy_script_owners(&self) -> std::collections::BTreeSet<RoutineId> {
+        self.config
+            .iter()
+            .filter(|(_, routine)| routine.rules.iter().any(rule_contains_script))
+            .map(|(routine_id, _)| routine_id.clone())
+            .collect()
     }
 
     /// Enabled routines that failed validation and are therefore not runnable.
@@ -406,8 +596,18 @@ impl Routines {
             causation: EventCausation::default(),
             frame_id: None,
             seed_only: false,
+            allow_deferred_scripts: false,
         };
         let mut statuses = self.evaluate_routines(&ctx).statuses;
+
+        // Script leaves cannot be evaluated during a refresh (that is the
+        // point of moving them off-actor), so show the last captured decision
+        // for script-bearing routines instead of a placeholder false.
+        for (routine_id, captured) in &self.captured_statuses {
+            if let Some(slot) = statuses.0.get_mut(routine_id) {
+                *slot = captured.clone();
+            }
+        }
 
         // Surface quarantined routines as visible, non-runnable errors.
         for (routine_id, report) in &self.quarantined {
@@ -501,22 +701,25 @@ impl Routines {
                 causation,
                 frame_id,
                 seed_only: false,
+                // A frame already at the bound must not spawn off-actor work
+                // whose actions could never be dispatched.
+                allow_deferred_scripts: !suppressed,
             };
             let evaluation = self.evaluate_routines(&ctx);
             self.runtime_statuses = Arc::new(evaluation.statuses);
 
             if suppressed {
-                if !evaluation.actions.is_empty() {
+                let suppressed_actions = evaluation.actions.len() + evaluation.deferred_actions;
+                if suppressed_actions > 0 {
                     warn!(
                         "Causation limit {MAX_CAUSATION_DEPTH} reached at routine evaluation; \
-                         suppressing {} action(s) (origin={origin:?}, cause={:?})",
-                        evaluation.actions.len(),
+                         suppressing {suppressed_actions} action(s) (origin={origin:?}, cause={:?})",
                         causation.cause_id
                     );
                 }
                 return RoutineDispatchSummary {
                     dispatched: 0,
-                    suppressed: evaluation.actions.len(),
+                    suppressed: suppressed_actions,
                 };
             }
 
@@ -559,6 +762,7 @@ impl Routines {
             causation: EventCausation::default(),
             frame_id: None,
             seed_only: true,
+            allow_deferred_scripts: false,
         };
         let _ = self.evaluate_routines(&ctx);
         self.v2.seed(devices.get_state(), groups, helpers);
@@ -632,6 +836,177 @@ impl Routines {
         self.v2.record_script_failure(routine_id, reason);
     }
 
+    /// Drain legacy script leaves captured by the last frame evaluation(s).
+    /// The caller admits and submits them off-actor.
+    pub fn take_deferred_script_requests(&mut self) -> Vec<LegacyScriptRequest> {
+        std::mem::take(&mut self.new_script_requests)
+    }
+
+    /// Associate an admitted invocation with its captured leaf. Returns false
+    /// when the leaf no longer exists (configuration reloaded mid-command).
+    pub fn note_deferred_leaf_admitted(
+        &mut self,
+        routine_id: &RoutineId,
+        path: &str,
+        request_id: u64,
+    ) -> bool {
+        let Some(queue) = self.deferred.get_mut(routine_id) else {
+            return false;
+        };
+        for evaluation in queue.iter_mut() {
+            for leaf in &mut evaluation.leaves {
+                if leaf.path == path && leaf.request_id.is_none() && leaf.result.is_none() {
+                    leaf.request_id = Some(request_id);
+                    self.deferred_leaf_index
+                        .insert(request_id, (routine_id.clone(), path.to_string()));
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Resolve one captured leaf by its stable path (admission failures).
+    pub fn resolve_deferred_script_leaf(
+        &mut self,
+        routine_id: &RoutineId,
+        path: &str,
+        status: RuleRuntimeStatus,
+    ) -> Vec<FinalizedRuleRun> {
+        self.settle_deferred_leaf(routine_id, path, status)
+    }
+
+    /// Resolve one captured leaf by its admitted request id (worker results).
+    pub fn resolve_deferred_leaf_result(
+        &mut self,
+        routine_id: &RoutineId,
+        request_id: u64,
+        status: RuleRuntimeStatus,
+    ) -> Vec<FinalizedRuleRun> {
+        let Some((indexed_routine, path)) = self.deferred_leaf_index.get(&request_id).cloned()
+        else {
+            return Vec::new();
+        };
+        if &indexed_routine != routine_id {
+            warn!(
+                "Ignoring legacy script result for routine {} with a request id owned by {}",
+                routine_id.0, indexed_routine.0
+            );
+            return Vec::new();
+        }
+        self.settle_deferred_leaf(routine_id, &path, status)
+    }
+
+    fn settle_deferred_leaf(
+        &mut self,
+        routine_id: &RoutineId,
+        path: &str,
+        status: RuleRuntimeStatus,
+    ) -> Vec<FinalizedRuleRun> {
+        let finalized_entries = {
+            let Some(queue) = self.deferred.get_mut(routine_id) else {
+                return Vec::new();
+            };
+            let mut settled = false;
+            for evaluation in queue.iter_mut() {
+                for leaf in &mut evaluation.leaves {
+                    if leaf.path == path && leaf.result.is_none() {
+                        if let Some(request_id) = leaf.request_id.take() {
+                            self.deferred_leaf_index.remove(&request_id);
+                        }
+                        leaf.result = Some(status.clone());
+                        settled = true;
+                        break;
+                    }
+                }
+                if settled {
+                    break;
+                }
+            }
+            if !settled {
+                return Vec::new();
+            }
+
+            // Only fully resolved heads finalize, so per-routine dispatch
+            // order matches the order frames were evaluated.
+            let mut finalized = Vec::new();
+            while queue.front().is_some_and(|evaluation| {
+                evaluation.leaves.iter().all(|leaf| leaf.result.is_some())
+            }) {
+                finalized.push(queue.pop_front().expect("front entry exists"));
+            }
+            finalized
+        };
+
+        if self
+            .deferred
+            .get(routine_id)
+            .is_some_and(VecDeque::is_empty)
+        {
+            self.deferred.remove(routine_id);
+        }
+
+        let mut runs = Vec::new();
+        for entry in finalized_entries {
+            if let Some(run) = self.finalize_deferred_evaluation(entry) {
+                runs.push(run);
+            }
+        }
+        runs
+    }
+
+    fn finalize_deferred_evaluation(
+        &mut self,
+        entry: DeferredRuleEvaluation,
+    ) -> Option<FinalizedRuleRun> {
+        if entry.config_generation != self.config_generation {
+            warn!(
+                "Discarding legacy script decision for routine {}: configuration changed while the result was in flight",
+                entry.routine_id.0
+            );
+            return None;
+        }
+        let routine = self.config.get(&entry.routine_id)?;
+
+        let mut captured = entry.captured;
+        for leaf in &entry.leaves {
+            if let Some(result) = &leaf.result {
+                captured.insert(leaf.path.clone(), result.clone());
+            }
+        }
+        let combined = combine_captured_routine(&routine.rules, &captured);
+        self.captured_statuses
+            .insert(entry.routine_id.clone(), combined.clone());
+
+        if combined.will_trigger && entry.record_history {
+            info!(
+                "Routine triggered: id={} name={:?} actions={} event_source={:?} origin=deferred_script",
+                entry.routine_id.0,
+                entry.routine_name,
+                entry.actions.len(),
+                entry.event_source,
+            );
+            routine_history::record_rule_match(
+                &entry.routine_id,
+                &entry.routine_name,
+                entry.event_source.as_ref(),
+                entry.actions.len(),
+                &combined,
+            );
+        }
+
+        if combined.will_trigger {
+            Some(FinalizedRuleRun {
+                routine_id: entry.routine_id,
+                actions: entry.actions,
+                event_source: entry.event_source,
+                causation: entry.causation,
+            })
+        } else {
+            None
+        }
+    }
+
     pub fn force_trigger_routine(
         &self,
         routine_id: &RoutineId,
@@ -671,47 +1046,127 @@ impl Routines {
 
     fn evaluate_routines(&mut self, ctx: &RuleEvaluationContext<'_>) -> EvaluationResult {
         let mut triggered_actions = Vec::new();
+        let mut deferred_actions = 0usize;
         let mut routine_statuses = HashMap::new();
+        // Script rules are only deferred on real dispatch passes: status
+        // refresh and startup seeding must not spawn worker traffic.
+        let defer_scripts = ctx.allow_deferred_scripts
+            && ctx.record_history
+            && ctx.update_edge_state
+            && !ctx.seed_only;
 
         let routine_ids: Vec<RoutineId> = self.config.keys().cloned().collect();
 
         for routine_id in routine_ids {
             let routine = self.config.get(&routine_id).unwrap().clone();
-            let status = self.evaluate_routine_status(&routine_id, &routine, ctx);
+            let mut collector = LeafCollector::new(defer_scripts);
+            let status = self.evaluate_routine_status(&routine_id, &routine, ctx, &mut collector);
 
-            if status.will_trigger {
-                // Only real dispatch records history. Status refresh/preview
-                // evaluations must not advance the fired-history log.
-                if ctx.record_history {
-                    info!(
-                        "Routine triggered: id={} name={:?} actions={} event_source={:?} origin={:?}",
-                        routine_id.0,
-                        routine.name,
-                        routine.actions.len(),
-                        ctx.event_source,
-                        ctx.origin,
-                    );
-                    routine_history::record_rule_match(
-                        &routine_id,
-                        &routine.name,
-                        ctx.event_source,
-                        routine.actions.len(),
-                        &status,
-                    );
+            if collector.script_leaves.is_empty() {
+                if status.will_trigger {
+                    // Only real dispatch records history. Status refresh/preview
+                    // evaluations must not advance the fired-history log.
+                    if ctx.record_history {
+                        info!(
+                            "Routine triggered: id={} name={:?} actions={} event_source={:?} origin={:?}",
+                            routine_id.0,
+                            routine.name,
+                            routine.actions.len(),
+                            ctx.event_source,
+                            ctx.origin,
+                        );
+                        routine_history::record_rule_match(
+                            &routine_id,
+                            &routine.name,
+                            ctx.event_source,
+                            routine.actions.len(),
+                            &status,
+                        );
+                    }
+                    if !ctx.seed_only {
+                        triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
+                            expand_action_source_context(action, ctx.event_source, ctx.groups)
+                        }));
+                    }
                 }
-                if !ctx.seed_only {
-                    triggered_actions.extend(routine.actions.iter().cloned().map(|action| {
-                        expand_action_source_context(action, ctx.event_source, ctx.groups)
-                    }));
-                }
+
+                routine_statuses.insert(routine_id, status);
+                continue;
             }
 
-            routine_statuses.insert(routine_id, status);
+            // The decision depends on off-actor leaves: publish a pending
+            // status (never triggering) and freeze the frame.
+            let mut pending = status;
+            pending.will_trigger = false;
+            routine_statuses.insert(routine_id.clone(), pending.clone());
+            self.captured_statuses
+                .insert(routine_id.clone(), pending.clone());
+
+            match legacy_rule_context(ctx.devices_state, ctx.groups.get_flattened_groups()) {
+                Ok(context) => {
+                    let actions: Actions = routine
+                        .actions
+                        .iter()
+                        .cloned()
+                        .map(|action| {
+                            expand_action_source_context(action, ctx.event_source, ctx.groups)
+                        })
+                        .collect();
+                    let leaves: Vec<CapturedScriptLeaf> = collector
+                        .script_leaves
+                        .iter()
+                        .map(|(path, script)| CapturedScriptLeaf {
+                            path: path.clone(),
+                            script: script.clone(),
+                            request_id: None,
+                            result: None,
+                        })
+                        .collect();
+                    deferred_actions += actions.len();
+                    for leaf in &leaves {
+                        self.new_script_requests.push(LegacyScriptRequest {
+                            routine_id: routine_id.clone(),
+                            path: leaf.path.clone(),
+                            script: leaf.script.clone(),
+                            context: context.clone(),
+                        });
+                    }
+                    self.deferred
+                        .entry(routine_id.clone())
+                        .or_default()
+                        .push_back(DeferredRuleEvaluation {
+                            routine_id,
+                            routine_name: routine.name.clone(),
+                            config_generation: self.config_generation,
+                            captured: collector.statuses,
+                            leaves,
+                            actions,
+                            event_source: ctx.event_source.cloned(),
+                            causation: ctx.child_causation(),
+                            record_history: ctx.record_history,
+                        });
+                }
+                Err(error) => {
+                    error!(
+                        "Legacy script context for routine {} could not be materialized: {error}",
+                        routine_id.0
+                    );
+                    let failed = RoutineRuntimeStatus {
+                        all_conditions_match: false,
+                        will_trigger: false,
+                        rules: vec![RuleRuntimeStatus::from_error(error)],
+                        v2: None,
+                    };
+                    routine_statuses.insert(routine_id.clone(), failed.clone());
+                    self.captured_statuses.insert(routine_id, failed);
+                }
+            }
         }
 
         EvaluationResult {
             actions: triggered_actions,
             statuses: RoutineStatuses(routine_statuses),
+            deferred_actions,
         }
     }
 
@@ -720,11 +1175,21 @@ impl Routines {
         routine_id: &RoutineId,
         routine: &Routine,
         ctx: &RuleEvaluationContext<'_>,
+        collector: &mut LeafCollector,
     ) -> RoutineRuntimeStatus {
         let rule_statuses = routine
             .rules
             .iter()
-            .map(|rule| self.evaluate_rule_status(routine_id, rule, ctx))
+            .enumerate()
+            .map(|(index, rule)| {
+                self.evaluate_rule_status_at(
+                    routine_id,
+                    rule,
+                    ctx,
+                    &script_rule_path("", index),
+                    collector,
+                )
+            })
             .collect::<Vec<_>>();
 
         let all_conditions_match =
@@ -740,17 +1205,37 @@ impl Routines {
         }
     }
 
+    /// Evaluate a single rule for tests without deferring script leaves
+    /// off-actor.
+    #[cfg(test)]
     fn evaluate_rule_status(
         &mut self,
         routine_id: &RoutineId,
         rule: &Rule,
         ctx: &RuleEvaluationContext<'_>,
     ) -> RuleRuntimeStatus {
-        match self.try_evaluate_rule_status(routine_id, rule, ctx) {
-            Ok(status) => status,
+        let mut collector = LeafCollector::new(false);
+        self.evaluate_rule_status_at(routine_id, rule, ctx, "rules/0", &mut collector)
+    }
+
+    fn evaluate_rule_status_at(
+        &mut self,
+        routine_id: &RoutineId,
+        rule: &Rule,
+        ctx: &RuleEvaluationContext<'_>,
+        path: &str,
+        collector: &mut LeafCollector,
+    ) -> RuleRuntimeStatus {
+        match self.try_evaluate_rule_status(routine_id, rule, ctx, path, collector) {
+            Ok(status) => {
+                collector.record(path, status.clone());
+                status
+            }
             Err(error) => {
                 error!("Routine rule evaluation error: {error}");
-                RuleRuntimeStatus::from_error(error.to_string())
+                let status = RuleRuntimeStatus::from_error(error.to_string());
+                collector.record(path, status.clone());
+                status
             }
         }
     }
@@ -761,12 +1246,23 @@ impl Routines {
         routine_id: &RoutineId,
         rule: &Rule,
         ctx: &RuleEvaluationContext<'_>,
+        path: &str,
+        collector: &mut LeafCollector,
     ) -> Result<RuleRuntimeStatus> {
         match rule {
             Rule::Any(AnyRule { any: rules }) => {
                 let children = rules
                     .iter()
-                    .map(|child_rule| self.evaluate_rule_status(routine_id, child_rule, ctx))
+                    .enumerate()
+                    .map(|(index, child_rule)| {
+                        self.evaluate_rule_status_at(
+                            routine_id,
+                            child_rule,
+                            ctx,
+                            &script_rule_path(path, index),
+                            collector,
+                        )
+                    })
                     .collect::<Vec<_>>();
 
                 Ok(RuleRuntimeStatus::from_children(
@@ -786,15 +1282,11 @@ impl Routines {
             Rule::EvalExpr(expr) => Err(eyre!(
                 "Legacy evalexpr rules are no longer supported: {expr}"
             )),
-            Rule::Script(ScriptRule { script }) => {
-                let mut engine = ScriptEngine::new();
-                let device_state = ctx.devices_state;
-                let flattened_groups = ctx.groups.get_flattened_groups();
-                match engine.eval_rule_script(script, device_state, flattened_groups) {
-                    Ok(result) => Ok(RuleRuntimeStatus::from_match(result, result)),
-                    Err(error) => Err(eyre!("Script rule evaluation error: {error}")),
-                }
-            }
+            // P07/Section 6.4: there is no in-process v1 script path. On a
+            // dispatch pass the leaf is captured for the supervised worker and
+            // its result is combined with the frozen native leaf statuses; on
+            // refresh/seed passes it stays an unevaluated placeholder.
+            Rule::Script(ScriptRule { script }) => Ok(collector.record_script(path, script)),
         }
     }
 
@@ -1216,12 +1708,13 @@ fn is_json_truthy(value: &Value) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        evaluate_raw_rule_match, expand_action_source_context, Routines, RuleEvaluationContext,
+        evaluate_raw_rule_match, expand_action_source_context, RoutineDispatchSummary, Routines,
+        RuleEvaluationContext, RuleRuntimeStatus,
     };
     use crate::core::{devices::Devices, groups::Groups, routine_history};
     use crate::db::config_queries;
     use crate::types::action::{Action, Actions};
-    use crate::types::automation_event::{EventCausation, EventOrigin};
+    use crate::types::automation_event::{DeviceMutation, EventCausation, EventId, EventOrigin};
     use crate::types::device::{
         ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, DeviceRef, ManageKind,
         SensorDevice,
@@ -1230,7 +1723,8 @@ mod tests {
     use crate::types::group::GroupsConfig;
     use crate::types::integration::IntegrationId;
     use crate::types::rule::{
-        DeviceRule, RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule, TriggerMode,
+        AnyRule, DeviceRule, RawRule, RawRuleOperator, Routine, RoutineId, RoutinesConfig, Rule,
+        ScriptRule, TriggerMode,
     };
     use crate::utils::cli::Cli;
     use jsonptr::PointerBuf;
@@ -1317,6 +1811,7 @@ mod tests {
             causation: EventCausation::default(),
             frame_id: None,
             seed_only: false,
+            allow_deferred_scripts: true,
         }
     }
 
@@ -1848,5 +2343,334 @@ mod tests {
         assert_eq!(v2.definition_revision, 3);
         assert!(v2.execution_pending);
         assert_eq!(v2.matched_trigger_ids.len(), 1);
+    }
+
+    // ------------------------------------------------------------------
+    // P07 part 2b: legacy script leaves run off-actor
+    // ------------------------------------------------------------------
+
+    fn controllable_lamp(power: bool) -> Device {
+        Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("lamp"),
+            "Lamp".to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                power,
+                None,
+                None,
+                None,
+                Default::default(),
+                ManageKind::Unmanaged,
+            )),
+            None,
+        )
+    }
+
+    fn lamp_device_rule(power: bool) -> Rule {
+        Rule::Device(DeviceRule {
+            power: Some(power),
+            scene: None,
+            trigger_mode: TriggerMode::Level,
+            device_ref: DeviceRef::new_with_id(
+                IntegrationId::from("mqtt".to_string()),
+                DeviceId::new("lamp"),
+            ),
+        })
+    }
+
+    fn script_rule(script: &str) -> Rule {
+        Rule::Script(ScriptRule {
+            script: script.to_string(),
+        })
+    }
+
+    fn trigger_action() -> Action {
+        Action::ForceTriggerRoutine(crate::types::rule::ForceTriggerRoutineDescriptor {
+            routine_id: RoutineId::from("target".to_string()),
+        })
+    }
+
+    fn deferred_routines(rules: Vec<Rule>) -> (Routines, RoutineId, RxEventChannel) {
+        let (event_tx, event_rx) = mk_event_channel();
+        let routine_id = RoutineId::from("scripted".to_string());
+        let mut config = RoutinesConfig::new();
+        config.insert(
+            routine_id.clone(),
+            Routine {
+                name: "Scripted".to_string(),
+                rules,
+                actions: vec![trigger_action()],
+            },
+        );
+        (Routines::new(config, event_tx), routine_id, event_rx)
+    }
+
+    fn lamp_mutation(power_before: bool, power_after: bool) -> (Devices, DeviceMutation) {
+        let (mut devices, _rx) = test_devices();
+        let before = controllable_lamp(power_before);
+        let after = controllable_lamp(power_after);
+        devices.set_state(&after, true, true);
+        let mutation = DeviceMutation {
+            event_id: EventId::default(),
+            device_key: after.get_device_key(),
+            before: Some(before),
+            after,
+            origin: EventOrigin::Report,
+        };
+        (devices, mutation)
+    }
+
+    async fn evaluate_mutation(
+        routines: &mut Routines,
+        devices: &Devices,
+    ) -> RoutineDispatchSummary {
+        let groups = Groups::new(GroupsConfig::default());
+        let after = controllable_lamp(true);
+        let mutation = DeviceMutation {
+            event_id: EventId::default(),
+            device_key: after.get_device_key(),
+            before: Some(controllable_lamp(false)),
+            after,
+            origin: EventOrigin::Report,
+        };
+        routines
+            .handle_internal_state_update(
+                &mutation,
+                devices,
+                &groups,
+                EventOrigin::Report,
+                EventCausation::default(),
+                None,
+            )
+            .await
+    }
+
+    // V1 rows with a script rule load through the legacy validator and are
+    // registered as legacy script owners.
+    #[test]
+    fn v1_script_rule_rows_load_and_register_legacy_owners() {
+        let row = config_queries::RoutineRow {
+            id: "legacy".to_string(),
+            name: "Legacy".to_string(),
+            enabled: true,
+            semantics_version: 1,
+            revision: 0,
+            definition_v2: None,
+            rules: json!([
+                { "script": "devices['mqtt/lamp'] !== undefined" },
+                { "power": true, "trigger_mode": "level",
+                  "integration_id": "mqtt", "device_id": "lamp" }
+            ]),
+            actions: json!([
+                { "action": "ForceTriggerRoutine", "routine_id": "target" }
+            ]),
+        };
+        let routines = load(&[row]);
+        assert!(
+            routines
+                .config
+                .contains_key(&RoutineId::from("legacy".to_string())),
+            "quarantined: {:?}",
+            routines.quarantined_routines()
+        );
+        assert_eq!(
+            routines.legacy_script_owners(),
+            [RoutineId::from("legacy".to_string())]
+                .into_iter()
+                .collect()
+        );
+    }
+
+    // Section 6.4: a script leaf defers the combined decision; the native
+    // leaf result is captured and the script result is combined with it.
+    #[tokio::test]
+    async fn legacy_script_leaf_defers_and_combines_with_captured_native_leaves() {
+        let (mut routines, routine_id, _rx) =
+            deferred_routines(vec![script_rule("true"), lamp_device_rule(true)]);
+        let (devices, _mutation) = lamp_mutation(false, true);
+
+        let summary = evaluate_mutation(&mut routines, &devices).await;
+        assert_eq!(summary.dispatched, 0, "deferred decisions dispatch nothing");
+        assert_eq!(summary.suppressed, 0);
+
+        let requests = routines.take_deferred_script_requests();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].routine_id, routine_id);
+        assert_eq!(requests[0].path, "rules/0");
+        assert!(
+            requests[0].context.get("devices").is_some(),
+            "legacy context carries the devices global"
+        );
+        assert!(routines.take_deferred_script_requests().is_empty());
+
+        // Pending status: visible, but never triggering.
+        let pending = routines
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("pending status visible");
+        assert!(!pending.will_trigger);
+        assert!(!pending.rules[0].condition_match);
+
+        let runs = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/0",
+            RuleRuntimeStatus::from_match(true, true),
+        );
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].actions.len(), 1);
+        assert!(matches!(runs[0].actions[0], Action::ForceTriggerRoutine(_)));
+
+        // The captured decision is overlaid onto refresh passes.
+        routines.refresh_runtime_statuses(&devices, &Groups::new(GroupsConfig::default()), None);
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("status visible");
+        assert!(status.will_trigger);
+        assert!(status.rules.iter().all(|rule| rule.condition_match));
+    }
+
+    // Section 6.4: nested Any with a native leaf interspersed between script
+    // leaves; only fully resolved heads finalize, and the combine uses the
+    // captured native result.
+    #[tokio::test]
+    async fn nested_any_script_leaves_combine_with_interspersed_native_leaves() {
+        let (mut routines, routine_id, _rx) = deferred_routines(vec![Rule::Any(AnyRule {
+            any: vec![
+                script_rule("false"),
+                Rule::Any(AnyRule {
+                    any: vec![script_rule("true"), lamp_device_rule(false)],
+                }),
+            ],
+        })]);
+        let (devices, _mutation) = lamp_mutation(false, true);
+
+        let _ = evaluate_mutation(&mut routines, &devices).await;
+        let requests = routines.take_deferred_script_requests();
+        let paths: Vec<&str> = requests
+            .iter()
+            .map(|request| request.path.as_str())
+            .collect();
+        assert_eq!(paths, vec!["rules/0/any/0", "rules/0/any/1/any/0"]);
+
+        // Resolving the later leaf first must not finalize the decision.
+        let later = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/0/any/1/any/0",
+            RuleRuntimeStatus::from_match(true, true),
+        );
+        assert!(later.is_empty(), "head leaf still unresolved");
+
+        let head = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/0/any/0",
+            RuleRuntimeStatus::from_match(false, false),
+        );
+        assert_eq!(head.len(), 1, "both leaves resolved -> combined decision");
+        assert_eq!(head[0].actions.len(), 1);
+    }
+
+    // B04/Section 6.4: shared-device edge memory is applied once under actor
+    // ownership at capture time, and a second frame does not re-trigger.
+    #[tokio::test]
+    async fn shared_device_edge_memory_applies_at_capture_not_finalize() {
+        let edge_rule = Rule::Device(DeviceRule {
+            power: Some(true),
+            scene: None,
+            trigger_mode: TriggerMode::Edge,
+            device_ref: DeviceRef::new_with_id(
+                IntegrationId::from("mqtt".to_string()),
+                DeviceId::new("lamp"),
+            ),
+        });
+        let (mut routines, routine_id, _rx) =
+            deferred_routines(vec![edge_rule, script_rule("true")]);
+        let (devices, _mutation) = lamp_mutation(false, true);
+
+        let _ = evaluate_mutation(&mut routines, &devices).await;
+        assert!(
+            routines
+                .prev_edge_triggered
+                .contains(&(routine_id.clone(), controllable_lamp(true).get_device_key())),
+            "edge memory is recorded when the frame is captured"
+        );
+        let requests = routines.take_deferred_script_requests();
+        assert_eq!(requests.len(), 1);
+
+        let runs = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/1",
+            RuleRuntimeStatus::from_match(true, true),
+        );
+        assert_eq!(runs.len(), 1);
+
+        // Same state reported again: the edge rule no longer triggers, so the
+        // combined decision must not fire even though the script still matches.
+        let _ = evaluate_mutation(&mut routines, &devices).await;
+        let requests = routines.take_deferred_script_requests();
+        assert_eq!(requests.len(), 1);
+        let runs = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/1",
+            RuleRuntimeStatus::from_match(true, true),
+        );
+        assert!(
+            runs.is_empty(),
+            "captured edge memory must prevent a re-fire"
+        );
+    }
+
+    // Section 6.4: a reload invalidates in-flight legacy leaves; their results
+    // are rejected and dispatch nothing.
+    #[tokio::test]
+    async fn reload_rejects_in_flight_legacy_leaf_results() {
+        let (mut routines, routine_id, _rx) = deferred_routines(vec![script_rule("true")]);
+        let (devices, _mutation) = lamp_mutation(false, true);
+
+        let _ = evaluate_mutation(&mut routines, &devices).await;
+        let requests = routines.take_deferred_script_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(routines.note_deferred_leaf_admitted(&routine_id, &requests[0].path, 7));
+
+        routines.load_config_rows(&[], &super::automation::ConfigCatalog::default());
+        let runs = routines.resolve_deferred_leaf_result(
+            &routine_id,
+            7,
+            RuleRuntimeStatus::from_match(true, true),
+        );
+        assert!(runs.is_empty(), "stale leaves never dispatch");
+        assert!(routines.take_deferred_script_requests().is_empty());
+    }
+
+    // Refresh and seed passes must never submit script work or execute it.
+    #[test]
+    fn refresh_passes_leave_script_leaves_pending_without_submission() {
+        let (mut routines, routine_id, _rx) = deferred_routines(vec![script_rule("true")]);
+        let (devices, _mutation) = lamp_mutation(false, true);
+        let groups = Groups::new(GroupsConfig::default());
+
+        let history_before = routine_history::recent_routine_history().len();
+        routines.refresh_runtime_statuses(&devices, &groups, None);
+        routines.seed_transitions(&devices, &groups, None);
+
+        assert!(routines.take_deferred_script_requests().is_empty());
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("status visible");
+        assert!(!status.will_trigger);
+        assert!(status.rules[0].error.is_none());
+        assert_eq!(
+            routine_history::recent_routine_history().len(),
+            history_before,
+            "refresh/seed must not write history"
+        );
     }
 }

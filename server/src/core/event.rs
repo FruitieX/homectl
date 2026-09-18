@@ -18,6 +18,7 @@ use crate::types::{
     event::*,
     group::GroupId,
     integration::CustomActionDescriptor,
+    routine_status::RuleRuntimeStatus,
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
     scene::{
         ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor, SceneConfig,
@@ -33,11 +34,12 @@ use super::snapshot::SnapshotChanges;
 use super::state::{AppState, PendingWsUpdate};
 use super::{
     automation::{
-        guard_suppression, step_status, CompleteResult, FrameContext, InvocationToken, PlanInputs,
-        PlannedStepBody, RoutinePlan, ScriptOutputContract,
+        guard_suppression, step_status, CompleteResult, ConditionOutcome, FrameContext,
+        InvocationToken, PlanInputs, PlannedStepBody, RoutinePlan, ScriptOutputContract,
     },
     groups::Groups,
     integrations::Integrations,
+    routines::FinalizedRuleRun,
 };
 
 /// Resolves the effective scene id for an action that may reference the
@@ -434,6 +436,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 )
                 .await;
 
+            // P07: legacy script leaves captured by this evaluation run
+            // off-actor; results finalize the captured decision later.
+            state.execute_deferred_legacy_scripts().await;
+
             // P04: evaluate v2 routines against the same single-mutation frame.
             if !state.rules.compiled_v2_routines().is_empty() {
                 let after_view = state.devices.get_state().clone();
@@ -658,9 +664,88 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 ..SnapshotChanges::none()
             });
         }
+        Event::RuleScriptLeafResult {
+            routine_id,
+            request_id,
+            owner_key,
+            owner_generation,
+            definition_revision,
+            state_revision,
+            value,
+            error,
+        } => {
+            let token = InvocationToken {
+                request_id: *request_id,
+                owner_key: owner_key.clone(),
+                owner_generation: *owner_generation,
+                definition_revision: *definition_revision,
+                state_revision: *state_revision,
+                contract: ScriptOutputContract::Condition,
+            };
+            let resolution =
+                legacy_leaf_resolution(state, &token, value.as_ref(), error.as_deref());
+            let finalized =
+                state
+                    .rules
+                    .resolve_deferred_leaf_result(routine_id, *request_id, resolution);
+            dispatch_finalized_rule_runs(state, finalized);
+            state.refresh_routine_statuses();
+            outcome.mark_snapshot_changes(SnapshotChanges {
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            });
+        }
     }
 
     Ok(outcome)
+}
+
+/// Complete one legacy rule-script leaf against the coordinator and turn the
+/// outcome into a captured leaf status. Stale, contract, and worker failures
+/// stay visible in the routine status and dispatch nothing (Section 6.4).
+fn legacy_leaf_resolution(
+    state: &mut AppState,
+    token: &InvocationToken,
+    value: Option<&serde_json::Value>,
+    error: Option<&str>,
+) -> RuleRuntimeStatus {
+    if let Some(message) = error {
+        return RuleRuntimeStatus::from_error(format!(
+            "script_worker_error: {}",
+            super::automation::bounded_text(message)
+        ));
+    }
+    let value = value.cloned().unwrap_or(serde_json::Value::Bool(false));
+    match state
+        .scripts
+        .coordinator_mut()
+        .complete_condition(token, &value)
+    {
+        CompleteResult::Applied { value, .. } => {
+            let matched = matches!(value, ConditionOutcome::Known(true));
+            RuleRuntimeStatus::from_match(matched, matched)
+        }
+        CompleteResult::Stale(reason) => {
+            RuleRuntimeStatus::from_error(format!("script_result_stale: {}", reason.as_str()))
+        }
+        CompleteResult::ContractError { message } => RuleRuntimeStatus::from_error(format!(
+            "script_contract_error: {}",
+            super::automation::bounded_text(&message)
+        )),
+    }
+}
+
+/// Dispatch the actions of finalized legacy decisions through the same
+/// `RoutineAction` path as v1 captures, with the frozen frame causation.
+fn dispatch_finalized_rule_runs(state: &mut AppState, runs: Vec<FinalizedRuleRun>) {
+    for run in runs {
+        for action in run.actions {
+            state.event_tx.send(Event::RoutineAction {
+                action,
+                causation: run.causation,
+            });
+        }
+    }
 }
 
 /// Apply a validated v2 helper write and schedule durable persistence.
@@ -1103,6 +1188,78 @@ impl AppState {
         }
     }
 
+    /// Admit and submit the legacy script leaves captured by the last frame
+    /// evaluation(s). Pool creation, owner admission, and spawning happen on
+    /// the actor, but no script ever runs on this thread and the actor never
+    /// waits for a result (Section 6.4).
+    async fn execute_deferred_legacy_scripts(&mut self) {
+        let requests = self.rules.take_deferred_script_requests();
+        if requests.is_empty() {
+            return;
+        }
+
+        // A missing worker degrades to a visible per-leaf error instead of
+        // leaving legacy decisions pending forever.
+        let pool = match self.scripts.ensure_pool().await {
+            Ok(pool) => pool,
+            Err(message) => {
+                for request in requests {
+                    let finalized = self.rules.resolve_deferred_script_leaf(
+                        &request.routine_id,
+                        &request.path,
+                        RuleRuntimeStatus::from_error(message.clone()),
+                    );
+                    dispatch_finalized_rule_runs(self, finalized);
+                }
+                warn!("{message}");
+                self.refresh_routine_statuses();
+                return;
+            }
+        };
+
+        for request in requests {
+            match self.scripts.prepare_legacy_leaf(
+                &request.routine_id,
+                request.script,
+                request.context,
+            ) {
+                Ok(run) => {
+                    if !self.rules.note_deferred_leaf_admitted(
+                        &request.routine_id,
+                        &request.path,
+                        run.token.request_id,
+                    ) {
+                        // No captured leaf to settle (configuration changed
+                        // mid-command): release the admitted slot instead of
+                        // leaking a pending invocation.
+                        warn!(
+                            "Legacy script leaf for routine {} disappeared before submission",
+                            request.routine_id.0
+                        );
+                        self.scripts
+                            .coordinator_mut()
+                            .complete_condition(&run.token, &serde_json::Value::Bool(false));
+                        continue;
+                    }
+                    self.scripts.spawn_legacy_execution(
+                        std::sync::Arc::clone(&pool),
+                        self.event_tx.clone(),
+                        run,
+                    );
+                }
+                Err(reason) => {
+                    let finalized = self.rules.resolve_deferred_script_leaf(
+                        &request.routine_id,
+                        &request.path,
+                        RuleRuntimeStatus::from_error(reason),
+                    );
+                    dispatch_finalized_rule_runs(self, finalized);
+                }
+            }
+        }
+        self.refresh_routine_statuses();
+    }
+
     /// Hand admitted script invocations to the supervised pool. A missing or
     /// failed pool records a visible rejected run for every admitted
     /// invocation instead of leaving them pending forever.
@@ -1211,6 +1368,11 @@ impl AppState {
                 .await;
             suppressed += summary.suppressed;
         }
+
+        // P07: legacy script leaves captured by this frame's v1 evaluations
+        // are submitted off-actor; their results finalize the frozen decisions
+        // as actor events.
+        self.execute_deferred_legacy_scripts().await;
 
         // P04: v2 routines evaluate once per coherent frame. The before view
         // rolls back every mutation in the transaction, so a multi-device
@@ -2565,6 +2727,222 @@ pub(crate) mod tests {
             "unexpected rejection reason: {reason}"
         );
         assert_eq!(run.steps[0].disposition, StepDisposition::Suppressed);
+    }
+
+    fn legacy_routine_row(id: &str, script: &str) -> RoutineRow {
+        RoutineRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled: true,
+            semantics_version: 1,
+            revision: 0,
+            definition_v2: None,
+            rules: serde_json::json!([
+                { "script": script },
+                { "power": true, "trigger_mode": "level",
+                  "integration_id": "mqtt", "device_id": "lamp" }
+            ]),
+            actions: serde_json::json!([
+                { "action": "ForceTriggerRoutine", "routine_id": "target" }
+            ]),
+        }
+    }
+
+    /// A loaded routine that never matches, for force-trigger targets.
+    fn inert_routine_row(id: &str) -> RoutineRow {
+        RoutineRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled: true,
+            semantics_version: 1,
+            revision: 0,
+            definition_v2: None,
+            rules: serde_json::json!([
+                { "power": true, "trigger_mode": "level",
+                  "integration_id": "mqtt", "device_id": "missing" }
+            ]),
+            actions: serde_json::json!([]),
+        }
+    }
+
+    async fn next_leaf_result(
+        state: &mut AppState,
+        event_rx: &mut crate::types::event::RxEventChannel,
+    ) -> Event {
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                let event = event_rx.recv().await.expect("event channel open");
+                if matches!(event, Event::RuleScriptLeafResult { .. }) {
+                    return event;
+                }
+                handle_event(state, &event).await.unwrap();
+                state.flush_pending_frames().await;
+            }
+        })
+        .await
+        .expect("legacy script leaf result arrives within the test budget")
+    }
+
+    // P07/Section 6.4 vertical slice: a v1 script rule is evaluated off-actor;
+    // its boolean result is combined with the captured native leaf results and
+    // the frozen actions are dispatched through the normal path.
+    #[tokio::test]
+    async fn p07_legacy_rule_script_executes_off_actor_and_dispatches_frozen_actions() {
+        let (mut state, mut event_rx) = test_state();
+        state.scripts.worker_binary = Some(script_worker_binary());
+
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        let script = "devices['mqtt/lamp'] !== undefined";
+        state.runtime_config.routines = vec![
+            legacy_routine_row("legacy", script),
+            inert_routine_row("target"),
+        ];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let routine_id = crate::types::rule::RoutineId("legacy".to_string());
+        let pending = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("status visible");
+        assert!(
+            !pending.will_trigger,
+            "the combined decision waits for the worker leaf"
+        );
+        assert!(
+            !pending.rules[0].condition_match,
+            "script leaf shows the pending placeholder"
+        );
+
+        let result = next_leaf_result(&mut state, &mut event_rx).await;
+        let Event::RuleScriptLeafResult {
+            routine_id: result_routine,
+            value,
+            error,
+            ..
+        } = &result
+        else {
+            unreachable!("helper filters leaf results");
+        };
+        assert_eq!(result_routine, &routine_id);
+        assert!(error.is_none(), "unexpected worker error: {error:?}");
+        assert_eq!(value, &Some(serde_json::json!(true)));
+        handle_event(&mut state, &result).await.unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("status visible");
+        assert!(status.will_trigger);
+        assert!(status.rules.iter().all(|rule| rule.condition_match));
+        assert!(status.rules.iter().all(|rule| rule.error.is_none()));
+
+        // The frozen action reached the actor channel as a v1 routine action.
+        let mut dispatched = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            if matches!(event, Event::RoutineAction { .. }) {
+                dispatched += 1;
+            }
+            handle_event(&mut state, &event).await.unwrap();
+            assert!(dispatched < 8, "dispatch loop should terminate");
+        }
+        assert_eq!(dispatched, 1, "one frozen action dispatched");
+    }
+
+    // Section 6.4: a reload while a legacy leaf is in flight rejects the
+    // result and dispatches nothing.
+    #[tokio::test]
+    async fn p07_legacy_leaf_result_after_reload_is_rejected() {
+        let (mut state, mut event_rx) = test_state();
+        state.scripts.worker_binary = Some(script_worker_binary());
+
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        state.runtime_config.routines = vec![legacy_routine_row("legacy", "true")];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        // Reload: same row, but every load invalidates in-flight v1 results.
+        state.runtime_config.routines = vec![legacy_routine_row("legacy", "true")];
+        state.apply_runtime_routines();
+
+        let result = next_leaf_result(&mut state, &mut event_rx).await;
+        handle_event(&mut state, &result).await.unwrap();
+        state.flush_pending_frames().await;
+
+        let mut dispatched = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            if matches!(event, Event::RoutineAction { .. }) {
+                dispatched += 1;
+            }
+        }
+        assert_eq!(dispatched, 0, "stale legacy results must not dispatch");
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&crate::types::rule::RoutineId("legacy".to_string()))
+            .cloned()
+            .expect("status visible");
+        assert!(!status.will_trigger);
+        assert_eq!(
+            state
+                .scripts
+                .coordinator()
+                .pending_count(&crate::core::automation::ScriptOwnerId::routine("legacy")),
+            0,
+            "the reload released the pending admission slot"
+        );
     }
 
     // A missing worker binary degrades to a visible rejected run, not a

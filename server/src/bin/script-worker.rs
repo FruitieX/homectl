@@ -73,6 +73,9 @@ fn handle_script(request: &ScriptRequest, writer: &mut impl Write) {
         RequestKind::Validate => {
             engine::validate_script(&request.script).map(|()| serde_json::Value::Null)
         }
+        RequestKind::ExecuteLegacy => {
+            engine::execute_legacy_rule_script(&request.script, &request.context)
+        }
     };
 
     let response = match result {

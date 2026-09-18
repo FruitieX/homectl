@@ -41,6 +41,12 @@ use super::script_coordinator::{
 /// Maximum characters retained from a worker failure in a visible status.
 pub const MAX_SCRIPT_ERROR_CHARS: usize = 512;
 
+/// Definition revision recorded for legacy (v1) script owners. V1 routine rows
+/// have no revision, so every configuration load re-registers the owner and
+/// bumps its generation: any in-flight v1 result is conservatively rejected
+/// after a reload (Section 6.4).
+pub const LEGACY_DEFINITION_REVISION: i64 = 0;
+
 /// One admitted handler invocation ready to be handed to the worker pool.
 #[derive(Clone, Debug)]
 pub struct PreparedScriptRun {
@@ -49,6 +55,15 @@ pub struct PreparedScriptRun {
     pub source_body: String,
     pub context: Value,
     pub causation: EventCausation,
+}
+
+/// One admitted legacy (v1) rule-script leaf ready for the worker pool.
+#[derive(Clone, Debug)]
+pub struct PreparedLegacyLeaf {
+    pub routine_id: RoutineId,
+    pub token: InvocationToken,
+    pub script: String,
+    pub context: Value,
 }
 
 /// Owner state for script programs owned by the state actor.
@@ -87,11 +102,17 @@ impl ScriptExecution {
         &mut self.coordinator
     }
 
-    /// Reconcile routine owners with the compiled definitions. Definitions
-    /// whose revision is unchanged keep their generation and pending results;
-    /// edited definitions bump the generation (S16); removed definitions drop
-    /// their owner state.
-    pub fn sync_owners(&mut self, definitions: &BTreeMap<RoutineId, V2Definition>) {
+    /// Reconcile routine owners with the compiled definitions and legacy
+    /// script-bearing routines. V2 definitions whose revision is unchanged keep
+    /// their generation and pending results; edited definitions bump the
+    /// generation (S16); removed definitions drop their owner state. Legacy
+    /// owners are re-registered on every reconciliation so a configuration
+    /// reload always invalidates in-flight v1 results (Section 6.4).
+    pub fn sync_owners(
+        &mut self,
+        definitions: &BTreeMap<RoutineId, V2Definition>,
+        legacy_script_owners: &BTreeSet<RoutineId>,
+    ) {
         let mut live: BTreeSet<String> = BTreeSet::new();
         for (routine_id, definition) in definitions {
             if !matches!(
@@ -106,6 +127,12 @@ impl ScriptExecution {
                 self.coordinator
                     .load_owner(&owner, definition.revision, Value::Null);
             }
+            live.insert(owner.key());
+        }
+        for routine_id in legacy_script_owners {
+            let owner = ScriptOwnerId::routine(routine_id.0.clone());
+            self.coordinator
+                .load_owner(&owner, LEGACY_DEFINITION_REVISION, Value::Null);
             live.insert(owner.key());
         }
 
@@ -317,8 +344,68 @@ impl ScriptExecution {
         }
     }
 
+    /// Admit one legacy rule-script leaf. Uses the same per-owner queues and
+    /// generation checks as v2 handlers; admission failures are returned as
+    /// visible reasons and never reach a worker.
+    pub fn prepare_legacy_leaf(
+        &mut self,
+        routine_id: &RoutineId,
+        script: String,
+        context: Value,
+    ) -> Result<PreparedLegacyLeaf, String> {
+        let invocation = ScriptInvocation {
+            owner: ScriptOwnerId::routine(routine_id.0.clone()),
+            definition_revision: LEGACY_DEFINITION_REVISION,
+            contract: super::script_contract::ScriptOutputContract::Condition,
+            source_body: script.clone(),
+            context: context.clone(),
+            coalesce: super::script_coordinator::CoalescePolicy::Queue,
+            run_id: None,
+        };
+        match self.coordinator.submit(&invocation) {
+            Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
+                Ok(PreparedLegacyLeaf {
+                    routine_id: routine_id.clone(),
+                    token,
+                    script,
+                    context,
+                })
+            }
+            Err(error) => Err(admission_error_text(&error)),
+        }
+    }
+
+    /// Deliver a legacy leaf result as an actor event.
+    pub fn spawn_legacy_execution(
+        &self,
+        pool: Arc<JsWorkerPool>,
+        event_tx: TxEventChannel,
+        run: PreparedLegacyLeaf,
+    ) {
+        tokio::spawn(async move {
+            let outcome = pool.execute_legacy(&run.script, run.context).await;
+            let (value, error) = match outcome {
+                Ok(value) => (Some(value), None),
+                Err(error) => (None, Some(bounded_text(&error.to_string()))),
+            };
+            event_tx
+                .try_send(Event::RuleScriptLeafResult {
+                    routine_id: run.routine_id,
+                    request_id: run.token.request_id,
+                    owner_key: run.token.owner_key,
+                    owner_generation: run.token.owner_generation,
+                    definition_revision: run.token.definition_revision,
+                    state_revision: run.token.state_revision,
+                    value,
+                    error,
+                })
+                .ok();
+        });
+    }
+
     /// Deliver a handler result as an actor event. The spawned task only owns
     /// the shared pool and the event sender; it never touches `AppState`.
+    #[allow(clippy::too_many_arguments)]
     pub fn spawn_handler_execution(
         &self,
         pool: Arc<JsWorkerPool>,
@@ -410,6 +497,7 @@ mod tests {
     };
 
     use super::super::evaluate::FrameContext;
+    use super::super::script_coordinator::{CompleteResult, StaleReason};
     use super::*;
     use crate::core::groups::Groups;
 
@@ -592,7 +680,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        scripts.sync_owners(&owners);
+        scripts.sync_owners(&owners, &BTreeSet::new());
         let owner = ScriptOwnerId::routine("scripted");
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(1));
         assert_eq!(
@@ -604,10 +692,46 @@ mod tests {
 
         let edited: BTreeMap<RoutineId, V2Definition> =
             [definition("scripted", 2, true)].into_iter().collect();
-        scripts.sync_owners(&edited);
+        scripts.sync_owners(&edited, &BTreeSet::new());
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(2));
 
-        scripts.sync_owners(&BTreeMap::new());
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new());
+        assert_eq!(scripts.coordinator().owner_kind(&owner), None);
+    }
+
+    // Section 6.4: legacy owners are re-registered on every reconciliation so
+    // a configuration reload invalidates in-flight v1 results.
+    #[test]
+    fn legacy_owners_reload_and_bump_generation() {
+        let mut scripts = ScriptExecution::default();
+        let legacy: BTreeSet<RoutineId> = [RoutineId("legacy".to_string())].into_iter().collect();
+        scripts.sync_owners(&BTreeMap::new(), &legacy);
+
+        let owner = ScriptOwnerId::routine("legacy");
+        assert_eq!(
+            scripts.coordinator().definition_revision(&owner),
+            Some(LEGACY_DEFINITION_REVISION)
+        );
+        let prepared = scripts
+            .prepare_legacy_leaf(
+                &RoutineId("legacy".to_string()),
+                "true".to_string(),
+                json!({"devices": {}, "groups": {}}),
+            )
+            .expect("legacy leaf is admitted");
+        assert_eq!(prepared.token.owner_generation, 1);
+
+        scripts.sync_owners(&BTreeMap::new(), &legacy);
+        let completed = scripts
+            .coordinator_mut()
+            .complete_condition(&prepared.token, &json!(true));
+        assert_eq!(
+            completed,
+            CompleteResult::Stale(StaleReason::DefinitionChanged),
+            "a reload rejects the in-flight legacy result"
+        );
+
+        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new());
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
     }
 }

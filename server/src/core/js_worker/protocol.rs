@@ -38,6 +38,10 @@ pub const MAX_RESPONSE_BYTES: usize = MAX_RESULT_BYTES + 64 * 1024;
 /// `core::automation::compile::SUPPORTED_SCRIPT_API_VERSION`).
 pub const SUPPORTED_SCRIPT_API_VERSION: u32 = 1;
 
+/// Legacy (v1) compatibility invocation format version. Lives beside the v2
+/// version so the two ABIs can never be silently mixed (Section 6.4).
+pub const SUPPORTED_LEGACY_API_VERSION: u32 = 1;
+
 /// Maximum accepted `run_id` length.
 pub const MAX_RUN_ID_BYTES: usize = 256;
 
@@ -45,10 +49,14 @@ pub const MAX_RUN_ID_BYTES: usize = 256;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestKind {
-    /// Parse the script and execute it, returning its JSON result.
+    /// Parse the v2 function body and execute it, returning its JSON result.
     Execute,
-    /// Parse the script without executing it.
+    /// Parse the v2 function body without executing it.
     Validate,
+    /// Execute a legacy (v1) rule expression: old `devices`/`groups` globals,
+    /// raw expression completion, and plain JavaScript boolean truthiness.
+    /// Kept as a distinct kind so the v2 ABI is never applied to v1 scripts.
+    ExecuteLegacy,
 }
 
 /// Deterministic fault-injection modes used by process-level tests.
@@ -133,6 +141,25 @@ impl ScriptRequest {
             test_mode: None,
         }
     }
+
+    /// A request that executes a legacy (v1) rule expression with the legacy
+    /// invocation context (`{devices, groups}`).
+    pub fn execute_legacy(
+        request_id: u64,
+        script: impl Into<String>,
+        context: serde_json::Value,
+    ) -> Self {
+        Self {
+            request_id,
+            generation: 0,
+            api_version: SUPPORTED_LEGACY_API_VERSION,
+            kind: RequestKind::ExecuteLegacy,
+            script: script.into(),
+            context,
+            run_id: None,
+            test_mode: None,
+        }
+    }
 }
 
 /// One invocation response sent from a worker process to the supervisor.
@@ -197,10 +224,18 @@ impl ScriptResponse {
 
 /// Request-side validation that does not require a worker.
 pub fn validate_request(request: &ScriptRequest) -> Result<(), String> {
-    if request.api_version != SUPPORTED_SCRIPT_API_VERSION {
+    let supported_version = match request.kind {
+        RequestKind::Execute | RequestKind::Validate => SUPPORTED_SCRIPT_API_VERSION,
+        RequestKind::ExecuteLegacy => SUPPORTED_LEGACY_API_VERSION,
+    };
+    if request.api_version != supported_version {
+        let abi = match request.kind {
+            RequestKind::Execute | RequestKind::Validate => "script",
+            RequestKind::ExecuteLegacy => "legacy script",
+        };
         return Err(format!(
-            "unsupported script api_version {}; this build supports {}",
-            request.api_version, SUPPORTED_SCRIPT_API_VERSION
+            "unsupported {abi} api_version {}; this build supports {}",
+            request.api_version, supported_version
         ));
     }
     if request.script.len() > MAX_SCRIPT_BYTES {
@@ -475,6 +510,22 @@ mod tests {
         request.script = "return 1;".to_string();
         request.run_id = Some("x".repeat(MAX_RUN_ID_BYTES + 1));
         assert!(validate_request(&request).is_err());
+    }
+
+    #[test]
+    fn legacy_requests_validate_against_the_legacy_api_version() {
+        let legacy = ScriptRequest::execute_legacy(
+            1,
+            "devices['a'] !== undefined",
+            serde_json::json!({"devices": {}, "groups": {}}),
+        );
+        assert_eq!(legacy.kind, RequestKind::ExecuteLegacy);
+        assert_eq!(legacy.api_version, SUPPORTED_LEGACY_API_VERSION);
+        assert!(validate_request(&legacy).is_ok());
+
+        let mut mismatched = legacy;
+        mismatched.api_version = SUPPORTED_SCRIPT_API_VERSION + 1;
+        assert!(validate_request(&mismatched).is_err());
     }
 
     #[test]

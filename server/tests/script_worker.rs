@@ -52,6 +52,14 @@ fn test_request(id: u64, mode: TestMode) -> ScriptRequest {
     request
 }
 
+async fn run_legacy(
+    pool: &JsWorkerPool,
+    script: &str,
+    context: &serde_json::Value,
+) -> Result<serde_json::Value, WorkerError> {
+    pool.execute_legacy(script, context.clone()).await
+}
+
 fn proc_entry_exists(pid: u32) -> bool {
     Path::new(&format!("/proc/{pid}")).exists()
 }
@@ -95,6 +103,66 @@ async fn executes_and_validates_scripts_through_the_worker() {
     pool.validate("return 1;").await.expect("valid syntax");
     let error = pool.validate("return (;").await.unwrap_err();
     assert!(matches!(error, WorkerError::Script { .. }), "{error:?}");
+
+    pool.shutdown().await;
+}
+
+// Section 6.4: the legacy (v1) invocation format keeps its own globals, raw
+// expression completion, and JavaScript truthiness, and is versioned
+// separately from the v2 ABI.
+#[tokio::test]
+async fn legacy_rule_scripts_keep_v1_semantics_through_the_worker() {
+    use homectl_server::core::js_worker::protocol::{
+        RequestKind, SUPPORTED_LEGACY_API_VERSION, SUPPORTED_SCRIPT_API_VERSION,
+    };
+
+    let pool = test_pool(2).await;
+    let context = json!({
+        "devices": { "mqtt/lamp": { "name": "Lamp" } },
+        "groups": { "room": { "name": "Room", "power": true, "scene_id": "night" } }
+    });
+    assert_eq!(
+        run_legacy(&pool, "true", &context).await.unwrap(),
+        json!(true)
+    );
+    assert_eq!(
+        run_legacy(&pool, "''", &context).await.unwrap(),
+        json!(false)
+    );
+    assert_eq!(
+        run_legacy(&pool, "'0'", &context).await.unwrap(),
+        json!(true)
+    );
+    assert_eq!(
+        run_legacy(&pool, "groups['room'].scene_id === 'night'", &context)
+            .await
+            .unwrap(),
+        json!(true)
+    );
+    assert_eq!(
+        run_legacy(&pool, "devices['mqtt/lamp'].name === 'Lamp'", &context)
+            .await
+            .unwrap(),
+        json!(true)
+    );
+    assert!(
+        run_legacy(&pool, "return true;", &context).await.is_err(),
+        "the v2 body ABI must not be accepted by the legacy format"
+    );
+    assert!(run_legacy(&pool, "while (true) {}", &context)
+        .await
+        .is_err());
+
+    // A v2-versioned request must not be accepted as legacy.
+    let mut mismatched = ScriptRequest::execute_legacy(1, "true", context.clone());
+    assert_eq!(mismatched.kind, RequestKind::ExecuteLegacy);
+    assert_eq!(mismatched.api_version, SUPPORTED_LEGACY_API_VERSION);
+    mismatched.api_version = SUPPORTED_SCRIPT_API_VERSION + 1;
+    let error = pool.run_request(mismatched).await.unwrap_err();
+    assert!(
+        matches!(error, WorkerError::InvalidRequest { .. }),
+        "{error:?}"
+    );
 
     pool.shutdown().await;
 }

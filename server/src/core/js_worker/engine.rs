@@ -13,6 +13,7 @@
 use boa_engine::{Context, Source};
 
 use super::protocol::{MAX_CONTEXT_BYTES, MAX_RESULT_BYTES, MAX_SCRIPT_BYTES};
+use crate::core::scripting::SCENE_SCRIPT_HELPERS;
 
 /// In-engine loop iteration limit (legacy limit, kept until compatibility review).
 pub const LOOP_ITERATION_LIMIT: u64 = 10_000;
@@ -131,6 +132,48 @@ pub fn execute_script(
     serde_json::from_str(&json).map_err(|error| format!("script result is not valid JSON: {error}"))
 }
 
+/// Execute a legacy (v1) rule expression off-actor.
+///
+/// This is a compatibility format, not a second user-facing runtime: the
+/// worker reconstructs the old `devices` and `groups` globals, evaluates the
+/// raw expression for its completion value, and coerces it with JavaScript
+/// `ToBoolean` exactly like the retired in-process `eval_boolean` (Section
+/// 6.4). The result is always a JSON boolean.
+pub fn execute_legacy_rule_script(
+    script: &str,
+    context: &serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    check_script_size(script)?;
+
+    let empty = serde_json::Value::Object(serde_json::Map::new());
+    let devices = context.get("devices").unwrap_or(&empty);
+    let groups = context.get("groups").unwrap_or(&empty);
+    let devices_json = serde_json::to_string(devices)
+        .map_err(|error| format!("legacy devices are not JSON-serializable: {error}"))?;
+    let groups_json = serde_json::to_string(groups)
+        .map_err(|error| format!("legacy groups are not JSON-serializable: {error}"))?;
+    let injection = format!("var devices = {devices_json};\nvar groups = {groups_json};");
+    if injection.len() > MAX_CONTEXT_BYTES {
+        return Err(format!(
+            "legacy invocation context exceeds the {MAX_CONTEXT_BYTES} byte limit"
+        ));
+    }
+
+    let mut context = fresh_context();
+    context
+        .eval(Source::from_bytes(SCENE_SCRIPT_HELPERS))
+        .map_err(|error| format!("failed to install legacy script helpers: {error}"))?;
+    context
+        .eval(Source::from_bytes(&injection))
+        .map_err(|error| format!("failed to inject legacy script context: {error}"))?;
+
+    let value = context
+        .eval(Source::from_bytes(script))
+        .map_err(|error| format!("script error: {error}"))?;
+
+    Ok(serde_json::Value::Bool(value.to_boolean()))
+}
+
 /// Result cap used by the worker for script output.
 pub const MAX_SCRIPT_RESULT_BYTES: usize = MAX_RESULT_BYTES;
 
@@ -229,5 +272,53 @@ mod tests {
         validate_script("return 1;").unwrap();
         validate_script("while (true) {}").unwrap();
         assert!(validate_script("return (;").is_err());
+    }
+
+    fn run_legacy(script: &str) -> Result<serde_json::Value, String> {
+        execute_legacy_rule_script(
+            script,
+            &serde_json::json!({
+                "devices": {
+                    "dummy/lamp": { "state": { "Controllable": { "power": true } } }
+                },
+                "groups": {
+                    "room": { "name": "Room", "power": true, "scene_id": "night" }
+                }
+            }),
+        )
+    }
+
+    // B04/Section 6.4: v1 semantics are raw completion + ToBoolean, not the v2
+    // function-body ABI.
+    #[test]
+    fn legacy_rule_scripts_keep_truthiness_and_globals() {
+        assert_eq!(run_legacy("true").unwrap(), serde_json::json!(true));
+        assert_eq!(run_legacy("false").unwrap(), serde_json::json!(false));
+        assert_eq!(run_legacy("1 + 1 === 2").unwrap(), serde_json::json!(true));
+        assert_eq!(run_legacy("''").unwrap(), serde_json::json!(false));
+        assert_eq!(run_legacy("'0'").unwrap(), serde_json::json!(true));
+        assert_eq!(run_legacy("0").unwrap(), serde_json::json!(false));
+        assert_eq!(run_legacy("[]").unwrap(), serde_json::json!(true));
+        assert_eq!(
+            run_legacy("({}).missing").unwrap(),
+            serde_json::json!(false)
+        );
+        assert_eq!(
+            run_legacy("groups['room'].scene_id === 'night'").unwrap(),
+            serde_json::json!(true)
+        );
+        assert_eq!(
+            run_legacy("devices['dummy/lamp'] !== undefined").unwrap(),
+            serde_json::json!(true)
+        );
+    }
+
+    #[test]
+    fn legacy_rule_scripts_reject_errors_and_runaway_loops() {
+        assert!(run_legacy("throw new Error('boom')").is_err());
+        assert!(run_legacy("while (true) {}").is_err());
+        // The v2 body ABI must not be accepted: `return` is a syntax error in
+        // the legacy raw-expression format.
+        assert!(run_legacy("return true;").is_err());
     }
 }

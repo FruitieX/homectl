@@ -58,5 +58,6 @@ pub use script_coordinator::{
     MAX_PENDING_INVOCATIONS_PER_OWNER,
 };
 pub use script_runtime::{
-    bounded_text, PreparedScriptRun, ScriptExecution, MAX_SCRIPT_ERROR_CHARS,
+    bounded_text, PreparedLegacyLeaf, PreparedScriptRun, ScriptExecution,
+    LEGACY_DEFINITION_REVISION, MAX_SCRIPT_ERROR_CHARS,
 };

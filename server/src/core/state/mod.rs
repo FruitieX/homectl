@@ -813,10 +813,13 @@ impl AppState {
         });
     }
 
-    /// Reconcile script owner generations with the compiled v2 definitions so
-    /// an edit/disable rejects pending worker results (S16).
+    /// Reconcile script owner generations with the compiled v2 definitions and
+    /// legacy script-bearing routines so an edit/disable/reload rejects pending
+    /// worker results (S16, Section 6.4).
     pub fn sync_script_owners(&mut self) {
-        self.scripts.sync_owners(self.rules.compiled_v2_routines());
+        let legacy_owners = self.rules.legacy_script_owners();
+        self.scripts
+            .sync_owners(self.rules.compiled_v2_routines(), &legacy_owners);
     }
 
     pub async fn refresh_runtime_config_from_db(&mut self) -> Result<()> {

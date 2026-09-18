@@ -10,12 +10,79 @@ use std::collections::HashMap;
 
 use crate::types::{device::DevicesState, group::FlattenedGroupsConfig};
 
-const SCENE_SCRIPT_HELPERS: &str = r#"
+/// Scene-script helper globals. Shared verbatim with the supervised worker's
+/// legacy invocation format so v1 semantics cannot drift between the retired
+/// in-process engine and off-actor execution (P07, Section 6.4).
+pub const SCENE_SCRIPT_HELPERS: &str = r#"
 var defineSceneScript = function (factory) { return factory(); };
 var deviceState = function (config) { return config; };
 var deviceLink = function (config) { return config; };
 var sceneLink = function (config) { return config; };
 "#;
+
+/// Simplified legacy `groups` global derived from group membership and device
+/// state. This is the exact shape `update_groups` has always exposed to v1
+/// scripts; the worker receives the same materialized map.
+pub fn legacy_groups_map(
+    devices: &DevicesState,
+    groups: &FlattenedGroupsConfig,
+) -> HashMap<String, serde_json::Value> {
+    let mut groups_map: HashMap<String, serde_json::Value> = HashMap::new();
+
+    for (group_id, group) in &groups.0 {
+        let all_powered = group.device_keys.iter().all(|key| {
+            devices
+                .0
+                .get(key)
+                .and_then(|d| d.is_powered_on())
+                .unwrap_or(false)
+        });
+
+        let first_scene = group
+            .device_keys
+            .first()
+            .and_then(|key| devices.0.get(key))
+            .and_then(|d| d.get_scene_id());
+
+        let common_scene = if group
+            .device_keys
+            .iter()
+            .all(|key| devices.0.get(key).and_then(|d| d.get_scene_id()) == first_scene)
+        {
+            first_scene.map(|s| s.to_string())
+        } else {
+            None
+        };
+
+        groups_map.insert(
+            group_id.to_string(),
+            serde_json::json!({
+                "name": group.name,
+                "power": all_powered,
+                "scene_id": common_scene
+            }),
+        );
+    }
+
+    groups_map
+}
+
+/// Immutable legacy invocation context carrying the `devices` and `groups`
+/// globals for one coherent frame. Built under actor ownership; the worker
+/// only interprets it.
+pub fn legacy_rule_context(
+    devices: &DevicesState,
+    groups: &FlattenedGroupsConfig,
+) -> Result<serde_json::Value, String> {
+    let devices_json = serde_json::to_value(&devices.0)
+        .map_err(|error| format!("devices are not serializable: {error}"))?;
+    let groups_json = serde_json::to_value(legacy_groups_map(devices, groups))
+        .map_err(|error| format!("groups are not serializable: {error}"))?;
+    Ok(serde_json::json!({
+        "devices": devices_json,
+        "groups": groups_json,
+    }))
+}
 
 /// JavaScript scripting context for evaluating dynamic expressions
 pub struct ScriptEngine {
@@ -77,44 +144,7 @@ impl ScriptEngine {
 
     /// Update the script context with current group states as JSON
     pub fn update_groups(&mut self, groups: &FlattenedGroupsConfig, devices: &DevicesState) {
-        // Build a simplified group state object
-        let mut groups_map: HashMap<String, serde_json::Value> = HashMap::new();
-
-        for (group_id, group) in &groups.0 {
-            let all_powered = group.device_keys.iter().all(|key| {
-                devices
-                    .0
-                    .get(key)
-                    .and_then(|d| d.is_powered_on())
-                    .unwrap_or(false)
-            });
-
-            let first_scene = group
-                .device_keys
-                .first()
-                .and_then(|key| devices.0.get(key))
-                .and_then(|d| d.get_scene_id());
-
-            let common_scene = if group
-                .device_keys
-                .iter()
-                .all(|key| devices.0.get(key).and_then(|d| d.get_scene_id()) == first_scene)
-            {
-                first_scene.map(|s| s.to_string())
-            } else {
-                None
-            };
-
-            groups_map.insert(
-                group_id.to_string(),
-                serde_json::json!({
-                    "name": group.name,
-                    "power": all_powered,
-                    "scene_id": common_scene
-                }),
-            );
-        }
-
+        let groups_map = legacy_groups_map(devices, groups);
         let groups_json = serde_json::to_string(&groups_map).unwrap_or_else(|_| "{}".to_string());
         let script = format!("var groups = {};", groups_json);
         self.load_context(&script);

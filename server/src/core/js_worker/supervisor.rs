@@ -425,6 +425,16 @@ impl JsWorkerPool {
         self.run_request(request).await.map(|_| ())
     }
 
+    /// Execute a legacy (v1) rule expression and return its boolean result.
+    pub async fn execute_legacy(
+        &self,
+        script: &str,
+        context: serde_json::Value,
+    ) -> Result<serde_json::Value, WorkerError> {
+        let request = ScriptRequest::execute_legacy(self.next_request_id(), script, context);
+        self.run_request(request).await
+    }
+
     /// Run one request, returning its JSON value or a bounded error.
     ///
     /// This future is cancellation-safe with respect to the pool: dropping it
