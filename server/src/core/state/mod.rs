@@ -201,6 +201,11 @@ impl AppState {
             } else {
                 Arc::clone(&previous.helper_statuses)
             },
+            timers: if changes.timers {
+                Arc::new(self.timer_statuses())
+            } else {
+                Arc::clone(&previous.timers)
+            },
             ui_state: if changes.ui_state {
                 Arc::new(self.ui.get_state().clone())
             } else {
@@ -835,6 +840,11 @@ impl AppState {
     /// Pending named-timer wakeups for the scheduler driver (P09).
     pub fn timer_wakeups(&self) -> Vec<crate::core::automation::TimerWakeup> {
         self.timers.wakeups()
+    }
+
+    /// Read-only projection of live timer jobs for the published snapshot.
+    pub fn timer_statuses(&self) -> Vec<crate::types::timer_status::TimerRuntimeStatus> {
+        self.timers.runtime_statuses(self.clock.monotonic_ms())
     }
 
     /// Actor-routed administrative timer cancellation with generation

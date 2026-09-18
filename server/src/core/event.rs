@@ -778,17 +778,23 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     // queued (P09 clock policy).
                     let now_monotonic_ms = state.clock.monotonic_ms();
                     let now_wall_ms = state.clock.wall_ms();
-                    if let Err(error) = state.timers.apply(
+                    match state.timers.apply(
                         routine_id,
                         *definition_revision,
                         operation,
                         now_monotonic_ms,
                         now_wall_ms,
                     ) {
-                        warn!(
-                            "Timer operation for routine {routine_id} failed: {}",
-                            error.message()
-                        );
+                        Ok(_) => outcome.mark_snapshot_changes(SnapshotChanges {
+                            timers: true,
+                            ..SnapshotChanges::none()
+                        }),
+                        Err(error) => {
+                            warn!(
+                                "Timer operation for routine {routine_id} failed: {}",
+                                error.message()
+                            );
+                        }
                     }
                 }
                 _ => debug!("Ignoring timer operation for edited or missing routine {routine_id}"),
@@ -806,7 +812,13 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 .timers
                 .consume(routine_id, *definition_revision, timer, *generation)
             {
-                Some(fire) => state.pending_timer_fires.push(fire),
+                Some(fire) => {
+                    state.pending_timer_fires.push(fire);
+                    outcome.mark_snapshot_changes(SnapshotChanges {
+                        timers: true,
+                        ..SnapshotChanges::none()
+                    });
+                }
                 None => debug!(
                     "Ignoring stale timer wakeup for {routine_id}: \
                      timer={timer} generation={generation} due_at={due_wall_ms}"
@@ -1828,6 +1840,7 @@ pub(crate) mod tests {
             flattened_scenes: Arc::new(Default::default()),
             routine_statuses: Arc::new(Default::default()),
             helper_statuses: Arc::new(Default::default()),
+            timers: Arc::new(Default::default()),
             ui_state: Arc::new(Default::default()),
             warming_up: false,
         });
@@ -3556,5 +3569,57 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert!(!pending, "the actor removed the live timer");
+    }
+
+    // P09: live jobs are visible through the runtime snapshot, and lifecycle
+    // changes republish the projection (remaining duration is a sample).
+    #[tokio::test]
+    async fn p09_timer_projection_publishes_lifecycle_changes() {
+        use crate::core::snapshot::SnapshotChanges;
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+        use crate::types::timer_status::TimerPersistence;
+
+        let (mut state, _event_rx) = test_state();
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        state
+            .timers
+            .apply(
+                &owner,
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 5_000,
+                },
+                0,
+                1_000_000,
+            )
+            .unwrap();
+        state.publish_snapshot(SnapshotChanges {
+            timers: true,
+            ..SnapshotChanges::none()
+        });
+
+        let published = state.snapshot.load();
+        assert_eq!(published.timers.len(), 1);
+        let status = &published.timers[0];
+        assert_eq!(status.routine_id, owner);
+        assert_eq!(status.timer, timer);
+        assert_eq!(status.definition_revision, 1);
+        assert_eq!(status.persistence, TimerPersistence::Session);
+        assert!(status.remaining_ms > 0);
+        assert_eq!(status.due_wall_ms, 1_005_000);
+        drop(published);
+
+        assert_eq!(
+            state.cancel_timer(&owner, &timer, None),
+            crate::core::automation::TimerCancellation::Cancelled { generation: 1 }
+        );
+        state.publish_snapshot(SnapshotChanges {
+            timers: true,
+            ..SnapshotChanges::none()
+        });
+        assert!(state.snapshot.load().timers.is_empty());
     }
 }

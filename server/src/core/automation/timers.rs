@@ -257,6 +257,28 @@ impl TimerStore {
             .retain(|(owner, _), job| current.get(owner) == Some(&job.definition_revision));
     }
 
+    /// Read-only runtime projection for the published snapshot (P09).
+    pub fn runtime_statuses(
+        &self,
+        now_monotonic_ms: u64,
+    ) -> Vec<crate::types::timer_status::TimerRuntimeStatus> {
+        use crate::types::timer_status::{TimerJobStatus, TimerPersistence, TimerRuntimeStatus};
+
+        self.jobs
+            .iter()
+            .map(|((owner, timer), job)| TimerRuntimeStatus {
+                routine_id: owner.clone(),
+                definition_revision: job.definition_revision,
+                timer: timer.clone(),
+                generation: job.generation,
+                status: TimerJobStatus::Pending,
+                due_wall_ms: job.due_wall_ms,
+                remaining_ms: job.due_monotonic_ms.saturating_sub(now_monotonic_ms),
+                persistence: TimerPersistence::Session,
+            })
+            .collect()
+    }
+
     /// Rebuildable wakeup index for the scheduler driver.
     pub fn wakeups(&self) -> Vec<TimerWakeup> {
         self.jobs

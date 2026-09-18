@@ -23,6 +23,7 @@ use homectl_server::types::{
     routine_status::{RoutineRuntimeStatus, RoutineStatuses, RuleRuntimeStatus},
     rule::{Routine, Rule, TriggerMode},
     scene::{FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig},
+    timer_status::{TimerJobStatus, TimerPersistence, TimerRuntimeStatus},
     ui::UiActionDescriptor,
     websockets::{StateUpdate, WebSocketRequest, WebSocketResponse},
 };
@@ -71,6 +72,9 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         SourceId::export_all_to(&output_dir)?;
         TargetSpec::export_all_to(&output_dir)?;
         TimerId::export_all_to(&output_dir)?;
+        TimerJobStatus::export_all_to(&output_dir)?;
+        TimerPersistence::export_all_to(&output_dir)?;
+        TimerRuntimeStatus::export_all_to(&output_dir)?;
         TriggerRuntimeStatus::export_all_to(&output_dir)?;
         TriggerSpec::export_all_to(&output_dir)?;
         TruthValue::export_all_to(&output_dir)?;

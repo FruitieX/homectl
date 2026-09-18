@@ -214,6 +214,7 @@ async fn run_event_loop(
         flattened_scenes: Arc::new(scenes.get_flattened_scenes().clone()),
         routine_statuses: rules.get_runtime_statuses(),
         helper_statuses: Arc::new(Vec::new()),
+        timers: Arc::new(Vec::new()),
         ui_state: Arc::new(ui.get_state().clone()),
         warming_up: true,
     });

@@ -30,6 +30,7 @@ pub struct SnapshotChanges {
     pub flattened_scenes: bool,
     pub routine_statuses: bool,
     pub helper_statuses: bool,
+    pub timers: bool,
     pub ui_state: bool,
     pub warming_up: bool,
 }
@@ -43,6 +44,7 @@ impl SnapshotChanges {
             flattened_scenes: false,
             routine_statuses: false,
             helper_statuses: false,
+            timers: false,
             ui_state: false,
             warming_up: false,
         }
@@ -56,6 +58,7 @@ impl SnapshotChanges {
             flattened_scenes: true,
             routine_statuses: true,
             helper_statuses: true,
+            timers: true,
             ui_state: true,
             warming_up: true,
         }
@@ -111,6 +114,7 @@ impl SnapshotChanges {
         self.flattened_scenes |= other.flattened_scenes;
         self.routine_statuses |= other.routine_statuses;
         self.helper_statuses |= other.helper_statuses;
+        self.timers |= other.timers;
         self.ui_state |= other.ui_state;
         self.warming_up |= other.warming_up;
     }
@@ -122,6 +126,7 @@ impl SnapshotChanges {
             && !self.flattened_scenes
             && !self.routine_statuses
             && !self.helper_statuses
+            && !self.timers
             && !self.ui_state
             && !self.warming_up
     }
@@ -135,6 +140,9 @@ pub struct RuntimeSnapshot {
     pub flattened_scenes: Arc<FlattenedScenesConfig>,
     pub routine_statuses: Arc<RoutineStatuses>,
     pub helper_statuses: Arc<Vec<HelperRuntimeStatus>>,
+    /// Live named timer jobs (P09). Lifecycle changes only; the remaining
+    /// duration is a publish-time sample, not a ticking countdown.
+    pub timers: Arc<Vec<crate::types::timer_status::TimerRuntimeStatus>>,
     pub ui_state: Arc<HashMap<String, serde_json::Value>>,
     pub warming_up: bool,
 }
