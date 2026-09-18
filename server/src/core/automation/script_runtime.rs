@@ -13,7 +13,11 @@
 //! The invocation context deliberately exposes only devices the routine
 //! declared (plus the devices mutated by the triggering frame), so undeclared
 //! reads are absent instead of silently observed; the exposed set never
-//! depends on which branch a previous invocation took (S14/S15).
+//! depends on which branch a previous invocation took (S14/S15). A script may
+//! opt into the explicitly broad `AllState` compatibility declaration, which
+//! exposes every device in the current frame instead of narrowing by
+//! declarations. Devices declared before they are discovered stay absent
+//! until they appear in the frame (S13).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
@@ -189,9 +193,11 @@ impl ScriptExecution {
     ///
     /// `ctx.event` carries the coherent frame identify and mutations;
     /// `ctx.before`/`ctx.after` expose only declared and mutated devices, so an
-    /// undeclared read is absent rather than silently observed. Helpers are
-    /// exposed with their declared kind, and owner memory/revision come from
-    /// the coordinator (S11/S12/S14/S15).
+    /// undeclared read is absent rather than silently observed, unless the
+    /// script opts into the explicitly broad `AllState` declaration. Declared
+    /// entities that are not discovered yet are simply absent until they
+    /// appear (S13). Helpers are exposed with their declared kind, and owner
+    /// memory/revision come from the coordinator (S11/S12/S14/S15).
     pub fn build_handler_context(
         &mut self,
         owner: &ScriptOwnerId,
@@ -201,6 +207,7 @@ impl ScriptExecution {
         origin: EventOrigin,
         causation: EventCausation,
     ) -> Result<Value, String> {
+        let mut broad_reads = false;
         let mut device_keys: BTreeSet<DeviceKey> = BTreeSet::new();
         for declaration in &spec.declarations {
             match declaration {
@@ -214,7 +221,16 @@ impl ScriptExecution {
                     }
                 }
                 ScriptDeclaration::Timer { .. } => {}
+                ScriptDeclaration::AllState => broad_reads = true,
             }
+        }
+        if broad_reads {
+            // S14 compatibility mode: expose every device in the coherent
+            // frame instead of an exact declaration. The set is still fixed
+            // per invocation from the current frame, so a previous branch can
+            // never narrow or widen it (S15).
+            device_keys.extend(frame.before.0.keys().cloned());
+            device_keys.extend(frame.after.0.keys().cloned());
         }
         for mutation in frame.mutations {
             device_keys.insert(mutation.device_key.clone());
@@ -587,6 +603,186 @@ mod tests {
         );
         assert!(context["before"]["devices"]["dummy/lamp"].is_object());
         assert_eq!(context["event"]["mutations"].as_array().unwrap().len(), 1);
+    }
+
+    // S14: an explicit broad compatibility declaration exposes the whole
+    // current frame instead of narrowing to exact device declarations.
+    #[test]
+    fn all_state_declaration_opens_the_whole_frame() {
+        let mut scripts = ScriptExecution {
+            clock: || 1000,
+            ..ScriptExecution::default()
+        };
+        let before = states(vec![lamp("lamp", false), lamp("other", false)]);
+        let after = states(vec![lamp("lamp", true), lamp("other", false)]);
+        let mutations = vec![DeviceMutation {
+            event_id: EventId::default(),
+            device_key: key("lamp"),
+            before: Some(lamp("lamp", false)),
+            after: lamp("lamp", true),
+            origin: EventOrigin::Report,
+        }];
+        let frame = FrameContext {
+            mutations: &mutations,
+            before: &before,
+            after: &after,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let context = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(vec![ScriptDeclaration::AllState]),
+                &frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .expect("context builds");
+
+        assert!(context["after"]["devices"]["dummy/lamp"].is_object());
+        assert!(
+            context["after"]["devices"]["dummy/other"].is_object(),
+            "broad reads expose undeclared devices in the current frame"
+        );
+        assert!(context["before"]["devices"]["dummy/other"].is_object());
+    }
+
+    // S15: the exposed scope is derived from the current frame and
+    // declarations only; a device observed by a previous invocation never
+    // leaks into the next one.
+    #[test]
+    fn context_scope_never_inherits_previous_branch_reads() {
+        let mut scripts = ScriptExecution {
+            clock: || 1000,
+            ..ScriptExecution::default()
+        };
+        let declaration = ScriptDeclaration::Device {
+            device: DeviceRef::from(&key("lamp")),
+        };
+        let before = states(vec![lamp("lamp", false), lamp("other", false)]);
+        let after = states(vec![lamp("lamp", true), lamp("other", false)]);
+
+        let first_mutations = vec![DeviceMutation {
+            event_id: EventId::default(),
+            device_key: key("other"),
+            before: Some(lamp("other", false)),
+            after: lamp("other", true),
+            origin: EventOrigin::Report,
+        }];
+        let first_frame = FrameContext {
+            mutations: &first_mutations,
+            before: &before,
+            after: &after,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let first = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(vec![declaration.clone()]),
+                &first_frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .unwrap();
+        assert!(
+            first["after"]["devices"]["dummy/other"].is_object(),
+            "mutated devices are exposed for the triggering invocation"
+        );
+
+        let second_mutations = vec![DeviceMutation {
+            event_id: EventId::default(),
+            device_key: key("lamp"),
+            before: Some(lamp("lamp", false)),
+            after: lamp("lamp", true),
+            origin: EventOrigin::Report,
+        }];
+        let second_frame = FrameContext {
+            mutations: &second_mutations,
+            before: &before,
+            after: &after,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let second = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(vec![declaration]),
+                &second_frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .unwrap();
+        assert!(
+            second["after"]["devices"].get("dummy/other").is_none(),
+            "the previous invocation's mutation does not widen the next scope"
+        );
+    }
+
+    // S13: a declaration for an entity that is not discovered yet stays absent
+    // (but tracked) until the entity appears in a later frame.
+    #[test]
+    fn declared_missing_entity_enters_the_context_once_present() {
+        let mut scripts = ScriptExecution {
+            clock: || 1000,
+            ..ScriptExecution::default()
+        };
+        let declaration = ScriptDeclaration::Device {
+            device: DeviceRef::from(&key("future")),
+        };
+
+        let before = states(vec![lamp("lamp", false)]);
+        let after = states(vec![lamp("lamp", false)]);
+        let no_mutations: Vec<DeviceMutation> = Vec::new();
+        let missing_frame = FrameContext {
+            mutations: &no_mutations,
+            before: &before,
+            after: &after,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let missing = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(vec![declaration.clone()]),
+                &missing_frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .unwrap();
+        assert!(
+            missing["after"]["devices"].get("dummy/future").is_none(),
+            "an undiscovered declared device has no state yet"
+        );
+
+        // Discovery: the same declaration now resolves against the frame.
+        let discovered_before = states(vec![lamp("lamp", false), lamp("future", false)]);
+        let discovered_after = states(vec![lamp("lamp", false), lamp("future", true)]);
+        let discovered_frame = FrameContext {
+            mutations: &no_mutations,
+            before: &discovered_before,
+            after: &discovered_after,
+            groups: &Groups::new(Default::default()),
+            helpers: None,
+        };
+        let discovered = scripts
+            .build_handler_context(
+                &ScriptOwnerId::routine("r"),
+                &spec(vec![declaration]),
+                &discovered_frame,
+                EventId::default(),
+                EventOrigin::Report,
+                EventCausation::default(),
+            )
+            .unwrap();
+        assert!(
+            discovered["after"]["devices"]["dummy/future"].is_object(),
+            "the declared device is readable once discovery puts it in the frame"
+        );
     }
 
     // S11 direction: the clock and seed are context inputs, not ambient state.

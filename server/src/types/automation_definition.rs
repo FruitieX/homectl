@@ -499,13 +499,27 @@ fn default_limits_profile() -> String {
 
 /// A declared read/subscription of a script program. A scripted trigger is a
 /// declaration plus a pure filter; scripts cannot register hidden listeners.
+///
+/// Device/group declarations may name entities that are not configured yet:
+/// the declaration is a standing dependency, so discovery can wake the script
+/// later (S13). Until then the runtime simply has no state for the entity.
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export)]
 pub enum ScriptDeclaration {
-    Device { device: DeviceRef },
-    Group { group_id: GroupId },
-    Timer { timer: TimerId },
+    Device {
+        device: DeviceRef,
+    },
+    Group {
+        group_id: GroupId,
+    },
+    Timer {
+        timer: TimerId,
+    },
+    /// Explicitly broad compatibility declaration (S14): the script opts into
+    /// reading any device state in the triggering frame instead of an exact
+    /// declaration. Strict scripts keep undeclared devices absent.
+    AllState,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

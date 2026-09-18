@@ -6,6 +6,7 @@ import type { EventCausation } from "./EventCausation";
 import type { EventId } from "./EventId";
 import type { EventOrigin } from "./EventOrigin";
 import type { HelperId } from "./HelperId";
+import type { RoutineId } from "./RoutineId";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -67,4 +68,20 @@ origin: EventOrigin | null,
 /**
  * Causation metadata when this state change was derived from a routine.
  */
-causation: EventCausation | null, } } | { "RoutineAction": { action: Action, causation: EventCausation, } } | { "RoutineSetHelper": { helper: HelperId, value: JsonValue, causation: EventCausation, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };
+causation: EventCausation | null, } } | { "RoutineAction": { action: Action, causation: EventCausation, } } | { "RoutineSetHelper": { helper: HelperId, value: JsonValue, causation: EventCausation, } } | { "RoutineScriptResult": { routine_id: RoutineId, request_id: bigint, owner_key: string, owner_generation: bigint, definition_revision: bigint, state_revision: bigint, causation: EventCausation, 
+/**
+ * Strictly serialized worker result when the invocation succeeded.
+ */
+value?: JsonValue | null, 
+/**
+ * Bounded failure message when the worker reported an error.
+ */
+error?: string | null, } } | { "RuleScriptLeafResult": { routine_id: RoutineId, request_id: bigint, owner_key: string, owner_generation: bigint, definition_revision: bigint, state_revision: bigint, 
+/**
+ * Strictly coerced v1 boolean result when the invocation succeeded.
+ */
+value?: JsonValue | null, 
+/**
+ * Bounded failure message when the worker reported an error.
+ */
+error?: string | null, } } | "StartupCompleted" | { "DbStoreScene": { scene_id: SceneId, config: SceneConfig, } } | { "DbEditScene": { scene_id: SceneId, name: string, } } | { "DbDeleteScene": { scene_id: SceneId, } } | { "Action": Action };

@@ -1123,10 +1123,28 @@ impl Compiler<'_> {
             let declaration_path = format!("{path}/declarations/{index}");
             match declaration {
                 ScriptDeclaration::Device { device } => {
-                    self.resolve_device(device, &declaration_path, "device", None);
+                    // S13: declarations may name entities that are not
+                    // discovered yet. The reference is tracked instead of
+                    // rejected so discovery can wake the script; until then
+                    // the runtime has no state for the missing entity.
+                    let DeviceRef::Id(id_ref) = device;
+                    self.add_dependency(ResolvedReference::Device(
+                        id_ref.clone().into_device_key(),
+                    ));
                 }
                 ScriptDeclaration::Group { group_id } => {
-                    self.resolve_group(group_id, &format!("{declaration_path}/group_id"), None);
+                    // S13: same forward-reference tracking as devices. Known
+                    // groups are still checked for membership cycles.
+                    if let Some(cycle) = self.catalog.group_cycle(group_id) {
+                        self.report.error_with_entity(
+                            format!("{declaration_path}/group_id"),
+                            None,
+                            "group_cycle",
+                            format!("Group membership cycle: {cycle}."),
+                            group_id.to_string(),
+                        );
+                    }
+                    self.add_dependency(ResolvedReference::Group(group_id.clone()));
                 }
                 ScriptDeclaration::Timer { timer } => {
                     self.validate_id(
@@ -1137,6 +1155,9 @@ impl Compiler<'_> {
                     );
                     self.add_dependency(ResolvedReference::Timer(timer.clone()));
                 }
+                // Broad compatibility mode only widens the runtime context;
+                // there is no entity to resolve or subscribe to.
+                ScriptDeclaration::AllState => {}
             }
         }
     }
@@ -1761,6 +1782,79 @@ mod tests {
         });
         let compiled = compile_ok(definition, &catalog());
         assert_eq!(compiled.dependencies.len(), 1);
+    }
+
+    // S13: script declarations may reference entities that are not discovered
+    // yet. The declaration is tracked as a dependency instead of rejecting the
+    // routine, so later discovery can wake the script.
+    #[test]
+    fn missing_script_declaration_entities_are_tracked_for_discovery() {
+        let definition = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": {
+                "kind": "script",
+                "spec": {
+                    "api_version": 1,
+                    "source_body": "return { actions: [] };",
+                    "declarations": [
+                        { "kind": "device", "device": { "integration_id": "dummy", "device_id": "future_lamp" } },
+                        { "kind": "group", "group_id": "future_group" }
+                    ]
+                }
+            }
+        });
+        let compiled = compile_ok(definition, &catalog());
+        assert!(compiled
+            .dependencies
+            .contains(&ResolvedReference::Device(key("dummy", "future_lamp"))));
+        assert!(compiled
+            .dependencies
+            .contains(&ResolvedReference::Group(GroupId(
+                "future_group".to_string()
+            ))));
+    }
+
+    // S14: the AllState declaration is an explicitly broad compatibility
+    // subscription with no exact entity to resolve.
+    #[test]
+    fn all_state_declaration_compiles_as_broad_compatibility_mode() {
+        let definition = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": {
+                "kind": "script",
+                "spec": {
+                    "api_version": 1,
+                    "source_body": "return { actions: [] };",
+                    "declarations": [{ "kind": "all_state" }]
+                }
+            }
+        });
+        let compiled = compile_ok(definition, &catalog());
+        assert!(
+            compiled.dependencies.is_empty(),
+            "broad reads do not name concrete dependencies"
+        );
+    }
+
+    // Forward references are tolerated in script declarations only; typed
+    // trigger references still reject unknown devices.
+    #[test]
+    fn unknown_trigger_device_is_still_rejected() {
+        let definition = json!({
+            "triggers": [{
+                "kind": "state_change",
+                "id": "trig",
+                "device": { "integration_id": "dummy", "device_id": "future_lamp" }
+            }],
+            "program": {
+                "kind": "native",
+                "steps": [{ "action": "cancel_timer", "id": "step", "timer": "t" }]
+            }
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&definition, &catalog()).unwrap_err()),
+            vec!["unknown_device"]
+        );
     }
 
     // V03: nonfinite/range/type/duration/capability errors are rejected.

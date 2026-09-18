@@ -2673,4 +2673,57 @@ mod tests {
             "refresh/seed must not write history"
         );
     }
+
+    // S13: a v1 lookup of an undiscovered device stays inert, and the next
+    // frame after discovery sees it (scan-all wakes declared dependencies).
+    #[tokio::test]
+    async fn missing_device_lookup_wakes_when_the_device_is_discovered() {
+        let (mut routines, routine_id, _rx) =
+            deferred_routines(vec![script_rule("devices['mqtt/future'] !== undefined")]);
+        let (mut devices, _rx) = test_devices();
+
+        // Frame 1: the future device is not discovered yet.
+        let _ = evaluate_mutation(&mut routines, &devices).await;
+        let requests = routines.take_deferred_script_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(requests[0].context["devices"].get("mqtt/future").is_none());
+        let runs = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/0",
+            RuleRuntimeStatus::from_match(false, false),
+        );
+        assert!(runs.is_empty());
+
+        // Discovery: the device appears before the next frame.
+        let future = Device::new(
+            IntegrationId::from("mqtt".to_string()),
+            DeviceId::new("future"),
+            "Future".to_string(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                true,
+                None,
+                None,
+                None,
+                Default::default(),
+                ManageKind::Unmanaged,
+            )),
+            None,
+        );
+        devices.set_state(&future, true, true);
+
+        let _ = evaluate_mutation(&mut routines, &devices).await;
+        let requests = routines.take_deferred_script_requests();
+        assert_eq!(requests.len(), 1);
+        assert!(
+            requests[0].context["devices"]["mqtt/future"].is_object(),
+            "the discovered device is captured into the legacy context"
+        );
+        let runs = routines.resolve_deferred_script_leaf(
+            &routine_id,
+            "rules/0",
+            RuleRuntimeStatus::from_match(true, true),
+        );
+        assert_eq!(runs.len(), 1, "the rule fires once the device exists");
+    }
 }

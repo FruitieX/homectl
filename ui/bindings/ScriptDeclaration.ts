@@ -6,5 +6,9 @@ import type { TimerId } from "./TimerId";
 /**
  * A declared read/subscription of a script program. A scripted trigger is a
  * declaration plus a pure filter; scripts cannot register hidden listeners.
+ *
+ * Device/group declarations may name entities that are not configured yet:
+ * the declaration is a standing dependency, so discovery can wake the script
+ * later (S13). Until then the runtime simply has no state for the entity.
  */
-export type ScriptDeclaration = { "kind": "device", device: DeviceRef, } | { "kind": "group", group_id: GroupId, } | { "kind": "timer", timer: TimerId, };
+export type ScriptDeclaration = { "kind": "device", device: DeviceRef, } | { "kind": "group", group_id: GroupId, } | { "kind": "timer", timer: TimerId, } | { "kind": "all_state" };

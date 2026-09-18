@@ -838,6 +838,56 @@ mod tests {
         assert!(reason.contains("superseded_by_newer_intent"), "{reason}");
     }
 
+    // S17: a script plan's stale rejection is scoped to its own targets. An
+    // unrelated intent change does not invalidate the plan; a relevant one
+    // does.
+    #[test]
+    fn script_plan_guards_only_relevant_targets() {
+        let devices = states(vec![lamp("lamp", Some("evening"), false)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let intents = IntentTracker::default();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &intents,
+        };
+        let script_value = json!({
+            "actions": [
+                { "action": "set_power",
+                  "device": { "integration_id": "dummy", "device_id": "lamp" }, "power": true }
+            ]
+        });
+        let outcome = super::super::script_contract::parse_routine_handler_outcome(
+            &script_value,
+            super::super::script_contract::MAX_SCRIPT_STATE_BYTES,
+        )
+        .expect("script outcome parses");
+        let plan = plan_script_actions(
+            &RoutineId("routine".to_string()),
+            1,
+            &outcome.actions,
+            &inputs,
+        );
+        assert_eq!(plan.steps.len(), 1);
+        assert!(guard_suppression(&plan.steps[0], &intents).is_none());
+
+        // Unrelated device and scene intents leave the plan intact.
+        let mut unrelated = IntentTracker::default();
+        unrelated.bump_device(&key("other"));
+        unrelated.bump_scene(&SceneId::from("other_scene".to_string()));
+        assert!(
+            guard_suppression(&plan.steps[0], &unrelated).is_none(),
+            "only the plan's relevant targets are guarded"
+        );
+
+        let mut relevant = IntentTracker::default();
+        relevant.bump_device(&key("lamp"));
+        let reason = guard_suppression(&plan.steps[0], &relevant).expect("superseded");
+        assert!(reason.contains("superseded_by_newer_intent"), "{reason}");
+    }
+
     // A04: a mixed group uses only the configured fallback; without a fallback
     // the activation is suppressed with a visible reason.
     #[test]
