@@ -63,4 +63,7 @@ pub use script_runtime::{
     SceneMaterializationCompletion, ScriptExecution, LEGACY_DEFINITION_REVISION,
     MAX_SCRIPT_ERROR_CHARS,
 };
-pub use timers::{TimerFire, TimerOperationError, TimerStore, TimerWakeup, MAX_TIMERS_PER_OWNER};
+pub use timers::{
+    TimerCancellation, TimerFire, TimerOperationError, TimerStore, TimerWakeup,
+    MAX_TIMERS_PER_OWNER,
+};

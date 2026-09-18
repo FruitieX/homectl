@@ -61,6 +61,17 @@ pub struct TimerWakeup {
     pub due_wall_ms: i64,
 }
 
+/// Outcome of an actor-routed timer cancellation (P09 admin control).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum TimerCancellation {
+    /// The timer was live and has been removed.
+    Cancelled { generation: u64 },
+    /// No live timer occupies the owner/key, or the owner was removed.
+    NoOp,
+    /// The caller expected a different live generation; nothing was removed.
+    GenerationMismatch { current: u64, expected: u64 },
+}
+
 /// One validated timer fire ready for frame evaluation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct TimerFire {
@@ -97,6 +108,37 @@ impl TimerStore {
 
     pub fn is_pending(&self, owner: &RoutineId, timer: &TimerId) -> bool {
         self.jobs.contains_key(&(owner.clone(), timer.clone()))
+    }
+
+    /// Current generation of a live owner/key, if any.
+    pub fn pending_generation(&self, owner: &RoutineId, timer: &TimerId) -> Option<u64> {
+        self.jobs
+            .get(&(owner.clone(), timer.clone()))
+            .map(|job| job.generation)
+    }
+
+    /// Actor-routed administrative cancellation with optional generation
+    /// checking. Missing timers are a `NoOp` (idempotent cancellation).
+    pub fn cancel_checked(
+        &mut self,
+        owner: &RoutineId,
+        timer: &TimerId,
+        expected_generation: Option<u64>,
+    ) -> TimerCancellation {
+        match self.pending_generation(owner, timer) {
+            Some(current) => match expected_generation {
+                Some(expected) if expected != current => {
+                    TimerCancellation::GenerationMismatch { current, expected }
+                }
+                _ => {
+                    self.jobs.remove(&(owner.clone(), timer.clone()));
+                    TimerCancellation::Cancelled {
+                        generation: current,
+                    }
+                }
+            },
+            None => TimerCancellation::NoOp,
+        }
     }
 
     /// Apply one timer operation. Returns the affected generation (zero for a

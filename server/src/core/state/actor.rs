@@ -91,6 +91,21 @@ impl StateHandle {
             .map_err(|_| color_eyre::eyre::eyre!("State actor dropped the command result"))
     }
 
+    /// Actor-routed cancellation of an explicitly addressed routine timer
+    /// (P09). Runs inside the actor through the existing mutate command, so
+    /// the generation check is authoritative.
+    pub async fn cancel_timer(
+        &self,
+        routine_id: crate::types::rule::RoutineId,
+        timer: crate::types::automation_definition::TimerId,
+        expected_generation: Option<u64>,
+    ) -> Result<crate::core::automation::TimerCancellation> {
+        self.mutate(move |state| {
+            Box::pin(async move { state.cancel_timer(&routine_id, &timer, expected_generation) })
+        })
+        .await
+    }
+
     /// Fire-and-forget dispatch of an event to the actor. The caller does
     /// not wait for the mutation to complete.
     pub fn send_event(&self, event: Event) {

@@ -3466,4 +3466,95 @@ pub(crate) mod tests {
             Ok(Event::RoutineTimerOperation { .. })
         ));
     }
+
+    // P09: explicit administrative cancellation is generation-checked and
+    // idempotent; a mismatch removes nothing.
+    #[tokio::test]
+    async fn p09_admin_cancellation_is_generation_checked() {
+        use crate::core::automation::TimerCancellation;
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        state
+            .timers
+            .apply(
+                &owner,
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 1_000,
+                },
+                0,
+                1_000_000,
+            )
+            .unwrap();
+        let generation = state.timers.pending_generation(&owner, &timer).unwrap();
+
+        assert_eq!(
+            state.cancel_timer(&owner, &timer, Some(generation + 1)),
+            TimerCancellation::GenerationMismatch {
+                current: generation,
+                expected: generation + 1
+            }
+        );
+        assert!(
+            state.timers.is_pending(&owner, &timer),
+            "a mismatched cancellation removes nothing"
+        );
+        assert_eq!(
+            state.cancel_timer(&owner, &timer, Some(generation)),
+            TimerCancellation::Cancelled { generation }
+        );
+        assert_eq!(
+            state.cancel_timer(&owner, &timer, Some(generation)),
+            TimerCancellation::NoOp,
+            "cancelling a missing timer is idempotent"
+        );
+    }
+
+    // P09: the public actor handle routes cancellation through the
+    // authoritative store inside the actor task.
+    #[tokio::test]
+    async fn p09_actor_routed_cancellation_reaches_the_authoritative_store() {
+        use crate::core::automation::TimerCancellation;
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        state
+            .timers
+            .apply(
+                &owner,
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 1_000,
+                },
+                0,
+                1_000_000,
+            )
+            .unwrap();
+        let generation = state.timers.pending_generation(&owner, &timer).unwrap();
+
+        let snapshot = state.snapshot.clone();
+        let (work_tx, _work_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot, work_tx);
+
+        let result = handle
+            .cancel_timer(owner.clone(), timer.clone(), Some(generation))
+            .await
+            .unwrap();
+        assert_eq!(result, TimerCancellation::Cancelled { generation });
+
+        let pending = handle
+            .mutate(|state| Box::pin(async move { state.timers.is_pending(&owner, &timer) }))
+            .await
+            .unwrap();
+        assert!(!pending, "the actor removed the live timer");
+    }
 }

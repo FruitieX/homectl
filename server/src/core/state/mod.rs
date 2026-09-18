@@ -837,6 +837,19 @@ impl AppState {
         self.timers.wakeups()
     }
 
+    /// Actor-routed administrative timer cancellation with generation
+    /// checking. Ordinary timer actions remain owner-scoped; this exists for
+    /// explicitly addressed inspection/control (P09).
+    pub fn cancel_timer(
+        &mut self,
+        routine_id: &crate::types::rule::RoutineId,
+        timer: &crate::types::automation_definition::TimerId,
+        expected_generation: Option<u64>,
+    ) -> crate::core::automation::TimerCancellation {
+        self.timers
+            .cancel_checked(routine_id, timer, expected_generation)
+    }
+
     /// Reconcile script owner generations with the compiled v2 definitions and
     /// legacy script-bearing routines so an edit/disable/reload rejects pending
     /// worker results (S16, Section 6.4).
