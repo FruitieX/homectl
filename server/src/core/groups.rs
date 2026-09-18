@@ -22,6 +22,10 @@ pub struct Groups {
     config: GroupsConfig,
     device_refs_by_groups: BTreeMap<GroupId, BTreeSet<DeviceRef>>,
     flattened_groups: FlattenedGroupsConfig,
+    /// Monotonic counter bumped whenever the group configuration (and thus
+    /// configured membership) changes. V2 evaluation uses it to invalidate
+    /// predicate subscriptions and transition memory (G06).
+    definition_revision: u64,
 }
 
 /// Evaluates the group config and returns a flattened version of it
@@ -161,7 +165,20 @@ impl Groups {
             config,
             device_refs_by_groups,
             flattened_groups: Default::default(),
+            definition_revision: 0,
         }
+    }
+
+    /// Configured membership for a group: recursively flattened, deduplicated,
+    /// and including references that do not resolve to runtime devices yet.
+    /// This is the denominator for v2 group evaluation (G01/G02).
+    pub fn configured_device_refs(&self, group_id: &GroupId) -> Option<&BTreeSet<DeviceRef>> {
+        self.device_refs_by_groups.get(group_id)
+    }
+
+    /// Monotonic group-configuration revision (G06).
+    pub fn definition_revision(&self) -> u64 {
+        self.definition_revision
     }
 
     pub fn load_config_rows(&mut self, groups: &[config_queries::GroupRow]) {
@@ -212,6 +229,7 @@ impl Groups {
 
         self.config = new_config;
         self.device_refs_by_groups = mk_device_refs_by_groups(&self.config);
+        self.definition_revision = self.definition_revision.wrapping_add(1);
     }
 
     /// Hot-reload groups configuration from the database

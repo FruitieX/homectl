@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use ts_rs::TS;
 
 macro_attr! {
-    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, NewtypeDisplay!, NewtypeFrom!)]
+    #[derive(TS, Clone, Debug, Deserialize, Serialize, Eq, PartialEq, Hash, Ord, PartialOrd, NewtypeDisplay!, NewtypeFrom!)]
     #[ts(export)]
     pub struct RoutineId(pub String);
 }
@@ -55,7 +55,7 @@ pub struct SensorRule {
     pub device_ref: DeviceRef,
 }
 
-#[derive(TS, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(TS, Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum RawRuleOperator {

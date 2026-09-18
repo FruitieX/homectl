@@ -29,7 +29,7 @@ use crate::db::config_queries;
 use super::devices::ActivateSceneRequest;
 use super::snapshot::SnapshotChanges;
 use super::state::{AppState, PendingWsUpdate};
-use super::{groups::Groups, integrations::Integrations};
+use super::{automation::FrameContext, groups::Groups, integrations::Integrations};
 
 /// Resolves the effective scene id for an action that may reference the
 /// currently active scene of another group. Falls back to `fallback_scene_id`
@@ -403,6 +403,29 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     Some(frame_id),
                 )
                 .await;
+
+            // P04: evaluate v2 routines against the same single-mutation frame.
+            if !state.rules.compiled_v2_routines().is_empty() {
+                let after_view = state.devices.get_state().clone();
+                let mut before_view = after_view.clone();
+                match &mutation.before {
+                    Some(before) => {
+                        before_view
+                            .0
+                            .insert(mutation.device_key.clone(), before.clone());
+                    }
+                    None => {
+                        before_view.0.remove(&mutation.device_key);
+                    }
+                }
+                let v2_frame = FrameContext {
+                    mutations: std::slice::from_ref(&mutation),
+                    before: &before_view,
+                    after: &after_view,
+                    groups: &state.groups,
+                };
+                let _evaluations = state.rules.handle_v2_frame(&v2_frame);
+            }
 
             let mut changes = SnapshotChanges {
                 devices: true,
@@ -888,6 +911,33 @@ impl AppState {
                 )
                 .await;
             suppressed += summary.suppressed;
+        }
+
+        // P04: v2 routines evaluate once per coherent frame. The before view
+        // rolls back every mutation in the transaction, so a multi-device
+        // batch never presents partial group state (E04).
+        if !self.rules.compiled_v2_routines().is_empty() {
+            let after_view = self.devices.get_state().clone();
+            let mut before_view = after_view.clone();
+            for mutation in mutations.iter().rev() {
+                match &mutation.before {
+                    Some(before) => {
+                        before_view
+                            .0
+                            .insert(mutation.device_key.clone(), before.clone());
+                    }
+                    None => {
+                        before_view.0.remove(&mutation.device_key);
+                    }
+                }
+            }
+            let frame = FrameContext {
+                mutations: &mutations,
+                before: &before_view,
+                after: &after_view,
+                groups: &self.groups,
+            };
+            let _evaluations = self.rules.handle_v2_frame(&frame);
         }
 
         let disposition = if suppressed > 0 {

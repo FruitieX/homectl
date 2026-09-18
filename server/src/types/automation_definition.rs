@@ -307,6 +307,10 @@ pub enum Quantifier {
     All,
     Any,
     None,
+    /// True only with known disagreement: at least one known true and one
+    /// known false member. All-members-known without a mixture is false, and
+    /// fewer than two members stay unknown (G04).
+    Partial,
 }
 
 /// Tagged program body: native typed actions or a sandboxed script.

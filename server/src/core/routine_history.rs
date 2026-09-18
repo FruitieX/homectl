@@ -121,6 +121,7 @@ mod tests {
             all_conditions_match: true,
             will_trigger: true,
             rules: Vec::new(),
+            v2: None,
         };
         for index in 0..(MAX_ROUTINE_HISTORY_ENTRIES + 3) {
             record_rule_match(

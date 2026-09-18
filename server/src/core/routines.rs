@@ -7,6 +7,7 @@ use crate::db::config_queries;
 use crate::types::{
     action::{Action, Actions},
     automation_event::{DeviceMutation, EventCausation, EventId, EventOrigin, MAX_CAUSATION_DEPTH},
+    automation_trace::TruthValue,
     device::{Device, DeviceKey, DeviceRef, DevicesState, SensorDevice},
     dim::DimDescriptor,
     event::{Event, TxEventChannel},
@@ -19,12 +20,14 @@ use crate::types::{
     scene::{ActivateSceneActionDescriptor, CycleScenesDescriptor},
 };
 use std::{
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
 };
 
 use super::{
-    automation::{self, CompiledDefinition, ConfigCatalog},
+    automation::{
+        self, ConfigCatalog, FrameContext, RoutineFrameEvaluation, V2Definition, V2Runtime,
+    },
     devices::Devices,
     groups::Groups,
     routine_history,
@@ -138,10 +141,10 @@ pub struct Routines {
     /// rows stay in `runtime_config`) but are not runnable, and their errors are
     /// surfaced through `get_runtime_statuses`.
     quarantined: HashMap<RoutineId, RoutineValidationReport>,
-    /// Enabled v2 routines that compiled successfully. P03 validates and
-    /// inventories them but does not execute them (native evaluation lands in
-    /// P04); they remain visibly non-executing via runtime status.
-    compiled_v2: HashMap<RoutineId, CompiledDefinition>,
+    /// P04: compiled v2 definitions, transition memory, and evaluation
+    /// statuses. Native evaluation runs, but decisions are not executed until
+    /// P05 wires the action planner.
+    v2: V2Runtime,
 }
 
 struct RuleEvaluationContext<'a> {
@@ -254,7 +257,7 @@ impl Routines {
             runtime_statuses: Arc::new(RoutineStatuses::default()),
             prev_edge_triggered: HashSet::new(),
             quarantined: HashMap::new(),
-            compiled_v2: HashMap::new(),
+            v2: V2Runtime::default(),
         }
     }
 
@@ -273,7 +276,7 @@ impl Routines {
 
         let mut new_config = RoutinesConfig::new();
         let mut quarantined = HashMap::new();
-        let mut compiled_v2 = HashMap::new();
+        let mut compiled_v2 = BTreeMap::new();
         for routine in routines {
             if !routine.enabled {
                 // Disabled rows stay in `runtime_config` for display/edit and
@@ -320,7 +323,13 @@ impl Routines {
                 }
                 RoutineSemantics::V2 => match automation::compile_row(routine, catalog) {
                     Ok(automation::CompiledRoutine::V2(compiled)) => {
-                        compiled_v2.insert(RoutineId::from(routine.id.clone()), *compiled);
+                        compiled_v2.insert(
+                            RoutineId::from(routine.id.clone()),
+                            V2Definition {
+                                revision: routine.revision,
+                                compiled: *compiled,
+                            },
+                        );
                     }
                     Ok(automation::CompiledRoutine::V1(_)) => {
                         unreachable!("v2 row compiled through the v1 validator")
@@ -354,7 +363,7 @@ impl Routines {
 
         self.config = new_config;
         self.quarantined = quarantined;
-        self.compiled_v2 = compiled_v2;
+        self.v2.load(compiled_v2);
         self.runtime_statuses = Arc::new(RoutineStatuses::default());
         self.prev_edge_triggered.clear();
     }
@@ -364,9 +373,9 @@ impl Routines {
         &self.quarantined
     }
 
-    /// Enabled v2 routines that compiled successfully (not executed in P03).
-    pub fn compiled_v2_routines(&self) -> &HashMap<RoutineId, CompiledDefinition> {
-        &self.compiled_v2
+    /// Compiled v2 definitions by routine id.
+    pub fn compiled_v2_routines(&self) -> &BTreeMap<RoutineId, V2Definition> {
+        self.v2.definitions()
     }
 
     /// Hot-reload routines configuration from the database
@@ -410,22 +419,32 @@ impl Routines {
                             ))
                         })
                         .collect(),
+                    v2: None,
                 },
             );
         }
 
-        // Enabled v2 routines compile but are not executed in P03. They must
-        // not silently appear healthy; surface the pending evaluator.
-        for (routine_id, compiled) in &self.compiled_v2 {
+        // P04: v2 conditions are evaluated against current state for status
+        // display; transition memory and matched triggers are untouched.
+        self.v2.refresh_statuses(devices.get_state(), groups);
+        for (routine_id, v2_status) in self.v2.statuses() {
             statuses.0.insert(
                 routine_id.clone(),
                 RoutineRuntimeStatus {
-                    all_conditions_match: false,
-                    will_trigger: false,
-                    rules: vec![RuleRuntimeStatus::from_error(format!(
-                        "semantics_not_executed: v2 definition compiled (fingerprint {}) but native evaluation is not enabled in this build (P04 pending)",
-                        compiled.fingerprint
-                    ))],
+                    all_conditions_match: !v2_status.condition.is_error()
+                        && v2_status.condition.truth == TruthValue::True,
+                    will_trigger: v2_status.will_trigger,
+                    rules: v2_status
+                        .triggers
+                        .iter()
+                        .map(|trigger| RuleRuntimeStatus {
+                            condition_match: v2_status.condition.truth.is_true(),
+                            trigger_match: trigger.fired,
+                            error: trigger.error.clone(),
+                            children: None,
+                        })
+                        .collect(),
+                    v2: Some(v2_status.clone()),
                 },
             );
         }
@@ -529,6 +548,30 @@ impl Routines {
             seed_only: true,
         };
         let _ = self.evaluate_routines(&ctx);
+        self.v2.seed(devices.get_state(), groups);
+    }
+
+    /// Evaluate all v2 routines against one coherent actor frame. P04 records
+    /// decisions and per-trigger memory; action dispatch is P05.
+    pub fn handle_v2_frame(&mut self, frame: &FrameContext<'_>) -> Vec<RoutineFrameEvaluation> {
+        if self.v2.is_empty() {
+            return Vec::new();
+        }
+        let evaluations = self.v2.evaluate_frame(frame);
+        for evaluation in &evaluations {
+            if evaluation.will_trigger {
+                info!(
+                    "v2 routine matched (execution pending P05): id={} triggers={:?}",
+                    evaluation.routine_id.0,
+                    evaluation
+                        .matched_trigger_ids
+                        .iter()
+                        .map(|id| id.0.as_str())
+                        .collect::<Vec<_>>()
+                );
+            }
+        }
+        evaluations
     }
 
     pub fn force_trigger_routine(
@@ -635,6 +678,7 @@ impl Routines {
             all_conditions_match,
             will_trigger,
             rules: rule_statuses,
+            v2: None,
         }
     }
 
@@ -1653,10 +1697,15 @@ mod tests {
             .cloned()
             .expect("compiled v2 routine is visible");
         assert!(!status.will_trigger);
-        assert!(status.rules.iter().any(|rule| rule
-            .error
-            .as_deref()
-            .is_some_and(|error| { error.contains("semantics_not_executed") })));
+        assert!(
+            status.v2.is_some(),
+            "P04 attaches real v2 evaluation status"
+        );
+        assert!(status.v2.as_ref().unwrap().execution_pending);
+        assert!(
+            status.rules.iter().all(|rule| rule.error.is_none()),
+            "compiled v2 routines no longer report semantics_not_executed"
+        );
 
         let invalid = routines
             .get_runtime_statuses()
@@ -1671,5 +1720,74 @@ mod tests {
             history_before,
             "status refresh must not write routine history for v2 rows"
         );
+    }
+
+    // P04: v2 frames evaluate through the actor path. A report trigger fires,
+    // records transition memory, and surfaces a status with
+    // `execution_pending` until P05 dispatches actions.
+    #[test]
+    fn p04_v2_frames_evaluate_triggers_and_conditions() {
+        use crate::core::automation::{ConfigCatalog, FrameContext};
+        use crate::types::automation_event::{DeviceMutation, EventId};
+        use crate::types::device::DevicesState;
+        use std::collections::BTreeMap;
+
+        let (event_tx, _event_rx) = mk_event_channel();
+        let mut routines = Routines::new(RoutinesConfig::new(), event_tx);
+        let row = config_queries::RoutineRow {
+            id: "v2_frame".to_string(),
+            name: "V2 Frame".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 3,
+            definition_v2: Some(json!({
+                "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "mqtt", "device_id": "sensor" } }],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "step", "timer": "t1" }
+                ]}
+            })),
+            ..Default::default()
+        };
+        routines.load_config_rows(&[row], &ConfigCatalog::default());
+
+        let (devices, _rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let device = sensor_device(json!({ "button": "single" }));
+        let device_key = device.get_device_key();
+        let before_view = DevicesState(BTreeMap::from([(device_key.clone(), device.clone())]));
+        let after_view = before_view.clone();
+        let mutation = DeviceMutation {
+            event_id: EventId::default(),
+            device_key,
+            before: Some(device.clone()),
+            after: device,
+            origin: EventOrigin::Report,
+        };
+        let mutations = vec![mutation];
+        let frame = FrameContext {
+            mutations: &mutations,
+            before: &before_view,
+            after: &after_view,
+            groups: &groups,
+        };
+
+        let evaluations = routines.handle_v2_frame(&frame);
+        assert_eq!(evaluations.len(), 1);
+        assert!(evaluations[0].will_trigger);
+        assert_eq!(evaluations[0].matched_trigger_ids.len(), 1);
+
+        routines.refresh_runtime_statuses(&devices, &groups);
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&RoutineId::from("v2_frame".to_string()))
+            .cloned()
+            .expect("v2 status visible");
+        assert!(status.will_trigger);
+        let v2 = status.v2.expect("v2 detail attached");
+        assert_eq!(v2.definition_revision, 3);
+        assert!(v2.execution_pending);
+        assert_eq!(v2.matched_trigger_ids.len(), 1);
     }
 }
