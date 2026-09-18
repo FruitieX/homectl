@@ -709,6 +709,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let declaration = ScriptDeclaration::Device {
             device: DeviceRef::from(&key("lamp")),
@@ -756,6 +757,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let context = scripts
             .build_handler_context(
@@ -803,6 +805,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let first = scripts
             .build_handler_context(
@@ -834,6 +837,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let second = scripts
             .build_handler_context(
@@ -871,6 +875,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let missing = scripts
             .build_handler_context(
@@ -898,6 +903,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let discovered = scripts
             .build_handler_context(
@@ -935,6 +941,7 @@ mod tests {
             groups: &Groups::new(Default::default()),
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         let first = scripts
             .build_handler_context(

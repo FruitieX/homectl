@@ -462,6 +462,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     groups: &state.groups,
                     helpers: Some(&state.helpers),
                     fired_timers: &[],
+                    predicate_fires: &[],
                 };
                 let evaluations = state.rules.handle_v2_frame(&v2_frame);
                 if !evaluations.is_empty() {
@@ -1549,7 +1550,8 @@ impl AppState {
         let evaluation_time_ms = self.clock.wall_ms();
         let pending = self.devices.take_pending_mutations();
         let fired_timers = std::mem::take(&mut self.pending_timer_fires);
-        if pending.is_empty() && fired_timers.is_empty() {
+        let predicate_fires = std::mem::take(&mut self.pending_predicate_fires);
+        if pending.is_empty() && fired_timers.is_empty() && predicate_fires.is_empty() {
             // Invalidation-free commands (scene/group edits through mutate
             // closures) may still have queued materializations.
             self.execute_deferred_scene_materializations().await;
@@ -1601,6 +1603,7 @@ impl AppState {
 
         if self.warming_up {
             self.pending_timer_fires = fired_timers;
+            self.pending_predicate_fires = predicate_fires;
             self.frame_log.record(AutomationFrame {
                 frame_id,
                 origin,
@@ -1664,6 +1667,7 @@ impl AppState {
                     groups: &self.groups,
                     helpers: Some(&self.helpers),
                     fired_timers: &fired_timers,
+                    predicate_fires: &predicate_fires,
                 };
                 let evaluations = self.rules.handle_v2_frame(&frame);
                 let mut prepared_scripts: Vec<super::automation::PreparedScriptRun> = Vec::new();
@@ -1708,6 +1712,42 @@ impl AppState {
                 }
                 (evaluations, native_plans, prepared_scripts)
             };
+
+            // J06: sustained-predicate arming and cancellation requested by
+            // this coherent frame reach the authoritative store before any
+            // plan dispatches; `Arm` keeps a live episode and `Cancel` is
+            // idempotent.
+            let now_monotonic_ms = self.clock.monotonic_ms();
+            let now_wall_ms = self.clock.wall_ms();
+            for evaluation in &evaluations {
+                for intent in &evaluation.predicate_jobs {
+                    match intent {
+                        super::automation::PredicateJobIntent::Arm {
+                            trigger_id,
+                            duration_ms,
+                        } => {
+                            if let Err(error) = self.timers.ensure_predicate(
+                                &evaluation.routine_id,
+                                evaluation.definition_revision,
+                                trigger_id,
+                                *duration_ms,
+                                now_monotonic_ms,
+                                now_wall_ms,
+                            ) {
+                                warn!(
+                                    "Predicate arming for routine {} failed: {}",
+                                    evaluation.routine_id,
+                                    error.message()
+                                );
+                            }
+                        }
+                        super::automation::PredicateJobIntent::Cancel { trigger_id } => {
+                            self.timers
+                                .cancel_predicate(&evaluation.routine_id, trigger_id);
+                        }
+                    }
+                }
+            }
 
             for plan in native_plans {
                 let routine_id = plan.routine_id.clone();
@@ -3638,6 +3678,238 @@ pub(crate) mod tests {
             ..SnapshotChanges::none()
         });
         assert!(state.snapshot.load().timers.is_empty());
+    }
+
+    fn predicate_for_routine_row(id: &str, revision: i64, duration_ms: u64) -> RoutineRow {
+        RoutineRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{
+                    "kind": "predicate_for",
+                    "id": "trig",
+                    "predicate": {
+                        "kind": "comparison",
+                        "source": { "kind": "device",
+                            "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                            "path": "/power" },
+                        "operator": "eq",
+                        "value": true
+                    },
+                    "duration_ms": duration_ms
+                }],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "native", "steps": [
+                    { "action": "set_power", "id": "step",
+                      "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                      "power": true }
+                ]}
+            })),
+            ..Default::default()
+        }
+    }
+
+    // J06: false/unknown -> true arms, false cancels, true again starts a new
+    // episode generation; a false predicate never arms.
+    #[tokio::test]
+    async fn p09_predicate_for_arms_cancels_and_rearms() {
+        use crate::types::automation_definition::NodeId;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        state.runtime_config.routines = vec![predicate_for_routine_row("pred_routine", 1, 30_000)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("pred_routine".to_string());
+        let trigger = NodeId("trig".to_string());
+        assert!(
+            state
+                .timers
+                .pending_predicate_generation(&owner, &trigger)
+                .is_none(),
+            "a false predicate never arms"
+        );
+
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", true, 0.1), true, true);
+        state.flush_pending_frames().await;
+        let first = state
+            .timers
+            .pending_predicate_generation(&owner, &trigger)
+            .expect("false -> true arms the episode");
+
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        state.flush_pending_frames().await;
+        assert!(
+            state
+                .timers
+                .pending_predicate_generation(&owner, &trigger)
+                .is_none(),
+            "false cancels the episode"
+        );
+
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", true, 0.1), true, true);
+        state.flush_pending_frames().await;
+        let second = state
+            .timers
+            .pending_predicate_generation(&owner, &trigger)
+            .expect("true again re-arms");
+        assert!(second > first, "a new episode starts a new generation");
+    }
+
+    // J05/J06: expiry rechecks the predicate against current state and the
+    // episode generation; maturity fires once and stays latched.
+    #[tokio::test]
+    async fn p09_predicate_expiry_rechecks_state_and_latches() {
+        use crate::types::automation_definition::NodeId;
+        use crate::types::event::TimerWakeupJob;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        state.runtime_config.routines = vec![predicate_for_routine_row("pred_routine", 1, 30_000)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("pred_routine".to_string());
+        let trigger = NodeId("trig".to_string());
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", true, 0.1), true, true);
+        state.flush_pending_frames().await;
+        let armed = state
+            .timers
+            .wakeups()
+            .pop()
+            .expect("armed predicate wakeup");
+        assert!(matches!(
+            &armed.job,
+            TimerWakeupJob::PredicateDeadline { .. }
+        ));
+        let armed_generation = armed.generation;
+
+        // The predicate drops within the expiry frame: current state wins and
+        // the validated fire does not trigger (J05).
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: armed.job.clone(),
+                generation: armed_generation,
+                due_wall_ms: armed.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+        let matched = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&owner)
+            .and_then(|status| status.v2.clone())
+            .map(|v2| v2.matched_trigger_ids)
+            .unwrap_or_default();
+        assert!(
+            matched.is_empty(),
+            "expiry rechecks the current predicate, not the captured episode"
+        );
+
+        // True again arms a fresh episode; the old generation is stale.
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", true, 0.1), true, true);
+        state.flush_pending_frames().await;
+        let generation = state
+            .timers
+            .pending_predicate_generation(&owner, &trigger)
+            .expect("re-armed");
+        assert!(generation > armed_generation);
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: armed.job.clone(),
+                generation: armed_generation,
+                due_wall_ms: armed.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+        assert!(
+            state.pending_predicate_fires.is_empty(),
+            "the replaced episode's wakeup is dropped by the store"
+        );
+
+        // The current generation matures once and stays latched even though
+        // the predicate remains true.
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: armed.job,
+                generation,
+                due_wall_ms: armed.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+        let matched = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&owner)
+            .and_then(|status| status.v2.clone())
+            .map(|v2| v2.matched_trigger_ids)
+            .unwrap_or_default();
+        assert_eq!(matched, vec![trigger.clone()], "current episode matures");
+
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", true, 0.3), true, true);
+        state.flush_pending_frames().await;
+        let matched = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&owner)
+            .and_then(|status| status.v2.clone())
+            .map(|v2| v2.matched_trigger_ids)
+            .unwrap_or_default();
+        assert!(
+            matched.is_empty(),
+            "maturity is latched until the predicate leaves true"
+        );
+        assert!(
+            state
+                .timers
+                .pending_predicate_generation(&owner, &trigger)
+                .is_none(),
+            "a latched maturity does not re-arm"
+        );
     }
 
     // J06: a predicate wakeup is validated against the authoritative store

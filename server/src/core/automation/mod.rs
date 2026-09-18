@@ -37,8 +37,8 @@ pub use compile::{
 };
 pub use evaluate::{
     evaluate_condition, evaluate_routine_frame, resolve_value, seed_routine_memory, EvaluationView,
-    FrameContext, ResolvedValue, RoutineFrameEvaluation, TriggerMemory, TriggerMemoryEntry,
-    TriggerMemoryKey,
+    FrameContext, PredicateJobIntent, ResolvedValue, RoutineFrameEvaluation, TriggerMemory,
+    TriggerMemoryEntry, TriggerMemoryKey,
 };
 pub use groups::{evaluate_group, MAX_GROUP_EVAL_MEMBERS};
 pub use plan::{

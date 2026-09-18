@@ -424,6 +424,7 @@ mod tests {
             groups: &groups,
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         runtime.seed(&before, &groups, None);
         let evaluations = runtime.evaluate_frame(&frame);
@@ -452,6 +453,7 @@ mod tests {
             groups: &groups,
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         runtime.evaluate_frame(&frame);
         assert!(runtime
@@ -491,6 +493,7 @@ mod tests {
             groups: &groups,
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         runtime.evaluate_frame(&frame);
         assert!(runtime.memory().entry_for_test("lamp", 1, "trig").is_some());
@@ -503,6 +506,7 @@ mod tests {
             groups: &groups,
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         runtime.evaluate_frame(&frame);
         assert!(

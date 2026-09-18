@@ -70,6 +70,10 @@ pub struct FrameContext<'a> {
     /// Named timer fires the actor validated for this frame (P09). Empty for
     /// ordinary device frames.
     pub fired_timers: &'a [super::timers::TimerFire],
+    /// Sustained-predicate maturities the actor validated for this frame
+    /// (J06). Expiry re-evaluates the predicate against this frame's current
+    /// state rather than the captured episode state (J05).
+    pub predicate_fires: &'a [super::timers::PredicateDeadlineFire],
 }
 
 impl FrameContext<'_> {
@@ -159,6 +163,9 @@ impl ResolvedValue {
 pub struct TriggerMemoryEntry {
     pub truth: TruthValue,
     pub last_event: Option<EventId>,
+    /// Sustained-predicate latch: maturity fires once per episode and does not
+    /// re-arm until the predicate leaves true (J06).
+    pub predicate_matured: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -244,6 +251,20 @@ impl TriggerMemory {
     }
 }
 
+/// One sustained-predicate job change requested by this frame's evaluation
+/// (J06). The caller applies it to the actor-authoritative store after the
+/// frame; `Arm` is idempotent per episode and `Cancel` is idempotent.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PredicateJobIntent {
+    Arm {
+        trigger_id: NodeId,
+        duration_ms: u64,
+    },
+    Cancel {
+        trigger_id: NodeId,
+    },
+}
+
 /// Outcome of evaluating one routine against one frame.
 #[derive(Clone, Debug)]
 pub struct RoutineFrameEvaluation {
@@ -253,6 +274,8 @@ pub struct RoutineFrameEvaluation {
     pub triggers: Vec<TriggerRuntimeStatus>,
     pub condition: ConditionEvaluation,
     pub will_trigger: bool,
+    /// Sustained-predicate arming/cancellation implied by this frame.
+    pub predicate_jobs: Vec<PredicateJobIntent>,
 }
 
 impl RoutineFrameEvaluation {
@@ -283,9 +306,17 @@ pub fn evaluate_routine_frame(
     let mut matched_trigger_ids = Vec::new();
     let mut trigger_statuses = Vec::new();
     let mut trigger_error: Option<String> = None;
+    let mut predicate_jobs = Vec::new();
 
     for trigger in &definition.triggers {
-        let outcome = evaluate_trigger(routine_id, definition_revision, trigger, memory, frame);
+        let outcome = evaluate_trigger(
+            routine_id,
+            definition_revision,
+            trigger,
+            memory,
+            frame,
+            &mut predicate_jobs,
+        );
         if outcome.fired {
             matched_trigger_ids.push(trigger.id().clone());
         }
@@ -321,6 +352,7 @@ pub fn evaluate_routine_frame(
         triggers: trigger_statuses,
         condition,
         will_trigger,
+        predicate_jobs,
     }
 }
 
@@ -349,6 +381,7 @@ pub fn seed_routine_memory(
             TriggerMemoryEntry {
                 truth,
                 last_event: None,
+                predicate_matured: false,
             },
         );
     }
@@ -381,6 +414,7 @@ fn evaluate_trigger(
     trigger: &TriggerSpec,
     memory: &mut TriggerMemory,
     frame: &FrameContext<'_>,
+    predicate_jobs: &mut Vec<PredicateJobIntent>,
 ) -> TriggerOutcome {
     match trigger {
         TriggerSpec::Report { device, field, .. } => {
@@ -440,6 +474,7 @@ fn evaluate_trigger(
                 TriggerMemoryEntry {
                     truth: after,
                     last_event: Some(mutation.event_id),
+                    predicate_matured: false,
                 },
             );
             TriggerOutcome {
@@ -471,6 +506,7 @@ fn evaluate_trigger(
                                 .map(|mutation| mutation.event_id)
                                 .unwrap_or_default(),
                         ),
+                        predicate_matured: false,
                     },
                 );
             }
@@ -482,26 +518,97 @@ fn evaluate_trigger(
                 unknown_reason: after.unknown_reason,
             }
         }
-        TriggerSpec::PredicateFor { predicate, .. } => {
-            // P04 tracks the sustained predicate truth; arming the server-side
-            // duration job and expiry checks arrive with the P09 scheduler.
+        TriggerSpec::PredicateFor {
+            predicate,
+            duration_ms,
+            ..
+        } => {
+            // J06 arming contract. The sustained predicate is a server-owned
+            // deadline job on the shared wakeup driver: seeded true does not
+            // arm; false/unknown -> true starts an episode from now; true ->
+            // true keeps the live generation; false/unknown/error cancels and
+            // invalidates; maturity fires once and stays latched until the
+            // predicate leaves true, even when the routine condition blocks.
             let evaluation = evaluate_condition(predicate, frame.after_view(), "/predicate");
-            if evaluation.error.is_none() {
-                memory.set(
-                    routine_id,
-                    definition_revision,
-                    trigger.id(),
-                    TriggerMemoryEntry {
-                        truth: evaluation.truth,
-                        last_event: None,
-                    },
-                );
+            let previous = memory
+                .get(routine_id, definition_revision, trigger.id())
+                .copied()
+                .unwrap_or_default();
+            let had_episode = previous.truth == TruthValue::True || previous.predicate_matured;
+
+            if let Some(error) = evaluation.error {
+                if had_episode {
+                    predicate_jobs.push(PredicateJobIntent::Cancel {
+                        trigger_id: trigger.id().clone(),
+                    });
+                    memory.set(
+                        routine_id,
+                        definition_revision,
+                        trigger.id(),
+                        TriggerMemoryEntry {
+                            truth: previous.truth,
+                            last_event: None,
+                            predicate_matured: false,
+                        },
+                    );
+                }
+                return TriggerOutcome {
+                    eligible: false,
+                    fired: false,
+                    truth: evaluation.truth,
+                    error: Some(error),
+                    unknown_reason: evaluation.unknown_reason,
+                };
             }
+
+            let matured_fire = frame
+                .predicate_fires
+                .iter()
+                .find(|fire| fire.routine_id == *routine_id && fire.trigger == *trigger.id());
+
+            let (fired, matured) = match evaluation.truth {
+                TruthValue::True => match matured_fire {
+                    // J05: the actor validated the episode generation; this
+                    // frame's current state decided the predicate recheck.
+                    Some(_) => (true, true),
+                    None => {
+                        if previous.truth != TruthValue::True && !previous.predicate_matured {
+                            predicate_jobs.push(PredicateJobIntent::Arm {
+                                trigger_id: trigger.id().clone(),
+                                duration_ms: *duration_ms,
+                            });
+                        }
+                        (
+                            false,
+                            previous.predicate_matured && previous.truth == TruthValue::True,
+                        )
+                    }
+                },
+                TruthValue::False | TruthValue::Unknown => {
+                    if had_episode {
+                        predicate_jobs.push(PredicateJobIntent::Cancel {
+                            trigger_id: trigger.id().clone(),
+                        });
+                    }
+                    (false, false)
+                }
+            };
+
+            memory.set(
+                routine_id,
+                definition_revision,
+                trigger.id(),
+                TriggerMemoryEntry {
+                    truth: evaluation.truth,
+                    last_event: None,
+                    predicate_matured: matured,
+                },
+            );
             TriggerOutcome {
-                eligible: false,
-                fired: false,
+                eligible: fired,
+                fired,
                 truth: evaluation.truth,
-                error: evaluation.error,
+                error: None,
                 unknown_reason: evaluation.unknown_reason,
             }
         }
@@ -1330,6 +1437,7 @@ mod tests {
             groups,
             helpers: None,
             fired_timers: &[],
+            predicate_fires: &[],
         };
         run(&frame)
     }

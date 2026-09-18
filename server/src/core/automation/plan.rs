@@ -784,6 +784,7 @@ mod tests {
             triggers: Vec::new(),
             condition,
             will_trigger: true,
+            predicate_jobs: Vec::new(),
         }
     }
 
