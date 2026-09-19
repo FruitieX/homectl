@@ -1,3 +1,4 @@
+import type { ChooseBranch } from '@/bindings/ChooseBranch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
@@ -7,6 +8,11 @@ import type { Program } from '@/bindings/Program';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
+import {
+  ConditionDatalists,
+  ConditionEditor,
+  describeCondition,
+} from '@/ui/ConditionBuilder';
 import {
   DeviceMultiSelect,
   DeviceSelect,
@@ -124,35 +130,6 @@ function deviceRefKey(ref: { integration_id: string; device_id: string }) {
 function keyToDeviceRef(key: string) {
   const split = splitDeviceKey(key);
   return split ?? { integration_id: '', device_id: key };
-}
-
-function describeCondition(condition: unknown): string {
-  if (!condition || typeof condition !== 'object') {
-    return 'condition';
-  }
-  const expr = condition as {
-    kind?: string;
-    value?: unknown;
-    conditions?: unknown[];
-    condition?: unknown;
-    group_id?: string;
-  };
-  switch (expr.kind) {
-    case 'literal':
-      return expr.value === false ? 'never' : 'always';
-    case 'all':
-      return `all of ${expr.conditions?.length ?? 0} conditions`;
-    case 'any':
-      return `any of ${expr.conditions?.length ?? 0} conditions`;
-    case 'not':
-      return `not (${describeCondition(expr.condition)})`;
-    case 'group':
-      return `group ${expr.group_id ?? '?'}`;
-    case 'comparison':
-      return 'value comparison';
-    default:
-      return 'condition';
-  }
 }
 
 function summarizeStep(step: NativeAction): string {
@@ -318,32 +295,186 @@ function helperDefaultValue(helper: HelperRuntimeStatus | undefined): JsonValue 
   }
 }
 
-function ChooseStepSummary({ step }: { step: Extract<NativeAction, { action: 'choose' }> }) {
+function ChooseStepEditor({
+  step,
+  onChange,
+  devices,
+  groups,
+  scenes,
+  routines,
+  helpers,
+  existingIds,
+}: {
+  step: Extract<NativeAction, { action: 'choose' }>;
+  onChange: (step: NativeAction) => void;
+  devices: DevicesState;
+  groups: FlattenedGroupsConfig;
+  scenes: Array<{ id: string; name: string }>;
+  routines: Array<{ id: string; name: string }>;
+  helpers: HelperRuntimeStatus[];
+  existingIds: string[];
+}) {
+  const [newBranchStepKind, setNewBranchStepKind] =
+    useState<StepKind>('activate_scene');
+
+  const updateBranch = (index: number, branch: ChooseBranch) => {
+    onChange({
+      ...step,
+      branches: step.branches.map((candidate, candidateIndex) =>
+        candidateIndex === index ? branch : candidate,
+      ),
+    });
+  };
+
+  const addBranch = () => {
+    onChange({
+      ...step,
+      branches: [
+        ...step.branches,
+        {
+          id: nextNodeId('branch', [
+            ...step.branches.map((branch) => branch.id),
+            ...existingIds,
+          ]),
+          condition: { kind: 'literal', value: true },
+          steps: [],
+        },
+      ],
+    });
+  };
+
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        Branch steps and their nested conditions are edited in the Definition
-        (JSON) tab. The branches run first-match in order.
+        Branches run first-match in order; unknown or erroring conditions block
+        later branches.
       </p>
       {step.branches.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3 text-center text-sm text-muted-foreground">
-          No branches configured.
+          No branches configured. A choose step with no branches runs nothing.
         </div>
-      ) : (
-        <ul className="space-y-1 text-sm">
-          {step.branches.map((branch) => (
-            <li key={branch.id} className="rounded-lg bg-muted/40 px-3 py-2">
-              <span className="font-mono text-xs">{branch.id}</span>
-              {' · '}
-              <span className="text-muted-foreground">
-                {describeCondition(branch.condition)}
-              </span>
-              {' · '}
-              {branch.steps.length} step(s)
-            </li>
+      ) : null}
+      {step.branches.map((branch, index) => (
+        <div
+          key={`${branch.id}:${index}`}
+          className="space-y-3 rounded-2xl border border-border/60 bg-background/40 p-3"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <ConfigField label="Branch ID" className="max-w-md">
+              <Input
+                className="font-mono"
+                value={branch.id}
+                onChange={(event) =>
+                  updateBranch(index, { ...branch, id: event.target.value })
+                }
+              />
+            </ConfigField>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() =>
+                onChange({
+                  ...step,
+                  branches: step.branches.filter(
+                    (_, candidateIndex) => candidateIndex !== index,
+                  ),
+                })
+              }
+            >
+              Remove branch
+            </Button>
+          </div>
+          <ConditionEditor
+            condition={branch.condition}
+            onChange={(condition) =>
+              updateBranch(index, { ...branch, condition })
+            }
+            devices={devices}
+            groups={groups}
+            scenes={scenes}
+            helpers={helpers}
+          />
+          {branch.steps.map((nested, nestedIndex) => (
+            <StepEditor
+              key={`${nested.id}:${nestedIndex}`}
+              step={nested}
+              index={nestedIndex}
+              total={branch.steps.length}
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              routines={routines}
+              helpers={helpers}
+              existingIds={existingIds}
+              onChange={(next) =>
+                updateBranch(index, {
+                  ...branch,
+                  steps: branch.steps.map((candidate, candidateIndex) =>
+                    candidateIndex === nestedIndex ? next : candidate,
+                  ),
+                })
+              }
+              onRemove={() =>
+                updateBranch(index, {
+                  ...branch,
+                  steps: branch.steps.filter(
+                    (_, candidateIndex) => candidateIndex !== nestedIndex,
+                  ),
+                })
+              }
+              onMove={(offset) => {
+                const target = nestedIndex + offset;
+                if (target < 0 || target >= branch.steps.length) {
+                  return;
+                }
+                const steps = [...branch.steps];
+                const [moved] = steps.splice(nestedIndex, 1);
+                steps.splice(target, 0, moved);
+                updateBranch(index, { ...branch, steps });
+              }}
+            />
           ))}
-        </ul>
-      )}
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              className={selectClassName}
+              value={newBranchStepKind}
+              onChange={(event) =>
+                setNewBranchStepKind(event.target.value as StepKind)
+              }
+            >
+              {stepKindOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                updateBranch(index, {
+                  ...branch,
+                  steps: [
+                    ...branch.steps,
+                    defaultStep(
+                      newBranchStepKind,
+                      nextNodeId(newBranchStepKind, existingIds),
+                    ),
+                  ],
+                })
+              }
+            >
+              Add branch step
+            </Button>
+          </div>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" onClick={addBranch}>
+        Add branch
+      </Button>
     </div>
   );
 }
@@ -356,6 +487,7 @@ function StepFields({
   scenes,
   routines,
   helpers,
+  existingIds,
 }: {
   step: NativeAction;
   onChange: (step: NativeAction) => void;
@@ -364,6 +496,7 @@ function StepFields({
   scenes: Array<{ id: string; name: string }>;
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
+  existingIds: string[];
 }) {
   switch (step.action) {
     case 'activate_scene':
@@ -659,7 +792,18 @@ function StepFields({
       );
 
     case 'choose':
-      return <ChooseStepSummary step={step} />;
+      return (
+        <ChooseStepEditor
+          step={step}
+          onChange={onChange}
+          devices={devices}
+          groups={groups}
+          scenes={scenes}
+          routines={routines}
+          helpers={helpers}
+          existingIds={existingIds}
+        />
+      );
   }
 }
 
@@ -785,6 +929,7 @@ function StepEditor({
           scenes={scenes}
           routines={routines}
           helpers={helpers}
+          existingIds={existingIds}
         />
       </CardContent>
     </Card>
@@ -881,6 +1026,7 @@ export function ProgramBuilder({
 
   return (
     <div className="space-y-4">
+      <ConditionDatalists />
       <div>
         <h4 className="font-medium">Program steps</h4>
         <p className="text-sm text-muted-foreground">

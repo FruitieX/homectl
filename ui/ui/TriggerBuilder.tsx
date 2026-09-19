@@ -2,13 +2,16 @@ import type { BacklogPolicy } from '@/bindings/BacklogPolicy';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
-import type { RawRuleOperator } from '@/bindings/RawRuleOperator';
+import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { ScheduleSpec } from '@/bindings/ScheduleSpec';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
-import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
-import { DeviceSelect, GroupSelect, splitDeviceKey } from '@/ui/config-selectors';
+import {
+  ConditionDatalists,
+  ConditionEditor,
+} from '@/ui/ConditionBuilder';
+import { DeviceSelect, splitDeviceKey } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
@@ -45,42 +48,6 @@ const triggerKindLabels: Record<TriggerKind, string> = {
   startup: 'Startup',
   manual: 'Manual',
 };
-
-const operatorOptions: Array<{ value: RawRuleOperator; label: string }> = [
-  { value: 'eq', label: 'Equals' },
-  { value: 'ne', label: 'Not equal' },
-  { value: 'gt', label: 'Greater than' },
-  { value: 'gte', label: 'Greater than or equal' },
-  { value: 'lt', label: 'Less than' },
-  { value: 'lte', label: 'Less than or equal' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'starts_with', label: 'Starts with' },
-  { value: 'exists', label: 'Exists' },
-  { value: 'truthy', label: 'Truthy' },
-  { value: 'regex', label: 'Regex match' },
-];
-
-const operatorsWithoutValue = new Set<RawRuleOperator>(['exists', 'truthy']);
-
-const sensorPathSuggestions = [
-  '/value',
-  '/observed',
-  '/observed/value',
-  '/availability/online',
-  '/last_report/value',
-  '/name',
-];
-
-const controllablePathSuggestions = [
-  '/power',
-  '/brightness',
-  '/color',
-  '/scene_id',
-  '/observed',
-  '/observed/power',
-  '/availability/online',
-  '/name',
-];
 
 const timezoneSuggestions = [
   'UTC',
@@ -129,290 +96,20 @@ function defaultTrigger(kind: TriggerKind, id: string): TriggerSpec {
   }
 }
 
-function ComparisonValueEditor({
-  operator,
-  value,
-  onChange,
-}: {
-  operator: RawRuleOperator;
-  value: unknown;
-  onChange: (value: unknown) => void;
-}) {
-  if (operatorsWithoutValue.has(operator)) {
-    return null;
-  }
-
-  const valueType =
-    typeof value === 'number'
-      ? 'number'
-      : typeof value === 'boolean'
-        ? 'boolean'
-        : 'text';
-
-  return (
-    <>
-      <ConfigField label="Value type">
-        <select
-          className={selectClassName}
-          value={valueType}
-          onChange={(event) => {
-            const next = event.target.value;
-            onChange(next === 'number' ? 0 : next === 'boolean' ? true : '');
-          }}
-        >
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-          <option value="boolean">Boolean</option>
-        </select>
-      </ConfigField>
-      <ConfigField label="Value">
-        {valueType === 'boolean' ? (
-          <select
-            className={selectClassName}
-            value={value === true ? 'true' : 'false'}
-            onChange={(event) => onChange(event.target.value === 'true')}
-          >
-            <option value="true">True</option>
-            <option value="false">False</option>
-          </select>
-        ) : valueType === 'number' ? (
-          <Input
-            type="number"
-            step="any"
-            value={typeof value === 'number' ? value : ''}
-            onChange={(event) => {
-              const parsed = event.target.valueAsNumber;
-              onChange(Number.isNaN(parsed) ? 0 : parsed);
-            }}
-          />
-        ) : (
-          <Input
-            value={typeof value === 'string' ? value : ''}
-            onChange={(event) => onChange(event.target.value)}
-          />
-        )}
-      </ConfigField>
-    </>
-  );
-}
-
-function PredicateEditor({
-  predicate,
-  onChange,
-  devices,
-  groups,
-  scenes,
-}: {
-  predicate: ConditionExpr;
-  onChange: (predicate: ConditionExpr) => void;
-  devices: DevicesState;
-  groups: FlattenedGroupsConfig;
-  scenes: Array<{ id: string; name: string }>;
-}) {
-  if (predicate.kind === 'group') {
-    return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ConfigField label="Group">
-          <GroupSelect
-            groups={groups}
-            value={predicate.group_id}
-            onChange={(group_id) => onChange({ ...predicate, group_id })}
-          />
-        </ConfigField>
-        <ConfigField label="Quantifier">
-          <select
-            className={selectClassName}
-            value={predicate.quantifier}
-            onChange={(event) =>
-              onChange({
-                ...predicate,
-                quantifier: event.target.value as typeof predicate.quantifier,
-              })
-            }
-          >
-            <option value="all">All members</option>
-            <option value="any">Any member</option>
-            <option value="none">No member</option>
-            <option value="partial">Partially</option>
-          </select>
-        </ConfigField>
-        <ConfigField label="Power">
-          <select
-            className={selectClassName}
-            value={
-              predicate.power === undefined
-                ? 'any'
-                : predicate.power
-                  ? 'on'
-                  : 'off'
-            }
-            onChange={(event) => {
-              const next = event.target.value;
-              onChange({
-                ...predicate,
-                power: next === 'any' ? undefined : next === 'on',
-              });
-            }}
-          >
-            <option value="any">Any</option>
-            <option value="on">On</option>
-            <option value="off">Off</option>
-          </select>
-        </ConfigField>
-        <ConfigField label="Scene">
-          <select
-            className={selectClassName}
-            value={predicate.scene ?? ''}
-            onChange={(event) =>
-              onChange({
-                ...predicate,
-                scene: event.target.value || undefined,
-              })
-            }
-          >
-            <option value="">Any scene</option>
-            {scenes.map((scene) => (
-              <option key={scene.id} value={scene.id}>
-                {scene.name}
-              </option>
-            ))}
-          </select>
-        </ConfigField>
-      </div>
-    );
-  }
-
-  if (predicate.kind === 'comparison' && predicate.source.kind === 'device') {
-    const { device, path } = predicate.source;
-    const deviceKey =
-      device.integration_id && device.device_id
-        ? `${device.integration_id}/${device.device_id}`
-        : '';
-    const deviceData = deviceKey ? devices[deviceKey]?.data : undefined;
-    const pathSuggestions = deviceData
-      ? 'Sensor' in deviceData
-        ? sensorPathSuggestions
-        : controllablePathSuggestions
-      : sensorPathSuggestions;
-
-    return (
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ConfigField label="Device">
-          <DeviceSelect
-            devices={devices}
-            value={deviceKey}
-            onChange={(key) =>
-              onChange({
-                ...predicate,
-                source: {
-                  kind: 'device',
-                  device: splitDeviceKey(key) ?? {
-                    integration_id: '',
-                    device_id: '',
-                  },
-                  path,
-                },
-              })
-            }
-          />
-        </ConfigField>
-        <ConfigField
-          label="Value path"
-          description="JSON pointer into the device state, for example /power or /value."
-        >
-          <Input
-            list={
-              pathSuggestions === sensorPathSuggestions
-                ? 'v2-sensor-paths'
-                : 'v2-controllable-paths'
-            }
-            value={path}
-            placeholder="/value"
-            onChange={(event) =>
-              onChange({
-                ...predicate,
-                source: {
-                  kind: 'device',
-                  device,
-                  path: event.target.value,
-                },
-              })
-            }
-          />
-        </ConfigField>
-        <ConfigField label="Operator">
-          <select
-            className={selectClassName}
-            value={predicate.operator}
-            onChange={(event) =>
-              onChange({
-                ...predicate,
-                operator: event.target.value as RawRuleOperator,
-              })
-            }
-          >
-            {operatorOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </ConfigField>
-        <ComparisonValueEditor
-          operator={predicate.operator}
-          value={predicate.value}
-          onChange={(value) =>
-            onChange({ ...predicate, value: value as JsonValue | undefined })
-          }
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-2 rounded-2xl border border-dashed border-border bg-muted/30 p-3">
-      <p className="text-sm text-muted-foreground">
-        This predicate uses nested logic or a helper/computed source. Edit it
-        in the Definition JSON tab, or replace it with a simple condition.
-      </p>
-      <pre className="overflow-x-auto text-xs">
-        {JSON.stringify(predicate, null, 2)}
-      </pre>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={() =>
-          onChange({
-            kind: 'comparison',
-            source: {
-              kind: 'device',
-              device: { integration_id: '', device_id: '' },
-              path: '/value',
-            },
-            operator: 'eq',
-            value: true,
-          })
-        }
-      >
-        Replace with a simple condition
-      </Button>
-    </div>
-  );
-}
-
 function TriggerFields({
   trigger,
   onChange,
   devices,
   groups,
   scenes,
+  helpers,
 }: {
   trigger: TriggerSpec;
   onChange: (trigger: TriggerSpec) => void;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   scenes: Array<{ id: string; name: string }>;
+  helpers: HelperRuntimeStatus[];
 }) {
   switch (trigger.kind) {
     case 'schedule': {
@@ -632,12 +329,13 @@ function TriggerFields({
     case 'predicate_for':
       return (
         <div className="space-y-4">
-          <PredicateEditor
-            predicate={trigger.predicate}
+          <ConditionEditor
+            condition={trigger.predicate}
             onChange={(predicate) => onChange({ ...trigger, predicate })}
             devices={devices}
             groups={groups}
             scenes={scenes}
+            helpers={helpers}
           />
           {trigger.kind === 'predicate_for' ? (
             <ConfigField
@@ -690,6 +388,7 @@ export function TriggerBuilder({
   devices,
   groups,
   scenes,
+  helpers,
   runtimeStatus,
 }: {
   triggers: TriggerSpec[];
@@ -697,6 +396,7 @@ export function TriggerBuilder({
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   scenes: Array<{ id: string; name: string }>;
+  helpers: HelperRuntimeStatus[];
   runtimeStatus?: RoutineRuntimeStatus;
 }) {
   const [newKind, setNewKind] = useState<TriggerKind>('schedule');
@@ -719,16 +419,7 @@ export function TriggerBuilder({
 
   return (
     <div className="space-y-4">
-      <datalist id="v2-sensor-paths">
-        {sensorPathSuggestions.map((path) => (
-          <option key={path} value={path} />
-        ))}
-      </datalist>
-      <datalist id="v2-controllable-paths">
-        {controllablePathSuggestions.map((path) => (
-          <option key={path} value={path} />
-        ))}
-      </datalist>
+      <ConditionDatalists />
       <datalist id="v2-timezones">
         {timezoneSuggestions.map((zone) => (
           <option key={zone} value={zone} />
@@ -834,6 +525,7 @@ export function TriggerBuilder({
                   devices={devices}
                   groups={groups}
                   scenes={scenes}
+                  helpers={helpers}
                 />
 
                 {live?.error ? (

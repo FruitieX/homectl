@@ -6,6 +6,7 @@ import {
   Routine,
   RoutineDefinitionV2Body,
 } from '@/hooks/useConfig';
+import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { Program } from '@/bindings/Program';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
@@ -25,6 +26,7 @@ import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { TriggerBuilder } from '@/ui/TriggerBuilder';
+import { ConditionEditor } from '@/ui/ConditionBuilder';
 import { ProgramBuilder } from '@/ui/ProgramBuilder';
 import { RoutineRuntimePanel } from '@/ui/routine-runtime';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
@@ -253,7 +255,7 @@ function RoutineCard({
   const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
   const [actions, setActions] = useState<Action[]>(routine.actions as Action[]);
   const [editTab, setEditTab] = useState<
-    'basics' | 'rules' | 'program' | 'actions' | 'json'
+    'basics' | 'rules' | 'condition' | 'program' | 'actions' | 'json'
   >('basics');
   const [rulesJson, setRulesJson] = useState(
     JSON.stringify(routine.rules, null, 2),
@@ -328,6 +330,7 @@ function RoutineCard({
     if (
       value === 'basics' ||
       value === 'rules' ||
+      value === 'condition' ||
       value === 'program' ||
       value === 'actions'
     ) {
@@ -402,11 +405,18 @@ function RoutineCard({
   const editContent = (
     <div className="flex min-h-full flex-col">
       <Tabs value={editTab} onValueChange={changeTab}>
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList
+          className={`grid h-auto w-full grid-cols-2 ${
+            isV2 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
+          }`}
+        >
           <TabsTrigger value="basics">Basics</TabsTrigger>
           <TabsTrigger value="rules">
             {isV2 ? 'Triggers' : 'Rules'}
           </TabsTrigger>
+          {isV2 ? (
+            <TabsTrigger value="condition">Condition</TabsTrigger>
+          ) : null}
           {isV2 ? <TabsTrigger value="program">Program</TabsTrigger> : null}
           {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
           <TabsTrigger value="json">
@@ -462,6 +472,7 @@ function RoutineCard({
                 devices={devices}
                 groups={groups}
                 scenes={scenes}
+                helpers={helpers}
                 runtimeStatus={runtimeStatus}
               />
             ) : (
@@ -475,6 +486,28 @@ function RoutineCard({
             )}
           </ConfigFormSection>
         </TabsContent>
+
+        {isV2 ? (
+          <TabsContent value="condition" className="mt-4">
+            <ConfigFormSection aria-label="Routine condition">
+              <ConditionEditor
+                condition={
+                  (definition.condition as ConditionExpr | undefined) ?? {
+                    kind: 'literal',
+                    value: true,
+                  }
+                }
+                onChange={(condition) =>
+                  setDefinition((current) => ({ ...current, condition }))
+                }
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                helpers={helpers}
+              />
+            </ConfigFormSection>
+          </TabsContent>
+        ) : null}
 
         {isV2 ? (
           <TabsContent value="program" className="mt-4">
