@@ -96,18 +96,29 @@ async fn export_from_sqlite_source_db(db_path: &Path) -> Result<ConfigExport> {
             warn!(
                 "Failed to read SQLite source using current schema, trying legacy schema fallback: {error}"
             );
-            export_from_legacy_sqlite_source_db(&db).await
+            export_from_legacy_source_db(&db).await
         }
     }
 }
 
+/// Open a source PostgreSQL DB and export its config. Databases created before
+/// the additive v2 routine columns (P03) fall back to the same column-tolerant
+/// query-builder reader the SQLite path uses.
 async fn export_from_postgres_source_db(database_url: &str) -> Result<ConfigExport> {
     let db = Database::connect(database_url).await?;
-    let export = config_queries::db_export_config_from_connection(&db).await?;
-    Ok(normalize_source_export(export))
+
+    match config_queries::db_export_config_from_connection(&db).await {
+        Ok(export) => Ok(normalize_source_export(export)),
+        Err(error) => {
+            warn!(
+                "Failed to read PostgreSQL source using current schema, trying legacy schema fallback: {error}"
+            );
+            export_from_legacy_source_db(&db).await
+        }
+    }
 }
 
-async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Result<ConfigExport> {
+async fn export_from_legacy_source_db<C: ConnectionTrait>(db: &C) -> Result<ConfigExport> {
     let integrations = all(
         db,
         Query::select()
