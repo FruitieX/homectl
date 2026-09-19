@@ -7,12 +7,17 @@
 //! responsible for cadence, freshness, and publication.
 
 pub mod circadian_compat;
+pub mod presets;
 pub mod registry;
 
 pub use circadian_compat::{
     CircadianCompatCurve, CIRCADIAN_COMPAT_PRESET_VERSION, CIRCADIAN_COMPAT_TRANSITION_MS,
 };
+pub use presets::{
+    preset_infos, resolve_source_body, validate_script_compute, SourcePreset,
+    MAX_SOURCE_SCRIPT_BYTES,
+};
 pub use registry::{
-    evaluate_due_sources, evaluate_source, source_device_key, synthetic_device, SourceEvaluation,
-    Sources, COMPUTED_SOURCE_INTEGRATION_ID,
+    evaluate_due_sources, evaluate_source, local_time_label, script_context, source_device_key,
+    synthetic_device, SourceEvaluation, Sources, COMPUTED_SOURCE_INTEGRATION_ID,
 };

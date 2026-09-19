@@ -190,6 +190,24 @@ pub enum Event {
         error: Option<String>,
     },
 
+    /// A supervised worker finished a computed-source invocation (P11). The
+    /// actor validates the value against the source output schema, then
+    /// publishes it through the read-only synthetic device.
+    SourceScriptResult {
+        source_id: crate::types::automation_definition::SourceId,
+        request_id: u64,
+        owner_key: String,
+        owner_generation: u64,
+        definition_revision: i64,
+        state_revision: u64,
+        /// Strictly serialized worker result when the invocation succeeded.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        value: Option<serde_json::Value>,
+        /// Bounded failure message when the worker reported an error.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        error: Option<String>,
+    },
+
     /// A v2 routine dispatched a named timer operation (P09). Timer state is
     /// actor-authoritative, so the operation is applied by the handler in plan
     /// order rather than at plan time.

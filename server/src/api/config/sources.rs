@@ -50,6 +50,9 @@ pub(super) fn validate_source(source: &SourceDefinition) -> Result<(), String> {
             CircadianCompatCurve::from_params(params)
                 .map_err(|error| format!("compute.params: {error}"))?;
         }
+        script @ SourceCompute::Script { .. } => {
+            crate::core::automation::sources::validate_script_compute(script)?;
+        }
     }
 
     Ok(())
@@ -65,6 +68,11 @@ pub(super) fn sources_routes(
         .and(with_snapshot(snapshot))
         .and_then(list_sources);
 
+    let presets = warp::path("source-presets")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(list_source_presets);
+
     let upsert = warp::path!("sources" / String)
         .and(warp::put())
         .and(warp::body::json())
@@ -77,7 +85,15 @@ pub(super) fn sources_routes(
         .and(with_handle(handle))
         .and_then(delete_source);
 
-    list.or(upsert).or(delete)
+    list.or(presets).or(upsert).or(delete)
+}
+
+/// Shipped preset metadata, including the forkable body. The body is a
+/// shipped application asset, not a secret.
+async fn list_source_presets() -> Result<impl Reply, warp::Rejection> {
+    Ok(ApiResponse::success(
+        crate::core::automation::sources::preset_infos(),
+    ))
 }
 
 async fn list_sources(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -185,14 +201,19 @@ mod tests {
         validate_source(&valid_source()).unwrap();
 
         let mut unsupported_preset = valid_source();
-        let SourceCompute::CircadianCompat { preset_version, .. } = &mut unsupported_preset.compute;
+        let SourceCompute::CircadianCompat { preset_version, .. } = &mut unsupported_preset.compute
+        else {
+            panic!("fixture is the built-in preset");
+        };
         *preset_version = 99;
         assert!(validate_source(&unsupported_preset)
             .unwrap_err()
             .contains("unsupported circadian preset version"));
 
         let mut overlapping = valid_source();
-        let SourceCompute::CircadianCompat { params, .. } = &mut overlapping.compute;
+        let SourceCompute::CircadianCompat { params, .. } = &mut overlapping.compute else {
+            panic!("fixture is the built-in preset");
+        };
         params.day_fade_duration_hours = 16;
         assert!(validate_source(&overlapping)
             .unwrap_err()

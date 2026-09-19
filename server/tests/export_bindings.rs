@@ -9,7 +9,7 @@ use homectl_server::types::{
     },
     automation_source::{
         CircadianCompatParams, LightProfile, SourceCompute, SourceDefinition, SourceOutput,
-        SourceQuality,
+        SourcePresetInfo, SourcePresetRef, SourceQuality,
     },
     automation_trace::{
         ConditionEvaluation, ConditionTraceNode, GroupEvaluation, GroupMemberEvaluation,
@@ -79,6 +79,8 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         SourceDefinition::export_all_to(&output_dir)?;
         SourceId::export_all_to(&output_dir)?;
         SourceOutput::export_all_to(&output_dir)?;
+        SourcePresetInfo::export_all_to(&output_dir)?;
+        SourcePresetRef::export_all_to(&output_dir)?;
         SourceQuality::export_all_to(&output_dir)?;
         TargetSpec::export_all_to(&output_dir)?;
         TimerId::export_all_to(&output_dir)?;

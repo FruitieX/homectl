@@ -469,6 +469,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::RoutineScriptResult { .. } => "RoutineScriptResult",
         Event::RuleScriptLeafResult { .. } => "RuleScriptLeafResult",
         Event::SceneMaterializedResult { .. } => "SceneMaterializedResult",
+        Event::SourceScriptResult { .. } => "SourceScriptResult",
         Event::RoutineTimerOperation { .. } => "RoutineTimerOperation",
         Event::TimerWakeup { .. } => "TimerWakeup",
     }

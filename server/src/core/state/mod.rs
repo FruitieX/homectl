@@ -754,6 +754,9 @@ impl AppState {
         self.apply_runtime_groups();
         self.apply_runtime_scenes();
         self.apply_runtime_routines();
+        // Scripted sources compute through the worker pool; dispatch now so
+        // an explicit reload does not wait for the next refresh tick.
+        self.dispatch_due_source_scripts().await;
         Ok(())
     }
 
@@ -1207,10 +1210,12 @@ impl AppState {
     pub fn sync_script_owners(&mut self) {
         let legacy_owners = self.rules.legacy_script_owners();
         let scene_owners = self.scenes.script_revisions();
+        let source_owners = self.sources.script_owner_revisions();
         self.scripts.sync_owners(
             self.rules.compiled_v2_routines(),
             &legacy_owners,
             &scene_owners,
+            &source_owners,
         );
     }
 

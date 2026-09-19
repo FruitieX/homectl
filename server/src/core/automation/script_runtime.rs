@@ -26,7 +26,7 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use crate::types::{
-    automation_definition::{ScriptDeclaration, ScriptSpec},
+    automation_definition::{ScriptDeclaration, ScriptSpec, SourceId},
     automation_event::{EventCausation, EventId, EventOrigin},
     device::{Device, DeviceKey, DeviceRef},
     event::{Event, TxEventChannel},
@@ -38,6 +38,7 @@ use crate::core::js_worker::{JsWorkerPool, SupervisorConfig};
 
 use super::evaluate::FrameContext;
 use super::runtime::V2Definition;
+use super::script_contract::ComputedSourceOutcome;
 use super::script_coordinator::{
     Admission, AdmissionError, CompleteResult, InvocationToken, OwnerKind, ScriptCoordinator,
     ScriptInvocation, ScriptOwnerId, StaleReason,
@@ -77,6 +78,15 @@ pub struct PreparedSceneMaterialization {
     pub scene_id: SceneId,
     pub token: InvocationToken,
     pub script: String,
+    pub context: Value,
+}
+
+/// One admitted computed-source invocation ready for the worker pool.
+#[derive(Clone, Debug)]
+pub struct PreparedSourceRun {
+    pub source_id: SourceId,
+    pub token: InvocationToken,
+    pub source_body: String,
     pub context: Value,
 }
 
@@ -137,6 +147,7 @@ impl ScriptExecution {
         definitions: &BTreeMap<RoutineId, V2Definition>,
         legacy_script_owners: &BTreeSet<RoutineId>,
         scene_owners: &BTreeMap<SceneId, i64>,
+        source_owners: &BTreeMap<SourceId, i64>,
     ) {
         let mut live: BTreeSet<String> = BTreeSet::new();
         for (routine_id, definition) in definitions {
@@ -168,13 +179,24 @@ impl ScriptExecution {
             }
             live.insert(owner.key());
         }
+        for (source_id, revision) in source_owners {
+            let owner = ScriptOwnerId::computed_source(source_id.0.clone());
+            let current = self.coordinator.definition_revision(&owner);
+            if current != Some(*revision) || !self.coordinator.is_enabled(&owner) {
+                self.coordinator.load_owner(&owner, *revision, Value::Null);
+            }
+            live.insert(owner.key());
+        }
 
         let stale: Vec<ScriptOwnerId> = self
             .coordinator
             .owner_keys()
             .into_iter()
             .filter(|(key, kind)| {
-                matches!(kind, OwnerKind::Routine | OwnerKind::Scene) && !live.contains(key)
+                matches!(
+                    kind,
+                    OwnerKind::Routine | OwnerKind::Scene | OwnerKind::ComputedSource
+                ) && !live.contains(key)
             })
             .map(|(key, kind)| ScriptOwnerId {
                 kind,
@@ -585,6 +607,85 @@ impl ScriptExecution {
                     definition_revision: token.definition_revision,
                     state_revision: token.state_revision,
                     causation,
+                    value,
+                    error,
+                })
+                .ok();
+        });
+    }
+
+    /// Admit one computed-source invocation. Current-value recomputation
+    /// coalesces to the latest revision; the context is the pure source
+    /// context (parameters plus injected civil time).
+    pub fn prepare_source_invocation(
+        &mut self,
+        source_id: &SourceId,
+        definition_revision: i64,
+        source_body: String,
+        context: Value,
+    ) -> Result<PreparedSourceRun, String> {
+        let invocation = ScriptInvocation {
+            owner: ScriptOwnerId::computed_source(source_id.0.clone()),
+            definition_revision,
+            contract: super::script_contract::ScriptOutputContract::ComputedSource,
+            source_body: source_body.clone(),
+            context: context.clone(),
+            coalesce: super::script_coordinator::CoalescePolicy::LatestWins,
+            run_id: None,
+        };
+        match self.coordinator.submit(&invocation) {
+            Ok(Admission::Accepted(token)) | Ok(Admission::Coalesced { token, .. }) => {
+                Ok(PreparedSourceRun {
+                    source_id: source_id.clone(),
+                    token,
+                    source_body,
+                    context,
+                })
+            }
+            Err(error) => Err(admission_error_text(&error)),
+        }
+    }
+
+    /// Complete one computed-source result against the coordinator. The
+    /// caller still validates the value against the source output schema.
+    pub fn complete_computed_source(
+        &mut self,
+        token: &InvocationToken,
+        value: &Value,
+    ) -> CompleteResult<ComputedSourceOutcome> {
+        self.coordinator.complete_computed_source(token, value)
+    }
+
+    /// Release a failed source invocation. Staleness is still enforced, so a
+    /// failure for a superseded owner is ignored instead of marking the
+    /// current definition failed.
+    pub fn abandon_source(&mut self, token: &InvocationToken) -> Result<(), StaleReason> {
+        self.coordinator.abandon(token)
+    }
+
+    /// Deliver a computed-source result as an actor event. The spawned task
+    /// only owns the shared pool and the event sender; it never touches
+    /// `AppState`.
+    pub fn spawn_source_execution(
+        &self,
+        pool: Arc<JsWorkerPool>,
+        event_tx: TxEventChannel,
+        run: PreparedSourceRun,
+    ) {
+        tokio::spawn(async move {
+            let outcome = pool.execute(&run.source_body, run.context).await;
+            let (value, error) = match outcome {
+                Ok(value) => (Some(value), None),
+                Err(error) => (None, Some(bounded_text(&error.to_string()))),
+            };
+            event_tx
+                .try_send(Event::SourceScriptResult {
+                    source_id: run.source_id,
+                    request_id: run.token.request_id,
+                    owner_key: run.token.owner_key,
+                    owner_generation: run.token.owner_generation,
+                    definition_revision: run.token.definition_revision,
+                    state_revision: run.token.state_revision,
                     value,
                     error,
                 })
@@ -1021,7 +1122,12 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        scripts.sync_owners(&owners, &BTreeSet::new(), &BTreeMap::new());
+        scripts.sync_owners(
+            &owners,
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         let owner = ScriptOwnerId::routine("scripted");
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(1));
         assert_eq!(
@@ -1033,10 +1139,20 @@ mod tests {
 
         let edited: BTreeMap<RoutineId, V2Definition> =
             [definition("scripted", 2, true)].into_iter().collect();
-        scripts.sync_owners(&edited, &BTreeSet::new(), &BTreeMap::new());
+        scripts.sync_owners(
+            &edited,
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(2));
 
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &BTreeMap::new());
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
     }
 
@@ -1046,7 +1162,12 @@ mod tests {
     fn legacy_owners_reload_and_bump_generation() {
         let mut scripts = ScriptExecution::default();
         let legacy: BTreeSet<RoutineId> = [RoutineId("legacy".to_string())].into_iter().collect();
-        scripts.sync_owners(&BTreeMap::new(), &legacy, &BTreeMap::new());
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &legacy,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
 
         let owner = ScriptOwnerId::routine("legacy");
         assert_eq!(
@@ -1062,7 +1183,12 @@ mod tests {
             .expect("legacy leaf is admitted");
         assert_eq!(prepared.token.owner_generation, 1);
 
-        scripts.sync_owners(&BTreeMap::new(), &legacy, &BTreeMap::new());
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &legacy,
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         let completed = scripts
             .coordinator_mut()
             .complete_condition(&prepared.token, &json!(true));
@@ -1072,7 +1198,12 @@ mod tests {
             "a reload rejects the in-flight legacy result"
         );
 
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &BTreeMap::new());
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
     }
 
@@ -1085,7 +1216,12 @@ mod tests {
         let mut scripts = ScriptExecution::default();
         let scene = SceneId::new("evening".to_string());
         let owners: BTreeMap<SceneId, i64> = [(scene.clone(), 1)].into_iter().collect();
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &owners);
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &owners,
+            &BTreeMap::new(),
+        );
 
         let owner = ScriptOwnerId::scene("evening");
         assert_eq!(scripts.coordinator().definition_revision(&owner), Some(1));
@@ -1104,7 +1240,12 @@ mod tests {
         );
 
         // Unchanged revision: the generation (and the pending result) survive.
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &owners);
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &owners,
+            &BTreeMap::new(),
+        );
         let applied = scripts
             .coordinator_mut()
             .complete_legacy_scene(&prepared.token, &json!({"dummy/lamp": {"power": true}}));
@@ -1121,7 +1262,12 @@ mod tests {
 
         // Edited revision: the new owner generation rejects the old token.
         let edited: BTreeMap<SceneId, i64> = [(scene.clone(), 2)].into_iter().collect();
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &edited);
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &edited,
+            &BTreeMap::new(),
+        );
         let stale_token = scripts
             .prepare_scene_materialization(
                 &scene,
@@ -1142,7 +1288,12 @@ mod tests {
         );
 
         // Removed scene scripts drop their owner entirely.
-        scripts.sync_owners(&BTreeMap::new(), &BTreeSet::new(), &BTreeMap::new());
+        scripts.sync_owners(
+            &BTreeMap::new(),
+            &BTreeSet::new(),
+            &BTreeMap::new(),
+            &BTreeMap::new(),
+        );
         assert_eq!(scripts.coordinator().owner_kind(&owner), None);
     }
 }

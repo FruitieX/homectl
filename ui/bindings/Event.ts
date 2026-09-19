@@ -9,6 +9,7 @@ import type { HelperId } from "./HelperId";
 import type { RoutineId } from "./RoutineId";
 import type { SceneConfig } from "./SceneConfig";
 import type { SceneId } from "./SceneId";
+import type { SourceId } from "./SourceId";
 import type { TimerIntentCapture } from "./TimerIntentCapture";
 import type { TimerOperation } from "./TimerOperation";
 import type { TimerWakeupJob } from "./TimerWakeupJob";
@@ -90,6 +91,14 @@ value?: JsonValue | null,
 error?: string | null, } } | { "SceneMaterializedResult": { scene_id: SceneId, request_id: bigint, owner_key: string, owner_generation: bigint, definition_revision: bigint, state_revision: bigint, 
 /**
  * Raw legacy JSON result when the invocation succeeded.
+ */
+value?: JsonValue | null, 
+/**
+ * Bounded failure message when the worker reported an error.
+ */
+error?: string | null, } } | { "SourceScriptResult": { source_id: SourceId, request_id: bigint, owner_key: string, owner_generation: bigint, definition_revision: bigint, state_revision: bigint, 
+/**
+ * Strictly serialized worker result when the invocation succeeded.
  */
 value?: JsonValue | null, 
 /**

@@ -12,6 +12,7 @@
 
 use ordered_float::OrderedFloat;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use ts_rs::TS;
 
 use super::automation_definition::SourceId;
@@ -117,6 +118,29 @@ pub struct CircadianCompatParams {
     pub night_brightness: Option<f32>,
 }
 
+/// Identity of a shipped source preset, pinned in the definition so a later
+/// preset update is a deliberate migration instead of a silent change.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SourcePresetRef {
+    pub id: String,
+    pub version: u32,
+}
+
+/// Metadata of a shipped preset version, including the forkable body. The
+/// parameter object stays `params`-shaped JSON so the authoring form can show
+/// it without a second schema language.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SourcePresetInfo {
+    pub id: String,
+    pub version: u32,
+    pub name: String,
+    pub description: String,
+    pub default_params: Value,
+    pub source_body: String,
+}
+
 /// How a computed source derives its output.
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -128,6 +152,21 @@ pub enum SourceCompute {
     CircadianCompat {
         preset_version: u32,
         params: CircadianCompatParams,
+    },
+
+    /// A JavaScript computation executed by the supervised worker. Exactly
+    /// one of `preset` (a shipped, pinned asset) or `source_body` (a
+    /// DB-backed fork or hand-written body) is present. Inputs are pure:
+    /// the parameter object plus injected civil time, never live devices.
+    Script {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        preset: Option<SourcePresetRef>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        source_body: Option<String>,
+        #[serde(default)]
+        params: Value,
     },
 }
 

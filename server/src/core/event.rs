@@ -10,6 +10,7 @@ use crate::types::{
         AutomationFrame, DeviceMutation, EventCausation, EventOrigin, FrameDisposition,
         MAX_CAUSATION_DEPTH, MAX_DERIVATION_STEPS,
     },
+    automation_source::LightProfile,
     automation_trace::{PlannedRunStatus, StepDisposition},
     automation_value::HelperPersistence,
     color::DeviceColor,
@@ -668,6 +669,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
         }
         Event::SourceRefreshTick => {
             outcome.mark_snapshot_changes(state.refresh_due_sources());
+            outcome.mark_snapshot_changes(state.dispatch_due_source_scripts().await);
         }
         Event::SetExternalState { device } => {
             let calibration = state
@@ -891,6 +893,135 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     );
                 }
             }
+        }
+
+        Event::SourceScriptResult {
+            source_id,
+            request_id,
+            owner_key,
+            owner_generation,
+            definition_revision,
+            state_revision,
+            value,
+            error,
+        } => {
+            let token = InvocationToken {
+                request_id: *request_id,
+                owner_key: owner_key.clone(),
+                owner_generation: *owner_generation,
+                definition_revision: *definition_revision,
+                state_revision: *state_revision,
+                contract: ScriptOutputContract::ComputedSource,
+            };
+            match (value, error) {
+                (Some(value), _) => match state.scripts.complete_computed_source(&token, value) {
+                    CompleteResult::Applied { value: applied, .. } => {
+                        let profile = serde_json::from_value::<LightProfile>(applied.value.clone())
+                            .map_err(|error| {
+                                format!("source result is not a light profile: {error}")
+                            })
+                            .and_then(|profile| profile.validate().map(|_| profile));
+                        match profile {
+                            Ok(profile) => {
+                                if let Some(definition) =
+                                    state.sources.definitions().get(source_id).cloned()
+                                {
+                                    let now_wall_ms = state.clock.wall_ms();
+                                    let local_time =
+                                        sources::local_time_label(&definition, now_wall_ms).ok();
+                                    state.sources.record_success(
+                                        &definition,
+                                        profile.clone(),
+                                        local_time,
+                                        now_wall_ms,
+                                    );
+                                    let device = sources::synthetic_device(&definition, &profile);
+                                    let first_publish = state
+                                        .devices
+                                        .get_device(&device.get_device_key())
+                                        .is_none();
+                                    match apply_internal_state(
+                                        state,
+                                        &device,
+                                        Some(true),
+                                        Some(true),
+                                        Some(EventOrigin::Derived),
+                                    ) {
+                                        Ok(publish) => {
+                                            outcome.include(publish);
+                                        }
+                                        Err(error) => {
+                                            warn!(
+                                                "Computed source {} failed to publish: {error:#}",
+                                                definition.id.0
+                                            );
+                                            state.sources.record_failure(
+                                                &definition.id,
+                                                error.to_string(),
+                                                now_wall_ms,
+                                            );
+                                        }
+                                    }
+                                    // A first result makes `computed/<id>`
+                                    // resolvable, so routines quarantined at
+                                    // startup can compile now.
+                                    if first_publish {
+                                        state.apply_runtime_routines();
+                                    }
+                                }
+                            }
+                            Err(message) => {
+                                warn!(
+                                    "Computed source {} returned an invalid profile: {message}",
+                                    source_id.0
+                                );
+                                state.sources.record_failure(
+                                    source_id,
+                                    message,
+                                    state.clock.wall_ms(),
+                                );
+                            }
+                        }
+                    }
+                    CompleteResult::Stale(reason) => {
+                        debug!(
+                            "Ignoring stale computed source result for {}: {}",
+                            source_id.0,
+                            reason.as_str()
+                        );
+                    }
+                    CompleteResult::ContractError { message } => {
+                        warn!("Computed source {} contract error: {message}", source_id.0);
+                        state
+                            .sources
+                            .record_failure(source_id, message, state.clock.wall_ms());
+                    }
+                },
+                (None, Some(message)) => {
+                    if state.scripts.abandon_source(&token).is_ok() {
+                        warn!("Computed source {} script failed: {message}", source_id.0);
+                        state.sources.record_failure(
+                            source_id,
+                            message.clone(),
+                            state.clock.wall_ms(),
+                        );
+                    }
+                }
+                (None, None) => {
+                    if state.scripts.abandon_source(&token).is_ok() {
+                        state.sources.record_failure(
+                            source_id,
+                            "source worker returned no result".to_string(),
+                            state.clock.wall_ms(),
+                        );
+                    }
+                }
+            }
+            outcome.mark_snapshot_changes(SnapshotChanges {
+                devices: true,
+                routine_statuses: true,
+                ..SnapshotChanges::none()
+            });
         }
 
         Event::RoutineTimerOperation {
@@ -2079,6 +2210,9 @@ impl AppState {
             }
         }
         self.devices.set_source_aliases(self.sources.aliases());
+        // Script owners track definition revisions so an edit rejects results
+        // admitted against the previous revision (S16).
+        self.sync_script_owners();
         changes.include(self.refresh_due_sources());
         changes
     }
@@ -2115,6 +2249,84 @@ impl AppState {
             }
         }
         changes
+    }
+
+    /// Dispatch worker invocations for due script sources. Compat sources are
+    /// handled synchronously by [`Self::refresh_due_sources`]; script sources
+    /// never block the actor on a worker. Results arrive as
+    /// [`Event::SourceScriptResult`] and publish through the same synthetic
+    /// device path.
+    pub async fn dispatch_due_source_scripts(&mut self) -> SnapshotChanges {
+        let now_wall_ms = self.clock.wall_ms();
+        let due = self.sources.due_script_sources(now_wall_ms);
+        if due.is_empty() {
+            return SnapshotChanges::none();
+        }
+        let pool = match self.scripts.ensure_pool().await {
+            Ok(pool) => pool,
+            Err(message) => {
+                for definition in due {
+                    warn!(
+                        "Computed source {} script pool unavailable: {message}",
+                        definition.id.0
+                    );
+                    self.sources
+                        .record_failure(&definition.id, message.clone(), now_wall_ms);
+                }
+                return SnapshotChanges::none();
+            }
+        };
+
+        for definition in due {
+            let body = match sources::resolve_source_body(&definition.compute) {
+                Ok(body) => body,
+                Err(message) => {
+                    warn!(
+                        "Computed source {} has no script body: {message}",
+                        definition.id.0
+                    );
+                    self.sources
+                        .record_failure(&definition.id, message, now_wall_ms);
+                    continue;
+                }
+            };
+            let (context, _local_time) = match sources::script_context(&definition, now_wall_ms) {
+                Ok(context) => context,
+                Err(message) => {
+                    self.sources
+                        .record_failure(&definition.id, message, now_wall_ms);
+                    continue;
+                }
+            };
+            match self.scripts.prepare_source_invocation(
+                &definition.id,
+                definition.revision,
+                body,
+                context,
+            ) {
+                Ok(run) => {
+                    self.sources
+                        .mark_script_dispatched(&definition.id, now_wall_ms);
+                    self.scripts.spawn_source_execution(
+                        std::sync::Arc::clone(&pool),
+                        self.event_tx.clone(),
+                        run,
+                    );
+                }
+                Err(message) => {
+                    warn!(
+                        "Computed source {} script admission failed: {message}",
+                        definition.id.0
+                    );
+                    self.sources
+                        .record_failure(&definition.id, message, now_wall_ms);
+                }
+            }
+        }
+
+        // Publication arrives with the result event; the tick's snapshot
+        // changes come from the synchronous refresh above.
+        SnapshotChanges::none()
     }
 }
 
@@ -4998,7 +5210,10 @@ pub(crate) mod tests {
         // without inventing a healthy output; the last good device stays.
         state.runtime_config.sources[0].revision = 2;
         let crate::types::automation_source::SourceCompute::CircadianCompat { params, .. } =
-            &mut state.runtime_config.sources[0].compute;
+            &mut state.runtime_config.sources[0].compute
+        else {
+            panic!("fixture is the built-in preset");
+        };
         params.day_fade_duration_hours = 16;
         state.apply_runtime_sources();
         assert!(state.sources.output(&source_id).is_none());
@@ -5069,5 +5284,209 @@ pub(crate) mod tests {
             .rules
             .compiled_v2_routines()
             .contains_key(&RoutineId("source_triggered".to_string())));
+    }
+
+    // P11: a scripted source publishes through the same synthetic device path
+    // as a built-in source; stale, invalid, and failed results never publish
+    // and a failure keeps the last good value as stale (D06/S16).
+    #[tokio::test]
+    async fn p11_script_source_results_publish_and_reject_stale_or_invalid() {
+        use crate::types::automation_definition::SourceId;
+        use crate::types::automation_source::{
+            SourceCompute, SourceDefinition, SourcePresetRef, SourceQuality,
+        };
+        use crate::types::device::{DeviceData, SensorDevice};
+        use crate::types::event::Event;
+
+        use crate::db::config_queries::RoutineRow;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let source_id = SourceId("scripted".to_string());
+        state.runtime_config.sources = vec![SourceDefinition {
+            id: source_id.clone(),
+            name: "Scripted".to_string(),
+            enabled: true,
+            revision: 1,
+            timezone: "UTC".to_string(),
+            refresh_interval_ms: 60_000,
+            aliases: vec![],
+            compute: SourceCompute::Script {
+                preset: Some(SourcePresetRef {
+                    id: "circadian".to_string(),
+                    version: 1,
+                }),
+                source_body: None,
+                params: serde_json::json!({}),
+            },
+        }];
+        // A routine referencing the scripted source device cannot compile
+        // before the first result; the first publish makes it resolvable.
+        state.runtime_config.routines = vec![RoutineRow {
+            id: "scripted_trigger".to_string(),
+            name: "Scripted Trigger".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{
+                    "kind": "state_change",
+                    "id": "trig_device",
+                    "device": { "integration_id": "computed", "device_id": "scripted" }
+                }],
+                "condition": {
+                    "kind": "comparison",
+                    "source": {
+                        "kind": "computed_source",
+                        "source": "scripted",
+                        "path": "/brightness"
+                    },
+                    "operator": "gt",
+                    "value": 0.0
+                },
+                "program": { "kind": "native", "steps": [{
+                    "action": "set_power",
+                    "id": "step_on",
+                    "device": { "integration_id": "dummy", "device_id": "lamp" },
+                    "power": true
+                }]}
+            })),
+            rules: serde_json::json!([]),
+            actions: serde_json::json!([]),
+        }];
+        let bulb = lamp("dummy", "lamp", false, 0.5);
+        state
+            .devices
+            .set_state_with_origin(&bulb, true, true, EventOrigin::Derived);
+        state.apply_runtime_sources();
+        state.apply_runtime_routines();
+        assert!(
+            !state
+                .rules
+                .compiled_v2_routines()
+                .contains_key(&RoutineId("scripted_trigger".to_string())),
+            "the routine is quarantined until the source device exists"
+        );
+        let canonical = crate::core::automation::sources::source_device_key(&source_id);
+
+        let admit = |state: &mut AppState| {
+            state
+                .scripts
+                .prepare_source_invocation(
+                    &source_id,
+                    state.sources.definitions()[&source_id].revision,
+                    "return { value: {} };".to_string(),
+                    serde_json::json!({}),
+                )
+                .expect("script source is admitted")
+        };
+        let result_event = |prepared: &crate::core::automation::PreparedSourceRun,
+                            value: Option<serde_json::Value>,
+                            error: Option<String>| {
+            Event::SourceScriptResult {
+                source_id: source_id.clone(),
+                request_id: prepared.token.request_id,
+                owner_key: prepared.token.owner_key.clone(),
+                owner_generation: prepared.token.owner_generation,
+                definition_revision: prepared.token.definition_revision,
+                state_revision: prepared.token.state_revision,
+                value,
+                error,
+            }
+        };
+
+        // An edit bumps the owner generation: the in-flight result is stale.
+        let stale = admit(&mut state);
+        state.runtime_config.sources[0].revision = 2;
+        state.apply_runtime_sources();
+        handle_event(
+            &mut state,
+            &result_event(
+                &stale,
+                Some(serde_json::json!({"value": {"brightness": 0.4}})),
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(state.devices.get_device(&canonical).is_none());
+        assert!(state.sources.output(&source_id).is_none());
+
+        // A contract-valid but out-of-range profile is reported, not
+        // published, and there is no last-good value to keep.
+        let invalid = admit(&mut state);
+        handle_event(
+            &mut state,
+            &result_event(
+                &invalid,
+                Some(serde_json::json!({"value": {"brightness": 1.5}})),
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+        assert!(state.devices.get_device(&canonical).is_none());
+        assert!(state.sources.output(&source_id).is_none());
+
+        // A current valid result publishes the read-only synthetic sensor.
+        let valid = admit(&mut state);
+        handle_event(
+            &mut state,
+            &result_event(
+                &valid,
+                Some(serde_json::json!({
+                    "value": {
+                        "color": {"ct": 2700},
+                        "brightness": 0.4,
+                        "transition_ms": 60000
+                    }
+                })),
+                None,
+            ),
+        )
+        .await
+        .unwrap();
+        let device = state
+            .devices
+            .get_device(&canonical)
+            .expect("the scripted source publishes its device");
+        let DeviceData::Sensor(SensorDevice::Color(sensor)) = &device.data else {
+            panic!("expected a color sensor, got {:?}", device.data);
+        };
+        assert!(sensor.power);
+        assert_eq!(
+            sensor.color,
+            Some(crate::types::color::DeviceColor::new_from_kelvin(2700))
+        );
+        assert_eq!(sensor.brightness.map(|value| value.into_inner()), Some(0.4));
+        let output = state.sources.output(&source_id).expect("output recorded");
+        assert_eq!(output.quality, SourceQuality::Fresh);
+        assert_eq!(output.definition_revision, 2);
+        assert!(
+            state
+                .rules
+                .compiled_v2_routines()
+                .contains_key(&RoutineId("scripted_trigger".to_string())),
+            "the first result lets the quarantined routine compile"
+        );
+
+        // A worker failure keeps the last good value as stale.
+        let failed = admit(&mut state);
+        handle_event(
+            &mut state,
+            &result_event(&failed, None, Some("worker exploded".to_string())),
+        )
+        .await
+        .unwrap();
+        assert!(state.devices.get_device(&canonical).is_some());
+        match &state
+            .sources
+            .output(&source_id)
+            .expect("last good output")
+            .quality
+        {
+            SourceQuality::Stale { message } => assert!(message.contains("worker exploded")),
+            other => panic!("expected a stale output, got {other:?}"),
+        }
     }
 }

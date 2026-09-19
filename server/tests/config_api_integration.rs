@@ -335,7 +335,10 @@ fn source_refresh_publishes_read_only_synthetic_device() {
         .unwrap();
     assert!(find_device(&server, &client, "computed", "circadian").is_some());
     client
-        .delete(format!("{}/api/v1/config/integrations/dummy", server.base_url))
+        .delete(format!(
+            "{}/api/v1/config/integrations/dummy",
+            server.base_url
+        ))
         .send()
         .unwrap()
         .error_for_status()
@@ -350,6 +353,191 @@ fn source_refresh_publishes_read_only_synthetic_device() {
         .error_for_status()
         .unwrap();
     assert!(find_device(&server, &client, "computed", "circadian").is_none());
+}
+
+fn wait_for_device(
+    server: &TestServer,
+    client: &Client,
+    integration_id: &str,
+    device_id: &str,
+) -> Value {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        if let Some(device) = find_device(server, client, integration_id, device_id) {
+            return device;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "device {integration_id}/{device_id} never appeared"
+        );
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// P11/D10: shipped presets are listed with their forkable body, script
+/// definitions pin a preset version or carry an inline body (never both), and
+/// a fork is a normal DB-backed definition.
+#[test]
+fn script_source_validation_pins_presets_and_accepts_forks() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+
+    let presets_url = format!("{}/api/v1/config/source-presets", server.base_url);
+    let presets: Value = client.get(&presets_url).send().unwrap().json().unwrap();
+    let circadian = presets["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|preset| preset["id"] == "circadian" && preset["version"] == 1)
+        .expect("the circadian preset is listed")
+        .clone();
+    let preset_body = circadian["source_body"].as_str().unwrap().to_string();
+    assert!(preset_body.contains("api.color.mix"));
+    assert!(circadian["default_params"]["day_fade_start"].is_string());
+
+    let url = format!("{}/api/v1/config/sources/scripted", server.base_url);
+    let params = circadian["default_params"].clone();
+    let scripted = |compute: Value| {
+        json!({
+            "id": "scripted",
+            "name": "Scripted",
+            "enabled": false,
+            "revision": 0,
+            "timezone": "UTC",
+            "refresh_interval_ms": 60000,
+            "aliases": [],
+            "compute": compute
+        })
+    };
+
+    let pinned = scripted(json!({
+        "kind": "script",
+        "preset": { "id": "circadian", "version": 1 },
+        "params": params
+    }));
+    let saved: Value = client
+        .put(&url)
+        .json(&pinned)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(saved["data"]["revision"], 1);
+
+    let unknown = scripted(json!({
+        "kind": "script",
+        "preset": { "id": "circadian", "version": 99 },
+        "params": params
+    }));
+    assert_eq!(
+        client.put(&url).json(&unknown).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let both = scripted(json!({
+        "kind": "script",
+        "preset": { "id": "circadian", "version": 1 },
+        "source_body": "return { value: {} };",
+        "params": params
+    }));
+    assert_eq!(
+        client.put(&url).json(&both).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let neither = scripted(json!({ "kind": "script", "params": params }));
+    assert_eq!(
+        client.put(&url).json(&neither).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let mut mixed = pinned.clone();
+    mixed["compute"]["params"]["night_color"] = json!({ "h": 200, "s": 0.5 });
+    assert_eq!(
+        client.put(&url).json(&mixed).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    // A fork copies the shipped body into a DB-backed definition and drops
+    // the pin; the shipped asset is never mutated.
+    let fork = scripted(json!({
+        "kind": "script",
+        "source_body": preset_body,
+        "params": params
+    }));
+    let saved: Value = client
+        .put(&url)
+        .json(&fork)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(saved["data"]["revision"], 2);
+    assert!(saved["data"]["compute"]["preset"].is_null());
+
+    let presets_after: Value = client.get(&presets_url).send().unwrap().json().unwrap();
+    assert_eq!(presets_after["data"], presets["data"]);
+}
+
+/// P11: a scripted source computes through the supervised worker and
+/// publishes the same read-only synthetic device; a broken body reports stale
+/// without inventing an output.
+#[test]
+fn script_source_publishes_after_worker_computation() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let url = format!("{}/api/v1/config/sources/scripted", server.base_url);
+
+    let source = json!({
+        "id": "scripted",
+        "name": "Scripted",
+        "enabled": true,
+        "revision": 0,
+        "timezone": "UTC",
+        "refresh_interval_ms": 1000,
+        "aliases": [],
+        "compute": {
+            "kind": "script",
+            "source_body": "return { value: { color: api.color.kelvin(2700), brightness: 0.4, transition_ms: 60000 } };",
+            "params": {}
+        }
+    });
+    client
+        .put(&url)
+        .json(&source)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let device = wait_for_device(&server, &client, "computed", "scripted");
+    assert!(device["data"]["Sensor"]["power"].as_bool().unwrap());
+    assert_eq!(device["data"]["Sensor"]["color"]["ct"], 2700);
+    assert_eq!(device["data"]["Sensor"]["brightness"], 0.4);
+
+    // A broken body keeps the last good value as stale and publishes nothing
+    // new; the server stays healthy.
+    let mut broken = source.clone();
+    broken["compute"]["source_body"] = json!("throw new Error('boom');");
+    client
+        .put(&url)
+        .json(&broken)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    thread::sleep(Duration::from_secs(3));
+    let still = find_device(&server, &client, "computed", "scripted").expect("last good stays");
+    assert_eq!(still["data"]["Sensor"]["color"]["ct"], 2700);
+    let health: Response = client
+        .get(format!("{}/health/ready", server.base_url))
+        .send()
+        .unwrap();
+    assert!(health.status().is_success());
 }
 
 #[test]

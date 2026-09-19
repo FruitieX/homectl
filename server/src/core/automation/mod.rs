@@ -63,7 +63,7 @@ pub use script_coordinator::{
 };
 pub use script_runtime::{
     bounded_text, PreparedLegacyLeaf, PreparedSceneMaterialization, PreparedScriptRun,
-    SceneMaterializationCompletion, ScriptExecution, LEGACY_DEFINITION_REVISION,
+    PreparedSourceRun, SceneMaterializationCompletion, ScriptExecution, LEGACY_DEFINITION_REVISION,
     MAX_SCRIPT_ERROR_CHARS,
 };
 pub use timers::{

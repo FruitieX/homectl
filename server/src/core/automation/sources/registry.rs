@@ -12,6 +12,7 @@
 
 use std::collections::BTreeMap;
 
+use chrono::Timelike;
 use log::warn;
 use ordered_float::OrderedFloat;
 
@@ -76,7 +77,61 @@ pub fn evaluate_source(
                 local_time: Some(local.format("%H:%M:%S").to_string()),
             })
         }
+        // Script sources evaluate asynchronously through the supervised
+        // worker; the synchronous path never guesses a result.
+        SourceCompute::Script { .. } => {
+            Err("script sources evaluate through the worker pool".to_string())
+        }
     }
+}
+
+/// Civil time of a source definition at a wall-clock instant, plus its
+/// `HH:MM:SS` label for provenance.
+fn local_parts(
+    definition: &SourceDefinition,
+    now_wall_ms: i64,
+) -> Result<(chrono::NaiveTime, String), String> {
+    let zone = parse_schedule_zone(&definition.timezone)
+        .ok_or_else(|| format!("unknown timezone {:?}", definition.timezone))?;
+    let instant = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_wall_ms)
+        .ok_or_else(|| format!("invalid wall time {now_wall_ms}"))?;
+    let local = zone.local_time_at(instant);
+    let label = local.format("%H:%M:%S").to_string();
+    Ok((local, label))
+}
+
+/// `HH:MM:SS` civil time label for a source output's provenance.
+pub fn local_time_label(definition: &SourceDefinition, now_wall_ms: i64) -> Result<String, String> {
+    local_parts(definition, now_wall_ms).map(|(_, label)| label)
+}
+
+/// Immutable, bounded context for one scripted source invocation: injected
+/// civil time plus the parameter object. Sources never read live devices, so
+/// the context carries no frame state (P11: pure inputs only).
+pub fn script_context(
+    definition: &SourceDefinition,
+    now_wall_ms: i64,
+) -> Result<(serde_json::Value, String), String> {
+    let SourceCompute::Script { params, .. } = &definition.compute else {
+        return Err("computed source is not script-based".to_string());
+    };
+    let (local, local_time) = local_parts(definition, now_wall_ms)?;
+    let seconds_of_day = f64::from(local.num_seconds_from_midnight());
+
+    let context = serde_json::json!({
+        "now_ms": now_wall_ms,
+        "seed": 0,
+        "local": {
+            "timezone": definition.timezone,
+            "time": local_time,
+            "minutes_of_day": seconds_of_day / 60.0,
+            "seconds_of_day": seconds_of_day,
+            "day_fraction": seconds_of_day / 86_400.0,
+        },
+        "params": params,
+        "source": { "id": definition.id.0, "name": definition.name },
+    });
+    Ok((context, local_time))
 }
 
 /// Evaluate every enabled source whose cadence has elapsed, recording
@@ -89,6 +144,9 @@ pub fn evaluate_due_sources(
 ) -> Vec<(SourceDefinition, LightProfile)> {
     let mut publishable = Vec::new();
     for definition in registry.due_sources(now_wall_ms) {
+        if matches!(definition.compute, SourceCompute::Script { .. }) {
+            continue;
+        }
         match evaluate_source(&definition, now_wall_ms) {
             Ok(evaluation) => {
                 registry.record_success(
@@ -138,7 +196,15 @@ pub struct Sources {
     definitions: BTreeMap<SourceId, SourceDefinition>,
     outputs: BTreeMap<SourceId, SourceOutput>,
     last_attempt_wall_ms: BTreeMap<SourceId, i64>,
+    /// Script sources with an invocation in flight, keyed by dispatch time so
+    /// a lost result cannot wedge the cadence forever.
+    script_pending: BTreeMap<SourceId, i64>,
 }
+
+/// A script invocation older than this is presumed lost and may be
+/// re-dispatched. The worker supervisor already bounds invocation time; this
+/// is the actor-side backstop.
+pub const SCRIPT_PENDING_TIMEOUT_MS: i64 = 60_000;
 
 impl Sources {
     /// Rebuild the definition set, preserving outputs for unchanged
@@ -182,6 +248,13 @@ impl Sources {
                 })
             })
             .collect();
+        // An edited or removed definition cannot receive its old result, so
+        // the pending marker must not block the immediate recompute.
+        self.script_pending.retain(|id, _| {
+            self.definitions
+                .get(id)
+                .is_some_and(|definition| previous_revisions.get(id) == Some(&definition.revision))
+        });
 
         removed
     }
@@ -216,6 +289,41 @@ impl Sources {
             .collect()
     }
 
+    /// Enabled script sources whose cadence has elapsed and that have no
+    /// invocation in flight. Compat sources evaluate synchronously and are
+    /// never returned here.
+    pub fn due_script_sources(&self, now_wall_ms: i64) -> Vec<SourceDefinition> {
+        self.due_sources(now_wall_ms)
+            .into_iter()
+            .filter(|definition| matches!(definition.compute, SourceCompute::Script { .. }))
+            .filter(|definition| match self.script_pending.get(&definition.id) {
+                Some(dispatched_at) => {
+                    now_wall_ms.saturating_sub(*dispatched_at) >= SCRIPT_PENDING_TIMEOUT_MS
+                }
+                None => true,
+            })
+            .collect()
+    }
+
+    /// Record that a script invocation was handed to the worker pool. The
+    /// cadence cursor moves at dispatch so a slow computation is not queued
+    /// again; completion overwrites it with the result time.
+    pub fn mark_script_dispatched(&mut self, id: &SourceId, dispatched_at_ms: i64) {
+        self.last_attempt_wall_ms
+            .insert(id.clone(), dispatched_at_ms);
+        self.script_pending.insert(id.clone(), dispatched_at_ms);
+    }
+
+    /// Definition revisions of script-based sources, for coordinator owner
+    /// reconciliation (S16).
+    pub fn script_owner_revisions(&self) -> BTreeMap<SourceId, i64> {
+        self.definitions
+            .iter()
+            .filter(|(_, definition)| matches!(definition.compute, SourceCompute::Script { .. }))
+            .map(|(id, definition)| (id.clone(), definition.revision))
+            .collect()
+    }
+
     /// Alias device keys mapped to their canonical `computed/<id>` key.
     pub fn aliases(&self) -> Vec<(DeviceKey, DeviceKey)> {
         let mut aliases = Vec::new();
@@ -239,6 +347,7 @@ impl Sources {
     ) {
         self.last_attempt_wall_ms
             .insert(definition.id.clone(), computed_at_ms);
+        self.script_pending.remove(&definition.id);
         self.outputs.insert(
             definition.id.clone(),
             SourceOutput {
@@ -254,6 +363,7 @@ impl Sources {
     pub fn record_failure(&mut self, id: &SourceId, message: String, attempted_at_ms: i64) {
         self.last_attempt_wall_ms
             .insert(id.clone(), attempted_at_ms);
+        self.script_pending.remove(id);
         if let Some(output) = self.outputs.get_mut(id) {
             output.quality = SourceQuality::Stale { message };
         }

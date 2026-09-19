@@ -2548,13 +2548,18 @@ mod tests {
             ValueSource::ComputedSource { path, .. } if path == "/"
         ));
 
-        let report = compile_row(&v2_row(definition("missing", Some("/brightness"))), &catalog)
-            .unwrap_err();
+        let report = compile_row(
+            &v2_row(definition("missing", Some("/brightness"))),
+            &catalog,
+        )
+        .unwrap_err();
         assert!(error_codes(&report).contains(&"unknown_source".to_string()));
 
-        let report =
-            compile_row(&v2_row(definition("circadian", Some("brightness"))), &catalog)
-                .unwrap_err();
+        let report = compile_row(
+            &v2_row(definition("circadian", Some("brightness"))),
+            &catalog,
+        )
+        .unwrap_err();
         assert!(error_codes(&report).contains(&"invalid_json_pointer".to_string()));
     }
 }

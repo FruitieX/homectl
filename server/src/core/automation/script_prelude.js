@@ -240,6 +240,156 @@
     cancel: api.actions.cancelTimer,
   };
 
+  // ---------------------------------------------------------------------------
+  // Pure time and color helpers (computed-source presets)
+  // ---------------------------------------------------------------------------
+
+  function __homectl_local() {
+    var local = ctx && ctx.local;
+    if (
+      !local ||
+      typeof local.minutes_of_day !== "number" ||
+      !isFinite(local.minutes_of_day)
+    ) {
+      throw new Error(
+        "api.time requires a computed-source context with ctx.local"
+      );
+    }
+    return local;
+  }
+
+  function __homectl_seconds_of_day() {
+    var local = __homectl_local();
+    if (typeof local.seconds_of_day === "number" && isFinite(local.seconds_of_day)) {
+      return local.seconds_of_day;
+    }
+    return local.minutes_of_day * 60;
+  }
+
+  function __homectl_finite(value, what) {
+    if (typeof value !== "number" || !isFinite(value)) {
+      throw new Error(what + " must be a finite number");
+    }
+    return value;
+  }
+
+  api.time = {
+    // Strict `HH:MM` civil time to minutes since midnight.
+    parseHHMM: function (text) {
+      if (typeof text !== "string") {
+        throw new Error("api.time.parseHHMM expects a string");
+      }
+      var match = /^([01][0-9]|2[0-3]):([0-5][0-9])$/.exec(text);
+      if (!match) {
+        throw new Error("api.time.parseHHMM expects HH:MM, got " + text);
+      }
+      return Number(match[1]) * 60 + Number(match[2]);
+    },
+
+    // Injected civil time of this invocation, in minutes since midnight with
+    // the seconds fraction included.
+    minutes: function () {
+      return __homectl_seconds_of_day() / 60;
+    },
+
+    seconds: function () {
+      return __homectl_seconds_of_day();
+    },
+
+    dayFraction: function () {
+      return api.time.minutes() / 1440;
+    },
+
+    lerp: function (from, to, t) {
+      __homectl_finite(from, "api.time.lerp from");
+      __homectl_finite(to, "api.time.lerp to");
+      __homectl_finite(t, "api.time.lerp t");
+      return from + (to - from) * t;
+    },
+
+    // The night-fade easing used by the shipped circadian preset.
+    easeSine: function (t) {
+      __homectl_finite(t, "api.time.easeSine t");
+      return Math.sin((t * Math.PI) / 2);
+    },
+  };
+
+  function __homectl_color_kind(color) {
+    if (
+      color &&
+      typeof color === "object" &&
+      typeof color.ct === "number" &&
+      isFinite(color.ct)
+    ) {
+      return "ct";
+    }
+    if (
+      color &&
+      typeof color === "object" &&
+      typeof color.h === "number" &&
+      isFinite(color.h) &&
+      typeof color.s === "number" &&
+      isFinite(color.s)
+    ) {
+      return "hs";
+    }
+    return null;
+  }
+
+  api.color = {
+    kelvin: function (kelvin) {
+      __homectl_finite(kelvin, "api.color.kelvin");
+      return { ct: Math.round(kelvin) };
+    },
+
+    hs: function (hue, saturation) {
+      __homectl_finite(hue, "api.color.hs hue");
+      __homectl_finite(saturation, "api.color.hs saturation");
+      return { h: ((Math.round(hue) % 360) + 360) % 360, s: saturation };
+    },
+
+    isKelvin: function (color) {
+      return __homectl_color_kind(color) === "ct";
+    },
+
+    isHs: function (color) {
+      return __homectl_color_kind(color) === "hs";
+    },
+
+    // Mix two colors at `t` in `0.0..=1.0`. Kelvin pairs interpolate
+    // linearly and round to whole Kelvin; HS pairs interpolate the shortest
+    // hue arc and saturation. Exact half-circle hue differences walk the
+    // positive arc, matching the built-in oracle's direction.
+    mix: function (from, to, t) {
+      __homectl_finite(t, "api.color.mix t");
+      var clamped = t < 0 ? 0 : t > 1 ? 1 : t;
+      var fromKind = __homectl_color_kind(from);
+      var toKind = __homectl_color_kind(to);
+      if (fromKind === "ct" && toKind === "ct") {
+        return { ct: Math.round(api.time.lerp(from.ct, to.ct, clamped)) };
+      }
+      if (fromKind === "hs" && toKind === "hs") {
+        var diff = (to.h - from.h) % 360;
+        if (diff > 180) {
+          diff -= 360;
+        } else if (diff < -180) {
+          diff += 360;
+        }
+        var hue = from.h + diff * clamped;
+        return {
+          h: ((Math.round(hue) % 360) + 360) % 360,
+          s: api.time.lerp(from.s, to.s, clamped),
+        };
+      }
+      throw new Error(
+        "api.color.mix expects two Kelvin or two HS colors, got " +
+          fromKind +
+          " and " +
+          toKind
+      );
+    },
+  };
+
   __homectl_deep_freeze(api);
   globalThis.api = api;
 })();
