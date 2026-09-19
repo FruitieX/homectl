@@ -2,6 +2,7 @@ import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
 import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
+import type { SourcePresetInfo } from '@/bindings/SourcePresetInfo';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
@@ -160,6 +161,34 @@ export interface DeviceConfigMutationResult {
   position_changed: boolean;
 }
 
+export type SourceComputeConfig =
+  | {
+      kind: 'circadian_compat';
+      preset_version: number;
+      params: Record<string, unknown>;
+    }
+  | {
+      kind: 'script';
+      preset?: { id: string; version: number };
+      source_body?: string;
+      params: unknown;
+    };
+
+/**
+ * DB-backed computed source. `revision` and `refresh_interval_ms` are plain
+ * numbers in JSON even though the generated binding maps i64 to bigint.
+ */
+export interface SourceConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  revision: number;
+  timezone: string;
+  refresh_interval_ms: number;
+  aliases?: string[];
+  compute: SourceComputeConfig;
+}
+
 export interface ConfigExport {
   version?: number;
   core?: Record<string, unknown>;
@@ -167,6 +196,7 @@ export interface ConfigExport {
   groups?: Group[];
   scenes?: Scene[];
   routines?: Routine[];
+  sources?: SourceConfig[];
   floorplan?: Record<string, unknown> | null;
   floorplans?: Record<string, unknown>[];
   device_display_overrides?: DeviceDisplayNameOverride[];
@@ -360,6 +390,38 @@ export function useScenes() {
 
 export function useRoutines() {
   return useConfigApi<Routine>('routines');
+}
+
+export function useSources() {
+  return useConfigApi<SourceConfig>('sources');
+}
+
+export function useSourcePresets() {
+  const { apiEndpoint } = useAppConfig();
+  const baseUrl = `${apiEndpoint}/api/v1/config`;
+  const endpoint = 'source-presets';
+  const queryKey = ['config', baseUrl, endpoint] as const;
+
+  const query = useQuery({
+    queryKey,
+    queryFn: async () => {
+      const response = await fetch(`${baseUrl}/${endpoint}`);
+      const result = await readApiResponse<SourcePresetInfo[]>(
+        response,
+        'Failed to fetch source presets',
+      );
+      return result.data ?? [];
+    },
+  });
+
+  const error = query.error instanceof Error ? query.error.message : null;
+
+  return {
+    data: query.data ?? [],
+    loading: query.isLoading,
+    error,
+    refetch: query.refetch,
+  };
 }
 
 export function useHelpers() {

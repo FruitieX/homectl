@@ -70,6 +70,22 @@ export const configSections = [
     keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
   },
   {
+    href: '/config/sources',
+    label: 'Computed sources',
+    description:
+      'Server-computed circadian profiles published as read-only sensors, with forkable script presets.',
+    group: 'Automation',
+    keywords: [
+      'computed',
+      'source',
+      'circadian',
+      'kelvin',
+      'script',
+      'preset',
+      'alias',
+    ],
+  },
+  {
     href: '/config/floorplan',
     label: 'Floorplan',
     description:

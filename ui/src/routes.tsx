@@ -27,6 +27,7 @@ const ConfigRoutineHistoryPage = lazy(
 const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
 const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
 const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
+const ConfigSourcesPage = lazy(() => import('../app/config/sources/page'));
 const RoomPage = lazy(() => import('../app/groups/RoomPage'));
 const GroupsPage = lazy(() => import('../app/groups/page'));
 const MapPage = lazy(() => import('../app/map/page'));
@@ -140,6 +141,10 @@ export const router = createBrowserRouter([
           {
             path: 'scenes',
             element: withSuspense(<ConfigScenesPage />),
+          },
+          {
+            path: 'sources',
+            element: withSuspense(<ConfigSourcesPage />),
           },
           {
             path: 'settings',
