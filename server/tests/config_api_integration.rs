@@ -2913,6 +2913,28 @@ fn v2_mixed_definition() -> Value {
     })
 }
 
+/// P10 fixture: a device report schedules a named timer whose expiry turns
+/// the same device off. The trigger fires when the dummy sensor reports true.
+fn v2_durable_timer_definition() -> Value {
+    json!({
+        "triggers": [{
+            "kind": "state_change",
+            "id": "sensor_on",
+            "device": { "integration_id": "dummy", "device_id": "sensor1" },
+            "mode": "level"
+        }],
+        "condition": { "kind": "literal", "value": true },
+        "program": { "kind": "native", "steps": [
+            {
+                "action": "schedule_timer",
+                "id": "schedule_off",
+                "timer": "off",
+                "delay_ms": 600000
+            }
+        ]}
+    })
+}
+
 #[test]
 fn v2_routines_validate_quarantine_drafts_and_preserve_definitions() {
     let server = TestServer::new().expect("Failed to start test server");
@@ -3259,4 +3281,140 @@ fn helper_api_validates_and_persists_values() {
         list["data"].as_array().expect("helpers array").is_empty(),
         "deleted helper does not return after restart"
     );
+}
+
+// P10: a scheduled named timer is written through to the database, survives a
+// server restart, and remains cancellable. Past-due timers are dropped at
+// startup rather than fired late.
+#[test]
+fn durable_named_timers_survive_restart_and_cancelled_ones_do_not() {
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "homectl_timer_jobs_{}_{}",
+        std::process::id(),
+        unique_id
+    ));
+    if temp_dir.exists() {
+        std::fs::remove_dir_all(&temp_dir).expect("old test dir should be removable");
+    }
+    std::fs::create_dir_all(&temp_dir).expect("test dir should be created");
+
+    let mut server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        config_content: Some(sample_config_export().to_string()),
+        config_file_name: Some("config-backup.json".to_string()),
+        ..Default::default()
+    })
+    .expect("Failed to start timer persistence SQLite server");
+
+    let create = post_json(
+        &server.base_url,
+        "/api/v1/config/routines",
+        &json!({
+            "id": "durable_timer",
+            "name": "Durable Timer",
+            "enabled": true,
+            "semantics_version": 2,
+            "definition_v2": v2_durable_timer_definition(),
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(create.status(), StatusCode::CREATED);
+
+    // The routine fires on the sensor's level-true state change and schedules
+    // a named timer for ten minutes out.
+    let sensor_update = put_json(
+        &server.base_url,
+        "/api/v1/devices/sensor1",
+        &json!({
+            "id": "sensor1",
+            "name": "Sensor 1",
+            "integration_id": "dummy",
+            "data": { "Sensor": { "value": true } }
+        }),
+    );
+    assert_eq!(sensor_update.status(), StatusCode::OK);
+
+    let timer_job_count = |database_path: &std::path::Path| -> i64 {
+        use sea_orm::ConnectionTrait;
+        use sea_orm::TryGetable;
+
+        let runtime = tokio::runtime::Runtime::new().expect("tokio runtime should start");
+        runtime.block_on(async {
+            let db = sea_orm::Database::connect(format!(
+                "sqlite://{}?mode=rwc",
+                database_path.display()
+            ))
+            .await
+            .expect("should open the test SQLite database");
+            let row = db
+                .query_one(sea_orm::Statement::from_string(
+                    sea_orm::DbBackend::Sqlite,
+                    "SELECT COUNT(*) AS count FROM automation_timer_jobs",
+                ))
+                .await
+                .expect("timer jobs table should be queryable")
+                .expect("count row");
+            i64::try_get_by_index(&row, 0).expect("count column")
+        })
+    };
+
+    let database_path = temp_dir.join("homectl.db");
+    wait_for("durable timer row to be written through", || {
+        timer_job_count(&database_path) == 1
+    });
+
+    server.stop();
+
+    let server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to restart timer persistence SQLite server");
+    wait_for(
+        "timer persistence table to remain readable after restart",
+        || timer_job_count(&database_path) == 1,
+    );
+
+    // Cancel through the API path (routine edit drops the live generation),
+    // then restart again: the row must not resurrect.
+    let disable = put_json(
+        &server.base_url,
+        "/api/v1/config/routines/durable_timer",
+        &json!({
+            "id": "durable_timer",
+            "name": "Durable Timer",
+            "enabled": false,
+            "semantics_version": 2,
+            "definition_v2": v2_durable_timer_definition(),
+            "rules": [],
+            "actions": []
+        }),
+    );
+    assert_eq!(disable.status(), StatusCode::OK);
+    wait_for("dropped timer row to be deleted", || {
+        timer_job_count(&database_path) == 0
+    });
+    drop(server);
+
+    let server = TestServer::with_config(TestServerConfig {
+        working_dir: Some(temp_dir.clone()),
+        cleanup_working_dir: false,
+        ..Default::default()
+    })
+    .expect("Failed to restart timer persistence SQLite server for the cancel check");
+    assert_eq!(
+        timer_job_count(&database_path),
+        0,
+        "an acknowledged cancel survives a restart"
+    );
+    drop(server);
+
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }
