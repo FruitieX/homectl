@@ -1,3 +1,4 @@
+import type { ConditionTraceNode } from '@/bindings/ConditionTraceNode';
 import type { DeviceIdRef } from '@/bindings/DeviceIdRef';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
@@ -137,6 +138,68 @@ function triggerLabel(
     case 'manual':
       return 'Manual trigger';
   }
+}
+
+function truthBadge(node: ConditionTraceNode): { label: string; tone: Tone } {
+  if (!node.evaluated) {
+    return { label: 'not evaluated', tone: 'ghost' };
+  }
+
+  switch (node.truth) {
+    case 'true':
+      return { label: 'true', tone: 'success' };
+    case 'false':
+      return { label: 'false', tone: 'neutral' };
+    case 'unknown':
+      return { label: 'unknown', tone: 'warning' };
+  }
+}
+
+/**
+ * Server-side condition trace (P04/G07): every visited node with its truth,
+ * group counts, and reasons. This is the evaluator's own explanation, not a
+ * UI reimplementation.
+ */
+function ConditionTraceTree({ node }: { node: ConditionTraceNode }) {
+  const badge = truthBadge(node);
+
+  return (
+    <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge label={badge.label} tone={badge.tone} />
+        <span className="font-mono text-xs text-muted-foreground">
+          {node.path}
+        </span>
+        {node.group ? (
+          <span className="text-xs text-muted-foreground">
+            {node.group.quantifier} · {node.group.true_count}/
+            {node.group.configured_count} true
+            {node.group.unknown_count > 0
+              ? ` · ${node.group.unknown_count} unknown`
+              : ''}
+          </span>
+        ) : null}
+      </div>
+      {node.error ? (
+        <p className="text-xs text-destructive">{node.error}</p>
+      ) : null}
+      {node.unknown_reason ? (
+        <p className="text-xs text-muted-foreground">
+          Unknown: {formatUnknownReason(node.unknown_reason)}
+        </p>
+      ) : null}
+      {node.group?.reasons?.length ? (
+        <p className="text-xs text-muted-foreground">
+          {node.group.reasons.map(formatUnknownReason).join(' · ')}
+        </p>
+      ) : null}
+      {node.children?.map((child) => (
+        <div key={child.path} className="border-l border-border pl-3">
+          <ConditionTraceTree node={child} />
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function triggerBadge(trigger: TriggerRuntimeStatus): {
@@ -311,6 +374,15 @@ export function RoutineRuntimePanel({
                 }${v2.last_run.dropped > 0 ? `, ${v2.last_run.dropped} dropped` : ''}`
               : ''}
           </p>
+
+          <details className="rounded-2xl border border-border bg-background/70">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Condition trace
+            </summary>
+            <div className="space-y-2 px-3 pb-3">
+              <ConditionTraceTree node={v2.condition.trace} />
+            </div>
+          </details>
 
           {routine.definition_v2 ? (
             <details className="rounded-2xl border border-border bg-background/70">
