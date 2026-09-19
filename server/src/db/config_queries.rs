@@ -9,13 +9,14 @@ use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
-    AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions, CoreConfig,
-    DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices,
-    Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines,
+    AutomationSources, AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions,
+    CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs,
+    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines,
     SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::automation_definition::HelperId;
+use crate::types::automation_source::{SourceCompute, SourceDefinition};
 use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
@@ -284,6 +285,8 @@ pub struct ConfigExport {
     pub helpers: Vec<crate::types::automation_value::HelperDefinition>,
     #[serde(default)]
     pub helper_values: Vec<HelperValueExportRow>,
+    #[serde(default)]
+    pub sources: Vec<SourceDefinition>,
     pub floorplan: Option<FloorplanRow>,
     #[serde(default)]
     pub floorplans: Vec<FloorplanExportRow>,
@@ -1292,6 +1295,97 @@ pub async fn db_delete_helper_state(helper_id: &str) -> Result<bool> {
 }
 
 // ============================================================================
+// Computed source definitions (P11)
+// ============================================================================
+
+pub async fn db_get_sources() -> Result<Vec<SourceDefinition>> {
+    sources_on(get_db_connection()?).await
+}
+
+async fn sources_on<C: ConnectionTrait>(db: &C) -> Result<Vec<SourceDefinition>> {
+    all(
+        db,
+        Query::select()
+            .columns([
+                AutomationSources::Id,
+                AutomationSources::Name,
+                AutomationSources::Enabled,
+                AutomationSources::Revision,
+                AutomationSources::Timezone,
+                AutomationSources::RefreshIntervalMs,
+                AutomationSources::Aliases,
+                AutomationSources::Compute,
+            ])
+            .from(AutomationSources::Table)
+            .order_by(AutomationSources::Id, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(source_from_row)
+    .collect()
+}
+
+pub async fn db_upsert_source(source: &SourceDefinition) -> Result<()> {
+    upsert_source_on(get_db_connection()?, source).await
+}
+
+async fn upsert_source_on<C: ConnectionTrait>(db: &C, source: &SourceDefinition) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(AutomationSources::Table)
+            .columns([
+                AutomationSources::Id,
+                AutomationSources::Name,
+                AutomationSources::Enabled,
+                AutomationSources::Revision,
+                AutomationSources::Timezone,
+                AutomationSources::RefreshIntervalMs,
+                AutomationSources::Aliases,
+                AutomationSources::Compute,
+            ])
+            .values_panic([
+                Expr::value(source.id.0.clone()),
+                Expr::value(source.name.clone()),
+                Expr::value(source.enabled),
+                Expr::value(source.revision),
+                Expr::value(source.timezone.clone()),
+                Expr::value(source.refresh_interval_ms.min(i64::MAX as u64) as i64),
+                Expr::value(serde_json::to_string(&source.aliases)?),
+                Expr::value(serde_json::to_string(&source.compute)?),
+            ])
+            .on_conflict(
+                OnConflict::column(AutomationSources::Id)
+                    .update_columns([
+                        AutomationSources::Name,
+                        AutomationSources::Enabled,
+                        AutomationSources::Revision,
+                        AutomationSources::Timezone,
+                        AutomationSources::RefreshIntervalMs,
+                        AutomationSources::Aliases,
+                        AutomationSources::Compute,
+                    ])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_source(id: &str) -> Result<bool> {
+    delete_by_string_key(
+        get_db_connection()?,
+        AutomationSources::Table,
+        AutomationSources::Id,
+        id,
+    )
+    .await
+}
+
+// ============================================================================
 // Best-effort durable named timer jobs (P10)
 // ============================================================================
 
@@ -2061,6 +2155,8 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
     let helpers = helpers_on(db).await?;
     let helper_values = helper_states_on(db, &helpers).await?;
 
+    let sources = sources_on(db).await?;
+
     let floorplan = one(
         db,
         Query::select()
@@ -2219,6 +2315,7 @@ pub async fn db_export_config_from_connection<C: ConnectionTrait>(db: &C) -> Res
         routines,
         helpers,
         helper_values,
+        sources,
         floorplan,
         floorplans,
         group_positions,
@@ -2297,6 +2394,9 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     }
     for helper in &config.helpers {
         db_upsert_helper(helper).await?;
+    }
+    for source in &config.sources {
+        db_upsert_source(source).await?;
     }
     let durable_helper_ids: HashSet<&str> = config
         .helpers
@@ -2383,6 +2483,7 @@ pub async fn db_has_config() -> Result<bool> {
         || !db_get_config_scenes().await?.is_empty()
         || !db_get_routines().await?.is_empty()
         || !db_get_helpers().await?.is_empty()
+        || !db_get_sources().await?.is_empty()
         || !db_get_group_positions().await?.is_empty()
         || !db_get_device_display_overrides().await?.is_empty()
         || !calibration::profiles(get_db_connection()?)
@@ -3163,6 +3264,29 @@ fn helper_from_row(row: QueryResult) -> Result<HelperDefinition> {
         initial_value,
         persistence: parse_helper_persistence(&persistence),
         hidden: row.try_get::<Option<bool>>("", "hidden")?,
+    })
+}
+
+fn source_from_row(row: QueryResult) -> Result<SourceDefinition> {
+    let id: String = row.try_get("", "id")?;
+    let aliases_json: String = row.try_get("", "aliases")?;
+    let compute_json: String = row.try_get("", "compute")?;
+
+    let aliases: Vec<crate::types::device::DeviceKey> = serde_json::from_str(&aliases_json)
+        .map_err(|error| eyre!("Failed to parse aliases for source '{id}': {error}"))?;
+    let compute: SourceCompute = serde_json::from_str(&compute_json)
+        .map_err(|error| eyre!("Failed to parse compute for source '{id}': {error}"))?;
+
+    Ok(SourceDefinition {
+        id: crate::types::automation_definition::SourceId(id),
+        name: row.try_get("", "name")?,
+        enabled: row.try_get("", "enabled")?,
+        revision: row.try_get("", "revision")?,
+        timezone: row.try_get("", "timezone")?,
+        refresh_interval_ms: get_u64(&row, "refresh_interval_ms")
+            .unwrap_or(crate::types::automation_source::DEFAULT_SOURCE_REFRESH_INTERVAL_MS),
+        aliases,
+        compute,
     })
 }
 

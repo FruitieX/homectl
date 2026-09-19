@@ -66,6 +66,7 @@ impl RuntimeConfigSnapshot {
                 routines: Vec::new(),
                 helpers: Vec::new(),
                 helper_values: Vec::new(),
+                sources: Vec::new(),
                 floorplan: None,
                 floorplans: Vec::new(),
                 group_positions: Vec::new(),

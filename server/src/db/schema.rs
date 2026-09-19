@@ -128,6 +128,21 @@ pub enum AutomationValueState {
     Revision,
 }
 
+/// P11 computed source definitions. The computed value and its freshness live
+/// in actor state; only the versioned definition is persisted.
+#[derive(Clone, Copy, Iden)]
+pub enum AutomationSources {
+    Table,
+    Id,
+    Name,
+    Enabled,
+    Revision,
+    Timezone,
+    RefreshIntervalMs,
+    Aliases,
+    Compute,
+}
+
 /// P10 best-effort durable named timer jobs. Only named timers are persisted;
 /// schedule occurrences and sustained-predicate deadlines recover from
 /// current time/state instead.

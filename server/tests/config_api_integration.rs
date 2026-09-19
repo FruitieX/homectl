@@ -15,6 +15,9 @@ fn blank_backup_config() -> Value {
         "groups": [],
         "scenes": [],
         "routines": [],
+        "helpers": [],
+        "helper_values": [],
+        "sources": [],
         "floorplan": null,
         "floorplans": [],
         "group_positions": [],
@@ -106,6 +109,132 @@ fn color_calibration_crud_validation_and_export_import() {
     );
     let after: Value = client.get(&list_url).send().unwrap().json().unwrap();
     assert_eq!(after["data"], restored["data"]);
+}
+
+#[test]
+fn source_crud_validation_and_export_import() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let url = format!("{}/api/v1/config/sources/circadian", server.base_url);
+    let source = json!({
+        "id": "circadian",
+        "name": "Circadian",
+        "enabled": true,
+        "revision": 0,
+        "timezone": "Europe/Helsinki",
+        "refresh_interval_ms": 60000,
+        "aliases": ["circadian/color"],
+        "compute": {
+            "kind": "circadian_compat",
+            "preset_version": 1,
+            "params": {
+                "day_fade_start": "06:00",
+                "day_fade_duration_hours": 2,
+                "day_color": {"ct": 3000},
+                "day_brightness": 0.8,
+                "night_fade_start": "20:00",
+                "night_fade_duration_hours": 2,
+                "night_color": {"ct": 2000},
+                "night_brightness": 0.2
+            }
+        }
+    });
+
+    let saved: Value = client
+        .put(&url)
+        .json(&source)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(saved["data"]["id"], "circadian");
+    assert_eq!(saved["data"]["revision"], 1);
+
+    let saved_again: Value = client
+        .put(&url)
+        .json(&source)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(saved_again["data"]["revision"], 2);
+
+    let list_url = format!("{}/api/v1/config/sources", server.base_url);
+    let listed: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(listed["data"].as_array().unwrap().len(), 1);
+    assert_eq!(listed["data"][0]["revision"], 2);
+
+    let mut unsupported_preset = source.clone();
+    unsupported_preset["compute"]["preset_version"] = json!(99);
+    assert_eq!(
+        client
+            .put(&url)
+            .json(&unsupported_preset)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let mut overlapping = source.clone();
+    overlapping["compute"]["params"]["day_fade_duration_hours"] = json!(16);
+    assert_eq!(
+        client.put(&url).json(&overlapping).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let mut unknown_zone = source.clone();
+    unknown_zone["timezone"] = json!("Mars/Olympus");
+    assert_eq!(
+        client
+            .put(&url)
+            .json(&unknown_zone)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let mut mismatched_id = source.clone();
+    mismatched_id["id"] = json!("other");
+    assert_eq!(
+        client
+            .put(&url)
+            .json(&mismatched_id)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let export_url = format!("{}/api/v1/config/export", server.base_url);
+    let exported: Value = client.get(&export_url).send().unwrap().json().unwrap();
+    assert_eq!(exported["data"]["sources"][0]["id"], "circadian");
+    assert_eq!(exported["data"]["sources"][0]["revision"], 2);
+
+    client
+        .delete(&url)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let cleared: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(cleared["data"], json!([]));
+
+    client
+        .post(format!("{}/api/v1/config/import", server.base_url))
+        .json(&exported["data"])
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let restored: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(restored["data"][0]["id"], "circadian");
+    assert_eq!(restored["data"][0]["revision"], 2);
 }
 
 #[test]
@@ -671,6 +800,7 @@ fn sample_config_export() -> Value {
         ],
         "helpers": [],
         "helper_values": [],
+        "sources": [],
         "floorplan": {
             "image_data": null,
             "image_mime_type": null,

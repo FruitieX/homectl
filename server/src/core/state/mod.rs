@@ -752,6 +752,33 @@ impl AppState {
         Ok(())
     }
 
+    pub fn upsert_source(&mut self, source: crate::types::automation_source::SourceDefinition) {
+        if let Some(existing) = self
+            .runtime_config
+            .sources
+            .iter_mut()
+            .find(|existing| existing.id == source.id)
+        {
+            *existing = source;
+        } else {
+            self.runtime_config.sources.push(source);
+            self.runtime_config
+                .sources
+                .sort_by(|left, right| left.id.0.cmp(&right.id.0));
+        }
+    }
+
+    pub fn delete_source(
+        &mut self,
+        source_id: &crate::types::automation_definition::SourceId,
+    ) -> bool {
+        let len_before = self.runtime_config.sources.len();
+        self.runtime_config
+            .sources
+            .retain(|source| source.id != *source_id);
+        self.runtime_config.sources.len() != len_before
+    }
+
     pub fn upsert_scene(&mut self, scene: SceneRow) {
         if let Some(existing) = self
             .runtime_config

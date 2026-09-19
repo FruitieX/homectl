@@ -1,9 +1,9 @@
 use crate::db::schema::{
-    AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions, CoreConfig,
-    DashboardLayouts, DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides,
-    DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
-    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
-    WidgetSettings,
+    AutomationSources, AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions,
+    CoreConfig, DashboardLayouts, DashboardWidgets, DeviceColorCalibrations,
+    DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
+    GroupPositions, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
+    SceneOverrides, Scenes, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -26,7 +26,67 @@ impl MigratorTrait for Migrator {
             Box::new(M20260919000000RoutineV2Semantics),
             Box::new(M20260920000000AutomationHelpers),
             Box::new(M20260921000000AutomationTimerJobs),
+            Box::new(M20260922000000AutomationSources),
         ]
+    }
+}
+
+/// P11 computed source definitions. Output values, freshness, and refresh
+/// cursors are runtime state and are deliberately not persisted here.
+struct M20260922000000AutomationSources;
+
+impl MigrationName for M20260922000000AutomationSources {
+    fn name(&self) -> &str {
+        "m20260922000000_automation_sources"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260922000000AutomationSources {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AutomationSources::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AutomationSources::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(AutomationSources::Name).text().not_null())
+                    .col(
+                        ColumnDef::new(AutomationSources::Enabled)
+                            .boolean()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationSources::Revision)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationSources::Timezone)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationSources::RefreshIntervalMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(AutomationSources::Aliases).text().not_null())
+                    .col(ColumnDef::new(AutomationSources::Compute).text().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AutomationSources::Table).to_owned())
+            .await
     }
 }
 

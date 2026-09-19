@@ -304,6 +304,7 @@ async fn export_from_legacy_sqlite_source_db<C: ConnectionTrait>(db: &C) -> Resu
         routines,
         helpers: Vec::new(),
         helper_values: Vec::new(),
+        sources: Vec::new(),
         floorplan,
         floorplans,
         group_positions: Vec::new(),

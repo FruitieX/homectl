@@ -1626,6 +1626,7 @@ pub fn config(
             .or(scenes_routes(snapshot, handle))
             .or(routines_routes(snapshot, handle))
             .or(helpers_routes(snapshot, handle))
+            .or(sources_routes(snapshot, handle))
             .or(floorplans_routes(snapshot, handle))
             .or(floorplan_routes(snapshot, handle))
             .or(dashboard_routes(snapshot, handle))
@@ -2825,6 +2826,9 @@ use scenes::scenes_routes;
 mod routines;
 use routines::routines_routes;
 
+mod sources;
+use sources::sources_routes;
+
 fn floorplans_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
@@ -3701,6 +3705,7 @@ impl MigratePreviewResult {
             routines: self.routines.clone(),
             helpers: Vec::new(),
             helper_values: Vec::new(),
+            sources: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
             group_positions: Vec::new(),
@@ -5087,6 +5092,7 @@ devices = [
             routines: Vec::new(),
             helpers: Vec::new(),
             helper_values: Vec::new(),
+            sources: Vec::new(),
             floorplan: None,
             floorplans: Vec::new(),
             group_positions: Vec::new(),
