@@ -128,6 +128,13 @@ pub enum DeviceColor {
     Ct(Ct),
 }
 
+impl Ct {
+    /// The repo stores color temperature in Kelvin in `ct`, never mireds.
+    pub fn from_kelvin(kelvin: u16) -> Self {
+        Ct { ct: kelvin as u64 }
+    }
+}
+
 impl DeviceColor {
     const D65_X: f32 = 0.3127;
     const D65_Y: f32 = 0.3290;
@@ -156,6 +163,11 @@ impl DeviceColor {
 
     pub fn new_from_ct(ct: u16) -> DeviceColor {
         DeviceColor::Ct(Ct { ct: ct as u64 })
+    }
+
+    /// Named Kelvin constructor, making the unit explicit at call sites.
+    pub fn new_from_kelvin(kelvin: u16) -> DeviceColor {
+        DeviceColor::Ct(Ct::from_kelvin(kelvin))
     }
 
     pub fn to_device_preferred_mode(&self, capabilities: &Capabilities) -> Option<DeviceColor> {

@@ -26,6 +26,7 @@ pub mod schedules;
 pub mod script_contract;
 pub mod script_coordinator;
 pub mod script_runtime;
+pub mod sources;
 pub mod timers;
 
 pub use compile::{

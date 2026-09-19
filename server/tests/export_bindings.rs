@@ -7,6 +7,10 @@ use homectl_server::types::{
         NodeId, Program, Quantifier, RoutineDefinitionV2, ScheduleSpec, ScriptDeclaration,
         ScriptSpec, SourceId, TargetSpec, TimerId, TriggerSpec, ValueSource,
     },
+    automation_source::{
+        CircadianCompatParams, LightProfile, SourceCompute, SourceDefinition, SourceOutput,
+        SourceQuality,
+    },
     automation_trace::{
         ConditionEvaluation, ConditionTraceNode, GroupEvaluation, GroupMemberEvaluation,
         GroupSceneSummary, GroupSceneSummaryKind, PlannedRunStatus, PlannedStepStatus,
@@ -42,6 +46,7 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all_to(&output_dir)?;
         homectl_server::types::config_write::ConfigWriteStatus::export_all_to(&output_dir)?;
         ChooseBranch::export_all_to(&output_dir)?;
+        CircadianCompatParams::export_all_to(&output_dir)?;
         ConditionEvaluation::export_all_to(&output_dir)?;
         ConditionExpr::export_all_to(&output_dir)?;
         ConditionTraceNode::export_all_to(&output_dir)?;
@@ -56,6 +61,7 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         HelperKind::export_all_to(&output_dir)?;
         HelperPersistence::export_all_to(&output_dir)?;
         HelperRuntimeStatus::export_all_to(&output_dir)?;
+        LightProfile::export_all_to(&output_dir)?;
         PlannedRunStatus::export_all_to(&output_dir)?;
         PlannedStepStatus::export_all_to(&output_dir)?;
         StepDisposition::export_all_to(&output_dir)?;
@@ -69,7 +75,11 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         ScheduleSpec::export_all_to(&output_dir)?;
         ScriptDeclaration::export_all_to(&output_dir)?;
         ScriptSpec::export_all_to(&output_dir)?;
+        SourceCompute::export_all_to(&output_dir)?;
+        SourceDefinition::export_all_to(&output_dir)?;
         SourceId::export_all_to(&output_dir)?;
+        SourceOutput::export_all_to(&output_dir)?;
+        SourceQuality::export_all_to(&output_dir)?;
         TargetSpec::export_all_to(&output_dir)?;
         TimerId::export_all_to(&output_dir)?;
         TimerJobStatus::export_all_to(&output_dir)?;
