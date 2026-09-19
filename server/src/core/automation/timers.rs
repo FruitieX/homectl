@@ -111,6 +111,18 @@ pub struct PredicateDeadlineFire {
     pub due_wall_ms: i64,
 }
 
+/// One validated schedule occurrence ready for frame evaluation (K). The
+/// occurrence instant is authoritative; evaluation only matches it to the
+/// trigger and the actor rearms from the current time.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScheduleOccurrenceFire {
+    pub routine_id: RoutineId,
+    pub definition_revision: i64,
+    pub trigger: NodeId,
+    pub generation: u64,
+    pub due_wall_ms: i64,
+}
+
 #[derive(Clone, Debug)]
 struct TimerJob {
     definition_revision: i64,
@@ -128,6 +140,12 @@ fn named_job(timer: &TimerId) -> TimerWakeupJob {
 
 fn predicate_job(trigger: &NodeId) -> TimerWakeupJob {
     TimerWakeupJob::PredicateDeadline {
+        trigger: trigger.clone(),
+    }
+}
+
+fn schedule_job(trigger: &NodeId) -> TimerWakeupJob {
+    TimerWakeupJob::ScheduleOccurrence {
         trigger: trigger.clone(),
     }
 }
@@ -255,6 +273,75 @@ impl TimerStore {
         })
     }
 
+    /// Current generation of a live schedule occurrence, if any.
+    pub fn pending_schedule_generation(&self, owner: &RoutineId, trigger: &NodeId) -> Option<u64> {
+        self.jobs
+            .get(&(owner.clone(), schedule_job(trigger)))
+            .map(|job| job.generation)
+    }
+
+    /// Idempotently arm a schedule occurrence: a live occurrence for the same
+    /// owner revision is kept (no generation churn), otherwise `due` is
+    /// inserted as given. Calendar occurrences may legitimately exceed the
+    /// named-timer delay bound (K).
+    pub fn ensure_schedule(
+        &mut self,
+        owner: &RoutineId,
+        definition_revision: i64,
+        trigger: &NodeId,
+        due_monotonic_ms: u64,
+        due_wall_ms: i64,
+    ) -> Result<u64, TimerOperationError> {
+        let key = (owner.clone(), schedule_job(trigger));
+        if let Some(job) = self.jobs.get(&key) {
+            if job.definition_revision == definition_revision {
+                return Ok(job.generation);
+            }
+            self.jobs.remove(&key);
+        }
+        self.insert_job(
+            owner,
+            schedule_job(trigger),
+            definition_revision,
+            due_monotonic_ms,
+            due_wall_ms,
+            None,
+        )
+    }
+
+    /// Cancel a live schedule occurrence. Returns its generation, or zero when
+    /// nothing was live (idempotent).
+    pub fn cancel_schedule(&mut self, owner: &RoutineId, trigger: &NodeId) -> u64 {
+        self.jobs
+            .remove(&(owner.clone(), schedule_job(trigger)))
+            .map(|job| job.generation)
+            .unwrap_or(0)
+    }
+
+    /// Validate and consume one schedule wakeup (revision + generation), so a
+    /// replaced or edited schedule never fires a stale occurrence.
+    pub fn consume_schedule(
+        &mut self,
+        owner: &RoutineId,
+        definition_revision: i64,
+        trigger: &NodeId,
+        generation: u64,
+    ) -> Option<ScheduleOccurrenceFire> {
+        let key = (owner.clone(), schedule_job(trigger));
+        let job = self.jobs.get(&key)?;
+        if job.generation != generation || job.definition_revision != definition_revision {
+            return None;
+        }
+        let job = self.jobs.remove(&key)?;
+        Some(ScheduleOccurrenceFire {
+            routine_id: owner.clone(),
+            definition_revision: job.definition_revision,
+            trigger: trigger.clone(),
+            generation: job.generation,
+            due_wall_ms: job.due_wall_ms,
+        })
+    }
+
     /// Apply one timer operation. Returns the affected generation (zero for a
     /// cancel that matched no live timer).
     pub fn apply(
@@ -320,6 +407,25 @@ impl TimerStore {
                 max_ms: MAX_TIMER_DELAY_MS,
             });
         }
+        self.insert_job(
+            owner,
+            job,
+            definition_revision,
+            now_monotonic_ms.saturating_add(delay_ms),
+            now_wall_ms.saturating_add(delay_ms as i64),
+            captured,
+        )
+    }
+
+    fn insert_job(
+        &mut self,
+        owner: &RoutineId,
+        job: TimerWakeupJob,
+        definition_revision: i64,
+        due_monotonic_ms: u64,
+        due_wall_ms: i64,
+        captured: Option<CapturedTimerIntents>,
+    ) -> Result<u64, TimerOperationError> {
         let owner_count = self
             .jobs
             .keys()
@@ -338,8 +444,8 @@ impl TimerStore {
             TimerJob {
                 definition_revision,
                 generation,
-                due_monotonic_ms: now_monotonic_ms.saturating_add(delay_ms),
-                due_wall_ms: now_wall_ms.saturating_add(delay_ms as i64),
+                due_monotonic_ms,
+                due_wall_ms,
                 captured,
             },
         );
@@ -398,6 +504,7 @@ impl TimerStore {
                     persistence: TimerPersistence::Session,
                 }),
                 TimerWakeupJob::PredicateDeadline { .. } => None,
+                TimerWakeupJob::ScheduleOccurrence { .. } => None,
             })
             .collect()
     }
@@ -642,5 +749,75 @@ mod tests {
 
         store.retain_current(&BTreeMap::from([(owner("routine"), 2)]));
         assert!(store.is_empty(), "an edited revision drops both kinds");
+    }
+
+    // K: schedule occurrences arm idempotently, consume once, rearm, and are
+    // never user-visible; calendar occurrences may exceed the named bound.
+    #[test]
+    fn schedule_occurrences_arm_consume_and_rearm() {
+        let mut store = TimerStore::default();
+        let trigger = NodeId("morning".to_string());
+        let first = store
+            .ensure_schedule(&owner("routine"), 1, &trigger, 5_000, 10_000)
+            .unwrap();
+        assert_eq!(
+            store
+                .ensure_schedule(&owner("routine"), 1, &trigger, 6_000, 11_000)
+                .unwrap(),
+            first,
+            "a live occurrence is kept without generation churn"
+        );
+        assert!(
+            store.runtime_statuses(0).is_empty(),
+            "schedule occurrences are not user-visible timers"
+        );
+
+        let fire = store
+            .consume_schedule(&owner("routine"), 1, &trigger, first)
+            .expect("current occurrence fires");
+        assert_eq!(fire.trigger, trigger);
+        assert_eq!(fire.due_wall_ms, 10_000);
+        assert!(
+            store
+                .consume_schedule(&owner("routine"), 1, &trigger, first)
+                .is_none(),
+            "an occurrence fires at most once"
+        );
+
+        let second = store
+            .ensure_schedule(&owner("routine"), 1, &trigger, 30_000, 35_000)
+            .unwrap();
+        assert!(second > first, "rearm starts a new generation");
+
+        // A weekly-or-longer occurrence exceeds the named delay bound.
+        let far = 30 * 24 * 60 * 60 * 1000;
+        assert!(store
+            .ensure_schedule(&owner("routine"), 1, &trigger, far, far as i64)
+            .is_ok());
+        assert!(store
+            .pending_schedule_generation(&owner("routine"), &trigger)
+            .is_some());
+
+        store.retain_current(&BTreeMap::from([(owner("routine"), 2)]));
+        assert!(store.is_empty(), "an edited revision drops schedules");
+    }
+
+    #[test]
+    fn stale_schedule_revision_never_fires() {
+        let mut store = TimerStore::default();
+        let trigger = NodeId("morning".to_string());
+        let generation = store
+            .ensure_schedule(&owner("routine"), 1, &trigger, 5_000, 10_000)
+            .unwrap();
+        store.retain_current(&BTreeMap::from([(owner("routine"), 2)]));
+        store
+            .ensure_schedule(&owner("routine"), 2, &trigger, 7_000, 12_000)
+            .unwrap();
+        assert!(
+            store
+                .consume_schedule(&owner("routine"), 1, &trigger, generation)
+                .is_none(),
+            "an edited revision never consumes the old generation"
+        );
     }
 }

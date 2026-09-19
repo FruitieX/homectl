@@ -872,6 +872,20 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     ),
                 }
             }
+            crate::types::event::TimerWakeupJob::ScheduleOccurrence { trigger } => {
+                match state.timers.consume_schedule(
+                    routine_id,
+                    *definition_revision,
+                    trigger,
+                    *generation,
+                ) {
+                    Some(fire) => state.pending_schedule_fires.push(fire),
+                    None => debug!(
+                        "Ignoring stale schedule wakeup for {routine_id}: \
+                         trigger={trigger} generation={generation} due_at={due_wall_ms}"
+                    ),
+                }
+            }
         },
     }
 
@@ -1951,6 +1965,7 @@ pub(crate) mod tests {
             timers: Default::default(),
             pending_timer_fires: Vec::new(),
             pending_predicate_fires: Vec::new(),
+            pending_schedule_fires: Vec::new(),
             clock: Arc::new(crate::core::clock::ManualClock::new(1_000_000)),
             event_tx,
             ws: WebSockets::default(),
@@ -3953,6 +3968,65 @@ pub(crate) mod tests {
                 .pending_predicate_generation(&owner, &trigger)
                 .is_none(),
             "a latched maturity does not re-arm"
+        );
+    }
+
+    // K: schedule wakeups are validated against the store generation and
+    // queued for the next coherent frame; a stale wakeup is dropped.
+    #[tokio::test]
+    async fn p09_schedule_wakeups_are_validated_by_the_store() {
+        use crate::types::automation_definition::NodeId;
+        use crate::types::event::TimerWakeupJob;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let owner = RoutineId("sched_routine".to_string());
+        let trigger = NodeId("morning".to_string());
+        let generation = state
+            .timers
+            .ensure_schedule(&owner, 1, &trigger, 5_000, 10_000)
+            .unwrap();
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: TimerWakeupJob::ScheduleOccurrence {
+                    trigger: trigger.clone(),
+                },
+                generation: generation + 1,
+                due_wall_ms: 10_000,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            state.pending_schedule_fires.is_empty(),
+            "a stale generation is dropped"
+        );
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: TimerWakeupJob::ScheduleOccurrence {
+                    trigger: trigger.clone(),
+                },
+                generation,
+                due_wall_ms: 10_000,
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(state.pending_schedule_fires.len(), 1);
+        assert!(
+            state
+                .timers
+                .pending_schedule_generation(&owner, &trigger)
+                .is_none(),
+            "a consumed occurrence is no longer live"
         );
     }
 

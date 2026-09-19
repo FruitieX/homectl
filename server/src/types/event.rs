@@ -23,6 +23,8 @@ pub enum TimerWakeupJob {
     NamedTimer { timer: TimerId },
     /// A sustained-predicate deadline (`predicate_for`).
     PredicateDeadline { trigger: NodeId },
+    /// One calendar/interval schedule occurrence (`schedule` trigger, K).
+    ScheduleOccurrence { trigger: NodeId },
 }
 
 #[allow(clippy::large_enum_variant)]

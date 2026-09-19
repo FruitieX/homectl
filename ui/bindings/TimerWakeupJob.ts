@@ -5,4 +5,4 @@ import type { TimerId } from "./TimerId";
 /**
  * Which authoritative job store entry a wakeup belongs to (P09).
  */
-export type TimerWakeupJob = { "job": "named_timer", timer: TimerId, } | { "job": "predicate_deadline", trigger: NodeId, };
+export type TimerWakeupJob = { "job": "named_timer", timer: TimerId, } | { "job": "predicate_deadline", trigger: NodeId, } | { "job": "schedule_occurrence", trigger: NodeId, };

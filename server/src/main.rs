@@ -234,6 +234,7 @@ async fn run_event_loop(
         timers: Default::default(),
         pending_timer_fires: Vec::new(),
         pending_predicate_fires: Vec::new(),
+        pending_schedule_fires: Vec::new(),
         clock: Arc::new(homectl_server::core::clock::SystemClock::new()),
         event_tx: event_tx.clone(),
         ui,
