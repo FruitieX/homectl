@@ -196,7 +196,13 @@ impl V2Runtime {
                             definition_revision: definition.revision,
                             fingerprint: definition.compiled.fingerprint.clone(),
                             matched_trigger_ids: Vec::new(),
-                            triggers: Vec::new(),
+                            triggers: super::evaluate::display_trigger_statuses(
+                                routine_id,
+                                definition.revision,
+                                &definition.compiled,
+                                &self.memory,
+                                view,
+                            ),
                             condition,
                             will_trigger: false,
                             execution_pending: true,
@@ -574,5 +580,19 @@ mod tests {
             crate::types::automation_trace::TruthValue::True
         );
         assert!(!status.will_trigger, "no frame fired");
+        assert_eq!(
+            status.triggers.len(),
+            1,
+            "display rows appear without a frame"
+        );
+        assert_eq!(status.triggers[0].trigger_id.0, "trig");
+        assert_eq!(status.triggers[0].kind, "state_change");
+        assert!(!status.triggers[0].fired);
+        assert!(!status.triggers[0].armed);
+        assert_eq!(
+            status.triggers[0].truth,
+            crate::types::automation_trace::TruthValue::True,
+            "seeded transition memory supplies the display truth"
+        );
     }
 }

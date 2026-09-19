@@ -1181,20 +1181,32 @@ impl AppState {
     }
 
     pub fn refresh_routine_statuses(&mut self) {
-        // Live arms annotate the v2 statuses before the published projection
-        // is rebuilt, so `armed`/`due_wall_ms` are never stale in the Arc.
-        self.annotate_trigger_arms();
-        self.rules
-            .refresh_runtime_statuses(&self.devices, &self.groups, Some(&self.helpers));
+        // Live arms are applied while the projection is rebuilt, after the
+        // trigger rows exist, so a freshly saved routine reports armed
+        // schedules in the same publish and `armed`/`due_wall_ms` are never
+        // stale in the Arc (J06/K).
+        let arms = self.timer_wakeup_arms();
+        self.rules.refresh_runtime_statuses(
+            &self.devices,
+            &self.groups,
+            Some(&self.helpers),
+            Some(&arms),
+        );
     }
 
-    /// Project live predicate/schedule wakeup arms into trigger statuses
-    /// (J06/K) so the snapshot exposes armed/deadline per trigger.
-    pub fn annotate_trigger_arms(&mut self) {
+    /// Live predicate/schedule wakeup arms keyed by routine and trigger (J06/K).
+    pub fn timer_wakeup_arms(
+        &self,
+    ) -> std::collections::BTreeMap<
+        (
+            crate::types::rule::RoutineId,
+            crate::types::automation_definition::NodeId,
+        ),
+        i64,
+    > {
         use crate::types::event::TimerWakeupJob;
 
-        let arms = self
-            .timers
+        self.timers
             .wakeups()
             .into_iter()
             .filter_map(|wakeup| {
@@ -1205,7 +1217,13 @@ impl AppState {
                 };
                 Some(((wakeup.routine_id, trigger), wakeup.due_wall_ms))
             })
-            .collect();
+            .collect()
+    }
+
+    /// Project live predicate/schedule wakeup arms into trigger statuses
+    /// (J06/K) so the snapshot exposes armed/deadline per trigger.
+    pub fn annotate_trigger_arms(&mut self) {
+        let arms = self.timer_wakeup_arms();
         self.rules.annotate_trigger_arms(&arms);
     }
 

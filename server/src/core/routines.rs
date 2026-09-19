@@ -592,6 +592,7 @@ impl Routines {
         devices: &Devices,
         groups: &Groups,
         helpers: Option<&Helpers>,
+        arms: Option<&BTreeMap<(RoutineId, crate::types::automation_definition::NodeId), i64>>,
     ) {
         let ctx = RuleEvaluationContext {
             event_source: None,
@@ -643,6 +644,11 @@ impl Routines {
         // display; transition memory and matched triggers are untouched.
         self.v2
             .refresh_statuses(devices.get_state(), groups, helpers);
+        // Live arms annotate after the rows exist so a freshly saved routine
+        // reports armed schedules in the same publish (J06/K).
+        if let Some(arms) = arms {
+            self.v2.annotate_trigger_arms(arms);
+        }
         for (routine_id, v2_status) in self.v2.statuses() {
             statuses.0.insert(
                 routine_id.clone(),
@@ -744,7 +750,7 @@ impl Routines {
                 suppressed: 0,
             }
         } else {
-            self.refresh_runtime_statuses(devices, groups, None);
+            self.refresh_runtime_statuses(devices, groups, None, None);
             RoutineDispatchSummary::default()
         }
     }
@@ -2100,7 +2106,7 @@ mod tests {
 
         let (devices, _rx) = test_devices();
         let groups = Groups::new(GroupsConfig::default());
-        routines.refresh_runtime_statuses(&devices, &groups, None);
+        routines.refresh_runtime_statuses(&devices, &groups, None, None);
 
         let status = routines
             .get_runtime_statuses()
@@ -2175,7 +2181,7 @@ mod tests {
         devices.set_state(&lamp, true, true);
 
         // Sanity: the level routine is eligible to trigger on refresh.
-        routines.refresh_runtime_statuses(&devices, &groups, None);
+        routines.refresh_runtime_statuses(&devices, &groups, None, None);
         let status = routines
             .get_runtime_statuses()
             .0
@@ -2186,7 +2192,7 @@ mod tests {
 
         let history_before = routine_history::recent_routine_history().len();
         for _ in 0..3 {
-            routines.refresh_runtime_statuses(&devices, &groups, None);
+            routines.refresh_runtime_statuses(&devices, &groups, None, None);
         }
         assert_eq!(
             routine_history::recent_routine_history().len(),
@@ -2249,7 +2255,7 @@ mod tests {
         let (devices, _rx) = test_devices();
         let groups = Groups::new(GroupsConfig::default());
         let history_before = routine_history::recent_routine_history().len();
-        routines.refresh_runtime_statuses(&devices, &groups, None);
+        routines.refresh_runtime_statuses(&devices, &groups, None, None);
 
         let status = routines
             .get_runtime_statuses()
@@ -2281,6 +2287,72 @@ mod tests {
             history_before,
             "status refresh must not write routine history for v2 rows"
         );
+    }
+
+    // P12: a freshly saved v2 routine reports per-trigger rows without waiting
+    // for a device frame, and live arms annotate those rows in the same
+    // projection (J06/K).
+    #[test]
+    fn v2_status_refresh_populates_trigger_rows_and_arms() {
+        use crate::types::automation_definition::NodeId;
+        use std::collections::BTreeMap;
+
+        let row = config_queries::RoutineRow {
+            id: "v2_editor".to_string(),
+            name: "V2 editor".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(json!({
+                "triggers": [
+                    { "kind": "state_change", "id": "change", "device": { "integration_id": "mqtt", "device_id": "lamp" } },
+                    { "kind": "schedule", "id": "sched", "schedule": { "every_ms": 60000, "backlog": "skip" } }
+                ],
+                "program": { "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "step", "timer": "t1" }
+                ]}
+            })),
+            ..Default::default()
+        };
+        let mut routines = load(&[row]);
+
+        let (devices, _rx) = test_devices();
+        let groups = Groups::new(GroupsConfig::new());
+        let routine_id = RoutineId::from("v2_editor".to_string());
+        let mut arms = BTreeMap::new();
+        arms.insert(
+            (routine_id.clone(), NodeId("sched".to_string())),
+            1_700_000_000_000i64,
+        );
+
+        routines.refresh_runtime_statuses(&devices, &groups, None, Some(&arms));
+
+        let status = routines
+            .get_runtime_statuses()
+            .0
+            .get(&routine_id)
+            .cloned()
+            .expect("v2 routine status");
+        let v2 = status.v2.expect("v2 status attached");
+        assert_eq!(
+            v2.triggers.len(),
+            2,
+            "trigger rows are visible before any frame evaluates"
+        );
+        let schedule = v2
+            .triggers
+            .iter()
+            .find(|trigger| trigger.trigger_id.0 == "sched")
+            .expect("schedule row");
+        assert!(schedule.armed, "live schedule arm annotates the fresh row");
+        assert_eq!(schedule.due_wall_ms, Some(1_700_000_000_000));
+        let change = v2
+            .triggers
+            .iter()
+            .find(|trigger| trigger.trigger_id.0 == "change")
+            .expect("state_change row");
+        assert!(!change.armed);
+        assert!(!change.fired);
     }
 
     // P04: v2 frames evaluate through the actor path. A report trigger fires,
@@ -2342,7 +2414,7 @@ mod tests {
         assert!(evaluations[0].will_trigger);
         assert_eq!(evaluations[0].matched_trigger_ids.len(), 1);
 
-        routines.refresh_runtime_statuses(&devices, &groups, None);
+        routines.refresh_runtime_statuses(&devices, &groups, None, None);
         let status = routines
             .get_runtime_statuses()
             .0
@@ -2535,7 +2607,12 @@ mod tests {
         assert!(matches!(runs[0].actions[0], Action::ForceTriggerRoutine(_)));
 
         // The captured decision is overlaid onto refresh passes.
-        routines.refresh_runtime_statuses(&devices, &Groups::new(GroupsConfig::default()), None);
+        routines.refresh_runtime_statuses(
+            &devices,
+            &Groups::new(GroupsConfig::default()),
+            None,
+            None,
+        );
         let status = routines
             .get_runtime_statuses()
             .0
@@ -2666,7 +2743,7 @@ mod tests {
         let groups = Groups::new(GroupsConfig::default());
 
         let history_before = routine_history::recent_routine_history().len();
-        routines.refresh_runtime_statuses(&devices, &groups, None);
+        routines.refresh_runtime_statuses(&devices, &groups, None, None);
         routines.seed_transitions(&devices, &groups, None);
 
         assert!(routines.take_deferred_script_requests().is_empty());

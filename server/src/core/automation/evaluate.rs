@@ -373,6 +373,71 @@ pub fn evaluate_routine_frame(
     }
 }
 
+/// Display-only trigger statuses for a routine that has not evaluated a frame
+/// yet (for example right after a config save). Predicate truth and seeded
+/// state-change truth come from the current view and transition memory, but
+/// nothing is written back and no jobs are emitted (V05/X01).
+pub fn display_trigger_statuses(
+    routine_id: &RoutineId,
+    definition_revision: i64,
+    compiled: &CompiledDefinition,
+    memory: &TriggerMemory,
+    view: EvaluationView<'_>,
+) -> Vec<TriggerRuntimeStatus> {
+    compiled
+        .normalized
+        .triggers
+        .iter()
+        .map(|trigger| {
+            let (eligible, truth, error, unknown_reason) = match trigger {
+                TriggerSpec::StateChange { device, .. } => (
+                    false,
+                    memory
+                        .get(routine_id, definition_revision, trigger.id())
+                        .map(|entry| entry.truth)
+                        .unwrap_or_else(|| device_active_truth(device, view.devices)),
+                    None,
+                    None,
+                ),
+                TriggerSpec::PredicateTransition { predicate, .. } => {
+                    let evaluation = evaluate_condition(predicate, view, "/predicate");
+                    (
+                        true,
+                        evaluation.truth,
+                        evaluation.error,
+                        evaluation.unknown_reason,
+                    )
+                }
+                TriggerSpec::PredicateFor { predicate, .. } => {
+                    let evaluation = evaluate_condition(predicate, view, "/predicate");
+                    (
+                        false,
+                        evaluation.truth,
+                        evaluation.error,
+                        evaluation.unknown_reason,
+                    )
+                }
+                TriggerSpec::Report { .. }
+                | TriggerSpec::TimerFired { .. }
+                | TriggerSpec::Schedule { .. }
+                | TriggerSpec::Startup { .. }
+                | TriggerSpec::Manual { .. } => (false, TruthValue::Unknown, None, None),
+            };
+            TriggerRuntimeStatus {
+                armed: false,
+                due_wall_ms: None,
+                trigger_id: trigger.id().clone(),
+                kind: trigger_kind(trigger).to_string(),
+                fired: false,
+                eligible,
+                truth,
+                error,
+                unknown_reason,
+            }
+        })
+        .collect()
+}
+
 /// Seed trigger memory from the current state without firing. Used at startup
 /// and configuration reload (E06).
 pub fn seed_routine_memory(
