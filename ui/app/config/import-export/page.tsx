@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/ui/primitives/card';
+import { Checkbox } from '@/ui/primitives/checkbox';
 import { Download, Info, Upload, X } from 'lucide-react';
 import { useState, useRef } from 'react';
 
@@ -22,6 +23,7 @@ export default function ImportExportPage() {
   const { data: runtimeStatus } = useRuntimeStatus(5000);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [includeSecrets, setIncludeSecrets] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -31,7 +33,7 @@ export default function ImportExportPage() {
     try {
       setExporting(true);
       setError(null);
-      const config = await exportConfig();
+      const config = await exportConfig(includeSecrets);
 
       // Download as JSON file
       const blob = new Blob([JSON.stringify(config, null, 2)], {
@@ -134,6 +136,29 @@ export default function ImportExportPage() {
                 : ' Keep one before major changes so you can roll the config back quickly.'}
             </CardDescription>
           </CardHeader>
+          <CardContent>
+            <label className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-3">
+              <Checkbox
+                checked={includeSecrets}
+                onCheckedChange={(checked) =>
+                  setIncludeSecrets(checked === true)
+                }
+                aria-label="Include secrets in export"
+                className="mt-0.5"
+              />
+              <span className="space-y-1">
+                <span className="block text-sm font-medium text-foreground">
+                  Include secrets
+                </span>
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  Off by default: widget tokens and calendar URLs are left out
+                  of the file. Turn this on for a backup that can fully restore
+                  a fresh instance. Imports keep stored secrets unless the file
+                  sets them explicitly.
+                </span>
+              </span>
+            </label>
+          </CardContent>
           <CardFooter>
             <Button
               onClick={handleExport}

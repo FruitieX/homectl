@@ -89,10 +89,6 @@ struct CoreConfigPayload {
     train_api_url: String,
     #[serde(default)]
     influx_url: String,
-    #[serde(default)]
-    influx_token: String,
-    #[serde(default)]
-    calendar_ics_url: String,
 }
 
 /// Omitted fields preserve stored values and environment fallbacks.
@@ -200,20 +196,6 @@ impl CoreConfigPayload {
                 INFLUXDB_SETTING_KEY,
                 URL_FIELD,
                 "INFLUX_URL",
-            )
-            .unwrap_or_default(),
-            influx_token: widget_setting_string_or_env(
-                settings,
-                INFLUXDB_SETTING_KEY,
-                TOKEN_FIELD,
-                "INFLUX_TOKEN",
-            )
-            .unwrap_or_default(),
-            calendar_ics_url: widget_setting_string_or_env(
-                settings,
-                CALENDAR_SETTING_KEY,
-                ICS_URL_FIELD,
-                "GOOGLE_CALENDAR_ICS_URL",
             )
             .unwrap_or_default(),
         }
@@ -3493,6 +3475,65 @@ struct ImportQuery {
     save_version: bool,
 }
 
+#[derive(Deserialize)]
+struct ExportQuery {
+    #[serde(default)]
+    include_secrets: bool,
+}
+
+/// Secret `widget_settings` fields, keyed by widget setting and config field.
+///
+/// These never leave the server in browser config responses or default
+/// exports; `?include_secrets=true` asks for a secret-inclusive backup.
+fn secret_widget_field(setting_key: &str) -> Option<&'static str> {
+    match setting_key {
+        INFLUXDB_SETTING_KEY => Some(TOKEN_FIELD),
+        CALENDAR_SETTING_KEY => Some(ICS_URL_FIELD),
+        _ => None,
+    }
+}
+
+/// Drop secret widget fields from an export (unless requested explicitly).
+fn redact_widget_secrets(config: &mut ConfigExport) {
+    for setting in &mut config.widget_settings {
+        let Some(field) = secret_widget_field(&setting.key) else {
+            continue;
+        };
+        if let Some(object) = setting.config.as_object_mut() {
+            object.remove(field);
+        }
+    }
+}
+
+/// Restore stored secrets for widget fields absent from an import.
+///
+/// A redacted export excludes secret fields, so importing one must not wipe
+/// the stored tokens. An explicit value (including an empty string) is kept
+/// as given; `?include_secrets=true` exports carry the real values.
+fn preserve_omitted_widget_secrets(config: &mut ConfigExport, current: &ConfigExport) {
+    for setting in &mut config.widget_settings {
+        let Some(field) = secret_widget_field(&setting.key) else {
+            continue;
+        };
+        let Some(object) = setting.config.as_object_mut() else {
+            continue;
+        };
+        if object.contains_key(field) {
+            continue;
+        }
+        let stored = current
+            .widget_settings
+            .iter()
+            .find(|row| row.key == setting.key)
+            .and_then(|row| row.config.get(field))
+            .filter(|value| !value.is_null())
+            .cloned();
+        if let Some(value) = stored {
+            object.insert(field.to_string(), value);
+        }
+    }
+}
+
 fn export_import_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
@@ -3500,6 +3541,7 @@ fn export_import_routes(
     let export = warp::path("export")
         .and(warp::path::end())
         .and(warp::get())
+        .and(warp::query::<ExportQuery>())
         .and(with_snapshot(snapshot))
         .and_then(export_config);
 
@@ -3514,20 +3556,39 @@ fn export_import_routes(
     export.or(import)
 }
 
-async fn export_config(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+async fn export_config(
+    query: ExportQuery,
+    snapshot: SnapshotHandle,
+) -> Result<impl Reply, warp::Rejection> {
     let snap = snapshot.load();
-    Ok(ApiResponse::success((*snap.runtime_config).clone()))
+    let mut config = (*snap.runtime_config).clone();
+    if !query.include_secrets {
+        redact_widget_secrets(&mut config);
+    }
+    Ok(ApiResponse::success(config))
 }
 
 async fn import_config(
     query: ImportQuery,
-    config: ConfigExport,
+    mut config: ConfigExport,
     handle: StateHandle,
 ) -> Result<impl Reply, warp::Rejection> {
     let write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
         Err(_) => return Ok(actor_unavailable()),
     };
+
+    // Read after acquiring the write lock, like the integration reload path:
+    // secrets missing from the import (redacted export) keep their stored
+    // values instead of being wiped.
+    let current = match handle
+        .mutate(|state| Box::pin(async move { state.get_runtime_config().clone() }))
+        .await
+    {
+        Ok(config) => config,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+    preserve_omitted_widget_secrets(&mut config, &current);
     // Optionally save version before import
     if query.save_version {
         if let Err(e) = config_queries::db_save_config_version(&config, Some("Before import")).await
@@ -4489,6 +4550,99 @@ mod tests {
         .unwrap();
         assert_eq!(override_name.display_name, "Custom name");
         assert!(preserved_display_name("old/device", None, Some("  ")).is_none());
+    }
+
+    fn config_with_secret_widgets() -> ConfigExport {
+        let (state, _rx) = crate::core::event::tests::test_state();
+        let mut config = state.runtime_config;
+        config.widget_settings = vec![
+            config_queries::WidgetSettingRow {
+                key: INFLUXDB_SETTING_KEY.into(),
+                config: serde_json::json!({
+                    URL_FIELD: "http://influx.local:8086",
+                    TOKEN_FIELD: "s3cret",
+                    "bucket": "home",
+                }),
+            },
+            config_queries::WidgetSettingRow {
+                key: CALENDAR_SETTING_KEY.into(),
+                config: serde_json::json!({ ICS_URL_FIELD: "https://calendar.example/private.ics" }),
+            },
+            config_queries::WidgetSettingRow {
+                key: WEATHER_SETTING_KEY.into(),
+                config: serde_json::json!({ API_URL_FIELD: "https://weather.example" }),
+            },
+        ];
+        config
+    }
+
+    #[test]
+    fn redacted_exports_drop_only_secret_widget_fields() {
+        let mut config = config_with_secret_widgets();
+        redact_widget_secrets(&mut config);
+
+        let influx = &config.widget_settings[0].config;
+        assert_eq!(influx[URL_FIELD], "http://influx.local:8086");
+        assert_eq!(influx["bucket"], "home");
+        assert!(influx.get(TOKEN_FIELD).is_none());
+
+        let calendar = &config.widget_settings[1].config;
+        assert!(calendar.get(ICS_URL_FIELD).is_none());
+
+        let weather = &config.widget_settings[2].config;
+        assert_eq!(weather[API_URL_FIELD], "https://weather.example");
+    }
+
+    #[test]
+    fn redacted_export_round_trips_through_import_with_stored_secrets() {
+        let original = config_with_secret_widgets();
+        let mut exported = original.clone();
+        redact_widget_secrets(&mut exported);
+
+        preserve_omitted_widget_secrets(&mut exported, &original);
+
+        assert_eq!(
+            exported.widget_settings[0].config[TOKEN_FIELD],
+            original.widget_settings[0].config[TOKEN_FIELD]
+        );
+        assert_eq!(
+            exported.widget_settings[1].config[ICS_URL_FIELD],
+            original.widget_settings[1].config[ICS_URL_FIELD]
+        );
+    }
+
+    #[test]
+    fn explicit_import_values_win_over_stored_secrets() {
+        let current = config_with_secret_widgets();
+
+        let mut cleared = current.clone();
+        cleared.widget_settings[0].config[TOKEN_FIELD] = serde_json::json!("");
+        preserve_omitted_widget_secrets(&mut cleared, &current);
+        assert_eq!(cleared.widget_settings[0].config[TOKEN_FIELD], "");
+
+        let mut replaced = current.clone();
+        replaced.widget_settings[0].config[TOKEN_FIELD] = serde_json::json!("new-token");
+        preserve_omitted_widget_secrets(&mut replaced, &current);
+        assert_eq!(replaced.widget_settings[0].config[TOKEN_FIELD], "new-token");
+    }
+
+    #[test]
+    fn import_only_preserves_secrets_for_present_rows() {
+        let original = config_with_secret_widgets();
+        let mut exported = original.clone();
+        redact_widget_secrets(&mut exported);
+        exported.widget_settings.remove(0);
+
+        preserve_omitted_widget_secrets(&mut exported, &original);
+
+        assert!(exported
+            .widget_settings
+            .iter()
+            .all(|row| row.key != INFLUXDB_SETTING_KEY));
+        assert_eq!(
+            exported.widget_settings[0].config[ICS_URL_FIELD],
+            "https://calendar.example/private.ics"
+        );
     }
 
     #[test]

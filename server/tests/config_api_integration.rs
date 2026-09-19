@@ -3501,6 +3501,142 @@ fn cross_origin_requests_are_restricted() {
     );
 }
 
+fn widget_setting(config: &Value, key: &str) -> Value {
+    config["widget_settings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["key"] == key)
+        .cloned()
+        .unwrap_or_else(|| panic!("missing widget setting {key}"))
+}
+
+#[test]
+fn config_exports_redact_widget_secrets_by_default() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let base = &server.base_url;
+
+    // Secrets can still be written through the write-only core patch.
+    client
+        .put(format!("{base}/api/v1/config/core"))
+        .json(&json!({
+            "influx_token": "secret-token",
+            "calendar_ics_url": "https://calendar.example/private.ics",
+        }))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    // Browser config responses never carry the secrets.
+    let ui_config: Value = client
+        .get(format!("{base}/api/config"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    for key in [
+        "influx_token",
+        "influxToken",
+        "calendar_ics_url",
+        "calendarIcsUrl",
+    ] {
+        assert!(
+            ui_config.get(key).is_none(),
+            "unexpected {key} in /api/config"
+        );
+    }
+
+    let core: Value = client
+        .get(format!("{base}/api/v1/config/core"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(core["data"].get("influx_token").is_none());
+    assert!(core["data"].get("calendar_ics_url").is_none());
+
+    // Default exports omit secret fields entirely.
+    let export: Value = client
+        .get(format!("{base}/api/v1/config/export"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let redacted = export["data"].clone();
+    let influx = widget_setting(&redacted, "influxdb");
+    assert!(influx["config"].get("token").is_none());
+    let calendar = widget_setting(&redacted, "calendar");
+    assert!(calendar["config"].get("icsUrl").is_none());
+
+    // An explicit request gets a secret-inclusive backup for restores.
+    let full: Value = client
+        .get(format!("{base}/api/v1/config/export?include_secrets=true"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let full = full["data"].clone();
+    assert_eq!(
+        widget_setting(&full, "influxdb")["config"]["token"],
+        "secret-token"
+    );
+    assert_eq!(
+        widget_setting(&full, "calendar")["config"]["icsUrl"],
+        "https://calendar.example/private.ics"
+    );
+
+    // Importing the redacted export keeps the stored secrets.
+    client
+        .post(format!("{base}/api/v1/config/import"))
+        .json(&redacted)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let restored: Value = client
+        .get(format!("{base}/api/v1/config/export?include_secrets=true"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let restored = restored["data"].clone();
+    assert_eq!(
+        widget_setting(&restored, "influxdb")["config"]["token"],
+        "secret-token"
+    );
+    assert_eq!(
+        widget_setting(&restored, "calendar")["config"]["icsUrl"],
+        "https://calendar.example/private.ics"
+    );
+
+    // An explicit empty value still clears a stored secret.
+    let mut cleared = redacted.clone();
+    for row in cleared["widget_settings"].as_array_mut().unwrap() {
+        if row["key"] == "influxdb" {
+            row["config"]["token"] = json!("");
+        }
+    }
+    client
+        .post(format!("{base}/api/v1/config/import"))
+        .json(&cleared)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let after_clear: Value = client
+        .get(format!("{base}/api/v1/config/export?include_secrets=true"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(
+        widget_setting(&after_clear["data"], "influxdb")["config"]["token"],
+        ""
+    );
+}
+
 #[test]
 fn cross_origin_allowlist_honors_configured_origins() {
     let server = TestServer::with_config(TestServerConfig {

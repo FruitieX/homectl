@@ -4,7 +4,5 @@ export type Config = {
   weatherApiUrl: string;
   trainApiUrl: string;
   influxUrl: string;
-  influxToken: string;
   calendarApiUrl: string;
-  calendarIcsUrl: string;
 };

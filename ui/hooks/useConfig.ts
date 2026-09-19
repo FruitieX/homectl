@@ -629,14 +629,18 @@ export function useConfigExport() {
   const { apiEndpoint } = useAppConfig();
   const baseUrl = `${apiEndpoint}/api/v1/config`;
 
-  const exportConfig = useCallback(async (): Promise<ConfigExport> => {
-    const response = await fetch(`${baseUrl}/export`);
-    const result = await response.json();
-    if (result.success) {
-      return result.data;
-    }
-    throw new Error(result.error || 'Failed to export');
-  }, [baseUrl]);
+  const exportConfig = useCallback(
+    async (includeSecrets = false): Promise<ConfigExport> => {
+      const query = includeSecrets ? '?include_secrets=true' : '';
+      const response = await fetch(`${baseUrl}/export${query}`);
+      const result = await response.json();
+      if (result.success) {
+        return result.data;
+      }
+      throw new Error(result.error || 'Failed to export');
+    },
+    [baseUrl],
+  );
 
   const importConfig = useCallback(
     async (config: ConfigExport) => {

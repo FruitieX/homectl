@@ -11,9 +11,7 @@ type ConfigResponse = Partial<Config> & {
   weather_api_url?: string;
   train_api_url?: string;
   influx_url?: string;
-  influx_token?: string;
   calendar_api_url?: string;
-  calendar_ics_url?: string;
 };
 
 function firstNonEmptyString(...values: unknown[]) {
@@ -61,13 +59,9 @@ function normalizeConfig(
     trainApiUrl:
       firstNonEmptyString(config.trainApiUrl, config.train_api_url) ?? '',
     influxUrl: firstNonEmptyString(config.influxUrl, config.influx_url) ?? '',
-    influxToken:
-      firstNonEmptyString(config.influxToken, config.influx_token) ?? '',
     calendarApiUrl:
       firstNonEmptyString(config.calendarApiUrl, config.calendar_api_url) ??
       '/api/calendar',
-    calendarIcsUrl:
-      firstNonEmptyString(config.calendarIcsUrl, config.calendar_ics_url) ?? '',
   };
 }
 

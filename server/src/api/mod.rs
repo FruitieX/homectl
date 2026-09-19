@@ -21,8 +21,8 @@ use config::*;
 use devices::*;
 use health::health;
 use widgets::{
-    widget_setting_string_or_env, API_URL_FIELD, CALENDAR_SETTING_KEY, ICS_URL_FIELD,
-    INFLUXDB_SETTING_KEY, TOKEN_FIELD, TRAIN_SCHEDULE_SETTING_KEY, URL_FIELD, WEATHER_SETTING_KEY,
+    widget_setting_string_or_env, API_URL_FIELD, INFLUXDB_SETTING_KEY, TRAIN_SCHEDULE_SETTING_KEY,
+    URL_FIELD, WEATHER_SETTING_KEY,
 };
 
 use color_eyre::Result;
@@ -42,9 +42,7 @@ struct UiConfigResponse {
     weather_api_url: String,
     train_api_url: String,
     influx_url: String,
-    influx_token: String,
     calendar_api_url: String,
-    calendar_ics_url: String,
 }
 
 impl UiConfigResponse {
@@ -78,22 +76,8 @@ impl UiConfigResponse {
                 "INFLUX_URL",
             )
             .unwrap_or_default(),
-            influx_token: widget_setting_string_or_env(
-                widget_settings,
-                INFLUXDB_SETTING_KEY,
-                TOKEN_FIELD,
-                "INFLUX_TOKEN",
-            )
-            .unwrap_or_default(),
             calendar_api_url: env_var("CALENDAR_API_URL")
                 .unwrap_or_else(|| "/api/calendar".to_string()),
-            calendar_ics_url: widget_setting_string_or_env(
-                widget_settings,
-                CALENDAR_SETTING_KEY,
-                ICS_URL_FIELD,
-                "GOOGLE_CALENDAR_ICS_URL",
-            )
-            .unwrap_or_default(),
         }
     }
 }
