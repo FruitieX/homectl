@@ -2,7 +2,8 @@ import { useRef, useState } from 'react';
 import { createUuid } from '@/lib/uuid';
 import { useAtom } from 'jotai';
 import { atomWithStorage } from 'jotai/utils';
-import { Check, Star } from 'lucide-react';
+import { Check, SquarePen, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import {
   useConnectionStatus,
   useDevicesState,
@@ -10,6 +11,7 @@ import {
   useWebsocket,
 } from '@/hooks/websocket';
 import { useSceneModalState } from '@/hooks/sceneModalState';
+import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -26,11 +28,13 @@ const pinnedScenesAtom = atomWithStorage<string[]>(
 type Props = { deviceKeys: string[]; showAll?: boolean; compact?: boolean };
 
 export function SceneList({ deviceKeys, showAll, compact }: Props) {
+  const navigate = useNavigate();
   const ws = useWebsocket();
   const connected = useConnectionStatus() === 'connected';
   const scenes = useScenesState();
   const devices = useDevicesState();
   const modal = useSceneModalState();
+  const deviceModal = useDeviceModalState();
   const [search, setSearch] = useState('');
   const [pendingScene, setPendingScene] = useState<string | null>(null);
   const sending = useRef(false);
@@ -172,6 +176,23 @@ export function SceneList({ deviceKeys, showAll, compact }: Props) {
                   <Check aria-hidden className="size-4 shrink-0 text-primary" />
                 )}
               </button>
+              <Button
+                className="shrink-0"
+                size="icon"
+                variant="ghost"
+                aria-label={`Edit ${scene.name} in scene settings`}
+                title="Edit in scene settings"
+                onClick={() => {
+                  const params = new URLSearchParams({ scene: id });
+                  if (deviceKeys.length === 1) {
+                    params.set('device', deviceKeys[0]!);
+                  }
+                  deviceModal.setOpen(false);
+                  navigate(`/config/scenes?${params.toString()}`);
+                }}
+              >
+                <SquarePen />
+              </Button>
               <Button
                 className="mr-1 shrink-0"
                 size="icon"

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import {
   SceneDeviceConfig,
   SceneDeviceState,
@@ -288,6 +288,7 @@ interface SceneTargetConfigEditorProps {
   targetCount?: number;
   onMoveUp?: () => void;
   onMoveDown?: () => void;
+  focused?: boolean;
 }
 
 function SceneTargetConfigEditor({
@@ -304,8 +305,15 @@ function SceneTargetConfigEditor({
   targetCount,
   onMoveUp,
   onMoveDown,
+  focused,
 }: SceneTargetConfigEditorProps) {
   const configType = getConfigType(config);
+  const cardRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) {
+      cardRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [focused]);
 
   const handleTypeChange = (
     newType: 'device_state' | 'device_link' | 'scene_link',
@@ -320,7 +328,13 @@ function SceneTargetConfigEditor({
   };
 
   return (
-    <Card className="rounded-2xl bg-muted/30">
+    <Card
+      ref={cardRef}
+      className={cn(
+        'rounded-2xl bg-muted/30',
+        focused && 'border-primary ring-2 ring-primary/40',
+      )}
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div>
@@ -528,6 +542,8 @@ interface SceneTargetSectionEditorProps {
   onChange: (items: Record<string, SceneDeviceConfig>) => void;
   order?: string[];
   onOrderChange?: (order: string[]) => void;
+  focusTargetKey?: string | null;
+  focusNonce?: number;
 }
 
 export function SceneTargetSectionEditor({
@@ -544,6 +560,8 @@ export function SceneTargetSectionEditor({
   onChange,
   order,
   onOrderChange,
+  focusTargetKey,
+  focusNonce = 0,
 }: SceneTargetSectionEditorProps) {
   const [showAddTarget, setShowAddTarget] = useState(false);
 
@@ -606,6 +624,40 @@ export function SceneTargetSectionEditor({
     options.map((option) => [option.key, option.label]),
   );
 
+  const [focusedKey, setFocusedKey] = useState<string | null>(null);
+  const appliedFocusNonce = useRef(0);
+  const focusTimeout = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      !focusTargetKey ||
+      focusNonce === 0 ||
+      appliedFocusNonce.current === focusNonce
+    ) {
+      return;
+    }
+    appliedFocusNonce.current = focusNonce;
+    if (!(focusTargetKey in items)) {
+      setFocusedKey(null);
+      return;
+    }
+    setFocusedKey(focusTargetKey);
+    if (focusTimeout.current !== null) {
+      window.clearTimeout(focusTimeout.current);
+    }
+    focusTimeout.current = window.setTimeout(() => {
+      focusTimeout.current = null;
+      setFocusedKey(null);
+    }, 2500);
+  }, [focusNonce, focusTargetKey, items]);
+  useEffect(
+    () => () => {
+      if (focusTimeout.current !== null) {
+        window.clearTimeout(focusTimeout.current);
+      }
+    },
+    [],
+  );
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -642,6 +694,7 @@ export function SceneTargetSectionEditor({
                 targetCount={onOrderChange ? orderedKeys.length : undefined}
                 onMoveUp={() => moveTarget(targetKey, -1)}
                 onMoveDown={() => moveTarget(targetKey, 1)}
+                focused={focusedKey === targetKey}
               />
             );
           })}

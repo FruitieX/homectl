@@ -49,6 +49,9 @@ const UnmemoizedCarHeaterModal = () => {
               device,
               skip_external_update: false,
               skip_db_update: null,
+              origin: null,
+              causation: null,
+              integration_epoch: null,
             },
           },
         };

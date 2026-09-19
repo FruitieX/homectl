@@ -1,6 +1,6 @@
 import type { SceneCommand } from '@/bindings/SceneCommand';
 import { createUuid } from '@/lib/uuid';
-import { useSearchParams } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import {
   useGroups,
@@ -10,7 +10,7 @@ import {
   getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
 import { useAppConfig } from '@/hooks/appConfig';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigPageHeader } from '../page-header';
@@ -117,6 +117,15 @@ export default function ScenesPage() {
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [showCreate, setShowCreate] = useState(false);
+  const location = useLocation();
+  const requestedSceneId = searchParams.get('scene');
+  const requestedDeviceKey = searchParams.get('device');
+  const appliedDeepLink = useRef<string | null>(null);
+  const [deviceFocus, setDeviceFocus] = useState<{
+    sceneId: string;
+    deviceKey: string;
+    nonce: number;
+  } | null>(null);
   const { devicesState: devices } = useDevicesApi();
   const deviceOptions = useMemo(
     () =>
@@ -153,6 +162,43 @@ export default function ScenesPage() {
   const visibleScenes = scenes.filter((scene) =>
     matchesConfigSearch(search, ...getSceneSearchValues(scene)),
   );
+
+  useEffect(() => {
+    if (loading || error || !requestedSceneId) {
+      return;
+    }
+    const scene = scenes.find(
+      (candidate) => candidate.id === requestedSceneId,
+    );
+    if (!scene) {
+      return;
+    }
+    const linkKey = `${location.key}:${requestedSceneId}:${requestedDeviceKey ?? ''}`;
+    if (appliedDeepLink.current === linkKey) {
+      return;
+    }
+    appliedDeepLink.current = linkKey;
+    if (!matchesConfigSearch(search, ...getSceneSearchValues(scene))) {
+      setSearch('');
+    }
+    setOpenId(scene.id);
+    setEditingId(scene.id);
+    if (requestedDeviceKey) {
+      setDeviceFocus((current) => ({
+        sceneId: scene.id,
+        deviceKey: requestedDeviceKey,
+        nonce: (current?.nonce ?? 0) + 1,
+      }));
+    }
+  }, [
+    error,
+    loading,
+    location.key,
+    requestedDeviceKey,
+    requestedSceneId,
+    scenes,
+    search,
+  ]);
 
   const activateScene = async (scene: Scene) => {
     setActivatingSceneId(scene.id);
@@ -258,6 +304,14 @@ export default function ScenesPage() {
                 activationNotice={openId === scene.id ? activationNotice : null}
                 isEditing={editingId === scene.id}
                 isOpen={openId === scene.id}
+                focusDeviceKey={
+                  deviceFocus?.sceneId === scene.id
+                    ? deviceFocus.deviceKey
+                    : null
+                }
+                focusNonce={
+                  deviceFocus?.sceneId === scene.id ? deviceFocus.nonce : 0
+                }
                 onOpen={() => {
                   setActivationError(null);
                   setActivationNotice(null);
@@ -542,6 +596,8 @@ function SceneEditorForm({
   groupOptions,
   onSave,
   onCancel,
+  focusDeviceKey,
+  focusNonce,
 }: {
   scene: Scene;
   scenes: Scene[];
@@ -550,11 +606,19 @@ function SceneEditorForm({
   groupOptions: SceneTargetOption[];
   onSave: (scene: Partial<Scene>) => Promise<void>;
   onCancel: () => void;
+  focusDeviceKey?: string | null;
+  focusNonce?: number;
 }) {
   const [name, setName] = useState(scene.name);
   const [hidden, setHidden] = useState(scene.hidden);
   const [script, setScript] = useState(scene.script || '');
-  const [deviceStates, setDeviceStates] = useState(scene.device_states || {});
+  const [deviceStates, setDeviceStates] = useState(() => {
+    const initial = scene.device_states || {};
+    if (focusDeviceKey && !(focusDeviceKey in initial)) {
+      return { ...initial, [focusDeviceKey]: { power: true, brightness: 1 } };
+    }
+    return initial;
+  });
   const [groupStates, setGroupStates] = useState(scene.group_states || {});
   const [groupStateOrder, setGroupStateOrder] = useState(
     scene.group_state_order?.length
@@ -563,7 +627,11 @@ function SceneEditorForm({
   );
   const [editTab, setEditTab] = useState<
     'basics' | 'script' | 'devices' | 'groups'
-  >('basics');
+  >(focusDeviceKey ? 'devices' : 'basics');
+  const focusNotice =
+    focusDeviceKey && !(focusDeviceKey in (scene.device_states || {}))
+      ? `${focusDeviceKey} is not a target of this scene yet; add it below and save to keep it.`
+      : null;
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const otherScenes = scenes.filter((candidate) => candidate.id !== scene.id);
@@ -668,6 +736,11 @@ function SceneEditorForm({
             title="Device targets"
             description="Set explicit device states or link a target to another device or scene."
           >
+            {focusNotice && (
+              <Alert>
+                <AlertDescription>{focusNotice}</AlertDescription>
+              </Alert>
+            )}
             <SceneTargetSectionEditor
               addLabel="Add Device"
               allScenes={scenes}
@@ -680,6 +753,8 @@ function SceneEditorForm({
               targetKind="device"
               devices={devices}
               onChange={setDeviceStates}
+              focusTargetKey={focusDeviceKey}
+              focusNonce={focusNonce}
             />
           </ConfigFormSection>
         </TabsContent>
@@ -743,6 +818,8 @@ function SceneCard({
   activationNotice,
   isEditing,
   isOpen,
+  focusDeviceKey,
+  focusNonce,
   onActivate,
   onOpen,
   onClose,
@@ -761,6 +838,8 @@ function SceneCard({
   activationNotice: string | null;
   isEditing: boolean;
   isOpen: boolean;
+  focusDeviceKey: string | null;
+  focusNonce: number;
   onActivate: () => void;
   onOpen: () => void;
   onClose: () => void;
@@ -907,6 +986,7 @@ function SceneCard({
     >
       {isEditing ? (
         <SceneEditorForm
+          key={`${scene.id}:${focusDeviceKey ?? ''}:${focusNonce}`}
           scene={scene}
           scenes={scenes}
           devices={devices}
@@ -914,6 +994,8 @@ function SceneCard({
           groupOptions={groupOptions}
           onSave={onSave}
           onCancel={onCancel}
+          focusDeviceKey={focusDeviceKey}
+          focusNonce={focusNonce}
         />
       ) : (
         viewContent
