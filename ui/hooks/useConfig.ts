@@ -1,4 +1,5 @@
 import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
+import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
 import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
@@ -358,6 +359,10 @@ export function useScenes() {
 
 export function useRoutines() {
   return useConfigApi<Routine>('routines');
+}
+
+export function useHelpers() {
+  return useConfigApi<HelperRuntimeStatus>('helpers');
 }
 
 export function useDeviceDisplayNames() {

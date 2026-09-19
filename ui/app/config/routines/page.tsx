@@ -1,10 +1,13 @@
 import {
   useDeviceDisplayNames,
+  useHelpers,
   useRoutines,
   useScenes,
   Routine,
   RoutineDefinitionV2Body,
 } from '@/hooks/useConfig';
+import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
+import type { Program } from '@/bindings/Program';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { TimerRuntimeStatus } from '@/bindings/TimerRuntimeStatus';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
@@ -22,6 +25,7 @@ import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { TriggerBuilder } from '@/ui/TriggerBuilder';
+import { ProgramBuilder } from '@/ui/ProgramBuilder';
 import { RoutineRuntimePanel } from '@/ui/routine-runtime';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
@@ -71,6 +75,7 @@ export default function RoutinesPage() {
     remove,
   } = useRoutines();
   const { data: scenes, loading: scenesLoading } = useScenes();
+  const { data: helpers } = useHelpers();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
@@ -155,6 +160,7 @@ export default function RoutinesPage() {
               groups={groups}
               scenes={sceneList}
               routines={routineList}
+              helpers={helpers}
               runtimeStatus={routineStatuses?.[routine.id]}
               timers={timers}
               deviceDisplayNameMap={deviceDisplayNameMap}
@@ -211,6 +217,7 @@ function RoutineCard({
   groups,
   scenes,
   routines,
+  helpers,
   runtimeStatus,
   timers,
   deviceDisplayNameMap,
@@ -228,6 +235,7 @@ function RoutineCard({
   groups: FlattenedGroupsConfig;
   scenes: { id: string; name: string }[];
   routines: { id: string; name: string }[];
+  helpers: HelperRuntimeStatus[];
   runtimeStatus?: RoutineRuntimeStatus;
   timers: TimerRuntimeStatus[];
   deviceDisplayNameMap: Record<string, string>;
@@ -245,7 +253,7 @@ function RoutineCard({
   const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
   const [actions, setActions] = useState<Action[]>(routine.actions as Action[]);
   const [editTab, setEditTab] = useState<
-    'basics' | 'rules' | 'actions' | 'json'
+    'basics' | 'rules' | 'program' | 'actions' | 'json'
   >('basics');
   const [rulesJson, setRulesJson] = useState(
     JSON.stringify(routine.rules, null, 2),
@@ -317,7 +325,12 @@ function RoutineCard({
       }
     }
 
-    if (value === 'basics' || value === 'rules' || value === 'actions') {
+    if (
+      value === 'basics' ||
+      value === 'rules' ||
+      value === 'program' ||
+      value === 'actions'
+    ) {
       setEditTab(value);
     }
   };
@@ -389,15 +402,12 @@ function RoutineCard({
   const editContent = (
     <div className="flex min-h-full flex-col">
       <Tabs value={editTab} onValueChange={changeTab}>
-        <TabsList
-          className={`grid h-auto w-full grid-cols-2 ${
-            isV2 ? 'sm:grid-cols-3' : 'sm:grid-cols-4'
-          }`}
-        >
+        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
           <TabsTrigger value="basics">Basics</TabsTrigger>
           <TabsTrigger value="rules">
             {isV2 ? 'Triggers' : 'Rules'}
           </TabsTrigger>
+          {isV2 ? <TabsTrigger value="program">Program</TabsTrigger> : null}
           {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
           <TabsTrigger value="json">
             {isV2 ? 'Definition' : 'JSON'}
@@ -466,6 +476,24 @@ function RoutineCard({
           </ConfigFormSection>
         </TabsContent>
 
+        {isV2 ? (
+          <TabsContent value="program" className="mt-4">
+            <ConfigFormSection aria-label="Routine program">
+              <ProgramBuilder
+                program={definition.program as Program | undefined}
+                onChange={(program) =>
+                  setDefinition((current) => ({ ...current, program }))
+                }
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                routines={routines}
+                helpers={helpers}
+              />
+            </ConfigFormSection>
+          </TabsContent>
+        ) : null}
+
         {!isV2 ? (
           <TabsContent value="actions" className="mt-4">
             <ConfigFormSection aria-label="Routine actions">
@@ -486,7 +514,7 @@ function RoutineCard({
             title="Advanced JSON"
             description={
               isV2
-                ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, programs, advanced predicates).'
+                ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, script programs, choose branches, advanced predicates).'
                 : 'Edit the raw routine payload when a visual editor does not expose an edge case.'
             }
           >
