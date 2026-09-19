@@ -16,6 +16,7 @@
 //! with error/unknown separation and per-trigger transition memory. It does
 //! not dispatch actions; P05 adds planning and execution.
 
+pub mod calendar;
 pub mod compile;
 pub mod evaluate;
 pub mod groups;
