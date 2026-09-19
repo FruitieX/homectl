@@ -6,6 +6,7 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { ScheduleSpec } from '@/bindings/ScheduleSpec';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
+import { useSchedulePreview } from '@/hooks/useConfig';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
 import {
   ConditionDatalists,
@@ -96,6 +97,80 @@ function defaultTrigger(kind: TriggerKind, id: string): TriggerSpec {
   }
 }
 
+function occurrenceFormatter(zone: string) {
+  try {
+    const formatter = new Intl.DateTimeFormat(undefined, {
+      timeZone: zone,
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    return (wallMs: number) => formatter.format(new Date(wallMs));
+  } catch {
+    return (wallMs: number) => new Date(wallMs).toLocaleString();
+  }
+}
+
+function SchedulePreviewPanel({
+  schedule,
+  occurrences,
+  error,
+  pending,
+}: {
+  schedule: ScheduleSpec;
+  occurrences: number[] | null;
+  error: string | null;
+  pending: boolean;
+}) {
+  const zone = schedule.timezone || 'UTC';
+  const format = occurrenceFormatter(zone);
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs">
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
+
+  if (occurrences === null) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        {pending
+          ? 'Checking schedule...'
+          : 'Set a cron expression or interval to preview fire times.'}
+      </div>
+    );
+  }
+
+  if (occurrences.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        No upcoming occurrences.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/30 px-3 py-2 text-xs">
+      <p className="font-medium text-muted-foreground">
+        Next occurrences ({zone}){pending ? ' - updating...' : ''}
+      </p>
+      <ul className="mt-1 space-y-0.5">
+        {occurrences.map((occurrence) => (
+          <li key={occurrence} className="font-mono">
+            {format(occurrence)}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function TriggerFields({
   trigger,
   onChange,
@@ -111,6 +186,24 @@ function TriggerFields({
   scenes: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
 }) {
+  const schedulePreview = useSchedulePreview(
+    trigger.kind === 'schedule'
+      ? {
+          cron: trigger.schedule.cron,
+          every_ms:
+            trigger.schedule.every_ms === undefined
+              ? undefined
+              : Number(trigger.schedule.every_ms),
+          timezone: trigger.schedule.timezone,
+          backlog: trigger.schedule.backlog,
+          catch_up_lateness_ms:
+            trigger.schedule.catch_up_lateness_ms === undefined
+              ? undefined
+              : Number(trigger.schedule.catch_up_lateness_ms),
+        }
+      : null,
+  );
+
   switch (trigger.kind) {
     case 'schedule': {
       const schedule = trigger.schedule;
@@ -241,6 +334,13 @@ function TriggerFields({
               </ConfigField>
             ) : null}
           </div>
+
+          <SchedulePreviewPanel
+            schedule={schedule}
+            occurrences={schedulePreview.occurrences}
+            error={schedulePreview.error}
+            pending={schedulePreview.pending}
+          />
         </div>
       );
     }

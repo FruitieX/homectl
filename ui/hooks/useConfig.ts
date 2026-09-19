@@ -8,6 +8,7 @@ import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
+import { useDebounceValue } from 'usehooks-ts';
 import { useAppConfig } from './appConfig';
 
 // Types for config API responses
@@ -363,6 +364,86 @@ export function useRoutines() {
 
 export function useHelpers() {
   return useConfigApi<HelperRuntimeStatus>('helpers');
+}
+
+export type SchedulePreviewInput = {
+  cron?: string;
+  every_ms?: number;
+  timezone?: string;
+  backlog: import('@/bindings/BacklogPolicy').BacklogPolicy;
+  catch_up_lateness_ms?: number;
+};
+
+/**
+ * Preview the next occurrences of an unsaved schedule trigger. Debounced so
+ * typing a cron expression does not spam the server; the server validates the
+ * cron/zone and clamps the occurrence count. Returns null occurrences while
+ * the schedule has neither a cron expression nor an interval.
+ */
+export function useSchedulePreview(schedule: SchedulePreviewInput | null) {
+  const { apiEndpoint } = useAppConfig();
+  const [occurrences, setOccurrences] = useState<number[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const serialized = schedule ? JSON.stringify(schedule) : '';
+  const [debounced] = useDebounceValue(serialized, 400);
+
+  useEffect(() => {
+    if (!debounced) {
+      setOccurrences(null);
+      setError(null);
+      setPending(false);
+      return;
+    }
+
+    const parsed = JSON.parse(debounced) as SchedulePreviewInput;
+    if (!parsed.cron && !parsed.every_ms) {
+      setOccurrences(null);
+      setError(null);
+      setPending(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setPending(true);
+    fetch(`${apiEndpoint}/api/v1/config/routines/schedule-preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schedule: parsed, count: 5 }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const result = (await response.json()) as ApiResponse<{
+          occurrences: number[];
+        }>;
+        if (!response.ok || !result.success) {
+          throw new Error(result.error || 'Failed to preview schedule');
+        }
+        return result.data?.occurrences ?? [];
+      })
+      .then((next) => {
+        setOccurrences(next);
+        setError(null);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        setOccurrences(null);
+        setError(
+          err instanceof Error ? err.message : 'Failed to preview schedule',
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setPending(false);
+        }
+      });
+
+    return () => controller.abort();
+  }, [apiEndpoint, debounced]);
+
+  return { occurrences, error, pending };
 }
 
 export function useDeviceDisplayNames() {

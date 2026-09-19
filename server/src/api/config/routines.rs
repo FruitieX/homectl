@@ -106,7 +106,16 @@ pub(super) fn routines_routes(
         .and(with_handle(handle))
         .and_then(delete_routine);
 
-    list.or(get).or(create).or(update).or(delete)
+    let schedule_preview = warp::path!("routines" / "schedule-preview")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(preview_schedule);
+
+    list.or(get)
+        .or(create)
+        .or(update)
+        .or(delete)
+        .or(schedule_preview)
 }
 
 pub(super) async fn list_routines(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -363,6 +372,39 @@ pub(super) async fn delete_routine(
         database_available,
         StatusCode::OK,
     ))
+}
+
+/// Request body for `POST /config/routines/schedule-preview`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchedulePreviewRequest {
+    pub schedule: crate::types::automation_definition::ScheduleSpec,
+    /// Number of occurrences to return (default 5, clamped by the core).
+    #[serde(default)]
+    pub count: Option<usize>,
+    /// Reference wall-clock instant in ms; defaults to the server clock.
+    #[serde(default)]
+    pub from_ms: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct SchedulePreviewData {
+    pub occurrences: Vec<i64>,
+}
+
+/// Preview the next occurrences of a schedule while it is being edited. The
+/// schedule does not have to be stored; the answer comes from the same
+/// calendar rules the runtime uses.
+pub(super) async fn preview_schedule(
+    request: SchedulePreviewRequest,
+) -> Result<impl Reply, warp::Rejection> {
+    let from_ms = request
+        .from_ms
+        .unwrap_or_else(|| chrono::Utc::now().timestamp_millis());
+    let count = request.count.unwrap_or(5);
+    match automation::schedules::preview_occurrences(&request.schedule, from_ms, count) {
+        Ok(occurrences) => Ok(ApiResponse::success(SchedulePreviewData { occurrences })),
+        Err(error) => Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    }
 }
 
 // ============================================================================

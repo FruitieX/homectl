@@ -22,6 +22,7 @@ pub mod evaluate;
 pub mod groups;
 pub mod plan;
 pub mod runtime;
+pub mod schedules;
 pub mod script_contract;
 pub mod script_coordinator;
 pub mod script_runtime;
