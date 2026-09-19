@@ -833,17 +833,22 @@ function validateV2Draft(definition: RoutineDefinitionV2Body): string | null {
   }
 
   const program = definition.program as Program | undefined;
-  if (!program || program.kind !== 'native') {
-    return 'Add a native program with at least one step.';
+  if (!program) {
+    return 'Add a native or script program.';
   }
-  if (program.steps.length === 0) {
-    return 'Add at least one program step.';
-  }
-  const missingScene = walkNativeSteps(program.steps).some(
-    (step) => step.action === 'activate_scene' && !step.select && !step.scene_id,
-  );
-  if (missingScene) {
-    return 'Choose a scene for each scene activation.';
+  if (program.kind === 'native') {
+    if (program.steps.length === 0) {
+      return 'Add at least one program step.';
+    }
+    const missingScene = walkNativeSteps(program.steps).some(
+      (step) =>
+        step.action === 'activate_scene' && !step.select && !step.scene_id,
+    );
+    if (missingScene) {
+      return 'Choose a scene for each scene activation.';
+    }
+  } else if (!program.spec.source_body.trim()) {
+    return 'Add a script body.';
   }
 
   if (hasEmptyConditionGroup(definition.condition)) {

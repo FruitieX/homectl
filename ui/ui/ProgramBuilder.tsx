@@ -5,6 +5,8 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { InvokeMode } from '@/bindings/InvokeMode';
 import type { NativeAction } from '@/bindings/NativeAction';
 import type { Program } from '@/bindings/Program';
+import type { ScriptDeclaration } from '@/bindings/ScriptDeclaration';
+import type { ScriptSpec } from '@/bindings/ScriptSpec';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
@@ -17,6 +19,7 @@ import {
   DeviceMultiSelect,
   DeviceSelect,
   GroupMultiSelect,
+  GroupSelect,
   RoutineSelect,
   SceneSelect,
   splitDeviceKey,
@@ -25,7 +28,8 @@ import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
-import { useCallback, useState } from 'react';
+import { Textarea } from '@/ui/primitives/textarea';
+import { useCallback, useRef, useState } from 'react';
 
 type StepKind = NativeAction['action'];
 
@@ -936,6 +940,279 @@ function StepEditor({
   );
 }
 
+const SCRIPT_STARTER = `// ctx is frozen: ctx.now_ms, ctx.state.memory, ctx.state.revision.
+// api is pure: api.now, api.random(), api.actions.*.
+const memory = ctx.state.memory;
+return {
+  actions: [],
+  next_state: { runs: (memory.runs ?? 0) + 1 },
+};
+`;
+
+function defaultDeclaration(kind: ScriptDeclaration['kind']): ScriptDeclaration {
+  switch (kind) {
+    case 'device':
+      return {
+        kind: 'device',
+        device: { integration_id: '', device_id: '' },
+      };
+    case 'group':
+      return { kind: 'group', group_id: '' };
+    case 'timer':
+      return { kind: 'timer', timer: '' };
+    case 'all_state':
+      return { kind: 'all_state' };
+  }
+}
+
+function ScriptProgramEditor({
+  spec,
+  onChange,
+  devices,
+  groups,
+}: {
+  spec: ScriptSpec;
+  onChange: (spec: ScriptSpec) => void;
+  devices: DevicesState;
+  groups: FlattenedGroupsConfig;
+}) {
+  const [newDeclarationKind, setNewDeclarationKind] =
+    useState<ScriptDeclaration['kind']>('device');
+  const sourceRef = useRef<HTMLTextAreaElement>(null);
+
+  const updateDeclaration = (index: number, declaration: ScriptDeclaration) => {
+    onChange({
+      ...spec,
+      declarations: spec.declarations.map((candidate, candidateIndex) =>
+        candidateIndex === index ? declaration : candidate,
+      ),
+    });
+  };
+
+  const addDeclaration = () => {
+    onChange({
+      ...spec,
+      declarations: [...spec.declarations, defaultDeclaration(newDeclarationKind)],
+    });
+  };
+
+  const insertStarter = () => {
+    const element = sourceRef.current;
+    if (!element) {
+      onChange({ ...spec, source_body: `${spec.source_body}${SCRIPT_STARTER}` });
+      return;
+    }
+    const start = element.selectionStart ?? spec.source_body.length;
+    const end = element.selectionEnd ?? start;
+    onChange({
+      ...spec,
+      source_body:
+        spec.source_body.slice(0, start) +
+        SCRIPT_STARTER +
+        spec.source_body.slice(end),
+    });
+    requestAnimationFrame(() => {
+      element.focus();
+      const cursor = start + SCRIPT_STARTER.length;
+      element.setSelectionRange(cursor, cursor);
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2">
+        <ConfigField
+          label="API version"
+          description="Only version 1 is supported by this server."
+        >
+          <Input className="font-mono" value={spec.api_version} readOnly />
+        </ConfigField>
+        <ConfigField
+          label="Limits profile"
+          description="Only 'default' is supported by this server."
+        >
+          <Input className="font-mono" value={spec.limits_profile} readOnly />
+        </ConfigField>
+      </div>
+
+      <ConfigField
+        label="Function body"
+        description="Runs in the sandboxed worker after a trigger fires and the condition holds. ctx and api are available; return { actions, next_state? }."
+      >
+        <Textarea
+          ref={sourceRef}
+          className="h-64 font-mono text-xs"
+          value={spec.source_body}
+          placeholder="return { actions: [] };"
+          onChange={(event) =>
+            onChange({ ...spec, source_body: event.target.value })
+          }
+        />
+      </ConfigField>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={insertStarter}
+        >
+          Insert starter
+        </Button>
+        <span className="text-xs text-muted-foreground">
+          The body is a function body; an unambiguous return is required.
+        </span>
+      </div>
+
+      <div className="space-y-3">
+        <div>
+          <h5 className="text-sm font-medium">Declarations</h5>
+          <p className="text-sm text-muted-foreground">
+            Declarations decide when the script runs and which state it may
+            read. Undeclared reads are absent; devices and groups may be
+            declared before they are discovered.
+          </p>
+        </div>
+
+        {spec.declarations.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-3 text-center text-sm text-muted-foreground">
+            No declarations. The script only sees the triggering frame and its
+            own memory.
+          </div>
+        ) : null}
+
+        {spec.declarations.map((declaration, index) => (
+          <div
+            key={`${declaration.kind}:${index}`}
+            className="flex flex-wrap items-end gap-2 rounded-xl border border-border/60 bg-muted/20 p-3"
+          >
+            <ConfigField label="Kind" className="min-w-44">
+              <select
+                className={selectClassName}
+                value={declaration.kind}
+                onChange={(event) =>
+                  updateDeclaration(
+                    index,
+                    defaultDeclaration(
+                      event.target.value as ScriptDeclaration['kind'],
+                    ),
+                  )
+                }
+              >
+                <option value="device">Device</option>
+                <option value="group">Group</option>
+                <option value="timer">Timer</option>
+                <option value="all_state">All state (broad)</option>
+              </select>
+            </ConfigField>
+
+            {declaration.kind === 'device' ? (
+              <ConfigField label="Device" className="min-w-64">
+                <DeviceSelect
+                  devices={devices}
+                  value={
+                    declaration.device.integration_id &&
+                    declaration.device.device_id
+                      ? `${declaration.device.integration_id}/${declaration.device.device_id}`
+                      : ''
+                  }
+                  onChange={(key) =>
+                    updateDeclaration(index, {
+                      kind: 'device',
+                      device: splitDeviceKey(key) ?? {
+                        integration_id: '',
+                        device_id: '',
+                      },
+                    })
+                  }
+                />
+              </ConfigField>
+            ) : null}
+
+            {declaration.kind === 'group' ? (
+              <ConfigField label="Group" className="min-w-64">
+                <GroupSelect
+                  groups={groups}
+                  value={declaration.group_id}
+                  onChange={(group_id) =>
+                    updateDeclaration(index, { kind: 'group', group_id })
+                  }
+                />
+              </ConfigField>
+            ) : null}
+
+            {declaration.kind === 'timer' ? (
+              <ConfigField label="Timer name" className="min-w-64">
+                <Input
+                  className="font-mono"
+                  value={declaration.timer}
+                  placeholder="off"
+                  onChange={(event) =>
+                    updateDeclaration(index, {
+                      kind: 'timer',
+                      timer: event.target.value,
+                    })
+                  }
+                />
+              </ConfigField>
+            ) : null}
+
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={() =>
+                onChange({
+                  ...spec,
+                  declarations: spec.declarations.filter(
+                    (_, candidateIndex) => candidateIndex !== index,
+                  ),
+                })
+              }
+            >
+              Remove
+            </Button>
+          </div>
+        ))}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <select
+            className={selectClassName}
+            value={newDeclarationKind}
+            onChange={(event) =>
+              setNewDeclarationKind(
+                event.target.value as ScriptDeclaration['kind'],
+              )
+            }
+          >
+            <option value="device">Device</option>
+            <option value="group">Group</option>
+            <option value="timer">Timer</option>
+            <option value="all_state">All state (broad)</option>
+          </select>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={addDeclaration}
+          >
+            Add declaration
+          </Button>
+        </div>
+
+        {spec.declarations.some(
+          (declaration) => declaration.kind === 'all_state',
+        ) ? (
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            All state is a broad compatibility declaration: the script may read
+            any device in the triggering frame. Prefer exact declarations.
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function ProgramBuilder({
   program,
   onChange,
@@ -987,21 +1264,21 @@ export function ProgramBuilder({
     [program, onChange],
   );
 
-  if (program?.kind === 'script') {
-    return (
-      <div className="space-y-3">
-        <p className="text-sm text-muted-foreground">
-          This routine runs a sandboxed script program (API version{' '}
-          {program.spec.api_version}). Script bodies and declarations are
-          edited in the Definition (JSON) tab.
-        </p>
-        <p className="text-sm text-muted-foreground">
-          {program.spec.declarations?.length ?? 0} declared
-          read(s)/subscription(s).
-        </p>
-      </div>
-    );
-  }
+  const changeProgramKind = (kind: Program['kind']) => {
+    if (kind === 'native') {
+      onChange({ kind: 'native', steps: [] });
+      return;
+    }
+    onChange({
+      kind: 'script',
+      spec: {
+        api_version: 1,
+        source_body: '',
+        declarations: [],
+        limits_profile: 'default',
+      },
+    });
+  };
 
   const steps = program?.kind === 'native' ? program.steps : [];
   const existingIds = collectStepIds(steps);
@@ -1027,30 +1304,62 @@ export function ProgramBuilder({
   return (
     <div className="space-y-4">
       <ConditionDatalists />
-      <div>
-        <h4 className="font-medium">Program steps</h4>
-        <p className="text-sm text-muted-foreground">
-          Steps run in order after a trigger fires and the condition holds.
-          Steps and branches may write helpers, start timers, or invoke other
-          routines.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h4 className="font-medium">Program</h4>
+          <p className="text-sm text-muted-foreground">
+            Runs after a trigger fires and the condition holds. Native steps run
+            in order; a script runs sandboxed with declared state access.
+          </p>
+        </div>
+        <ConfigField label="Program type" className="min-w-56">
+          <select
+            className={selectClassName}
+            value={program?.kind ?? ''}
+            onChange={(event) =>
+              changeProgramKind(event.target.value as Program['kind'])
+            }
+          >
+            {program === undefined ? (
+              <option value="">Select type...</option>
+            ) : null}
+            <option value="native">Native steps</option>
+            <option value="script">Sandboxed script</option>
+          </select>
+        </ConfigField>
       </div>
 
-      {program?.kind !== 'native' ? (
+      {program === undefined ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center">
           <p className="text-sm text-muted-foreground">
-            This routine has no native program yet.
+            This routine has no program yet.
           </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-3"
-            onClick={() => addStep('activate_scene')}
-          >
-            Create native program
-          </Button>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => changeProgramKind('native')}
+            >
+              Create native program
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => changeProgramKind('script')}
+            >
+              Create script program
+            </Button>
+          </div>
         </div>
+      ) : program.kind === 'script' ? (
+        <ScriptProgramEditor
+          spec={program.spec}
+          onChange={(spec) => onChange({ kind: 'script', spec })}
+          devices={devices}
+          groups={groups}
+        />
       ) : (
         <>
           <div className="flex flex-wrap items-end gap-3">
