@@ -10,6 +10,7 @@ import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
 import { RoutineStatuses } from '@/bindings/RoutineStatuses';
 import { StateUpdate } from '@/bindings/StateUpdate';
+import { TimerRuntimeStatus } from '@/bindings/TimerRuntimeStatus';
 import { WebSocketResponse } from '@/bindings/WebSocketResponse';
 import { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useEffect, useMemo, useRef } from 'react';
@@ -23,12 +24,14 @@ const devicesAtom = atom<DevicesState | null>(null);
 const scenesAtom = atom<FlattenedScenesConfig | null>(null);
 const groupsAtom = atom<FlattenedGroupsConfig | null>(null);
 const routineStatusesStateAtom = atom<RoutineStatuses | null>(null);
+const timersStateAtom = atom<TimerRuntimeStatus[] | null>(null);
 const websocketUiStateAtom = atom<UiState | null>(null);
 const websocketStateAtom = atom<StateUpdate | null>((get) => {
   const devices = get(devicesAtom);
   const scenes = get(scenesAtom);
   const groups = get(groupsAtom);
   const routineStatuses = get(routineStatusesStateAtom);
+  const timers = get(timersStateAtom);
   const uiState = get(websocketUiStateAtom);
 
   if (
@@ -36,6 +39,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
     scenes === null ||
     groups === null ||
     routineStatuses === null ||
+    timers === null ||
     uiState === null
   ) {
     return null;
@@ -46,6 +50,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
     scenes,
     groups,
     routine_statuses: routineStatuses,
+    timers,
     ui_state: uiState,
   };
 });
@@ -84,6 +89,7 @@ export const useProvideWebsocketState = () => {
   const setScenes = useSetAtom(scenesAtom);
   const setGroups = useSetAtom(groupsAtom);
   const setRoutineStatuses = useSetAtom(routineStatusesStateAtom);
+  const setTimers = useSetAtom(timersStateAtom);
   const setUiState = useSetAtom(websocketUiStateAtom);
   const setWebsocket = useSetAtom(websocketAtom);
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
@@ -157,6 +163,7 @@ export const useProvideWebsocketState = () => {
           setScenes(msg.State.scenes);
           setGroups(msg.State.groups);
           setRoutineStatuses(msg.State.routine_statuses);
+          setTimers(msg.State.timers);
           setUiState(msg.State.ui_state);
         } else if ('Patch' in msg) {
           const patch = msg.Patch;
@@ -172,6 +179,9 @@ export const useProvideWebsocketState = () => {
           }
           if (patch.routine_statuses) {
             setRoutineStatuses(patch.routine_statuses);
+          }
+          if (patch.timers) {
+            setTimers(patch.timers);
           }
           if (patch.ui_state) {
             setUiState(patch.ui_state);
@@ -212,6 +222,7 @@ export const useProvideWebsocketState = () => {
     setGroups,
     setRoutineStatuses,
     setScenes,
+    setTimers,
     setUiState,
     setWebsocket,
     setConnectionStatus,
@@ -323,4 +334,10 @@ export const useUiState = <T>(key: string): T | undefined => {
 
 export const useRoutineStatuses = (): RoutineStatuses | undefined => {
   return useAtomValue(routineStatusesAtom) ?? undefined;
+};
+
+export const timersAtom = timersStateAtom;
+
+export const useTimers = (): TimerRuntimeStatus[] | undefined => {
+  return useAtomValue(timersAtom) ?? undefined;
 };

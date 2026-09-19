@@ -1,6 +1,7 @@
 import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
 import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
 import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
+import type { RoutineDefinitionV2 } from '@/bindings/RoutineDefinitionV2';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
@@ -87,6 +88,9 @@ export interface Routine {
   enabled: boolean;
   rules: unknown[];
   actions: unknown[];
+  semantics_version?: number;
+  revision?: number;
+  definition_v2?: RoutineDefinitionV2 | null;
 }
 
 export interface DeviceDisplayNameOverride {

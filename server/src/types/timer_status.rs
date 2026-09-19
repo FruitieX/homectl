@@ -5,13 +5,13 @@
 //! estimate, while `due_wall_ms` is the persisted UTC deadline estimate.
 //! Elapsed-time authority always stays with the monotonic clock.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{automation_definition::TimerId, rule::RoutineId};
 
 /// Current lifecycle state of one live job.
-#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimerJobStatus {
@@ -20,7 +20,7 @@ pub enum TimerJobStatus {
 }
 
 /// How the job survives process lifetime (P10 adds durable jobs).
-#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimerPersistence {
@@ -34,7 +34,7 @@ pub enum TimerPersistence {
 }
 
 /// One live timer job as published to readers.
-#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct TimerRuntimeStatus {
     pub routine_id: RoutineId,

@@ -5,15 +5,21 @@ import {
   Routine,
 } from '@/hooks/useConfig';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
+import type { TimerRuntimeStatus } from '@/bindings/TimerRuntimeStatus';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { useMemo, useState } from 'react';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
-import { useDevicesState, useRoutineStatuses } from '@/hooks/websocket';
+import {
+  useDevicesState,
+  useRoutineStatuses,
+  useTimers,
+} from '@/hooks/websocket';
 import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
+import { RoutineRuntimePanel } from '@/ui/routine-runtime';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -82,6 +88,7 @@ export default function RoutinesPage() {
     return merged;
   }, [apiDevices, liveDevices]);
   const routineStatuses = useRoutineStatuses();
+  const timers = useTimers() ?? [];
   const groups = useGroupsState();
   const deviceDisplayNameMap = deviceDisplayNames.reduce<
     Record<string, string>
@@ -146,6 +153,7 @@ export default function RoutinesPage() {
               scenes={sceneList}
               routines={routineList}
               runtimeStatus={routineStatuses?.[routine.id]}
+              timers={timers}
               deviceDisplayNameMap={deviceDisplayNameMap}
               onOpen={() => setOpenId(routine.id)}
               onClose={() => {
@@ -201,6 +209,7 @@ function RoutineCard({
   scenes,
   routines,
   runtimeStatus,
+  timers,
   deviceDisplayNameMap,
   onOpen,
   onClose,
@@ -217,6 +226,7 @@ function RoutineCard({
   scenes: { id: string; name: string }[];
   routines: { id: string; name: string }[];
   runtimeStatus?: RoutineRuntimeStatus;
+  timers: TimerRuntimeStatus[];
   deviceDisplayNameMap: Record<string, string>;
   onOpen: () => void;
   onClose: () => void;
@@ -265,6 +275,12 @@ function RoutineCard({
   const matchingRuleCount = runtimeStatus?.rules.filter(
     (status) => status.condition_match,
   ).length;
+  const v2Status = runtimeStatus?.v2;
+  const isV2 = routine.semantics_version === 2 || Boolean(routine.definition_v2);
+  const triggerCount =
+    v2Status?.triggers.length ?? routine.definition_v2?.triggers.length ?? 0;
+  const armedTriggerCount =
+    v2Status?.triggers.filter((trigger) => trigger.armed).length ?? 0;
 
   const changeTab = (value: string) => {
     if (value === 'json') {
@@ -308,6 +324,7 @@ function RoutineCard({
           >
             {routine.enabled ? 'Enabled' : 'Disabled'}
           </Badge>
+          {isV2 ? <Badge variant="outline">v2</Badge> : null}
           {routineStatusBadge ? (
             <Badge className={routineStatusBadge.className}>
               {routineStatusBadge.label}
@@ -317,15 +334,37 @@ function RoutineCard({
       </div>
 
       <div className="text-sm">
-        <span className="font-medium">{routine.rules.length}</span> rules ·{' '}
-        <span className="font-medium">{routine.actions.length}</span> actions
-        {routine.enabled && matchingRuleCount !== undefined ? (
+        {isV2 ? (
           <>
-            {' '}
-            · <span className="font-medium">{matchingRuleCount}</span> matching
-            now
+            <span className="font-medium">{triggerCount}</span> triggers ·{' '}
+            <span className="font-medium">{armedTriggerCount}</span> armed
+            {routine.enabled && v2Status ? (
+              <>
+                {' '}
+                · condition{' '}
+                <span className="font-medium">
+                  {v2Status.condition.truth === 'true'
+                    ? 'met'
+                    : v2Status.condition.truth === 'false'
+                      ? 'not met'
+                      : 'unknown'}
+                </span>
+              </>
+            ) : null}
           </>
-        ) : null}
+        ) : (
+          <>
+            <span className="font-medium">{routine.rules.length}</span> rules ·{' '}
+            <span className="font-medium">{routine.actions.length}</span> actions
+            {routine.enabled && matchingRuleCount !== undefined ? (
+              <>
+                {' '}
+                · <span className="font-medium">{matchingRuleCount}</span>{' '}
+                matching now
+              </>
+            ) : null}
+          </>
+        )}
       </div>
     </div>
   );
@@ -488,34 +527,55 @@ function RoutineCard({
       <p className="text-sm text-muted-foreground">
         {!routine.enabled
           ? 'Disabled: this routine does not evaluate or trigger.'
-          : !runtimeStatus
-            ? 'Waiting for runtime status.'
-            : runtimeStatus.rules.some((rule) => rule.error)
-              ? 'A rule could not be evaluated. See its error below.'
-              : runtimeStatus.will_trigger
-                ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
-                : runtimeStatus.all_conditions_match
-                  ? 'The conditions match; waiting for a matching trigger event.'
-                  : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
+          : isV2
+            ? !v2Status
+              ? 'Waiting for runtime status.'
+              : v2Status.condition.error
+                ? 'The condition could not be evaluated. See the trigger details below.'
+                : v2Status.will_trigger
+                  ? 'The condition and a triggering event matched. This status does not confirm physical device delivery.'
+                  : v2Status.condition.truth === 'true'
+                    ? 'The condition is met; waiting for a matching trigger event.'
+                    : v2Status.condition.truth === 'false'
+                      ? 'The condition is not met; the routine will not trigger yet.'
+                      : 'The condition is unknown right now. See the trigger details below.'
+            : !runtimeStatus
+              ? 'Waiting for runtime status.'
+              : runtimeStatus.rules.some((rule) => rule.error)
+                ? 'A rule could not be evaluated. See its error below.'
+                : runtimeStatus.will_trigger
+                  ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
+                  : runtimeStatus.all_conditions_match
+                    ? 'The conditions match; waiting for a matching trigger event.'
+                    : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
       </p>
-      <div className="grid gap-4 xl:grid-cols-2">
-        <RoutineRuleList
-          rules={routine.rules as Rule[]}
-          status={runtimeStatus}
-          devices={devices}
-          groups={groups}
-          scenes={scenes}
-          deviceDisplayNameMap={deviceDisplayNameMap}
-        />
-        <RoutineActionList
-          actions={routine.actions as Action[]}
-          devices={devices}
-          groups={groups}
-          scenes={scenes}
-          routines={routines}
-          deviceDisplayNameMap={deviceDisplayNameMap}
-        />
-      </div>
+      <RoutineRuntimePanel
+        routine={routine}
+        status={runtimeStatus}
+        timers={timers}
+        devices={devices}
+        deviceDisplayNameMap={deviceDisplayNameMap}
+      />
+      {!isV2 ? (
+        <div className="grid gap-4 xl:grid-cols-2">
+          <RoutineRuleList
+            rules={routine.rules as Rule[]}
+            status={runtimeStatus}
+            devices={devices}
+            groups={groups}
+            scenes={scenes}
+            deviceDisplayNameMap={deviceDisplayNameMap}
+          />
+          <RoutineActionList
+            actions={routine.actions as Action[]}
+            devices={devices}
+            groups={groups}
+            scenes={scenes}
+            routines={routines}
+            deviceDisplayNameMap={deviceDisplayNameMap}
+          />
+        </div>
+      ) : null}
 
       <div className="flex justify-end gap-2">
         <Button variant="ghost" size="sm" onClick={onEdit}>

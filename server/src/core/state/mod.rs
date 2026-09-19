@@ -94,6 +94,7 @@ impl PendingWsUpdate {
             || self.changes.flattened_groups
             || self.changes.flattened_scenes
             || self.changes.routine_statuses
+            || self.changes.timers
             || self.changes.ui_state
     }
 }
@@ -1379,6 +1380,7 @@ struct StateUpdateRef<'a> {
     scenes: &'a FlattenedScenesConfig,
     groups: &'a FlattenedGroupsConfig,
     routine_statuses: &'a RoutineStatuses,
+    timers: &'a [crate::types::timer_status::TimerRuntimeStatus],
     ui_state: &'a HashMap<String, serde_json::Value>,
 }
 
@@ -1403,6 +1405,8 @@ struct StatePatchRef<'a> {
     groups: Option<&'a FlattenedGroupsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     routine_statuses: Option<&'a RoutineStatuses>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    timers: Option<&'a [crate::types::timer_status::TimerRuntimeStatus]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ui_state: Option<&'a HashMap<String, serde_json::Value>>,
 }
@@ -1439,6 +1443,7 @@ pub async fn send_state_ws_from_snapshot(
         scenes: snap.flattened_scenes.as_ref(),
         groups: snap.flattened_groups.as_ref(),
         routine_statuses: snap.routine_statuses.as_ref(),
+        timers: snap.timers.as_slice(),
         ui_state: snap.ui_state.as_ref(),
     });
 
@@ -1608,6 +1613,90 @@ mod native_color_tests {
     }
 }
 
+#[cfg(test)]
+mod websocket_timer_tests {
+    use super::*;
+    use crate::core::snapshot::new_snapshot_handle;
+    use crate::types::automation_definition::TimerId;
+    use crate::types::rule::RoutineId;
+    use crate::types::timer_status::{TimerJobStatus, TimerPersistence, TimerRuntimeStatus};
+
+    fn snapshot_with_timer() -> SnapshotHandle {
+        let (state, _events) = crate::core::event::tests::test_state();
+        let mut snapshot = state.snapshot.load().as_ref().clone();
+        snapshot.timers = Arc::new(vec![TimerRuntimeStatus {
+            routine_id: RoutineId("porch-light".to_string()),
+            definition_revision: 3,
+            timer: TimerId("off".to_string()),
+            generation: 2,
+            status: TimerJobStatus::Pending,
+            due_wall_ms: 1_700_000_000_000,
+            remaining_ms: 60_000,
+            persistence: TimerPersistence::Durable,
+        }]);
+        new_snapshot_handle(snapshot)
+    }
+
+    // P09/P12: timer lifecycle is visible to browser clients in the full
+    // state and in timer-only patches, so the routine view can show pending
+    // deadlines without polling.
+    #[tokio::test]
+    async fn timers_are_published_in_state_and_timer_patches() {
+        let handle = snapshot_with_timer();
+        let ws = WebSockets::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        ws.user_connected(1, tx).await;
+
+        send_state_ws_from_snapshot(&handle, &ws, Some(1)).await;
+        send_state_ws_patch_from_snapshot(
+            &handle,
+            &ws,
+            Some(1),
+            SnapshotChanges {
+                timers: true,
+                ..SnapshotChanges::none()
+            }
+            .into(),
+        )
+        .await;
+
+        for path in ["/State/timers/0", "/Patch/timers/0"] {
+            let message = rx.recv().await.unwrap();
+            let value: serde_json::Value = serde_json::from_str(message.to_str().unwrap()).unwrap();
+            let timer = value.pointer(path).expect("timer in websocket payload");
+            assert_eq!(timer["routine_id"].as_str(), Some("porch-light"));
+            assert_eq!(timer["timer"].as_str(), Some("off"));
+            assert_eq!(timer["due_wall_ms"].as_i64(), Some(1_700_000_000_000));
+            assert_eq!(timer["persistence"].as_str(), Some("durable"));
+        }
+    }
+
+    // A patch that only carries other changes must not include timers.
+    #[tokio::test]
+    async fn unrelated_patches_omit_timers() {
+        let handle = snapshot_with_timer();
+        let ws = WebSockets::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        ws.user_connected(1, tx).await;
+
+        send_state_ws_patch_from_snapshot(
+            &handle,
+            &ws,
+            Some(1),
+            SnapshotChanges {
+                ui_state: true,
+                ..SnapshotChanges::none()
+            }
+            .into(),
+        )
+        .await;
+
+        let message = rx.recv().await.unwrap();
+        let value: serde_json::Value = serde_json::from_str(message.to_str().unwrap()).unwrap();
+        assert!(value.pointer("/Patch/timers").is_none());
+    }
+}
+
 /// Build a targeted `StatePatch` from the currently published runtime snapshot
 /// and broadcast it to the given WebSocket peers.
 pub async fn send_state_ws_patch_from_snapshot(
@@ -1674,6 +1763,7 @@ pub async fn send_state_ws_patch_from_snapshot(
             .changes
             .routine_statuses
             .then_some(snap.routine_statuses.as_ref()),
+        timers: update.changes.timers.then_some(snap.timers.as_slice()),
         ui_state: update.changes.ui_state.then_some(snap.ui_state.as_ref()),
     });
 

@@ -3,6 +3,7 @@ import type { DevicesPatch } from "./DevicesPatch";
 import type { FlattenedGroupsConfig } from "./FlattenedGroupsConfig";
 import type { FlattenedScenesConfig } from "./FlattenedScenesConfig";
 import type { RoutineStatuses } from "./RoutineStatuses";
+import type { TimerRuntimeStatus } from "./TimerRuntimeStatus";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type StatePatch = { devices: DevicesPatch | null, scenes: FlattenedScenesConfig | null, groups: FlattenedGroupsConfig | null, routine_statuses: RoutineStatuses | null, ui_state: { [key in string]?: JsonValue } | null, };
+export type StatePatch = { devices: DevicesPatch | null, scenes: FlattenedScenesConfig | null, groups: FlattenedGroupsConfig | null, routine_statuses: RoutineStatuses | null, timers: Array<TimerRuntimeStatus> | null, ui_state: { [key in string]?: JsonValue } | null, };

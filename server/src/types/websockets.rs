@@ -9,6 +9,7 @@ use super::{
     group::FlattenedGroupsConfig,
     routine_status::RoutineStatuses,
     scene::FlattenedScenesConfig,
+    timer_status::TimerRuntimeStatus,
 };
 
 #[derive(TS, Deserialize, Serialize, Debug)]
@@ -26,6 +27,9 @@ pub struct StateUpdate {
     pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
     pub routine_statuses: RoutineStatuses,
+    /// Live named timer jobs (P09). `remaining_ms` is a publish-time sample;
+    /// clients should count down from `due_wall_ms`.
+    pub timers: Vec<TimerRuntimeStatus>,
     pub ui_state: HashMap<String, serde_json::Value>,
 }
 
@@ -47,6 +51,8 @@ pub struct StatePatch {
     pub groups: Option<FlattenedGroupsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub routine_statuses: Option<RoutineStatuses>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub timers: Option<Vec<TimerRuntimeStatus>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_state: Option<HashMap<String, serde_json::Value>>,
 }
