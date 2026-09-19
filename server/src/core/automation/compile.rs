@@ -9,10 +9,10 @@ use crate::core::routine_validation::{self, RoutineValidationReport, ValidatedRo
 use crate::db::config_queries::{ConfigExport, RoutineRow};
 use crate::types::{
     automation_definition::{
-        ConditionExpr, ExecutionPolicy, HelperId, InvokeMode, NativeAction, NodeId, Program,
-        RoutineDefinitionV2, RoutineSemantics, SceneSelection, ScheduleSpec, ScriptDeclaration,
-        ScriptSpec, SourceId, StateChangeMode, TargetSpec, TimerId, TriggerSpec, ValueSource,
-        ROUTINE_SEMANTICS_VERSION_V2,
+        BacklogPolicy, ConditionExpr, ExecutionPolicy, HelperId, InvokeMode, NativeAction, NodeId,
+        Program, RoutineDefinitionV2, RoutineSemantics, SceneSelection, ScheduleSpec,
+        ScriptDeclaration, ScriptSpec, SourceId, StateChangeMode, TargetSpec, TimerId, TriggerSpec,
+        ValueSource, ROUTINE_SEMANTICS_VERSION_V2,
     },
     automation_value::{HelperDefinition, HelperKind},
     device::{DeviceKey, DeviceRef},
@@ -1370,7 +1370,12 @@ impl Compiler<'_> {
                 );
             }
             (Some(cron), None) => {
+                // K01: the six-field grammar is configured explicitly and the
+                // pinned croner grammar is preserved (DOM/DOW-OR included),
+                // but its calendar resolution is never reused for DST
+                // semantics; occurrences are generated from civil time.
                 let mut parsed = croner::Cron::new(cron);
+                parsed.with_seconds_required();
                 if let Err(error) = parsed.parse() {
                     self.report.error_at_node(
                         format!("{path}/cron"),
@@ -1393,14 +1398,63 @@ impl Compiler<'_> {
         }
 
         if let Some(timezone) = &schedule.timezone {
-            if !is_valid_timezone_syntax(timezone) {
+            if let Err(reason) = timezone_error(timezone) {
                 self.report.error_at_node(
                     format!("{path}/timezone"),
                     node,
                     "invalid_timezone",
-                    format!("Invalid timezone '{timezone}'."),
+                    format!("Invalid timezone '{timezone}': {reason}."),
                 );
             }
+        }
+
+        match (&schedule.cron, schedule.every_ms) {
+            (Some(_), None) => match schedule.backlog {
+                BacklogPolicy::Skip => {
+                    if schedule.catch_up_lateness_ms.is_some() {
+                        self.report.error_at_node(
+                            format!("{path}/catch_up_lateness_ms"),
+                            node,
+                            "schedule_policy_not_applicable",
+                            "catch_up_lateness_ms requires backlog = catch_up_once.",
+                        );
+                    }
+                }
+                BacklogPolicy::CatchUpOnce => match schedule.catch_up_lateness_ms {
+                    Some(lateness) if lateness > 0 && lateness <= MAX_TIMER_DELAY_MS => {}
+                    Some(lateness) => {
+                        self.report.error_at_node(
+                            format!("{path}/catch_up_lateness_ms"),
+                            node,
+                            "invalid_duration",
+                            format!(
+                                "catch_up_lateness_ms must be in 1..={MAX_TIMER_DELAY_MS}, got {lateness}."
+                            ),
+                        );
+                    }
+                    None => {
+                        self.report.error_at_node(
+                            format!("{path}/backlog"),
+                            node,
+                            "schedule_policy_not_applicable",
+                            "backlog = catch_up_once requires catch_up_lateness_ms.",
+                        );
+                    }
+                },
+            },
+            (None, Some(_)) => {
+                if schedule.backlog != BacklogPolicy::Skip
+                    || schedule.catch_up_lateness_ms.is_some()
+                {
+                    self.report.error_at_node(
+                        format!("{path}/backlog"),
+                        node,
+                        "schedule_policy_not_applicable",
+                        "Calendar backlog policy applies to cron schedules only.",
+                    );
+                }
+            }
+            _ => {}
         }
     }
 
@@ -1599,30 +1653,26 @@ fn parse_script_function_body(source: &str) -> Result<(), String> {
     routine_validation::parse_script(&wrapped)
 }
 
-/// Syntax-level timezone validation. Full IANA resolution arrives with P09's
-/// scheduler; P03 rejects obviously invalid values and offsets that do not
-/// parse.
-fn is_valid_timezone_syntax(timezone: &str) -> bool {
+/// Resolve a schedule timezone to an IANA zone (chrono-tz) or a fixed offset.
+/// Calendar schedules store IANA zones so DST policy stays stable across
+/// process restarts and host configuration changes (K).
+fn timezone_error(timezone: &str) -> Result<(), String> {
     if timezone.trim() != timezone || timezone.is_empty() {
-        return false;
+        return Err("expected a non-empty trimmed name".to_string());
     }
-    if timezone == "UTC" || timezone == "GMT" {
-        return true;
+    if timezone.eq_ignore_ascii_case("utc") || timezone.eq_ignore_ascii_case("gmt") {
+        return Ok(());
     }
     if timezone.starts_with('+') || timezone.starts_with('-') {
-        return timezone.parse::<chrono::FixedOffset>().is_ok();
+        return timezone
+            .parse::<chrono::FixedOffset>()
+            .map(|_| ())
+            .map_err(|error| error.to_string());
     }
-    let mut parts = timezone.split('/');
-    let (Some(area), Some(location), None) = (parts.next(), parts.next(), parts.next()) else {
-        return false;
-    };
-    fn valid_component(component: &str) -> bool {
-        !component.is_empty()
-            && component
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '+'))
-    }
-    valid_component(area) && valid_component(location)
+    timezone
+        .parse::<chrono_tz::Tz>()
+        .map(|_| ())
+        .map_err(|_| "unknown IANA timezone".to_string())
 }
 
 /// Whether a native action's invoke mode awaits completion (reserved for P05).
@@ -1989,6 +2039,113 @@ mod tests {
         assert_eq!(
             report.errors[0].related_entity.as_deref(),
             Some("dummy/missing")
+        );
+    }
+
+    // K01/K02: the six-field grammar and calendar policy are validated at
+    // compile time so stored definitions and fingerprints are stable.
+    #[test]
+    fn k01_calendar_grammar_and_policy_are_validated() {
+        let definition = |schedule: serde_json::Value| {
+            json!({
+                "triggers": [{ "kind": "schedule", "id": "trig", "schedule": schedule }],
+                "program": { "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "step_timer", "timer": "t1" }
+                ]}
+            })
+        };
+
+        assert!(compile_definition_value(
+            &definition(json!({
+                "cron": "0 0 8 * * *",
+                "timezone": "Europe/Helsinki"
+            })),
+            &catalog()
+        )
+        .is_ok());
+
+        // Seconds may not be omitted: five fields are rejected explicitly.
+        assert_eq!(
+            error_codes(
+                &compile_definition_value(
+                    &definition(json!({ "cron": "0 8 * * *", "timezone": "Europe/Helsinki" })),
+                    &catalog()
+                )
+                .unwrap_err()
+            ),
+            vec!["invalid_cron"]
+        );
+
+        // Timezones resolve to IANA zones (or fixed offsets).
+        assert_eq!(
+            error_codes(
+                &compile_definition_value(
+                    &definition(json!({ "cron": "0 0 8 * * *", "timezone": "Mars/Olympus" })),
+                    &catalog()
+                )
+                .unwrap_err()
+            ),
+            vec!["invalid_timezone"]
+        );
+
+        // Catch-up policy requires cron plus a bounded lateness; the lateness
+        // alone or on interval schedules is not applicable.
+        assert_eq!(
+            error_codes(
+                &compile_definition_value(
+                    &definition(json!({ "cron": "0 0 8 * * *", "backlog": "catch_up_once" })),
+                    &catalog()
+                )
+                .unwrap_err()
+            ),
+            vec!["schedule_policy_not_applicable"]
+        );
+        assert_eq!(
+            error_codes(
+                &compile_definition_value(
+                    &definition(json!({ "cron": "0 0 8 * * *", "catch_up_lateness_ms": 60000 })),
+                    &catalog()
+                )
+                .unwrap_err()
+            ),
+            vec!["schedule_policy_not_applicable"]
+        );
+        assert!(compile_definition_value(
+            &definition(json!({
+                "cron": "0 0 8 * * *",
+                "backlog": "catch_up_once",
+                "catch_up_lateness_ms": 60000
+            })),
+            &catalog()
+        )
+        .is_ok());
+        assert_eq!(
+            error_codes(
+                &compile_definition_value(
+                    &definition(json!({
+                        "every_ms": 1000,
+                        "backlog": "catch_up_once",
+                        "catch_up_lateness_ms": 60000
+                    })),
+                    &catalog()
+                )
+                .unwrap_err()
+            ),
+            vec!["schedule_policy_not_applicable"]
+        );
+        assert_eq!(
+            error_codes(
+                &compile_definition_value(
+                    &definition(json!({
+                        "cron": "0 0 8 * * *",
+                        "backlog": "catch_up_once",
+                        "catch_up_lateness_ms": 999_999_999_999u64
+                    })),
+                    &catalog()
+                )
+                .unwrap_err()
+            ),
+            vec!["invalid_duration"]
         );
     }
 

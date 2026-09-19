@@ -238,18 +238,46 @@ pub enum StateChangeMode {
     Level,
 }
 
+/// Calendar policy for cron schedules (K). The DST defaults are fixed for now:
+/// nonexistent spring-forward locals are skipped and repeated fall-back locals
+/// run once at the earlier occurrence. Backlog handling is explicit and
+/// distinct from scheduler lateness.
+#[derive(TS, Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum BacklogPolicy {
+    /// Missed occurrences while the process was down or blocked are dropped.
+    #[default]
+    Skip,
+    /// At most one coalesced occurrence runs within the bounded lateness.
+    CatchUpOnce,
+}
+
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct ScheduleSpec {
+    /// Six-field cron (`second minute hour day-of-month month day-of-week`).
+    /// The DOM/DOW-OR behavior is preserved; calendar resolution is our own
+    /// (croner only parses the grammar).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub cron: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub every_ms: Option<u64>,
+    /// IANA timezone name (or a fixed offset). Calendar schedules should store
+    /// an explicit IANA zone so DST behavior is stable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub timezone: Option<String>,
+    /// Missed-occurrence handling for cron schedules.
+    #[serde(default)]
+    pub backlog: BacklogPolicy,
+    /// Bounded lateness for the single coalesced catch-up. Required when
+    /// `backlog` is `catch_up_once` and rejected otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub catch_up_lateness_ms: Option<u64>,
 }
 
 /// Three-valued condition expression. `All`/`Any` require at least one child.
