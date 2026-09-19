@@ -1,8 +1,9 @@
 use crate::db::schema::{
-    AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
-    DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs,
-    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines,
-    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState, WidgetSettings,
+    AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions, CoreConfig,
+    DashboardLayouts, DashboardWidgets, DeviceColorCalibrations, DeviceDisplayOverrides,
+    DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups,
+    Integrations, Routines, SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState,
+    WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -24,7 +25,70 @@ impl MigratorTrait for Migrator {
             Box::new(M20260918000000SceneGroupStateOrder),
             Box::new(M20260919000000RoutineV2Semantics),
             Box::new(M20260920000000AutomationHelpers),
+            Box::new(M20260921000000AutomationTimerJobs),
         ]
+    }
+}
+
+/// P10 best-effort persistence for named timer jobs. Only named timers are
+/// stored; schedule occurrences re-arm from the current time and predicate
+/// deadlines re-evaluate from current state at startup.
+struct M20260921000000AutomationTimerJobs;
+
+impl MigrationName for M20260921000000AutomationTimerJobs {
+    fn name(&self) -> &str {
+        "m20260921000000_automation_timer_jobs"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260921000000AutomationTimerJobs {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AutomationTimerJobs::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AutomationTimerJobs::RoutineId)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationTimerJobs::TimerId)
+                            .text()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationTimerJobs::DefinitionRevision)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationTimerJobs::Generation)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AutomationTimerJobs::DueWallMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(AutomationTimerJobs::Capture).text().null())
+                    .primary_key(
+                        Index::create()
+                            .col(AutomationTimerJobs::RoutineId)
+                            .col(AutomationTimerJobs::TimerId),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AutomationTimerJobs::Table).to_owned())
+            .await
     }
 }
 

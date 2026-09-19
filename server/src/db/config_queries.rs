@@ -9,10 +9,10 @@ use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
-    AutomationValueState, AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts,
-    DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
-    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines, SceneDeviceStates,
-    SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
+    AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions, CoreConfig,
+    DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs, Devices,
+    Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines,
+    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::automation_definition::HelperId;
@@ -255,6 +255,20 @@ pub struct HelperValueExportRow {
     pub id: String,
     pub value: serde_json::Value,
     pub revision: i64,
+}
+
+/// One best-effort persisted named timer job (P10). Captured intent *tokens*
+/// are process-local revisions and are deliberately absent: the capture spec
+/// is re-frozen against the live intent tracker when the job is restored.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TimerJobRow {
+    pub routine_id: String,
+    pub timer_id: String,
+    pub definition_revision: i64,
+    pub generation: i64,
+    pub due_wall_ms: i64,
+    /// Serialized `TimerIntentCapture`, when the timer was scheduled with one.
+    pub capture: Option<String>,
 }
 
 /// Full config export structure.
@@ -1278,6 +1292,129 @@ pub async fn db_delete_helper_state(helper_id: &str) -> Result<bool> {
 }
 
 // ============================================================================
+// Best-effort durable named timer jobs (P10)
+// ============================================================================
+
+pub async fn db_get_timer_jobs() -> Result<Vec<TimerJobRow>> {
+    timer_jobs_on(get_db_connection()?).await
+}
+
+async fn timer_jobs_on<C: ConnectionTrait>(db: &C) -> Result<Vec<TimerJobRow>> {
+    all(
+        db,
+        Query::select()
+            .columns([
+                AutomationTimerJobs::RoutineId,
+                AutomationTimerJobs::TimerId,
+                AutomationTimerJobs::DefinitionRevision,
+                AutomationTimerJobs::Generation,
+                AutomationTimerJobs::DueWallMs,
+                AutomationTimerJobs::Capture,
+            ])
+            .from(AutomationTimerJobs::Table)
+            .order_by(AutomationTimerJobs::RoutineId, Order::Asc)
+            .order_by(AutomationTimerJobs::TimerId, Order::Asc)
+            .to_owned(),
+    )
+    .await?
+    .into_iter()
+    .map(timer_job_from_row)
+    .collect()
+}
+
+fn timer_job_from_row(row: QueryResult) -> Result<TimerJobRow> {
+    Ok(TimerJobRow {
+        routine_id: row.try_get("", "routine_id")?,
+        timer_id: row.try_get("", "timer_id")?,
+        definition_revision: row.try_get("", "definition_revision")?,
+        generation: row.try_get("", "generation")?,
+        due_wall_ms: row.try_get("", "due_wall_ms")?,
+        capture: row.try_get("", "capture")?,
+    })
+}
+
+pub async fn db_upsert_timer_job(job: &TimerJobRow) -> Result<()> {
+    upsert_timer_job_on(get_db_connection()?, job).await
+}
+
+async fn upsert_timer_job_on<C: ConnectionTrait>(db: &C, job: &TimerJobRow) -> Result<()> {
+    execute(
+        db,
+        Query::insert()
+            .into_table(AutomationTimerJobs::Table)
+            .columns([
+                AutomationTimerJobs::RoutineId,
+                AutomationTimerJobs::TimerId,
+                AutomationTimerJobs::DefinitionRevision,
+                AutomationTimerJobs::Generation,
+                AutomationTimerJobs::DueWallMs,
+                AutomationTimerJobs::Capture,
+            ])
+            .values_panic([
+                Expr::value(job.routine_id.clone()),
+                Expr::value(job.timer_id.clone()),
+                Expr::value(job.definition_revision),
+                Expr::value(job.generation),
+                Expr::value(job.due_wall_ms),
+                Expr::value(job.capture.clone()),
+            ])
+            .on_conflict(
+                OnConflict::columns([AutomationTimerJobs::RoutineId, AutomationTimerJobs::TimerId])
+                    .update_columns([
+                        AutomationTimerJobs::DefinitionRevision,
+                        AutomationTimerJobs::Generation,
+                        AutomationTimerJobs::DueWallMs,
+                        AutomationTimerJobs::Capture,
+                    ])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_timer_job(routine_id: &str, timer_id: &str) -> Result<bool> {
+    delete_timer_job_on(get_db_connection()?, routine_id, timer_id).await
+}
+
+async fn delete_timer_job_on<C: ConnectionTrait>(
+    db: &C,
+    routine_id: &str,
+    timer_id: &str,
+) -> Result<bool> {
+    let rows = execute(
+        db,
+        Query::delete()
+            .from_table(AutomationTimerJobs::Table)
+            .and_where(Expr::col(AutomationTimerJobs::RoutineId).eq(routine_id))
+            .and_where(Expr::col(AutomationTimerJobs::TimerId).eq(timer_id))
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(rows > 0)
+}
+
+/// Drop every persisted timer job. A config import replaces the runtime
+/// configuration, so previously acknowledged jobs must never resume (P10).
+pub async fn db_clear_timer_jobs() -> Result<()> {
+    clear_timer_jobs_on(get_db_connection()?).await
+}
+
+async fn clear_timer_jobs_on<C: ConnectionTrait>(db: &C) -> Result<()> {
+    execute(
+        db,
+        Query::delete()
+            .from_table(AutomationTimerJobs::Table)
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
+// ============================================================================
 // Floorplan
 // ============================================================================
 
@@ -2201,6 +2338,11 @@ pub async fn db_import_config(config: &ConfigExport) -> Result<()> {
     for widget in &config.dashboard_widgets {
         db_upsert_dashboard_widget(widget).await?;
     }
+
+    // P10: an import replaces the runtime configuration, so previously
+    // acknowledged named timers must never resume after a restart. Timer jobs
+    // are deliberately not part of the export format.
+    clear_timer_jobs_on(get_db_connection()?).await?;
 
     Ok(())
 }
@@ -3442,6 +3584,55 @@ mod consistency_tests {
         assert_eq!(after.core.default_transition_ms, Some(1000));
         assert_eq!(after.core.scene_transition_ms, Some(1000));
         assert!(after.widget_settings.iter().any(|row| row.key == "first"));
+    }
+
+    // P10: named timer jobs are upserted/deleted per owner+key and are never
+    // part of the config export; an import clears previously acknowledged
+    // jobs so they cannot resume.
+    #[tokio::test]
+    async fn timer_jobs_upsert_delete_and_import_clears() {
+        let db = database().await;
+        let job = TimerJobRow {
+            routine_id: "routine".into(),
+            timer_id: "off".into(),
+            definition_revision: 2,
+            generation: 41,
+            due_wall_ms: 5_000,
+            capture: Some(r#"{"targets":[],"frozen_members":[]}"#.into()),
+        };
+        upsert_timer_job_on(&db, &job).await.unwrap();
+
+        let rows = timer_jobs_on(&db).await.unwrap();
+        assert_eq!(rows, vec![job.clone()]);
+
+        let replaced = TimerJobRow {
+            generation: 42,
+            due_wall_ms: 9_000,
+            ..job.clone()
+        };
+        upsert_timer_job_on(&db, &replaced).await.unwrap();
+        assert_eq!(timer_jobs_on(&db).await.unwrap(), vec![replaced.clone()]);
+
+        let other = TimerJobRow {
+            timer_id: "morning".into(),
+            ..job.clone()
+        };
+        upsert_timer_job_on(&db, &other).await.unwrap();
+        assert_eq!(timer_jobs_on(&db).await.unwrap().len(), 2);
+
+        assert!(delete_timer_job_on(&db, "routine", "off").await.unwrap());
+        assert!(!delete_timer_job_on(&db, "routine", "off").await.unwrap());
+        assert_eq!(timer_jobs_on(&db).await.unwrap(), vec![other]);
+
+        let export = db_export_config_from_connection(&db).await.unwrap();
+        let json = serde_json::to_value(&export).unwrap();
+        assert!(
+            !json.as_object().unwrap().contains_key("timer_jobs"),
+            "timer jobs are runtime state, not exported configuration"
+        );
+
+        clear_timer_jobs_on(&db).await.unwrap();
+        assert!(timer_jobs_on(&db).await.unwrap().is_empty());
     }
 }
 

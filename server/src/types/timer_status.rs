@@ -24,8 +24,13 @@ pub enum TimerJobStatus {
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimerPersistence {
-    /// Session timer: restart cancels it.
+    /// Session timer: restart cancels it (a database was unavailable, so the
+    /// best-effort P10 write-through is not expected to restore it).
     Session,
+    /// Best-effort durable named timer: scheduled/replaced/cancelled through
+    /// the database and restored on restart when the deadline is still in the
+    /// future. Deliberately not an exactly-once guarantee.
+    Durable,
 }
 
 /// One live timer job as published to readers.

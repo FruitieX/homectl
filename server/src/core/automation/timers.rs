@@ -31,6 +31,19 @@ pub struct CapturedTimerIntents {
     pub tokens: TimerIntentTokens,
 }
 
+/// Persistable projection of one named timer job (P10). The capture spec is
+/// stored; its intent tokens are process-local revisions and are re-frozen
+/// against the live tracker when the job is restored.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PersistedTimerJob {
+    pub routine_id: RoutineId,
+    pub timer: TimerId,
+    pub definition_revision: i64,
+    pub generation: u64,
+    pub due_wall_ms: i64,
+    pub capture: Option<crate::types::automation_definition::TimerIntentCapture>,
+}
+
 /// Why a timer operation was rejected.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TimerOperationError {
@@ -38,7 +51,6 @@ pub enum TimerOperationError {
     DelayOutOfRange { delay_ms: u64, max_ms: u64 },
     TooManyTimers { max: usize },
 }
-
 impl TimerOperationError {
     pub fn code(&self) -> &'static str {
         match self {
@@ -483,10 +495,102 @@ impl TimerStore {
             .retain(|(owner, _), job| current.get(owner) == Some(&job.definition_revision));
     }
 
-    /// Read-only runtime projection for the published snapshot (P09).
+    /// Snapshot of one live named job for best-effort persistence (P10).
+    pub fn named_job_snapshot(
+        &self,
+        owner: &RoutineId,
+        timer: &TimerId,
+    ) -> Option<PersistedTimerJob> {
+        let job = self.jobs.get(&(owner.clone(), named_job(timer)))?;
+        Some(PersistedTimerJob {
+            routine_id: owner.clone(),
+            timer: timer.clone(),
+            definition_revision: job.definition_revision,
+            generation: job.generation,
+            due_wall_ms: job.due_wall_ms,
+            capture: job
+                .captured
+                .as_ref()
+                .map(|captured| captured.capture.clone()),
+        })
+    }
+
+    /// Snapshots of every live named job (P10), used to clean up stored rows
+    /// for jobs that a definition edit drops.
+    pub fn named_job_snapshots(&self) -> Vec<PersistedTimerJob> {
+        self.jobs
+            .keys()
+            .filter_map(|(owner, job)| match job {
+                TimerWakeupJob::NamedTimer { timer } => self.named_job_snapshot(owner, timer),
+                TimerWakeupJob::PredicateDeadline { .. }
+                | TimerWakeupJob::ScheduleOccurrence { .. } => None,
+            })
+            .collect()
+    }
+
+    /// Restore one persisted named job at startup (P10). The monotonic
+    /// deadline is reconstructed from the stored UTC deadline and `now`, the
+    /// persisted generation is reused so the stored row stays accurate, and
+    /// the generic generation counter is advanced past it so a future
+    /// generation can never collide with a restored one. The caller has
+    /// already dropped past-due and stale-revision rows.
+    pub fn restore_named_job(
+        &mut self,
+        job: &PersistedTimerJob,
+        captured: Option<CapturedTimerIntents>,
+        now_monotonic_ms: u64,
+        now_wall_ms: i64,
+    ) -> Result<(), TimerOperationError> {
+        let delay_ms = job.due_wall_ms.saturating_sub(now_wall_ms).max(0) as u64;
+        if delay_ms > MAX_TIMER_DELAY_MS {
+            return Err(TimerOperationError::DelayOutOfRange {
+                delay_ms,
+                max_ms: MAX_TIMER_DELAY_MS,
+            });
+        }
+        if self
+            .jobs
+            .contains_key(&(job.routine_id.clone(), named_job(&job.timer)))
+        {
+            return Err(TimerOperationError::AlreadyPending {
+                timer: job.timer.clone(),
+                generation: self
+                    .pending_generation(&job.routine_id, &job.timer)
+                    .unwrap_or(0),
+            });
+        }
+        let owner_count = self
+            .jobs
+            .keys()
+            .filter(|(job_owner, _)| job_owner == &job.routine_id)
+            .count();
+        if owner_count >= MAX_TIMERS_PER_OWNER {
+            return Err(TimerOperationError::TooManyTimers {
+                max: MAX_TIMERS_PER_OWNER,
+            });
+        }
+
+        self.next_generation = self.next_generation.max(job.generation);
+        self.jobs.insert(
+            (job.routine_id.clone(), named_job(&job.timer)),
+            TimerJob {
+                definition_revision: job.definition_revision,
+                generation: job.generation,
+                due_monotonic_ms: now_monotonic_ms.saturating_add(delay_ms),
+                due_wall_ms: job.due_wall_ms,
+                captured,
+            },
+        );
+        Ok(())
+    }
+
+    /// Read-only runtime projection for the published snapshot (P09/P10).
+    /// `durable` reflects whether write-through persistence is currently
+    /// available; named timers are always best-effort durable semantics.
     pub fn runtime_statuses(
         &self,
         now_monotonic_ms: u64,
+        durable: bool,
     ) -> Vec<crate::types::timer_status::TimerRuntimeStatus> {
         use crate::types::timer_status::{TimerJobStatus, TimerPersistence, TimerRuntimeStatus};
 
@@ -501,7 +605,11 @@ impl TimerStore {
                     status: TimerJobStatus::Pending,
                     due_wall_ms: job.due_wall_ms,
                     remaining_ms: job.due_monotonic_ms.saturating_sub(now_monotonic_ms),
-                    persistence: TimerPersistence::Session,
+                    persistence: if durable {
+                        TimerPersistence::Durable
+                    } else {
+                        TimerPersistence::Session
+                    },
                 }),
                 TimerWakeupJob::PredicateDeadline { .. } => None,
                 TimerWakeupJob::ScheduleOccurrence { .. } => None,
@@ -737,7 +845,7 @@ mod tests {
         schedule(&mut store, "routine", "off", 1_000);
 
         assert_eq!(
-            store.runtime_statuses(0).len(),
+            store.runtime_statuses(0, true).len(),
             1,
             "only named timers are user-visible"
         );
@@ -768,7 +876,7 @@ mod tests {
             "a live occurrence is kept without generation churn"
         );
         assert!(
-            store.runtime_statuses(0).is_empty(),
+            store.runtime_statuses(0, true).is_empty(),
             "schedule occurrences are not user-visible timers"
         );
 
@@ -845,6 +953,99 @@ mod tests {
                 .consume_schedule(&owner("routine"), 1, &trigger, generation)
                 .is_none(),
             "an edited revision never consumes the old generation"
+        );
+    }
+
+    // P10: restoring a persisted job reconstructs the monotonic deadline from
+    // the stored UTC deadline, keeps the stored generation, and advances the
+    // generation counter so later generations never collide.
+    #[test]
+    fn restored_jobs_keep_their_generation_and_reconstruct_the_deadline() {
+        let mut store = TimerStore::default();
+        let job = PersistedTimerJob {
+            routine_id: owner("routine"),
+            timer: timer("off"),
+            definition_revision: 1,
+            generation: 9,
+            due_wall_ms: 40_000,
+            capture: None,
+        };
+        store.restore_named_job(&job, None, 1_000, 10_000).unwrap();
+
+        let wakeup = store.wakeups().pop().expect("restored wakeup");
+        assert_eq!(wakeup.generation, 9, "the stored generation is reused");
+        assert_eq!(wakeup.due_wall_ms, 40_000);
+        assert_eq!(
+            wakeup.due_monotonic_ms, 31_000,
+            "the monotonic deadline is now + remaining wall time"
+        );
+        assert_eq!(
+            store.runtime_statuses(1_000, true)[0].persistence,
+            crate::types::timer_status::TimerPersistence::Durable
+        );
+
+        // A later scheduling operation must not reuse generation 9.
+        let next = schedule(&mut store, "other", "off", 500);
+        assert!(
+            next > 9,
+            "the generation counter advanced past restored ones"
+        );
+    }
+
+    // P10: a past-due row is not restored, and the capture spec survives the
+    // round trip for the caller to re-freeze.
+    #[test]
+    fn restore_rejects_past_due_and_oversized_jobs() {
+        let mut store = TimerStore::default();
+        let past_due = PersistedTimerJob {
+            routine_id: owner("routine"),
+            timer: timer("off"),
+            definition_revision: 1,
+            generation: 3,
+            due_wall_ms: 9_999,
+            capture: None,
+        };
+        assert!(
+            store
+                .restore_named_job(&past_due, None, 1_000, 10_000)
+                .is_ok(),
+            "the caller drops past-due rows before restore; a due-now row is valid"
+        );
+
+        let oversized = PersistedTimerJob {
+            routine_id: owner("routine"),
+            timer: timer("far"),
+            definition_revision: 1,
+            generation: 4,
+            due_wall_ms: i64::MAX,
+            capture: None,
+        };
+        assert!(matches!(
+            store.restore_named_job(&oversized, None, 0, 0),
+            Err(TimerOperationError::DelayOutOfRange { .. })
+        ));
+    }
+
+    #[test]
+    fn named_job_snapshots_include_only_named_timers() {
+        let mut store = TimerStore::default();
+        let trigger = NodeId("armed".to_string());
+        store
+            .ensure_predicate(&owner("routine"), 1, &trigger, 30_000, 0, 1_000)
+            .unwrap();
+        store
+            .ensure_schedule(&owner("routine"), 1, &trigger, 5_000, 10_000)
+            .unwrap();
+        schedule(&mut store, "routine", "off", 1_000);
+
+        let snapshots = store.named_job_snapshots();
+        assert_eq!(snapshots.len(), 1);
+        assert_eq!(snapshots[0].timer, timer("off"));
+        assert_eq!(
+            snapshots[0].generation,
+            store
+                .pending_generation(&owner("routine"), &timer("off"))
+                .unwrap()
         );
     }
 }

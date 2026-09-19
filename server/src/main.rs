@@ -12,7 +12,7 @@ use homectl_server::core::{
     logs::init_logging,
     routines::Routines,
     scenes::Scenes,
-    snapshot::{new_snapshot_handle, RuntimeSnapshot},
+    snapshot::{new_snapshot_handle, RuntimeSnapshot, SnapshotChanges},
     state::{spawn_state_actor, AppState, StateHandle},
     ui::Ui,
 };
@@ -236,6 +236,7 @@ async fn run_event_loop(
         pending_predicate_fires: Vec::new(),
         pending_schedule_fires: Vec::new(),
         clock: Arc::new(homectl_server::core::clock::SystemClock::new()),
+        pending_deferred_work: Vec::new(),
         event_tx: event_tx.clone(),
         ui,
         ws: Default::default(),
@@ -250,6 +251,20 @@ async fn run_event_loop(
     // must not fire routines (E06).
     state.sync_script_owners();
     state.seed_startup_state().await;
+
+    // P10: restore best-effort durable named timers so a restart does not lose
+    // "turn the hallway light off in 10 minutes". Schedule occurrences re-arm
+    // from now and predicate deadlines re-evaluate from state, both with
+    // visible logs; only named timers are persisted.
+    restore_startup_timers(&mut state).await;
+    state.arm_schedules_at_startup();
+    state.log_predicate_recovery();
+    // The restored/armed jobs must be visible before the actor processes its
+    // first command (the actor republishes timers only on lifecycle changes).
+    state.publish_snapshot(SnapshotChanges {
+        timers: true,
+        ..SnapshotChanges::none()
+    });
 
     let ws_handle = state.ws.clone();
 
@@ -294,6 +309,54 @@ async fn run_event_loop(
             .expect("Expected sender end of channel to never be dropped");
 
         state_handle.send_event(event);
+    }
+}
+
+/// P10 startup recovery for best-effort durable named timers.
+///
+/// Named timers are loaded and restored (future due only; past-due rows are
+/// logged, dropped, and deleted). Schedule occurrences and predicate deadlines
+/// are intentionally not persisted: schedules re-arm from `now` through
+/// `apply_runtime_routines`, and sustained predicates re-evaluate from current
+/// state on the next frame. A database that is unavailable logs one warning
+/// and leaves session-only behavior; persistence then happens per job when the
+/// deferred lane can write.
+async fn restore_startup_timers(state: &mut AppState) {
+    if !is_db_connected() {
+        warn!("Database unavailable; named timers are session-only for this run");
+        return;
+    }
+
+    let rows = match config_queries::db_get_timer_jobs().await {
+        Ok(rows) => rows,
+        Err(error) => {
+            warn!("Failed to load persisted timer jobs; timers are session-only: {error}");
+            return;
+        }
+    };
+
+    state.restore_timer_jobs(&rows);
+
+    // Clean up rows that were dropped as past-due or stale so the next start
+    // does not log them again.
+    for row in rows {
+        let dropped = match state.timers.named_job_snapshot(
+            &homectl_server::types::rule::RoutineId(row.routine_id.clone()),
+            &homectl_server::types::automation_definition::TimerId(row.timer_id.clone()),
+        ) {
+            Some(job) => job.generation != u64::try_from(row.generation).unwrap_or(0),
+            None => true,
+        };
+        if dropped {
+            if let Err(error) =
+                config_queries::db_delete_timer_job(&row.routine_id, &row.timer_id).await
+            {
+                warn!(
+                    "Failed to delete dropped timer job {}/{}: {error}",
+                    row.routine_id, row.timer_id
+                );
+            }
+        }
     }
 }
 

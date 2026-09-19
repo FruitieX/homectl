@@ -133,6 +133,9 @@ pub struct AppState {
     pub pending_schedule_fires: Vec<crate::core::automation::ScheduleOccurrenceFire>,
     /// Injected wall/monotonic clock used by scheduling (P09).
     pub clock: Arc<dyn crate::core::clock::Clock>,
+    /// Deferred work produced by admin mutations that do not run through
+    /// `handle_event`; the actor drains this after every command (P10).
+    pub pending_deferred_work: Vec<super::event::DeferredEventWork>,
     pub event_tx: TxEventChannel,
     pub ws: WebSockets,
     pub ui: Ui,
@@ -818,7 +821,23 @@ impl AppState {
         self.rules
             .load_config_rows(&self.runtime_config.routines, &catalog);
         self.sync_script_owners();
+        // P10: snapshot named jobs before retention so rows for jobs that an
+        // edit drops are deleted from the best-effort store.
+        let persisted_before = self.timers.named_job_snapshots();
         self.timers.retain_current(&self.v2_definition_revisions());
+        for job in persisted_before {
+            if self
+                .timers
+                .named_job_snapshot(&job.routine_id, &job.timer)
+                .is_none()
+            {
+                self.pending_deferred_work
+                    .push(super::event::DeferredEventWork::DeleteTimerJob {
+                        routine_id: job.routine_id,
+                        timer: job.timer,
+                    });
+            }
+        }
         self.arm_schedules();
         // E06: reloaded definitions seed transition memory from current state
         // instead of treating already-true predicates as fresh edges.
@@ -845,9 +864,61 @@ impl AppState {
     /// Arm the next occurrence of every live schedule trigger (K).
     /// Idempotent: a live occurrence for the current revision is kept.
     pub fn arm_schedules(&mut self) {
+        let armed = self.arm_schedules_inner();
+        if armed > 0 {
+            self.schedule_ws_broadcast(SnapshotChanges {
+                timers: true,
+                ..SnapshotChanges::none()
+            });
+        }
+    }
+
+    /// Startup variant that also logs how schedules recovered (P10). Schedule
+    /// occurrences are never persisted; they re-arm from `now`, so missed
+    /// occurrences are skipped rather than replayed.
+    pub fn arm_schedules_at_startup(&mut self) -> usize {
+        let armed = self.arm_schedules_inner();
+        if armed > 0 {
+            info!("Re-armed {armed} schedule trigger(s) from the current time");
+        }
+        armed
+    }
+
+    /// Startup visibility for sustained predicates (P10): they are never
+    /// persisted, so each episode starts from current state on the next frame.
+    /// This logs what the runtime expects to re-evaluate instead of silently
+    /// forgetting the previous run's episodes.
+    pub fn log_predicate_recovery(&self) {
+        let count: usize = self
+            .rules
+            .compiled_v2_routines()
+            .values()
+            .map(|definition| {
+                definition
+                    .compiled
+                    .normalized
+                    .triggers
+                    .iter()
+                    .filter(|trigger| {
+                        matches!(
+                            trigger,
+                            crate::types::automation_definition::TriggerSpec::PredicateFor { .. }
+                        )
+                    })
+                    .count()
+            })
+            .sum();
+        if count > 0 {
+            info!(
+                "Sustained predicates are not persisted; {count} trigger(s) will re-evaluate from current state"
+            );
+        }
+    }
+
+    fn arm_schedules_inner(&mut self) -> usize {
         let now_monotonic_ms = self.clock.monotonic_ms();
         let now_wall_ms = self.clock.wall_ms();
-        let mut armed = false;
+        let mut armed = 0usize;
         for (routine_id, definition) in self.rules.compiled_v2_routines() {
             for trigger in &definition.compiled.normalized.triggers {
                 let crate::types::automation_definition::TriggerSpec::Schedule { id, schedule } =
@@ -871,7 +942,7 @@ impl AppState {
                             due_monotonic_ms,
                             due_wall_ms,
                         ) {
-                            Ok(_) => armed = true,
+                            Ok(_) => armed += 1,
                             Err(error) => warn!(
                                 "Schedule arming for routine {routine_id} failed: {}",
                                 error.message()
@@ -891,12 +962,7 @@ impl AppState {
                 }
             }
         }
-        if armed {
-            self.schedule_ws_broadcast(SnapshotChanges {
-                timers: true,
-                ..SnapshotChanges::none()
-            });
-        }
+        armed
     }
 
     /// Compiled schedule spec for a live trigger, used to apply backlog policy
@@ -935,27 +1001,164 @@ impl AppState {
         schedule_within_lateness_at(schedule, due_wall_ms, self.clock.wall_ms())
     }
 
+    /// Restore best-effort persisted named timer jobs at startup (P10).
+    ///
+    /// Only jobs whose definition revision is still current and whose UTC
+    /// deadline is still in the future are restored. Past-due jobs are logged
+    /// and dropped (the write-through delete follows), stale revisions are
+    /// dropped silently because a config edit already invalidated them, and a
+    /// database that is unavailable logs one warning and leaves session
+    /// behavior intact. Captured intent specs are re-frozen against the live
+    /// tracker, since stored tokens are process-local revisions.
+    pub fn restore_timer_jobs(&mut self, rows: &[config_queries::TimerJobRow]) {
+        if rows.is_empty() {
+            return;
+        }
+        let now_monotonic_ms = self.clock.monotonic_ms();
+        let now_wall_ms = self.clock.wall_ms();
+        let revisions = self.v2_definition_revisions();
+        let mut restored = 0usize;
+        for row in rows {
+            let routine_id = crate::types::rule::RoutineId(row.routine_id.clone());
+            let timer = crate::types::automation_definition::TimerId(row.timer_id.clone());
+            let Some(current_revision) = revisions.get(&routine_id) else {
+                debug!(
+                    "Dropping persisted timer {}/{}: routine is not a compiled v2 definition",
+                    row.routine_id, row.timer_id
+                );
+                continue;
+            };
+            if *current_revision != row.definition_revision {
+                debug!(
+                    "Dropping persisted timer {}/{}: stored revision {} is not current ({})",
+                    row.routine_id, row.timer_id, row.definition_revision, current_revision
+                );
+                continue;
+            }
+            if row.due_wall_ms <= now_wall_ms {
+                warn!(
+                    "Dropping past-due persisted timer {}/{} (due {}ms, now {}ms)",
+                    row.routine_id, row.timer_id, row.due_wall_ms, now_wall_ms
+                );
+                continue;
+            }
+            let capture = match row.capture.as_deref().map(serde_json::from_str) {
+                Some(Ok(capture)) => Some(self.freeze_timer_capture(capture)),
+                Some(Err(error)) => {
+                    warn!(
+                        "Dropping persisted timer {}/{}: capture could not be parsed: {error}",
+                        row.routine_id, row.timer_id
+                    );
+                    continue;
+                }
+                None => None,
+            };
+            let job = crate::core::automation::PersistedTimerJob {
+                routine_id: routine_id.clone(),
+                timer: timer.clone(),
+                definition_revision: row.definition_revision,
+                generation: u64::try_from(row.generation).unwrap_or(0),
+                due_wall_ms: row.due_wall_ms,
+                capture: capture.as_ref().map(|captured| captured.capture.clone()),
+            };
+            match self
+                .timers
+                .restore_named_job(&job, capture, now_monotonic_ms, now_wall_ms)
+            {
+                Ok(()) => {
+                    restored += 1;
+                    info!(
+                        "Restored persisted timer {}/{} due in {}ms",
+                        row.routine_id,
+                        row.timer_id,
+                        row.due_wall_ms.saturating_sub(now_wall_ms)
+                    );
+                }
+                Err(error) => warn!(
+                    "Dropping persisted timer {}/{}: {}",
+                    row.routine_id,
+                    row.timer_id,
+                    error.message()
+                ),
+            }
+        }
+        if restored > 0 {
+            self.schedule_ws_broadcast(SnapshotChanges {
+                timers: true,
+                ..SnapshotChanges::none()
+            });
+        }
+    }
+
+    /// Re-freeze a persisted capture spec against the live intent tracker
+    /// (P10). Stored intent tokens are process-local revisions and must not be
+    /// trusted after a restart; the frozen group membership is already part of
+    /// the stored spec.
+    fn freeze_timer_capture(
+        &self,
+        capture: crate::types::automation_definition::TimerIntentCapture,
+    ) -> crate::core::automation::CapturedTimerIntents {
+        let tokens = capture
+            .targets
+            .iter()
+            .map(|target| {
+                let intent_target = match target {
+                    crate::types::automation_definition::TimerIntentTarget::Device { device } => {
+                        crate::core::automation::IntentTarget::Device(device.clone())
+                    }
+                    crate::types::automation_definition::TimerIntentTarget::Group { group } => {
+                        crate::core::automation::IntentTarget::Group(group.clone())
+                    }
+                };
+                (target.clone(), self.intents.revision(&intent_target))
+            })
+            .collect();
+        crate::core::automation::CapturedTimerIntents { capture, tokens }
+    }
+
     /// Pending named-timer wakeups for the scheduler driver (P09).
     pub fn timer_wakeups(&self) -> Vec<crate::core::automation::TimerWakeup> {
         self.timers.wakeups()
     }
 
     /// Read-only projection of live timer jobs for the published snapshot.
+    /// Persistence reports durable semantics while the database is available
+    /// (P10); a missing database degrades to session behavior.
     pub fn timer_statuses(&self) -> Vec<crate::types::timer_status::TimerRuntimeStatus> {
-        self.timers.runtime_statuses(self.clock.monotonic_ms())
+        self.timers
+            .runtime_statuses(self.clock.monotonic_ms(), crate::db::is_db_connected())
     }
 
     /// Actor-routed administrative timer cancellation with generation
     /// checking. Ordinary timer actions remain owner-scoped; this exists for
-    /// explicitly addressed inspection/control (P09).
+    /// explicitly addressed inspection/control (P09). An actually removed job
+    /// also deletes its persisted row (P10).
     pub fn cancel_timer(
         &mut self,
         routine_id: &crate::types::rule::RoutineId,
         timer: &crate::types::automation_definition::TimerId,
         expected_generation: Option<u64>,
     ) -> crate::core::automation::TimerCancellation {
-        self.timers
-            .cancel_checked(routine_id, timer, expected_generation)
+        let cancellation = self
+            .timers
+            .cancel_checked(routine_id, timer, expected_generation);
+        if matches!(
+            cancellation,
+            crate::core::automation::TimerCancellation::Cancelled { .. }
+        ) {
+            self.pending_deferred_work
+                .push(super::event::DeferredEventWork::DeleteTimerJob {
+                    routine_id: routine_id.clone(),
+                    timer: timer.clone(),
+                });
+        }
+        cancellation
+    }
+
+    /// Drain deferred work queued by admin mutations for the actor's deferred
+    /// lane (P10). `handle_event` outcomes carry their own work.
+    pub fn take_pending_deferred_work(&mut self) -> Vec<super::event::DeferredEventWork> {
+        std::mem::take(&mut self.pending_deferred_work)
     }
 
     /// Reconcile script owner generations with the compiled v2 definitions and

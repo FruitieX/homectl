@@ -227,6 +227,11 @@ async fn run_actor(
 ) -> Result<()> {
     use crate::core::event::handle_event;
 
+    // Publish startup timer wakeups (restored durable jobs and armed
+    // schedules) before the first command so a due-at-startup deadline cannot
+    // wait for unrelated traffic (P10).
+    scheduler.update(app_state.timer_wakeups());
+
     while let Some((queued_at, cmd)) = rx.recv().await {
         metrics.on_dequeue();
         let kind_idx = metrics::kind_index_for_command(&cmd);
@@ -287,6 +292,12 @@ async fn run_actor(
                     }
                     Err(err) => {
                         error!("Error while handling event (actor): kind={kind} err={err:#?}");
+                    }
+                }
+
+                for work in app_state.take_pending_deferred_work() {
+                    if deferred_work_tx.send(work).is_err() {
+                        warn!("Deferred event worker channel closed");
                     }
                 }
 
@@ -372,6 +383,12 @@ async fn run_actor(
                         "Slow mutation: elapsed={:?} mutate={:?} publish_snapshot={:?}",
                         elapsed, mutate_elapsed, publish_elapsed
                     );
+                }
+
+                for work in app_state.take_pending_deferred_work() {
+                    if deferred_work_tx.send(work).is_err() {
+                        warn!("Deferred event worker channel closed");
+                    }
                 }
             }
         }

@@ -128,6 +128,20 @@ pub enum AutomationValueState {
     Revision,
 }
 
+/// P10 best-effort durable named timer jobs. Only named timers are persisted;
+/// schedule occurrences and sustained-predicate deadlines recover from
+/// current time/state instead.
+#[derive(Clone, Copy, Iden)]
+pub enum AutomationTimerJobs {
+    Table,
+    RoutineId,
+    TimerId,
+    DefinitionRevision,
+    Generation,
+    DueWallMs,
+    Capture,
+}
+
 #[derive(Clone, Copy, Iden)]
 pub enum Floorplans {
     Table,

@@ -173,6 +173,59 @@ pub enum DeferredEventWork {
         value: serde_json::Value,
         revision: i64,
     },
+    /// Best-effort write-through of one named timer job (P10).
+    PersistTimerJob {
+        job: Box<crate::core::automation::PersistedTimerJob>,
+    },
+    /// Remove a consumed or explicitly cancelled named timer job (P10).
+    DeleteTimerJob {
+        routine_id: crate::types::rule::RoutineId,
+        timer: crate::types::automation_definition::TimerId,
+    },
+}
+
+impl std::fmt::Debug for DeferredEventWork {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::PublishIntegrationState { device, .. } => f
+                .debug_struct("PublishIntegrationState")
+                .field("device", device)
+                .finish(),
+            Self::RunIntegrationAction { descriptor, .. } => f
+                .debug_struct("RunIntegrationAction")
+                .field("integration_id", &descriptor.integration_id)
+                .finish(),
+            Self::PersistSceneOverride { scene_id, .. } => f
+                .debug_struct("PersistSceneOverride")
+                .field("scene_id", scene_id)
+                .finish(),
+            Self::UpsertConfigScene { scene_id, .. } => f
+                .debug_struct("UpsertConfigScene")
+                .field("scene_id", scene_id)
+                .finish(),
+            Self::DeleteConfigScene { scene_id } => f
+                .debug_struct("DeleteConfigScene")
+                .field("scene_id", scene_id)
+                .finish(),
+            Self::StoreUiState { key, .. } => {
+                f.debug_struct("StoreUiState").field("key", key).finish()
+            }
+            Self::PersistHelperValue { helper, .. } => f
+                .debug_struct("PersistHelperValue")
+                .field("helper", helper)
+                .finish(),
+            Self::PersistTimerJob { job } => f
+                .debug_struct("PersistTimerJob")
+                .field("routine_id", &job.routine_id)
+                .field("timer", &job.timer)
+                .finish(),
+            Self::DeleteTimerJob { routine_id, timer } => f
+                .debug_struct("DeleteTimerJob")
+                .field("routine_id", routine_id)
+                .field("timer", timer)
+                .finish(),
+        }
+    }
 }
 
 impl DeferredEventWork {
@@ -237,8 +290,55 @@ impl DeferredEventWork {
 
                 Ok(())
             }
+            DeferredEventWork::PersistTimerJob { job } => {
+                let row = match timer_job_row(&job) {
+                    Ok(row) => row,
+                    Err(error) => {
+                        warn!("Failed to serialize timer job for persistence: {error}");
+                        return Ok(());
+                    }
+                };
+                if let Err(error) = config_queries::db_upsert_timer_job(&row).await {
+                    warn!(
+                        "DB not available when storing timer {}/{}: {error}",
+                        job.routine_id, job.timer
+                    );
+                }
+
+                Ok(())
+            }
+            DeferredEventWork::DeleteTimerJob { routine_id, timer } => {
+                if let Err(error) =
+                    config_queries::db_delete_timer_job(&routine_id.0, &timer.0).await
+                {
+                    warn!("DB not available when deleting timer {routine_id}/{timer}: {error}");
+                }
+
+                Ok(())
+            }
         }
     }
+}
+
+/// Convert one named timer job into its stored row (P10). Captured intent
+/// tokens stay process-local; only the capture spec is stored.
+fn timer_job_row(
+    job: &crate::core::automation::PersistedTimerJob,
+) -> Result<config_queries::TimerJobRow> {
+    Ok(config_queries::TimerJobRow {
+        routine_id: job.routine_id.0.clone(),
+        timer_id: job.timer.0.clone(),
+        definition_revision: job.definition_revision,
+        generation: i64::try_from(job.generation).map_err(|_| {
+            color_eyre::eyre::eyre!("timer generation {} cannot be stored", job.generation)
+        })?,
+        due_wall_ms: job.due_wall_ms,
+        capture: job
+            .capture
+            .as_ref()
+            .map(serde_json::to_string)
+            .transpose()?,
+    })
 }
 
 /// Origin to record on a rejected causally-derived frame.
@@ -818,10 +918,39 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                         now_monotonic_ms,
                         now_wall_ms,
                     ) {
-                        Ok(_) => outcome.mark_snapshot_changes(SnapshotChanges {
-                            timers: true,
-                            ..SnapshotChanges::none()
-                        }),
+                        Ok(_) => {
+                            outcome.mark_snapshot_changes(SnapshotChanges {
+                                timers: true,
+                                ..SnapshotChanges::none()
+                            });
+                            // P10: write-through best-effort. Scheduling and
+                            // replacing upsert the job row; cancelling deletes
+                            // it so an acknowledged cancel survives a restart.
+                            match operation {
+                                crate::types::automation_definition::TimerOperation::Cancel {
+                                    timer,
+                                } => {
+                                    outcome.push(DeferredEventWork::DeleteTimerJob {
+                                        routine_id: routine_id.clone(),
+                                        timer: timer.clone(),
+                                    });
+                                }
+                                operation => {
+                                    let timer = match operation {
+                                        crate::types::automation_definition::TimerOperation::Schedule { timer, .. }
+                                        | crate::types::automation_definition::TimerOperation::Replace { timer, .. } => timer,
+                                        crate::types::automation_definition::TimerOperation::Cancel { .. } => unreachable!(),
+                                    };
+                                    if let Some(job) =
+                                        state.timers.named_job_snapshot(routine_id, timer)
+                                    {
+                                        outcome.push(DeferredEventWork::PersistTimerJob {
+                                            job: Box::new(job),
+                                        });
+                                    }
+                                }
+                            }
+                        }
                         Err(error) => {
                             warn!(
                                 "Timer operation for routine {routine_id} failed: {}",
@@ -848,6 +977,12 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 {
                     Some(fire) => {
                         state.pending_timer_fires.push(fire);
+                        // P10: a consumed generation is gone; delete the row
+                        // so a restart cannot replay an already-fired timer.
+                        outcome.push(DeferredEventWork::DeleteTimerJob {
+                            routine_id: routine_id.clone(),
+                            timer: timer.clone(),
+                        });
                         outcome.mark_snapshot_changes(SnapshotChanges {
                             timers: true,
                             ..SnapshotChanges::none()
@@ -2006,6 +2141,7 @@ pub(crate) mod tests {
             pending_predicate_fires: Vec::new(),
             pending_schedule_fires: Vec::new(),
             clock: Arc::new(crate::core::clock::ManualClock::new(1_000_000)),
+            pending_deferred_work: Vec::new(),
             event_tx,
             ws: WebSockets::default(),
             ui: Ui::new(),
@@ -3796,6 +3932,282 @@ pub(crate) mod tests {
             ..SnapshotChanges::none()
         });
         assert!(state.snapshot.load().timers.is_empty());
+    }
+
+    // P10: named timer scheduling, replacement, and cancellation each queue
+    // exactly one write-through/delete for the persisted store, and an
+    // acknowledged cancel removes the live job.
+    #[tokio::test]
+    async fn p10_named_timer_write_through_queues_persist_and_delete() {
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, mut event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", true, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.runtime_config.routines = vec![timer_routine_row("timer_routine", "off", false, 1)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        let operation = |operation| Event::RoutineTimerOperation {
+            routine_id: owner.clone(),
+            definition_revision: 1,
+            operation,
+            capture: None,
+            causation: EventCausation::default(),
+        };
+
+        let outcome = handle_event(
+            &mut state,
+            &operation(TimerOperation::Schedule {
+                timer: timer.clone(),
+                delay_ms: 5_000,
+            }),
+        )
+        .await
+        .unwrap();
+        match outcome.into_deferred_work().as_slice() {
+            [DeferredEventWork::PersistTimerJob { job }] => {
+                assert_eq!(job.routine_id, owner);
+                assert_eq!(job.timer, timer);
+                assert_eq!(job.due_wall_ms, 1_005_000);
+            }
+            other => panic!("expected one persist job, got {other:?}"),
+        }
+
+        let outcome = handle_event(
+            &mut state,
+            &operation(TimerOperation::Replace {
+                timer: timer.clone(),
+                delay_ms: 10_000,
+            }),
+        )
+        .await
+        .unwrap();
+        match outcome.into_deferred_work().as_slice() {
+            [DeferredEventWork::PersistTimerJob { job }] => {
+                assert_eq!(job.due_wall_ms, 1_010_000, "replace upserts the new row")
+            }
+            other => panic!("expected one persist job, got {other:?}"),
+        }
+
+        // A directly handled timer operation applies to the authoritative
+        // store without re-queueing an event.
+        assert!(event_rx.try_recv().is_err());
+
+        let wakeup = state.timers.wakeups().pop().expect("replacement wakeup");
+        let outcome = handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: wakeup.definition_revision,
+                job: wakeup.job.clone(),
+                generation: wakeup.generation,
+                due_wall_ms: wakeup.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        match outcome.into_deferred_work().as_slice() {
+            [DeferredEventWork::DeleteTimerJob {
+                routine_id,
+                timer: deleted,
+            }] => {
+                assert_eq!(routine_id, &owner);
+                assert_eq!(deleted, &timer);
+            }
+            other => panic!("expected one delete job, got {other:?}"),
+        }
+        assert!(
+            !state.timers.is_pending(&owner, &timer),
+            "a consumed generation is gone"
+        );
+    }
+
+    // P10: administrative cancellation removes the live job and queues its
+    // stored row for deletion, so an acknowledged cancel survives a restart.
+    #[tokio::test]
+    async fn p10_admin_cancel_queues_the_row_delete() {
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        state
+            .timers
+            .apply(
+                &owner,
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 1_000,
+                },
+                None,
+                0,
+                1_000_000,
+            )
+            .unwrap();
+
+        state.cancel_timer(&owner, &timer, None);
+        let queued = state.take_pending_deferred_work();
+        match queued.as_slice() {
+            [DeferredEventWork::DeleteTimerJob {
+                routine_id,
+                timer: deleted,
+            }] => {
+                assert_eq!(routine_id, &owner);
+                assert_eq!(deleted, &timer);
+            }
+            other => panic!("expected one delete job, got {other:?}"),
+        }
+        assert!(
+            state.take_pending_deferred_work().is_empty(),
+            "drained once"
+        );
+
+        state
+            .timers
+            .apply(
+                &owner,
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 1_000,
+                },
+                None,
+                0,
+                1_000_000,
+            )
+            .unwrap();
+        state.cancel_timer(&owner, &timer, Some(99));
+        assert!(
+            state.take_pending_deferred_work().is_empty(),
+            "a mismatched cancellation deletes nothing"
+        );
+    }
+
+    // P10: editing a definition drops its live named jobs and queues deletes
+    // for their stored rows.
+    #[tokio::test]
+    async fn p10_definition_edit_deletes_dropped_job_rows() {
+        use crate::types::automation_definition::{TimerId, TimerOperation};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", true, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.runtime_config.routines = vec![timer_routine_row("timer_routine", "off", false, 1)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("timer_routine".to_string());
+        let timer = TimerId("off".to_string());
+        handle_event(
+            &mut state,
+            &Event::RoutineTimerOperation {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                operation: TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 5_000,
+                },
+                capture: None,
+                causation: EventCausation::default(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(state.timers.is_pending(&owner, &timer));
+        state.take_pending_deferred_work();
+
+        state.runtime_config.routines = vec![timer_routine_row("timer_routine", "off", false, 2)];
+        state.apply_runtime_routines();
+        let queued = state.take_pending_deferred_work();
+        match queued.as_slice() {
+            [DeferredEventWork::DeleteTimerJob {
+                routine_id,
+                timer: deleted,
+            }] => {
+                assert_eq!(routine_id, &owner);
+                assert_eq!(deleted, &timer);
+            }
+            other => panic!("expected one delete job, got {other:?}"),
+        }
+        assert!(!state.timers.is_pending(&owner, &timer));
+    }
+
+    // P10: startup restoration keeps future jobs, drops past-due and
+    // stale-revision rows with a log, and re-freezes the capture spec against
+    // the live intent tracker.
+    #[tokio::test]
+    async fn p10_startup_restore_keeps_future_jobs_and_drops_past_due() {
+        use crate::db::config_queries::TimerJobRow;
+        use crate::types::automation_definition::{TimerId, TimerIntentTarget};
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", true, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.runtime_config.routines = vec![timer_routine_row("timer_routine", "off", false, 1)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        // The manual clock reports wall time 1_000_000 and monotonic 0.
+        let owner = RoutineId("timer_routine".to_string());
+        let capture =
+            serde_json::to_string(&crate::types::automation_definition::TimerIntentCapture {
+                targets: vec![TimerIntentTarget::Device {
+                    device: bulb.get_device_key(),
+                }],
+                frozen_members: Vec::new(),
+            })
+            .unwrap();
+        state.restore_timer_jobs(&[
+            TimerJobRow {
+                routine_id: owner.0.clone(),
+                timer_id: "off".into(),
+                definition_revision: 1,
+                generation: 12,
+                due_wall_ms: 1_060_000,
+                capture: Some(capture),
+            },
+            TimerJobRow {
+                routine_id: owner.0.clone(),
+                timer_id: "past".into(),
+                definition_revision: 1,
+                generation: 13,
+                due_wall_ms: 999_000,
+                capture: None,
+            },
+            TimerJobRow {
+                routine_id: owner.0.clone(),
+                timer_id: "stale".into(),
+                definition_revision: 0,
+                generation: 14,
+                due_wall_ms: 1_060_000,
+                capture: None,
+            },
+            TimerJobRow {
+                routine_id: "missing".into(),
+                timer_id: "off".into(),
+                definition_revision: 1,
+                generation: 15,
+                due_wall_ms: 1_060_000,
+                capture: None,
+            },
+        ]);
+
+        assert!(state.timers.is_pending(&owner, &TimerId("off".into())));
+        assert!(!state.timers.is_pending(&owner, &TimerId("past".into())));
+        assert!(!state.timers.is_pending(&owner, &TimerId("stale".into())));
+
+        let wakeup = state.timers.wakeups().pop().expect("restored wakeup");
+        assert_eq!(wakeup.generation, 12, "the stored generation is reused");
+        assert_eq!(wakeup.due_monotonic_ms, 60_000);
+        assert_eq!(wakeup.due_wall_ms, 1_060_000);
     }
 
     fn predicate_for_routine_row(id: &str, revision: i64, duration_ms: u64) -> RoutineRow {
