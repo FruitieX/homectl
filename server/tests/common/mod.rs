@@ -286,7 +286,7 @@ fn wait_for_ready(
                 std::thread::sleep(Duration::from_millis(100));
             }
             Err(e) => {
-                if start_time.elapsed().as_secs() % 3 == 0 {
+                if start_time.elapsed().as_secs().is_multiple_of(3) {
                     eprintln!(
                         "[test] Connection error: {} (elapsed: {:?})",
                         e,

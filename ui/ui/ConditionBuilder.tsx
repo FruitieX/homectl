@@ -106,7 +106,7 @@ function defaultValueSource(kind: ValueSource['kind']): ValueSource {
     case 'helper':
       return { kind: 'helper', helper: '' };
     case 'computed_source':
-      return { kind: 'computed_source', source: '' };
+      return { kind: 'computed_source', source: '', path: '/' };
   }
 }
 
@@ -117,7 +117,7 @@ function describeSource(source: ValueSource): string {
     case 'helper':
       return `helper ${source.helper || '?'}`;
     case 'computed_source':
-      return `source ${source.source || '?'}`;
+      return `source ${source.source || '?'} ${source.path}`;
   }
 }
 
@@ -328,19 +328,33 @@ function ValueSourceEditor({
       ) : null}
 
       {source.kind === 'computed_source' ? (
-        <ConfigField
-          label="Computed source"
-          description="Id of a computed source defined in the server configuration."
-        >
-          <Input
-            className="font-mono"
-            value={source.source}
-            placeholder="source_id"
-            onChange={(event) =>
-              onChange({ ...source, source: event.target.value })
-            }
-          />
-        </ConfigField>
+        <>
+          <ConfigField
+            label="Computed source"
+            description="Id of a computed source defined in the server configuration."
+          >
+            <Input
+              className="font-mono"
+              value={source.source}
+              placeholder="source_id"
+              onChange={(event) =>
+                onChange({ ...source, source: event.target.value })
+              }
+            />
+          </ConfigField>
+          <ConfigField
+            label="Value path"
+            description="JSON pointer into the source value, for example /brightness or /color/ct."
+          >
+            <Input
+              value={source.path}
+              placeholder="/"
+              onChange={(event) =>
+                onChange({ ...source, path: event.target.value })
+              }
+            />
+          </ConfigField>
+        </>
       ) : null}
     </div>
   );

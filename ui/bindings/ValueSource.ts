@@ -3,4 +3,4 @@ import type { DeviceRef } from "./DeviceRef";
 import type { HelperId } from "./HelperId";
 import type { SourceId } from "./SourceId";
 
-export type ValueSource = { "kind": "device", device: DeviceRef, path: string, } | { "kind": "helper", helper: HelperId, } | { "kind": "computed_source", source: SourceId, };
+export type ValueSource = { "kind": "device", device: DeviceRef, path: string, } | { "kind": "helper", helper: HelperId, } | { "kind": "computed_source", source: SourceId, path: string, };

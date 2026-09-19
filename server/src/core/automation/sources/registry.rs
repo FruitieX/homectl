@@ -12,6 +12,7 @@
 
 use std::collections::BTreeMap;
 
+use log::warn;
 use ordered_float::OrderedFloat;
 
 use crate::core::automation::calendar::parse_schedule_zone;
@@ -76,6 +77,38 @@ pub fn evaluate_source(
             })
         }
     }
+}
+
+/// Evaluate every enabled source whose cadence has elapsed, recording
+/// successes and failures. Returns the definitions and profiles that should
+/// be published; startup seeding and the actor refresh path share this so
+/// cadence and freshness bookkeeping cannot drift.
+pub fn evaluate_due_sources(
+    registry: &mut Sources,
+    now_wall_ms: i64,
+) -> Vec<(SourceDefinition, LightProfile)> {
+    let mut publishable = Vec::new();
+    for definition in registry.due_sources(now_wall_ms) {
+        match evaluate_source(&definition, now_wall_ms) {
+            Ok(evaluation) => {
+                registry.record_success(
+                    &definition,
+                    evaluation.profile.clone(),
+                    evaluation.local_time,
+                    now_wall_ms,
+                );
+                publishable.push((definition, evaluation.profile));
+            }
+            Err(message) => {
+                warn!(
+                    "Computed source {} failed to evaluate: {message}",
+                    definition.id.0
+                );
+                registry.record_failure(&definition.id, message, now_wall_ms);
+            }
+        }
+    }
+    publishable
 }
 
 /// Read-only synthetic device carrying the computed profile. Sensors accept

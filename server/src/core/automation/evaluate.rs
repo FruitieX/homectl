@@ -26,6 +26,11 @@
 //! - `/availability/*`, `/last_report/*`: evidence metadata.
 //! - `/name`, `/integration_id`, `/device_id`, `/is_sensor`,
 //!   `/is_controllable`: identity metadata.
+//!
+//! A color sensor's value is a structured document, so paths beyond the
+//! sensor default read the serialized state as a JSON pointer
+//! (`/brightness`, `/color/ct`). Computed-source references resolve through
+//! the source's published synthetic device with the same paths (P11).
 
 use std::collections::BTreeMap;
 
@@ -989,7 +994,7 @@ fn source_entity(source: &ValueSource) -> String {
     match source {
         ValueSource::Device { device, .. } => device_key(device).to_string(),
         ValueSource::Helper { helper } => helper.to_string(),
-        ValueSource::ComputedSource { source } => source.to_string(),
+        ValueSource::ComputedSource { source, .. } => source.to_string(),
     }
 }
 
@@ -1014,10 +1019,12 @@ pub fn resolve_value(source: &ValueSource, view: EvaluationView<'_>) -> Resolved
                 source: helper.to_string(),
             }),
         },
-        ValueSource::ComputedSource { source } => {
-            ResolvedValue::unknown(UnknownReason::UnknownSourceValue {
-                source: source.to_string(),
-            })
+        // A computed source is read through its published synthetic device
+        // (P11), so source references and scene links observe the same
+        // last-good value. A source that never published resolves as a
+        // missing entity rather than as unknown.
+        ValueSource::ComputedSource { source, path } => {
+            resolve_device_path(&super::sources::source_device_key(source), path, view)
         }
     }
 }
@@ -1063,9 +1070,24 @@ fn resolve_sensor_path(
         "/device_id" => ResolvedValue::known(Value::String(key.device_id.to_string())),
         "/is_sensor" => ResolvedValue::known(Value::Bool(true)),
         "/is_controllable" => ResolvedValue::known(Value::Bool(false)),
-        _ => ResolvedValue::absent(UnknownReason::MissingField {
-            field: path.to_string(),
-        }),
+        _ => {
+            // A color sensor's value is a structured document
+            // (`{power, brightness, color, transition}`), so any other path
+            // reads it as a JSON pointer. Computed-source references rely on
+            // this for fields like `/brightness` and `/color/ct` (P11).
+            if let crate::types::device::SensorDevice::Color(state) = sensor {
+                let pointer = path.strip_prefix("/value").unwrap_or(path);
+                let pointer = if pointer.is_empty() { "/" } else { pointer };
+                if let Ok(value) = serde_json::to_value(state) {
+                    if let Some(found) = value.pointer(pointer) {
+                        return ResolvedValue::known(found.clone());
+                    }
+                }
+            }
+            ResolvedValue::absent(UnknownReason::MissingField {
+                field: path.to_string(),
+            })
+        }
     }
 }
 
@@ -2460,5 +2482,80 @@ mod tests {
             evaluate_routine_frame(&routine_id(), 1, &definition, &mut memory, frame)
         });
         assert!(!skipped.will_trigger);
+    }
+
+    fn color_sensor(integration: &str, id: &str, brightness: f32, ct: u16) -> Device {
+        Device::new(
+            IntegrationId::from(integration.to_string()),
+            DeviceId::new(id),
+            id.to_string(),
+            DeviceData::Sensor(SensorDevice::Color(ControllableState {
+                power: true,
+                brightness: Some(ordered_float::OrderedFloat(brightness)),
+                color: Some(crate::types::color::DeviceColor::new_from_kelvin(ct)),
+                transition: Some(ordered_float::OrderedFloat(60.0)),
+            })),
+            None,
+        )
+    }
+
+    // P11: computed-source references resolve through the published
+    // synthetic device, including structured color-sensor paths.
+    #[test]
+    fn p11_computed_source_references_resolve_through_the_synthetic_device() {
+        use crate::types::automation_definition::SourceId;
+
+        let devices = states(vec![color_sensor("computed", "circadian", 0.5, 2500)]);
+        let groups = no_groups();
+        let view = EvaluationView {
+            devices: &devices,
+            groups: &groups,
+            helpers: None,
+        };
+
+        let resolve = |path: &str| {
+            resolve_value(
+                &ValueSource::ComputedSource {
+                    source: SourceId("circadian".to_string()),
+                    path: path.to_string(),
+                },
+                view,
+            )
+        };
+
+        assert_eq!(resolve("/brightness").value, Some(json!(0.5)));
+        assert_eq!(resolve("/power").value, Some(json!(true)));
+        assert_eq!(resolve("/color/ct").value, Some(json!(2500)));
+        assert_eq!(
+            resolve("/").value,
+            Some(json!({
+                "power": true,
+                "brightness": 0.5,
+                "color": { "ct": 2500 },
+                "transition": 60.0,
+            }))
+        );
+
+        // A source that never published is a missing entity, not a silent
+        // unknown; an absent field on a published source is a missing field.
+        let missing = resolve_value(
+            &ValueSource::ComputedSource {
+                source: SourceId("other".to_string()),
+                path: "/brightness".to_string(),
+            },
+            view,
+        );
+        assert!(missing.value.is_none());
+        assert!(matches!(
+            missing.reason,
+            Some(UnknownReason::MissingEntity { .. })
+        ));
+
+        let absent = resolve("/nope");
+        assert!(absent.value.is_none());
+        assert!(matches!(
+            absent.reason,
+            Some(UnknownReason::MissingField { .. })
+        ));
     }
 }

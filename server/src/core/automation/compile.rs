@@ -107,7 +107,11 @@ impl ConfigCatalog {
             scenes,
             routines,
             helpers,
-            sources: HashSet::new(),
+            sources: export
+                .sources
+                .iter()
+                .map(|source| source.id.clone())
+                .collect(),
             group_links,
             strict_devices: false,
         }
@@ -749,7 +753,10 @@ impl Compiler<'_> {
                         }
                         self.add_dependency(ResolvedReference::Helper(helper.clone()));
                     }
-                    ValueSource::ComputedSource { source } => {
+                    ValueSource::ComputedSource {
+                        source,
+                        path: pointer,
+                    } => {
                         if !self.catalog.sources.contains(source) {
                             self.report.error_with_entity(
                                 format!("{path}/source/source"),
@@ -759,6 +766,7 @@ impl Compiler<'_> {
                                 source.to_string(),
                             );
                         }
+                        self.validate_pointer(pointer, &format!("{path}/source/path"));
                         self.add_dependency(ResolvedReference::Source(source.clone()));
                     }
                 }
@@ -2452,5 +2460,101 @@ mod tests {
             devices,
             vec![device_ref("dummy", "sensor1"), device_ref("dummy", "lamp1")]
         );
+    }
+
+    // P11: the catalog resolves DB-backed computed sources, and references
+    // validate both source existence and the JSON pointer.
+    #[test]
+    fn p11_computed_source_references_resolve_and_validate() {
+        let export: ConfigExport = serde_json::from_value(json!({
+            "version": 1,
+            "core": { "warmup_time_seconds": 0 },
+            "integrations": [],
+            "groups": [],
+            "scenes": [],
+            "routines": [],
+            "sources": [{
+                "id": "circadian",
+                "name": "Circadian",
+                "enabled": true,
+                "timezone": "Europe/Helsinki",
+                "compute": {
+                    "kind": "circadian_compat",
+                    "preset_version": 1,
+                    "params": {
+                        "day_fade_start": "06:00",
+                        "day_fade_duration_hours": 2,
+                        "day_color": { "ct": 3000 },
+                        "night_fade_start": "20:00",
+                        "night_fade_duration_hours": 2,
+                        "night_color": { "ct": 2000 }
+                    }
+                }
+            }],
+            "floorplan": null,
+            "dashboard_layouts": [],
+            "dashboard_widgets": []
+        }))
+        .expect("export parses");
+        let catalog = ConfigCatalog::new(
+            vec![key("dummy", "sensor1"), key("dummy", "lamp1")],
+            &export,
+        );
+        assert!(catalog.sources.contains(&SourceId("circadian".to_string())));
+
+        let definition = |source: &str, path: Option<&str>| {
+            let mut value_source = json!({
+                "kind": "computed_source",
+                "source": source,
+            });
+            if let Some(path) = path {
+                value_source["path"] = json!(path);
+            }
+            json!({
+                "triggers": [{
+                    "kind": "report",
+                    "id": "trig_report",
+                    "device": { "integration_id": "dummy", "device_id": "sensor1" }
+                }],
+                "condition": {
+                    "kind": "comparison",
+                    "source": value_source,
+                    "operator": "gt",
+                    "value": 0.5
+                },
+                "program": { "kind": "native", "steps": [{
+                    "action": "set_power",
+                    "id": "step_power",
+                    "device": { "integration_id": "dummy", "device_id": "lamp1" },
+                    "power": true
+                }]}
+            })
+        };
+
+        let compiled = compile_ok(definition("circadian", Some("/brightness")), &catalog);
+        assert!(compiled
+            .dependencies
+            .contains(&ResolvedReference::Source(SourceId(
+                "circadian".to_string()
+            ))));
+
+        // The pointer defaults to the whole value when omitted.
+        let defaulted = compile_ok(definition("circadian", None), &catalog);
+        let ConditionExpr::Comparison { source, .. } = &defaulted.normalized.condition else {
+            panic!("expected a comparison condition");
+        };
+        assert!(matches!(
+            source,
+            ValueSource::ComputedSource { path, .. } if path == "/"
+        ));
+
+        let report = compile_row(&v2_row(definition("missing", Some("/brightness"))), &catalog)
+            .unwrap_err();
+        assert!(error_codes(&report).contains(&"unknown_source".to_string()));
+
+        let report =
+            compile_row(&v2_row(definition("circadian", Some("brightness"))), &catalog)
+                .unwrap_err();
+        assert!(error_codes(&report).contains(&"invalid_json_pointer".to_string()));
     }
 }

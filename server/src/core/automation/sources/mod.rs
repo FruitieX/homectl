@@ -13,6 +13,6 @@ pub use circadian_compat::{
     CircadianCompatCurve, CIRCADIAN_COMPAT_PRESET_VERSION, CIRCADIAN_COMPAT_TRANSITION_MS,
 };
 pub use registry::{
-    evaluate_source, source_device_key, synthetic_device, SourceEvaluation, Sources,
-    COMPUTED_SOURCE_INTEGRATION_ID,
+    evaluate_due_sources, evaluate_source, source_device_key, synthetic_device, SourceEvaluation,
+    Sources, COMPUTED_SOURCE_INTEGRATION_ID,
 };

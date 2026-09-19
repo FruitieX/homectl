@@ -5,7 +5,8 @@ use homectl_server::api::config::{parse_config_backup, ParsedConfigBackup};
 use homectl_server::api::init_api;
 use homectl_server::core::simulate;
 use homectl_server::core::{
-    automation::ConfigCatalog,
+    automation::{sources, ConfigCatalog},
+    clock::Clock,
     devices::Devices,
     groups::Groups,
     integrations::Integrations,
@@ -20,6 +21,7 @@ use homectl_server::db::{
     actions, config_queries, connect_configured_database, init_db, is_db_connected,
     is_db_reconnect_configured,
 };
+use homectl_server::types::automation_event::EventOrigin;
 use homectl_server::types::event::{mk_event_channel, Event, TxEventChannel};
 use homectl_server::types::scene::SceneOverridesConfig;
 use homectl_server::utils::cli::{Cli, Command};
@@ -196,6 +198,19 @@ async fn run_event_loop(
     let mut devices = Devices::new(event_tx.clone(), cli);
     devices.refresh_db_devices(&scenes).await;
 
+    let clock = Arc::new(homectl_server::core::clock::SystemClock::new());
+
+    // P11: seed computed-source devices before routines compile, so a device
+    // reference to `computed/<id>` resolves on the first load. The registry
+    // is handed to `AppState`, and the startup refresh then sees the sources
+    // as already computed for this cadence.
+    let mut sources = sources::Sources::default();
+    sources.load_rows(runtime_config.config.sources.clone());
+    for (definition, profile) in sources::evaluate_due_sources(&mut sources, clock.wall_ms()) {
+        let device = sources::synthetic_device(&definition, &profile);
+        devices.set_state_with_origin(&device, true, true, EventOrigin::Derived);
+    }
+
     let mut rules = Routines::new(Default::default(), event_tx.clone());
     let catalog = ConfigCatalog::new(
         devices.get_state().0.keys().cloned(),
@@ -230,14 +245,14 @@ async fn run_event_loop(
         devices,
         rules,
         helpers: Default::default(),
-        sources: Default::default(),
+        sources,
         intents: Default::default(),
         scripts: Default::default(),
         timers: Default::default(),
         pending_timer_fires: Vec::new(),
         pending_predicate_fires: Vec::new(),
         pending_schedule_fires: Vec::new(),
-        clock: Arc::new(homectl_server::core::clock::SystemClock::new()),
+        clock,
         pending_deferred_work: Vec::new(),
         event_tx: event_tx.clone(),
         ui,

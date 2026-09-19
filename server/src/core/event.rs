@@ -2088,49 +2088,29 @@ impl AppState {
     /// nothing (D06).
     pub fn refresh_due_sources(&mut self) -> SnapshotChanges {
         let now_wall_ms = self.clock.wall_ms();
+        let due = sources::evaluate_due_sources(&mut self.sources, now_wall_ms);
         let mut changes = SnapshotChanges::none();
-        for definition in self.sources.due_sources(now_wall_ms) {
-            match sources::evaluate_source(&definition, now_wall_ms) {
-                Ok(evaluation) => {
-                    self.sources.record_success(
-                        &definition,
-                        evaluation.profile.clone(),
-                        evaluation.local_time,
-                        now_wall_ms,
-                    );
-                    let device = sources::synthetic_device(&definition, &evaluation.profile);
-                    match apply_internal_state(
-                        self,
-                        &device,
-                        Some(true),
-                        Some(true),
-                        Some(EventOrigin::Derived),
-                    ) {
-                        Ok(outcome) => {
-                            changes.include(outcome.snapshot_changes());
-                            self.pending_deferred_work
-                                .extend(outcome.into_deferred_work());
-                        }
-                        Err(error) => {
-                            warn!(
-                                "Computed source {} failed to publish: {error:#}",
-                                definition.id.0
-                            );
-                            self.sources.record_failure(
-                                &definition.id,
-                                error.to_string(),
-                                now_wall_ms,
-                            );
-                        }
-                    }
+        for (definition, profile) in due {
+            let device = sources::synthetic_device(&definition, &profile);
+            match apply_internal_state(
+                self,
+                &device,
+                Some(true),
+                Some(true),
+                Some(EventOrigin::Derived),
+            ) {
+                Ok(outcome) => {
+                    changes.include(outcome.snapshot_changes());
+                    self.pending_deferred_work
+                        .extend(outcome.into_deferred_work());
                 }
-                Err(message) => {
+                Err(error) => {
                     warn!(
-                        "Computed source {} failed to evaluate: {message}",
+                        "Computed source {} failed to publish: {error:#}",
                         definition.id.0
                     );
                     self.sources
-                        .record_failure(&definition.id, message, now_wall_ms);
+                        .record_failure(&definition.id, error.to_string(), now_wall_ms);
                 }
             }
         }
@@ -5023,5 +5003,71 @@ pub(crate) mod tests {
         state.apply_runtime_sources();
         assert!(state.sources.output(&source_id).is_none());
         assert!(state.devices.get_device(&canonical).is_some());
+    }
+
+    // P11: seeding source devices before routines compile keeps device
+    // references to `computed/<id>` resolvable at startup (main.rs seeds
+    // before `Routines::load_config_rows`).
+    #[tokio::test]
+    async fn p11_source_devices_seed_before_routine_compile() {
+        use crate::db::config_queries::RoutineRow;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        let routine = || RoutineRow {
+            id: "source_triggered".to_string(),
+            name: "Source Triggered".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{
+                    "kind": "state_change",
+                    "id": "trig_device",
+                    "device": { "integration_id": "computed", "device_id": "circadian" }
+                }],
+                "condition": {
+                    "kind": "comparison",
+                    "source": {
+                        "kind": "computed_source",
+                        "source": "circadian",
+                        "path": "/brightness"
+                    },
+                    "operator": "gt",
+                    "value": 0.0
+                },
+                "program": { "kind": "native", "steps": [{
+                    "action": "set_power",
+                    "id": "step_on",
+                    "device": { "integration_id": "dummy", "device_id": "lamp" },
+                    "power": true
+                }]}
+            })),
+            rules: serde_json::json!([]),
+            actions: serde_json::json!([]),
+        };
+
+        state.runtime_config.routines = vec![routine()];
+        let lamp = lamp("dummy", "lamp", false, 0.5);
+        state
+            .devices
+            .set_state_with_origin(&lamp, true, true, EventOrigin::Derived);
+
+        // Without a published source device the reference cannot resolve.
+        state.apply_runtime_routines();
+        assert!(!state
+            .rules
+            .compiled_v2_routines()
+            .contains_key(&RoutineId("source_triggered".to_string())));
+
+        // Seeding the source publishes `computed/circadian`; the same routine
+        // now compiles and is live.
+        state.runtime_config.sources = vec![test_source_definition()];
+        state.apply_runtime_sources();
+        state.apply_runtime_routines();
+        assert!(state
+            .rules
+            .compiled_v2_routines()
+            .contains_key(&RoutineId("source_triggered".to_string())));
     }
 }

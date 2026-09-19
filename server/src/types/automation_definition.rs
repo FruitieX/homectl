@@ -336,6 +336,8 @@ pub enum ValueSource {
     },
     ComputedSource {
         source: SourceId,
+        #[serde(default = "default_json_pointer")]
+        path: String,
     },
 }
 
