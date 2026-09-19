@@ -195,6 +195,9 @@ pub enum Event {
         routine_id: RoutineId,
         definition_revision: i64,
         operation: crate::types::automation_definition::TimerOperation,
+        /// Frozen intent targets the scheduling step asked to capture (J08).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capture: Option<crate::types::automation_definition::TimerIntentCapture>,
         causation: EventCausation,
     },
 

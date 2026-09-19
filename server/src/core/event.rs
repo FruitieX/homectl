@@ -765,6 +765,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
             routine_id,
             definition_revision,
             operation,
+            capture,
             causation: _,
         } => {
             let current_revision = state
@@ -779,10 +780,33 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     // queued (P09 clock policy).
                     let now_monotonic_ms = state.clock.monotonic_ms();
                     let now_wall_ms = state.clock.wall_ms();
+                    // J08: freeze intent tokens now. Earlier plan steps were
+                    // queued before this command, so their manual bumps are
+                    // already reflected; a later manual change can only be
+                    // observed as a newer revision at expiry.
+                    let captured = capture.as_ref().map(|capture| {
+                        capture
+                            .targets
+                            .iter()
+                            .map(|target| {
+                                let revision = match target {
+                                    crate::types::automation_definition::TimerIntentTarget::Device {
+                                        device,
+                                    } => state.intents.revision(
+                                        &crate::core::automation::IntentTarget::Device(
+                                            device.clone(),
+                                        ),
+                                    ),
+                                };
+                                (target.clone(), revision)
+                            })
+                            .collect()
+                    });
                     match state.timers.apply(
                         routine_id,
                         *definition_revision,
                         operation,
+                        captured,
                         now_monotonic_ms,
                         now_wall_ms,
                     ) {
@@ -1350,6 +1374,10 @@ impl AppState {
                     &plan.routine_id,
                     plan.definition_revision,
                     operation,
+                    // Conflict validation ignores capture bookkeeping; tokens
+                    // are frozen by the acceptance handler after earlier
+                    // steps have bumped intents (J08).
+                    None,
                     now_monotonic_ms,
                     now_wall_ms,
                 ) {
@@ -1380,6 +1408,7 @@ impl AppState {
                     routine_id: plan.routine_id.clone(),
                     definition_revision: plan.definition_revision,
                     operation: operation.clone(),
+                    capture: step.timer_capture.clone(),
                     causation,
                 },
             };
@@ -3356,6 +3385,7 @@ pub(crate) mod tests {
                     timer: timer.clone(),
                     delay_ms: 5_000,
                 },
+                capture: None,
                 causation: EventCausation::default(),
             },
         )
@@ -3372,6 +3402,7 @@ pub(crate) mod tests {
                     timer: timer.clone(),
                     delay_ms: 10_000,
                 },
+                capture: None,
                 causation: EventCausation::default(),
             },
         )
@@ -3464,6 +3495,7 @@ pub(crate) mod tests {
                     timer: timer.clone(),
                     delay_ms: 1_000,
                 },
+                None,
                 0,
                 1_000_000,
             )
@@ -3479,6 +3511,7 @@ pub(crate) mod tests {
                 },
             },
             intent_guard: Vec::new(),
+            timer_capture: None,
         };
         let conflicting = RoutinePlan {
             routine_id: owner.clone(),
@@ -3517,6 +3550,7 @@ pub(crate) mod tests {
                         },
                     },
                     intent_guard: Vec::new(),
+                    timer_capture: None,
                 },
                 schedule_step(5_000),
             ],
@@ -3557,6 +3591,7 @@ pub(crate) mod tests {
                     timer: timer.clone(),
                     delay_ms: 1_000,
                 },
+                None,
                 0,
                 1_000_000,
             )
@@ -3605,6 +3640,7 @@ pub(crate) mod tests {
                     timer: timer.clone(),
                     delay_ms: 1_000,
                 },
+                None,
                 0,
                 1_000_000,
             )
@@ -3649,6 +3685,7 @@ pub(crate) mod tests {
                     timer: timer.clone(),
                     delay_ms: 5_000,
                 },
+                None,
                 0,
                 1_000_000,
             )
@@ -3909,6 +3946,120 @@ pub(crate) mod tests {
                 .pending_predicate_generation(&owner, &trigger)
                 .is_none(),
             "a latched maturity does not re-arm"
+        );
+    }
+
+    // J08: a timer scheduled with `capture_target_intents` freezes the
+    // target's intent token at acceptance; a newer manual intent suppresses
+    // the delayed action at expiry, while an untouched target still runs.
+    #[tokio::test]
+    async fn p09_captured_target_intents_suppress_superseded_delayed_actions() {
+        use crate::types::automation_definition::{
+            TimerId, TimerIntentCapture, TimerIntentTarget, TimerOperation,
+        };
+        use crate::types::event::Event;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, mut event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", true, 0.1);
+        let key = bulb.get_device_key();
+        state.devices.set_state(&bulb, true, true);
+        state.runtime_config.routines = vec![timer_routine_row("capture_routine", "off", false, 1)];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("capture_routine".to_string());
+        let timer = TimerId("off".to_string());
+        let capture = || TimerIntentCapture {
+            targets: vec![TimerIntentTarget::Device {
+                device: key.clone(),
+            }],
+        };
+
+        // Untouched target: the delayed action proceeds.
+        handle_event(
+            &mut state,
+            &Event::RoutineTimerOperation {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                operation: TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 5_000,
+                },
+                capture: Some(capture()),
+                causation: EventCausation::default(),
+            },
+        )
+        .await
+        .unwrap();
+        let wakeup = state.timers.wakeups().pop().expect("scheduled wakeup");
+        assert_eq!(
+            wakeup.job,
+            crate::types::event::TimerWakeupJob::NamedTimer {
+                timer: timer.clone()
+            }
+        );
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: wakeup.job,
+                generation: wakeup.generation,
+                due_wall_ms: wakeup.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+        let mut proceeded = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            if matches!(event, Event::RoutineAction { .. }) {
+                proceeded += 1;
+            }
+        }
+        assert_eq!(proceeded, 1, "an untouched capture still runs its action");
+
+        // Superseded target: the manual intent arrives after acceptance.
+        handle_event(
+            &mut state,
+            &Event::RoutineTimerOperation {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                operation: TimerOperation::Schedule {
+                    timer: timer.clone(),
+                    delay_ms: 5_000,
+                },
+                capture: Some(capture()),
+                causation: EventCausation::default(),
+            },
+        )
+        .await
+        .unwrap();
+        state.intents.bump_device(&key);
+        let wakeup = state.timers.wakeups().pop().expect("rescheduled wakeup");
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: wakeup.job,
+                generation: wakeup.generation,
+                due_wall_ms: wakeup.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+        let mut dispatch_after_manual = 0;
+        while let Ok(event) = event_rx.try_recv() {
+            if matches!(event, Event::RoutineAction { .. }) {
+                dispatch_after_manual += 1;
+            }
+        }
+        assert_eq!(
+            dispatch_after_manual, 0,
+            "a newer manual intent suppresses the captured delayed action"
         );
     }
 

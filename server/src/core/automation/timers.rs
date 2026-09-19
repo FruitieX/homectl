@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use crate::types::{
-    automation_definition::{NodeId, TimerId, TimerOperation},
+    automation_definition::{NodeId, TimerId, TimerIntentTarget, TimerOperation},
     event::TimerWakeupJob,
     rule::RoutineId,
 };
@@ -18,6 +18,9 @@ use super::compile::MAX_TIMER_DELAY_MS;
 
 /// Per-owner bound on live named timers.
 pub const MAX_TIMERS_PER_OWNER: usize = 64;
+
+/// Intent tokens frozen for one scheduled timer generation (J08).
+pub type TimerIntentTokens = Vec<(TimerIntentTarget, u64)>;
 
 /// Why a timer operation was rejected.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -81,6 +84,10 @@ pub struct TimerFire {
     pub timer: TimerId,
     pub generation: u64,
     pub due_wall_ms: i64,
+    /// Intent tokens frozen when this generation was scheduled (J08). The
+    /// expiry plan guards captured targets with these instead of live
+    /// revisions, so a newer manual intent suppresses the delayed action.
+    pub captured: Option<TimerIntentTokens>,
 }
 
 /// One validated sustained-predicate maturity ready for frame evaluation. The
@@ -95,12 +102,13 @@ pub struct PredicateDeadlineFire {
     pub due_wall_ms: i64,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct TimerJob {
     definition_revision: i64,
     generation: u64,
     due_monotonic_ms: u64,
     due_wall_ms: i64,
+    captured: Option<TimerIntentTokens>,
 }
 
 fn named_job(timer: &TimerId) -> TimerWakeupJob {
@@ -199,6 +207,7 @@ impl TimerStore {
             predicate_job(trigger),
             definition_revision,
             delay_ms,
+            None,
             now_monotonic_ms,
             now_wall_ms,
         )
@@ -244,6 +253,7 @@ impl TimerStore {
         owner: &RoutineId,
         definition_revision: i64,
         operation: &TimerOperation,
+        captured: Option<TimerIntentTokens>,
         now_monotonic_ms: u64,
         now_wall_ms: i64,
     ) -> Result<u64, TimerOperationError> {
@@ -260,6 +270,7 @@ impl TimerStore {
                     named_job(timer),
                     definition_revision,
                     *delay_ms,
+                    captured,
                     now_monotonic_ms,
                     now_wall_ms,
                 )
@@ -269,6 +280,7 @@ impl TimerStore {
                 named_job(timer),
                 definition_revision,
                 *delay_ms,
+                captured,
                 now_monotonic_ms,
                 now_wall_ms,
             ),
@@ -289,6 +301,7 @@ impl TimerStore {
         job: TimerWakeupJob,
         definition_revision: i64,
         delay_ms: u64,
+        captured: Option<TimerIntentTokens>,
         now_monotonic_ms: u64,
         now_wall_ms: i64,
     ) -> Result<u64, TimerOperationError> {
@@ -318,6 +331,7 @@ impl TimerStore {
                 generation,
                 due_monotonic_ms: now_monotonic_ms.saturating_add(delay_ms),
                 due_wall_ms: now_wall_ms.saturating_add(delay_ms as i64),
+                captured,
             },
         );
         Ok(generation)
@@ -343,6 +357,7 @@ impl TimerStore {
             timer: timer.clone(),
             generation: job.generation,
             due_wall_ms: job.due_wall_ms,
+            captured: job.captured,
         })
     }
 
@@ -415,6 +430,7 @@ mod tests {
                     timer: timer(timer_id),
                     delay_ms: delay,
                 },
+                None,
                 1_000,
                 10_000,
             )
@@ -434,6 +450,7 @@ mod tests {
                     timer: timer("off"),
                     delay_ms: 2_000,
                 },
+                None,
                 1_100,
                 10_100,
             )
@@ -460,8 +477,12 @@ mod tests {
         let cancel = TimerOperation::Cancel {
             timer: timer("off"),
         };
-        assert!(store.apply(&owner("routine"), 1, &cancel, 0, 0).is_ok());
-        assert!(store.apply(&owner("routine"), 1, &cancel, 0, 0).is_ok());
+        assert!(store
+            .apply(&owner("routine"), 1, &cancel, None, 0, 0)
+            .is_ok());
+        assert!(store
+            .apply(&owner("routine"), 1, &cancel, None, 0, 0)
+            .is_ok());
         assert!(store.is_empty());
         assert!(store
             .consume(&owner("routine"), 1, &timer("off"), generation)
@@ -516,6 +537,7 @@ mod tests {
                     timer: timer("off"),
                     delay_ms: 10,
                 },
+                None,
                 0,
                 0,
             )

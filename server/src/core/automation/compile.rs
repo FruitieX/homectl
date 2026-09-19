@@ -978,10 +978,16 @@ impl Compiler<'_> {
                     }
                 }
                 NativeAction::ScheduleTimer {
-                    timer, delay_ms, ..
+                    timer,
+                    delay_ms,
+                    capture_target_intents,
+                    ..
                 }
                 | NativeAction::ReplaceTimer {
-                    timer, delay_ms, ..
+                    timer,
+                    delay_ms,
+                    capture_target_intents,
+                    ..
                 } => {
                     self.validate_id(
                         &timer.0,
@@ -998,6 +1004,24 @@ impl Compiler<'_> {
                                 "Timer delay must be in 1..={MAX_TIMER_DELAY_MS} milliseconds."
                             ),
                         );
+                    }
+                    if let Some(capture) = capture_target_intents {
+                        if capture.devices.is_empty() && capture.groups.is_empty() {
+                            self.report.error_at_node(
+                                format!("{action_path}/capture_target_intents"),
+                                action.id(),
+                                "invalid_capture_targets",
+                                "capture_target_intents must name at least one target.",
+                            );
+                        }
+                        if !capture.groups.is_empty() {
+                            self.report.error_at_node(
+                                format!("{action_path}/capture_target_intents"),
+                                action.id(),
+                                "capture_group_intents_unsupported",
+                                "Capturing group intents needs frozen group membership (J09) and is not supported yet.",
+                            );
+                        }
                     }
                     self.add_write(WriteKind::Timer, timer.to_string());
                 }
@@ -1891,6 +1915,21 @@ mod tests {
         assert_eq!(
             error_codes(&compile_definition_value(&bad_duration, &catalog()).unwrap_err()),
             vec!["invalid_duration"]
+        );
+
+        // J08/J09: group captures need frozen membership and stay rejected
+        // until that lands, so authors never get an expanding capture.
+        let group_capture = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [
+                { "action": "schedule_timer", "id": "step_timer", "timer": "t1",
+                  "delay_ms": 1000,
+                  "capture_target_intents": { "groups": ["g1"] } }
+            ]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&group_capture, &catalog()).unwrap_err()),
+            vec!["capture_group_intents_unsupported"]
         );
 
         let bad_policy = json!({

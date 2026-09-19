@@ -390,6 +390,10 @@ pub enum NativeAction {
         id: NodeId,
         timer: TimerId,
         delay_ms: u64,
+        /// Freeze intent tokens for these targets at actor acceptance (J08).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        capture_target_intents: Option<TargetSpec>,
     },
 
     /// Replaces a named timer generation.
@@ -397,6 +401,10 @@ pub enum NativeAction {
         id: NodeId,
         timer: TimerId,
         delay_ms: u64,
+        /// Freeze intent tokens for these targets at actor acceptance (J08).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        capture_target_intents: Option<TargetSpec>,
     },
 
     /// Cancels a named timer. Cancelling a missing timer succeeds.
@@ -483,6 +491,26 @@ pub struct TargetSpec {
     pub devices: Vec<DeviceRef>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub groups: Vec<GroupId>,
+}
+
+/// Intent targets captured when a timer is scheduled (J08). The actor records
+/// the tokens at acceptance, after earlier plan steps have bumped intents, and
+/// a delayed plan may act only on unchanged tokens.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct TimerIntentCapture {
+    pub targets: Vec<TimerIntentTarget>,
+}
+
+/// One capturable intent target. Group capture needs frozen membership (J09)
+/// and is rejected at compile time until that lands.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum TimerIntentTarget {
+    Device {
+        device: crate::types::device::DeviceKey,
+    },
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]

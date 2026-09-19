@@ -276,6 +276,10 @@ pub struct RoutineFrameEvaluation {
     pub will_trigger: bool,
     /// Sustained-predicate arming/cancellation implied by this frame.
     pub predicate_jobs: Vec<PredicateJobIntent>,
+    /// Intent tokens frozen when the fired timer generations were scheduled
+    /// (J08). The expiry plan guards captured targets with these instead of
+    /// live revisions.
+    pub timer_captures: Vec<super::timers::TimerIntentTokens>,
 }
 
 impl RoutineFrameEvaluation {
@@ -307,6 +311,12 @@ pub fn evaluate_routine_frame(
     let mut trigger_statuses = Vec::new();
     let mut trigger_error: Option<String> = None;
     let mut predicate_jobs = Vec::new();
+    let timer_captures = frame
+        .fired_timers
+        .iter()
+        .filter(|fire| &fire.routine_id == routine_id)
+        .filter_map(|fire| fire.captured.clone())
+        .collect();
 
     for trigger in &definition.triggers {
         let outcome = evaluate_trigger(
@@ -353,6 +363,7 @@ pub fn evaluate_routine_frame(
         condition,
         will_trigger,
         predicate_jobs,
+        timer_captures,
     }
 }
 

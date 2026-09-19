@@ -21,7 +21,7 @@ use crate::types::{
     action::Action,
     automation_definition::{
         HelperId, InvokeMode, NativeAction, NodeId, Program, SceneSelection, TargetSpec,
-        TimerOperation,
+        TimerIntentCapture, TimerIntentTarget, TimerOperation,
     },
     automation_trace::{PlannedStepStatus, StepDisposition},
     device::{DeviceData, DeviceKey, DeviceRef, DevicesState},
@@ -102,6 +102,9 @@ pub struct PlannedStep {
     pub body: PlannedStepBody,
     /// Intent revisions captured at plan time; dispatch re-checks them.
     pub intent_guard: Vec<(IntentTarget, u64)>,
+    /// Frozen intent targets riding the timer operation this step schedules
+    /// (J08). The actor records their tokens at acceptance.
+    pub timer_capture: Option<crate::types::automation_definition::TimerIntentCapture>,
 }
 
 #[derive(Clone, Debug)]
@@ -224,6 +227,7 @@ pub fn plan_evaluation(
         inputs,
         steps: Vec::new(),
         suppressions: Vec::new(),
+        timer_captures: evaluation.timer_captures.clone(),
     };
     match &compiled.normalized.program {
         Program::Native(program) => planner.plan_steps(&program.steps),
@@ -255,6 +259,7 @@ pub fn plan_script_actions(
         inputs,
         steps: Vec::new(),
         suppressions: Vec::new(),
+        timer_captures: Vec::new(),
     };
     planner.plan_steps(actions);
     RoutinePlan {
@@ -270,6 +275,9 @@ struct Planner<'a> {
     inputs: &'a PlanInputs<'a>,
     steps: Vec<PlannedStep>,
     suppressions: Vec<PlannedStepStatus>,
+    /// Intent tokens frozen by the timer generation(s) firing in this frame
+    /// (J08), flattened across captures.
+    timer_captures: Vec<super::timers::TimerIntentTokens>,
 }
 
 impl Planner<'_> {
@@ -310,14 +318,76 @@ impl Planner<'_> {
             kind,
             body,
             intent_guard,
+            timer_capture: None,
         });
     }
 
+    fn push_timer_step(
+        &mut self,
+        action: &NativeAction,
+        kind: &'static str,
+        operation: TimerOperation,
+        timer_capture: Option<crate::types::automation_definition::TimerIntentCapture>,
+    ) {
+        self.steps.push(PlannedStep {
+            action_id: action.id().clone(),
+            kind,
+            body: PlannedStepBody::TimerOperation { operation },
+            intent_guard: Vec::new(),
+            timer_capture,
+        });
+    }
+
+    /// Resolve a `capture_target_intents` spec at plan time: `Ok(None)` means
+    /// no capture, `Err(())` means the step was suppressed and must not plan.
+    fn plan_timer_capture(
+        &mut self,
+        action: &NativeAction,
+        kind: &str,
+        spec: Option<&TargetSpec>,
+    ) -> Result<Option<TimerIntentCapture>, ()> {
+        let Some(spec) = spec else {
+            return Ok(None);
+        };
+        if !spec.groups.is_empty() {
+            self.suppress(
+                action,
+                kind,
+                Vec::new(),
+                "capture_group_intents_unsupported".to_string(),
+            );
+            return Err(());
+        }
+        Ok(Some(TimerIntentCapture {
+            targets: spec
+                .devices
+                .iter()
+                .map(|reference| TimerIntentTarget::Device {
+                    device: device_key(reference),
+                })
+                .collect(),
+        }))
+    }
+
     fn capture_guard(&self, targets: Vec<IntentTarget>) -> Vec<(IntentTarget, u64)> {
+        let captured: Vec<(TimerIntentTarget, u64)> =
+            self.timer_captures.iter().flatten().cloned().collect();
         targets
             .into_iter()
             .map(|target| {
-                let revision = self.inputs.intents.revision(&target);
+                let frozen = match &target {
+                    IntentTarget::Device(key) => captured
+                        .iter()
+                        .find(|(captured_target, _)| {
+                            *captured_target
+                                == TimerIntentTarget::Device {
+                                    device: key.clone(),
+                                }
+                        })
+                        .map(|(_, revision)| *revision),
+                    IntentTarget::Group(_) | IntentTarget::Scene(_) => None,
+                };
+                let revision = frozen.unwrap_or_else(|| self.inputs.intents.revision(&target));
                 (target, revision)
             })
             .collect()
@@ -458,33 +528,45 @@ impl Planner<'_> {
                 self.suppress(action, kind, Vec::new(), "no_matching_branch".to_string());
             }
             NativeAction::ScheduleTimer {
-                timer, delay_ms, ..
+                timer,
+                delay_ms,
+                capture_target_intents,
+                ..
             } => {
-                self.push_dispatch(
+                let Ok(capture) =
+                    self.plan_timer_capture(action, kind, capture_target_intents.as_ref())
+                else {
+                    return;
+                };
+                self.push_timer_step(
                     action,
                     kind,
-                    PlannedStepBody::TimerOperation {
-                        operation: TimerOperation::Schedule {
-                            timer: timer.clone(),
-                            delay_ms: *delay_ms,
-                        },
+                    TimerOperation::Schedule {
+                        timer: timer.clone(),
+                        delay_ms: *delay_ms,
                     },
-                    Vec::new(),
+                    capture,
                 );
             }
             NativeAction::ReplaceTimer {
-                timer, delay_ms, ..
+                timer,
+                delay_ms,
+                capture_target_intents,
+                ..
             } => {
-                self.push_dispatch(
+                let Ok(capture) =
+                    self.plan_timer_capture(action, kind, capture_target_intents.as_ref())
+                else {
+                    return;
+                };
+                self.push_timer_step(
                     action,
                     kind,
-                    PlannedStepBody::TimerOperation {
-                        operation: TimerOperation::Replace {
-                            timer: timer.clone(),
-                            delay_ms: *delay_ms,
-                        },
+                    TimerOperation::Replace {
+                        timer: timer.clone(),
+                        delay_ms: *delay_ms,
                     },
-                    Vec::new(),
+                    capture,
                 );
             }
             NativeAction::CancelTimer { timer, .. } => {
@@ -785,6 +867,7 @@ mod tests {
             condition,
             will_trigger: true,
             predicate_jobs: Vec::new(),
+            timer_captures: Vec::new(),
         }
     }
 
