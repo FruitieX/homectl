@@ -46,6 +46,8 @@ pub struct TestServerConfig {
     pub cleanup_working_dir: bool,
     /// If set, start in simulation mode using this TOML config file path
     pub simulate_config: Option<PathBuf>,
+    /// Additional environment variables to pass to the server process.
+    pub extra_env: Vec<(String, String)>,
 }
 
 impl Default for TestServerConfig {
@@ -58,6 +60,7 @@ impl Default for TestServerConfig {
             working_dir: None,
             cleanup_working_dir: true,
             simulate_config: None,
+            extra_env: Vec::new(),
         }
     }
 }
@@ -127,6 +130,10 @@ impl TestServer {
                 .env_remove("CONFIG_FILE")
                 .stdout(Stdio::piped())
                 .stderr(Stdio::piped());
+
+            for (key, value) in &config.extra_env {
+                cmd.env(key, value);
+            }
 
             if let Some(ref sim_config) = config.simulate_config {
                 // Simulation mode: run from workspace root (where prod-config.toml lives)

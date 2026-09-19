@@ -12,6 +12,7 @@ pub mod config;
 pub mod device_commands;
 mod devices;
 mod health;
+mod origin;
 mod widgets;
 mod ws;
 
@@ -119,11 +120,6 @@ pub fn init_api(
     event_tx: TxEventChannel,
     port: u16,
 ) -> Result<()> {
-    let cors = warp::cors()
-        .allow_any_origin()
-        .allow_methods(vec!["GET", "POST", "PUT", "DELETE", "OPTIONS"])
-        .allow_headers(vec!["Content-Type"]);
-
     let api = warp::path("api")
         .and(warp::path("v1"))
         .and(
@@ -158,14 +154,57 @@ pub fn init_api(
         routes = routes.or(ui_routes).unify().boxed();
     }
 
+    let allowed_origins = origin::AllowedOrigins::from_env();
+    if !allowed_origins.is_empty() {
+        let configured: Vec<&str> = allowed_origins.entries().collect();
+        info!(
+            "Allowing cross-origin requests from {}",
+            configured.join(", ")
+        );
+    }
+    let routes = apply_origin_guard(routes, allowed_origins);
+
     info!("Starting API server on port {}", port);
     tokio::spawn(async move {
-        warp::serve(routes.with(cors))
-            .run(([0, 0, 0, 0], port))
-            .await;
+        warp::serve(routes).run(([0, 0, 0, 0], port)).await;
     });
 
     Ok(())
+}
+
+/// Reject cross-origin requests that are not explicitly allowed.
+///
+/// The guard runs before every route handler. Requests from allowed origins
+/// (including the server's own origin) continue as usual; denied requests and
+/// CORS preflights are answered without touching any handler.
+fn apply_origin_guard(
+    routes: BoxedFilter<(Response,)>,
+    allowed_origins: origin::AllowedOrigins,
+) -> BoxedFilter<(Response,)> {
+    let guard = origin::guard(allowed_origins);
+
+    // `not_found()` is the fall-through rejection: warp absorbs it whenever the
+    // other branch produces a real rejection, so route errors keep their status.
+    let immediate = guard.clone().and_then(|verdict| async move {
+        match verdict {
+            origin::Verdict::Immediate(response) => Ok(response),
+            origin::Verdict::Proceed(_) => Err(warp::reject::not_found()),
+        }
+    });
+
+    let guarded = guard
+        .and_then(|verdict| async move {
+            match verdict {
+                origin::Verdict::Proceed(origin) => Ok(origin),
+                origin::Verdict::Immediate(_) => Err(warp::reject::not_found()),
+            }
+        })
+        .and(routes)
+        .map(|origin: Option<String>, response: Response| {
+            origin::finalize(origin.as_deref(), response)
+        });
+
+    immediate.or(guarded).unify().boxed()
 }
 
 fn env_var(name: &str) -> Option<String> {

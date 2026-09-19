@@ -232,6 +232,9 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
   (SQLite and PostgreSQL are supported; defaults to `./homectl.db` SQLite)
 - `CONFIG_FILE` – JSON export backup or legacy TOML file used for seeding and fallback startup
 - `RUST_LOG` – Logging level (e.g., `homectl_server=info`)
+- `HOMECTL_ALLOWED_ORIGINS` – Comma separated list of additional browser
+  origins allowed to call the API cross-origin (same-origin and loopback
+  origins are always allowed; all other origins are rejected before routing)
 
 ## CI/CD
 

@@ -3418,3 +3418,127 @@ fn durable_named_timers_survive_restart_and_cancelled_ones_do_not() {
 
     let _ = std::fs::remove_dir_all(&temp_dir);
 }
+
+#[test]
+fn cross_origin_requests_are_restricted() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let export_url = format!("{}/api/v1/config/export", server.base_url);
+
+    // Requests without an Origin header (CLI, curl, health probes) keep working.
+    let response = client.get(&export_url).send().unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Same-origin browser requests (the bundled UI) keep working, even when
+    // the public host differs from the loopback address used in tests.
+    let response = client
+        .get(&export_url)
+        .header("Host", "homectl.test")
+        .header("Origin", "https://homectl.test")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("Access-Control-Allow-Origin")
+            .unwrap(),
+        "https://homectl.test"
+    );
+
+    // Loopback origins are allowed for local development.
+    let response = client
+        .get(&export_url)
+        .header("Origin", "http://localhost:5173")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    // Foreign origins are rejected before any handler runs, and their
+    // responses carry no CORS permissions.
+    let response = client
+        .get(&export_url)
+        .header("Origin", "https://evil.example")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert!(response
+        .headers()
+        .get("Access-Control-Allow-Origin")
+        .is_none());
+
+    let import_url = format!("{}/api/v1/config/import", server.base_url);
+    let response = client
+        .post(&import_url)
+        .header("Origin", "https://evil.example")
+        .json(&blank_backup_config())
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    let response = client
+        .request(reqwest::Method::OPTIONS, &import_url)
+        .header("Origin", "https://evil.example")
+        .header("Access-Control-Request-Method", "POST")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+    // Allowed preflights are answered with CORS headers.
+    let response = client
+        .request(reqwest::Method::OPTIONS, &import_url)
+        .header("Origin", "http://localhost:5173")
+        .header("Access-Control-Request-Method", "POST")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    assert_eq!(
+        response
+            .headers()
+            .get("Access-Control-Allow-Origin")
+            .unwrap(),
+        "http://localhost:5173"
+    );
+}
+
+#[test]
+fn cross_origin_allowlist_honors_configured_origins() {
+    let server = TestServer::with_config(TestServerConfig {
+        extra_env: vec![(
+            "HOMECTL_ALLOWED_ORIGINS".to_string(),
+            "https://dashboard.example/, http://kiosk.local:8080".to_string(),
+        )],
+        ..Default::default()
+    })
+    .unwrap();
+    let client = Client::new();
+    let export_url = format!("{}/api/v1/config/export", server.base_url);
+
+    let response = client
+        .get(&export_url)
+        .header("Origin", "https://dashboard.example")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("Access-Control-Allow-Origin")
+            .unwrap(),
+        "https://dashboard.example"
+    );
+
+    let response = client
+        .get(&export_url)
+        .header("Origin", "http://kiosk.local:8080")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let response = client
+        .get(&export_url)
+        .header("Origin", "https://other.example")
+        .send()
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+}
