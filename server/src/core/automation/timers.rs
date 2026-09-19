@@ -802,6 +802,33 @@ mod tests {
         assert!(store.is_empty(), "an edited revision drops schedules");
     }
 
+    // J04: zero delay queues an occurrence at the current instant; firing is
+    // still an event on the shared driver, never inline recursion.
+    #[test]
+    fn zero_delay_timers_queue_at_the_current_instant() {
+        let mut store = TimerStore::default();
+        let generation = store
+            .apply(
+                &owner("routine"),
+                1,
+                &TimerOperation::Schedule {
+                    timer: timer("now"),
+                    delay_ms: 0,
+                },
+                None,
+                4_242,
+                9_000,
+            )
+            .unwrap();
+        let wakeup = store
+            .wakeups()
+            .into_iter()
+            .find(|wakeup| wakeup.generation == generation)
+            .expect("queued wakeup");
+        assert_eq!(wakeup.due_monotonic_ms, 4_242);
+        assert_eq!(wakeup.due_wall_ms, 9_000);
+    }
+
     #[test]
     fn stale_schedule_revision_never_fires() {
         let mut store = TimerStore::default();

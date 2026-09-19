@@ -995,13 +995,15 @@ impl Compiler<'_> {
                         Some(action.id()),
                         "timer",
                     );
-                    if *delay_ms == 0 || *delay_ms > MAX_TIMER_DELAY_MS {
+                    // J04: zero delay is allowed and queues a later event; it
+                    // never runs inline.
+                    if *delay_ms > MAX_TIMER_DELAY_MS {
                         self.report.error_at_node(
                             format!("{action_path}/delay_ms"),
                             action.id(),
                             "invalid_duration",
                             format!(
-                                "Timer delay must be in 1..={MAX_TIMER_DELAY_MS} milliseconds."
+                                "Timer delay must be in 0..={MAX_TIMER_DELAY_MS} milliseconds."
                             ),
                         );
                     }
@@ -1968,6 +1970,28 @@ mod tests {
         });
         assert_eq!(
             error_codes(&compile_definition_value(&bad_duration, &catalog()).unwrap_err()),
+            vec!["invalid_duration"]
+        );
+
+        // J04: zero delay is a queued event, not inline recursion; only
+        // delays above the bound are invalid.
+        let zero_delay = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [
+                { "action": "schedule_timer", "id": "step_timer", "timer": "t1",
+                  "delay_ms": 0 }
+            ]}
+        });
+        assert!(compile_definition_value(&zero_delay, &catalog()).is_ok());
+        let beyond_bound = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [
+                { "action": "schedule_timer", "id": "step_timer", "timer": "t1",
+                  "delay_ms": MAX_TIMER_DELAY_MS + 1 }
+            ]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&beyond_bound, &catalog()).unwrap_err()),
             vec!["invalid_duration"]
         );
 
