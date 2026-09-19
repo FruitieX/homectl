@@ -119,6 +119,9 @@ pub struct AppState {
     pub rules: Routines,
     /// Typed helper definitions and current values (P05).
     pub helpers: crate::core::helpers::Helpers,
+    /// Computed source definitions, last-good outputs, and refresh cursors
+    /// (P11).
+    pub sources: crate::core::automation::sources::Sources,
     /// Manual-intent revisions used to reject stale v2 plans (A03).
     pub intents: crate::core::automation::IntentTracker,
     /// Owner bookkeeping, lazy worker pool, and invocation contexts for v2
@@ -706,6 +709,7 @@ impl AppState {
         self.integrations = integrations;
         let removed_device_keys = self.remove_devices_for_integrations(&removed_ids);
         self.apply_runtime_helpers();
+        self.apply_runtime_sources();
         self.apply_runtime_groups();
         self.apply_runtime_scenes();
         self.apply_runtime_routines();
@@ -746,6 +750,7 @@ impl AppState {
     pub async fn apply_runtime_config(&mut self) -> Result<()> {
         self.apply_runtime_integrations().await?;
         self.apply_runtime_helpers();
+        self.apply_runtime_sources();
         self.apply_runtime_groups();
         self.apply_runtime_scenes();
         self.apply_runtime_routines();
@@ -766,6 +771,9 @@ impl AppState {
                 .sources
                 .sort_by(|left, right| left.id.0.cmp(&right.id.0));
         }
+        // A write always changes the revision, so the source recomputes and
+        // republishes immediately instead of waiting for its cadence.
+        self.apply_runtime_sources();
     }
 
     pub fn delete_source(
@@ -776,7 +784,11 @@ impl AppState {
         self.runtime_config
             .sources
             .retain(|source| source.id != *source_id);
-        self.runtime_config.sources.len() != len_before
+        let deleted = self.runtime_config.sources.len() != len_before;
+        if deleted {
+            self.apply_runtime_sources();
+        }
+        deleted
     }
 
     pub fn upsert_scene(&mut self, scene: SceneRow) {

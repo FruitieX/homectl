@@ -39,6 +39,7 @@ pub const KIND_LABELS: &[&str] = &[
     "HandleEvent:SceneMaterializedResult",
     "HandleEvent:RoutineTimerOperation",
     "HandleEvent:TimerWakeup",
+    "HandleEvent:SourceRefreshTick",
 ];
 
 pub const KIND_MUTATE: usize = 11;
@@ -205,5 +206,6 @@ fn event_kind_index(event: &crate::types::event::Event) -> usize {
         Event::SceneMaterializedResult { .. } => 17,
         Event::RoutineTimerOperation { .. } => 18,
         Event::TimerWakeup { .. } => 19,
+        Event::SourceRefreshTick => 20,
     }
 }

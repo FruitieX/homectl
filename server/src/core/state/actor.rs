@@ -458,6 +458,7 @@ fn event_kind(event: &Event) -> &'static str {
         Event::SetExternalState { .. } => "SetExternalState",
         Event::SetInternalState { .. } => "SetInternalState",
         Event::ApplyDeviceState { .. } => "ApplyDeviceState",
+        Event::SourceRefreshTick => "SourceRefreshTick",
         Event::StartupCompleted => "StartupCompleted",
         Event::DbStoreScene { .. } => "DbStoreScene",
         Event::DbEditScene { .. } => "DbEditScene",

@@ -43,6 +43,8 @@ use super::{
     routines::FinalizedRuleRun,
 };
 
+use super::automation::sources;
+
 /// Resolves the effective scene id for an action that may reference the
 /// currently active scene of another group. Falls back to `fallback_scene_id`
 /// when the referenced group has no unanimous active scene.
@@ -129,6 +131,11 @@ pub struct EventOutcome {
 impl EventOutcome {
     fn push(&mut self, work: DeferredEventWork) {
         self.deferred_work.push(work);
+    }
+
+    fn include(&mut self, other: EventOutcome) {
+        self.deferred_work.extend(other.deferred_work);
+        self.snapshot_changes.include(other.snapshot_changes);
     }
 
     fn mark_snapshot_changes(&mut self, changes: SnapshotChanges) {
@@ -349,6 +356,52 @@ fn causation_origin(event: &Event) -> EventOrigin {
         }
         _ => EventOrigin::Derived,
     }
+}
+
+/// Apply one internal state publication: scene-override bookkeeping, scene
+/// resolution, and the device mutation. Shared by [`Event::SetInternalState`]
+/// and computed-source refreshes (P11) so the two paths cannot drift.
+fn apply_internal_state(
+    state: &mut AppState,
+    device: &Device,
+    skip_external_update: Option<bool>,
+    skip_db_update: Option<bool>,
+    origin: Option<EventOrigin>,
+) -> Result<EventOutcome> {
+    let mut outcome = EventOutcome::default();
+
+    let has_scene_override = state.scenes.has_override(device);
+    if has_scene_override {
+        let (scene_id, overrides) = state.scenes.store_scene_override_in_memory(device, true)?;
+        outcome.push(DeferredEventWork::PersistSceneOverride {
+            scene_id,
+            overrides: Box::new(overrides),
+        });
+        state.scenes.force_invalidate(&state.devices, &state.groups);
+        outcome.mark_snapshot_changes(SnapshotChanges {
+            flattened_scenes: true,
+            routine_statuses: true,
+            ..SnapshotChanges::none()
+        });
+    }
+
+    let device = device.set_scene(
+        device.get_scene_id().as_ref(),
+        &state.scenes,
+        &state.devices,
+    );
+
+    state.devices.set_state_with_origin(
+        &device,
+        skip_external_update.unwrap_or_default(),
+        skip_db_update.unwrap_or(true),
+        origin.unwrap_or(EventOrigin::Command),
+    );
+    if origin.unwrap_or(EventOrigin::Command) == EventOrigin::Command {
+        state.intents.bump_device(&device.get_device_key());
+    }
+    outcome.mark_snapshot_changes(SnapshotChanges::devices());
+    Ok(outcome)
 }
 
 pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOutcome> {
@@ -605,38 +658,16 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                 );
                 return Ok(outcome);
             }
-            let has_scene_override = state.scenes.has_override(device);
-            if has_scene_override {
-                let (scene_id, overrides) =
-                    state.scenes.store_scene_override_in_memory(device, true)?;
-                outcome.push(DeferredEventWork::PersistSceneOverride {
-                    scene_id,
-                    overrides: Box::new(overrides),
-                });
-                state.scenes.force_invalidate(&state.devices, &state.groups);
-                outcome.mark_snapshot_changes(SnapshotChanges {
-                    flattened_scenes: true,
-                    routine_statuses: true,
-                    ..SnapshotChanges::none()
-                });
-            }
-
-            let device = device.set_scene(
-                device.get_scene_id().as_ref(),
-                &state.scenes,
-                &state.devices,
-            );
-
-            state.devices.set_state_with_origin(
-                &device,
-                skip_external_update.unwrap_or_default(),
-                skip_db_update.unwrap_or(true),
-                origin.unwrap_or(EventOrigin::Command),
-            );
-            if origin.unwrap_or(EventOrigin::Command) == EventOrigin::Command {
-                state.intents.bump_device(&device.get_device_key());
-            }
-            outcome.mark_snapshot_changes(SnapshotChanges::devices());
+            outcome.include(apply_internal_state(
+                state,
+                device,
+                *skip_external_update,
+                *skip_db_update,
+                *origin,
+            )?);
+        }
+        Event::SourceRefreshTick => {
+            outcome.mark_snapshot_changes(state.refresh_due_sources());
         }
         Event::SetExternalState { device } => {
             let calibration = state
@@ -2033,6 +2064,78 @@ impl AppState {
         self.rules
             .seed_transitions(&self.devices, &self.groups, Some(&self.helpers));
     }
+
+    /// Rebuild the computed-source registry from the runtime config, drop
+    /// synthetic devices for removed sources, and refresh every due source.
+    /// Startup and definition changes always compute once (D04); alias keys
+    /// resolve to the canonical `computed/<id>` device instead of a duplicate
+    /// entity (D07).
+    pub fn apply_runtime_sources(&mut self) -> SnapshotChanges {
+        let removed = self.sources.load_rows(self.runtime_config.sources.clone());
+        let mut changes = SnapshotChanges::none();
+        for id in removed {
+            if self.devices.remove_device(&sources::source_device_key(&id)) {
+                changes.devices = true;
+            }
+        }
+        self.devices.set_source_aliases(self.sources.aliases());
+        changes.include(self.refresh_due_sources());
+        changes
+    }
+
+    /// Refresh every enabled source whose cadence has elapsed. Evaluation or
+    /// publication failures retain the last good output as stale and publish
+    /// nothing (D06).
+    pub fn refresh_due_sources(&mut self) -> SnapshotChanges {
+        let now_wall_ms = self.clock.wall_ms();
+        let mut changes = SnapshotChanges::none();
+        for definition in self.sources.due_sources(now_wall_ms) {
+            match sources::evaluate_source(&definition, now_wall_ms) {
+                Ok(evaluation) => {
+                    self.sources.record_success(
+                        &definition,
+                        evaluation.profile.clone(),
+                        evaluation.local_time,
+                        now_wall_ms,
+                    );
+                    let device = sources::synthetic_device(&definition, &evaluation.profile);
+                    match apply_internal_state(
+                        self,
+                        &device,
+                        Some(true),
+                        Some(true),
+                        Some(EventOrigin::Derived),
+                    ) {
+                        Ok(outcome) => {
+                            changes.include(outcome.snapshot_changes());
+                            self.pending_deferred_work
+                                .extend(outcome.into_deferred_work());
+                        }
+                        Err(error) => {
+                            warn!(
+                                "Computed source {} failed to publish: {error:#}",
+                                definition.id.0
+                            );
+                            self.sources.record_failure(
+                                &definition.id,
+                                error.to_string(),
+                                now_wall_ms,
+                            );
+                        }
+                    }
+                }
+                Err(message) => {
+                    warn!(
+                        "Computed source {} failed to evaluate: {message}",
+                        definition.id.0
+                    );
+                    self.sources
+                        .record_failure(&definition.id, message, now_wall_ms);
+                }
+            }
+        }
+        changes
+    }
 }
 
 #[cfg(test)]
@@ -2135,6 +2238,7 @@ pub(crate) mod tests {
             devices,
             rules: Routines::new(Default::default(), event_tx.clone()),
             helpers: Default::default(),
+            sources: Default::default(),
             intents: Default::default(),
             scripts: Default::default(),
             timers: Default::default(),
@@ -4829,5 +4933,95 @@ pub(crate) mod tests {
         .await
         .unwrap();
         assert_eq!(state.pending_predicate_fires.len(), 1);
+    }
+
+    fn test_source_definition() -> crate::types::automation_source::SourceDefinition {
+        use crate::types::automation_definition::SourceId;
+        use crate::types::automation_source::{
+            CircadianCompatParams, SourceCompute, SourceDefinition,
+        };
+        use crate::types::color::DeviceColor;
+        use crate::types::device::{DeviceId, DeviceKey};
+        use crate::types::integration::IntegrationId;
+
+        SourceDefinition {
+            id: SourceId("circadian".to_string()),
+            name: "Circadian".to_string(),
+            enabled: true,
+            revision: 1,
+            timezone: "Europe/Helsinki".to_string(),
+            refresh_interval_ms: 60_000,
+            aliases: vec![DeviceKey::new(
+                IntegrationId::from("circadian".to_string()),
+                DeviceId::new("color"),
+            )],
+            compute: SourceCompute::CircadianCompat {
+                preset_version: crate::core::automation::sources::CIRCADIAN_COMPAT_PRESET_VERSION,
+                params: CircadianCompatParams {
+                    day_fade_start: "06:00".to_string(),
+                    day_fade_duration_hours: 2,
+                    day_color: DeviceColor::new_from_kelvin(3000),
+                    day_brightness: Some(0.8),
+                    night_fade_start: "20:00".to_string(),
+                    night_fade_duration_hours: 2,
+                    night_color: DeviceColor::new_from_kelvin(2000),
+                    night_brightness: Some(0.2),
+                },
+            },
+        }
+    }
+
+    // P11/D04/D07/D09: a refresh tick publishes the read-only synthetic
+    // sensor under `computed/<id>`, the legacy alias resolves to the same
+    // entity, and the cadence gate suppresses repeat work.
+    #[tokio::test]
+    async fn p11_source_refresh_publishes_canonical_device_and_alias() {
+        use crate::types::automation_definition::SourceId;
+        use crate::types::device::{DeviceData, DeviceId, DeviceKey, SensorDevice};
+        use crate::types::integration::IntegrationId;
+
+        let (mut state, _event_rx) = test_state();
+        state.runtime_config.sources = vec![test_source_definition()];
+        state.apply_runtime_sources();
+
+        let canonical = DeviceKey::new(
+            IntegrationId::from("computed".to_string()),
+            DeviceId::new("circadian"),
+        );
+        let alias = DeviceKey::new(
+            IntegrationId::from("circadian".to_string()),
+            DeviceId::new("color"),
+        );
+        let source_id = SourceId("circadian".to_string());
+
+        let device = state.devices.get_device(&canonical).expect("published");
+        let DeviceData::Sensor(SensorDevice::Color(sensor)) = &device.data else {
+            panic!("expected a read-only color sensor");
+        };
+        assert!(sensor.power);
+        // ManualClock starts at 1_000_000 ms: 02:16 Helsinki, night.
+        assert_eq!(sensor.brightness, Some(ordered_float::OrderedFloat(0.2)));
+        assert_eq!(
+            state.sources.output(&source_id).unwrap().quality,
+            crate::types::automation_source::SourceQuality::Fresh
+        );
+        assert_eq!(
+            state.devices.get_device(&alias).map(Device::get_device_key),
+            Some(canonical.clone()),
+            "the alias resolves to the one canonical entity"
+        );
+
+        // The tick is not due again within the cadence.
+        assert!(state.refresh_due_sources().is_empty());
+
+        // A corrupted definition (import bypassed API validation) fails
+        // without inventing a healthy output; the last good device stays.
+        state.runtime_config.sources[0].revision = 2;
+        let crate::types::automation_source::SourceCompute::CircadianCompat { params, .. } =
+            &mut state.runtime_config.sources[0].compute;
+        params.day_fade_duration_hours = 16;
+        state.apply_runtime_sources();
+        assert!(state.sources.output(&source_id).is_none());
+        assert!(state.devices.get_device(&canonical).is_some());
     }
 }

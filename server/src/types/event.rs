@@ -215,6 +215,11 @@ pub enum Event {
         due_wall_ms: i64,
     },
 
+    /// Periodic opportunity for computed sources to refresh (P11). The actor
+    /// compares each enabled source's own cadence against its last attempt;
+    /// the ticker carries no per-source decision.
+    SourceRefreshTick,
+
     /// Wait for a bit for devices to come online before starting up.
     StartupCompleted,
 

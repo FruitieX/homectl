@@ -52,6 +52,17 @@ pub fn parse_schedule_zone(name: &str) -> Option<ScheduleZone> {
     None
 }
 
+impl ScheduleZone {
+    /// Civil time of an instant in this zone. Computed sources evaluate
+    /// against this injected local time (P11).
+    pub fn local_time_at(&self, instant: DateTime<Utc>) -> chrono::NaiveTime {
+        match self {
+            ScheduleZone::Tz(zone) => instant.with_timezone(zone).time(),
+            ScheduleZone::Fixed(offset) => instant.with_timezone(offset).time(),
+        }
+    }
+}
+
 /// Resolve a civil time in a zone under the fixed DST policy.
 fn resolve_civil(zone: ScheduleZone, civil: NaiveDateTime) -> Option<DateTime<Utc>> {
     match zone {

@@ -20,7 +20,7 @@ use homectl_server::db::{
     actions, config_queries, connect_configured_database, init_db, is_db_connected,
     is_db_reconnect_configured,
 };
-use homectl_server::types::event::{mk_event_channel, Event};
+use homectl_server::types::event::{mk_event_channel, Event, TxEventChannel};
 use homectl_server::types::scene::SceneOverridesConfig;
 use homectl_server::utils::cli::{Cli, Command};
 
@@ -230,6 +230,7 @@ async fn run_event_loop(
         devices,
         rules,
         helpers: Default::default(),
+        sources: Default::default(),
         intents: Default::default(),
         scripts: Default::default(),
         timers: Default::default(),
@@ -251,6 +252,9 @@ async fn run_event_loop(
     // Startup discovery/restore mutations are seeded as startup frames and
     // must not fire routines (E06).
     state.sync_script_owners();
+    // P11: every enabled computed source computes once at startup; the
+    // published synthetic devices join the same startup seed.
+    state.apply_runtime_sources();
     state.seed_startup_state().await;
 
     // P10: restore best-effort durable named timers so a restart does not lose
@@ -274,6 +278,10 @@ async fn run_event_loop(
     // `StateHandle`, and the main loop below forwards incoming events
     // onto the actor's command channel.
     let state_handle = spawn_state_actor(state, snapshot.clone(), deferred_work_tx.clone());
+
+    // P11: computed sources refresh on their own cadence. The ticker only
+    // wakes the actor; per-source due checks stay in actor state.
+    spawn_source_refresh_ticker(event_tx.clone());
 
     init_api(
         snapshot.clone(),
@@ -311,6 +319,23 @@ async fn run_event_loop(
 
         state_handle.send_event(event);
     }
+}
+
+/// P11: periodic opportunity for computed sources to refresh. A fixed
+/// one-second tick honors every validated cadence (the minimum is one
+/// second); each source's own interval is enforced in actor state, so the
+/// tick carries no per-source decision.
+fn spawn_source_refresh_ticker(event_tx: TxEventChannel) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        // The first tick completes immediately; startup already computed.
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            event_tx.send(Event::SourceRefreshTick);
+        }
+    });
 }
 
 /// P10 startup recovery for best-effort durable named timers.

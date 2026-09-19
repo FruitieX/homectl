@@ -237,6 +237,121 @@ fn source_crud_validation_and_export_import() {
     assert_eq!(restored["data"][0]["revision"], 2);
 }
 
+fn find_device(
+    server: &TestServer,
+    client: &Client,
+    integration_id: &str,
+    device_id: &str,
+) -> Option<Value> {
+    let response: Value = client
+        .get(format!("{}/api/v1/devices", server.base_url))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    response["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|device| device["integration_id"] == integration_id && device["id"] == device_id)
+        .cloned()
+}
+
+/// P11: a computed source publishes exactly one read-only synthetic sensor
+/// under `computed/<id>`; the legacy alias is not a second entity, and
+/// deleting the source removes the device.
+#[test]
+fn source_refresh_publishes_read_only_synthetic_device() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let url = format!("{}/api/v1/config/sources/circadian", server.base_url);
+    let source = json!({
+        "id": "circadian",
+        "name": "Circadian",
+        "enabled": false,
+        "revision": 0,
+        "timezone": "Europe/Helsinki",
+        "refresh_interval_ms": 60000,
+        "aliases": ["circadian/color"],
+        "compute": {
+            "kind": "circadian_compat",
+            "preset_version": 1,
+            "params": {
+                "day_fade_start": "06:00",
+                "day_fade_duration_hours": 2,
+                "day_color": {"ct": 3000},
+                "day_brightness": 0.8,
+                "night_fade_start": "20:00",
+                "night_fade_duration_hours": 2,
+                "night_color": {"ct": 2000},
+                "night_brightness": 0.2
+            }
+        }
+    });
+
+    // Disabled sources never compute and never publish.
+    client
+        .put(&url)
+        .json(&source)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert!(find_device(&server, &client, "computed", "circadian").is_none());
+
+    // Enabling computes immediately (a new revision is always due).
+    let mut enabled = source.clone();
+    enabled["enabled"] = json!(true);
+    client
+        .put(&url)
+        .json(&enabled)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let device = find_device(&server, &client, "computed", "circadian").expect("published");
+    assert_eq!(device["name"], "Circadian");
+    assert!(device["data"]["Sensor"]["power"].as_bool().unwrap());
+    assert!(device["data"]["Sensor"]["brightness"].is_number());
+    assert!(
+        find_device(&server, &client, "circadian", "color").is_none(),
+        "the alias must not appear as a duplicate entity"
+    );
+
+    // D08: integration reloads never remove computed owners.
+    let integrations_url = format!("{}/api/v1/config/integrations", server.base_url);
+    client
+        .post(&integrations_url)
+        .json(&json!({
+            "id": "dummy",
+            "plugin": "dummy",
+            "config": { "devices": {} },
+            "enabled": true
+        }))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert!(find_device(&server, &client, "computed", "circadian").is_some());
+    client
+        .delete(format!("{}/api/v1/config/integrations/dummy", server.base_url))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert!(find_device(&server, &client, "computed", "circadian").is_some());
+
+    // Deleting the source removes the synthetic device.
+    client
+        .delete(&url)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    assert!(find_device(&server, &client, "computed", "circadian").is_none());
+}
+
 #[test]
 fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
     let mut config = blank_backup_config();

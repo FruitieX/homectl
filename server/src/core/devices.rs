@@ -179,6 +179,10 @@ pub struct Devices {
     mutation_causation: EventCausation,
     /// Lazily allocated frame id for the command currently being handled.
     current_frame_id: Option<EventId>,
+    /// Legacy keys that resolve to a computed source's canonical
+    /// `computed/<id>` device (P11/D07). Aliases never chain, and a real
+    /// device always wins over an alias with the same key.
+    source_aliases: BTreeMap<DeviceKey, DeviceKey>,
 }
 
 impl Devices {
@@ -193,7 +197,16 @@ impl Devices {
             pending_mutations: Vec::new(),
             mutation_causation: EventCausation::default(),
             current_frame_id: None,
+            source_aliases: BTreeMap::new(),
         }
+    }
+
+    /// Replace the computed-source alias map (P11/D07).
+    pub fn set_source_aliases(&mut self, aliases: Vec<(DeviceKey, DeviceKey)>) {
+        self.source_aliases = aliases
+            .into_iter()
+            .filter(|(alias, canonical)| alias != canonical)
+            .collect();
     }
 
     /// Start collecting mutations for one actor command with the given
@@ -809,7 +822,11 @@ impl Devices {
     }
 
     pub fn get_device(&self, device_key: &DeviceKey) -> Option<&Device> {
-        self.state.0.get(device_key)
+        if let Some(device) = self.state.0.get(device_key) {
+            return Some(device);
+        }
+        let canonical = self.source_aliases.get(device_key)?;
+        self.state.0.get(canonical)
     }
 
     fn resolve_scene_devices(&self, request: &ActivateSceneRequest<'_>) -> Option<Vec<Device>> {
@@ -1084,7 +1101,7 @@ impl Devices {
             DeviceRef::Id(id_ref) => id_ref.clone().into_device_key(),
         };
 
-        self.state.0.get(&device_key)
+        self.get_device(&device_key)
     }
 }
 
@@ -1096,9 +1113,11 @@ mod tests {
     use super::{ActivateSceneRequest, Devices};
     use crate::core::{groups::Groups, scenes::Scenes};
     use crate::db::config_queries::DevicePositionRow;
+    use crate::types::automation_event::EventOrigin;
     use crate::types::color::Capabilities;
     use crate::types::device::{
-        ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, ManageKind, SensorDevice,
+        ControllableDevice, ControllableState, Device, DeviceData, DeviceId, DeviceKey, DeviceRef,
+        ManageKind, SensorDevice,
     };
     use crate::types::event::{mk_event_channel, RxEventChannel};
     use crate::types::group::GroupsConfig;
@@ -1129,6 +1148,65 @@ mod tests {
     fn test_devices() -> (Devices, RxEventChannel) {
         let (event_tx, event_rx) = mk_event_channel();
         (Devices::new(event_tx, &test_cli()), event_rx)
+    }
+
+    /// D07: a legacy alias resolves to the canonical computed-source device
+    /// as one entity, and a real device at the alias key always wins.
+    #[test]
+    fn source_aliases_resolve_to_canonical_device() {
+        let (mut devices, _rx) = test_devices();
+
+        let canonical = DeviceKey::new(
+            IntegrationId::from("computed".to_string()),
+            DeviceId::new("circadian"),
+        );
+        let alias = DeviceKey::new(
+            IntegrationId::from("circadian".to_string()),
+            DeviceId::new("color"),
+        );
+
+        let color_state = || {
+            DeviceData::Sensor(SensorDevice::Color(ControllableState {
+                power: true,
+                brightness: Some(OrderedFloat(0.8)),
+                color: None,
+                transition: None,
+            }))
+        };
+        let computed = Device::new(
+            canonical.integration_id.clone(),
+            canonical.device_id.clone(),
+            "Circadian".to_string(),
+            color_state(),
+            None,
+        );
+        devices.set_state_with_origin(&computed, true, true, EventOrigin::Derived);
+        devices.set_source_aliases(vec![(alias.clone(), canonical.clone())]);
+
+        let resolved = devices.get_device(&alias).expect("alias resolves");
+        assert_eq!(resolved.get_device_key(), canonical);
+        assert_eq!(
+            devices
+                .get_device_by_ref(&DeviceRef::new_with_id(
+                    alias.integration_id.clone(),
+                    alias.device_id.clone(),
+                ))
+                .map(Device::get_device_key),
+            Some(canonical.clone())
+        );
+
+        // A real device at the alias key shadows the alias.
+        let real = Device::new(
+            alias.integration_id.clone(),
+            alias.device_id.clone(),
+            "Legacy color".to_string(),
+            color_state(),
+            None,
+        );
+        devices.set_state_with_origin(&real, true, true, EventOrigin::Derived);
+        let shadowed = devices.get_device(&alias).expect("real device wins");
+        assert_eq!(shadowed.get_device_key(), alias);
+        assert_eq!(shadowed.name, "Legacy color");
     }
 
     fn create_scene_device_config(
