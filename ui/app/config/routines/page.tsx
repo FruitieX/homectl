@@ -8,6 +8,7 @@ import {
 } from '@/hooks/useConfig';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
+import type { NativeAction } from '@/bindings/NativeAction';
 import type { Program } from '@/bindings/Program';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { TimerRuntimeStatus } from '@/bindings/TimerRuntimeStatus';
@@ -200,6 +201,7 @@ export default function RoutinesPage() {
           groups={groups}
           scenes={sceneList}
           routines={routines}
+          helpers={helpers}
           onClose={() => setShowCreate(false)}
           onCreate={async (routine) => {
             await create(routine);
@@ -755,6 +757,102 @@ function RoutineCard({
   );
 }
 
+function v2Draft(kind: 'blank' | 'sensor' | 'schedule'): RoutineDefinitionV2Body {
+  const trigger: TriggerSpec =
+    kind === 'sensor'
+      ? {
+          kind: 'state_change',
+          id: 'state_change_1',
+          device: { integration_id: '', device_id: '' },
+          mode: 'transition',
+        }
+      : kind === 'schedule'
+        ? {
+            kind: 'schedule',
+            id: 'schedule_1',
+            schedule: {
+              cron: '0 0 8 * * *',
+              timezone: 'Europe/Helsinki',
+              backlog: 'skip',
+            },
+          }
+        : { kind: 'manual', id: 'manual_1' };
+
+  return {
+    triggers: [trigger],
+    condition: { kind: 'literal', value: true },
+    program: {
+      kind: 'native',
+      steps: [
+        {
+          action: 'activate_scene',
+          id: 'activate_scene_1',
+          scene_id: '',
+          targets: {},
+        } as unknown as NativeAction,
+      ],
+    },
+  };
+}
+
+function walkNativeSteps(steps: NativeAction[]): NativeAction[] {
+  const all: NativeAction[] = [];
+  for (const step of steps) {
+    all.push(step);
+    if (step.action === 'choose') {
+      for (const branch of step.branches) {
+        all.push(...walkNativeSteps(branch.steps));
+      }
+    }
+  }
+  return all;
+}
+
+function hasEmptyConditionGroup(condition: unknown): boolean {
+  if (!condition || typeof condition !== 'object') {
+    return false;
+  }
+  const expr = condition as ConditionExpr;
+  switch (expr.kind) {
+    case 'all':
+    case 'any':
+      return (
+        expr.conditions.length === 0 ||
+        expr.conditions.some((child) => hasEmptyConditionGroup(child))
+      );
+    case 'not':
+      return hasEmptyConditionGroup(expr.condition);
+    default:
+      return false;
+  }
+}
+
+function validateV2Draft(definition: RoutineDefinitionV2Body): string | null {
+  if ((definition.triggers ?? []).length === 0) {
+    return 'Add at least one trigger.';
+  }
+
+  const program = definition.program as Program | undefined;
+  if (!program || program.kind !== 'native') {
+    return 'Add a native program with at least one step.';
+  }
+  if (program.steps.length === 0) {
+    return 'Add at least one program step.';
+  }
+  const missingScene = walkNativeSteps(program.steps).some(
+    (step) => step.action === 'activate_scene' && !step.select && !step.scene_id,
+  );
+  if (missingScene) {
+    return 'Choose a scene for each scene activation.';
+  }
+
+  if (hasEmptyConditionGroup(definition.condition)) {
+    return 'Add at least one child to each all/any condition.';
+  }
+
+  return null;
+}
+
 function CreateRoutineModal({
   onClose,
   onCreate,
@@ -762,6 +860,7 @@ function CreateRoutineModal({
   groups,
   scenes,
   routines,
+  helpers,
 }: {
   onClose: () => void;
   onCreate: (routine: Partial<Routine>) => Promise<void>;
@@ -769,12 +868,17 @@ function CreateRoutineModal({
   groups: FlattenedGroupsConfig;
   scenes: { id: string; name: string }[];
   routines: Routine[];
+  helpers: HelperRuntimeStatus[];
 }) {
+  const [semantics, setSemantics] = useState<1 | 2>(2);
   const [id, setId] = useState('');
   const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [rules, setRules] = useState<Rule[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
+  const [definition, setDefinition] = useState<RoutineDefinitionV2Body>(() =>
+    v2Draft('blank'),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
@@ -794,8 +898,35 @@ function CreateRoutineModal({
       <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
         <ConfigFormSection
           title="Routine identity"
-          description="Choose a starting point, edit its rules and actions, then review before saving."
+          description={
+            semantics === 2
+              ? 'Pick a starting point, then edit triggers, condition, and program before saving.'
+              : 'Choose a starting point, edit its rules and actions, then review before saving.'
+          }
         >
+          <ConfigField
+            label="Routine type"
+            description="Native v2 routines use triggers, a condition, and a program. Legacy v1 routines use rules and actions."
+          >
+            <select
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              value={semantics}
+              onChange={(event) => {
+                const next = Number(event.target.value) as 1 | 2;
+                setSemantics(next);
+                setPreview(false);
+                if (next === 2) {
+                  setDefinition(v2Draft('blank'));
+                } else {
+                  setRules([]);
+                  setActions([]);
+                }
+              }}
+            >
+              <option value={2}>Native v2 (recommended)</option>
+              <option value={1}>Legacy v1 (rules and actions)</option>
+            </select>
+          </ConfigField>
           <ConfigField label="Start from">
             <select
               className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
@@ -803,6 +934,23 @@ function CreateRoutineModal({
               onChange={(event) => {
                 setPreview(false);
                 const value = event.target.value;
+                if (semantics === 2) {
+                  if (
+                    value === 'blank' ||
+                    value === 'sensor' ||
+                    value === 'schedule'
+                  ) {
+                    setDefinition(v2Draft(value));
+                    return;
+                  }
+                  const source = routines.find(
+                    (routine) => routine.id === value.slice(5),
+                  );
+                  if (source?.definition_v2) {
+                    setDefinition(structuredClone(source.definition_v2));
+                  }
+                  return;
+                }
                 if (value === 'blank') {
                   setRules([]);
                   setActions([]);
@@ -822,15 +970,44 @@ function CreateRoutineModal({
                 }
               }}
             >
-              <option value="blank">Blank routine</option>
-              <option value="sensor">Sensor activates a scene</option>
-              <optgroup label="Reuse an existing routine">
-                {routines.map((routine) => (
-                  <option key={routine.id} value={`copy:${routine.id}`}>
-                    {routine.name}
-                  </option>
-                ))}
-              </optgroup>
+              {semantics === 2 ? (
+                <>
+                  <option value="blank">Blank routine (manual trigger)</option>
+                  <option value="sensor">Device change activates a scene</option>
+                  <option value="schedule">Schedule activates a scene</option>
+                  <optgroup label="Reuse a v2 routine">
+                    {routines
+                      .filter(
+                        (routine) =>
+                          routine.semantics_version === 2 ||
+                          Boolean(routine.definition_v2),
+                      )
+                      .map((routine) => (
+                        <option key={routine.id} value={`copy:${routine.id}`}>
+                          {routine.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                </>
+              ) : (
+                <>
+                  <option value="blank">Blank routine</option>
+                  <option value="sensor">Sensor activates a scene</option>
+                  <optgroup label="Reuse a v1 routine">
+                    {routines
+                      .filter(
+                        (routine) =>
+                          routine.semantics_version !== 2 &&
+                          !routine.definition_v2,
+                      )
+                      .map((routine) => (
+                        <option key={routine.id} value={`copy:${routine.id}`}>
+                          {routine.name}
+                        </option>
+                      ))}
+                  </optgroup>
+                </>
+              )}
             </select>
           </ConfigField>
           <ConfigField label="Routine ID">
@@ -862,7 +1039,78 @@ function CreateRoutineModal({
         </ConfigFormSection>
 
         <div className="mt-4 space-y-4">
-          {preview ? (
+          {semantics === 2 ? (
+            preview ? (
+              <>
+                <ConfigField label="Definition (JSON)">
+                  <Textarea
+                    className="h-96 font-mono text-xs"
+                    readOnly
+                    value={JSON.stringify(definition, null, 2)}
+                  />
+                </ConfigField>
+                <p className="text-sm text-muted-foreground">
+                  {enabled
+                    ? 'This routine will be enabled when saved.'
+                    : 'This routine will be saved disabled.'}
+                </p>
+              </>
+            ) : (
+              <>
+                <ConfigFormSection
+                  title="Triggers"
+                  description="The routine runs when one of these fires and the condition holds."
+                >
+                  <TriggerBuilder
+                    triggers={definition.triggers ?? []}
+                    onChange={(triggers: TriggerSpec[]) =>
+                      setDefinition((current) => ({ ...current, triggers }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    helpers={helpers}
+                  />
+                </ConfigFormSection>
+                <ConfigFormSection
+                  title="Condition"
+                  description="Every firing is checked against this condition before the program runs."
+                >
+                  <ConditionEditor
+                    condition={
+                      (definition.condition as ConditionExpr | undefined) ?? {
+                        kind: 'literal',
+                        value: true,
+                      }
+                    }
+                    onChange={(condition) =>
+                      setDefinition((current) => ({ ...current, condition }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    helpers={helpers}
+                  />
+                </ConfigFormSection>
+                <ConfigFormSection
+                  title="Program"
+                  description="Steps run in order after the trigger and condition match."
+                >
+                  <ProgramBuilder
+                    program={definition.program as Program | undefined}
+                    onChange={(program) =>
+                      setDefinition((current) => ({ ...current, program }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    routines={routines}
+                    helpers={helpers}
+                  />
+                </ConfigFormSection>
+              </>
+            )
+          ) : preview ? (
             <>
               <RoutineRuleList
                 rules={rules}
@@ -920,6 +1168,36 @@ function CreateRoutineModal({
           <Button
             disabled={!id.trim() || !name.trim() || saving || !preview}
             onClick={async () => {
+              if (semantics === 2) {
+                const validation = validateV2Draft(definition);
+                if (validation) {
+                  setError(validation);
+                  return;
+                }
+                setSaving(true);
+                setError(null);
+                try {
+                  await onCreate({
+                    id: id.trim(),
+                    name: name.trim(),
+                    enabled,
+                    semantics_version: 2,
+                    definition_v2: definition,
+                    rules: [],
+                    actions: [],
+                  });
+                } catch (error) {
+                  setError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Failed to create routine',
+                  );
+                } finally {
+                  setSaving(false);
+                }
+                return;
+              }
+
               const validation = validateActions(actions);
               if (validation) {
                 setError(validation);
