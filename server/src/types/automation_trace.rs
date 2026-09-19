@@ -222,6 +222,14 @@ pub struct TriggerRuntimeStatus {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub unknown_reason: Option<UnknownReason>,
+    /// Whether a live wakeup job is armed for this trigger (J06/K). Reflects
+    /// the authoritative store at status refresh time, not the last frame.
+    #[serde(default)]
+    pub armed: bool,
+    /// Deadline/occurrence wall time of the armed job, when one exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub due_wall_ms: Option<i64>,
 }
 
 /// Observable v2 evaluation state for one routine.

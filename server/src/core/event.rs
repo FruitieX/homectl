@@ -901,8 +901,10 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                             ),
                         }
                         // K: arm the next occurrence from the current time so a
-                        // drop never stalls the schedule.
+                        // drop never stalls the schedule; the status projection
+                        // picks up the new deadline either way.
                         state.arm_schedules();
+                        state.refresh_routine_statuses();
                     }
                     None => debug!(
                         "Ignoring stale schedule wakeup for {routine_id}: \
@@ -4130,6 +4132,25 @@ pub(crate) mod tests {
             wakeup.due_wall_ms, 28_800_000,
             "next 08:00 UTC after the manual clock's reference instant"
         );
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&owner)
+            .cloned()
+            .expect("routine status");
+        let trigger_status = status
+            .v2
+            .expect("v2 status")
+            .triggers
+            .into_iter()
+            .find(|candidate| candidate.trigger_id == trigger)
+            .expect("schedule trigger status");
+        assert!(
+            trigger_status.armed,
+            "the snapshot reports the armed schedule"
+        );
+        assert_eq!(trigger_status.due_wall_ms, Some(28_800_000));
         let generation = wakeup.generation;
 
         handle_event(

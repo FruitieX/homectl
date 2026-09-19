@@ -340,6 +340,8 @@ pub fn evaluate_routine_frame(
             }
         }
         trigger_statuses.push(TriggerRuntimeStatus {
+            armed: false,
+            due_wall_ms: None,
             trigger_id: trigger.id().clone(),
             kind: trigger_kind(trigger).to_string(),
             fired: outcome.fired,

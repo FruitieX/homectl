@@ -977,8 +977,32 @@ impl AppState {
     }
 
     pub fn refresh_routine_statuses(&mut self) {
+        // Live arms annotate the v2 statuses before the published projection
+        // is rebuilt, so `armed`/`due_wall_ms` are never stale in the Arc.
+        self.annotate_trigger_arms();
         self.rules
             .refresh_runtime_statuses(&self.devices, &self.groups, Some(&self.helpers));
+    }
+
+    /// Project live predicate/schedule wakeup arms into trigger statuses
+    /// (J06/K) so the snapshot exposes armed/deadline per trigger.
+    pub fn annotate_trigger_arms(&mut self) {
+        use crate::types::event::TimerWakeupJob;
+
+        let arms = self
+            .timers
+            .wakeups()
+            .into_iter()
+            .filter_map(|wakeup| {
+                let trigger = match &wakeup.job {
+                    TimerWakeupJob::PredicateDeadline { trigger }
+                    | TimerWakeupJob::ScheduleOccurrence { trigger } => trigger.clone(),
+                    TimerWakeupJob::NamedTimer { .. } => return None,
+                };
+                Some(((wakeup.routine_id, trigger), wakeup.due_wall_ms))
+            })
+            .collect();
+        self.rules.annotate_trigger_arms(&arms);
     }
 
     /// Reload typed helper definitions and durable values from the runtime

@@ -10,4 +10,13 @@ export type TriggerRuntimeStatus = { trigger_id: NodeId, kind: string,
 /**
  * Whether this trigger fired for the frame.
  */
-fired: boolean, eligible: boolean, truth: TruthValue, error?: string, unknown_reason?: UnknownReason, };
+fired: boolean, eligible: boolean, truth: TruthValue, error?: string, unknown_reason?: UnknownReason, 
+/**
+ * Whether a live wakeup job is armed for this trigger (J06/K). Reflects
+ * the authoritative store at status refresh time, not the last frame.
+ */
+armed: boolean, 
+/**
+ * Deadline/occurrence wall time of the armed job, when one exists.
+ */
+due_wall_ms?: bigint, };

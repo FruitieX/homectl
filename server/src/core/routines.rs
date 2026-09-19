@@ -570,6 +570,14 @@ impl Routines {
         self.v2.definitions()
     }
 
+    /// Annotate v2 trigger statuses with live wakeup arms (J06/K).
+    pub fn annotate_trigger_arms(
+        &mut self,
+        arms: &BTreeMap<(RoutineId, crate::types::automation_definition::NodeId), i64>,
+    ) {
+        self.v2.annotate_trigger_arms(arms);
+    }
+
     /// Hot-reload routines configuration from the database
     pub async fn reload_from_db(&mut self, catalog: &ConfigCatalog) -> Result<()> {
         let db_routines = config_queries::db_get_routines().await?;

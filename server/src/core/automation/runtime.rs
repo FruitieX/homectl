@@ -136,6 +136,34 @@ impl V2Runtime {
         evaluations
     }
 
+    /// Annotate trigger statuses with the authoritative live wakeup arms
+    /// (J06/K): triggers without a live job report unarmed.
+    pub fn annotate_trigger_arms(
+        &mut self,
+        arms: &BTreeMap<
+            (
+                crate::types::rule::RoutineId,
+                crate::types::automation_definition::NodeId,
+            ),
+            i64,
+        >,
+    ) {
+        for (routine_id, status) in self.statuses.iter_mut() {
+            for trigger in &mut status.triggers {
+                match arms.get(&(routine_id.clone(), trigger.trigger_id.clone())) {
+                    Some(due_wall_ms) => {
+                        trigger.armed = true;
+                        trigger.due_wall_ms = Some(*due_wall_ms);
+                    }
+                    None => {
+                        trigger.armed = false;
+                        trigger.due_wall_ms = None;
+                    }
+                }
+            }
+        }
+    }
+
     /// Re-evaluate conditions against current state for status displays
     /// without touching transition memory (V05/X01).
     pub fn refresh_statuses(
