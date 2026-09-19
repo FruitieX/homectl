@@ -3,9 +3,11 @@ import {
   useRoutines,
   useScenes,
   Routine,
+  RoutineDefinitionV2Body,
 } from '@/hooks/useConfig';
 import type { RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
 import type { TimerRuntimeStatus } from '@/bindings/TimerRuntimeStatus';
+import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
@@ -19,6 +21,7 @@ import {
 import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
+import { TriggerBuilder } from '@/ui/TriggerBuilder';
 import { RoutineRuntimePanel } from '@/ui/routine-runtime';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
@@ -235,6 +238,7 @@ function RoutineCard({
   onCancel: () => void;
   onDelete: () => void;
 }) {
+  const isV2 = routine.semantics_version === 2 || Boolean(routine.definition_v2);
   const [id, setId] = useState(routine.id);
   const [name, setName] = useState(routine.name);
   const [enabled, setEnabled] = useState(routine.enabled);
@@ -248,6 +252,12 @@ function RoutineCard({
   );
   const [actionsJson, setActionsJson] = useState(
     JSON.stringify(routine.actions, null, 2),
+  );
+  const [definition, setDefinition] = useState<RoutineDefinitionV2Body>(
+    routine.definition_v2 ?? {},
+  );
+  const [definitionJson, setDefinitionJson] = useState(
+    JSON.stringify(routine.definition_v2 ?? {}, null, 2),
   );
 
   const routineStatusBadge = (() => {
@@ -276,24 +286,31 @@ function RoutineCard({
     (status) => status.condition_match,
   ).length;
   const v2Status = runtimeStatus?.v2;
-  const isV2 = routine.semantics_version === 2 || Boolean(routine.definition_v2);
   const triggerCount =
-    v2Status?.triggers.length ?? routine.definition_v2?.triggers.length ?? 0;
+    v2Status?.triggers.length ?? routine.definition_v2?.triggers?.length ?? 0;
   const armedTriggerCount =
     v2Status?.triggers.filter((trigger) => trigger.armed).length ?? 0;
 
   const changeTab = (value: string) => {
     if (value === 'json') {
-      setRulesJson(JSON.stringify(rules, null, 2));
-      setActionsJson(JSON.stringify(actions, null, 2));
+      if (isV2) {
+        setDefinitionJson(JSON.stringify(definition, null, 2));
+      } else {
+        setRulesJson(JSON.stringify(rules, null, 2));
+        setActionsJson(JSON.stringify(actions, null, 2));
+      }
       setEditTab('json');
       return;
     }
 
     if (editTab === 'json') {
       try {
-        setRules(JSON.parse(rulesJson));
-        setActions(JSON.parse(actionsJson));
+        if (isV2) {
+          setDefinition(JSON.parse(definitionJson));
+        } else {
+          setRules(JSON.parse(rulesJson));
+          setActions(JSON.parse(actionsJson));
+        }
       } catch {
         alert('Invalid JSON - fix before leaving the JSON tab');
         return;
@@ -372,11 +389,19 @@ function RoutineCard({
   const editContent = (
     <div className="flex min-h-full flex-col">
       <Tabs value={editTab} onValueChange={changeTab}>
-        <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+        <TabsList
+          className={`grid h-auto w-full grid-cols-2 ${
+            isV2 ? 'sm:grid-cols-3' : 'sm:grid-cols-4'
+          }`}
+        >
           <TabsTrigger value="basics">Basics</TabsTrigger>
-          <TabsTrigger value="rules">Rules</TabsTrigger>
-          <TabsTrigger value="actions">Actions</TabsTrigger>
-          <TabsTrigger value="json">JSON</TabsTrigger>
+          <TabsTrigger value="rules">
+            {isV2 ? 'Triggers' : 'Rules'}
+          </TabsTrigger>
+          {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
+          <TabsTrigger value="json">
+            {isV2 ? 'Definition' : 'JSON'}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="basics" className="mt-4">
@@ -417,54 +442,84 @@ function RoutineCard({
         </TabsContent>
 
         <TabsContent value="rules" className="mt-4">
-          <ConfigFormSection aria-label="Routine rules">
-            <RuleBuilder
-              rules={rules}
-              devices={devices}
-              groups={groups}
-              scenes={scenes}
-              onChange={setRules}
-            />
+          <ConfigFormSection aria-label={isV2 ? 'Routine triggers' : 'Routine rules'}>
+            {isV2 ? (
+              <TriggerBuilder
+                triggers={definition.triggers ?? []}
+                onChange={(triggers: TriggerSpec[]) =>
+                  setDefinition((current) => ({ ...current, triggers }))
+                }
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                runtimeStatus={runtimeStatus}
+              />
+            ) : (
+              <RuleBuilder
+                rules={rules}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                onChange={setRules}
+              />
+            )}
           </ConfigFormSection>
         </TabsContent>
 
-        <TabsContent value="actions" className="mt-4">
-          <ConfigFormSection aria-label="Routine actions">
-            <ActionBuilder
-              actions={actions}
-              devices={devices}
-              groups={groups}
-              scenes={scenes}
-              routines={routines}
-              onChange={setActions}
-            />
-          </ConfigFormSection>
-        </TabsContent>
+        {!isV2 ? (
+          <TabsContent value="actions" className="mt-4">
+            <ConfigFormSection aria-label="Routine actions">
+              <ActionBuilder
+                actions={actions}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                routines={routines}
+                onChange={setActions}
+              />
+            </ConfigFormSection>
+          </TabsContent>
+        ) : null}
 
         <TabsContent value="json" className="mt-4">
           <ConfigFormSection
             title="Advanced JSON"
-            description="Edit the raw routine payload when a visual editor does not expose an edge case."
+            description={
+              isV2
+                ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, programs, advanced predicates).'
+                : 'Edit the raw routine payload when a visual editor does not expose an edge case.'
+            }
           >
-            <div className="grid gap-4 lg:grid-cols-2">
-              <ConfigField label="Rules (JSON)">
+            {isV2 ? (
+              <ConfigField label="Definition (JSON)">
                 <Textarea
-                  className="h-64 font-mono text-xs"
-                  value={rulesJson}
-                  onChange={(e) => setRulesJson(e.target.value)}
-                  placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+                  className="h-96 font-mono text-xs"
+                  value={definitionJson}
+                  onChange={(e) => setDefinitionJson(e.target.value)}
+                  placeholder='{"triggers": [...], "program": {...}}'
                 />
               </ConfigField>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ConfigField label="Rules (JSON)">
+                  <Textarea
+                    className="h-64 font-mono text-xs"
+                    value={rulesJson}
+                    onChange={(e) => setRulesJson(e.target.value)}
+                    placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+                  />
+                </ConfigField>
 
-              <ConfigField label="Actions (JSON)">
-                <Textarea
-                  className="h-64 font-mono text-xs"
-                  value={actionsJson}
-                  onChange={(e) => setActionsJson(e.target.value)}
-                  placeholder='[{"ActivateScene": {"scene_id": "..."}]'
-                />
-              </ConfigField>
-            </div>
+                <ConfigField label="Actions (JSON)">
+                  <Textarea
+                    className="h-64 font-mono text-xs"
+                    value={actionsJson}
+                    onChange={(e) => setActionsJson(e.target.value)}
+                    placeholder='[{"ActivateScene": {"scene_id": "..."}]'
+                  />
+                </ConfigField>
+              </div>
+            )}
           </ConfigFormSection>
         </TabsContent>
       </Tabs>
@@ -477,9 +532,41 @@ function RoutineCard({
           size="sm"
           disabled={!id.trim() || !name.trim()}
           onClick={async () => {
+            const saveFromJson = editTab === 'json';
+
+            if (isV2) {
+              let finalDefinition: RoutineDefinitionV2Body;
+              try {
+                finalDefinition = saveFromJson
+                  ? JSON.parse(definitionJson)
+                  : definition;
+              } catch {
+                alert('Invalid JSON in the native definition');
+                return;
+              }
+
+              try {
+                await onSave({
+                  id,
+                  name,
+                  enabled,
+                  semantics_version: 2,
+                  definition_v2: finalDefinition,
+                  rules: routine.rules,
+                  actions: routine.actions,
+                });
+              } catch (error) {
+                alert(
+                  error instanceof Error
+                    ? error.message
+                    : 'Failed to save routine',
+                );
+              }
+              return;
+            }
+
             let finalRules: Rule[] | unknown[];
             let finalActions: Action[] | unknown[];
-            const saveFromJson = editTab === 'json';
 
             try {
               finalRules = saveFromJson ? JSON.parse(rulesJson) : rules;

@@ -30,7 +30,7 @@ const toneClassName: Record<Tone, string> = {
   ghost: 'border-transparent bg-muted/70 text-muted-foreground',
 };
 
-function StatusBadge({ label, tone }: { label: string; tone: Tone }) {
+export function StatusBadge({ label, tone }: { label: string; tone: Tone }) {
   return <Badge className={toneClassName[tone]}>{label}</Badge>;
 }
 
@@ -60,7 +60,7 @@ function formatDuration(ms: number): string {
   return restHours === 0 ? `${days}d` : `${days}d ${restHours}h`;
 }
 
-function formatDue(dueWallMs: number, nowMs: number): string {
+export function formatDue(dueWallMs: number, nowMs: number): string {
   const delta = dueWallMs - nowMs;
   const relative =
     delta >= 0 ? `in ${formatDuration(delta)}` : `${formatDuration(-delta)} overdue`;
@@ -71,7 +71,7 @@ function formatDue(dueWallMs: number, nowMs: number): string {
   return `${relative} · ${clock}`;
 }
 
-function formatUnknownReason(reason: UnknownReason): string {
+export function formatUnknownReason(reason: UnknownReason): string {
   switch (reason.kind) {
     case 'missing_entity':
       return `missing entity ${reason.entity}`;
@@ -202,7 +202,7 @@ function ConditionTraceTree({ node }: { node: ConditionTraceNode }) {
   );
 }
 
-function triggerBadge(trigger: TriggerRuntimeStatus): {
+export function triggerBadge(trigger: TriggerRuntimeStatus): {
   label: string;
   tone: Tone;
 } {

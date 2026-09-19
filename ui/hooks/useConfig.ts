@@ -1,7 +1,7 @@
 import type { ConfigWriteStatus } from '@/bindings/ConfigWriteStatus';
 import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
 import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
-import type { RoutineDefinitionV2 } from '@/bindings/RoutineDefinitionV2';
+import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
@@ -82,6 +82,18 @@ export interface DeviceColor {
   Ct?: { ct: number };
 }
 
+/**
+ * Raw v2 definition body as stored. `condition` and `execution` are
+ * normalized server-side when omitted, so editors must preserve unknown
+ * fields verbatim instead of round-tripping through the generated type.
+ */
+export interface RoutineDefinitionV2Body {
+  triggers?: TriggerSpec[];
+  condition?: unknown;
+  program?: unknown;
+  execution?: unknown;
+}
+
 export interface Routine {
   id: string;
   name: string;
@@ -90,7 +102,7 @@ export interface Routine {
   actions: unknown[];
   semantics_version?: number;
   revision?: number;
-  definition_v2?: RoutineDefinitionV2 | null;
+  definition_v2?: RoutineDefinitionV2Body | null;
 }
 
 export interface DeviceDisplayNameOverride {
