@@ -819,6 +819,7 @@ impl AppState {
             .load_config_rows(&self.runtime_config.routines, &catalog);
         self.sync_script_owners();
         self.timers.retain_current(&self.v2_definition_revisions());
+        self.arm_schedules();
         // E06: reloaded definitions seed transition memory from current state
         // instead of treating already-true predicates as fresh edges.
         self.rules
@@ -839,6 +840,99 @@ impl AppState {
             .iter()
             .map(|(routine_id, definition)| (routine_id.clone(), definition.revision))
             .collect()
+    }
+
+    /// Arm the next occurrence of every live schedule trigger (K).
+    /// Idempotent: a live occurrence for the current revision is kept.
+    pub fn arm_schedules(&mut self) {
+        let now_monotonic_ms = self.clock.monotonic_ms();
+        let now_wall_ms = self.clock.wall_ms();
+        let mut armed = false;
+        for (routine_id, definition) in self.rules.compiled_v2_routines() {
+            for trigger in &definition.compiled.normalized.triggers {
+                let crate::types::automation_definition::TriggerSpec::Schedule { id, schedule } =
+                    trigger
+                else {
+                    continue;
+                };
+                if self
+                    .timers
+                    .pending_schedule_generation(routine_id, id)
+                    .is_some()
+                {
+                    continue;
+                }
+                match schedule_due(schedule, now_monotonic_ms, now_wall_ms) {
+                    Ok(Some((due_monotonic_ms, due_wall_ms))) => {
+                        match self.timers.ensure_schedule(
+                            routine_id,
+                            definition.revision,
+                            id,
+                            due_monotonic_ms,
+                            due_wall_ms,
+                        ) {
+                            Ok(_) => armed = true,
+                            Err(error) => warn!(
+                                "Schedule arming for routine {routine_id} failed: {}",
+                                error.message()
+                            ),
+                        }
+                    }
+                    Ok(None) => {
+                        warn!(
+                            "Schedule trigger {id} of routine {routine_id} has no next occurrence"
+                        )
+                    }
+                    Err(error) => {
+                        warn!(
+                            "Schedule trigger {id} of routine {routine_id} cannot resolve: {error}"
+                        )
+                    }
+                }
+            }
+        }
+        if armed {
+            self.schedule_ws_broadcast(SnapshotChanges {
+                timers: true,
+                ..SnapshotChanges::none()
+            });
+        }
+    }
+
+    /// Compiled schedule spec for a live trigger, used to apply backlog policy
+    /// when an occurrence wakeup is consumed (K).
+    pub fn schedule_spec(
+        &self,
+        routine_id: &crate::types::rule::RoutineId,
+        definition_revision: i64,
+        trigger: &crate::types::automation_definition::NodeId,
+    ) -> Option<crate::types::automation_definition::ScheduleSpec> {
+        use crate::types::automation_definition::TriggerSpec;
+
+        let definition = self.rules.compiled_v2_routines().get(routine_id)?;
+        if definition.revision != definition_revision {
+            return None;
+        }
+        definition
+            .compiled
+            .normalized
+            .triggers
+            .iter()
+            .find_map(|candidate| match candidate {
+                TriggerSpec::Schedule { id, schedule } if id == trigger => Some(schedule.clone()),
+                _ => None,
+            })
+    }
+
+    /// Whether a consumed occurrence is still within its backlog policy. A
+    /// skipped occurrence always runs (lateness is not backlog); a coalesced
+    /// catch-up runs only inside its bounded lateness.
+    pub fn schedule_within_lateness(
+        &self,
+        schedule: &crate::types::automation_definition::ScheduleSpec,
+        due_wall_ms: i64,
+    ) -> bool {
+        schedule_within_lateness_at(schedule, due_wall_ms, self.clock.wall_ms())
     }
 
     /// Pending named-timer wakeups for the scheduler driver (P09).
@@ -1124,6 +1218,60 @@ pub async fn send_state_ws_from_snapshot(
     ws.send(user_id, &message).await;
 }
 
+/// Whether an occurrence is still within its backlog policy (K). A skipped
+/// occurrence always runs (lateness is not backlog); a coalesced catch-up runs
+/// only inside its bounded lateness.
+fn schedule_within_lateness_at(
+    schedule: &crate::types::automation_definition::ScheduleSpec,
+    due_wall_ms: i64,
+    now_wall_ms: i64,
+) -> bool {
+    use crate::types::automation_definition::BacklogPolicy;
+
+    match schedule.backlog {
+        BacklogPolicy::Skip => true,
+        BacklogPolicy::CatchUpOnce => match schedule.catch_up_lateness_ms {
+            Some(lateness) => now_wall_ms.saturating_sub(due_wall_ms) <= lateness as i64,
+            None => true,
+        },
+    }
+}
+
+/// Next due time for a schedule trigger: intervals are monotonic-relative,
+/// calendar occurrences resolve in the stored zone (K). Returns wall and
+/// monotonic due times in milliseconds.
+fn schedule_due(
+    schedule: &crate::types::automation_definition::ScheduleSpec,
+    now_monotonic_ms: u64,
+    now_wall_ms: i64,
+) -> Result<Option<(u64, i64)>, String> {
+    use crate::core::automation::calendar::{next_cron_occurrence, parse_schedule_zone};
+
+    if let Some(every_ms) = schedule.every_ms {
+        return Ok(Some((
+            now_monotonic_ms.saturating_add(every_ms),
+            now_wall_ms.saturating_add(every_ms as i64),
+        )));
+    }
+    let Some(cron) = schedule.cron.as_deref() else {
+        return Ok(None);
+    };
+    let zone_name = schedule.timezone.as_deref().unwrap_or("UTC");
+    let zone =
+        parse_schedule_zone(zone_name).ok_or_else(|| format!("unknown timezone {zone_name:?}"))?;
+    let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_wall_ms)
+        .ok_or_else(|| "wall clock out of range".to_string())?;
+    let Some(occurrence) = next_cron_occurrence(cron, zone, now)? else {
+        return Ok(None);
+    };
+    let due_wall_ms = occurrence.instant.timestamp_millis();
+    let delay_ms = (due_wall_ms - now_wall_ms).max(1) as u64;
+    Ok(Some((
+        now_monotonic_ms.saturating_add(delay_ms),
+        due_wall_ms,
+    )))
+}
+
 #[cfg(test)]
 mod native_color_tests {
     use super::*;
@@ -1170,6 +1318,66 @@ mod native_color_tests {
             assert!(color.get("x").is_some() && color.get("y").is_some());
             assert!(color.get("h").is_none());
         }
+    }
+
+    // K: intervals rearm monotonic-relative; calendar occurrences resolve in
+    // the stored zone against the wall clock.
+    #[test]
+    fn schedule_due_resolves_intervals_and_calendar() {
+        use crate::types::automation_definition::{BacklogPolicy, ScheduleSpec};
+
+        let interval = ScheduleSpec {
+            cron: None,
+            every_ms: Some(1_500),
+            timezone: None,
+            backlog: BacklogPolicy::Skip,
+            catch_up_lateness_ms: None,
+        };
+        assert_eq!(
+            schedule_due(&interval, 100, 1_000).unwrap(),
+            Some((1_600, 2_500))
+        );
+
+        let calendar = ScheduleSpec {
+            cron: Some("0 0 8 * * *".to_string()),
+            every_ms: None,
+            timezone: Some("UTC".to_string()),
+            backlog: BacklogPolicy::Skip,
+            catch_up_lateness_ms: None,
+        };
+        // 1_000_000 ms = 1970-01-01T00:16:40Z; the next 08:00 UTC is
+        // 28_800_000 ms, 27_800_000 ms after the reference.
+        assert_eq!(
+            schedule_due(&calendar, 0, 1_000_000).unwrap(),
+            Some((27_800_000, 28_800_000))
+        );
+
+        let unknown_zone = ScheduleSpec {
+            timezone: Some("Mars/Olympus".to_string()),
+            ..calendar
+        };
+        assert!(schedule_due(&unknown_zone, 0, 1_000_000).is_err());
+    }
+
+    // K: skip always runs an emitted occurrence; catch-up drops one outside
+    // its bounded lateness (lateness is not backlog).
+    #[test]
+    fn schedule_lateness_policy_is_bounded_only_for_catch_up() {
+        use crate::types::automation_definition::{BacklogPolicy, ScheduleSpec};
+
+        let mut spec = ScheduleSpec {
+            cron: Some("0 0 8 * * *".to_string()),
+            every_ms: None,
+            timezone: Some("UTC".to_string()),
+            backlog: BacklogPolicy::Skip,
+            catch_up_lateness_ms: None,
+        };
+        assert!(schedule_within_lateness_at(&spec, 0, 999_999));
+
+        spec.backlog = BacklogPolicy::CatchUpOnce;
+        spec.catch_up_lateness_ms = Some(30_000);
+        assert!(schedule_within_lateness_at(&spec, 1_000_000, 1_030_000));
+        assert!(!schedule_within_lateness_at(&spec, 1_000_000, 1_030_001));
     }
 }
 

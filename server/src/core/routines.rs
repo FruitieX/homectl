@@ -2326,6 +2326,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
 
         let evaluations = routines.handle_v2_frame(&frame);

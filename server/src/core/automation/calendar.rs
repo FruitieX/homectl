@@ -33,19 +33,46 @@ impl ScheduleOccurrence {
     }
 }
 
+/// A schedule's stored zone: an IANA zone (DST-aware) or a fixed offset
+/// (never DST-aware). Compile validation accepts both.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScheduleZone {
+    Tz(Tz),
+    Fixed(chrono::FixedOffset),
+}
+
+/// Parse a stored zone name the same way compile validation does.
+pub fn parse_schedule_zone(name: &str) -> Option<ScheduleZone> {
+    if let Ok(zone) = name.parse::<Tz>() {
+        return Some(ScheduleZone::Tz(zone));
+    }
+    if let Ok(offset) = name.parse::<chrono::FixedOffset>() {
+        return Some(ScheduleZone::Fixed(offset));
+    }
+    None
+}
+
 /// Resolve a civil time in a zone under the fixed DST policy.
-fn resolve_civil(zone: Tz, civil: NaiveDateTime) -> Option<DateTime<Utc>> {
-    match zone.from_local_datetime(&civil) {
-        LocalResult::Single(instant) => Some(instant.with_timezone(&Utc)),
-        LocalResult::Ambiguous(earlier, _later) => Some(earlier.with_timezone(&Utc)),
-        LocalResult::None => None,
+fn resolve_civil(zone: ScheduleZone, civil: NaiveDateTime) -> Option<DateTime<Utc>> {
+    match zone {
+        ScheduleZone::Tz(zone) => match zone.from_local_datetime(&civil) {
+            LocalResult::Single(instant) => Some(instant.with_timezone(&Utc)),
+            LocalResult::Ambiguous(earlier, _later) => Some(earlier.with_timezone(&Utc)),
+            LocalResult::None => None,
+        },
+        ScheduleZone::Fixed(offset) => Some(
+            offset
+                .from_local_datetime(&civil)
+                .single()?
+                .with_timezone(&Utc),
+        ),
     }
 }
 
 /// Next cron occurrence strictly after `after`.
 pub fn next_cron_occurrence(
     cron: &str,
-    zone: Tz,
+    zone: ScheduleZone,
     after: DateTime<Utc>,
 ) -> Result<Option<ScheduleOccurrence>, String> {
     let mut parsed = croner::Cron::new(cron);
@@ -84,7 +111,7 @@ mod tests {
     // timezone, and a missing spring-forward local is skipped.
     #[test]
     fn spring_forward_missing_local_is_skipped() {
-        let zone: Tz = "Europe/Helsinki".parse().unwrap();
+        let zone = ScheduleZone::Tz("Europe/Helsinki".parse().unwrap());
         // 2026-03-29 03:30 local does not exist (03:00 EET -> 04:00 EEST).
         let next = next_cron_occurrence("0 30 3 * * *", zone, utc("2026-03-28T12:00:00Z"))
             .unwrap()
@@ -97,7 +124,7 @@ mod tests {
     // is not emitted again for the later instant.
     #[test]
     fn fall_back_repeated_local_runs_once_at_the_earlier_instant() {
-        let zone: Tz = "Europe/Helsinki".parse().unwrap();
+        let zone = ScheduleZone::Tz("Europe/Helsinki".parse().unwrap());
         // 2026-10-25: 04:00 EEST -> 03:00 EET, so 03:30 local happens twice.
         let first = next_cron_occurrence("0 30 3 * * *", zone, utc("2026-10-24T12:00:00Z"))
             .unwrap()
@@ -114,8 +141,8 @@ mod tests {
 
     #[test]
     fn daily_civil_time_resolves_in_the_stored_zone() {
-        let helsinki: Tz = "Europe/Helsinki".parse().unwrap();
-        let new_york: Tz = "America/New_York".parse().unwrap();
+        let helsinki = ScheduleZone::Tz("Europe/Helsinki".parse().unwrap());
+        let new_york = ScheduleZone::Tz("America/New_York".parse().unwrap());
         let start = utc("2026-01-01T00:00:00Z");
 
         let winter = next_cron_occurrence("0 0 8 * * *", helsinki, start)
@@ -130,8 +157,17 @@ mod tests {
     }
 
     #[test]
+    fn fixed_offsets_resolve_without_dst() {
+        let zone = parse_schedule_zone("+02:00").expect("fixed offset parses");
+        let next = next_cron_occurrence("0 0 8 * * *", zone, utc("2026-01-01T00:00:00Z"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(next.instant, utc("2026-01-01T06:00:00Z"));
+    }
+
+    #[test]
     fn seconds_are_required_and_bad_grammar_is_an_error() {
-        let zone: Tz = "UTC".parse().unwrap();
+        let zone = ScheduleZone::Tz("UTC".parse().unwrap());
         assert!(next_cron_occurrence("0 8 * * *", zone, utc("2026-01-01T00:00:00Z")).is_err());
         assert!(next_cron_occurrence("nope", zone, utc("2026-01-01T00:00:00Z")).is_err());
     }

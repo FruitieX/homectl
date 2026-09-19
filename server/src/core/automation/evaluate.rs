@@ -74,6 +74,10 @@ pub struct FrameContext<'a> {
     /// (J06). Expiry re-evaluates the predicate against this frame's current
     /// state rather than the captured episode state (J05).
     pub predicate_fires: &'a [super::timers::PredicateDeadlineFire],
+    /// Schedule occurrences the actor validated for this frame (K). The
+    /// occurrence instant is authoritative; lateness/backlog policy was
+    /// already applied before the fire reached the frame.
+    pub schedule_fires: &'a [super::timers::ScheduleOccurrenceFire],
 }
 
 impl FrameContext<'_> {
@@ -643,15 +647,30 @@ fn evaluate_trigger(
                 unknown_reason: None,
             }
         }
-        TriggerSpec::Schedule { .. } | TriggerSpec::Startup { .. } | TriggerSpec::Manual { .. } => {
+        TriggerSpec::Schedule { id, .. } => {
+            let fired = frame
+                .schedule_fires
+                .iter()
+                .any(|fire| fire.routine_id == *routine_id && fire.trigger == *id);
             TriggerOutcome {
-                eligible: false,
-                fired: false,
-                truth: TruthValue::Unknown,
+                eligible: fired,
+                fired,
+                truth: if fired {
+                    TruthValue::True
+                } else {
+                    TruthValue::Unknown
+                },
                 error: None,
                 unknown_reason: None,
             }
         }
+        TriggerSpec::Startup { .. } | TriggerSpec::Manual { .. } => TriggerOutcome {
+            eligible: false,
+            fired: false,
+            truth: TruthValue::Unknown,
+            error: None,
+            unknown_reason: None,
+        },
     }
 }
 
@@ -1449,6 +1468,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         run(&frame)
     }

@@ -710,6 +710,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let declaration = ScriptDeclaration::Device {
             device: DeviceRef::from(&key("lamp")),
@@ -758,6 +759,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let context = scripts
             .build_handler_context(
@@ -806,6 +808,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let first = scripts
             .build_handler_context(
@@ -838,6 +841,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let second = scripts
             .build_handler_context(
@@ -876,6 +880,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let missing = scripts
             .build_handler_context(
@@ -904,6 +909,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let discovered = scripts
             .build_handler_context(
@@ -942,6 +948,7 @@ mod tests {
             helpers: None,
             fired_timers: &[],
             predicate_fires: &[],
+            schedule_fires: &[],
         };
         let first = scripts
             .build_handler_context(

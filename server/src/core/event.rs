@@ -463,6 +463,7 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     helpers: Some(&state.helpers),
                     fired_timers: &[],
                     predicate_fires: &[],
+                    schedule_fires: &[],
                 };
                 let evaluations = state.rules.handle_v2_frame(&v2_frame);
                 if !evaluations.is_empty() {
@@ -879,7 +880,30 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     trigger,
                     *generation,
                 ) {
-                    Some(fire) => state.pending_schedule_fires.push(fire),
+                    Some(fire) => {
+                        match state.schedule_spec(routine_id, *definition_revision, trigger) {
+                            // K: lateness is not backlog. A skipped occurrence
+                            // still runs; a bounded catch-up that is too late
+                            // is dropped, and the next occurrence is armed from
+                            // the current time either way.
+                            Some(spec)
+                                if state.schedule_within_lateness(&spec, fire.due_wall_ms) =>
+                            {
+                                state.pending_schedule_fires.push(fire);
+                            }
+                            Some(_) => debug!(
+                                "Skipping late schedule occurrence for {routine_id}: \
+                                 trigger={trigger} due_at={due_wall_ms}"
+                            ),
+                            None => debug!(
+                                "Ignoring schedule wakeup without a live trigger for \
+                                 {routine_id}: trigger={trigger}"
+                            ),
+                        }
+                        // K: arm the next occurrence from the current time so a
+                        // drop never stalls the schedule.
+                        state.arm_schedules();
+                    }
                     None => debug!(
                         "Ignoring stale schedule wakeup for {routine_id}: \
                          trigger={trigger} generation={generation} due_at={due_wall_ms}"
@@ -1601,7 +1625,12 @@ impl AppState {
         let pending = self.devices.take_pending_mutations();
         let fired_timers = std::mem::take(&mut self.pending_timer_fires);
         let predicate_fires = std::mem::take(&mut self.pending_predicate_fires);
-        if pending.is_empty() && fired_timers.is_empty() && predicate_fires.is_empty() {
+        let schedule_fires = std::mem::take(&mut self.pending_schedule_fires);
+        if pending.is_empty()
+            && fired_timers.is_empty()
+            && predicate_fires.is_empty()
+            && schedule_fires.is_empty()
+        {
             // Invalidation-free commands (scene/group edits through mutate
             // closures) may still have queued materializations.
             self.execute_deferred_scene_materializations().await;
@@ -1654,6 +1683,7 @@ impl AppState {
         if self.warming_up {
             self.pending_timer_fires = fired_timers;
             self.pending_predicate_fires = predicate_fires;
+            self.pending_schedule_fires = schedule_fires;
             self.frame_log.record(AutomationFrame {
                 frame_id,
                 origin,
@@ -1718,6 +1748,7 @@ impl AppState {
                     helpers: Some(&self.helpers),
                     fired_timers: &fired_timers,
                     predicate_fires: &predicate_fires,
+                    schedule_fires: &schedule_fires,
                 };
                 let evaluations = self.rules.handle_v2_frame(&frame);
                 let mut prepared_scripts: Vec<super::automation::PreparedScriptRun> = Vec::new();
@@ -1814,6 +1845,12 @@ impl AppState {
             if !prepared_scripts.is_empty() {
                 self.execute_prepared_scripts(prepared_scripts).await;
             }
+        }
+
+        // K: consumed (or dropped) occurrences rearm the next one from the
+        // current time, so backlog beyond the policy is skipped, not replayed.
+        if !schedule_fires.is_empty() {
+            self.arm_schedules();
         }
 
         let disposition = if suppressed > 0 {
@@ -3381,6 +3418,26 @@ pub(crate) mod tests {
         }
     }
 
+    fn schedule_routine_row(id: &str, schedule: serde_json::Value, revision: i64) -> RoutineRow {
+        RoutineRow {
+            id: id.to_string(),
+            name: id.to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision,
+            definition_v2: Some(serde_json::json!({
+                "triggers": [{ "kind": "schedule", "id": "trig", "schedule": schedule }],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "native", "steps": [
+                    { "action": "set_power", "id": "step",
+                      "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                      "power": true }
+                ]}
+            })),
+            ..Default::default()
+        }
+    }
+
     // P09/J01/J05: only the current generation of the owning routine's timer
     // fires, and the expiry frame evaluates current state.
     #[tokio::test]
@@ -3980,12 +4037,23 @@ pub(crate) mod tests {
         use crate::types::rule::RoutineId;
 
         let (mut state, _event_rx) = test_state();
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        state.runtime_config.routines = vec![schedule_routine_row(
+            "sched_routine",
+            serde_json::json!({ "every_ms": 1_000 }),
+            1,
+        )];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
         let owner = RoutineId("sched_routine".to_string());
-        let trigger = NodeId("morning".to_string());
+        let trigger = NodeId("trig".to_string());
         let generation = state
             .timers
-            .ensure_schedule(&owner, 1, &trigger, 5_000, 10_000)
-            .unwrap();
+            .pending_schedule_generation(&owner, &trigger)
+            .expect("armed by runtime apply");
 
         handle_event(
             &mut state,
@@ -4025,8 +4093,138 @@ pub(crate) mod tests {
             state
                 .timers
                 .pending_schedule_generation(&owner, &trigger)
-                .is_none(),
-            "a consumed occurrence is no longer live"
+                .expect("rearmed after consume")
+                > generation,
+            "a consumed occurrence starts the next generation"
+        );
+    }
+
+    // K: a due calendar occurrence fires the routine and rearms the next one
+    // from the current time.
+    #[tokio::test]
+    async fn p09_schedule_occurrences_fire_and_rearm() {
+        use crate::types::automation_definition::NodeId;
+        use crate::types::event::TimerWakeupJob;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        state.runtime_config.routines = vec![schedule_routine_row(
+            "sched_routine",
+            serde_json::json!({ "cron": "0 0 8 * * *", "timezone": "UTC" }),
+            1,
+        )];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("sched_routine".to_string());
+        let trigger = NodeId("trig".to_string());
+        let wakeup = state.timers.wakeups().pop().expect("armed schedule");
+        assert!(matches!(
+            &wakeup.job,
+            TimerWakeupJob::ScheduleOccurrence { .. }
+        ));
+        assert_eq!(
+            wakeup.due_wall_ms, 28_800_000,
+            "next 08:00 UTC after the manual clock's reference instant"
+        );
+        let generation = wakeup.generation;
+
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: wakeup.job.clone(),
+                generation,
+                due_wall_ms: wakeup.due_wall_ms,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let matched = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&owner)
+            .and_then(|status| status.v2.clone())
+            .map(|v2| v2.matched_trigger_ids)
+            .unwrap_or_default();
+        assert_eq!(matched, vec![trigger.clone()], "the occurrence fired");
+
+        let rearmed = state
+            .timers
+            .pending_schedule_generation(&owner, &trigger)
+            .expect("the next occurrence is armed");
+        assert!(rearmed > generation, "rearm starts a new generation");
+    }
+
+    // K: lateness is not backlog — a bounded catch-up occurrence too late to
+    // run is dropped and the schedule still rearms.
+    #[tokio::test]
+    async fn p09_late_catch_up_occurrence_is_dropped_and_rearms() {
+        use crate::types::automation_definition::NodeId;
+        use crate::types::event::TimerWakeupJob;
+        use crate::types::rule::RoutineId;
+
+        let (mut state, _event_rx) = test_state();
+        state
+            .devices
+            .set_state(&lamp("mqtt", "lamp", false, 0.1), true, true);
+        state.runtime_config.routines = vec![schedule_routine_row(
+            "catchup_routine",
+            serde_json::json!({
+                "cron": "0 0 8 * * *",
+                "timezone": "UTC",
+                "backlog": "catch_up_once",
+                "catch_up_lateness_ms": 1_000
+            }),
+            1,
+        )];
+        state.apply_runtime_routines();
+        state.flush_pending_frames().await;
+
+        let owner = RoutineId("catchup_routine".to_string());
+        let trigger = NodeId("trig".to_string());
+
+        // The store's due time is authoritative. Replace the armed occurrence
+        // with one due at epoch 0: the manual clock reads 1_000_000 ms, far
+        // beyond the 1_000 ms catch-up bound.
+        let armed = state.timers.cancel_schedule(&owner, &trigger);
+        assert!(armed > 0);
+        let generation = state
+            .timers
+            .ensure_schedule(&owner, 1, &trigger, 5_000, 0)
+            .unwrap();
+        handle_event(
+            &mut state,
+            &Event::TimerWakeup {
+                routine_id: owner.clone(),
+                definition_revision: 1,
+                job: TimerWakeupJob::ScheduleOccurrence {
+                    trigger: trigger.clone(),
+                },
+                generation,
+                due_wall_ms: 0,
+            },
+        )
+        .await
+        .unwrap();
+        assert!(
+            state.pending_schedule_fires.is_empty(),
+            "a catch-up outside its bound does not fire"
+        );
+        assert!(
+            state
+                .timers
+                .pending_schedule_generation(&owner, &trigger)
+                .expect("rearmed")
+                > generation,
+            "the dropped occurrence still rearms the schedule"
         );
     }
 
