@@ -1030,6 +1030,19 @@ pub async fn db_upsert_routine(routine: &RoutineRow) -> Result<()> {
     upsert_routine_on(get_db_connection()?, routine).await
 }
 
+/// Write a set of routine rows in one transaction. Used by the offline
+/// converter and its archive restore; unlike `db_replace_routines` this never
+/// deletes rows that are not part of the set.
+pub async fn db_apply_routine_rows(routines: &[RoutineRow]) -> Result<()> {
+    let db = get_db_connection()?;
+    let txn = db.begin().await?;
+    for routine in routines {
+        upsert_routine_on(&txn, routine).await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
 async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> Result<()> {
     let rules = serde_json::to_string(&routine.rules)?;
     let actions = serde_json::to_string(&routine.actions)?;

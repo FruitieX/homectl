@@ -12,7 +12,7 @@ pub mod config_queries;
 pub mod migrations;
 pub mod schema;
 
-const DEFAULT_SQLITE_DATABASE_FILE: &str = "homectl.db";
+pub(crate) const DEFAULT_SQLITE_DATABASE_FILE: &str = "homectl.db";
 
 static DB_CONNECTION: OnceCell<DatabaseConnection> = OnceCell::new();
 static DATABASE_TARGET: OnceCell<DatabaseTarget> = OnceCell::new();

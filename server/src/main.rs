@@ -7,6 +7,7 @@ use homectl_server::core::simulate;
 use homectl_server::core::{
     automation::{sources, ConfigCatalog},
     clock::Clock,
+    convert,
     devices::Devices,
     groups::Groups,
     integrations::Integrations,
@@ -24,7 +25,7 @@ use homectl_server::db::{
 use homectl_server::types::automation_event::EventOrigin;
 use homectl_server::types::event::{mk_event_channel, Event, TxEventChannel};
 use homectl_server::types::scene::SceneOverridesConfig;
-use homectl_server::utils::cli::{Cli, Command};
+use homectl_server::utils::cli::{Cli, Command, ConvertArgs};
 
 use clap::Parser;
 use color_eyre::Result;
@@ -113,8 +114,133 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     match &cli.command {
         Some(Command::Simulate(args)) => run_simulation(&cli, args).await,
+        Some(Command::Convert(args)) => run_convert(&cli, args).await,
         None => run_server(&cli).await,
     }
+}
+
+/// Offline v1 -> v2 routine conversion. Dry-run by default; `--apply` and
+/// `--restore` write to the database and refuse to run while a server owns
+/// the configured port.
+async fn run_convert(cli: &Cli, args: &ConvertArgs) -> Result<(), Box<dyn Error>> {
+    if args.source_db.is_some() && args.source_export.is_some() {
+        return Err(eyre!(
+            "--source-db and --source-export select different inputs; pass only one"
+        )
+        .into());
+    }
+    if args.source_export.is_some() && (args.apply || args.restore.is_some()) {
+        return Err(eyre!(
+            "--source-export reads a JSON file and cannot be combined with --apply or --restore"
+        )
+        .into());
+    }
+    if args.restore.is_some() && args.apply {
+        return Err(eyre!("--restore and --apply are mutually exclusive").into());
+    }
+
+    // Progress lines go to stderr when the report is machine-readable.
+    let announce = |message: String| {
+        if args.json {
+            eprintln!("{message}");
+        } else {
+            println!("{message}");
+        }
+    };
+
+    if let Some(archive_path) = &args.restore {
+        let rows = convert::read_archive(Path::new(archive_path))?;
+        check_converter_server_stopped(cli, args).await?;
+        let database_url = args.source_db.clone().or_else(|| cli.database_url.clone());
+        init_db(database_url.as_deref()).await?;
+        convert::apply_rows(&rows).await?;
+        announce(format!(
+            "Restored {} routine row(s) from {}. Restart the server to load the archived semantics.",
+            rows.len(),
+            archive_path
+        ));
+        return Ok(());
+    }
+
+    let (source, export) =
+        convert::load_source_export(args.source_db.as_deref(), args.source_export.as_deref())
+            .await?;
+    let report = convert::build_report(&source, &export);
+
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else {
+        print!("{}", convert::render_report(&report));
+        if !args.apply && report.converted > 0 {
+            println!(
+                "Dry run: {} routine(s) can be converted. Re-run with --apply (server stopped) to write them.",
+                report.converted
+            );
+        }
+    }
+
+    if !args.apply {
+        return Ok(());
+    }
+
+    if !report.is_clean() && !args.force {
+        return Err(eyre!(
+            "{} routine(s) need manual authoring or are unsupported; inspect the report, then re-run with --force to convert the convertible rows and leave the rest on v1",
+            report.needs_manual + report.unsupported
+        )
+        .into());
+    }
+
+    let rows = convert::converted_rows(&report, &export)?;
+    if rows.is_empty() {
+        announce("Nothing to apply.".to_string());
+        return Ok(());
+    }
+
+    check_converter_server_stopped(cli, args).await?;
+
+    let archive_path = args
+        .archive
+        .clone()
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(convert::default_archive_path);
+    convert::write_archive(&archive_path, &source, &export, &report)?;
+    announce(format!(
+        "Archived pre-conversion rows to {}",
+        archive_path.display()
+    ));
+
+    let database_url = args.source_db.clone().or_else(|| cli.database_url.clone());
+    init_db(database_url.as_deref()).await?;
+    convert::apply_rows(&rows).await?;
+    announce(format!(
+        "Applied {} converted routine(s); {} row(s) stay on v1 semantics. Restart the server to load v2 routines.",
+        rows.len(),
+        report.total - rows.len()
+    ));
+    Ok(())
+}
+
+async fn check_converter_server_stopped(
+    cli: &Cli,
+    args: &ConvertArgs,
+) -> Result<(), Box<dyn Error>> {
+    if args.skip_running_check {
+        return Ok(());
+    }
+    let mut ports = vec![cli.port];
+    if cli.port != 45289 {
+        ports.push(45289);
+    }
+    for port in ports {
+        if convert::server_reachable(port).await {
+            return Err(eyre!(
+                "a homectl server appears to be running on port {port} (checked /health/live); stop it before writing, pass --port for a custom port, or pass --skip-running-check",
+            )
+            .into());
+        }
+    }
+    Ok(())
 }
 
 /// Normal server startup: database persistence plus backup-config fallback.

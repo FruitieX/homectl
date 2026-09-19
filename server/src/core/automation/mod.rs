@@ -18,6 +18,7 @@
 
 pub mod calendar;
 pub mod compile;
+pub mod convert;
 pub mod evaluate;
 pub mod groups;
 pub mod plan;

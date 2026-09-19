@@ -5,6 +5,7 @@ pub mod clock;
 pub mod color_calibration;
 pub mod config;
 pub mod config_diagnostics;
+pub mod convert;
 pub mod deferred;
 pub mod devices;
 pub mod event;
