@@ -3,6 +3,6 @@ import type { DeviceKey } from "./DeviceKey";
 import type { GroupId } from "./GroupId";
 
 /**
- * One capturable intent target.
+ * Members of one captured group as resolved at plan time.
  */
-export type TimerIntentTarget = { "kind": "device", device: DeviceKey, } | { "kind": "group", group: GroupId, };
+export type FrozenGroupMembers = { group: GroupId, devices: Array<DeviceKey>, };

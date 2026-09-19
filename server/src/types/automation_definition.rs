@@ -493,23 +493,38 @@ pub struct TargetSpec {
     pub groups: Vec<GroupId>,
 }
 
-/// Intent targets captured when a timer is scheduled (J08). The actor records
-/// the tokens at acceptance, after earlier plan steps have bumped intents, and
-/// a delayed plan may act only on unchanged tokens.
+/// Intent targets captured when a timer is scheduled (J08/J09). The actor
+/// records the tokens at acceptance, after earlier plan steps have bumped
+/// intents, and a delayed plan may act only on unchanged tokens and on the
+/// group membership frozen here.
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[ts(export)]
 pub struct TimerIntentCapture {
     pub targets: Vec<TimerIntentTarget>,
+    /// Group membership resolved at plan time (J09). A delayed action may not
+    /// expand a captured group to members added after the capture.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub frozen_members: Vec<FrozenGroupMembers>,
 }
 
-/// One capturable intent target. Group capture needs frozen membership (J09)
-/// and is rejected at compile time until that lands.
+/// Members of one captured group as resolved at plan time.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct FrozenGroupMembers {
+    pub group: GroupId,
+    pub devices: Vec<crate::types::device::DeviceKey>,
+}
+
+/// One capturable intent target.
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export)]
 pub enum TimerIntentTarget {
     Device {
         device: crate::types::device::DeviceKey,
+    },
+    Group {
+        group: GroupId,
     },
 }
 

@@ -277,7 +277,7 @@ struct Planner<'a> {
     suppressions: Vec<PlannedStepStatus>,
     /// Intent tokens frozen by the timer generation(s) firing in this frame
     /// (J08), flattened across captures.
-    timer_captures: Vec<super::timers::TimerIntentTokens>,
+    timer_captures: Vec<super::timers::CapturedTimerIntents>,
 }
 
 impl Planner<'_> {
@@ -338,40 +338,103 @@ impl Planner<'_> {
         });
     }
 
-    /// Resolve a `capture_target_intents` spec at plan time: `Ok(None)` means
-    /// no capture, `Err(())` means the step was suppressed and must not plan.
-    fn plan_timer_capture(
-        &mut self,
-        action: &NativeAction,
-        kind: &str,
-        spec: Option<&TargetSpec>,
-    ) -> Result<Option<TimerIntentCapture>, ()> {
-        let Some(spec) = spec else {
-            return Ok(None);
-        };
-        if !spec.groups.is_empty() {
-            self.suppress(
-                action,
-                kind,
-                Vec::new(),
-                "capture_group_intents_unsupported".to_string(),
-            );
-            return Err(());
+    /// Resolve a `capture_target_intents` spec at plan time: `None` means no
+    /// capture; groups freeze their current membership here (J09).
+    fn plan_timer_capture(&mut self, spec: Option<&TargetSpec>) -> Option<TimerIntentCapture> {
+        let spec = spec?;
+        let mut targets: Vec<TimerIntentTarget> = Vec::new();
+        for reference in &spec.devices {
+            let target = TimerIntentTarget::Device {
+                device: device_key(reference),
+            };
+            if !targets.contains(&target) {
+                targets.push(target);
+            }
         }
-        Ok(Some(TimerIntentCapture {
-            targets: spec
-                .devices
+        let mut frozen_members = Vec::new();
+        for group in &spec.groups {
+            if !targets.contains(&TimerIntentTarget::Group {
+                group: group.clone(),
+            }) {
+                targets.push(TimerIntentTarget::Group {
+                    group: group.clone(),
+                });
+            }
+            let members = self.group_member_keys(group);
+            for member in &members {
+                let target = TimerIntentTarget::Device {
+                    device: member.clone(),
+                };
+                if !targets.contains(&target) {
+                    targets.push(target);
+                }
+            }
+            frozen_members.push(crate::types::automation_definition::FrozenGroupMembers {
+                group: group.clone(),
+                devices: members,
+            });
+        }
+        Some(TimerIntentCapture {
+            targets,
+            frozen_members,
+        })
+    }
+
+    /// Current member devices of a group, using flattened membership so linked
+    /// groups resolve consistently with execution-time expansion.
+    fn group_member_keys(&self, group: &GroupId) -> Vec<DeviceKey> {
+        let Some(refs) = self.inputs.groups.configured_device_refs(group) else {
+            return Vec::new();
+        };
+        refs.iter()
+            .map(device_key)
+            .filter(|key| self.inputs.devices.0.contains_key(key))
+            .collect()
+    }
+
+    /// Frozen members recorded for a captured group, if any (J09).
+    fn frozen_members_for(&self, group: &GroupId) -> Option<Vec<DeviceKey>> {
+        self.timer_captures.iter().find_map(|captured| {
+            captured
+                .capture
+                .frozen_members
                 .iter()
-                .map(|reference| TimerIntentTarget::Device {
-                    device: device_key(reference),
-                })
-                .collect(),
-        }))
+                .find(|frozen| &frozen.group == group)
+                .map(|frozen| frozen.devices.clone())
+        })
+    }
+
+    /// Replace a captured group with its frozen members resolved against the
+    /// current membership, so new members never receive the delayed action
+    /// (J09). Uncapped groups pass through untouched.
+    fn restrict_frozen_groups(
+        &self,
+        mut devices: Vec<DeviceKey>,
+        mut groups: Vec<GroupId>,
+    ) -> (Vec<DeviceKey>, Vec<GroupId>) {
+        for group in groups.clone() {
+            let Some(frozen) = self.frozen_members_for(&group) else {
+                continue;
+            };
+            let mut members: Vec<DeviceKey> = self
+                .group_member_keys(&group)
+                .into_iter()
+                .filter(|key| frozen.contains(key))
+                .collect();
+            devices.append(&mut members);
+            groups.retain(|candidate| candidate != &group);
+        }
+        devices.sort();
+        devices.dedup();
+        (devices, groups)
     }
 
     fn capture_guard(&self, targets: Vec<IntentTarget>) -> Vec<(IntentTarget, u64)> {
-        let captured: Vec<(TimerIntentTarget, u64)> =
-            self.timer_captures.iter().flatten().cloned().collect();
+        let captured: Vec<(TimerIntentTarget, u64)> = self
+            .timer_captures
+            .iter()
+            .flat_map(|captured| captured.tokens.iter().cloned())
+            .collect();
         targets
             .into_iter()
             .map(|target| {
@@ -422,9 +485,11 @@ impl Planner<'_> {
                     return;
                 };
                 let (devices, groups) = resolve_targets(targets);
+                let original_groups = groups.clone();
+                let (devices, groups) = self.restrict_frozen_groups(devices, groups);
                 let mut guard = vec![IntentTarget::Scene(scene.clone())];
                 guard.extend(devices.iter().cloned().map(IntentTarget::Device));
-                guard.extend(groups.iter().cloned().map(IntentTarget::Group));
+                guard.extend(original_groups.iter().cloned().map(IntentTarget::Group));
                 let descriptor = ActivateSceneActionDescriptor {
                     scene_id: scene,
                     mirror_from_group: None,
@@ -486,9 +551,11 @@ impl Planner<'_> {
                     self.suppress(action, kind, Vec::new(), "missing_targets".to_string());
                     return;
                 }
+                let original_groups = groups.clone();
+                let (devices, groups) = self.restrict_frozen_groups(devices, groups);
                 let mut guard: Vec<IntentTarget> =
                     devices.iter().cloned().map(IntentTarget::Device).collect();
-                guard.extend(groups.iter().cloned().map(IntentTarget::Group));
+                guard.extend(original_groups.iter().cloned().map(IntentTarget::Group));
                 let descriptor = DimDescriptor {
                     device_keys: (!devices.is_empty()).then_some(devices),
                     group_keys: (!groups.is_empty()).then_some(groups),
@@ -533,11 +600,7 @@ impl Planner<'_> {
                 capture_target_intents,
                 ..
             } => {
-                let Ok(capture) =
-                    self.plan_timer_capture(action, kind, capture_target_intents.as_ref())
-                else {
-                    return;
-                };
+                let capture = self.plan_timer_capture(capture_target_intents.as_ref());
                 self.push_timer_step(
                     action,
                     kind,
@@ -554,11 +617,7 @@ impl Planner<'_> {
                 capture_target_intents,
                 ..
             } => {
-                let Ok(capture) =
-                    self.plan_timer_capture(action, kind, capture_target_intents.as_ref())
-                else {
-                    return;
-                };
+                let capture = self.plan_timer_capture(capture_target_intents.as_ref());
                 self.push_timer_step(
                     action,
                     kind,
@@ -971,6 +1030,95 @@ mod tests {
 
         intents.bump_device(&key("lamp"));
         let reason = guard_suppression(&plan.steps[0], &intents).expect("superseded");
+        assert!(reason.contains("superseded_by_newer_intent"), "{reason}");
+    }
+
+    // J09: a captured group cannot expand to members added after the capture,
+    // and a newer manual group intent suppresses the delayed action.
+    #[test]
+    fn captured_group_members_are_frozen_against_new_members() {
+        use crate::types::automation_definition::FrozenGroupMembers;
+
+        let compiled = compile_definition_value(
+            &json!({
+                "triggers": [{ "kind": "manual", "id": "trig" }],
+                "program": { "kind": "native", "steps": [
+                    { "action": "dim", "id": "step",
+                      "targets": { "groups": ["room"] }, "step": 0.5 }
+                ]}
+            }),
+            &catalog(),
+        )
+        .expect("definition compiles");
+        let devices = states(vec![
+            lamp("lamp", Some("evening"), true),
+            lamp("second", Some("evening"), true),
+        ]);
+        // The room gained `second` after the capture was planned.
+        let groups = room_group(&["lamp", "second"]);
+        let helpers = helpers_with_mode("evening");
+        let intents = IntentTracker::default();
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &intents,
+        };
+        let room = GroupId("room".to_string());
+        let mut evaluation = evaluation(&compiled, &devices, &groups, &helpers);
+        evaluation.timer_captures = vec![super::super::timers::CapturedTimerIntents {
+            capture: TimerIntentCapture {
+                targets: vec![
+                    TimerIntentTarget::Group {
+                        group: room.clone(),
+                    },
+                    TimerIntentTarget::Device {
+                        device: key("lamp"),
+                    },
+                ],
+                frozen_members: vec![FrozenGroupMembers {
+                    group: room.clone(),
+                    devices: vec![key("lamp")],
+                }],
+            },
+            tokens: vec![
+                (
+                    TimerIntentTarget::Group {
+                        group: room.clone(),
+                    },
+                    0,
+                ),
+                (
+                    TimerIntentTarget::Device {
+                        device: key("lamp"),
+                    },
+                    0,
+                ),
+            ],
+        }];
+        let plan = plan_evaluation(&evaluation, &compiled, &inputs);
+        assert_eq!(plan.steps.len(), 1);
+        let PlannedStepBody::Dispatch(action) = &plan.steps[0].body else {
+            panic!("dim plans a dispatch step");
+        };
+        let Action::Dim(descriptor) = action.as_ref() else {
+            panic!("dim action expected");
+        };
+        assert_eq!(
+            descriptor.device_keys.clone().unwrap_or_default(),
+            vec![key("lamp")],
+            "new members never receive the delayed action"
+        );
+        assert!(
+            descriptor.group_keys.is_none(),
+            "the captured group cannot expand at execution time"
+        );
+
+        assert!(guard_suppression(&plan.steps[0], &intents).is_none());
+        let mut superseded = IntentTracker::default();
+        superseded.bump_group(&room);
+        let reason =
+            guard_suppression(&plan.steps[0], &superseded).expect("newer group intent wins");
         assert!(reason.contains("superseded_by_newer_intent"), "{reason}");
     }
 

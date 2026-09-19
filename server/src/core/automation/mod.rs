@@ -64,6 +64,6 @@ pub use script_runtime::{
     MAX_SCRIPT_ERROR_CHARS,
 };
 pub use timers::{
-    PredicateDeadlineFire, TimerCancellation, TimerFire, TimerOperationError, TimerStore,
-    TimerWakeup, MAX_TIMERS_PER_OWNER,
+    CapturedTimerIntents, PredicateDeadlineFire, TimerCancellation, TimerFire, TimerOperationError,
+    TimerStore, TimerWakeup, MAX_TIMERS_PER_OWNER,
 };

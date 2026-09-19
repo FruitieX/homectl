@@ -1006,21 +1006,25 @@ impl Compiler<'_> {
                         );
                     }
                     if let Some(capture) = capture_target_intents {
+                        let capture_path = format!("{action_path}/capture_target_intents");
                         if capture.devices.is_empty() && capture.groups.is_empty() {
                             self.report.error_at_node(
-                                format!("{action_path}/capture_target_intents"),
+                                capture_path.clone(),
                                 action.id(),
                                 "invalid_capture_targets",
                                 "capture_target_intents must name at least one target.",
                             );
                         }
-                        if !capture.groups.is_empty() {
-                            self.report.error_at_node(
-                                format!("{action_path}/capture_target_intents"),
-                                action.id(),
-                                "capture_group_intents_unsupported",
-                                "Capturing group intents needs frozen group membership (J09) and is not supported yet.",
+                        for reference in &capture.devices {
+                            self.resolve_device(
+                                reference,
+                                &capture_path,
+                                "devices",
+                                Some(action.id()),
                             );
+                        }
+                        for group in &capture.groups {
+                            self.resolve_group(group, &capture_path, Some(action.id()));
                         }
                     }
                     self.add_write(WriteKind::Timer, timer.to_string());
@@ -1917,8 +1921,8 @@ mod tests {
             vec!["invalid_duration"]
         );
 
-        // J08/J09: group captures need frozen membership and stay rejected
-        // until that lands, so authors never get an expanding capture.
+        // J08/J09: group captures compile because membership is frozen at
+        // plan time; an empty capture spec is rejected.
         let group_capture = json!({
             "triggers": [{ "kind": "manual", "id": "trig" }],
             "program": { "kind": "native", "steps": [
@@ -1927,9 +1931,20 @@ mod tests {
                   "capture_target_intents": { "groups": ["g1"] } }
             ]}
         });
+        let group_catalog = catalog().with_group(GroupId("g1".to_string()));
+        assert!(compile_definition_value(&group_capture, &group_catalog).is_ok());
+
+        let empty_capture = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [
+                { "action": "schedule_timer", "id": "step_timer", "timer": "t1",
+                  "delay_ms": 1000,
+                  "capture_target_intents": {} }
+            ]}
+        });
         assert_eq!(
-            error_codes(&compile_definition_value(&group_capture, &catalog()).unwrap_err()),
-            vec!["capture_group_intents_unsupported"]
+            error_codes(&compile_definition_value(&empty_capture, &catalog()).unwrap_err()),
+            vec!["invalid_capture_targets"]
         );
 
         let bad_policy = json!({

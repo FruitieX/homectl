@@ -22,6 +22,15 @@ pub const MAX_TIMERS_PER_OWNER: usize = 64;
 /// Intent tokens frozen for one scheduled timer generation (J08).
 pub type TimerIntentTokens = Vec<(TimerIntentTarget, u64)>;
 
+/// One frozen capture riding a timer generation: what the scheduling step
+/// asked to guard, the group membership resolved at plan time (J09), and the
+/// tokens recorded at acceptance (J08).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CapturedTimerIntents {
+    pub capture: crate::types::automation_definition::TimerIntentCapture,
+    pub tokens: TimerIntentTokens,
+}
+
 /// Why a timer operation was rejected.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TimerOperationError {
@@ -87,7 +96,7 @@ pub struct TimerFire {
     /// Intent tokens frozen when this generation was scheduled (J08). The
     /// expiry plan guards captured targets with these instead of live
     /// revisions, so a newer manual intent suppresses the delayed action.
-    pub captured: Option<TimerIntentTokens>,
+    pub captured: Option<CapturedTimerIntents>,
 }
 
 /// One validated sustained-predicate maturity ready for frame evaluation. The
@@ -108,7 +117,7 @@ struct TimerJob {
     generation: u64,
     due_monotonic_ms: u64,
     due_wall_ms: i64,
-    captured: Option<TimerIntentTokens>,
+    captured: Option<CapturedTimerIntents>,
 }
 
 fn named_job(timer: &TimerId) -> TimerWakeupJob {
@@ -253,7 +262,7 @@ impl TimerStore {
         owner: &RoutineId,
         definition_revision: i64,
         operation: &TimerOperation,
-        captured: Option<TimerIntentTokens>,
+        captured: Option<CapturedTimerIntents>,
         now_monotonic_ms: u64,
         now_wall_ms: i64,
     ) -> Result<u64, TimerOperationError> {
@@ -301,7 +310,7 @@ impl TimerStore {
         job: TimerWakeupJob,
         definition_revision: i64,
         delay_ms: u64,
-        captured: Option<TimerIntentTokens>,
+        captured: Option<CapturedTimerIntents>,
         now_monotonic_ms: u64,
         now_wall_ms: i64,
     ) -> Result<u64, TimerOperationError> {

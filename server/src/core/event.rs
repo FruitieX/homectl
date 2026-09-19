@@ -785,22 +785,29 @@ pub async fn handle_event(state: &mut AppState, event: &Event) -> Result<EventOu
                     // already reflected; a later manual change can only be
                     // observed as a newer revision at expiry.
                     let captured = capture.as_ref().map(|capture| {
-                        capture
+                        let tokens = capture
                             .targets
                             .iter()
                             .map(|target| {
-                                let revision = match target {
+                                let intent_target = match target {
                                     crate::types::automation_definition::TimerIntentTarget::Device {
                                         device,
-                                    } => state.intents.revision(
-                                        &crate::core::automation::IntentTarget::Device(
-                                            device.clone(),
-                                        ),
+                                    } => crate::core::automation::IntentTarget::Device(
+                                        device.clone(),
+                                    ),
+                                    crate::types::automation_definition::TimerIntentTarget::Group {
+                                        group,
+                                    } => crate::core::automation::IntentTarget::Group(
+                                        group.clone(),
                                     ),
                                 };
-                                (target.clone(), revision)
+                                (target.clone(), state.intents.revision(&intent_target))
                             })
-                            .collect()
+                            .collect();
+                        crate::core::automation::CapturedTimerIntents {
+                            capture: capture.clone(),
+                            tokens,
+                        }
                     });
                     match state.timers.apply(
                         routine_id,
@@ -3974,6 +3981,7 @@ pub(crate) mod tests {
             targets: vec![TimerIntentTarget::Device {
                 device: key.clone(),
             }],
+            frozen_members: Vec::new(),
         };
 
         // Untouched target: the delayed action proceeds.

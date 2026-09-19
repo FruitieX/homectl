@@ -276,10 +276,10 @@ pub struct RoutineFrameEvaluation {
     pub will_trigger: bool,
     /// Sustained-predicate arming/cancellation implied by this frame.
     pub predicate_jobs: Vec<PredicateJobIntent>,
-    /// Intent tokens frozen when the fired timer generations were scheduled
-    /// (J08). The expiry plan guards captured targets with these instead of
-    /// live revisions.
-    pub timer_captures: Vec<super::timers::TimerIntentTokens>,
+    /// Captures frozen when the fired timer generations were scheduled
+    /// (J08/J09). The expiry plan guards captured targets with these tokens
+    /// instead of live revisions and cannot expand captured groups.
+    pub timer_captures: Vec<super::timers::CapturedTimerIntents>,
 }
 
 impl RoutineFrameEvaluation {
