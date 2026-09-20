@@ -359,7 +359,16 @@ function RoutineCard({
           >
             {routine.enabled ? 'Enabled' : 'Disabled'}
           </Badge>
-          {isV2 ? <Badge variant="outline">v2</Badge> : null}
+          {isV2 ? (
+            <Badge variant="outline">v2</Badge>
+          ) : (
+            <Badge
+              variant="outline"
+              className="border-amber-500/50 text-amber-600 dark:text-amber-400"
+            >
+              Legacy v1
+            </Badge>
+          )}
           {routineStatusBadge ? (
             <Badge className={routineStatusBadge.className}>
               {routineStatusBadge.label}
@@ -757,7 +766,14 @@ function RoutineCard({
   );
 }
 
-function v2Draft(kind: 'blank' | 'sensor' | 'schedule'): RoutineDefinitionV2Body {
+type V2DraftKind =
+  | 'blank'
+  | 'sensor'
+  | 'motion'
+  | 'occupancy'
+  | 'schedule';
+
+function v2Draft(kind: V2DraftKind): RoutineDefinitionV2Body {
   const trigger: TriggerSpec =
     kind === 'sensor'
       ? {
@@ -766,21 +782,48 @@ function v2Draft(kind: 'blank' | 'sensor' | 'schedule'): RoutineDefinitionV2Body
           device: { integration_id: '', device_id: '' },
           mode: 'transition',
         }
-      : kind === 'schedule'
+      : kind === 'motion'
         ? {
-            kind: 'schedule',
-            id: 'schedule_1',
-            schedule: {
-              cron: '0 0 8 * * *',
-              timezone: 'Europe/Helsinki',
-              backlog: 'skip',
-            },
+            kind: 'report',
+            id: 'report_1',
+            device: { integration_id: '', device_id: '' },
           }
-        : { kind: 'manual', id: 'manual_1' };
+        : kind === 'occupancy'
+          ? {
+              kind: 'state_change',
+              id: 'state_change_1',
+              device: { integration_id: '', device_id: '' },
+              mode: 'level',
+            }
+          : kind === 'schedule'
+            ? {
+                kind: 'schedule',
+                id: 'schedule_1',
+                schedule: {
+                  cron: '0 0 8 * * *',
+                  timezone: 'Europe/Helsinki',
+                  backlog: 'skip',
+                },
+              }
+            : { kind: 'manual', id: 'manual_1' };
+
+  const condition: ConditionExpr =
+    kind === 'motion' || kind === 'occupancy'
+      ? {
+          kind: 'comparison',
+          source: {
+            kind: 'device',
+            device: { integration_id: '', device_id: '' },
+            path: '/value',
+          },
+          operator: 'eq',
+          value: true,
+        }
+      : { kind: 'literal', value: true };
 
   return {
     triggers: [trigger],
-    condition: { kind: 'literal', value: true },
+    condition,
     program: {
       kind: 'native',
       steps: [
@@ -953,6 +996,8 @@ function CreateRoutineModal({
                   if (
                     value === 'blank' ||
                     value === 'sensor' ||
+                    value === 'motion' ||
+                    value === 'occupancy' ||
                     value === 'schedule'
                   ) {
                     setDefinition(v2Draft(value));
@@ -989,6 +1034,12 @@ function CreateRoutineModal({
                 <>
                   <option value="blank">Blank routine (manual trigger)</option>
                   <option value="sensor">Device change activates a scene</option>
+                  <option value="motion">
+                    Motion report activates a scene
+                  </option>
+                  <option value="occupancy">
+                    Occupancy holds a scene (level)
+                  </option>
                   <option value="schedule">Schedule activates a scene</option>
                   <optgroup label="Reuse a v2 routine">
                     {routines
