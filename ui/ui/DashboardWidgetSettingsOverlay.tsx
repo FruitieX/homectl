@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { createUuid } from '@/lib/uuid';
 import { useSensorData } from '@/hooks/influxdb';
 import { useSensorCatalog } from '@/hooks/sensorCatalog';
-import { useHelpers } from '@/hooks/useConfig';
+import { useGroups, useHelpers } from '@/hooks/useConfig';
 import {
   type DashboardWidget,
   widgetRegistry,
@@ -132,6 +132,36 @@ function HelperOptionField({
               {helper.name || helper.id} ({helper.kind.kind})
             </option>
           ))}
+      </select>
+    </ConfigField>
+  );
+}
+
+function GroupOptionField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const { data: groups } = useGroups();
+
+  return (
+    <ConfigField
+      label="Group"
+      description="Show controls for this group. Specific device keys below override it."
+    >
+      <select
+        className={selectClassName}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">All controllable devices</option>
+        {(groups ?? []).map((group) => (
+          <option key={group.id} value={group.id}>
+            {group.name} ({group.id})
+          </option>
+        ))}
       </select>
     </ConfigField>
   );
@@ -608,10 +638,8 @@ function WidgetOptionFields({
   if (widgetType === 'controls') {
     return (
       <div className="grid gap-4 md:grid-cols-2">
-        <OptionTextField
-          label="Group id"
+        <GroupOptionField
           value={getString('groupId')}
-          placeholder="living_room"
           onChange={(value) => onChange('groupId', value)}
         />
         <OptionCsvField
@@ -808,6 +836,24 @@ function WidgetOptionFields({
           value={getString('alt', 'Dashboard image')}
           onChange={(value) => onChange('alt', value)}
         />
+      </div>
+    );
+  }
+
+  if (widgetType === 'custom') {
+    return (
+      <div className="grid gap-4">
+        <ConfigField
+          label="HTML"
+          description="Rendered in a sandboxed frame; scripts do not run."
+        >
+          <Textarea
+            className="min-h-48 font-mono text-xs"
+            placeholder="<div style='padding: 1rem'>Hello</div>"
+            value={getString('content')}
+            onChange={(event) => onChange('content', event.target.value)}
+          />
+        </ConfigField>
       </div>
     );
   }

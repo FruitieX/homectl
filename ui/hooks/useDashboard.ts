@@ -159,14 +159,13 @@ export const widgetRegistry: Record<
     name: 'Weather',
     description: 'Shows weather forecast',
     defaultOptions: {
-      location: '',
-      units: 'metric',
       weatherUrl: '',
       weatherPath: '/api/weather',
       outdoorSensorId: '',
       sensorPath: '/api/influxdb/temp-sensors',
       forecastHours: 48,
       forecastDays: 5,
+      showWidgetForecast: false,
       refreshSeconds: 60,
     },
   },
@@ -176,8 +175,6 @@ export const widgetRegistry: Record<
     defaultOptions: {
       sensorIds: [],
       primarySensorId: '',
-      indoorSensorIds: [],
-      prioritySensorIds: [],
       influxUrl: '',
       influxToken: '',
       sensorPath: '/api/influxdb/temp-sensors',
@@ -189,7 +186,7 @@ export const widgetRegistry: Record<
   controls: {
     name: 'Controls',
     description: 'Quick control buttons for scenes and devices',
-    defaultOptions: { groupId: null, deviceKeys: [] },
+    defaultOptions: { groupId: '', deviceKeys: [] },
   },
   helper_mode: {
     name: 'Mode / helper',
@@ -201,7 +198,6 @@ export const widgetRegistry: Record<
     name: 'Spot Price',
     description: 'Electricity spot price display',
     defaultOptions: {
-      region: 'FI',
       spotPricePath: '/api/influxdb/spot-prices',
       lowPriceThreshold: 2,
       mediumPriceThreshold: 5,
@@ -212,13 +208,17 @@ export const widgetRegistry: Record<
     name: 'Train Schedule',
     description: 'Upcoming train departures',
     defaultOptions: {
-      stationCode: '',
-      limit: 5,
       trainApiUrl: '',
       trainSchedulePath: '/api/train-schedule',
       stationId: 'HSL:2131551',
+      destination: '',
+      directionId: '',
       walkMinutes: 12,
       overdueMinutes: 3,
+      maxMinutesAhead: 100,
+      limit: 5,
+      displayLimit: 3,
+      scrollMore: false,
     },
   },
   text: {
@@ -242,8 +242,8 @@ export const widgetRegistry: Record<
     defaultOptions: { imageUrl: '', alt: 'Dashboard image' },
   },
   custom: {
-    name: 'Custom',
-    description: 'Custom widget with HTML/JS',
+    name: 'Custom HTML',
+    description: 'Custom HTML and inline CSS, rendered sandboxed without scripts',
     defaultOptions: { content: '' },
   },
 };

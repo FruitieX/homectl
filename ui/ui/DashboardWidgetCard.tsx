@@ -94,19 +94,30 @@ export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
           />
         </DashboardCard>
       );
-    case 'custom':
+    case 'custom': {
+      const content = getDashboardWidgetOptionString(widget, 'content', '');
       return (
         <DashboardCard className="dashboard-custom-card">
           <CardHeader className="dashboard-widget-title shrink-0">
             <CardTitle>{widget.title}</CardTitle>
           </CardHeader>
-          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden">
-            <p className="text-sm opacity-70">
-              Custom widgets are not runtime-rendered yet.
-            </p>
+          <CardContent className="dashboard-text-content min-h-0 flex-1 overflow-hidden p-0">
+            {content.trim() ? (
+              <iframe
+                className="h-full w-full border-0 bg-background"
+                sandbox=""
+                srcDoc={content}
+                title={widget.title}
+              />
+            ) : (
+              <p className="p-4 text-sm opacity-70">
+                Add HTML in the widget settings; scripts do not run.
+              </p>
+            )}
           </CardContent>
         </DashboardCard>
       );
+    }
     default:
       return (
         <DashboardCard>
