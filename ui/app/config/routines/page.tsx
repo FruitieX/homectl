@@ -7,6 +7,7 @@ import {
   RoutineDefinitionV2Body,
 } from '@/hooks/useConfig';
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
+import type { ExecutionPolicy } from '@/bindings/ExecutionPolicy';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { NativeAction } from '@/bindings/NativeAction';
 import type { Program } from '@/bindings/Program';
@@ -29,6 +30,7 @@ import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
 import { TriggerBuilder } from '@/ui/TriggerBuilder';
 import { ConditionEditor } from '@/ui/ConditionBuilder';
 import { ProgramBuilder } from '@/ui/ProgramBuilder';
+import { RoutineExecutionPolicyEditor } from '@/ui/RoutineExecutionPolicyEditor';
 import { RoutineRuntimePanel } from '@/ui/routine-runtime';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
@@ -521,7 +523,7 @@ function RoutineCard({
         ) : null}
 
         {isV2 ? (
-          <TabsContent value="program" className="mt-4">
+          <TabsContent value="program" className="mt-4 space-y-4">
             <ConfigFormSection aria-label="Routine program">
               <ProgramBuilder
                 program={definition.program as Program | undefined}
@@ -533,6 +535,17 @@ function RoutineCard({
                 scenes={scenes}
                 routines={routines}
                 helpers={helpers}
+              />
+            </ConfigFormSection>
+            <ConfigFormSection
+              title="Execution"
+              description="How overlapping invocations, the per-run action budget, and rate limits are handled."
+            >
+              <RoutineExecutionPolicyEditor
+                policy={definition.execution as ExecutionPolicy | undefined}
+                onChange={(execution) =>
+                  setDefinition((current) => ({ ...current, execution }))
+                }
               />
             </ConfigFormSection>
           </TabsContent>
@@ -906,6 +919,27 @@ function validateV2Draft(definition: RoutineDefinitionV2Body): string | null {
 
   if (hasEmptyConditionGroup(definition.condition)) {
     return 'Add at least one child to each all/any condition.';
+  }
+
+  const execution = definition.execution as ExecutionPolicy | undefined;
+  if (execution) {
+    if (
+      !Number.isInteger(execution.max_actions) ||
+      execution.max_actions < 1 ||
+      execution.max_actions > 64
+    ) {
+      return 'Max actions must be between 1 and 64.';
+    }
+    const minIntervalMs =
+      execution.min_interval_ms === undefined
+        ? undefined
+        : Number(execution.min_interval_ms);
+    if (
+      minIntervalMs !== undefined &&
+      (!Number.isFinite(minIntervalMs) || minIntervalMs <= 0)
+    ) {
+      return 'Minimum spacing must be a positive duration.';
+    }
   }
 
   return null;
