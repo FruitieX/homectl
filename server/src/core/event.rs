@@ -1654,6 +1654,32 @@ fn bump_action_intents(state: &mut AppState, action: &Action) {
     }
 }
 
+/// Visible status for a plan rejected before effects because it exceeds the
+/// routine's `max_actions` execution policy (plan §4.2/X02).
+fn rejected_policy_plan(plan: &RoutinePlan, reason: &str) -> PlannedRunStatus {
+    let mut steps = Vec::with_capacity(plan.steps.len() + plan.suppressions.len());
+    let mut dropped = 0u64;
+    for step in &plan.steps {
+        dropped += 1;
+        steps.push(step_status(
+            step,
+            StepDisposition::Suppressed,
+            Some(reason.to_string()),
+        ));
+    }
+    for suppression in &plan.suppressions {
+        dropped += 1;
+        steps.push(suppression.clone());
+    }
+    PlannedRunStatus {
+        run_id: plan.run_id,
+        definition_revision: plan.definition_revision,
+        accepted: false,
+        steps,
+        dropped,
+    }
+}
+
 /// Visible status for a plan rejected before effects because a timer
 /// operation conflicted with live state (P09/X02).
 fn rejected_timer_plan(
@@ -1702,6 +1728,26 @@ impl AppState {
         plan: RoutinePlan,
         causation: EventCausation,
     ) -> PlannedRunStatus {
+        // Plan §4.2: `max_actions` bounds dispatched actions per invocation.
+        // A plan that would exceed it is rejected as a whole (accepted:
+        // false), so an over-budget run never publishes a partial effect set.
+        if let Some(policy) = self.rules.execution_policy(&plan.routine_id) {
+            let would_dispatch = plan
+                .steps
+                .iter()
+                .filter(|step| guard_suppression(step, &self.intents).is_none())
+                .count();
+            if would_dispatch > policy.max_actions as usize {
+                return rejected_policy_plan(
+                    &plan,
+                    &format!(
+                        "execution_policy_max_actions: {would_dispatch} steps exceed the limit of {}",
+                        policy.max_actions
+                    ),
+                );
+            }
+        }
+
         // P09: validate the plan's timer operations against a staged view
         // before publishing any effect. A conflicting required ScheduleTimer
         // rejects the plan as a whole (accepted: false) instead of letting it
@@ -2038,6 +2084,7 @@ impl AppState {
                 }
             }
             let frame_causation = EventCausation::child_of(frame_id, causation);
+            let now_monotonic_ms = self.clock.monotonic_ms();
             let (evaluations, native_plans, prepared_scripts) = {
                 let frame = FrameContext {
                     mutations: &mutations,
@@ -2053,37 +2100,65 @@ impl AppState {
                 let mut prepared_scripts: Vec<super::automation::PreparedScriptRun> = Vec::new();
                 let mut native_plans: Vec<RoutinePlan> = Vec::new();
                 if !evaluations.is_empty() {
+                    // Plan §4.2: `min_interval_ms` rejects before planning or
+                    // worker submission. The mode (single/queued/restart) is
+                    // enforced for script programs by the coordinator; native
+                    // runs dispatch synchronously, so they have no pending
+                    // invocation to serialize.
+                    let mut accepted_evaluations = Vec::new();
+                    for evaluation in &evaluations {
+                        if !evaluation.will_trigger {
+                            continue;
+                        }
+                        if let Some(reason) = self
+                            .rules
+                            .v2_rate_limit_rejection(&evaluation.routine_id, now_monotonic_ms)
+                        {
+                            self.rules
+                                .record_v2_policy_rejection(&evaluation.routine_id, reason);
+                            continue;
+                        }
+                        accepted_evaluations.push(evaluation.clone());
+                    }
+
                     let inputs = PlanInputs {
                         devices: &after_view,
                         groups: &self.groups,
                         helpers: &self.helpers,
                         intents: &self.intents,
                     };
-                    native_plans = self.rules.plan_v2_runs(&evaluations, &inputs);
+                    native_plans = self.rules.plan_v2_runs(&accepted_evaluations, &inputs);
 
                     // P07: script programs are submitted to the supervised
                     // worker while the actor keeps running. Context building
                     // and owner admission happen against this coherent frame;
                     // the result event plans the returned actions at
                     // acceptance time.
-                    for evaluation in evaluations
-                        .iter()
-                        .filter(|evaluation| evaluation.will_trigger)
-                    {
+                    for evaluation in &accepted_evaluations {
                         let Some(spec) = self.rules.script_spec(&evaluation.routine_id) else {
                             continue;
                         };
+                        let mode = self
+                            .rules
+                            .execution_policy(&evaluation.routine_id)
+                            .map(|policy| policy.mode)
+                            .unwrap_or_default();
                         match self.scripts.prepare_handler_invocation(
                             &evaluation.routine_id,
                             evaluation.definition_revision,
                             spec,
+                            mode,
                             &frame,
                             frame_id,
                             origin,
                             frame_causation,
                             evaluation_time_ms,
                         ) {
-                            Ok(run) => prepared_scripts.push(run),
+                            Ok(run) => {
+                                self.rules
+                                    .note_v2_invocation(&evaluation.routine_id, now_monotonic_ms);
+                                prepared_scripts.push(run);
+                            }
                             Err(reason) => self
                                 .rules
                                 .record_v2_script_failure(&evaluation.routine_id, reason),
@@ -2097,7 +2172,6 @@ impl AppState {
             // this coherent frame reach the authoritative store before any
             // plan dispatches; `Arm` keeps a live episode and `Cancel` is
             // idempotent.
-            let now_monotonic_ms = self.clock.monotonic_ms();
             let now_wall_ms = self.clock.wall_ms();
             for evaluation in &evaluations {
                 for intent in &evaluation.predicate_jobs {
@@ -2132,6 +2206,9 @@ impl AppState {
             for plan in native_plans {
                 let routine_id = plan.routine_id.clone();
                 let status = self.dispatch_v2_plan(plan, frame_causation);
+                if status.accepted {
+                    self.rules.note_v2_invocation(&routine_id, now_monotonic_ms);
+                }
                 self.rules.record_v2_run(&routine_id, status);
             }
             if !evaluations.is_empty() {
@@ -3329,6 +3406,181 @@ pub(crate) mod tests {
         assert!(applied
             .get_controllable_state()
             .is_some_and(|state| state.power));
+    }
+
+    // Plan §4.2: a plan that would dispatch more actions than the routine's
+    // `max_actions` is rejected as a whole and publishes no effects.
+    #[tokio::test]
+    async fn execution_policy_max_actions_rejects_oversized_plans() {
+        use crate::types::{
+            automation_definition::RoutineDefinitionV2, automation_trace::StepDisposition,
+            rule::RoutineId,
+        };
+
+        let (mut state, mut event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        let definition = serde_json::from_value::<RoutineDefinitionV2>(serde_json::json!({
+            "triggers": [{ "kind": "state_change", "id": "trig", "device": {
+                "integration_id": "mqtt", "device_id": "lamp"
+            }}],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "set_power", "id": "on",
+                  "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                  "power": true },
+                { "action": "set_power", "id": "off",
+                  "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                  "power": false }
+            ]},
+            "execution": { "max_actions": 1 }
+        }))
+        .expect("definition decodes");
+        state.runtime_config.routines = vec![RoutineRow {
+            id: "budget".to_string(),
+            name: "Budget".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(serde_json::to_value(&definition).unwrap()),
+            ..Default::default()
+        }];
+        state.apply_runtime_routines();
+
+        let mut lit = bulb.clone();
+        if let DeviceData::Controllable(controllable) = &mut lit.data {
+            controllable.state.power = true;
+        }
+        handle_event(
+            &mut state,
+            &Event::SetInternalState {
+                device: lit,
+                skip_external_update: Some(true),
+                skip_db_update: Some(true),
+                origin: Some(EventOrigin::Command),
+                causation: None,
+                integration_epoch: None,
+            },
+        )
+        .await
+        .unwrap();
+        state.flush_pending_frames().await;
+
+        let status = state
+            .rules
+            .get_runtime_statuses()
+            .0
+            .get(&RoutineId("budget".to_string()))
+            .cloned()
+            .expect("v2 status visible");
+        let run = status
+            .v2
+            .expect("v2 detail attached")
+            .last_run
+            .expect("run status recorded");
+        assert!(!run.accepted);
+        assert_eq!(run.steps.len(), 2);
+        assert!(run
+            .steps
+            .iter()
+            .all(|step| step.disposition == StepDisposition::Suppressed));
+        assert!(run.steps[0]
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("execution_policy_max_actions")));
+        assert!(
+            drain_actions(&mut event_rx).is_empty(),
+            "a rejected plan must not publish effects"
+        );
+    }
+
+    // Plan §4.2: `min_interval_ms` rejects re-invocations that arrive before
+    // the configured spacing; the rejection is visible in `last_run`.
+    #[tokio::test]
+    async fn execution_policy_min_interval_rejects_rapid_reinvocations() {
+        use crate::types::{automation_definition::RoutineDefinitionV2, rule::RoutineId};
+
+        let (mut state, _event_rx) = test_state();
+        let bulb = lamp("mqtt", "lamp", false, 0.1);
+        state.devices.set_state(&bulb, true, true);
+        state.devices.begin_command(EventCausation::default());
+        state.flush_pending_frames().await;
+
+        let definition = serde_json::from_value::<RoutineDefinitionV2>(serde_json::json!({
+            "triggers": [{ "kind": "state_change", "id": "trig", "device": {
+                "integration_id": "mqtt", "device_id": "lamp"
+            }}],
+            "condition": { "kind": "literal", "value": true },
+            "program": { "kind": "native", "steps": [
+                { "action": "set_power", "id": "on",
+                  "device": { "integration_id": "mqtt", "device_id": "lamp" },
+                  "power": true }
+            ]},
+            "execution": { "min_interval_ms": 60000 }
+        }))
+        .expect("definition decodes");
+        state.runtime_config.routines = vec![RoutineRow {
+            id: "throttled".to_string(),
+            name: "Throttled".to_string(),
+            enabled: true,
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(serde_json::to_value(&definition).unwrap()),
+            ..Default::default()
+        }];
+        state.apply_runtime_routines();
+
+        async fn trigger(state: &mut AppState, mut device: Device, power: bool) {
+            if let DeviceData::Controllable(controllable) = &mut device.data {
+                controllable.state.power = power;
+            }
+            handle_event(
+                state,
+                &Event::SetInternalState {
+                    device,
+                    skip_external_update: Some(true),
+                    skip_db_update: Some(true),
+                    origin: Some(EventOrigin::Command),
+                    causation: None,
+                    integration_epoch: None,
+                },
+            )
+            .await
+            .unwrap();
+            state.flush_pending_frames().await;
+        }
+
+        let routine_id = RoutineId("throttled".to_string());
+        let last_run = |state: &AppState| {
+            state
+                .rules
+                .get_runtime_statuses()
+                .0
+                .get(&routine_id)
+                .cloned()
+                .expect("v2 status visible")
+                .v2
+                .expect("v2 detail attached")
+                .last_run
+                .expect("run status recorded")
+        };
+
+        trigger(&mut state, bulb.clone(), true).await;
+        assert!(last_run(&state).accepted, "first invocation is accepted");
+
+        // The default state-change mode re-arms on true -> false; the next
+        // false -> true transition fires and hits the rate limit.
+        trigger(&mut state, bulb.clone(), false).await;
+        trigger(&mut state, bulb.clone(), true).await;
+        let run = last_run(&state);
+        assert!(!run.accepted);
+        assert!(run.steps[0]
+            .reason
+            .as_deref()
+            .is_some_and(|reason| reason.contains("execution_policy_min_interval")));
     }
 
     /// Worker binary built next to the test executable's profile directory.

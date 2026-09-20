@@ -44,6 +44,9 @@ pub struct V2Runtime {
     definitions: BTreeMap<RoutineId, V2Definition>,
     memory: TriggerMemory,
     statuses: BTreeMap<RoutineId, RoutineV2RuntimeStatus>,
+    /// Monotonic acceptance time of the last accepted invocation per routine,
+    /// for `min_interval_ms` (plan §4.2).
+    last_invocation_monotonic_ms: BTreeMap<RoutineId, u64>,
     group_revision: Option<u64>,
     next_run_id: u64,
 }
@@ -60,6 +63,7 @@ impl V2Runtime {
         self.memory.retain_current(&current);
         self.definitions = definitions;
         self.statuses.clear();
+        self.last_invocation_monotonic_ms.clear();
         self.group_revision = None;
     }
 
@@ -67,8 +71,52 @@ impl V2Runtime {
         &self.definitions
     }
 
+    pub fn definition_revision(&self, routine_id: &RoutineId) -> Option<i64> {
+        self.definitions.get(routine_id).map(|entry| entry.revision)
+    }
+
     pub fn statuses(&self) -> &BTreeMap<RoutineId, RoutineV2RuntimeStatus> {
         &self.statuses
+    }
+
+    /// Allocate the next monotonic run id, for run statuses that are not
+    /// produced by planning (policy rejections).
+    pub fn allocate_run_id(&mut self) -> u64 {
+        let run_id = self.next_run_id;
+        self.next_run_id = self.next_run_id.wrapping_add(1);
+        run_id
+    }
+
+    /// Enforce the routine's `min_interval_ms` against the last accepted
+    /// invocation. Returns the visible rejection reason without recording an
+    /// invocation; callers note acceptance only once the run is admitted.
+    pub fn rate_limit_rejection(
+        &self,
+        routine_id: &RoutineId,
+        now_monotonic_ms: u64,
+    ) -> Option<String> {
+        let min_interval_ms = self
+            .definitions
+            .get(routine_id)?
+            .compiled
+            .normalized
+            .execution
+            .min_interval_ms?;
+        let last = self.last_invocation_monotonic_ms.get(routine_id)?;
+        let elapsed = now_monotonic_ms.saturating_sub(*last);
+        if elapsed < min_interval_ms {
+            return Some(format!(
+                "execution_policy_min_interval: {elapsed}ms since the last invocation (minimum {min_interval_ms}ms)"
+            ));
+        }
+        None
+    }
+
+    /// Record the acceptance time of an admitted invocation for the
+    /// `min_interval_ms` gate.
+    pub fn note_invocation(&mut self, routine_id: &RoutineId, now_monotonic_ms: u64) {
+        self.last_invocation_monotonic_ms
+            .insert(routine_id.clone(), now_monotonic_ms);
     }
 
     pub fn memory(&self) -> &TriggerMemory {
@@ -83,6 +131,7 @@ impl V2Runtime {
         self.definitions.clear();
         self.memory.clear();
         self.statuses.clear();
+        self.last_invocation_monotonic_ms.clear();
         self.group_revision = None;
     }
 
@@ -237,8 +286,7 @@ impl V2Runtime {
                 continue;
             }
             let mut plan = plan_evaluation(evaluation, &definition.compiled, inputs);
-            plan.run_id = self.next_run_id;
-            self.next_run_id = self.next_run_id.wrapping_add(1);
+            plan.run_id = self.allocate_run_id();
             plans.push(plan);
         }
         plans
@@ -254,8 +302,7 @@ impl V2Runtime {
     ) -> Option<RoutinePlan> {
         let definition_revision = self.definitions.get(routine_id)?.revision;
         let mut plan = plan_script_actions(routine_id, definition_revision, actions, inputs);
-        plan.run_id = self.next_run_id;
-        self.next_run_id = self.next_run_id.wrapping_add(1);
+        plan.run_id = self.allocate_run_id();
         Some(plan)
     }
 
@@ -271,13 +318,14 @@ impl V2Runtime {
     /// contract error). Nothing is dispatched and the pending flag clears so a
     /// stuck pending state cannot masquerade as success (X03).
     pub fn record_script_failure(&mut self, routine_id: &RoutineId, reason: String) {
-        let Some(definition) = self.definitions.get(routine_id) else {
+        let Some((revision, fingerprint)) = self
+            .definitions
+            .get(routine_id)
+            .map(|definition| (definition.revision, definition.compiled.fingerprint.clone()))
+        else {
             return;
         };
-        let revision = definition.revision;
-        let fingerprint = definition.compiled.fingerprint.clone();
-        let run_id = self.next_run_id;
-        self.next_run_id = self.next_run_id.wrapping_add(1);
+        let run_id = self.allocate_run_id();
         let status = PlannedRunStatus {
             run_id,
             definition_revision: revision,
@@ -410,6 +458,57 @@ mod tests {
         let mut runtime = V2Runtime::default();
         runtime.load(definitions.into_iter().collect());
         runtime
+    }
+
+    fn definition_with_execution(
+        id: &str,
+        revision: i64,
+        execution: serde_json::Value,
+    ) -> (RoutineId, V2Definition) {
+        let compiled = compile_definition_value(
+            &json!({
+                "triggers": [{ "kind": "state_change", "id": "trig", "device": { "integration_id": "dummy", "device_id": id } }],
+                "condition": { "kind": "literal", "value": true },
+                "program": { "kind": "native", "steps": [
+                    { "action": "cancel_timer", "id": "step", "timer": "t1" }
+                ]},
+                "execution": execution
+            }),
+            &ConfigCatalog::default(),
+        )
+        .expect("definition should compile");
+        (
+            RoutineId(id.to_string()),
+            V2Definition { revision, compiled },
+        )
+    }
+
+    #[test]
+    fn min_interval_gate_rejects_until_the_spacing_elapses() {
+        let routine_id = RoutineId("rate_limited".to_string());
+        let mut runtime = runtime_with(vec![definition_with_execution(
+            "rate_limited",
+            1,
+            json!({ "min_interval_ms": 1000 }),
+        )]);
+
+        assert_eq!(runtime.rate_limit_rejection(&routine_id, 0), None);
+        runtime.note_invocation(&routine_id, 0);
+        assert!(runtime
+            .rate_limit_rejection(&routine_id, 999)
+            .is_some_and(|reason| reason.contains("execution_policy_min_interval")));
+        assert_eq!(runtime.rate_limit_rejection(&routine_id, 1000), None);
+
+        // A rejected attempt does not itself count as an invocation.
+        runtime.note_invocation(&routine_id, 1000);
+        assert!(runtime.rate_limit_rejection(&routine_id, 1500).is_some());
+        assert_eq!(runtime.rate_limit_rejection(&routine_id, 2000), None);
+
+        // Reloading definitions clears rate-limit state.
+        let (id, definition) =
+            definition_with_execution("rate_limited", 1, json!({ "min_interval_ms": 1000 }));
+        runtime.load([(id, definition)].into_iter().collect());
+        assert_eq!(runtime.rate_limit_rejection(&routine_id, 2000), None);
     }
 
     fn no_groups() -> Groups {

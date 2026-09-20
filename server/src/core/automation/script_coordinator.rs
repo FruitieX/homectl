@@ -90,6 +90,9 @@ pub enum CoalescePolicy {
     /// Keep only the newest invocation per owner and contract (current-value
     /// recomputation).
     LatestWins,
+    /// Refuse the invocation while any invocation for the owner is pending
+    /// (routine `single` execution policy).
+    RejectIfBusy,
 }
 
 /// A request to invoke a script for an owner.
@@ -141,6 +144,11 @@ pub enum AdmissionError {
     },
     QueueFull {
         limit: usize,
+    },
+    /// The owner's `single` execution policy refused the invocation because an
+    /// invocation is already pending or in flight.
+    Busy {
+        pending: usize,
     },
 }
 
@@ -329,6 +337,11 @@ impl ScriptCoordinator {
         if entry.definition_revision != invocation.definition_revision {
             return Err(AdmissionError::WrongRevision {
                 expected: entry.definition_revision,
+            });
+        }
+        if invocation.coalesce == CoalescePolicy::RejectIfBusy && !entry.pending.is_empty() {
+            return Err(AdmissionError::Busy {
+                pending: entry.pending.len(),
             });
         }
         if entry.pending.len() >= limit {
@@ -675,6 +688,32 @@ mod tests {
             coordinator.complete_handler(&second, &json!({"actions": []})),
             CompleteResult::Applied { .. }
         ));
+    }
+
+    #[test]
+    fn reject_if_busy_refuses_while_an_invocation_is_pending() {
+        let mut coordinator = ScriptCoordinator::new();
+        coordinator.load_owner(&owner(), 1, serde_json::Value::Null);
+
+        let first = accepted(
+            coordinator
+                .submit(&invocation(1, CoalescePolicy::RejectIfBusy))
+                .unwrap(),
+        );
+        assert_eq!(
+            coordinator.submit(&invocation(1, CoalescePolicy::RejectIfBusy)),
+            Err(AdmissionError::Busy { pending: 1 })
+        );
+        assert_eq!(coordinator.pending_count(&owner()), 1);
+
+        // Once the in-flight invocation completes, the owner accepts again.
+        assert!(matches!(
+            coordinator.complete_handler(&first, &json!({"actions": []})),
+            CompleteResult::Applied { .. }
+        ));
+        assert!(coordinator
+            .submit(&invocation(1, CoalescePolicy::RejectIfBusy))
+            .is_ok());
     }
 
     #[test]

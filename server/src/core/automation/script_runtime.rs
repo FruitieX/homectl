@@ -26,7 +26,7 @@ use std::sync::Arc;
 use serde_json::{Map, Value};
 
 use crate::types::{
-    automation_definition::{ScriptDeclaration, ScriptSpec, SourceId},
+    automation_definition::{ExecutionMode, ScriptDeclaration, ScriptSpec, SourceId},
     automation_event::{EventCausation, EventId, EventOrigin},
     device::{Device, DeviceKey, DeviceRef},
     event::{Event, TxEventChannel},
@@ -40,8 +40,8 @@ use super::evaluate::FrameContext;
 use super::runtime::V2Definition;
 use super::script_contract::ComputedSourceOutcome;
 use super::script_coordinator::{
-    Admission, AdmissionError, CompleteResult, InvocationToken, OwnerKind, ScriptCoordinator,
-    ScriptInvocation, ScriptOwnerId, StaleReason,
+    Admission, AdmissionError, CoalescePolicy, CompleteResult, InvocationToken, OwnerKind,
+    ScriptCoordinator, ScriptInvocation, ScriptOwnerId, StaleReason,
 };
 
 /// Maximum characters retained from a worker failure in a visible status.
@@ -388,6 +388,7 @@ impl ScriptExecution {
         routine_id: &RoutineId,
         definition_revision: i64,
         spec: &ScriptSpec,
+        mode: ExecutionMode,
         frame: &FrameContext<'_>,
         frame_id: EventId,
         origin: EventOrigin,
@@ -403,7 +404,7 @@ impl ScriptExecution {
             contract: super::script_contract::ScriptOutputContract::RoutineHandler,
             source_body: spec.source_body.clone(),
             context: context.clone(),
-            coalesce: super::script_coordinator::CoalescePolicy::Queue,
+            coalesce: coalesce_for_execution_mode(mode),
             run_id: None,
         };
         match self.coordinator.submit(&invocation) {
@@ -708,6 +709,20 @@ fn admission_error_text(error: &AdmissionError) -> String {
         AdmissionError::QueueFull { limit } => {
             format!("script_admission_failed: pending queue full (limit {limit})")
         }
+        AdmissionError::Busy { pending } => {
+            format!("execution_policy_single: {pending} invocation(s) already pending")
+        }
+    }
+}
+
+/// Map a routine's `ExecutionMode` to the coordinator's queue behavior:
+/// `single` refuses while busy, `queued` preserves arrival order, and
+/// `restart` supersedes the previous pending invocation for the contract.
+fn coalesce_for_execution_mode(mode: ExecutionMode) -> CoalescePolicy {
+    match mode {
+        ExecutionMode::Single => CoalescePolicy::RejectIfBusy,
+        ExecutionMode::Queued => CoalescePolicy::Queue,
+        ExecutionMode::Restart => CoalescePolicy::LatestWins,
     }
 }
 
@@ -787,6 +802,24 @@ mod tests {
             declarations,
             limits_profile: "default".to_string(),
         }
+    }
+
+    // Plan §4.2: routine execution modes map onto the coordinator's per-owner
+    // queue behavior.
+    #[test]
+    fn execution_mode_maps_to_coordinator_queue_behavior() {
+        assert_eq!(
+            coalesce_for_execution_mode(ExecutionMode::Single),
+            CoalescePolicy::RejectIfBusy
+        );
+        assert_eq!(
+            coalesce_for_execution_mode(ExecutionMode::Queued),
+            CoalescePolicy::Queue
+        );
+        assert_eq!(
+            coalesce_for_execution_mode(ExecutionMode::Restart),
+            CoalescePolicy::LatestWins
+        );
     }
 
     // S14/S15: the exposed device view is declaration-derived and independent

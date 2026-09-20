@@ -57,7 +57,19 @@ use crate::types::automation_definition::{
 use crate::types::device::{DeviceKey, DeviceRef, SensorDevice};
 use crate::types::rule::{RawRuleOperator, Rule, TriggerMode};
 
-use super::compile::{compile_definition, CompiledDefinition, ConfigCatalog};
+use super::compile::{
+    compile_definition, CompiledDefinition, ConfigCatalog, MAX_EXECUTION_ACTIONS,
+};
+
+/// Execution policy for a converted v1 routine. The default `max_actions`
+/// bound must not truncate an existing program, so it is raised to the step
+/// count (capped at the compile-time limit).
+fn converted_execution(step_count: usize) -> ExecutionPolicy {
+    let mut policy = ExecutionPolicy::default();
+    let steps = u32::try_from(step_count).unwrap_or(u32::MAX);
+    policy.max_actions = policy.max_actions.max(steps.min(MAX_EXECUTION_ACTIONS));
+    policy
+}
 
 /// Per-row conversion outcome. `Converted` carries the normalized v2
 /// definition; the other variants carry human-readable reasons and leave the
@@ -216,11 +228,12 @@ pub fn convert_routine(
         return conversion;
     }
 
+    let step_count = steps.len();
     let definition = RoutineDefinitionV2 {
         triggers,
         condition: and_conditions(conditions),
         program: Program::Native(NativeProgram { steps }),
-        execution: ExecutionPolicy::default(),
+        execution: converted_execution(step_count),
     };
 
     match compile_definition(&definition, catalog) {
@@ -1004,7 +1017,7 @@ pub fn convert_cron_schedule(
         }],
         condition: ConditionExpr::default(),
         program: Program::Native(NativeProgram { steps: vec![step] }),
-        execution: ExecutionPolicy::default(),
+        execution: converted_execution(1),
     };
 
     match compile_definition(&definition, catalog) {

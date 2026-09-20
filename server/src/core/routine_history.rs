@@ -65,11 +65,7 @@ pub fn record_force_trigger(
 /// Record one completed v2 run: matched triggers, condition trace, and the
 /// planned step dispositions. Called after the run outcome is written to the
 /// routine's status, so the snapshot's `last_run` is this run (X03/P12).
-pub fn record_v2_run(
-    routine_id: &RoutineId,
-    routine_name: &str,
-    status: &RoutineV2RuntimeStatus,
-) {
+pub fn record_v2_run(routine_id: &RoutineId, routine_name: &str, status: &RoutineV2RuntimeStatus) {
     let action_count = status
         .last_run
         .as_ref()

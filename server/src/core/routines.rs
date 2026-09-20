@@ -7,7 +7,7 @@ use crate::db::config_queries;
 use crate::types::{
     action::{Action, Actions},
     automation_event::{DeviceMutation, EventCausation, EventId, EventOrigin, MAX_CAUSATION_DEPTH},
-    automation_trace::{PlannedRunStatus, TruthValue},
+    automation_trace::{PlannedRunStatus, PlannedStepStatus, TruthValue},
     device::{Device, DeviceKey, DeviceRef, DevicesState, SensorDevice},
     dim::DimDescriptor,
     event::{Event, TxEventChannel},
@@ -822,6 +822,58 @@ impl Routines {
         inputs: &PlanInputs<'_>,
     ) -> Vec<RoutinePlan> {
         self.v2.plan_runs(evaluations, inputs)
+    }
+
+    /// The execution policy of a compiled v2 routine.
+    pub fn execution_policy(
+        &self,
+        routine_id: &RoutineId,
+    ) -> Option<&crate::types::automation_definition::ExecutionPolicy> {
+        self.v2
+            .definitions()
+            .get(routine_id)
+            .map(|definition| &definition.compiled.normalized.execution)
+    }
+
+    /// Enforce the routine's `min_interval_ms`. Returns the visible rejection
+    /// reason; the caller notes acceptance with [`Self::note_v2_invocation`]
+    /// once the run is admitted.
+    pub fn v2_rate_limit_rejection(
+        &self,
+        routine_id: &RoutineId,
+        now_monotonic_ms: u64,
+    ) -> Option<String> {
+        self.v2.rate_limit_rejection(routine_id, now_monotonic_ms)
+    }
+
+    /// Record the acceptance time of an admitted v2 invocation.
+    pub fn note_v2_invocation(&mut self, routine_id: &RoutineId, now_monotonic_ms: u64) {
+        self.v2.note_invocation(routine_id, now_monotonic_ms);
+    }
+
+    /// Record a policy rejection (rate limit, or a `single`/`restart`
+    /// admission refusal) as a visible suppressed run (plan §4.2). Nothing is
+    /// dispatched, and the rejection appears in statuses and history.
+    pub fn record_v2_policy_rejection(&mut self, routine_id: &RoutineId, reason: String) {
+        let Some(definition_revision) = self.v2.definition_revision(routine_id) else {
+            return;
+        };
+        let status = PlannedRunStatus {
+            run_id: self.v2.allocate_run_id(),
+            definition_revision,
+            accepted: false,
+            steps: vec![PlannedStepStatus {
+                action_id: crate::types::automation_definition::NodeId(
+                    "execution_policy".to_string(),
+                ),
+                kind: "execution_policy".to_string(),
+                targets: Vec::new(),
+                disposition: crate::types::automation_trace::StepDisposition::Suppressed,
+                reason: Some(reason),
+            }],
+            dropped: 1,
+        };
+        self.record_v2_run(routine_id, status);
     }
 
     /// Record the dispatched outcome of one v2 run for status displays (X03)

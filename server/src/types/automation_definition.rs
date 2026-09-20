@@ -749,9 +749,11 @@ fn default_max_actions() -> u32 {
 #[ts(export)]
 pub enum ExecutionMode {
     /// Reject a new invocation while one is in flight.
-    #[default]
     Single,
-    /// Queue invocations in arrival order.
+    /// Queue invocations in arrival order up to the per-owner bound. This is
+    /// the default for general event-driven routines (plan §4.2): accepted
+    /// events keep their order and overflow rejects with a visible trace.
+    #[default]
     Queued,
     /// Cancel the in-flight invocation and start the newest.
     Restart,
