@@ -5,6 +5,7 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { RawRuleOperator } from '@/bindings/RawRuleOperator';
 import type { ValueSource } from '@/bindings/ValueSource';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
+import { useSources } from '@/hooks/useConfig';
 import { selectClassName } from '@/ui/builder-fields';
 import { DeviceSelect, GroupSelect, splitDeviceKey } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
@@ -244,6 +245,7 @@ function ValueSourceEditor({
   helpers: HelperRuntimeStatus[];
 }) {
   const sourceKind = source.kind;
+  const sources = useSources().data ?? [];
 
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -331,16 +333,28 @@ function ValueSourceEditor({
         <>
           <ConfigField
             label="Computed source"
-            description="Id of a computed source defined in the server configuration."
+            description="Computed source defined in the server configuration."
           >
-            <Input
-              className="font-mono"
+            <select
+              className={selectClassName}
               value={source.source}
-              placeholder="source_id"
               onChange={(event) =>
                 onChange({ ...source, source: event.target.value })
               }
-            />
+            >
+              <option value="">Select a source…</option>
+              {sources.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name} ({item.id}){item.enabled ? '' : ' — disabled'}
+                </option>
+              ))}
+              {source.source !== '' &&
+              !sources.some((item) => item.id === source.source) ? (
+                <option value={source.source}>
+                  {source.source} — unknown
+                </option>
+              ) : null}
+            </select>
           </ConfigField>
           <ConfigField
             label="Value path"

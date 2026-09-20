@@ -8,6 +8,7 @@ import type { Program } from '@/bindings/Program';
 import type { RolloutSpec } from '@/bindings/RolloutSpec';
 import type { ScriptDeclaration } from '@/bindings/ScriptDeclaration';
 import type { ScriptSpec } from '@/bindings/ScriptSpec';
+import type { SceneSelection } from '@/bindings/SceneSelection';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
@@ -161,7 +162,9 @@ function summarizeStep(step: NativeAction): string {
   switch (step.action) {
     case 'activate_scene':
       return step.select
-        ? 'dynamic scene selection'
+        ? step.select.kind === 'helper_enum'
+          ? `scene by helper ${step.select.helper}`
+          : `scene mirroring group ${step.select.group_id}`
         : step.scene_id
           ? `scene ${step.scene_id}`
           : 'no scene selected';
@@ -609,6 +612,173 @@ function RolloutToggle({
   );
 }
 
+function defaultSceneSelection(
+  helpers: HelperRuntimeStatus[],
+  groups: FlattenedGroupsConfig,
+): SceneSelection {
+  const helper = helpers.find((item) => item.kind.kind === 'enum');
+  if (helper) {
+    return {
+      kind: 'helper_enum',
+      helper: helper.id,
+      mapping: {},
+      fallback_scene_id: undefined,
+    };
+  }
+  return {
+    kind: 'group_active',
+    group_id: Object.keys(groups)[0] ?? '',
+    fallback_scene_id: undefined,
+  };
+}
+
+function SceneSelectionEditor({
+  selection,
+  scenes,
+  groups,
+  helpers,
+  onChange,
+  onClear,
+}: {
+  selection: SceneSelection;
+  scenes: Array<{ id: string; name: string }>;
+  groups: FlattenedGroupsConfig;
+  helpers: HelperRuntimeStatus[];
+  onChange: (selection: SceneSelection) => void;
+  onClear: () => void;
+}) {
+  const enumHelpers = helpers.filter((item) => item.kind.kind === 'enum');
+  const groupIds = Object.keys(groups);
+  const selectedHelper = enumHelpers.find(
+    (item) => selection.kind === 'helper_enum' && item.id === selection.helper,
+  );
+  const optionList =
+    selectedHelper && selectedHelper.kind.kind === 'enum'
+      ? selectedHelper.kind.options
+      : [];
+
+  const switchKind = (kind: SceneSelection['kind']) => {
+    if (kind === selection.kind) return;
+    onChange(defaultSceneSelection(helpers, groups));
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-border p-3">
+      <ConfigField
+        label="Dynamic selection"
+        description="Resolved once when the step runs and frozen into the plan."
+      >
+        <select
+          className={selectClassName}
+          value={selection.kind}
+          onChange={(event) =>
+            switchKind(event.target.value as SceneSelection['kind'])
+          }
+        >
+          <option value="helper_enum">Map a helper value to a scene</option>
+          <option value="group_active">Mirror a group&apos;s active scene</option>
+        </select>
+      </ConfigField>
+      {selection.kind === 'helper_enum' ? (
+        <>
+          <ConfigField
+            label="Helper"
+            description="Enum helper whose current value picks the scene."
+          >
+            <select
+              className={selectClassName}
+              value={selection.helper}
+              onChange={(event) =>
+                onChange({ ...selection, helper: event.target.value })
+              }
+            >
+              <option value="">Select helper…</option>
+              {enumHelpers.map((helper) => (
+                <option key={helper.id} value={helper.id}>
+                  {helper.name} ({helper.id})
+                </option>
+              ))}
+            </select>
+          </ConfigField>
+          <ConfigField
+            label="Value mapping"
+            description="Scene activated for each helper value. Unmapped values use the fallback."
+          >
+            <div className="space-y-2">
+              {optionList.length === 0 ? (
+                <p className="text-xs text-muted-foreground">
+                  {selectedHelper
+                    ? 'This helper has no enum options yet.'
+                    : 'Select an enum helper to configure its value mapping.'}
+                </p>
+              ) : (
+                optionList.map((option) => (
+                  <div
+                    key={option}
+                    className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)] items-center gap-2"
+                  >
+                    <span className="truncate font-mono text-xs">{option}</span>
+                    <SceneSelect
+                      scenes={scenes}
+                      value={selection.mapping[option] ?? ''}
+                      placeholder="No mapping"
+                      onChange={(sceneId) => {
+                        const mapping = { ...selection.mapping };
+                        if (sceneId) {
+                          mapping[option] = sceneId;
+                        } else {
+                          delete mapping[option];
+                        }
+                        onChange({ ...selection, mapping });
+                      }}
+                    />
+                  </div>
+                ))
+              )}
+            </div>
+          </ConfigField>
+        </>
+      ) : (
+        <ConfigField
+          label="Group"
+          description="Uses the group's unanimous active scene when every member agrees."
+        >
+          <select
+            className={selectClassName}
+            value={selection.group_id}
+            onChange={(event) =>
+              onChange({ ...selection, group_id: event.target.value })
+            }
+          >
+            <option value="">Select group…</option>
+            {groupIds.map((groupId) => (
+              <option key={groupId} value={groupId}>
+                {groups[groupId]?.name ?? groupId} ({groupId})
+              </option>
+            ))}
+          </select>
+        </ConfigField>
+      )}
+      <ConfigField
+        label="Fallback scene"
+        description="Used when the value is unknown or the group is mixed."
+      >
+        <SceneSelect
+          scenes={scenes}
+          value={selection.fallback_scene_id ?? ''}
+          placeholder="No fallback"
+          onChange={(sceneId) =>
+            onChange({ ...selection, fallback_scene_id: sceneId || undefined })
+          }
+        />
+      </ConfigField>
+      <Button type="button" variant="outline" size="sm" onClick={onClear}>
+        Use a fixed scene
+      </Button>
+    </div>
+  );
+}
+
 function StepFields({
   step,
   onChange,
@@ -633,33 +803,42 @@ function StepFields({
       return (
         <div className="space-y-3">
           {step.select ? (
-            <div className="space-y-2 rounded-xl border border-dashed border-border bg-muted/30 p-3">
-              <p className="text-sm text-muted-foreground">
-                This step uses a dynamic scene selection (helper or group
-                mapping). Edit it in the Definition (JSON) tab, or replace it
-                with a fixed scene.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  onChange({ ...step, select: undefined, scene_id: '' })
-                }
-              >
-                Use a fixed scene
-              </Button>
-            </div>
+            <SceneSelectionEditor
+              selection={step.select}
+              scenes={scenes}
+              groups={groups}
+              helpers={helpers}
+              onChange={(select) => onChange({ ...step, select })}
+              onClear={() =>
+                onChange({ ...step, select: undefined, scene_id: '' })
+              }
+            />
           ) : (
             <ConfigField
               label="Scene"
               description="Exactly one of a fixed scene or a dynamic selection is required."
             >
-              <SceneSelect
-                scenes={scenes}
-                value={step.scene_id ?? ''}
-                onChange={(scene_id) => onChange({ ...step, scene_id })}
-              />
+              <div className="space-y-2">
+                <SceneSelect
+                  scenes={scenes}
+                  value={step.scene_id ?? ''}
+                  onChange={(scene_id) => onChange({ ...step, scene_id })}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() =>
+                    onChange({
+                      ...step,
+                      scene_id: undefined,
+                      select: defaultSceneSelection(helpers, groups),
+                    })
+                  }
+                >
+                  Use a dynamic selection
+                </Button>
+              </div>
             </ConfigField>
           )}
           <TargetSpecEditor
