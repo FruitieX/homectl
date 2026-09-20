@@ -10,6 +10,7 @@ import { useDevicesState } from '@/hooks/websocket';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
+import { SourcePreviewPanel } from '@/ui/SourcePreviewPanel';
 import SourceScriptEditor, {
   SOURCE_SCRIPT_STARTER,
 } from '@/ui/SourceScriptEditor';
@@ -220,6 +221,7 @@ function SourceEditor({
         <TabsTrigger value="compute">Compute</TabsTrigger>
         <TabsTrigger value="params">Parameters</TabsTrigger>
         <TabsTrigger value="script">Script</TabsTrigger>
+        <TabsTrigger value="preview">Preview</TabsTrigger>
         <TabsTrigger value="json">Advanced JSON</TabsTrigger>
       </TabsList>
 
@@ -510,6 +512,10 @@ function SourceEditor({
             />
           </ConfigFormSection>
         )}
+      </TabsContent>
+
+      <TabsContent value="preview">
+        <SourcePreviewPanel timezone={draft.timezone} compute={compute} />
       </TabsContent>
 
       <TabsContent value="json" className="space-y-4 pt-4">

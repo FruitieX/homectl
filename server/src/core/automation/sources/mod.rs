@@ -8,6 +8,7 @@
 
 pub mod circadian_compat;
 pub mod presets;
+pub mod preview;
 pub mod registry;
 
 pub use circadian_compat::{
@@ -17,7 +18,8 @@ pub use presets::{
     preset_infos, resolve_source_body, validate_script_compute, SourcePreset,
     MAX_SOURCE_SCRIPT_BYTES,
 };
+pub use preview::preview_source;
 pub use registry::{
-    evaluate_due_sources, evaluate_source, local_time_label, script_context, source_device_key,
-    synthetic_device, SourceEvaluation, Sources, COMPUTED_SOURCE_INTEGRATION_ID,
+    evaluate_compute, evaluate_due_sources, evaluate_source, local_time_label, script_context,
+    source_device_key, synthetic_device, SourceEvaluation, Sources, COMPUTED_SOURCE_INTEGRATION_ID,
 };

@@ -200,6 +200,60 @@ fn default_source_revision() -> i64 {
     1
 }
 
+/// Default number of points in a source preview (one local day at 30-minute
+/// steps). Callers may ask for fewer or more within [`SOURCE_PREVIEW_SAMPLE_BOUNDS`].
+pub const DEFAULT_SOURCE_PREVIEW_SAMPLES: u32 = 48;
+
+/// Accepted preview sample counts. The bounds keep the synchronous preview
+/// cheap and the chart readable.
+pub const SOURCE_PREVIEW_SAMPLE_BOUNDS: std::ops::RangeInclusive<u32> = 12..=96;
+
+/// Request body for the stateless computed-source preview. The definition is
+/// not persisted; the editor posts its draft as-is.
+#[derive(TS, Clone, Debug, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SourcePreviewRequest {
+    /// IANA zone or fixed offset used to derive civil time.
+    pub timezone: String,
+    pub compute: SourceCompute,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub samples: Option<u32>,
+}
+
+/// One local day of a computed source's output, sampled at a fixed step.
+#[derive(TS, Clone, Debug, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SourcePreview {
+    pub timezone: String,
+    /// Sampled local day start (the instant of local midnight).
+    pub day_start_ms: i64,
+    /// Step between samples in milliseconds.
+    pub step_ms: i64,
+    pub samples: Vec<SourcePreviewSample>,
+    /// Set when the compute kind cannot be previewed synchronously; the
+    /// sample list is then empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub unsupported_reason: Option<String>,
+    /// Set when the preview is a faithful stand-in rather than the exact
+    /// runtime path (for example the shipped script preset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub note: Option<String>,
+}
+
+/// One previewed profile value at a wall-clock instant.
+#[derive(TS, Clone, Debug, Serialize, Deserialize)]
+#[ts(export)]
+pub struct SourcePreviewSample {
+    /// Wall-clock instant the profile was computed at.
+    pub time_ms: i64,
+    /// Civil time label in the source timezone (`HH:MM`).
+    pub local_time: String,
+    pub profile: LightProfile,
+}
+
 /// Legacy circadian poll rate, kept as the default refresh cadence.
 pub const DEFAULT_SOURCE_REFRESH_INTERVAL_MS: u64 = 60_000;
 

@@ -53,13 +53,24 @@ pub fn evaluate_source(
     definition: &SourceDefinition,
     now_wall_ms: i64,
 ) -> Result<SourceEvaluation, String> {
-    let zone = parse_schedule_zone(&definition.timezone)
-        .ok_or_else(|| format!("unknown timezone {:?}", definition.timezone))?;
+    evaluate_compute(&definition.timezone, &definition.compute, now_wall_ms)
+}
+
+/// Evaluate a compute kind at a wall-clock instant without a stored
+/// definition. The stateless source preview shares this path so the preview
+/// cannot drift from the runtime curve.
+pub fn evaluate_compute(
+    timezone: &str,
+    compute: &SourceCompute,
+    now_wall_ms: i64,
+) -> Result<SourceEvaluation, String> {
+    let zone =
+        parse_schedule_zone(timezone).ok_or_else(|| format!("unknown timezone {timezone:?}"))?;
     let instant = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_wall_ms)
         .ok_or_else(|| format!("invalid wall time {now_wall_ms}"))?;
     let local = zone.local_time_at(instant);
 
-    match &definition.compute {
+    match compute {
         SourceCompute::CircadianCompat {
             preset_version,
             params,

@@ -3,6 +3,7 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { IntegrationConfigFieldSchema } from '@/bindings/IntegrationConfigFieldSchema';
 import type { IntegrationConfigSchema } from '@/bindings/IntegrationConfigSchema';
 import type { SourcePresetInfo } from '@/bindings/SourcePresetInfo';
+import type { SourcePreview } from '@/bindings/SourcePreview';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
@@ -422,6 +423,56 @@ export function useSourcePresets() {
     error,
     refetch: query.refetch,
   };
+}
+
+export interface SourcePreviewArgs {
+  timezone: string;
+  compute: SourceComputeConfig;
+  samples?: number;
+}
+
+// Stateless preview of a draft source definition. The request is not
+// persisted; validation errors mirror saving.
+export function useSourcePreview() {
+  const { apiEndpoint } = useAppConfig();
+  const [data, setData] = useState<SourcePreview | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const preview = useCallback(
+    async (request: SourcePreviewArgs) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(
+          `${apiEndpoint}/api/v1/config/source-preview`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request),
+          },
+        );
+        const result = await readApiResponse<SourcePreview>(
+          response,
+          'Failed to preview source',
+        );
+        setData(result.data ?? null);
+        return result.data ?? null;
+      } catch (previewFailure) {
+        setError(
+          previewFailure instanceof Error
+            ? previewFailure.message
+            : 'Failed to preview source',
+        );
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [apiEndpoint],
+  );
+
+  return { preview, data, loading, error };
 }
 
 export function useHelpers() {

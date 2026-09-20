@@ -1,4 +1,5 @@
 import type { DeviceColor } from '@/bindings/DeviceColor';
+import { deviceColorPreview } from '@/lib/deviceColorPreview';
 import { ConfigField } from '@/ui/config-form';
 import { Input } from '@/ui/primitives/input';
 
@@ -16,14 +17,6 @@ function isHsColor(color?: DeviceColor): color is { h: number; s: number } {
   return Boolean(color && 'h' in color && 's' in color);
 }
 
-function kelvinPreview(kelvin: number) {
-  const warmth = Math.min(1, Math.max(0, (kelvin - 2000) / 4500));
-  const r = Math.round(255 - warmth * 20);
-  const g = Math.round(180 + warmth * 55);
-  const b = Math.round(120 + warmth * 135);
-  return `rgb(${r}, ${g}, ${b})`;
-}
-
 export function SourceColorField({
   label,
   color,
@@ -34,11 +27,7 @@ export function SourceColorField({
   onChange: (color: DeviceColor) => void;
 }) {
   const mode = isKelvinColor(color) ? 'ct' : isHsColor(color) ? 'hs' : 'ct';
-  const preview = isKelvinColor(color)
-    ? kelvinPreview(color.ct)
-    : isHsColor(color)
-      ? `hsl(${color.h}, ${Math.round(color.s * 100)}%, 55%)`
-      : '#888888';
+  const preview = deviceColorPreview(color);
 
   return (
     <div className="space-y-3">

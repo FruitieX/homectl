@@ -1,7 +1,7 @@
 use super::*;
 use crate::core::automation::sources::{CircadianCompatCurve, CIRCADIAN_COMPAT_PRESET_VERSION};
 use crate::types::automation_definition::SourceId;
-use crate::types::automation_source::{SourceCompute, SourceDefinition};
+use crate::types::automation_source::{SourceCompute, SourceDefinition, SourcePreviewRequest};
 
 /// Refresh cadence bounds. Startup always computes once regardless.
 const MIN_SOURCE_REFRESH_INTERVAL_MS: u64 = 1_000;
@@ -73,6 +73,12 @@ pub(super) fn sources_routes(
         .and(warp::get())
         .and_then(list_source_presets);
 
+    let preview = warp::path("source-preview")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(preview_source);
+
     let upsert = warp::path!("sources" / String)
         .and(warp::put())
         .and(warp::body::json())
@@ -85,7 +91,19 @@ pub(super) fn sources_routes(
         .and(with_handle(handle))
         .and_then(delete_source);
 
-    list.or(presets).or(upsert).or(delete)
+    list.or(presets).or(preview).or(upsert).or(delete)
+}
+
+/// Stateless preview of a draft source definition. The request is validated
+/// with the same rules as saving; nothing is persisted.
+async fn preview_source(request: SourcePreviewRequest) -> Result<impl Reply, warp::Rejection> {
+    match crate::core::automation::sources::preview_source(
+        &request,
+        chrono::Utc::now().timestamp_millis(),
+    ) {
+        Ok(preview) => Ok(ApiResponse::success(preview)),
+        Err(error) => Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    }
 }
 
 /// Shipped preset metadata, including the forkable body. The body is a

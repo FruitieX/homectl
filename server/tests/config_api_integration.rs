@@ -237,6 +237,95 @@ fn source_crud_validation_and_export_import() {
     assert_eq!(restored["data"][0]["revision"], 2);
 }
 
+/// P12: the stateless source preview samples one local day through the
+/// runtime evaluation path, reports validation errors like saving, and
+/// persists nothing.
+#[test]
+fn source_preview_is_stateless_and_validates_the_draft() {
+    let server = TestServer::new().unwrap();
+    let client = Client::new();
+    let url = format!("{}/api/v1/config/source-preview", server.base_url);
+    let request = json!({
+        "timezone": "Europe/Helsinki",
+        "compute": {
+            "kind": "circadian_compat",
+            "preset_version": 1,
+            "params": {
+                "day_fade_start": "06:00",
+                "day_fade_duration_hours": 2,
+                "day_color": {"ct": 3000},
+                "day_brightness": 0.8,
+                "night_fade_start": "20:00",
+                "night_fade_duration_hours": 2,
+                "night_color": {"ct": 2000},
+                "night_brightness": 0.2
+            }
+        },
+        "samples": 24
+    });
+
+    let preview: Value = client
+        .post(&url)
+        .json(&request)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    let samples = preview["data"]["samples"].as_array().unwrap();
+    assert_eq!(samples.len(), 24);
+    assert_eq!(preview["data"]["timezone"], "Europe/Helsinki");
+    assert_eq!(preview["data"]["step_ms"], 3_600_000);
+    assert_eq!(samples[0]["local_time"], "00:00");
+    assert_eq!(samples[0]["profile"]["brightness"], 0.2);
+    assert_eq!(samples[12]["local_time"], "12:00");
+    assert_eq!(samples[12]["profile"]["brightness"], 0.8);
+
+    let list_url = format!("{}/api/v1/config/sources", server.base_url);
+    let listed: Value = client.get(&list_url).send().unwrap().json().unwrap();
+    assert_eq!(listed["data"], json!([]));
+
+    let mut unknown_zone = request.clone();
+    unknown_zone["timezone"] = json!("Mars/Olympus");
+    assert_eq!(
+        client
+            .post(&url)
+            .json(&unknown_zone)
+            .send()
+            .unwrap()
+            .status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let mut too_few = request.clone();
+    too_few["samples"] = json!(4);
+    assert_eq!(
+        client.post(&url).json(&too_few).send().unwrap().status(),
+        StatusCode::BAD_REQUEST
+    );
+
+    let script = json!({
+        "timezone": "Europe/Helsinki",
+        "compute": {
+            "kind": "script",
+            "source_body": "return { brightness: 0.5 };",
+            "params": null
+        }
+    });
+    let preview: Value = client
+        .post(&url)
+        .json(&script)
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(preview["data"]["unsupported_reason"].is_string());
+    assert_eq!(preview["data"]["samples"], json!([]));
+}
+
 fn find_device(
     server: &TestServer,
     client: &Client,

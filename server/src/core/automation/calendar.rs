@@ -11,7 +11,7 @@
 //! Keeping candidate generation and timezone resolution separate is what makes
 //! that policy testable and independent of the host timezone.
 
-use chrono::{DateTime, LocalResult, NaiveDateTime, TimeZone, Utc};
+use chrono::{DateTime, LocalResult, NaiveDateTime, TimeZone, Timelike, Utc};
 use chrono_tz::Tz;
 
 /// A cron match resolved to one concrete instant.
@@ -60,6 +60,27 @@ impl ScheduleZone {
             ScheduleZone::Tz(zone) => instant.with_timezone(zone).time(),
             ScheduleZone::Fixed(offset) => instant.with_timezone(offset).time(),
         }
+    }
+
+    /// Instant of local midnight for the civil day containing `instant`,
+    /// resolved with the same DST policy as schedules. A nonexistent local
+    /// midnight (rare midnight-shifting DST transitions) falls back to the
+    /// zone offset in effect at `instant`.
+    pub fn local_midnight(&self, instant: DateTime<Utc>) -> DateTime<Utc> {
+        let civil = match self {
+            ScheduleZone::Tz(zone) => instant.with_timezone(zone).date_naive(),
+            ScheduleZone::Fixed(offset) => instant.with_timezone(offset).date_naive(),
+        }
+        .and_hms_opt(0, 0, 0);
+        let Some(civil) = civil else {
+            return instant;
+        };
+        if let Some(resolved) = resolve_civil(*self, civil) {
+            return resolved;
+        }
+        let seconds_since_midnight =
+            i64::from(self.local_time_at(instant).num_seconds_from_midnight());
+        instant - chrono::Duration::seconds(seconds_since_midnight)
     }
 }
 
