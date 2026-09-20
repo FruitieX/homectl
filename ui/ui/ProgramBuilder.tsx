@@ -29,7 +29,7 @@ import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
-import { Textarea } from '@/ui/primitives/textarea';
+import RoutineScriptEditor from '@/ui/RoutineScriptEditor';
 import { useCallback, useRef, useState } from 'react';
 
 type StepKind = NativeAction['action'];
@@ -1383,15 +1383,6 @@ function StepEditor({
   );
 }
 
-const SCRIPT_STARTER = `// ctx is frozen: ctx.now_ms, ctx.state.memory, ctx.state.revision.
-// api is pure: api.now, api.random(), api.actions.*.
-const memory = ctx.state.memory;
-return {
-  actions: [],
-  next_state: { runs: (memory.runs ?? 0) + 1 },
-};
-`;
-
 function defaultDeclaration(kind: ScriptDeclaration['kind']): ScriptDeclaration {
   switch (kind) {
     case 'device':
@@ -1421,7 +1412,6 @@ function ScriptProgramEditor({
 }) {
   const [newDeclarationKind, setNewDeclarationKind] =
     useState<ScriptDeclaration['kind']>('device');
-  const sourceRef = useRef<HTMLTextAreaElement>(null);
 
   const updateDeclaration = (index: number, declaration: ScriptDeclaration) => {
     onChange({
@@ -1436,28 +1426,6 @@ function ScriptProgramEditor({
     onChange({
       ...spec,
       declarations: [...spec.declarations, defaultDeclaration(newDeclarationKind)],
-    });
-  };
-
-  const insertStarter = () => {
-    const element = sourceRef.current;
-    if (!element) {
-      onChange({ ...spec, source_body: `${spec.source_body}${SCRIPT_STARTER}` });
-      return;
-    }
-    const start = element.selectionStart ?? spec.source_body.length;
-    const end = element.selectionEnd ?? start;
-    onChange({
-      ...spec,
-      source_body:
-        spec.source_body.slice(0, start) +
-        SCRIPT_STARTER +
-        spec.source_body.slice(end),
-    });
-    requestAnimationFrame(() => {
-      element.focus();
-      const cursor = start + SCRIPT_STARTER.length;
-      element.setSelectionRange(cursor, cursor);
     });
   };
 
@@ -1480,31 +1448,13 @@ function ScriptProgramEditor({
 
       <ConfigField
         label="Function body"
-        description="Runs in the sandboxed worker after a trigger fires and the condition holds. ctx and api are available; return { actions, next_state? }."
+        description="Runs in the sandboxed worker after a trigger fires and the condition holds. ctx and api are typed and autocompleted; return { actions, next_state? }."
       >
-        <Textarea
-          ref={sourceRef}
-          className="h-64 font-mono text-xs"
+        <RoutineScriptEditor
           value={spec.source_body}
-          placeholder="return { actions: [] };"
-          onChange={(event) =>
-            onChange({ ...spec, source_body: event.target.value })
-          }
+          onChange={(source_body) => onChange({ ...spec, source_body })}
         />
       </ConfigField>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={insertStarter}
-        >
-          Insert starter
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          The body is a function body; an unambiguous return is required.
-        </span>
-      </div>
 
       <div className="space-y-3">
         <div>
