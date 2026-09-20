@@ -39,6 +39,7 @@ const stepKindOptions: Array<{ value: StepKind; label: string }> = [
   { value: 'cycle_scenes', label: 'Cycle scenes' },
   { value: 'set_power', label: 'Set device power' },
   { value: 'dim', label: 'Dim targets' },
+  { value: 'randomize_color', label: 'Randomize colors' },
   { value: 'schedule_timer', label: 'Start named timer' },
   { value: 'replace_timer', label: 'Restart named timer' },
   { value: 'cancel_timer', label: 'Cancel named timer' },
@@ -52,6 +53,7 @@ const stepKindLabels: Record<StepKind, string> = {
   cycle_scenes: 'Cycle scenes',
   set_power: 'Set power',
   dim: 'Dim',
+  randomize_color: 'Randomize colors',
   schedule_timer: 'Start timer',
   replace_timer: 'Restart timer',
   cancel_timer: 'Cancel timer',
@@ -98,6 +100,8 @@ function defaultStep(kind: StepKind, id: string): NativeAction {
       };
     case 'dim':
       return { action: 'dim', id, targets: {}, step: -0.1 };
+    case 'randomize_color':
+      return { action: 'randomize_color', id, targets: {} };
     case 'schedule_timer':
       return {
         action: 'schedule_timer',
@@ -167,6 +171,8 @@ function summarizeStep(step: NativeAction): string {
       return `${step.power ? 'turn on' : 'turn off'} ${step.device.device_id || 'device'}`;
     case 'dim':
       return `step ${step.step}`;
+    case 'randomize_color':
+      return 'random hue and saturation';
     case 'schedule_timer':
     case 'replace_timer':
       return `timer ${step.timer || '?'}`;
@@ -964,6 +970,78 @@ function StepFields({
                 onChange={(event) => {
                   const parsed = event.target.valueAsNumber;
                   onChange({ ...step, step: Number.isNaN(parsed) ? 0 : parsed });
+                }}
+              />
+            </ConfigField>
+            <ConfigField
+              label="Transition"
+              description="Optional fade duration."
+            >
+              <DurationInput
+                valueMs={
+                  step.transition_ms === undefined
+                    ? undefined
+                    : Number(step.transition_ms)
+                }
+                onChange={(transition_ms) =>
+                  onChange({
+                    ...step,
+                    transition_ms,
+                  } as unknown as NativeAction)
+                }
+              />
+            </ConfigField>
+          </div>
+          <TargetSpecEditor
+            targets={step.targets}
+            devices={devices}
+            groups={groups}
+            onChange={(targets) => onChange({ ...step, targets })}
+          />
+        </div>
+      );
+
+    case 'randomize_color':
+      return (
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <ConfigField
+              label="Min saturation"
+              description="Inclusive lower bound. Defaults to 0.2."
+            >
+              <Input
+                type="number"
+                step="0.05"
+                min={0}
+                max={1}
+                placeholder="0.2"
+                value={step.min_saturation ?? ''}
+                onChange={(event) => {
+                  const parsed = event.target.valueAsNumber;
+                  onChange({
+                    ...step,
+                    min_saturation: Number.isNaN(parsed) ? undefined : parsed,
+                  } as unknown as NativeAction);
+                }}
+              />
+            </ConfigField>
+            <ConfigField
+              label="Max saturation"
+              description="Inclusive upper bound. Defaults to 1.0."
+            >
+              <Input
+                type="number"
+                step="0.05"
+                min={0}
+                max={1}
+                placeholder="1.0"
+                value={step.max_saturation ?? ''}
+                onChange={(event) => {
+                  const parsed = event.target.valueAsNumber;
+                  onChange({
+                    ...step,
+                    max_saturation: Number.isNaN(parsed) ? undefined : parsed,
+                  } as unknown as NativeAction);
                 }}
               />
             </ConfigField>

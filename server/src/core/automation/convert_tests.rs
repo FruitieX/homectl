@@ -431,6 +431,48 @@ fn numeric_sensor_rule_is_unsupported() {
 }
 
 #[test]
+fn randomize_color_maps_targets_saturation_and_transition() {
+    let mut catalog = ConfigCatalog::default();
+    catalog = catalog.with_device(crate::types::device::DeviceKey::new(
+        crate::types::integration::IntegrationId::from("dummy".to_string()),
+        crate::types::device::DeviceId::new("lamp1"),
+    ));
+    catalog = catalog.with_device(crate::types::device::DeviceKey::new(
+        crate::types::integration::IntegrationId::from("dummy".to_string()),
+        crate::types::device::DeviceId::new("button"),
+    ));
+    let conversion = convert_routine(
+        &row(
+            json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+            json!([{
+                "action": "RandomizeColor",
+                "device_keys": ["dummy/lamp1"],
+                "min_saturation": 0.25,
+                "max_saturation": 0.75,
+                "transition": 0.25
+            }]),
+        ),
+        &catalog,
+        &ConvertOptions::default(),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(
+        definition["program"]["steps"][0],
+        json!({
+            "action": "randomize_color",
+            "id": "a1",
+            "targets": {
+                "devices": [{"integration_id": "dummy", "device_id": "lamp1"}]
+            },
+            "min_saturation": 0.25,
+            "max_saturation": 0.75,
+            "transition_ms": 250
+        })
+    );
+}
+
+#[test]
 fn cycle_scenes_maps_entries_detection_and_rollout() {
     let conversion = convert(
         json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),

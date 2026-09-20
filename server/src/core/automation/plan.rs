@@ -18,7 +18,7 @@ use super::evaluate::{evaluate_condition, EvaluationView};
 use crate::core::groups::Groups;
 use crate::core::helpers::Helpers;
 use crate::types::{
-    action::Action,
+    action::{Action, RandomizeColorActionDescriptor},
     automation_definition::{
         ConditionExpr, HelperId, InvokeMode, NativeAction, NodeId, Program, RolloutSource,
         RolloutSpec, SceneSelection, TargetSpec, TimerIntentCapture, TimerIntentTarget,
@@ -706,6 +706,45 @@ impl Planner<'_> {
                     guard,
                 );
             }
+            NativeAction::RandomizeColor {
+                targets,
+                min_saturation,
+                max_saturation,
+                transition_ms,
+                ..
+            } => {
+                let (devices, groups) = resolve_targets(targets);
+                if devices.is_empty() && groups.is_empty() {
+                    self.suppress(action, kind, Vec::new(), "missing_targets".to_string());
+                    return;
+                }
+                let original_groups = groups.clone();
+                let (devices, groups) = self.restrict_frozen_groups(devices, groups);
+                let mut device_keys: BTreeSet<DeviceKey> = devices.iter().cloned().collect();
+                for group in &groups {
+                    device_keys.extend(self.group_member_keys(group));
+                }
+                if device_keys.is_empty() {
+                    self.suppress(action, kind, Vec::new(), "missing_targets".to_string());
+                    return;
+                }
+                let mut guard: Vec<IntentTarget> =
+                    devices.iter().cloned().map(IntentTarget::Device).collect();
+                guard.extend(original_groups.iter().cloned().map(IntentTarget::Group));
+                let descriptor = RandomizeColorActionDescriptor {
+                    device_keys: device_keys.into_iter().collect(),
+                    min_saturation: *min_saturation,
+                    max_saturation: *max_saturation,
+                    transition: transition_ms
+                        .map(|ms| ordered_float::OrderedFloat(ms as f32 / 1000.0)),
+                };
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Dispatch(Box::new(Action::RandomizeColor(descriptor))),
+                    guard,
+                );
+            }
             NativeAction::Choose { branches, .. } => {
                 for branch in branches {
                     let condition = evaluate_condition(
@@ -933,6 +972,7 @@ pub fn action_kind(action: &NativeAction) -> &'static str {
         NativeAction::CycleScenes { .. } => "cycle_scenes",
         NativeAction::SetPower { .. } => "set_power",
         NativeAction::Dim { .. } => "dim",
+        NativeAction::RandomizeColor { .. } => "randomize_color",
         NativeAction::Choose { .. } => "choose",
         NativeAction::ScheduleTimer { .. } => "schedule_timer",
         NativeAction::ReplaceTimer { .. } => "replace_timer",
@@ -1262,6 +1302,55 @@ mod tests {
                 other => panic!("expected cycle dispatch, got {other:?}"),
             },
             other => panic!("expected cycle dispatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn randomize_color_expands_groups_and_carries_transition() {
+        let compiled = compile_definition_value(
+            &json!({
+                "triggers": [{ "kind": "manual", "id": "trig" }],
+                "program": { "kind": "native", "steps": [{
+                    "action": "randomize_color",
+                    "id": "step",
+                    "targets": {
+                        "devices": [{ "integration_id": "dummy", "device_id": "lamp" }],
+                        "groups": ["room"]
+                    },
+                    "min_saturation": 0.3,
+                    "max_saturation": 0.8,
+                    "transition_ms": 250
+                }]}
+            }),
+            &catalog(),
+        )
+        .expect("definition compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), true)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let evaluation = evaluation(&compiled, &devices, &groups, &helpers);
+        let plan = plan_evaluation(&evaluation, &compiled, &inputs);
+
+        match &plan.steps[0].body {
+            PlannedStepBody::Dispatch(action) => match action.as_ref() {
+                Action::RandomizeColor(descriptor) => {
+                    assert_eq!(descriptor.device_keys, vec![key("lamp")]);
+                    assert_eq!(descriptor.min_saturation, Some(0.3));
+                    assert_eq!(descriptor.max_saturation, Some(0.8));
+                    assert_eq!(
+                        descriptor.transition,
+                        Some(ordered_float::OrderedFloat(0.25))
+                    );
+                }
+                other => panic!("expected randomize dispatch, got {other:?}"),
+            },
+            other => panic!("expected randomize dispatch, got {other:?}"),
         }
     }
 

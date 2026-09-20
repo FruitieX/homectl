@@ -186,6 +186,26 @@
       }
       return __homectl_action("dim", spec, extra);
     },
+    randomizeColor: function (spec) {
+      if (!spec || !spec.targets) {
+        throw new Error("api.actions.randomizeColor requires targets");
+      }
+      var targets = __homectl_targets(spec.targets);
+      if (targets.devices.length === 0 && targets.groups.length === 0) {
+        throw new Error("api.actions.randomizeColor requires targets");
+      }
+      var extra = { targets: targets };
+      if (spec.minSaturation !== undefined) {
+        extra.min_saturation = spec.minSaturation;
+      }
+      if (spec.maxSaturation !== undefined) {
+        extra.max_saturation = spec.maxSaturation;
+      }
+      if (spec.transitionMs !== undefined) {
+        extra.transition_ms = spec.transitionMs;
+      }
+      return __homectl_action("randomize_color", spec, extra);
+    },
     setHelper: function (spec) {
       if (!spec || !spec.helper) {
         throw new Error("api.actions.setHelper requires a helper id");

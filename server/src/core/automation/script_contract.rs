@@ -407,6 +407,37 @@ mod tests {
     }
 
     #[test]
+    fn handler_contract_accepts_randomize_color_actions() {
+        let outcome = parse_routine_handler_outcome(
+            &json!({
+                "actions": [
+                    {
+                        "action": "randomize_color",
+                        "targets": {"devices": [{"integration_id": "dummy", "device_id": "lamp"}]},
+                        "min_saturation": 0.25,
+                        "max_saturation": 0.75,
+                        "transition_ms": 250
+                    }
+                ]
+            }),
+            MAX_SCRIPT_STATE_BYTES,
+        )
+        .unwrap();
+
+        assert_eq!(outcome.actions.len(), 1);
+        assert_eq!(outcome.actions[0].id().as_str(), "script/0");
+        assert!(matches!(
+            &outcome.actions[0],
+            NativeAction::RandomizeColor {
+                min_saturation: Some(min),
+                max_saturation: Some(max),
+                transition_ms: Some(250),
+                ..
+            } if (*min - 0.25).abs() < f32::EPSILON && (*max - 0.75).abs() < f32::EPSILON
+        ));
+    }
+
+    #[test]
     fn handler_contract_rejects_wrong_shapes() {
         for rejected in [
             json!(true),

@@ -967,6 +967,48 @@ impl Compiler<'_> {
                     }
                     self.compile_targets(targets, &format!("{action_path}/targets"), action.id());
                 }
+                NativeAction::RandomizeColor {
+                    targets,
+                    min_saturation,
+                    max_saturation,
+                    transition_ms,
+                    ..
+                } => {
+                    for (field, value) in [
+                        ("min_saturation", min_saturation),
+                        ("max_saturation", max_saturation),
+                    ] {
+                        if let Some(value) = value {
+                            if !value.is_finite() {
+                                self.report.error_at_node(
+                                    format!("{action_path}/{field}"),
+                                    action.id(),
+                                    "invalid_saturation",
+                                    "Saturation bounds must be finite 0.0..=1.0 values.",
+                                );
+                            }
+                        }
+                    }
+                    if let Some(transition) = transition_ms {
+                        if *transition == 0 {
+                            self.report.error_at_node(
+                                format!("{action_path}/transition_ms"),
+                                action.id(),
+                                "invalid_duration",
+                                "RandomizeColor transition_ms must be greater than zero.",
+                            );
+                        }
+                    }
+                    if targets.devices.is_empty() && targets.groups.is_empty() {
+                        self.report.error_at_node(
+                            &action_path,
+                            action.id(),
+                            "missing_targets",
+                            "RandomizeColor requires at least one device or group target.",
+                        );
+                    }
+                    self.compile_targets(targets, &format!("{action_path}/targets"), action.id());
+                }
                 NativeAction::CycleScenes {
                     scenes,
                     detection,
@@ -1670,7 +1712,9 @@ impl ReferenceCollector {
         for action in steps {
             match action {
                 NativeAction::SetPower { device, .. } => self.push_device(device),
-                NativeAction::ActivateScene { targets, .. } | NativeAction::Dim { targets, .. } => {
+                NativeAction::ActivateScene { targets, .. }
+                | NativeAction::Dim { targets, .. }
+                | NativeAction::RandomizeColor { targets, .. } => {
                     for device in &targets.devices {
                         self.push_device(device);
                     }
@@ -1969,6 +2013,48 @@ mod tests {
         assert_eq!(
             error_codes(&compile_definition_value(&unknown_detection, &catalog()).unwrap_err()),
             vec!["unknown_device"]
+        );
+    }
+
+    #[test]
+    fn randomize_color_validation_requires_targets_and_positive_transition() {
+        let valid = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "randomize_color",
+                "id": "step",
+                "targets": { "devices": [{ "integration_id": "dummy", "device_id": "lamp1" }] },
+                "min_saturation": 0.2,
+                "max_saturation": 1.0,
+                "transition_ms": 250
+            }]}
+        });
+        assert!(compile_definition_value(&valid, &catalog()).is_ok());
+
+        let no_targets = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "randomize_color",
+                "id": "step"
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&no_targets, &catalog()).unwrap_err()),
+            vec!["missing_targets"]
+        );
+
+        let zero_transition = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "randomize_color",
+                "id": "step",
+                "targets": { "devices": [{ "integration_id": "dummy", "device_id": "lamp1" }] },
+                "transition_ms": 0
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&zero_transition, &catalog()).unwrap_err()),
+            vec!["invalid_duration"]
         );
     }
 

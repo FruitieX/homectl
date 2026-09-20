@@ -35,7 +35,17 @@ rollout?: RolloutSpec, } | { "action": "cycle_scenes", id: NodeId, scenes: Array
  * Restrict current-scene detection to these devices/groups. Empty
  * uses every device common to the cycled scenes.
  */
-detection: TargetSpec, rollout?: RolloutSpec, } | { "action": "set_power", id: NodeId, device: DeviceRef, power: boolean, } | { "action": "dim", id: NodeId, targets: TargetSpec, step: number, transition_ms?: bigint, } | { "action": "choose", id: NodeId, branches: Array<ChooseBranch>, } | { "action": "schedule_timer", id: NodeId, timer: TimerId, delay_ms: bigint, 
+detection: TargetSpec, rollout?: RolloutSpec, } | { "action": "set_power", id: NodeId, device: DeviceRef, power: boolean, } | { "action": "dim", id: NodeId, targets: TargetSpec, step: number, transition_ms?: bigint, } | { "action": "randomize_color", id: NodeId, targets: TargetSpec, 
+/**
+ * Inclusive saturation bounds in 0.0..=1.0. Missing values default to
+ * 0.2..=1.0; out-of-range values are clamped at execution, and the
+ * bounds are swapped when reversed.
+ */
+min_saturation?: number, max_saturation?: number, 
+/**
+ * Explicit transition override in milliseconds.
+ */
+transition_ms?: bigint, } | { "action": "choose", id: NodeId, branches: Array<ChooseBranch>, } | { "action": "schedule_timer", id: NodeId, timer: TimerId, delay_ms: bigint, 
 /**
  * Freeze intent tokens for these targets at actor acceptance (J08).
  */

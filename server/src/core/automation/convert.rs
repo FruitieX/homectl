@@ -707,6 +707,21 @@ fn convert_action(
                 transition_ms: None,
             })
         }
+        Action::RandomizeColor(descriptor) => {
+            if descriptor.device_keys.is_empty() {
+                return Err("randomize_color has no target devices".to_string());
+            }
+            Ok(NativeAction::RandomizeColor {
+                id: ids.action_id(),
+                targets: TargetSpec {
+                    devices: descriptor.device_keys.iter().map(DeviceRef::from).collect(),
+                    groups: Vec::new(),
+                },
+                min_saturation: descriptor.min_saturation,
+                max_saturation: descriptor.max_saturation,
+                transition_ms: transition_ms(descriptor.transition),
+            })
+        }
         Action::Custom(descriptor) => {
             let integration_id = descriptor.integration_id.to_string();
             if options.timer_integrations.contains(&integration_id) {
@@ -805,6 +820,7 @@ fn native_action_name(action: &NativeAction) -> &'static str {
         NativeAction::CycleScenes { .. } => "cycle_scenes",
         NativeAction::SetPower { .. } => "set_power",
         NativeAction::Dim { .. } => "dim",
+        NativeAction::RandomizeColor { .. } => "randomize_color",
         NativeAction::Choose { .. } => "choose",
         NativeAction::ScheduleTimer { .. } => "schedule_timer",
         NativeAction::ReplaceTimer { .. } => "replace_timer",

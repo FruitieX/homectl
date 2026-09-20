@@ -489,6 +489,28 @@ pub enum NativeAction {
         transition_ms: Option<u64>,
     },
 
+    /// Randomizes the hue and saturation of the target devices once. Also
+    /// clears each device's tracked `scene_id` so a later cycle does not read
+    /// the one-off color as a scene activation.
+    RandomizeColor {
+        id: NodeId,
+        #[serde(default)]
+        targets: TargetSpec,
+        /// Inclusive saturation bounds in 0.0..=1.0. Missing values default to
+        /// 0.2..=1.0; out-of-range values are clamped at execution, and the
+        /// bounds are swapped when reversed.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        min_saturation: Option<f32>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        max_saturation: Option<f32>,
+        /// Explicit transition override in milliseconds.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        transition_ms: Option<u64>,
+    },
+
     /// Ordered first-match branch selection. Unknown/error blocks selection.
     Choose {
         id: NodeId,
@@ -543,6 +565,7 @@ impl NativeAction {
             | Self::CycleScenes { id, .. }
             | Self::SetPower { id, .. }
             | Self::Dim { id, .. }
+            | Self::RandomizeColor { id, .. }
             | Self::Choose { id, .. }
             | Self::ScheduleTimer { id, .. }
             | Self::ReplaceTimer { id, .. }
