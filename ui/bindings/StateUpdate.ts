@@ -2,6 +2,7 @@
 import type { DevicesState } from "./DevicesState";
 import type { FlattenedGroupsConfig } from "./FlattenedGroupsConfig";
 import type { FlattenedScenesConfig } from "./FlattenedScenesConfig";
+import type { HelperRuntimeStatus } from "./HelperRuntimeStatus";
 import type { RoutineStatuses } from "./RoutineStatuses";
 import type { TimerRuntimeStatus } from "./TimerRuntimeStatus";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -11,4 +12,9 @@ export type StateUpdate = { devices: DevicesState, scenes: FlattenedScenesConfig
  * Live named timer jobs (P09). `remaining_ms` is a publish-time sample;
  * clients should count down from `due_wall_ms`.
  */
-timers: Array<TimerRuntimeStatus>, ui_state: { [key in string]?: JsonValue }, };
+timers: Array<TimerRuntimeStatus>, 
+/**
+ * Current helper values (P12). Widgets and editors read these instead of
+ * polling the config API.
+ */
+helper_statuses: Array<HelperRuntimeStatus>, ui_state: { [key in string]?: JsonValue }, };

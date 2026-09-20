@@ -428,6 +428,40 @@ export function useHelpers() {
   return useConfigApi<HelperRuntimeStatus>('helpers');
 }
 
+export function useSetHelperValue() {
+  const recordWrite = useRecordConfigWrite();
+  const { apiEndpoint } = useAppConfig();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      id,
+      value,
+    }: {
+      id: string;
+      value: unknown;
+    }) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/helpers/${encodeURIComponent(id)}/value`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ value }),
+        },
+      );
+      const result = await readApiResponse<{ id: string }>(
+        response,
+        'Failed to set helper value',
+      );
+      recordWrite(`helpers/${id}`, result.write);
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['config'] });
+    },
+  });
+}
+
 export type SchedulePreviewInput = {
   cron?: string;
   every_ms?: number;

@@ -8,6 +8,7 @@ import { DevicesState } from '@/bindings/DevicesState';
 import { Device } from '@/bindings/Device';
 import { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { FlattenedScenesConfig } from '@/bindings/FlattenedScenesConfig';
+import { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import { RoutineStatuses } from '@/bindings/RoutineStatuses';
 import { StateUpdate } from '@/bindings/StateUpdate';
 import { TimerRuntimeStatus } from '@/bindings/TimerRuntimeStatus';
@@ -25,6 +26,7 @@ const scenesAtom = atom<FlattenedScenesConfig | null>(null);
 const groupsAtom = atom<FlattenedGroupsConfig | null>(null);
 const routineStatusesStateAtom = atom<RoutineStatuses | null>(null);
 const timersStateAtom = atom<TimerRuntimeStatus[] | null>(null);
+const helperStatusesStateAtom = atom<HelperRuntimeStatus[] | null>(null);
 const websocketUiStateAtom = atom<UiState | null>(null);
 const websocketStateAtom = atom<StateUpdate | null>((get) => {
   const devices = get(devicesAtom);
@@ -32,6 +34,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
   const groups = get(groupsAtom);
   const routineStatuses = get(routineStatusesStateAtom);
   const timers = get(timersStateAtom);
+  const helperStatuses = get(helperStatusesStateAtom);
   const uiState = get(websocketUiStateAtom);
 
   if (
@@ -40,6 +43,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
     groups === null ||
     routineStatuses === null ||
     timers === null ||
+    helperStatuses === null ||
     uiState === null
   ) {
     return null;
@@ -51,6 +55,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
     groups,
     routine_statuses: routineStatuses,
     timers,
+    helper_statuses: helperStatuses,
     ui_state: uiState,
   };
 });
@@ -90,6 +95,7 @@ export const useProvideWebsocketState = () => {
   const setGroups = useSetAtom(groupsAtom);
   const setRoutineStatuses = useSetAtom(routineStatusesStateAtom);
   const setTimers = useSetAtom(timersStateAtom);
+  const setHelperStatuses = useSetAtom(helperStatusesStateAtom);
   const setUiState = useSetAtom(websocketUiStateAtom);
   const setWebsocket = useSetAtom(websocketAtom);
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
@@ -164,6 +170,7 @@ export const useProvideWebsocketState = () => {
           setGroups(msg.State.groups);
           setRoutineStatuses(msg.State.routine_statuses);
           setTimers(msg.State.timers);
+          setHelperStatuses(msg.State.helper_statuses);
           setUiState(msg.State.ui_state);
         } else if ('Patch' in msg) {
           const patch = msg.Patch;
@@ -182,6 +189,9 @@ export const useProvideWebsocketState = () => {
           }
           if (patch.timers) {
             setTimers(patch.timers);
+          }
+          if (patch.helper_statuses) {
+            setHelperStatuses(patch.helper_statuses);
           }
           if (patch.ui_state) {
             setUiState(patch.ui_state);
@@ -223,6 +233,7 @@ export const useProvideWebsocketState = () => {
     setRoutineStatuses,
     setScenes,
     setTimers,
+    setHelperStatuses,
     setUiState,
     setWebsocket,
     setConnectionStatus,
@@ -340,4 +351,10 @@ export const timersAtom = timersStateAtom;
 
 export const useTimers = (): TimerRuntimeStatus[] | undefined => {
   return useAtomValue(timersAtom) ?? undefined;
+};
+
+export const helperStatusesAtom = helperStatusesStateAtom;
+
+export const useHelperStatuses = (): HelperRuntimeStatus[] | undefined => {
+  return useAtomValue(helperStatusesAtom) ?? undefined;
 };

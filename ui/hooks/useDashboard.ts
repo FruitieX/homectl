@@ -8,6 +8,7 @@ export type WidgetType =
   | 'weather'
   | 'sensors'
   | 'controls'
+  | 'helper_mode'
   | 'spot_price'
   | 'train_schedule'
   | 'text'
@@ -189,6 +190,12 @@ export const widgetRegistry: Record<
     name: 'Controls',
     description: 'Quick control buttons for scenes and devices',
     defaultOptions: { groupId: null, deviceKeys: [] },
+  },
+  helper_mode: {
+    name: 'Mode / helper',
+    description:
+      'Shows a helper value and sets it with mode buttons or a value input',
+    defaultOptions: { helperId: '' },
   },
   spot_price: {
     name: 'Spot Price',

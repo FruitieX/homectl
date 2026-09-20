@@ -95,6 +95,7 @@ impl PendingWsUpdate {
             || self.changes.flattened_scenes
             || self.changes.routine_statuses
             || self.changes.timers
+            || self.changes.helper_statuses
             || self.changes.ui_state
     }
 }
@@ -1443,6 +1444,7 @@ struct StateUpdateRef<'a> {
     groups: &'a FlattenedGroupsConfig,
     routine_statuses: &'a RoutineStatuses,
     timers: &'a [crate::types::timer_status::TimerRuntimeStatus],
+    helper_statuses: &'a [crate::types::automation_value::HelperRuntimeStatus],
     ui_state: &'a HashMap<String, serde_json::Value>,
 }
 
@@ -1469,6 +1471,8 @@ struct StatePatchRef<'a> {
     routine_statuses: Option<&'a RoutineStatuses>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timers: Option<&'a [crate::types::timer_status::TimerRuntimeStatus]>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    helper_statuses: Option<&'a [crate::types::automation_value::HelperRuntimeStatus]>,
     #[serde(skip_serializing_if = "Option::is_none")]
     ui_state: Option<&'a HashMap<String, serde_json::Value>>,
 }
@@ -1506,6 +1510,7 @@ pub async fn send_state_ws_from_snapshot(
         groups: snap.flattened_groups.as_ref(),
         routine_statuses: snap.routine_statuses.as_ref(),
         timers: snap.timers.as_slice(),
+        helper_statuses: snap.helper_statuses.as_slice(),
         ui_state: snap.ui_state.as_ref(),
     });
 
@@ -1733,6 +1738,85 @@ mod websocket_timer_tests {
         }
     }
 
+    fn snapshot_with_helper() -> SnapshotHandle {
+        use crate::types::automation_definition::HelperId;
+        use crate::types::automation_value::{HelperKind, HelperPersistence, HelperRuntimeStatus};
+
+        let (state, _events) = crate::core::event::tests::test_state();
+        let mut snapshot = state.snapshot.load().as_ref().clone();
+        snapshot.helper_statuses = Arc::new(vec![HelperRuntimeStatus {
+            id: HelperId("staircase_mode".to_string()),
+            name: "Staircase mode".to_string(),
+            kind: HelperKind::Enum {
+                options: vec!["home".to_string(), "away".to_string()],
+            },
+            value: serde_json::json!("home"),
+            initial_value: serde_json::json!("home"),
+            revision: 4,
+            persistence: HelperPersistence::Durable,
+            hidden: None,
+        }]);
+        new_snapshot_handle(snapshot)
+    }
+
+    // P12: helper values are visible to browser clients in the full state and
+    // in helper-only patches, so the mode widget follows routine writes
+    // without polling.
+    #[tokio::test]
+    async fn helpers_are_published_in_state_and_helper_patches() {
+        let handle = snapshot_with_helper();
+        let ws = WebSockets::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        ws.user_connected(1, tx).await;
+
+        send_state_ws_from_snapshot(&handle, &ws, Some(1)).await;
+        send_state_ws_patch_from_snapshot(
+            &handle,
+            &ws,
+            Some(1),
+            SnapshotChanges {
+                helper_statuses: true,
+                ..SnapshotChanges::none()
+            }
+            .into(),
+        )
+        .await;
+
+        for path in ["/State/helper_statuses/0", "/Patch/helper_statuses/0"] {
+            let message = rx.recv().await.unwrap();
+            let value: serde_json::Value = serde_json::from_str(message.to_str().unwrap()).unwrap();
+            let helper = value.pointer(path).expect("helper in websocket payload");
+            assert_eq!(helper["id"].as_str(), Some("staircase_mode"));
+            assert_eq!(helper["value"].as_str(), Some("home"));
+            assert_eq!(helper["revision"].as_i64(), Some(4));
+        }
+    }
+
+    // A patch that only carries other changes must not include helpers.
+    #[tokio::test]
+    async fn unrelated_patches_omit_helpers() {
+        let handle = snapshot_with_helper();
+        let ws = WebSockets::default();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(4);
+        ws.user_connected(1, tx).await;
+
+        send_state_ws_patch_from_snapshot(
+            &handle,
+            &ws,
+            Some(1),
+            SnapshotChanges {
+                ui_state: true,
+                ..SnapshotChanges::none()
+            }
+            .into(),
+        )
+        .await;
+
+        let message = rx.recv().await.unwrap();
+        let value: serde_json::Value = serde_json::from_str(message.to_str().unwrap()).unwrap();
+        assert!(value.pointer("/Patch/helper_statuses").is_none());
+    }
+
     // A patch that only carries other changes must not include timers.
     #[tokio::test]
     async fn unrelated_patches_omit_timers() {
@@ -1826,6 +1910,10 @@ pub async fn send_state_ws_patch_from_snapshot(
             .routine_statuses
             .then_some(snap.routine_statuses.as_ref()),
         timers: update.changes.timers.then_some(snap.timers.as_slice()),
+        helper_statuses: update
+            .changes
+            .helper_statuses
+            .then_some(snap.helper_statuses.as_slice()),
         ui_state: update.changes.ui_state.then_some(snap.ui_state.as_ref()),
     });
 

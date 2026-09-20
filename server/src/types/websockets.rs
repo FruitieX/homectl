@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::{
+    automation_value::HelperRuntimeStatus,
     device::{DeviceKey, DevicesState},
     event::Event,
     group::FlattenedGroupsConfig,
@@ -30,6 +31,9 @@ pub struct StateUpdate {
     /// Live named timer jobs (P09). `remaining_ms` is a publish-time sample;
     /// clients should count down from `due_wall_ms`.
     pub timers: Vec<TimerRuntimeStatus>,
+    /// Current helper values (P12). Widgets and editors read these instead of
+    /// polling the config API.
+    pub helper_statuses: Vec<HelperRuntimeStatus>,
     pub ui_state: HashMap<String, serde_json::Value>,
 }
 
@@ -53,6 +57,8 @@ pub struct StatePatch {
     pub routine_statuses: Option<RoutineStatuses>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timers: Option<Vec<TimerRuntimeStatus>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub helper_statuses: Option<Vec<HelperRuntimeStatus>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_state: Option<HashMap<String, serde_json::Value>>,
 }

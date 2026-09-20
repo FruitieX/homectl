@@ -5,6 +5,7 @@ import { Button } from '@/ui/primitives/button';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { ClockCard } from '../app/dashboard/ClockCard';
 import { ControlsCard } from '../app/dashboard/ControlsCard';
+import { HelperModeCard } from '../app/dashboard/HelperModeCard';
 import { HomeOverview } from '../app/dashboard/HomeOverview';
 import { SensorsCard } from '../app/dashboard/SensorsCard';
 import { SpotPriceCard } from '../app/dashboard/SpotPriceCard';
@@ -20,6 +21,8 @@ export function DashboardWidgetCard({ widget }: { widget: DashboardWidget }) {
       return <ClockCard widget={widget} />;
     case 'controls':
       return <ControlsCard widget={widget} />;
+    case 'helper_mode':
+      return <HelperModeCard widget={widget} />;
     case 'sensors':
       return <SensorsCard widget={widget} />;
     case 'spot_price':

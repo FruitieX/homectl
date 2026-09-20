@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createUuid } from '@/lib/uuid';
 import { useSensorData } from '@/hooks/influxdb';
 import { useSensorCatalog } from '@/hooks/sensorCatalog';
+import { useHelpers } from '@/hooks/useConfig';
 import {
   type DashboardWidget,
   widgetRegistry,
@@ -100,6 +101,36 @@ function OptionNumberField({
         max={max}
         onChange={(event) => onChange(event.target.valueAsNumber || 0)}
       />
+    </ConfigField>
+  );
+}
+
+function HelperOptionField({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const { data: helpers } = useHelpers();
+
+  return (
+    <ConfigField
+      label="Helper"
+      description="The mode widget shows this helper's current value and writes new values to it."
+    >
+      <select
+        className={selectClassName}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      >
+        <option value="">Select a helper…</option>
+        {(helpers ?? []).map((helper) => (
+          <option key={helper.id} value={helper.id}>
+            {helper.name || helper.id} ({helper.kind.kind})
+          </option>
+        ))}
+      </select>
     </ConfigField>
   );
 }
@@ -508,6 +539,17 @@ function WidgetOptionFields({
           value={getNumber('refreshSeconds', 60)}
           min={30}
           onChange={(value) => onChange('refreshSeconds', value)}
+        />
+      </div>
+    );
+  }
+
+  if (widgetType === 'helper_mode') {
+    return (
+      <div className="grid gap-4 md:grid-cols-2">
+        <HelperOptionField
+          value={getString('helperId')}
+          onChange={(value) => onChange('helperId', value)}
         />
       </div>
     );
