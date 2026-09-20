@@ -37,7 +37,7 @@ use super::{
     scripting::legacy_rule_context,
 };
 
-const TRIGGERING_DEVICE_ROLLOUT_SOURCE: &str = "__homectl_runtime__/triggering_device";
+pub(crate) const TRIGGERING_DEVICE_ROLLOUT_SOURCE: &str = "__homectl_runtime__/triggering_device";
 
 /// Merges `source_groups` into `group_keys` (without duplicates), sets the
 /// option to `Some(..)` if anything was merged.

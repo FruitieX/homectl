@@ -71,7 +71,13 @@ function nextNodeId(prefix: string, existingIds: Iterable<string>) {
 function defaultStep(kind: StepKind, id: string): NativeAction {
   switch (kind) {
     case 'activate_scene':
-      return { action: 'activate_scene', id, scene_id: '', targets: {} };
+      return {
+        action: 'activate_scene',
+        id,
+        scene_id: '',
+        targets: {},
+        use_scene_transition: true,
+      };
     case 'set_power':
       return {
         action: 'set_power',
@@ -544,6 +550,133 @@ function StepFields({
             description="Leave empty to use the scene's own targets."
             onChange={(targets) => onChange({ ...step, targets })}
           />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ConfigField
+              label="Transition"
+              description="Scene-derived transitions are used unless disabled."
+            >
+              <select
+                className={selectClassName}
+                value={step.use_scene_transition ? 'scene' : 'none'}
+                onChange={(event) =>
+                  onChange({
+                    ...step,
+                    use_scene_transition: event.target.value === 'scene',
+                  })
+                }
+              >
+                <option value="scene">Use scene transitions</option>
+                <option value="none">No transition (instant)</option>
+              </select>
+            </ConfigField>
+            <ConfigField
+              label="Transition override"
+              description="Optional explicit fade duration for this activation."
+            >
+              <DurationInput
+                valueMs={
+                  step.transition_ms === undefined
+                    ? undefined
+                    : Number(step.transition_ms)
+                }
+                onChange={(transition_ms) =>
+                  onChange({
+                    ...step,
+                    transition_ms,
+                  } as unknown as NativeAction)
+                }
+              />
+            </ConfigField>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              className="size-4 shrink-0 rounded border border-input bg-background accent-primary"
+              checked={step.rollout !== undefined}
+              onChange={(event) =>
+                onChange({
+                  ...step,
+                  rollout: event.target.checked
+                    ? {
+                        style: 'spatial',
+                        source: { kind: 'triggering_device' },
+                        duration_ms: 1500,
+                      }
+                    : undefined,
+                } as unknown as NativeAction)
+              }
+            />
+            Spatial rollout (stagger targets by distance from a source)
+          </label>
+          {step.rollout ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <ConfigField
+                label="Rollout source"
+                description="Where the stagger radiates from."
+              >
+                <select
+                  className={selectClassName}
+                  value={step.rollout.source?.kind === 'device' ? 'device' : 'trigger'}
+                  onChange={(event) =>
+                    onChange({
+                      ...step,
+                      rollout: {
+                        ...step.rollout!,
+                        source:
+                          event.target.value === 'device'
+                            ? {
+                                kind: 'device',
+                                device: { integration_id: '', device_id: '' },
+                              }
+                            : { kind: 'triggering_device' },
+                      },
+                    } as unknown as NativeAction)
+                  }
+                >
+                  <option value="trigger">Triggering device</option>
+                  <option value="device">Fixed device</option>
+                </select>
+              </ConfigField>
+              {step.rollout.source?.kind === 'device' ? (
+                <ConfigField label="Source device">
+                  <DeviceSelect
+                    devices={devices}
+                    value={deviceRefKey(step.rollout.source.device)}
+                    onChange={(key) =>
+                      onChange({
+                        ...step,
+                        rollout: {
+                          ...step.rollout!,
+                          source: {
+                            kind: 'device',
+                            device: keyToDeviceRef(key),
+                          },
+                        },
+                      } as unknown as NativeAction)
+                    }
+                  />
+                </ConfigField>
+              ) : null}
+              <ConfigField
+                label="Rollout spread"
+                description="Targets without a saved position apply immediately."
+              >
+                <DurationInput
+                  valueMs={
+                    step.rollout.duration_ms === undefined
+                      ? undefined
+                      : Number(step.rollout.duration_ms)
+                  }
+                  onChange={(duration_ms) =>
+                    onChange({
+                      ...step,
+                      rollout: { ...step.rollout!, duration_ms },
+                    } as unknown as NativeAction)
+                  }
+                />
+              </ConfigField>
+            </div>
+          ) : null}
           {!step.select && !step.scene_id ? (
             <p className="text-xs text-destructive">Select a scene.</p>
           ) : null}

@@ -93,7 +93,8 @@ fn pulse_sensor_maps_to_report_trigger_with_value_condition() {
                 "action": "activate_scene",
                 "id": "a1",
                 "scene_id": "night",
-                "targets": {}
+                "targets": {},
+                "use_scene_transition": false
             }]
         })
     );
@@ -461,7 +462,8 @@ fn activate_scene_mirror_maps_to_group_active_selection() {
             "action": "activate_scene",
             "id": "a1",
             "select": {"kind": "group_active", "group_id": "living", "fallback_scene_id": "night"},
-            "targets": {}
+            "targets": {},
+            "use_scene_transition": false
         })
     );
 }
@@ -504,6 +506,73 @@ fn activate_scene_with_source_groups_needs_manual() {
         ConversionStatus::NeedsManual { .. }
     ));
     assert!(reasons(&conversion)[0].contains("include_source_groups"));
+}
+
+#[test]
+fn activate_scene_rollout_maps_with_triggering_device_source() {
+    let conversion = convert(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{
+            "action": "ActivateScene",
+            "scene_id": "night",
+            "rollout": "spatial",
+            "rollout_source_device_key": "__homectl_runtime__/triggering_device",
+            "rollout_duration_ms": 1500
+        }]),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(
+        definition["program"]["steps"][0]["rollout"],
+        json!({
+            "style": "spatial",
+            "source": {"kind": "triggering_device"},
+            "duration_ms": 1500
+        })
+    );
+}
+
+#[test]
+fn activate_scene_rollout_maps_with_fixed_device_source() {
+    let conversion = convert(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{
+            "action": "ActivateScene",
+            "scene_id": "night",
+            "rollout": "spatial",
+            "rollout_source_device_key": "zigbee2mqtt/0x001788010bd7ec37",
+            "rollout_duration_ms": 1500
+        }]),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(
+        definition["program"]["steps"][0]["rollout"]["source"],
+        json!({
+            "kind": "device",
+            "device": {"integration_id": "zigbee2mqtt", "device_id": "0x001788010bd7ec37"}
+        })
+    );
+}
+
+#[test]
+fn activate_scene_transition_seconds_map_to_milliseconds() {
+    let conversion = convert(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{
+            "action": "ActivateScene",
+            "scene_id": "night",
+            "transition": 0.25,
+            "use_scene_transition": true
+        }]),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(definition["program"]["steps"][0]["transition_ms"], 250);
+    assert_eq!(
+        definition["program"]["steps"][0]["use_scene_transition"],
+        true
+    );
 }
 
 #[test]

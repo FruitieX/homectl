@@ -20,15 +20,16 @@ use crate::core::helpers::Helpers;
 use crate::types::{
     action::Action,
     automation_definition::{
-        HelperId, InvokeMode, NativeAction, NodeId, Program, SceneSelection, TargetSpec,
-        TimerIntentCapture, TimerIntentTarget, TimerOperation,
+        ConditionExpr, HelperId, InvokeMode, NativeAction, NodeId, Program, RolloutSource,
+        RolloutSpec, SceneSelection, TargetSpec, TimerIntentCapture, TimerIntentTarget,
+        TimerOperation, TriggerSpec,
     },
     automation_trace::{PlannedStepStatus, StepDisposition},
     device::{DeviceData, DeviceKey, DeviceRef, DevicesState},
     dim::DimDescriptor,
     group::GroupId,
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
-    scene::{ActivateSceneActionDescriptor, SceneId},
+    scene::{ActivateSceneActionDescriptor, RolloutStyle, SceneId},
 };
 
 /// Maximum number of steps one routine run may plan. Mirrors the compiler's
@@ -228,6 +229,7 @@ pub fn plan_evaluation(
         steps: Vec::new(),
         suppressions: Vec::new(),
         timer_captures: evaluation.timer_captures.clone(),
+        triggering_device: triggering_device(compiled, &evaluation.matched_trigger_ids),
     };
     match &compiled.normalized.program {
         Program::Native(program) => planner.plan_steps(&program.steps),
@@ -260,6 +262,7 @@ pub fn plan_script_actions(
         steps: Vec::new(),
         suppressions: Vec::new(),
         timer_captures: Vec::new(),
+        triggering_device: None,
     };
     planner.plan_steps(actions);
     RoutinePlan {
@@ -278,6 +281,48 @@ struct Planner<'a> {
     /// Intent tokens frozen by the timer generation(s) firing in this frame
     /// (J08), flattened across captures.
     timer_captures: Vec<super::timers::CapturedTimerIntents>,
+    /// Device of the matched trigger that fired this run, used to resolve
+    /// `RolloutSource::TriggeringDevice` (script result plans have none).
+    triggering_device: Option<DeviceKey>,
+}
+
+/// The first matched trigger that names a device, in trigger order.
+fn triggering_device(
+    compiled: &CompiledDefinition,
+    matched_trigger_ids: &[NodeId],
+) -> Option<DeviceKey> {
+    compiled
+        .normalized
+        .triggers
+        .iter()
+        .filter(|trigger| matched_trigger_ids.contains(trigger.id()))
+        .find_map(|trigger| match trigger {
+            TriggerSpec::Report { device, .. } | TriggerSpec::StateChange { device, .. } => {
+                Some(device_key(device))
+            }
+            TriggerSpec::PredicateTransition { predicate, .. }
+            | TriggerSpec::PredicateFor { predicate, .. } => predicate_device(predicate),
+            TriggerSpec::Schedule { .. }
+            | TriggerSpec::TimerFired { .. }
+            | TriggerSpec::Startup { .. }
+            | TriggerSpec::Manual { .. } => None,
+        })
+}
+
+fn predicate_device(predicate: &ConditionExpr) -> Option<DeviceKey> {
+    match predicate {
+        ConditionExpr::Comparison {
+            source: crate::types::automation_definition::ValueSource::Device { device, .. },
+            ..
+        } => Some(device_key(device)),
+        ConditionExpr::All { conditions } | ConditionExpr::Any { conditions } => {
+            conditions.iter().find_map(predicate_device)
+        }
+        ConditionExpr::Not { condition } => predicate_device(condition),
+        ConditionExpr::Comparison { .. }
+        | ConditionExpr::Group { .. }
+        | ConditionExpr::Literal { .. } => None,
+    }
 }
 
 impl Planner<'_> {
@@ -471,6 +516,26 @@ impl Planner<'_> {
         }
     }
 
+    /// Resolve the v1 descriptor's rollout fields. `TriggeringDevice` uses the
+    /// device of the matched trigger; when the run has no triggering device
+    /// (schedules, scripts, manual runs) the rollout source stays unset and
+    /// the actor applies the activation immediately, matching v1's behavior
+    /// for a missing rollout origin.
+    fn resolve_rollout(
+        &self,
+        rollout: &Option<RolloutSpec>,
+    ) -> (Option<RolloutStyle>, Option<DeviceKey>, Option<u64>) {
+        let Some(rollout) = rollout else {
+            return (None, None, None);
+        };
+        let source = match &rollout.source {
+            Some(RolloutSource::Device { device }) => Some(device_key(device)),
+            Some(RolloutSource::TriggeringDevice) => self.triggering_device.clone(),
+            None => None,
+        };
+        (Some(rollout.style.clone()), source, rollout.duration_ms)
+    }
+
     fn plan_action(&mut self, action: &NativeAction) {
         let kind = action_kind(action);
         match action {
@@ -478,6 +543,9 @@ impl Planner<'_> {
                 scene_id,
                 select,
                 targets,
+                use_scene_transition,
+                transition_ms,
+                rollout,
                 ..
             } => {
                 let Some(scene) = self.resolve_scene(action, scene_id.as_ref(), select.as_ref())
@@ -490,17 +558,20 @@ impl Planner<'_> {
                 let mut guard = vec![IntentTarget::Scene(scene.clone())];
                 guard.extend(devices.iter().cloned().map(IntentTarget::Device));
                 guard.extend(original_groups.iter().cloned().map(IntentTarget::Group));
+                let (rollout_style, rollout_source, rollout_duration_ms) =
+                    self.resolve_rollout(rollout);
                 let descriptor = ActivateSceneActionDescriptor {
                     scene_id: scene,
                     mirror_from_group: None,
                     device_keys: (!devices.is_empty()).then_some(devices),
                     group_keys: (!groups.is_empty()).then_some(groups),
                     include_source_groups: false,
-                    use_scene_transition: true,
-                    transition: None,
-                    rollout: None,
-                    rollout_source_device_key: None,
-                    rollout_duration_ms: None,
+                    use_scene_transition: *use_scene_transition,
+                    transition: transition_ms
+                        .map(|ms| ordered_float::OrderedFloat(ms as f32 / 1000.0)),
+                    rollout: rollout_style,
+                    rollout_source_device_key: rollout_source,
+                    rollout_duration_ms,
                 };
                 self.push_dispatch(
                     action,
@@ -1004,6 +1075,108 @@ mod tests {
             "a new decision uses the new helper value; the earlier plan keeps its own"
         );
         assert_eq!(planned_scene(&plan), SceneId::from("night".to_string()));
+    }
+
+    #[test]
+    fn rollout_resolves_the_triggering_device_and_keeps_activation_options() {
+        let compiled = compile_definition_value(
+            &json!({
+                "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+                "program": { "kind": "native", "steps": [{
+                    "action": "activate_scene",
+                    "id": "step",
+                    "scene_id": "night",
+                    "use_scene_transition": false,
+                    "transition_ms": 250,
+                    "rollout": {
+                        "style": "spatial",
+                        "source": { "kind": "triggering_device" },
+                        "duration_ms": 1500
+                    }
+                }]}
+            }),
+            &catalog(),
+        )
+        .expect("definition compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), true)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let mut evaluation = evaluation(&compiled, &devices, &groups, &helpers);
+        evaluation.matched_trigger_ids = vec![NodeId::new("trig".to_string())];
+        let plan = plan_evaluation(&evaluation, &compiled, &inputs);
+
+        match &plan.steps[0].body {
+            PlannedStepBody::Dispatch(action) => match action.as_ref() {
+                Action::ActivateScene(descriptor) => {
+                    assert_eq!(descriptor.rollout, Some(RolloutStyle::Spatial));
+                    assert_eq!(
+                        descriptor.rollout_source_device_key,
+                        Some(key("lamp")),
+                        "the matched report trigger names the source device"
+                    );
+                    assert_eq!(descriptor.rollout_duration_ms, Some(1500));
+                    assert!(!descriptor.use_scene_transition);
+                    assert_eq!(descriptor.transition.map(|value| value.0), Some(0.25));
+                }
+                other => panic!("expected scene dispatch, got {other:?}"),
+            },
+            other => panic!("expected scene dispatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn rollout_without_a_triggering_device_plans_without_a_source() {
+        let compiled = compile_definition_value(
+            &json!({
+                "triggers": [{ "kind": "manual", "id": "trig" }],
+                "program": { "kind": "native", "steps": [{
+                    "action": "activate_scene",
+                    "id": "step",
+                    "scene_id": "night",
+                    "rollout": {
+                        "style": "spatial",
+                        "source": { "kind": "triggering_device" },
+                        "duration_ms": 1500
+                    }
+                }]}
+            }),
+            &catalog(),
+        )
+        .expect("definition compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), true)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let plan = plan_evaluation(
+            &evaluation(&compiled, &devices, &groups, &helpers),
+            &compiled,
+            &inputs,
+        );
+
+        match &plan.steps[0].body {
+            PlannedStepBody::Dispatch(action) => match action.as_ref() {
+                Action::ActivateScene(descriptor) => {
+                    assert_eq!(descriptor.rollout, Some(RolloutStyle::Spatial));
+                    assert_eq!(
+                        descriptor.rollout_source_device_key, None,
+                        "manual runs have no triggering device; the actor applies immediately"
+                    );
+                }
+                other => panic!("expected scene dispatch, got {other:?}"),
+            },
+            other => panic!("expected scene dispatch, got {other:?}"),
+        }
     }
 
     // A03: newer manual intent suppresses a stale plan at dispatch time.

@@ -562,6 +562,30 @@ fn classify_any_rule(
     }
 }
 
+/// v1 rollout is spatial-only; the source is either the runtime's
+/// triggering-device placeholder or a concrete device key.
+fn convert_rollout(
+    descriptor: &crate::types::scene::ActivateSceneActionDescriptor,
+) -> Result<Option<crate::types::automation_definition::RolloutSpec>, String> {
+    let Some(style) = descriptor.rollout.clone() else {
+        return Ok(None);
+    };
+    let source = match &descriptor.rollout_source_device_key {
+        Some(key) if key.to_string() == crate::core::routines::TRIGGERING_DEVICE_ROLLOUT_SOURCE => {
+            Some(crate::types::automation_definition::RolloutSource::TriggeringDevice)
+        }
+        Some(key) => Some(crate::types::automation_definition::RolloutSource::Device {
+            device: DeviceRef::from(key),
+        }),
+        None => None,
+    };
+    Ok(Some(crate::types::automation_definition::RolloutSpec {
+        style,
+        source,
+        duration_ms: descriptor.rollout_duration_ms,
+    }))
+}
+
 fn device_refs(keys: &Option<Vec<crate::types::device::DeviceKey>>) -> Vec<DeviceRef> {
     keys.as_ref()
         .map(|keys| keys.iter().map(DeviceRef::from).collect())
@@ -575,36 +599,20 @@ fn convert_action(
 ) -> Result<NativeAction, String> {
     match action {
         Action::ActivateScene(descriptor) => {
-            let mut descriptors = Vec::new();
             if descriptor.include_source_groups {
-                descriptors.push("include_source_groups");
+                return Err(
+                    "activate_scene uses include_source_groups, which v2 resolves at rule evaluation time and has no native equivalent".to_string(),
+                );
             }
-            if descriptor.use_scene_transition {
-                descriptors.push("use_scene_transition");
-            }
-            if descriptor.transition.is_some() {
-                descriptors.push("transition");
-            }
-            if descriptor.rollout.is_some() {
-                descriptors.push("rollout");
-            }
-            if descriptor.rollout_source_device_key.is_some() {
-                descriptors.push("rollout_source_device_key");
-            }
-            if descriptor.rollout_duration_ms.is_some() {
-                descriptors.push("rollout_duration_ms");
-            }
-            if !descriptors.is_empty() {
-                return Err(format!(
-                    "activate_scene uses {} which has no v2 native equivalent",
-                    descriptors.join(", ")
-                ));
-            }
-
             let targets = TargetSpec {
                 devices: device_refs(&descriptor.device_keys),
                 groups: descriptor.group_keys.clone().unwrap_or_default(),
             };
+            let rollout = convert_rollout(descriptor)?;
+            let transition_ms = descriptor
+                .transition
+                .map(|seconds| (seconds.0.max(0.0) * 1000.0).round() as u64)
+                .filter(|ms| *ms > 0);
 
             match &descriptor.mirror_from_group {
                 Some(group) => Ok(NativeAction::ActivateScene {
@@ -615,12 +623,18 @@ fn convert_action(
                         fallback_scene_id: Some(descriptor.scene_id.clone()),
                     }),
                     targets,
+                    use_scene_transition: descriptor.use_scene_transition,
+                    transition_ms,
+                    rollout,
                 }),
                 None => Ok(NativeAction::ActivateScene {
                     id: ids.action_id(),
                     scene_id: Some(descriptor.scene_id.clone()),
                     select: None,
                     targets,
+                    use_scene_transition: descriptor.use_scene_transition,
+                    transition_ms,
+                    rollout,
                 }),
             }
         }

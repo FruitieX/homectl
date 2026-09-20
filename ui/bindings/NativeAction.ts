@@ -4,6 +4,7 @@ import type { DeviceRef } from "./DeviceRef";
 import type { HelperId } from "./HelperId";
 import type { InvokeMode } from "./InvokeMode";
 import type { NodeId } from "./NodeId";
+import type { RolloutSpec } from "./RolloutSpec";
 import type { RoutineId } from "./RoutineId";
 import type { SceneId } from "./SceneId";
 import type { SceneSelection } from "./SceneSelection";
@@ -14,7 +15,21 @@ import type { JsonValue } from "./serde_json/JsonValue";
 /**
  * One typed native action with a stable node ID.
  */
-export type NativeAction = { "action": "activate_scene", id: NodeId, scene_id?: SceneId, select?: SceneSelection, targets: TargetSpec, } | { "action": "set_power", id: NodeId, device: DeviceRef, power: boolean, } | { "action": "dim", id: NodeId, targets: TargetSpec, step: number, transition_ms?: bigint, } | { "action": "choose", id: NodeId, branches: Array<ChooseBranch>, } | { "action": "schedule_timer", id: NodeId, timer: TimerId, delay_ms: bigint, 
+export type NativeAction = { "action": "activate_scene", id: NodeId, scene_id?: SceneId, select?: SceneSelection, targets: TargetSpec, 
+/**
+ * Preserve scene-derived transitions during activation. Defaults to
+ * true for native definitions (v1 action descriptors default to
+ * false; the converter stores the v1 value explicitly).
+ */
+use_scene_transition: boolean, 
+/**
+ * Explicit transition override in milliseconds.
+ */
+transition_ms?: bigint, 
+/**
+ * Stagger the activation across target positions.
+ */
+rollout?: RolloutSpec, } | { "action": "set_power", id: NodeId, device: DeviceRef, power: boolean, } | { "action": "dim", id: NodeId, targets: TargetSpec, step: number, transition_ms?: bigint, } | { "action": "choose", id: NodeId, branches: Array<ChooseBranch>, } | { "action": "schedule_timer", id: NodeId, timer: TimerId, delay_ms: bigint, 
 /**
  * Freeze intent tokens for these targets at actor acceptance (J08).
  */

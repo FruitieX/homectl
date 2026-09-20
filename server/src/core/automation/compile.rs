@@ -32,6 +32,8 @@ pub const MAX_SCRIPT_DECLARATIONS: usize = 32;
 pub const MAX_PREDICATE_FOR_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 pub const MAX_TIMER_DELAY_MS: u64 = 7 * 24 * 60 * 60 * 1000;
 pub const MAX_DIM_STEP: f32 = 1.0;
+/// Upper bound for a rollout spread; well above any sane floorplan stagger.
+pub const MAX_ROLLOUT_DURATION_MS: u64 = 10 * 60 * 1000;
 pub const MAX_EXECUTION_ACTIONS: u32 = 64;
 pub const SUPPORTED_SCRIPT_API_VERSION: u32 = 1;
 pub const DEFAULT_LIMITS_PROFILE: &str = "default";
@@ -872,6 +874,8 @@ impl Compiler<'_> {
                     scene_id,
                     select,
                     targets,
+                    transition_ms,
+                    rollout,
                     ..
                 } => {
                     match (scene_id, select) {
@@ -907,6 +911,17 @@ impl Compiler<'_> {
                         }
                     }
                     self.compile_targets(targets, &format!("{action_path}/targets"), action.id());
+                    if let Some(transition_ms) = transition_ms {
+                        if *transition_ms == 0 {
+                            self.report.error_at_node(
+                                format!("{action_path}/transition_ms"),
+                                action.id(),
+                                "invalid_duration",
+                                "ActivateScene transition_ms must be greater than zero.",
+                            );
+                        }
+                    }
+                    self.compile_rollout(rollout, &format!("{action_path}/rollout"), action.id());
                 }
                 NativeAction::SetPower { device, power, .. } => {
                     let _ = power;
@@ -1113,6 +1128,38 @@ impl Compiler<'_> {
         for (index, group) in targets.groups.iter().enumerate() {
             self.resolve_group(group, &format!("{path}/groups/{index}"), Some(node));
             self.add_write(WriteKind::Group, group.to_string());
+        }
+    }
+
+    /// Rollout affects timing only; the compiler checks the duration bound and
+    /// that a fixed source device exists. `TriggeringDevice` resolves at plan
+    /// time (and falls back to an immediate apply when the run has no
+    /// triggering device).
+    fn compile_rollout(
+        &mut self,
+        rollout: &Option<crate::types::automation_definition::RolloutSpec>,
+        path: &str,
+        node: &NodeId,
+    ) {
+        let Some(rollout) = rollout else {
+            return;
+        };
+        if let Some(duration_ms) = rollout.duration_ms {
+            if duration_ms > MAX_ROLLOUT_DURATION_MS {
+                self.report.error_at_node(
+                    format!("{path}/duration_ms"),
+                    node,
+                    "invalid_duration",
+                    format!("Rollout duration must not exceed {MAX_ROLLOUT_DURATION_MS} ms."),
+                );
+            }
+        }
+        if let Some(crate::types::automation_definition::RolloutSource::Device { device }) =
+            &rollout.source
+        {
+            if let Some(key) = self.resolve_device(device, path, "source", Some(node)) {
+                self.add_dependency(ResolvedReference::Device(key));
+            }
         }
     }
 
@@ -1722,6 +1769,83 @@ mod tests {
             .with_device(key("dummy", "lamp1"))
             .with_scene(SceneId::from("main_on".to_string()))
             .with_routine(RoutineId::from("other".to_string()))
+    }
+
+    #[test]
+    fn rollout_validation_bounds_duration_and_resolves_sources() {
+        let valid = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "activate_scene",
+                "id": "step",
+                "scene_id": "main_on",
+                "rollout": {
+                    "style": "spatial",
+                    "source": { "kind": "triggering_device" },
+                    "duration_ms": 1500
+                }
+            }]}
+        });
+        assert!(compile_definition_value(&valid, &catalog()).is_ok());
+
+        let fixed_source = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "activate_scene",
+                "id": "step",
+                "scene_id": "main_on",
+                "rollout": {
+                    "style": "spatial",
+                    "source": { "kind": "device", "device": { "integration_id": "dummy", "device_id": "sensor1" } }
+                }
+            }]}
+        });
+        assert!(compile_definition_value(&fixed_source, &catalog()).is_ok());
+
+        let unknown_source = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "activate_scene",
+                "id": "step",
+                "scene_id": "main_on",
+                "rollout": {
+                    "style": "spatial",
+                    "source": { "kind": "device", "device": { "integration_id": "dummy", "device_id": "ghost" } }
+                }
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&unknown_source, &catalog()).unwrap_err()),
+            vec!["unknown_device"]
+        );
+
+        let beyond_bound = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "activate_scene",
+                "id": "step",
+                "scene_id": "main_on",
+                "rollout": { "style": "spatial", "duration_ms": MAX_ROLLOUT_DURATION_MS + 1 }
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&beyond_bound, &catalog()).unwrap_err()),
+            vec!["invalid_duration"]
+        );
+
+        let zero_transition = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "activate_scene",
+                "id": "step",
+                "scene_id": "main_on",
+                "transition_ms": 0
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&zero_transition, &catalog()).unwrap_err()),
+            vec!["invalid_duration"]
+        );
     }
 
     fn valid_definition() -> Value {

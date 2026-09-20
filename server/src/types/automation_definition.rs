@@ -17,7 +17,7 @@ use super::{
     device::DeviceRef,
     group::GroupId,
     rule::{RawRuleOperator, RoutineId},
-    scene::SceneId,
+    scene::{RolloutStyle, SceneId},
 };
 
 /// Authoritative routine semantics marker for legacy `rules`/`actions` rows.
@@ -322,6 +322,38 @@ impl Default for ConditionExpr {
     }
 }
 
+/// Staggered activation of scene targets. The style mirrors the v1 rollout
+/// options; the source is either a fixed device or the routine's triggering
+/// device, resolved at plan time from the matched trigger.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct RolloutSpec {
+    pub style: RolloutStyle,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub source: Option<RolloutSource>,
+    /// Total spread in milliseconds; targets without a saved position apply
+    /// immediately, and a missing/zero duration applies everything at once.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub duration_ms: Option<u64>,
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+#[ts(export)]
+pub enum RolloutSource {
+    Device {
+        device: DeviceRef,
+    },
+    /// The device whose event triggered this routine run.
+    TriggeringDevice,
+}
+
+fn default_use_scene_transition() -> bool {
+    true
+}
+
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(export)]
@@ -390,6 +422,19 @@ pub enum NativeAction {
         select: Option<SceneSelection>,
         #[serde(default)]
         targets: TargetSpec,
+        /// Preserve scene-derived transitions during activation. Defaults to
+        /// true for native definitions (v1 action descriptors default to
+        /// false; the converter stores the v1 value explicitly).
+        #[serde(default = "default_use_scene_transition")]
+        use_scene_transition: bool,
+        /// Explicit transition override in milliseconds.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        transition_ms: Option<u64>,
+        /// Stagger the activation across target positions.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        rollout: Option<RolloutSpec>,
     },
 
     /// Sets power on one device.
