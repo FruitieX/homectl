@@ -5,6 +5,7 @@ import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { InvokeMode } from '@/bindings/InvokeMode';
 import type { NativeAction } from '@/bindings/NativeAction';
 import type { Program } from '@/bindings/Program';
+import type { RolloutSpec } from '@/bindings/RolloutSpec';
 import type { ScriptDeclaration } from '@/bindings/ScriptDeclaration';
 import type { ScriptSpec } from '@/bindings/ScriptSpec';
 import type { TargetSpec } from '@/bindings/TargetSpec';
@@ -35,6 +36,7 @@ type StepKind = NativeAction['action'];
 
 const stepKindOptions: Array<{ value: StepKind; label: string }> = [
   { value: 'activate_scene', label: 'Activate scene' },
+  { value: 'cycle_scenes', label: 'Cycle scenes' },
   { value: 'set_power', label: 'Set device power' },
   { value: 'dim', label: 'Dim targets' },
   { value: 'schedule_timer', label: 'Start named timer' },
@@ -47,6 +49,7 @@ const stepKindOptions: Array<{ value: StepKind; label: string }> = [
 
 const stepKindLabels: Record<StepKind, string> = {
   activate_scene: 'Activate scene',
+  cycle_scenes: 'Cycle scenes',
   set_power: 'Set power',
   dim: 'Dim',
   schedule_timer: 'Start timer',
@@ -77,6 +80,14 @@ function defaultStep(kind: StepKind, id: string): NativeAction {
         scene_id: '',
         targets: {},
         use_scene_transition: true,
+      };
+    case 'cycle_scenes':
+      return {
+        action: 'cycle_scenes',
+        id,
+        scenes: [],
+        nowrap: false,
+        detection: {},
       };
     case 'set_power':
       return {
@@ -150,6 +161,8 @@ function summarizeStep(step: NativeAction): string {
         : step.scene_id
           ? `scene ${step.scene_id}`
           : 'no scene selected';
+    case 'cycle_scenes':
+      return `${step.scenes.length} scene(s)${step.nowrap ? ', stop at last' : ''}`;
     case 'set_power':
       return `${step.power ? 'turn on' : 'turn off'} ${step.device.device_id || 'device'}`;
     case 'dim':
@@ -489,6 +502,107 @@ function ChooseStepEditor({
   );
 }
 
+function RolloutEditor({
+  rollout,
+  devices,
+  onChange,
+}: {
+  rollout: RolloutSpec;
+  devices: DevicesState;
+  onChange: (rollout: RolloutSpec) => void;
+}) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <ConfigField
+        label="Rollout source"
+        description="Where the stagger radiates from."
+      >
+        <select
+          className={selectClassName}
+          value={rollout.source?.kind === 'device' ? 'device' : 'trigger'}
+          onChange={(event) =>
+            onChange({
+              ...rollout,
+              source:
+                event.target.value === 'device'
+                  ? {
+                      kind: 'device',
+                      device: { integration_id: '', device_id: '' },
+                    }
+                  : { kind: 'triggering_device' },
+            })
+          }
+        >
+          <option value="trigger">Triggering device</option>
+          <option value="device">Fixed device</option>
+        </select>
+      </ConfigField>
+      {rollout.source?.kind === 'device' ? (
+        <ConfigField label="Source device">
+          <DeviceSelect
+            devices={devices}
+            value={deviceRefKey(rollout.source.device)}
+            onChange={(key) =>
+              onChange({
+                ...rollout,
+                source: {
+                  kind: 'device',
+                  device: keyToDeviceRef(key),
+                },
+              })
+            }
+          />
+        </ConfigField>
+      ) : null}
+      <ConfigField
+        label="Rollout spread"
+        description="Targets without a saved position apply immediately."
+      >
+        <DurationInput
+          valueMs={
+            rollout.duration_ms === undefined
+              ? undefined
+              : Number(rollout.duration_ms)
+          }
+          onChange={(duration_ms) =>
+            onChange({ ...rollout, duration_ms } as unknown as RolloutSpec)
+          }
+        />
+      </ConfigField>
+    </div>
+  );
+}
+
+function RolloutToggle({
+  rollout,
+  onChange,
+}: {
+  rollout: RolloutSpec | null | undefined;
+  onChange: (rollout: RolloutSpec | undefined) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center gap-2 text-sm">
+      <input
+        type="checkbox"
+        className="size-4 shrink-0 rounded border border-input bg-background accent-primary"
+        checked={rollout !== undefined && rollout !== null}
+        onChange={(event) =>
+          onChange(
+            event.target.checked
+              ? ({
+                  style: 'spatial',
+                  source: { kind: 'triggering_device' },
+                  duration_ms: 1500,
+                } as unknown as RolloutSpec)
+              : undefined,
+          )
+        }
+      />
+      Spatial rollout (stagger targets by distance from a source)
+    </label>
+  );
+}
+
 function StepFields({
   step,
   onChange,
@@ -588,97 +702,215 @@ function StepFields({
               />
             </ConfigField>
           </div>
+          <RolloutToggle
+            rollout={step.rollout}
+            onChange={(rollout) =>
+              onChange({ ...step, rollout } as unknown as NativeAction)
+            }
+          />
+          {step.rollout ? (
+            <RolloutEditor
+              rollout={step.rollout}
+              devices={devices}
+              onChange={(rollout) =>
+                onChange({ ...step, rollout } as unknown as NativeAction)
+              }
+            />
+          ) : null}
+          {!step.select && !step.scene_id ? (
+            <p className="text-xs text-destructive">Select a scene.</p>
+          ) : null}
+        </div>
+      );
+
+    case 'cycle_scenes':
+      return (
+        <div className="space-y-3">
+          <div className="space-y-2">
+            {step.scenes.map((entry, index) => (
+              <div
+                key={index}
+                className="space-y-2 rounded-xl border border-border p-3"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">Scene {index + 1}</p>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={index === 0}
+                      onClick={() =>
+                        onChange({
+                          ...step,
+                          scenes: step.scenes.map((item, itemIndex) =>
+                            itemIndex === index - 1
+                              ? entry
+                              : itemIndex === index
+                                ? step.scenes[index - 1]
+                                : item,
+                          ),
+                        })
+                      }
+                    >
+                      Move up
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        onChange({
+                          ...step,
+                          scenes: step.scenes.filter(
+                            (_, itemIndex) => itemIndex !== index,
+                          ),
+                        })
+                      }
+                    >
+                      Remove
+                    </Button>
+                  </div>
+                </div>
+                <ConfigField label="Scene">
+                  <SceneSelect
+                    scenes={scenes}
+                    value={entry.scene_id}
+                    onChange={(scene_id) =>
+                      onChange({
+                        ...step,
+                        scenes: step.scenes.map((item, itemIndex) =>
+                          itemIndex === index ? { ...item, scene_id } : item,
+                        ),
+                      })
+                    }
+                  />
+                </ConfigField>
+                <TargetSpecEditor
+                  targets={entry.targets}
+                  devices={devices}
+                  groups={groups}
+                  label="Target override"
+                  description="Leave empty to use the scene's own targets."
+                  onChange={(targets) =>
+                    onChange({
+                      ...step,
+                      scenes: step.scenes.map((item, itemIndex) =>
+                        itemIndex === index ? { ...item, targets } : item,
+                      ),
+                    })
+                  }
+                />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <ConfigField
+                    label="Transition"
+                    description="Scene-derived transitions are used unless disabled."
+                  >
+                    <select
+                      className={selectClassName}
+                      value={entry.use_scene_transition ? 'scene' : 'none'}
+                      onChange={(event) =>
+                        onChange({
+                          ...step,
+                          scenes: step.scenes.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? {
+                                  ...item,
+                                  use_scene_transition:
+                                    event.target.value === 'scene',
+                                }
+                              : item,
+                          ),
+                        })
+                      }
+                    >
+                      <option value="scene">Use scene transitions</option>
+                      <option value="none">No transition (instant)</option>
+                    </select>
+                  </ConfigField>
+                  <ConfigField
+                    label="Transition override"
+                    description="Optional explicit fade duration for this entry."
+                  >
+                    <DurationInput
+                      valueMs={
+                        entry.transition_ms === undefined
+                          ? undefined
+                          : Number(entry.transition_ms)
+                      }
+                      onChange={(transition_ms) =>
+                        onChange({
+                          ...step,
+                          scenes: step.scenes.map((item, itemIndex) =>
+                            itemIndex === index
+                              ? { ...item, transition_ms }
+                              : item,
+                          ),
+                        } as unknown as NativeAction)
+                      }
+                    />
+                  </ConfigField>
+                </div>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() =>
+                onChange({
+                  ...step,
+                  scenes: [
+                    ...step.scenes,
+                    { scene_id: '', targets: {}, use_scene_transition: true },
+                  ],
+                })
+              }
+            >
+              Add scene
+            </Button>
+          </div>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"
               className="size-4 shrink-0 rounded border border-input bg-background accent-primary"
-              checked={step.rollout !== undefined}
+              checked={step.nowrap}
               onChange={(event) =>
-                onChange({
-                  ...step,
-                  rollout: event.target.checked
-                    ? {
-                        style: 'spatial',
-                        source: { kind: 'triggering_device' },
-                        duration_ms: 1500,
-                      }
-                    : undefined,
-                } as unknown as NativeAction)
+                onChange({ ...step, nowrap: event.target.checked })
               }
             />
-            Spatial rollout (stagger targets by distance from a source)
+            Stop at the last scene instead of wrapping to the first
           </label>
+          <TargetSpecEditor
+            targets={step.detection}
+            devices={devices}
+            groups={groups}
+            label="Detection override"
+            description="Restrict current-scene detection to these devices or groups. Empty uses every target common to the cycled scenes."
+            onChange={(detection) => onChange({ ...step, detection })}
+          />
+          <RolloutToggle
+            rollout={step.rollout}
+            onChange={(rollout) =>
+              onChange({ ...step, rollout } as unknown as NativeAction)
+            }
+          />
           {step.rollout ? (
-            <div className="grid gap-3 sm:grid-cols-2">
-              <ConfigField
-                label="Rollout source"
-                description="Where the stagger radiates from."
-              >
-                <select
-                  className={selectClassName}
-                  value={step.rollout.source?.kind === 'device' ? 'device' : 'trigger'}
-                  onChange={(event) =>
-                    onChange({
-                      ...step,
-                      rollout: {
-                        ...step.rollout!,
-                        source:
-                          event.target.value === 'device'
-                            ? {
-                                kind: 'device',
-                                device: { integration_id: '', device_id: '' },
-                              }
-                            : { kind: 'triggering_device' },
-                      },
-                    } as unknown as NativeAction)
-                  }
-                >
-                  <option value="trigger">Triggering device</option>
-                  <option value="device">Fixed device</option>
-                </select>
-              </ConfigField>
-              {step.rollout.source?.kind === 'device' ? (
-                <ConfigField label="Source device">
-                  <DeviceSelect
-                    devices={devices}
-                    value={deviceRefKey(step.rollout.source.device)}
-                    onChange={(key) =>
-                      onChange({
-                        ...step,
-                        rollout: {
-                          ...step.rollout!,
-                          source: {
-                            kind: 'device',
-                            device: keyToDeviceRef(key),
-                          },
-                        },
-                      } as unknown as NativeAction)
-                    }
-                  />
-                </ConfigField>
-              ) : null}
-              <ConfigField
-                label="Rollout spread"
-                description="Targets without a saved position apply immediately."
-              >
-                <DurationInput
-                  valueMs={
-                    step.rollout.duration_ms === undefined
-                      ? undefined
-                      : Number(step.rollout.duration_ms)
-                  }
-                  onChange={(duration_ms) =>
-                    onChange({
-                      ...step,
-                      rollout: { ...step.rollout!, duration_ms },
-                    } as unknown as NativeAction)
-                  }
-                />
-              </ConfigField>
-            </div>
+            <RolloutEditor
+              rollout={step.rollout}
+              devices={devices}
+              onChange={(rollout) =>
+                onChange({ ...step, rollout } as unknown as NativeAction)
+              }
+            />
           ) : null}
-          {!step.select && !step.scene_id ? (
-            <p className="text-xs text-destructive">Select a scene.</p>
+          {step.scenes.length === 0 ? (
+            <p className="text-xs text-destructive">Add at least one scene.</p>
+          ) : null}
+          {step.scenes.some((entry) => !entry.scene_id) ? (
+            <p className="text-xs text-destructive">
+              Every entry needs a scene.
+            </p>
           ) : null}
         </div>
       );

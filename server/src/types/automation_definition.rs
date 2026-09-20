@@ -322,6 +322,23 @@ impl Default for ConditionExpr {
     }
 }
 
+/// One scene in a cycle list: the scene plus optional target and transition
+/// overrides for its activation.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[ts(export)]
+pub struct CycleSceneSpec {
+    pub scene_id: SceneId,
+    #[serde(default)]
+    pub targets: TargetSpec,
+    /// Preserve scene-derived transitions during activation. Defaults to true
+    /// like `ActivateScene`; the converter stores the v1 value explicitly.
+    #[serde(default = "default_use_scene_transition")]
+    pub use_scene_transition: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub transition_ms: Option<u64>,
+}
+
 /// Staggered activation of scene targets. The style mirrors the v1 rollout
 /// options; the source is either a fixed device or the routine's triggering
 /// device, resolved at plan time from the matched trigger.
@@ -437,6 +454,24 @@ pub enum NativeAction {
         rollout: Option<RolloutSpec>,
     },
 
+    /// Advances to the next scene in a cycle list. The current scene is
+    /// detected from the devices' tracked `scene_id` (optionally restricted to
+    /// `detection` targets), then the entry after it activates; `nowrap`
+    /// stops at the last entry instead of returning to the first.
+    CycleScenes {
+        id: NodeId,
+        scenes: Vec<CycleSceneSpec>,
+        #[serde(default)]
+        nowrap: bool,
+        /// Restrict current-scene detection to these devices/groups. Empty
+        /// uses every device common to the cycled scenes.
+        #[serde(default)]
+        detection: TargetSpec,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[ts(optional)]
+        rollout: Option<RolloutSpec>,
+    },
+
     /// Sets power on one device.
     SetPower {
         id: NodeId,
@@ -505,6 +540,7 @@ impl NativeAction {
     pub fn id(&self) -> &NodeId {
         match self {
             Self::ActivateScene { id, .. }
+            | Self::CycleScenes { id, .. }
             | Self::SetPower { id, .. }
             | Self::Dim { id, .. }
             | Self::Choose { id, .. }

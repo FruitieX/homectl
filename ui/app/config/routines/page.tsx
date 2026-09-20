@@ -840,12 +840,22 @@ function validateV2Draft(definition: RoutineDefinitionV2Body): string | null {
     if (program.steps.length === 0) {
       return 'Add at least one program step.';
     }
-    const missingScene = walkNativeSteps(program.steps).some(
+    const steps = walkNativeSteps(program.steps);
+    const missingScene = steps.some(
       (step) =>
         step.action === 'activate_scene' && !step.select && !step.scene_id,
     );
     if (missingScene) {
       return 'Choose a scene for each scene activation.';
+    }
+    const missingCycleScene = steps.some(
+      (step) =>
+        step.action === 'cycle_scenes' &&
+        (step.scenes.length === 0 ||
+          step.scenes.some((entry) => !entry.scene_id)),
+    );
+    if (missingCycleScene) {
+      return 'Add at least one scene to each scene cycle.';
     }
   } else if (!program.spec.source_body.trim()) {
     return 'Add a script body.';

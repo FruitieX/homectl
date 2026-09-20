@@ -967,6 +967,62 @@ impl Compiler<'_> {
                     }
                     self.compile_targets(targets, &format!("{action_path}/targets"), action.id());
                 }
+                NativeAction::CycleScenes {
+                    scenes,
+                    detection,
+                    rollout,
+                    ..
+                } => {
+                    if scenes.is_empty() {
+                        self.report.error_at_node(
+                            &action_path,
+                            action.id(),
+                            "empty_cycle_scenes",
+                            "cycle_scenes requires at least one scene.",
+                        );
+                    }
+                    for (index, entry) in scenes.iter().enumerate() {
+                        let entry_path = format!("{action_path}/scenes/{index}");
+                        self.resolve_scene_id(
+                            &entry.scene_id,
+                            &format!("{entry_path}/scene_id"),
+                            action.id(),
+                        );
+                        self.compile_targets(
+                            &entry.targets,
+                            &format!("{entry_path}/targets"),
+                            action.id(),
+                        );
+                        if let Some(transition_ms) = entry.transition_ms {
+                            if transition_ms == 0 {
+                                self.report.error_at_node(
+                                    format!("{entry_path}/transition_ms"),
+                                    action.id(),
+                                    "invalid_duration",
+                                    "cycle_scenes transition_ms must be greater than zero.",
+                                );
+                            }
+                        }
+                    }
+                    // Detection targets are read-only: they narrow which
+                    // devices decide the current scene and are never written.
+                    for (index, device) in detection.devices.iter().enumerate() {
+                        self.resolve_device(
+                            device,
+                            &format!("{action_path}/detection"),
+                            &format!("devices/{index}"),
+                            Some(action.id()),
+                        );
+                    }
+                    for (index, group) in detection.groups.iter().enumerate() {
+                        self.resolve_group(
+                            group,
+                            &format!("{action_path}/detection/groups/{index}"),
+                            Some(action.id()),
+                        );
+                    }
+                    self.compile_rollout(rollout, &format!("{action_path}/rollout"), action.id());
+                }
                 NativeAction::Choose { branches, .. } => {
                     if branches.is_empty() {
                         self.report.error_at_node(
@@ -1619,6 +1675,18 @@ impl ReferenceCollector {
                         self.push_device(device);
                     }
                 }
+                NativeAction::CycleScenes {
+                    scenes, detection, ..
+                } => {
+                    for device in &detection.devices {
+                        self.push_device(device);
+                    }
+                    for entry in scenes {
+                        for device in &entry.targets.devices {
+                            self.push_device(device);
+                        }
+                    }
+                }
                 NativeAction::Choose { branches, .. } => {
                     for branch in branches {
                         self.condition(&branch.condition);
@@ -1845,6 +1913,62 @@ mod tests {
         assert_eq!(
             error_codes(&compile_definition_value(&zero_transition, &catalog()).unwrap_err()),
             vec!["invalid_duration"]
+        );
+    }
+
+    #[test]
+    fn cycle_scenes_validation_requires_scenes_and_resolves_references() {
+        let valid = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "cycle_scenes",
+                "id": "step",
+                "scenes": [
+                    { "scene_id": "main_on", "targets": { "devices": [{ "integration_id": "dummy", "device_id": "lamp1" }] } }
+                ],
+                "detection": { "devices": [{ "integration_id": "dummy", "device_id": "sensor1" }] }
+            }]}
+        });
+        assert!(compile_definition_value(&valid, &catalog()).is_ok());
+
+        let empty = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "cycle_scenes",
+                "id": "step",
+                "scenes": []
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&empty, &catalog()).unwrap_err()),
+            vec!["empty_cycle_scenes"]
+        );
+
+        let unknown_scene = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "cycle_scenes",
+                "id": "step",
+                "scenes": [{ "scene_id": "missing" }]
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&unknown_scene, &catalog()).unwrap_err()),
+            vec!["unknown_scene"]
+        );
+
+        let unknown_detection = json!({
+            "triggers": [{ "kind": "manual", "id": "trig" }],
+            "program": { "kind": "native", "steps": [{
+                "action": "cycle_scenes",
+                "id": "step",
+                "scenes": [{ "scene_id": "main_on" }],
+                "detection": { "devices": [{ "integration_id": "dummy", "device_id": "ghost" }] }
+            }]}
+        });
+        assert_eq!(
+            error_codes(&compile_definition_value(&unknown_detection, &catalog()).unwrap_err()),
+            vec!["unknown_device"]
         );
     }
 

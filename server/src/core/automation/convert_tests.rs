@@ -431,17 +431,85 @@ fn numeric_sensor_rule_is_unsupported() {
 }
 
 #[test]
-fn cycle_scenes_needs_manual() {
+fn cycle_scenes_maps_entries_detection_and_rollout() {
     let conversion = convert(
         json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
-        json!([{"action": "CycleScenes", "scenes": [{"scene_id": "night"}]}]),
+        json!([{
+            "action": "CycleScenes",
+            "nowrap": true,
+            "group_keys": ["living"],
+            "rollout": "spatial",
+            "rollout_source_device_key": "__homectl_runtime__/triggering_device",
+            "rollout_duration_ms": 1500,
+            "scenes": [
+                {"scene_id": "bright", "group_keys": ["living"]},
+                {"scene_id": "night"}
+            ]
+        }]),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(
+        definition["program"]["steps"][0],
+        json!({
+            "action": "cycle_scenes",
+            "id": "a1",
+            "scenes": [
+                {
+                    "scene_id": "bright",
+                    "targets": {"groups": ["living"]},
+                    "use_scene_transition": false
+                },
+                {
+                    "scene_id": "night",
+                    "targets": {},
+                    "use_scene_transition": false
+                }
+            ],
+            "nowrap": true,
+            "detection": {"groups": ["living"]},
+            "rollout": {
+                "style": "spatial",
+                "source": {"kind": "triggering_device"},
+                "duration_ms": 1500
+            }
+        })
+    );
+}
+
+#[test]
+fn cycle_scenes_with_mirror_entry_needs_manual() {
+    let conversion = convert(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{
+            "action": "CycleScenes",
+            "scenes": [{"scene_id": "night", "mirror_from_group": "living"}]
+        }]),
     );
 
     assert!(matches!(
         conversion.status,
         ConversionStatus::NeedsManual { .. }
     ));
-    assert!(reasons(&conversion)[0].contains("cycle_scenes"));
+    assert!(reasons(&conversion)[0].contains("mirror_from_group"));
+}
+
+#[test]
+fn cycle_scenes_with_source_groups_needs_manual() {
+    let conversion = convert(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{
+            "action": "CycleScenes",
+            "include_source_groups": true,
+            "scenes": [{"scene_id": "night"}]
+        }]),
+    );
+
+    assert!(matches!(
+        conversion.status,
+        ConversionStatus::NeedsManual { .. }
+    ));
+    assert!(reasons(&conversion)[0].contains("include_source_groups"));
 }
 
 #[test]

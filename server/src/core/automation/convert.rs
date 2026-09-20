@@ -561,16 +561,15 @@ fn classify_any_rule(
         }
     }
 }
-
 /// v1 rollout is spatial-only; the source is either the runtime's
 /// triggering-device placeholder or a concrete device key.
 fn convert_rollout(
-    descriptor: &crate::types::scene::ActivateSceneActionDescriptor,
-) -> Result<Option<crate::types::automation_definition::RolloutSpec>, String> {
-    let Some(style) = descriptor.rollout.clone() else {
-        return Ok(None);
-    };
-    let source = match &descriptor.rollout_source_device_key {
+    style: Option<crate::types::scene::RolloutStyle>,
+    source_device_key: Option<&crate::types::device::DeviceKey>,
+    duration_ms: Option<u64>,
+) -> Option<crate::types::automation_definition::RolloutSpec> {
+    let style = style?;
+    let source = match source_device_key {
         Some(key) if key.to_string() == crate::core::routines::TRIGGERING_DEVICE_ROLLOUT_SOURCE => {
             Some(crate::types::automation_definition::RolloutSource::TriggeringDevice)
         }
@@ -579,13 +578,18 @@ fn convert_rollout(
         }),
         None => None,
     };
-    Ok(Some(crate::types::automation_definition::RolloutSpec {
+    Some(crate::types::automation_definition::RolloutSpec {
         style,
         source,
-        duration_ms: descriptor.rollout_duration_ms,
-    }))
+        duration_ms,
+    })
 }
 
+fn transition_ms(transition: Option<ordered_float::OrderedFloat<f32>>) -> Option<u64> {
+    transition
+        .map(|seconds| (seconds.0.max(0.0) * 1000.0).round() as u64)
+        .filter(|ms| *ms > 0)
+}
 fn device_refs(keys: &Option<Vec<crate::types::device::DeviceKey>>) -> Vec<DeviceRef> {
     keys.as_ref()
         .map(|keys| keys.iter().map(DeviceRef::from).collect())
@@ -608,11 +612,12 @@ fn convert_action(
                 devices: device_refs(&descriptor.device_keys),
                 groups: descriptor.group_keys.clone().unwrap_or_default(),
             };
-            let rollout = convert_rollout(descriptor)?;
-            let transition_ms = descriptor
-                .transition
-                .map(|seconds| (seconds.0.max(0.0) * 1000.0).round() as u64)
-                .filter(|ms| *ms > 0);
+            let rollout = convert_rollout(
+                descriptor.rollout.clone(),
+                descriptor.rollout_source_device_key.as_ref(),
+                descriptor.rollout_duration_ms,
+            );
+            let transition_ms = transition_ms(descriptor.transition);
 
             match &descriptor.mirror_from_group {
                 Some(group) => Ok(NativeAction::ActivateScene {
@@ -637,6 +642,50 @@ fn convert_action(
                     rollout,
                 }),
             }
+        }
+        Action::CycleScenes(descriptor) => {
+            if descriptor.include_source_groups {
+                return Err(
+                    "cycle_scenes uses include_source_groups, which v2 resolves at rule evaluation time and has no native equivalent".to_string(),
+                );
+            }
+            if descriptor.scenes.is_empty() {
+                return Err("cycle_scenes has no scenes".to_string());
+            }
+            let mut scenes = Vec::new();
+            for entry in &descriptor.scenes {
+                if entry.mirror_from_group.is_some() {
+                    return Err(
+                        "cycle_scenes entry uses mirror_from_group, which has no v2 native equivalent"
+                            .to_string(),
+                    );
+                }
+                scenes.push(crate::types::automation_definition::CycleSceneSpec {
+                    scene_id: entry.scene_id.clone(),
+                    targets: TargetSpec {
+                        devices: device_refs(&entry.device_keys),
+                        groups: entry.group_keys.clone().unwrap_or_default(),
+                    },
+                    use_scene_transition: entry.use_scene_transition,
+                    transition_ms: transition_ms(entry.transition),
+                });
+            }
+            let detection = TargetSpec {
+                devices: device_refs(&descriptor.device_keys),
+                groups: descriptor.group_keys.clone().unwrap_or_default(),
+            };
+            let rollout = convert_rollout(
+                descriptor.rollout.clone(),
+                descriptor.rollout_source_device_key.as_ref(),
+                descriptor.rollout_duration_ms,
+            );
+            Ok(NativeAction::CycleScenes {
+                id: ids.action_id(),
+                scenes,
+                nowrap: descriptor.nowrap.unwrap_or(false),
+                detection,
+                rollout,
+            })
         }
         Action::Dim(descriptor) => {
             if descriptor.include_source_groups {
@@ -753,6 +802,7 @@ fn trigger_name(trigger: &TriggerSpec) -> String {
 fn native_action_name(action: &NativeAction) -> &'static str {
     match action {
         NativeAction::ActivateScene { .. } => "activate_scene",
+        NativeAction::CycleScenes { .. } => "cycle_scenes",
         NativeAction::SetPower { .. } => "set_power",
         NativeAction::Dim { .. } => "dim",
         NativeAction::Choose { .. } => "choose",

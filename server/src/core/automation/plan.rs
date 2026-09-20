@@ -29,7 +29,10 @@ use crate::types::{
     dim::DimDescriptor,
     group::GroupId,
     rule::{ForceTriggerRoutineDescriptor, RoutineId},
-    scene::{ActivateSceneActionDescriptor, RolloutStyle, SceneId},
+    scene::{
+        ActivateSceneActionDescriptor, ActivateSceneDescriptor, CycleScenesDescriptor,
+        RolloutStyle, SceneId,
+    },
 };
 
 /// Maximum number of steps one routine run may plan. Mirrors the compiler's
@@ -580,6 +583,69 @@ impl Planner<'_> {
                     guard,
                 );
             }
+            NativeAction::CycleScenes {
+                scenes,
+                nowrap,
+                detection,
+                rollout,
+                ..
+            } => {
+                let mut resolved_scenes = Vec::new();
+                let mut guard = Vec::new();
+                for entry in scenes {
+                    let Some(scene) = self.resolve_scene(action, Some(&entry.scene_id), None)
+                    else {
+                        return;
+                    };
+                    let (devices, groups) = resolve_targets(&entry.targets);
+                    let original_groups = groups.clone();
+                    let (devices, groups) = self.restrict_frozen_groups(devices, groups);
+                    guard.push(IntentTarget::Scene(scene.clone()));
+                    guard.extend(devices.iter().cloned().map(IntentTarget::Device));
+                    guard.extend(original_groups.iter().cloned().map(IntentTarget::Group));
+                    resolved_scenes.push(ActivateSceneDescriptor {
+                        scene_id: scene,
+                        mirror_from_group: None,
+                        device_keys: (!devices.is_empty()).then_some(devices),
+                        group_keys: (!groups.is_empty()).then_some(groups),
+                        use_scene_transition: entry.use_scene_transition,
+                        transition: entry
+                            .transition_ms
+                            .map(|ms| ordered_float::OrderedFloat(ms as f32 / 1000.0)),
+                    });
+                }
+
+                let (detection_devices, detection_groups) = resolve_targets(detection);
+                let original_detection_groups = detection_groups.clone();
+                let (detection_devices, detection_groups) =
+                    self.restrict_frozen_groups(detection_devices, detection_groups);
+                guard.extend(detection_devices.iter().cloned().map(IntentTarget::Device));
+                guard.extend(
+                    original_detection_groups
+                        .iter()
+                        .cloned()
+                        .map(IntentTarget::Group),
+                );
+
+                let (rollout_style, rollout_source, rollout_duration_ms) =
+                    self.resolve_rollout(rollout);
+                let descriptor = CycleScenesDescriptor {
+                    scenes: resolved_scenes,
+                    nowrap: Some(*nowrap),
+                    device_keys: (!detection_devices.is_empty()).then_some(detection_devices),
+                    group_keys: (!detection_groups.is_empty()).then_some(detection_groups),
+                    include_source_groups: false,
+                    rollout: rollout_style,
+                    rollout_source_device_key: rollout_source,
+                    rollout_duration_ms,
+                };
+                self.push_dispatch(
+                    action,
+                    kind,
+                    PlannedStepBody::Dispatch(Box::new(Action::CycleScenes(descriptor))),
+                    guard,
+                );
+            }
             NativeAction::SetPower { device, power, .. } => {
                 let key = device_key(device);
                 let Some(current) = self.inputs.devices.0.get(&key) else {
@@ -864,6 +930,7 @@ fn device_key(reference: &DeviceRef) -> DeviceKey {
 pub fn action_kind(action: &NativeAction) -> &'static str {
     match action {
         NativeAction::ActivateScene { .. } => "activate_scene",
+        NativeAction::CycleScenes { .. } => "cycle_scenes",
         NativeAction::SetPower { .. } => "set_power",
         NativeAction::Dim { .. } => "dim",
         NativeAction::Choose { .. } => "choose",
@@ -1127,6 +1194,74 @@ mod tests {
                 other => panic!("expected scene dispatch, got {other:?}"),
             },
             other => panic!("expected scene dispatch, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cycle_scenes_plans_entries_detection_and_rollout() {
+        let compiled = compile_definition_value(
+            &json!({
+                "triggers": [{ "kind": "report", "id": "trig", "device": { "integration_id": "dummy", "device_id": "lamp" } }],
+                "program": { "kind": "native", "steps": [{
+                    "action": "cycle_scenes",
+                    "id": "step",
+                    "nowrap": true,
+                    "detection": { "groups": ["room"] },
+                    "scenes": [
+                        { "scene_id": "night", "targets": { "groups": ["room"] } },
+                        { "scene_id": "evening" }
+                    ],
+                    "rollout": {
+                        "style": "spatial",
+                        "source": { "kind": "triggering_device" },
+                        "duration_ms": 1500
+                    }
+                }]}
+            }),
+            &catalog(),
+        )
+        .expect("definition compiles");
+        let devices = states(vec![lamp("lamp", Some("evening"), true)]);
+        let groups = room_group(&["lamp"]);
+        let helpers = helpers_with_mode("night");
+        let inputs = PlanInputs {
+            devices: &devices,
+            groups: &groups,
+            helpers: &helpers,
+            intents: &IntentTracker::default(),
+        };
+        let mut evaluation = evaluation(&compiled, &devices, &groups, &helpers);
+        evaluation.matched_trigger_ids = vec![NodeId::new("trig".to_string())];
+        let plan = plan_evaluation(&evaluation, &compiled, &inputs);
+
+        match &plan.steps[0].body {
+            PlannedStepBody::Dispatch(action) => match action.as_ref() {
+                Action::CycleScenes(descriptor) => {
+                    assert_eq!(descriptor.nowrap, Some(true));
+                    assert_eq!(descriptor.scenes.len(), 2);
+                    assert_eq!(
+                        descriptor.scenes[0].scene_id,
+                        SceneId::from("night".to_string())
+                    );
+                    assert_eq!(
+                        descriptor.scenes[0].group_keys,
+                        Some(vec![GroupId("room".to_string())])
+                    );
+                    assert_eq!(
+                        descriptor.scenes[1].scene_id,
+                        SceneId::from("evening".to_string())
+                    );
+                    assert_eq!(
+                        descriptor.group_keys,
+                        Some(vec![GroupId("room".to_string())])
+                    );
+                    assert_eq!(descriptor.rollout, Some(RolloutStyle::Spatial));
+                    assert_eq!(descriptor.rollout_source_device_key, Some(key("lamp")));
+                    assert_eq!(descriptor.rollout_duration_ms, Some(1500));
+                }
+                other => panic!("expected cycle dispatch, got {other:?}"),
+            },
+            other => panic!("expected cycle dispatch, got {other:?}"),
         }
     }
 
