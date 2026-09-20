@@ -125,11 +125,13 @@ function HelperOptionField({
         onChange={(event) => onChange(event.target.value)}
       >
         <option value="">Select a helper…</option>
-        {(helpers ?? []).map((helper) => (
-          <option key={helper.id} value={helper.id}>
-            {helper.name || helper.id} ({helper.kind.kind})
-          </option>
-        ))}
+        {(helpers ?? [])
+          .filter((helper) => helper.hidden !== true)
+          .map((helper) => (
+            <option key={helper.id} value={helper.id}>
+              {helper.name || helper.id} ({helper.kind.kind})
+            </option>
+          ))}
       </select>
     </ConfigField>
   );

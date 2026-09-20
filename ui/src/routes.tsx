@@ -9,6 +9,7 @@ const DashboardPage = lazy(() => import('../app/dashboard/page'));
 const ConfigDevicesPage = lazy(() => import('../app/config/devices/page'));
 const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
 const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
+const ConfigHelpersPage = lazy(() => import('../app/config/helpers/page'));
 const ConfigImportExportPage = lazy(
   () => import('../app/config/import-export/page'),
 );
@@ -129,6 +130,10 @@ export const router = createBrowserRouter([
           {
             path: 'migration',
             element: withSuspense(<ConfigMigrationPage />),
+          },
+          {
+            path: 'helpers',
+            element: withSuspense(<ConfigHelpersPage />),
           },
           {
             path: 'routines',

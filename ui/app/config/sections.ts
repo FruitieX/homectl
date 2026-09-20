@@ -62,6 +62,23 @@ export const configSections = [
     keywords: ['rules', 'actions', 'automation', 'trigger', 'override'],
   },
   {
+    href: '/config/helpers',
+    label: 'Helpers',
+    description:
+      'Typed values routines, scripts, and widgets read and write, with live values and persistence.',
+    group: 'Automation',
+    keywords: [
+      'helper',
+      'state',
+      'boolean',
+      'enum',
+      'number',
+      'string',
+      'mode',
+      'value',
+    ],
+  },
+  {
     href: '/config/routine-history',
     label: 'Routine History',
     description:
