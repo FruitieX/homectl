@@ -149,6 +149,63 @@ fn device_power_pulse_and_edge_map_to_state_change_modes() {
 }
 
 #[test]
+fn device_scene_level_guard_maps_to_scene_id_condition() {
+    let conversion = convert(
+        json!([
+            {"integration_id": "dummy", "device_id": "motion", "state": {"value": true}},
+            {"integration_id": "dummy", "device_id": "lamp", "scene": "normal"}
+        ]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+
+    let definition = definition_json(&conversion);
+    let conditions = definition["condition"]["conditions"].as_array().unwrap();
+    assert_eq!(conditions[1]["source"]["path"], "/scene_id");
+    assert_eq!(conditions[1]["value"], "normal");
+    assert_eq!(conditions[1]["operator"], "eq");
+}
+
+#[test]
+fn device_scene_pulse_and_edge_map_to_event_triggers() {
+    let pulse = convert(
+        json!([{"integration_id": "dummy", "device_id": "lamp", "scene": "normal", "trigger_mode": "pulse"}]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+    let definition = definition_json(&pulse);
+    assert_eq!(definition["triggers"][0]["kind"], "report");
+    assert_eq!(definition["condition"]["source"]["path"], "/scene_id");
+
+    let edge = convert(
+        json!([{"integration_id": "dummy", "device_id": "lamp", "scene": "normal", "trigger_mode": "edge"}]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+    let definition = definition_json(&edge);
+    assert_eq!(definition["triggers"][0]["kind"], "predicate_transition");
+}
+
+#[test]
+fn device_scene_and_power_constraints_combine() {
+    let conversion = convert(
+        json!([{
+            "integration_id": "dummy",
+            "device_id": "lamp",
+            "scene": "normal",
+            "power": false,
+            "trigger_mode": "pulse"
+        }]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(definition["triggers"][0]["kind"], "report");
+    let conditions = definition["condition"]["conditions"].as_array().unwrap();
+    assert_eq!(conditions.len(), 2);
+    assert_eq!(conditions[0]["source"]["path"], "/scene_id");
+    assert_eq!(conditions[1]["source"]["path"], "/power");
+    assert_eq!(conditions[1]["value"], false);
+}
+
+#[test]
 fn group_level_guard_maps_to_group_condition() {
     let conversion = convert(
         json!([
@@ -188,7 +245,93 @@ fn any_of_level_rules_maps_to_any_condition() {
 }
 
 #[test]
-fn any_containing_an_event_leaf_is_unsupported() {
+fn any_of_event_leaves_maps_to_multiple_triggers_and_any_condition() {
+    let conversion = convert(
+        json!([{
+            "any": [
+                {"integration_id": "dummy", "device_id": "a", "state": {"value": "off_press"}},
+                {"integration_id": "dummy", "device_id": "b", "state": {"value": "off_press"}}
+            ]
+        }]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+
+    let definition = definition_json(&conversion);
+    let triggers = definition["triggers"].as_array().unwrap();
+    assert_eq!(triggers.len(), 2);
+    assert_eq!(triggers[0]["device"]["device_id"], "a");
+    assert_eq!(triggers[1]["device"]["device_id"], "b");
+    assert_eq!(definition["condition"]["kind"], "any");
+    assert_eq!(
+        definition["condition"]["conditions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
+#[test]
+fn any_of_edge_leaves_maps_to_predicate_transitions() {
+    let conversion = convert(
+        json!([{
+            "any": [
+                {"integration_id": "dummy", "device_id": "a", "state": {"value": "on_press"}, "trigger_mode": "edge"},
+                {"integration_id": "dummy", "device_id": "a", "state": {"value": "up_press"}, "trigger_mode": "edge"}
+            ]
+        }]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+
+    let definition = definition_json(&conversion);
+    let triggers = definition["triggers"].as_array().unwrap();
+    assert_eq!(triggers.len(), 2);
+    assert_eq!(triggers[0]["kind"], "predicate_transition");
+    assert_eq!(triggers[1]["kind"], "predicate_transition");
+}
+
+#[test]
+fn any_with_a_level_child_contributes_only_its_condition() {
+    let conversion = convert(
+        json!([
+            {"integration_id": "dummy", "device_id": "button", "state": {"value": true}},
+            {
+                "any": [
+                    {"integration_id": "dummy", "device_id": "a", "state": {"value": true}},
+                    {"integration_id": "dummy", "device_id": "lamp", "power": true}
+                ]
+            }
+        ]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+
+    let definition = definition_json(&conversion);
+    let triggers = definition["triggers"].as_array().unwrap();
+    assert_eq!(triggers.len(), 1, "only the gating pulse rule triggers");
+    assert_eq!(triggers[0]["kind"], "report");
+    let conditions = definition["condition"]["conditions"].as_array().unwrap();
+    assert_eq!(conditions[1]["kind"], "any");
+}
+
+#[test]
+fn single_child_any_unwraps_to_the_child() {
+    let conversion = convert(
+        json!([{
+            "any": [
+                {"integration_id": "dummy", "device_id": "a", "state": {"value": "down_press"}}
+            ]
+        }]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(definition["triggers"].as_array().unwrap().len(), 1);
+    assert_eq!(definition["condition"]["kind"], "comparison");
+    assert_eq!(definition["condition"]["value"], "down_press");
+}
+
+#[test]
+fn any_of_events_plus_another_event_rule_needs_manual() {
     let conversion = convert(
         json!([
             {
@@ -204,9 +347,9 @@ fn any_containing_an_event_leaf_is_unsupported() {
 
     assert!(matches!(
         conversion.status,
-        ConversionStatus::Unsupported { .. }
+        ConversionStatus::NeedsManual { .. }
     ));
-    assert!(reasons(&conversion)[0].contains("any rule contains an event leaf"));
+    assert!(reasons(&conversion)[0].contains("top-level event rules"));
 }
 
 #[test]
@@ -237,7 +380,7 @@ fn multiple_event_leaves_need_manual() {
         conversion.status,
         ConversionStatus::NeedsManual { .. }
     ));
-    assert!(reasons(&conversion)[0].contains("multiple event leaves"));
+    assert!(reasons(&conversion)[0].contains("top-level event rules"));
 }
 
 #[test]

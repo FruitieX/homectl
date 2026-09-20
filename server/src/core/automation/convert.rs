@@ -17,7 +17,13 @@
 //!   and fire while/to when `power` is true; v2 `state_change` with `level`/
 //!   `transition` mode observes active truth the same way.
 //! - v1 level rules are state guards and become conditions.
-//! - v1 `any` rules with only level children are disjunctive conditions.
+//! - v1 `any` rules OR their children for both condition and trigger, and v2
+//!   trigger lists are also OR'd, so an `any` of event leaves becomes one v2
+//!   trigger per child plus an `any` condition over the children's value
+//!   predicates. An `any` containing a level child is constant-true in v1
+//!   (level triggers never gate) and contributes only its `any` condition.
+//! - v1 device scene rules (`device.scene == X`) become `/scene_id`
+//!   comparisons, which v2 conditions can read directly.
 //! - v1 `custom` actions on a timer integration start that timer with a
 //!   millisecond delay and become `replace_timer` on the same name (timer
 //!   integrations are named for v2, so the integration id is the timer id).
@@ -30,12 +36,13 @@
 //!
 //! - raw rules (they read the report payload, which v2 conditions do not
 //!   expose), script rules, numeric/color sensor rules that v1 never matched,
-//!   `any` rules containing event leaves, group event leaves, level-only
-//!   routines (v1 fires on every eligible update; v2 has no such trigger),
-//!   routines whose actions have no native equivalent, timers read as a
-//!   synthetic device (v2 named timers expose no running/idle condition), and
-//!   descriptors that rely on dispatch-time expansion (`include_source_groups`,
-//!   rollout, mirroring extras, scene transitions).
+//!   group event leaves, level-only routines (v1 fires on every eligible
+//!   update; v2 has no such trigger), multiple top-level event rules (v1 ANDs
+//!   their trigger matches; v2 trigger lists are OR), routines whose actions
+//!   have no native equivalent, timers read as a synthetic device (v2 named
+//!   timers expose no running/idle condition), and descriptors that rely on
+//!   dispatch-time expansion (`include_source_groups`, rollout, mirroring
+//!   extras, scene transitions).
 
 use serde::Serialize;
 
@@ -143,12 +150,16 @@ pub fn convert_routine(
     let mut notes = Vec::new();
     let mut unsupported = Vec::new();
     let mut needs_manual = Vec::new();
+    let mut triggering_rules = 0usize;
 
     for rule in &validated.rules {
         match classify_rule(rule, &mut ids, &mut notes, options) {
-            LeafOutcome::Event(event) => {
-                let (trigger, implied) = event.into_parts();
-                triggers.push(trigger);
+            LeafOutcome::Events {
+                triggers: rule_triggers,
+                implied,
+            } => {
+                triggering_rules += 1;
+                triggers.extend(rule_triggers);
                 conditions.extend(implied);
             }
             LeafOutcome::Condition(condition) => conditions.push(condition),
@@ -173,11 +184,10 @@ pub fn convert_routine(
         return conversion;
     }
 
-    if triggers.len() > 1 {
+    if triggering_rules > 1 {
         conversion.status = ConversionStatus::NeedsManual {
             reasons: vec![format!(
-                "multiple event leaves ({}): v1 requires all of them to be the event source in the same frame, which v2 triggers cannot express; split or redesign deliberately",
-                triggers.len()
+                "{triggering_rules} top-level event rules: v1 requires all of them to be the event source in the same frame (AND), while v2 trigger lists are OR; split or redesign deliberately"
             )],
         };
         return conversion;
@@ -266,20 +276,18 @@ impl NodeIdGenerator {
 }
 
 enum LeafOutcome {
-    Event(EventLeaf),
+    /// Event leaves: one or more v2 triggers (a v1 `any` of event leaves ORs
+    /// its children, which v2 trigger lists express directly) plus the value
+    /// conditions implied by those triggers.
+    Events {
+        triggers: Vec<TriggerSpec>,
+        implied: Vec<ConditionExpr>,
+    },
+    /// Pure guard: a condition only. v1 level rules (and `any` rules whose
+    /// level children make the trigger constant-true) are neutral in the
+    /// top-level AND and must not contribute a v2 trigger.
     Condition(ConditionExpr),
     Unsupported(String),
-}
-
-struct EventLeaf {
-    trigger: TriggerSpec,
-    implied: Vec<ConditionExpr>,
-}
-
-impl EventLeaf {
-    fn into_parts(self) -> (TriggerSpec, Vec<ConditionExpr>) {
-        (self.trigger, self.implied)
-    }
 }
 
 fn classify_rule(
@@ -351,21 +359,21 @@ fn classify_sensor_rule(
     };
 
     match sensor.trigger_mode {
-        TriggerMode::Pulse => LeafOutcome::Event(EventLeaf {
-            trigger: TriggerSpec::Report {
+        TriggerMode::Pulse => LeafOutcome::Events {
+            triggers: vec![TriggerSpec::Report {
                 id: ids.trigger_id(),
                 device: DeviceRef::from(&key_of(&sensor.device_ref)),
                 field: None,
-            },
+            }],
             implied: vec![condition],
-        }),
-        TriggerMode::Edge => LeafOutcome::Event(EventLeaf {
-            trigger: TriggerSpec::PredicateTransition {
+        },
+        TriggerMode::Edge => LeafOutcome::Events {
+            triggers: vec![TriggerSpec::PredicateTransition {
                 id: ids.trigger_id(),
                 predicate: condition.clone(),
-            },
+            }],
             implied: vec![condition],
-        }),
+        },
         TriggerMode::Level => LeafOutcome::Condition(condition),
     }
 }
@@ -381,6 +389,20 @@ fn device_power_condition(device: &crate::types::device::DeviceRef, power: bool)
     }
 }
 
+fn device_scene_condition(
+    device: &crate::types::device::DeviceRef,
+    scene: &crate::types::scene::SceneId,
+) -> ConditionExpr {
+    ConditionExpr::Comparison {
+        source: crate::types::automation_definition::ValueSource::Device {
+            device: device.clone(),
+            path: "/scene_id".to_string(),
+        },
+        operator: RawRuleOperator::Eq,
+        value: Some(serde_json::Value::String(scene.to_string())),
+    }
+}
+
 fn classify_device_rule(
     device: &crate::types::rule::DeviceRule,
     ids: &mut NodeIdGenerator,
@@ -389,10 +411,36 @@ fn classify_device_rule(
     let device_key = key_of(&device.device_ref);
     let device_ref = DeviceRef::from(&device_key);
 
-    if device.scene.is_some() {
-        return LeafOutcome::Unsupported(format!(
-            "device rule on {device_key} matches an active scene, which has no v2 single-device condition"
+    if let Some(scene) = &device.scene {
+        // v1 matches the device's tracked `scene_id`; v2 exposes it as the
+        // readable `/scene_id` path, so scene rules convert for every trigger
+        // mode (unlike power-off, which state_change cannot express).
+        notes.push(format!(
+            "{device_key}: v1 scene rule mapped to v2 /scene_id condition"
         ));
+        let mut constraints = vec![device_scene_condition(&device_ref, scene)];
+        if let Some(power) = device.power {
+            constraints.push(device_power_condition(&device_ref, power));
+        }
+        let condition = and_conditions(constraints);
+        return match device.trigger_mode {
+            TriggerMode::Pulse => LeafOutcome::Events {
+                triggers: vec![TriggerSpec::Report {
+                    id: ids.trigger_id(),
+                    device: device_ref,
+                    field: None,
+                }],
+                implied: vec![condition],
+            },
+            TriggerMode::Edge => LeafOutcome::Events {
+                triggers: vec![TriggerSpec::PredicateTransition {
+                    id: ids.trigger_id(),
+                    predicate: condition.clone(),
+                }],
+                implied: vec![condition],
+            },
+            TriggerMode::Level => LeafOutcome::Condition(condition),
+        };
     }
 
     match (device.power, device.trigger_mode.clone()) {
@@ -400,23 +448,23 @@ fn classify_device_rule(
             notes.push(format!(
                 "{device_key}: v1 pulse power rule mapped to v2 state_change level"
             ));
-            LeafOutcome::Event(EventLeaf {
-                trigger: TriggerSpec::StateChange {
+            LeafOutcome::Events {
+                triggers: vec![TriggerSpec::StateChange {
                     id: ids.trigger_id(),
                     device: device_ref.clone(),
                     mode: StateChangeMode::Level,
-                },
+                }],
                 implied: vec![device_power_condition(&device_ref, true)],
-            })
+            }
         }
-        (Some(true), TriggerMode::Edge) => LeafOutcome::Event(EventLeaf {
-            trigger: TriggerSpec::StateChange {
+        (Some(true), TriggerMode::Edge) => LeafOutcome::Events {
+            triggers: vec![TriggerSpec::StateChange {
                 id: ids.trigger_id(),
                 device: device_ref.clone(),
                 mode: StateChangeMode::Transition,
-            },
+            }],
             implied: vec![device_power_condition(&device_ref, true)],
-        }),
+        },
         (Some(true), TriggerMode::Level) => {
             LeafOutcome::Condition(device_power_condition(&device_ref, true))
         }
@@ -466,21 +514,52 @@ fn classify_any_rule(
     notes: &mut Vec<String>,
     options: &ConvertOptions,
 ) -> LeafOutcome {
+    // A one-child `any` is exactly that child; unwrapping keeps converted
+    // definitions free of noise wrappers.
+    if let [only] = rules {
+        return classify_rule(only, ids, notes, options);
+    }
+
+    let mut triggers = Vec::new();
     let mut conditions = Vec::new();
+    let mut constant_trigger = false;
     for rule in rules {
         match classify_rule(rule, ids, notes, options) {
-            LeafOutcome::Condition(condition) => conditions.push(condition),
-            LeafOutcome::Event(_) => {
-                return LeafOutcome::Unsupported(
-                    "any rule contains an event leaf; v1 combines trigger matches disjunctively, which v2 cannot express".to_string(),
-                );
+            LeafOutcome::Events {
+                triggers: child_triggers,
+                implied,
+            } => {
+                triggers.extend(child_triggers);
+                conditions.extend(implied);
+            }
+            LeafOutcome::Condition(condition) => {
+                // A level child makes the v1 rule's trigger constant-true
+                // (`any` ORs child triggers), so the rule is neutral in the
+                // top-level AND: contribute no trigger at all.
+                constant_trigger = true;
+                conditions.push(condition);
             }
             LeafOutcome::Unsupported(reason) => {
                 return LeafOutcome::Unsupported(reason);
             }
         }
     }
-    LeafOutcome::Condition(ConditionExpr::Any { conditions })
+
+    if conditions.is_empty() {
+        return LeafOutcome::Unsupported(
+            "any rule has no children that v1 could match".to_string(),
+        );
+    }
+
+    let condition = ConditionExpr::Any { conditions };
+    if constant_trigger || triggers.is_empty() {
+        LeafOutcome::Condition(condition)
+    } else {
+        LeafOutcome::Events {
+            triggers,
+            implied: vec![condition],
+        }
+    }
 }
 
 fn device_refs(keys: &Option<Vec<crate::types::device::DeviceKey>>) -> Vec<DeviceRef> {
