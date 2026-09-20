@@ -197,7 +197,7 @@ export default function SettingsPage() {
         onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
       >
         <ConfigPageHeader
-          title="Settings"
+          title="System"
           description="Personalize the app shell, tune startup behavior, and inspect server endpoints."
           actions={
             <Button

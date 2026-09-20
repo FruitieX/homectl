@@ -57,9 +57,16 @@ export const configSections = [
   {
     href: '/config/routines',
     label: 'Routines',
-    description: 'Rules, triggers, actions, overrides, and automation status.',
+    description: 'Triggers, conditions, programs, and automation status.',
     group: 'Automation',
-    keywords: ['rules', 'actions', 'automation', 'trigger', 'override'],
+    keywords: [
+      'rules',
+      'actions',
+      'programs',
+      'automation',
+      'trigger',
+      'override',
+    ],
   },
   {
     href: '/config/helpers',
@@ -112,7 +119,7 @@ export const configSections = [
   },
   {
     href: '/config/settings',
-    label: 'Settings',
+    label: 'System',
     description:
       'Appearance, core server settings, warmup, and runtime behavior.',
     group: 'Operations',

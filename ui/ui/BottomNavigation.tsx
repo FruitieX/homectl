@@ -46,7 +46,7 @@ export const HomectlBottomNavigation = () => {
     },
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
+    { route: 'Config' as const, to: '/config', label: 'Config', icon: Cog },
   ];
 
   return (
@@ -109,7 +109,7 @@ export const HomectlNavigationRail = () => {
     { route: 'Dashboard' as const, to: '/', label: 'Home', icon: House },
     { route: 'Floorplan' as const, to: '/map', label: 'Floorplan', icon: Map },
     { route: 'Groups' as const, to: '/groups', label: 'Rooms', icon: Layers3 },
-    { route: 'Config' as const, to: '/config', label: 'Settings', icon: Cog },
+    { route: 'Config' as const, to: '/config', label: 'Config', icon: Cog },
   ];
 
   return (

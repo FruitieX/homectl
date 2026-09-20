@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlidersHorizontal } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import {
   useDevicesByKeysState,
   useDevicesState,
@@ -317,6 +318,9 @@ export const Viewport = () => {
                   }}
                 >
                   {selecting ? 'Finish selecting' : 'Select devices'}
+                </Button>
+                <Button variant="outline" className="w-full" asChild>
+                  <Link to="/config/floorplan">Edit floorplan</Link>
                 </Button>
                 <details className="text-sm">
                   <summary className="cursor-pointer py-1 font-medium">

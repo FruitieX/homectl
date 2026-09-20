@@ -35,7 +35,7 @@ export default function ConfigPage() {
       <div className="space-y-3">
         <ConfigPageHeader
           backTo={null}
-          title="Settings"
+          title="Configuration"
           description="Manage devices, automations, and appearance."
         />
         <Input
