@@ -25,6 +25,7 @@ use homectl_server::types::{
         IntegrationConfigFieldKind, IntegrationConfigFieldOption, IntegrationConfigFieldSchema,
         IntegrationConfigFieldVisibility, IntegrationConfigSchema,
     },
+    routine_history::{RoutineHistoryEntry, RoutineHistoryTriggerKind},
     routine_status::{RoutineRuntimeStatus, RoutineStatuses, RuleRuntimeStatus},
     rule::{Routine, Rule, TriggerMode},
     scene::{FlattenedSceneConfig, FlattenedScenesConfig, SceneConfig},
@@ -73,6 +74,8 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         Quantifier::export_all_to(&output_dir)?;
         RoutineDefinitionV2::export_all_to(&output_dir)?;
         RoutineV2RuntimeStatus::export_all_to(&output_dir)?;
+        RoutineHistoryEntry::export_all_to(&output_dir)?;
+        RoutineHistoryTriggerKind::export_all_to(&output_dir)?;
         ScheduleSpec::export_all_to(&output_dir)?;
         ScriptDeclaration::export_all_to(&output_dir)?;
         ScriptSpec::export_all_to(&output_dir)?;

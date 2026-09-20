@@ -294,6 +294,9 @@ pub struct Routines {
     /// statuses. Native evaluation runs, but decisions are not executed until
     /// P05 wires the action planner.
     v2: V2Runtime,
+    /// Display names for compiled v2 routines, for history entries. Disabled
+    /// and quarantined rows are absent.
+    v2_names: BTreeMap<RoutineId, String>,
     /// Bumped on every configuration load so a late worker result can never
     /// finalize a decision computed against a previous configuration.
     config_generation: u64,
@@ -429,6 +432,7 @@ impl Routines {
             prev_edge_triggered: HashSet::new(),
             quarantined: HashMap::new(),
             v2: V2Runtime::default(),
+            v2_names: BTreeMap::new(),
             config_generation: 0,
             deferred: BTreeMap::new(),
             deferred_leaf_index: BTreeMap::new(),
@@ -453,6 +457,7 @@ impl Routines {
         let mut new_config = RoutinesConfig::new();
         let mut quarantined = HashMap::new();
         let mut compiled_v2 = BTreeMap::new();
+        let mut v2_names = BTreeMap::new();
         for routine in routines {
             if !routine.enabled {
                 // Disabled rows stay in `runtime_config` for display/edit and
@@ -499,8 +504,10 @@ impl Routines {
                 }
                 RoutineSemantics::V2 => match automation::compile_row(routine, catalog) {
                     Ok(automation::CompiledRoutine::V2(compiled)) => {
+                        let routine_id = RoutineId::from(routine.id.clone());
+                        v2_names.insert(routine_id.clone(), routine.name.clone());
                         compiled_v2.insert(
-                            RoutineId::from(routine.id.clone()),
+                            routine_id,
                             V2Definition {
                                 revision: routine.revision,
                                 compiled: *compiled,
@@ -540,6 +547,7 @@ impl Routines {
         self.config = new_config;
         self.quarantined = quarantined;
         self.v2.load(compiled_v2);
+        self.v2_names = v2_names;
         self.runtime_statuses = Arc::new(RoutineStatuses::default());
         self.prev_edge_triggered.clear();
         self.config_generation = self.config_generation.wrapping_add(1);
@@ -816,9 +824,11 @@ impl Routines {
         self.v2.plan_runs(evaluations, inputs)
     }
 
-    /// Record the dispatched outcome of one v2 run for status displays (X03).
+    /// Record the dispatched outcome of one v2 run for status displays (X03)
+    /// and the bounded history buffer (P12).
     pub fn record_v2_run(&mut self, routine_id: &RoutineId, status: PlannedRunStatus) {
         self.v2.record_run(routine_id, status);
+        self.record_v2_history(routine_id);
     }
 
     /// The declared script spec for a compiled v2 script program, if any.
@@ -845,9 +855,23 @@ impl Routines {
     }
 
     /// Record a visible rejected script run (worker failure, stale result, or
-    /// contract error) for status displays.
+    /// contract error) for status displays and the bounded history buffer.
     pub fn record_v2_script_failure(&mut self, routine_id: &RoutineId, reason: String) {
         self.v2.record_script_failure(routine_id, reason);
+        self.record_v2_history(routine_id);
+    }
+
+    /// Push the current v2 evaluation and run snapshot into the history
+    /// buffer. Only routines with a compiled definition are recorded, so
+    /// status refreshes and quarantine writes cannot create entries.
+    fn record_v2_history(&self, routine_id: &RoutineId) {
+        let Some(name) = self.v2_names.get(routine_id) else {
+            return;
+        };
+        let Some(status) = self.v2.statuses().get(routine_id) else {
+            return;
+        };
+        routine_history::record_v2_run(routine_id, name, status);
     }
 
     /// Drain legacy script leaves captured by the last frame evaluation(s).

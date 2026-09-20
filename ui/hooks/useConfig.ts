@@ -8,6 +8,7 @@ import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { type DeviceSensorConfig } from '@/lib/sensorInteraction';
 import { type RoutineRuntimeStatus } from '@/bindings/RoutineRuntimeStatus';
+import { type RoutineV2RuntimeStatus } from '@/bindings/RoutineV2RuntimeStatus';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
@@ -128,7 +129,10 @@ export interface UiLogEntry {
   message: string;
 }
 
-export type RoutineHistoryTriggerKind = 'rule_match' | 'force_trigger';
+export type RoutineHistoryTriggerKind =
+  | 'rule_match'
+  | 'force_trigger'
+  | 'v2_run';
 
 export interface RoutineHistoryEntry {
   id: string;
@@ -139,6 +143,7 @@ export interface RoutineHistoryEntry {
   event_source_device_key?: string | null;
   action_count: number;
   status?: RoutineRuntimeStatus | null;
+  v2?: RoutineV2RuntimeStatus | null;
 }
 
 export interface RuntimeStatus {
