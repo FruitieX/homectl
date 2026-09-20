@@ -1043,6 +1043,29 @@ pub async fn db_apply_routine_rows(routines: &[RoutineRow]) -> Result<()> {
     Ok(())
 }
 
+/// Apply an offline conversion in one transaction: routine upserts, routine
+/// deletes (archive rollback of converter-created rows), and integration
+/// upserts (quiescing converted cron/timer integrations).
+pub async fn db_apply_conversion(
+    routine_upserts: &[RoutineRow],
+    routine_deletes: &[String],
+    integration_upserts: &[IntegrationRow],
+) -> Result<()> {
+    let db = get_db_connection()?;
+    let txn = db.begin().await?;
+    for id in routine_deletes {
+        delete_by_string_key(&txn, Routines::Table, Routines::Id, id).await?;
+    }
+    for routine in routine_upserts {
+        upsert_routine_on(&txn, routine).await?;
+    }
+    for integration in integration_upserts {
+        upsert_integration_on(&txn, integration).await?;
+    }
+    txn.commit().await?;
+    Ok(())
+}
+
 async fn upsert_routine_on<C: ConnectionTrait>(db: &C, routine: &RoutineRow) -> Result<()> {
     let rules = serde_json::to_string(&routine.rules)?;
     let actions = serde_json::to_string(&routine.actions)?;

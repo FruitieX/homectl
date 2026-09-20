@@ -92,6 +92,12 @@ pub struct ConvertArgs {
     #[arg(long)]
     pub archive: Option<String>,
 
+    /// IANA zone (or fixed offset like +02:00) that legacy cron schedules
+    /// resolved against. Required before any cron schedule can be converted,
+    /// because v2 schedule triggers default to UTC.
+    #[arg(long)]
+    pub cron_timezone: Option<String>,
+
     /// Print the conversion report as JSON instead of text.
     #[arg(long, default_value_t = false)]
     pub json: bool,

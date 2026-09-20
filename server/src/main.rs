@@ -149,32 +149,49 @@ async fn run_convert(cli: &Cli, args: &ConvertArgs) -> Result<(), Box<dyn Error>
     };
 
     if let Some(archive_path) = &args.restore {
-        let rows = convert::read_archive(Path::new(archive_path))?;
+        let plan = convert::read_archive(Path::new(archive_path))?;
         check_converter_server_stopped(cli, args).await?;
         let database_url = args.source_db.clone().or_else(|| cli.database_url.clone());
         init_db(database_url.as_deref()).await?;
-        convert::apply_rows(&rows).await?;
+        convert::apply_conversion(&plan.routines, &plan.created_routines, &plan.integrations)
+            .await?;
         announce(format!(
-            "Restored {} routine row(s) from {}. Restart the server to load the archived semantics.",
-            rows.len(),
+            "Restored {} archived routine row(s), removed {} converter-created routine(s), and re-enabled {} integration(s) from {}. Restart the server to load the archived semantics.",
+            plan.routines.len(),
+            plan.created_routines.len(),
+            plan.integrations.len(),
             archive_path
         ));
         return Ok(());
     }
 
+    // `--source-db` wins, otherwise the CLI's database URL (DATABASE_URL),
+    // matching the apply/restore path so a dry run reads the database that
+    // `--apply` will write.
+    let source_db = args.source_db.clone().or_else(|| cli.database_url.clone());
     let (source, export) =
-        convert::load_source_export(args.source_db.as_deref(), args.source_export.as_deref())
-            .await?;
-    let report = convert::build_report(&source, &export);
+        convert::load_source_export(source_db.as_deref(), args.source_export.as_deref()).await?;
+    if args.cron_timezone.is_none()
+        && export
+            .integrations
+            .iter()
+            .any(|integration| integration.plugin == "cron")
+    {
+        announce(
+            "note: cron schedules present and no --cron-timezone given; they will be reported as needs-manual"
+                .to_string(),
+        );
+    }
+    let report = convert::build_report(&source, &export, args.cron_timezone.clone());
 
+    let convertible = report.converted + report.cron_converted;
     if args.json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
         print!("{}", convert::render_report(&report));
-        if !args.apply && report.converted > 0 {
+        if !args.apply && convertible > 0 {
             println!(
-                "Dry run: {} routine(s) can be converted. Re-run with --apply (server stopped) to write them.",
-                report.converted
+                "Dry run: {convertible} routine(s)/schedule(s) can be converted. Re-run with --apply (server stopped) to write them."
             );
         }
     }
@@ -183,16 +200,20 @@ async fn run_convert(cli: &Cli, args: &ConvertArgs) -> Result<(), Box<dyn Error>
         return Ok(());
     }
 
+    let blocking = report.needs_manual
+        + report.unsupported
+        + report.cron_needs_manual
+        + report.cron_unsupported;
     if !report.is_clean() && !args.force {
         return Err(eyre!(
-            "{} routine(s) need manual authoring or are unsupported; inspect the report, then re-run with --force to convert the convertible rows and leave the rest on v1",
-            report.needs_manual + report.unsupported
+            "{blocking} routine(s)/schedule(s) need manual authoring or are unsupported; inspect the report, then re-run with --force to convert the convertible rows and leave the rest on v1"
         )
         .into());
     }
 
     let rows = convert::converted_rows(&report, &export)?;
-    if rows.is_empty() {
+    let disabled = convert::integrations_to_disable(&report, &export);
+    if rows.is_empty() && disabled.is_empty() {
         announce("Nothing to apply.".to_string());
         return Ok(());
     }
@@ -212,11 +233,14 @@ async fn run_convert(cli: &Cli, args: &ConvertArgs) -> Result<(), Box<dyn Error>
 
     let database_url = args.source_db.clone().or_else(|| cli.database_url.clone());
     init_db(database_url.as_deref()).await?;
-    convert::apply_rows(&rows).await?;
+    convert::apply_conversion(&rows, &[], &disabled).await?;
     announce(format!(
-        "Applied {} converted routine(s); {} row(s) stay on v1 semantics. Restart the server to load v2 routines.",
-        rows.len(),
-        report.total - rows.len()
+        "Applied {} converted routine(s), created {} cron routine(s), left {} row(s) and {} schedule(s) on v1 semantics, disabled {} legacy integration(s). Restart the server to load v2 routines.",
+        report.converted,
+        rows.len() - report.converted,
+        report.total - report.converted,
+        report.cron_total - report.cron_converted,
+        disabled.len()
     ));
     Ok(())
 }

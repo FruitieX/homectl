@@ -1,5 +1,7 @@
 use crate::core::automation::compile::ConfigCatalog;
-use crate::core::automation::convert::{convert_routine, ConversionStatus, RoutineConversion};
+use crate::core::automation::convert::{
+    convert_routine, ConversionStatus, ConvertOptions, RoutineConversion,
+};
 use crate::db::config_queries::RoutineRow;
 use crate::types::scene::SceneId;
 use serde_json::{json, Value};
@@ -18,24 +20,36 @@ fn row(rules: Value, actions: Value) -> RoutineRow {
 }
 
 fn convert(rules: Value, actions: Value) -> RoutineConversion {
+    convert_with(rules, actions, &ConvertOptions::default())
+}
+
+fn convert_with(rules: Value, actions: Value, options: &ConvertOptions) -> RoutineConversion {
     let mut catalog = ConfigCatalog::default();
     catalog = catalog.with_scene(SceneId::from("night".to_string()));
     catalog = catalog.with_scene(SceneId::from("bright".to_string()));
     catalog = catalog.with_group(crate::types::group::GroupId("living".to_string()));
-    convert_routine(&row(rules, actions), &catalog)
+    convert_routine(&row(rules, actions), &catalog, options)
 }
 
 fn definition_json(conversion: &RoutineConversion) -> Value {
     serde_json::to_value(conversion.converted_definition().expect("converted")).unwrap()
 }
 
-fn reasons(conversion: &RoutineConversion) -> Vec<String> {
-    match &conversion.status {
+fn status_reasons(status: &ConversionStatus) -> Vec<String> {
+    match status {
         ConversionStatus::NeedsManual { reasons } | ConversionStatus::Unsupported { reasons } => {
             reasons.clone()
         }
         other => panic!("expected a blocking status, got {other:?}"),
     }
+}
+
+fn reasons(conversion: &RoutineConversion) -> Vec<String> {
+    status_reasons(&conversion.status)
+}
+
+fn cron_reasons(conversion: &crate::core::automation::convert::CronConversion) -> Vec<String> {
+    status_reasons(&conversion.status)
 }
 
 #[test]
@@ -417,6 +431,7 @@ fn unknown_scene_is_reported_by_the_compiler() {
             json!([{"action": "ActivateScene", "scene_id": "missing"}]),
         ),
         &ConfigCatalog::default(),
+        &ConvertOptions::default(),
     );
 
     assert!(matches!(
@@ -446,7 +461,11 @@ fn v2_rows_are_never_rewritten() {
     stored.definition_v2 =
         Some(json!({"triggers": [], "program": {"kind": "native", "steps": []}}));
 
-    let conversion = convert_routine(&stored, &ConfigCatalog::default());
+    let conversion = convert_routine(
+        &stored,
+        &ConfigCatalog::default(),
+        &ConvertOptions::default(),
+    );
 
     assert!(matches!(conversion.status, ConversionStatus::AlreadyV2));
     assert_eq!(conversion.id, "routine");
@@ -476,4 +495,217 @@ fn text_sensor_state_maps_to_string_equality() {
 
     let definition = definition_json(&conversion);
     assert_eq!(definition["condition"]["value"], "press");
+}
+
+fn timer_options() -> ConvertOptions {
+    ConvertOptions {
+        timer_integrations: std::collections::BTreeSet::from(["entryway_timer".to_string()]),
+        cron_timezone: None,
+    }
+}
+
+#[test]
+fn custom_action_on_timer_integration_maps_to_replace_timer() {
+    let conversion = convert_with(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{"action": "Custom", "integration_id": "entryway_timer", "payload": "300000"}]),
+        &timer_options(),
+    );
+
+    let definition = definition_json(&conversion);
+    assert_eq!(definition["program"]["steps"][0]["action"], "replace_timer");
+    assert_eq!(definition["program"]["steps"][0]["timer"], "entryway_timer");
+    assert_eq!(definition["program"]["steps"][0]["delay_ms"], 300000);
+}
+
+#[test]
+fn custom_action_on_other_integration_stays_manual() {
+    let conversion = convert_with(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{"action": "Custom", "integration_id": "z2m", "payload": "brightness 50"}]),
+        &timer_options(),
+    );
+
+    assert!(matches!(
+        conversion.status,
+        ConversionStatus::NeedsManual { .. }
+    ));
+    assert!(reasons(&conversion)[0].contains("no v2 native equivalent"));
+}
+
+#[test]
+fn custom_timer_payload_must_be_numeric() {
+    let conversion = convert_with(
+        json!([{"integration_id": "dummy", "device_id": "button", "state": {"value": true}}]),
+        json!([{"action": "Custom", "integration_id": "entryway_timer", "payload": "soon"}]),
+        &timer_options(),
+    );
+
+    assert!(matches!(
+        conversion.status,
+        ConversionStatus::NeedsManual { .. }
+    ));
+    assert!(reasons(&conversion)[0].contains("non-numeric payload"));
+}
+
+#[test]
+fn timer_device_sensor_rule_reports_precise_reason() {
+    let conversion = convert_with(
+        json!([
+            {"integration_id": "dummy", "device_id": "motion", "state": {"value": true}},
+            {"integration_id": "entryway_timer", "device_id": "timer", "state": {"value": false}, "trigger": "level"}
+        ]),
+        json!([{"action": "ActivateScene", "scene_id": "night"}]),
+        &timer_options(),
+    );
+
+    assert!(matches!(
+        conversion.status,
+        ConversionStatus::Unsupported { .. }
+    ));
+    assert!(reasons(&conversion)[0].contains("synthetic device state"));
+}
+
+fn cron_input() -> crate::core::automation::convert::CronScheduleInput {
+    crate::core::automation::convert::CronScheduleInput {
+        integration_id: "morning".to_string(),
+        schedule_id: "wake".to_string(),
+        name: "Morning".to_string(),
+        schedule: "30 6 * * 1-5".to_string(),
+        action: serde_json::from_value(json!({"action": "ActivateScene", "scene_id": "night"}))
+            .unwrap(),
+        init_enabled: true,
+        integration_enabled: true,
+    }
+}
+
+fn convert_cron(
+    input: &crate::core::automation::convert::CronScheduleInput,
+    timezone: Option<&str>,
+) -> crate::core::automation::convert::CronConversion {
+    let mut catalog = ConfigCatalog::default();
+    catalog = catalog.with_scene(SceneId::from("night".to_string()));
+    crate::core::automation::convert::convert_cron_schedule(
+        input,
+        &catalog,
+        &ConvertOptions {
+            timer_integrations: std::collections::BTreeSet::new(),
+            cron_timezone: timezone.map(str::to_string),
+        },
+        &std::collections::BTreeSet::new(),
+    )
+}
+
+#[test]
+fn cron_schedule_needs_timezone_before_conversion() {
+    let conversion = convert_cron(&cron_input(), None);
+
+    assert!(matches!(
+        conversion.status,
+        ConversionStatus::NeedsManual { .. }
+    ));
+    assert!(cron_reasons(&conversion)[0].contains("--cron-timezone"));
+}
+
+#[test]
+fn cron_schedule_converts_with_seconds_and_explicit_timezone() {
+    let conversion = convert_cron(&cron_input(), Some("Europe/Helsinki"));
+
+    let definition = conversion.converted_definition().expect("converted");
+    let value = serde_json::to_value(definition).unwrap();
+    assert_eq!(value["triggers"][0]["kind"], "schedule");
+    assert_eq!(value["triggers"][0]["schedule"]["cron"], "0 30 6 * * 1-5");
+    assert_eq!(
+        value["triggers"][0]["schedule"]["timezone"],
+        "Europe/Helsinki"
+    );
+    assert_eq!(conversion.routine_id, "cron-morning-wake");
+}
+
+#[test]
+fn six_field_cron_expressions_are_kept() {
+    let mut input = cron_input();
+    input.schedule = "15 30 6 * * 1-5".to_string();
+    let conversion = convert_cron(&input, Some("UTC"));
+
+    let definition = conversion.converted_definition().expect("converted");
+    let value = serde_json::to_value(definition).unwrap();
+    assert_eq!(value["triggers"][0]["schedule"]["cron"], "15 30 6 * * 1-5");
+}
+
+#[test]
+fn cron_disabled_flag_survives_conversion() {
+    let mut input = cron_input();
+    input.init_enabled = false;
+    let conversion = convert_cron(&input, Some("UTC"));
+
+    assert!(!conversion.enabled);
+    assert!(conversion.is_converted());
+}
+
+#[test]
+fn cron_routine_id_collision_is_unsupported() {
+    let mut catalog = ConfigCatalog::default();
+    catalog = catalog.with_scene(SceneId::from("night".to_string()));
+    let conversion = crate::core::automation::convert::convert_cron_schedule(
+        &cron_input(),
+        &catalog,
+        &ConvertOptions {
+            timer_integrations: std::collections::BTreeSet::new(),
+            cron_timezone: Some("UTC".to_string()),
+        },
+        &std::collections::BTreeSet::from(["cron-morning-wake".to_string()]),
+    );
+
+    assert!(matches!(
+        conversion.status,
+        ConversionStatus::Unsupported { .. }
+    ));
+    assert!(cron_reasons(&conversion)[0].contains("already exists"));
+}
+
+#[test]
+fn cron_config_parses_schedules_with_init_enabled_default_true() {
+    let schedules = crate::core::automation::convert::parse_cron_schedules(
+        "morning",
+        true,
+        &json!({
+            "schedules": {
+                "wake": {"name": "Wake", "schedule": "30 6 * * *", "action": {"action": "ActivateScene", "scene_id": "night"}},
+                "sleep": {"name": "Sleep", "schedule": "0 23 * * *", "action": {"action": "ActivateScene", "scene_id": "night"}, "init_enabled": false}
+            }
+        }),
+    )
+    .expect("parses");
+
+    assert_eq!(schedules.len(), 2);
+    assert!(schedules
+        .iter()
+        .all(|schedule| schedule.integration_enabled));
+    assert!(
+        schedules
+            .iter()
+            .find(|s| s.schedule_id == "wake")
+            .unwrap()
+            .init_enabled
+    );
+    assert!(
+        !schedules
+            .iter()
+            .find(|s| s.schedule_id == "sleep")
+            .unwrap()
+            .init_enabled
+    );
+}
+
+#[test]
+fn malformed_cron_config_reports_unsupported() {
+    let error = crate::core::automation::convert::parse_cron_schedules(
+        "morning",
+        true,
+        &json!({"schedules": {"wake": {"name": "Wake"}}}),
+    )
+    .expect_err("missing schedule/action");
+
+    assert!(error.contains("does not parse"));
 }

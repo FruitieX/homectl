@@ -2,7 +2,10 @@
 //! archive, transactional apply, and archive restore.
 
 use homectl_server::core::convert;
-use homectl_server::db::{self, config_queries::RoutineRow};
+use homectl_server::db::{
+    self,
+    config_queries::{IntegrationRow, RoutineRow},
+};
 use serde_json::json;
 
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -59,6 +62,36 @@ async fn conversion_applies_convertible_rows_and_archive_restores_them() {
     db::config_queries::db_upsert_routine(&manual_row())
         .await
         .expect("store level-only v1 routine");
+    db::config_queries::db_upsert_integration(&IntegrationRow {
+        id: "morning".to_string(),
+        plugin: "cron".to_string(),
+        config: json!({
+            "schedules": {
+                "wake": {
+                    "name": "Wake",
+                    "schedule": "30 6 * * 1-5",
+                    "action": {"action": "ActivateScene", "scene_id": "night"}
+                },
+                "sleep": {
+                    "name": "Sleep",
+                    "schedule": "0 23 * * *",
+                    "action": {"action": "ActivateScene", "scene_id": "night"},
+                    "init_enabled": false
+                }
+            }
+        }),
+        enabled: true,
+    })
+    .await
+    .expect("store cron integration");
+    db::config_queries::db_upsert_integration(&IntegrationRow {
+        id: "entryway_timer".to_string(),
+        plugin: "timer".to_string(),
+        config: json!({"device_name": "Entryway timer"}),
+        enabled: true,
+    })
+    .await
+    .expect("store timer integration");
 
     let mut export = db::config_queries::db_export_config()
         .await
@@ -74,32 +107,57 @@ async fn conversion_applies_convertible_rows_and_archive_restores_them() {
             group_states: Default::default(),
             group_state_order: Vec::new(),
         });
-    let report = convert::build_report("test-db", &export);
+    let report = convert::build_report("test-db", &export, Some("Europe/Helsinki".to_string()));
 
     assert_eq!(report.total, 2);
     assert_eq!(report.converted, 1);
     assert_eq!(report.needs_manual, 1);
     assert_eq!(report.unsupported, 0);
     assert_eq!(report.already_v2, 0);
+    assert_eq!(report.cron_total, 2);
+    assert_eq!(report.cron_converted, 2);
     assert!(!report.is_clean());
 
     let text = convert::render_report(&report);
     assert!(text.contains("converted (triggers: report dummy/button"));
     assert!(text.contains("level-only routine"));
+    assert!(text.contains("cron-morning-wake"));
 
     let rows = convert::converted_rows(&report, &export).expect("converted rows");
-    assert_eq!(rows.len(), 1);
-    assert_eq!(rows[0].id, "pulse_button");
-    assert_eq!(rows[0].semantics_version, 2);
-    assert_eq!(rows[0].revision, 2);
-    assert!(rows[0].definition_v2.is_some());
-    assert_eq!(rows[0].rules, convertible_row().rules);
+    assert_eq!(rows.len(), 3);
+    let pulse = rows.iter().find(|row| row.id == "pulse_button").unwrap();
+    assert_eq!(pulse.semantics_version, 2);
+    assert_eq!(pulse.revision, 2);
+    assert!(pulse.definition_v2.is_some());
+    assert_eq!(pulse.rules, convertible_row().rules);
+    let wake = rows
+        .iter()
+        .find(|row| row.id == "cron-morning-wake")
+        .unwrap();
+    assert!(wake.enabled);
+    assert_eq!(wake.semantics_version, 2);
+    let sleep = rows
+        .iter()
+        .find(|row| row.id == "cron-morning-sleep")
+        .unwrap();
+    assert!(!sleep.enabled);
+
+    let disabled = convert::integrations_to_disable(&report, &export);
+    assert_eq!(
+        disabled.len(),
+        1,
+        "only the fully converted cron integration"
+    );
+    assert_eq!(disabled[0].id, "morning");
+    assert!(!disabled[0].enabled);
 
     let archive_path = temp_dir.join("archive.json");
     convert::write_archive(&archive_path, "test-db", &export, &report).expect("write archive");
     assert!(archive_path.exists());
 
-    convert::apply_rows(&rows).await.expect("apply conversion");
+    convert::apply_conversion(&rows, &[], &disabled)
+        .await
+        .expect("apply conversion");
 
     let after = db::config_queries::db_export_config()
         .await
@@ -119,13 +177,29 @@ async fn conversion_applies_convertible_rows_and_archive_restores_them() {
         .expect("manual row present");
     assert_eq!(manual.semantics_version, 1);
     assert!(manual.definition_v2.is_none());
+    let mutated_cron = after
+        .integrations
+        .iter()
+        .find(|integration| integration.id == "morning")
+        .expect("cron integration present");
+    assert!(!mutated_cron.enabled);
 
-    let archived = convert::read_archive(&archive_path).expect("read archive");
-    assert_eq!(archived.len(), 1);
-    assert_eq!(archived[0].id, "pulse_button");
-    assert_eq!(archived[0].semantics_version, 1);
+    let second = convert::build_report("test-db", &after, Some("Europe/Helsinki".to_string()));
+    assert_eq!(
+        second.cron_total, 0,
+        "a disabled integration whose routines exist is skipped, not re-reported"
+    );
+    assert!(second.disable_integrations.is_empty());
 
-    convert::apply_rows(&archived)
+    let plan = convert::read_archive(&archive_path).expect("read archive");
+    assert_eq!(plan.routines.len(), 1);
+    assert_eq!(plan.routines[0].id, "pulse_button");
+    assert_eq!(plan.routines[0].semantics_version, 1);
+    assert_eq!(plan.created_routines.len(), 2);
+    assert_eq!(plan.integrations.len(), 1);
+    assert!(plan.integrations[0].enabled);
+
+    convert::apply_conversion(&plan.routines, &plan.created_routines, &plan.integrations)
         .await
         .expect("restore archive");
 
@@ -140,6 +214,19 @@ async fn conversion_applies_convertible_rows_and_archive_restores_them() {
     assert_eq!(restored_row.semantics_version, 1);
     assert!(restored_row.definition_v2.is_none());
     assert_eq!(restored_row.rules, convertible_row().rules);
+    assert!(
+        !restored
+            .routines
+            .iter()
+            .any(|row| row.id.starts_with("cron-morning-")),
+        "restore removes converter-created routines"
+    );
+    let restored_cron = restored
+        .integrations
+        .iter()
+        .find(|integration| integration.id == "morning")
+        .expect("cron integration present");
+    assert!(restored_cron.enabled, "restore re-enables the integration");
 
     std::fs::remove_dir_all(&temp_dir).expect("remove temp dir");
 }

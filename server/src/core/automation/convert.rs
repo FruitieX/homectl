@@ -18,6 +18,13 @@
 //!   `transition` mode observes active truth the same way.
 //! - v1 level rules are state guards and become conditions.
 //! - v1 `any` rules with only level children are disjunctive conditions.
+//! - v1 `custom` actions on a timer integration start that timer with a
+//!   millisecond delay and become `replace_timer` on the same name (timer
+//!   integrations are named for v2, so the integration id is the timer id).
+//! - v1 cron schedules become new `schedule`-trigger routines. Their
+//!   five-field expressions gain an explicit zero second and the caller must
+//!   supply the zone that v1 resolved them in (`--cron-timezone`), because v2
+//!   schedules default to UTC.
 //!
 //! Deliberately not converted:
 //!
@@ -25,9 +32,10 @@
 //!   expose), script rules, numeric/color sensor rules that v1 never matched,
 //!   `any` rules containing event leaves, group event leaves, level-only
 //!   routines (v1 fires on every eligible update; v2 has no such trigger),
-//!   routines whose actions have no native equivalent, and descriptors that
-//!   rely on dispatch-time expansion (`include_source_groups`, rollout,
-//!   mirroring extras, scene transitions).
+//!   routines whose actions have no native equivalent, timers read as a
+//!   synthetic device (v2 named timers expose no running/idle condition), and
+//!   descriptors that rely on dispatch-time expansion (`include_source_groups`,
+//!   rollout, mirroring extras, scene transitions).
 
 use serde::Serialize;
 
@@ -35,8 +43,9 @@ use crate::core::routine_validation;
 use crate::db::config_queries::RoutineRow;
 use crate::types::action::Action;
 use crate::types::automation_definition::{
-    ConditionExpr, ExecutionPolicy, NativeAction, NativeProgram, NodeId, Program,
-    RoutineDefinitionV2, SceneSelection, StateChangeMode, TargetSpec, TriggerSpec,
+    BacklogPolicy, ConditionExpr, ExecutionPolicy, NativeAction, NativeProgram, NodeId, Program,
+    RoutineDefinitionV2, SceneSelection, ScheduleSpec, StateChangeMode, TargetSpec, TimerId,
+    TriggerSpec,
 };
 use crate::types::device::{DeviceKey, DeviceRef, SensorDevice};
 use crate::types::rule::{RawRuleOperator, Rule, TriggerMode};
@@ -85,9 +94,25 @@ impl RoutineConversion {
     }
 }
 
+/// Conversion inputs that are not part of a single row.
+#[derive(Clone, Debug, Default)]
+pub struct ConvertOptions {
+    /// Integration ids whose `custom` actions start the legacy timer. Those
+    /// actions map to `replace_timer` with the integration id as timer name.
+    pub timer_integrations: std::collections::BTreeSet<String>,
+    /// IANA zone or fixed offset that legacy cron schedules should keep. v1
+    /// cron fired in server-local time; v2 schedules default to UTC, so a
+    /// zone is required before a cron schedule can be converted.
+    pub cron_timezone: Option<String>,
+}
+
 /// Convert one stored routine row. v2 rows are reported as `AlreadyV2` and
 /// never rewritten.
-pub fn convert_routine(row: &RoutineRow, catalog: &ConfigCatalog) -> RoutineConversion {
+pub fn convert_routine(
+    row: &RoutineRow,
+    catalog: &ConfigCatalog,
+    options: &ConvertOptions,
+) -> RoutineConversion {
     let mut conversion = RoutineConversion {
         id: row.id.clone(),
         name: row.name.clone(),
@@ -120,7 +145,7 @@ pub fn convert_routine(row: &RoutineRow, catalog: &ConfigCatalog) -> RoutineConv
     let mut needs_manual = Vec::new();
 
     for rule in &validated.rules {
-        match classify_rule(rule, &mut ids, &mut notes) {
+        match classify_rule(rule, &mut ids, &mut notes, options) {
             LeafOutcome::Event(event) => {
                 let (trigger, implied) = event.into_parts();
                 triggers.push(trigger);
@@ -169,7 +194,7 @@ pub fn convert_routine(row: &RoutineRow, catalog: &ConfigCatalog) -> RoutineConv
 
     let mut steps = Vec::new();
     for action in &validated.actions {
-        match convert_action(action, &mut ids) {
+        match convert_action(action, &mut ids, options) {
             Ok(step) => steps.push(step),
             Err(reason) => needs_manual.push(reason),
         }
@@ -257,12 +282,17 @@ impl EventLeaf {
     }
 }
 
-fn classify_rule(rule: &Rule, ids: &mut NodeIdGenerator, notes: &mut Vec<String>) -> LeafOutcome {
+fn classify_rule(
+    rule: &Rule,
+    ids: &mut NodeIdGenerator,
+    notes: &mut Vec<String>,
+    options: &ConvertOptions,
+) -> LeafOutcome {
     match rule {
-        Rule::Sensor(sensor) => classify_sensor_rule(sensor, ids),
+        Rule::Sensor(sensor) => classify_sensor_rule(sensor, ids, options),
         Rule::Device(device) => classify_device_rule(device, ids, notes),
         Rule::Group(group) => classify_group_rule(group),
-        Rule::Any(any) => classify_any_rule(&any.any, ids, notes),
+        Rule::Any(any) => classify_any_rule(&any.any, ids, notes, options),
         Rule::Raw(_) => LeafOutcome::Unsupported(
             "raw rules read the device report payload, which v2 conditions do not expose".to_string(),
         ),
@@ -300,7 +330,19 @@ fn sensor_condition(sensor: &crate::types::rule::SensorRule) -> Option<Condition
 fn classify_sensor_rule(
     sensor: &crate::types::rule::SensorRule,
     ids: &mut NodeIdGenerator,
+    options: &ConvertOptions,
 ) -> LeafOutcome {
+    let key = key_of(&sensor.device_ref);
+    if options
+        .timer_integrations
+        .contains(&key.integration_id.to_string())
+        && key.device_id.to_string() == "timer"
+    {
+        return LeafOutcome::Unsupported(
+            "reads the legacy timer's synthetic device state; v2 named timers do not expose a running/idle condition, redesign the cooldown guard deliberately".to_string(),
+        );
+    }
+
     let Some(condition) = sensor_condition(sensor) else {
         return LeafOutcome::Unsupported(format!(
             "sensor rule for {} uses a state shape v1 never matched (only boolean and text sensor values are compared)",
@@ -422,10 +464,11 @@ fn classify_any_rule(
     rules: &[Rule],
     ids: &mut NodeIdGenerator,
     notes: &mut Vec<String>,
+    options: &ConvertOptions,
 ) -> LeafOutcome {
     let mut conditions = Vec::new();
     for rule in rules {
-        match classify_rule(rule, ids, notes) {
+        match classify_rule(rule, ids, notes, options) {
             LeafOutcome::Condition(condition) => conditions.push(condition),
             LeafOutcome::Event(_) => {
                 return LeafOutcome::Unsupported(
@@ -446,7 +489,11 @@ fn device_refs(keys: &Option<Vec<crate::types::device::DeviceKey>>) -> Vec<Devic
         .unwrap_or_default()
 }
 
-fn convert_action(action: &Action, ids: &mut NodeIdGenerator) -> Result<NativeAction, String> {
+fn convert_action(
+    action: &Action,
+    ids: &mut NodeIdGenerator,
+    options: &ConvertOptions,
+) -> Result<NativeAction, String> {
     match action {
         Action::ActivateScene(descriptor) => {
             let mut descriptors = Vec::new();
@@ -517,6 +564,27 @@ fn convert_action(action: &Action, ids: &mut NodeIdGenerator) -> Result<NativeAc
                 step: descriptor.step.unwrap_or(0.1),
                 transition_ms: None,
             })
+        }
+        Action::Custom(descriptor) => {
+            let integration_id = descriptor.integration_id.to_string();
+            if options.timer_integrations.contains(&integration_id) {
+                let raw_delay = descriptor.payload.to_string();
+                let delay_ms = raw_delay.trim().parse::<u64>().map_err(|_| {
+                    format!(
+                        "custom action on timer integration {integration_id} has a non-numeric payload {:?}",
+                        descriptor.payload
+                    )
+                })?;
+                return Ok(NativeAction::ReplaceTimer {
+                    id: ids.action_id(),
+                    timer: TimerId(integration_id),
+                    delay_ms,
+                    capture_target_intents: None,
+                });
+            }
+            Err(format!(
+                "action custom on integration {integration_id} has no v2 native equivalent"
+            ))
         }
         other => Err(format!(
             "action {} has no v2 native equivalent",
@@ -614,6 +682,196 @@ fn device_key(device: &DeviceRef) -> String {
     match device {
         DeviceRef::Id(id) => format!("{}/{}", id.integration_id, id.device_id),
     }
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct RawCronConfig {
+    #[serde(default)]
+    schedules: std::collections::BTreeMap<String, RawCronSchedule>,
+}
+
+#[derive(Clone, Debug, serde::Deserialize)]
+struct RawCronSchedule {
+    name: String,
+    schedule: String,
+    action: Action,
+    #[serde(default)]
+    init_enabled: Option<bool>,
+}
+
+/// One legacy cron schedule, ready for v2 conversion.
+#[derive(Clone, Debug)]
+pub struct CronScheduleInput {
+    pub integration_id: String,
+    pub schedule_id: String,
+    pub name: String,
+    pub schedule: String,
+    pub action: Action,
+    pub init_enabled: bool,
+    pub integration_enabled: bool,
+}
+
+/// Parse the stored `cron` integration config. Unknown fields are ignored, so
+/// a newer v1 config still converts.
+pub fn parse_cron_schedules(
+    integration_id: &str,
+    integration_enabled: bool,
+    config: &serde_json::Value,
+) -> Result<Vec<CronScheduleInput>, String> {
+    let parsed: RawCronConfig = serde_json::from_value(config.clone())
+        .map_err(|error| format!("cron config does not parse: {error}"))?;
+    Ok(parsed
+        .schedules
+        .into_iter()
+        .map(|(schedule_id, schedule)| CronScheduleInput {
+            integration_id: integration_id.to_string(),
+            schedule_id,
+            name: schedule.name,
+            schedule: schedule.schedule,
+            action: schedule.action,
+            init_enabled: schedule.init_enabled.unwrap_or(true),
+            integration_enabled,
+        })
+        .collect())
+}
+
+/// One cron schedule's conversion outcome. Converted schedules become new v2
+/// routines (`cron-<integration>-<schedule>`); nothing in the legacy cron
+/// integration is modified here.
+#[derive(Clone, Debug, Serialize)]
+pub struct CronConversion {
+    pub integration_id: String,
+    pub schedule_id: String,
+    pub routine_id: String,
+    pub name: String,
+    pub enabled: bool,
+    #[serde(flatten)]
+    pub status: ConversionStatus,
+}
+
+impl CronConversion {
+    pub fn is_converted(&self) -> bool {
+        matches!(self.status, ConversionStatus::Converted { .. })
+    }
+
+    pub fn converted_definition(&self) -> Option<&RoutineDefinitionV2> {
+        match &self.status {
+            ConversionStatus::Converted { definition, .. } => Some(definition.as_ref()),
+            _ => None,
+        }
+    }
+}
+
+pub fn cron_routine_id(integration_id: &str, schedule_id: &str) -> String {
+    format!("cron-{integration_id}-{schedule_id}")
+}
+
+/// v1 cron used five-field expressions resolved against server-local time.
+/// v2 schedules require seconds and default to UTC, so the field list is
+/// extended with a zero second and the caller must supply the effective zone.
+fn normalize_cron_expression(expression: &str) -> String {
+    let fields = expression.split_whitespace().count();
+    match fields {
+        5 => format!("0 {}", expression.trim()),
+        _ => expression.trim().to_string(),
+    }
+}
+
+pub fn convert_cron_schedule(
+    input: &CronScheduleInput,
+    catalog: &ConfigCatalog,
+    options: &ConvertOptions,
+    existing_ids: &std::collections::BTreeSet<String>,
+) -> CronConversion {
+    let routine_id = cron_routine_id(&input.integration_id, &input.schedule_id);
+    let mut conversion = CronConversion {
+        integration_id: input.integration_id.clone(),
+        schedule_id: input.schedule_id.clone(),
+        routine_id,
+        name: input.name.clone(),
+        enabled: input.integration_enabled && input.init_enabled,
+        status: ConversionStatus::Unsupported {
+            reasons: Vec::new(),
+        },
+    };
+
+    if existing_ids.contains(&conversion.routine_id) {
+        conversion.status = ConversionStatus::Unsupported {
+            reasons: vec![format!(
+                "routine id {} already exists; rename or remove it before converting this schedule",
+                conversion.routine_id
+            )],
+        };
+        return conversion;
+    }
+
+    let Some(timezone) = options.cron_timezone.as_deref() else {
+        conversion.status = ConversionStatus::NeedsManual {
+            reasons: vec![
+                "v1 cron schedules resolved in server-local time and v2 schedules default to UTC; pass --cron-timezone <IANA zone or offset> to preserve the effective zone".to_string(),
+            ],
+        };
+        return conversion;
+    };
+
+    let mut ids = NodeIdGenerator::default();
+    let mut notes = vec![format!(
+        "v1 cron fired in server-local time; converted with timezone {timezone}"
+    )];
+    if !conversion.enabled {
+        notes.push("runtime enablement is preserved from init_enabled/config; verify the schedule device power before enabling".to_string());
+    }
+
+    let step = match convert_action(&input.action, &mut ids, options) {
+        Ok(step) => step,
+        Err(reason) => {
+            conversion.status = ConversionStatus::NeedsManual {
+                reasons: vec![reason],
+            };
+            return conversion;
+        }
+    };
+
+    let definition = RoutineDefinitionV2 {
+        triggers: vec![TriggerSpec::Schedule {
+            id: ids.trigger_id(),
+            schedule: ScheduleSpec {
+                cron: Some(normalize_cron_expression(&input.schedule)),
+                every_ms: None,
+                timezone: Some(timezone.to_string()),
+                backlog: BacklogPolicy::Skip,
+                catch_up_lateness_ms: None,
+            },
+        }],
+        condition: ConditionExpr::default(),
+        program: Program::Native(NativeProgram { steps: vec![step] }),
+        execution: ExecutionPolicy::default(),
+    };
+
+    match compile_definition(&definition, catalog) {
+        Ok(compiled) => {
+            let CompiledDefinition {
+                normalized,
+                fingerprint,
+                ..
+            } = compiled;
+            conversion.status = ConversionStatus::Converted {
+                definition: Box::new(normalized),
+                fingerprint,
+                notes,
+            };
+        }
+        Err(report) => {
+            conversion.status = ConversionStatus::Unsupported {
+                reasons: vec![format!(
+                    "converted schedule does not compile: {}",
+                    report.summary()
+                )],
+            };
+        }
+    }
+
+    conversion
 }
 
 #[cfg(test)]
