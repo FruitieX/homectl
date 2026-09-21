@@ -159,40 +159,71 @@ impl AppState {
 
     /// Republish changed runtime snapshot fields while reusing unchanged
     /// `Arc` payloads from the currently published snapshot.
-    pub fn publish_snapshot(&self, changes: SnapshotChanges) {
+    pub fn publish_snapshot(&self, mut changes: SnapshotChanges) {
         if changes.is_empty() {
             return;
         }
 
         let previous = self.snapshot.load();
+        let devices = if changes.devices || changes.runtime_config {
+            let mut devices = self.devices.get_state().clone();
+            for device in devices.0.values_mut() {
+                if let crate::types::device::DeviceData::Controllable(data) = &mut device.data {
+                    data.disabled = Some(
+                        self.runtime_config
+                            .integrations
+                            .iter()
+                            .find(|row| row.id == device.integration_id.to_string())
+                            .is_some_and(|row| {
+                                crate::types::integration::device_is_disabled(
+                                    &row.config,
+                                    &device.id.to_string(),
+                                )
+                            }),
+                    );
+                }
+            }
+            Arc::new(devices)
+        } else {
+            Arc::clone(&previous.devices)
+        };
+
+        // Device changes always travel as explicit deltas: diff the freshly
+        // built state against the previously published one so a single device
+        // update never broadcasts the whole device list. When the rebuild
+        // produced no observable difference, drop the device flag entirely
+        // instead of falling back to a full-state broadcast.
+        let mut update = PendingWsUpdate::from(changes);
+        if changes.devices {
+            let mut upserted = BTreeSet::new();
+            for (key, device) in &devices.0 {
+                if previous.devices.0.get(key) != Some(device) {
+                    upserted.insert(key.clone());
+                }
+            }
+            let removed = previous
+                .devices
+                .0
+                .keys()
+                .filter(|key| !devices.0.contains_key(*key))
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            if upserted.is_empty() && removed.is_empty() {
+                changes.devices = false;
+                update.changes.devices = false;
+            } else {
+                update.device_upserts = upserted;
+                update.device_removals = removed;
+            }
+        }
+
         let snapshot = RuntimeSnapshot {
             runtime_config: if changes.runtime_config {
                 Arc::new(self.runtime_config.clone())
             } else {
                 Arc::clone(&previous.runtime_config)
             },
-            devices: if changes.devices || changes.runtime_config {
-                let mut devices = self.devices.get_state().clone();
-                for device in devices.0.values_mut() {
-                    if let crate::types::device::DeviceData::Controllable(data) = &mut device.data {
-                        data.disabled = Some(
-                            self.runtime_config
-                                .integrations
-                                .iter()
-                                .find(|row| row.id == device.integration_id.to_string())
-                                .is_some_and(|row| {
-                                    crate::types::integration::device_is_disabled(
-                                        &row.config,
-                                        &device.id.to_string(),
-                                    )
-                                }),
-                        );
-                    }
-                }
-                Arc::new(devices)
-            } else {
-                Arc::clone(&previous.devices)
-            },
+            devices,
             flattened_groups: if changes.flattened_groups {
                 Arc::new(self.groups.get_flattened_groups().clone())
             } else {
@@ -226,6 +257,10 @@ impl AppState {
             warming_up: self.warming_up,
         };
         self.snapshot.store(Arc::new(snapshot));
+
+        // Broadcast after storing so the scheduled task reads the snapshot
+        // that matches this update.
+        self.schedule_ws_broadcast(update);
     }
 
     pub fn update_core_config(&mut self, config: CoreConfigRow) {
@@ -1316,11 +1351,17 @@ impl AppState {
             return;
         }
 
+        // Sync callers (tests, startup helpers) may run without a reactor.
+        let Ok(runtime) = tokio::runtime::Handle::try_current() else {
+            self.ws_broadcast_pending.store(false, Ordering::SeqCst);
+            return;
+        };
+
         let snapshot = self.snapshot.clone();
         let ws = self.ws.clone();
         let pending = self.ws_broadcast_pending.clone();
         let pending_update = self.pending_ws_update.clone();
-        tokio::spawn(async move {
+        runtime.spawn(async move {
             tokio::time::sleep(Duration::from_millis(100)).await;
             pending.store(false, Ordering::SeqCst);
             let update = {
@@ -1437,8 +1478,24 @@ impl AppState {
     }
 }
 
+/// Monotonic revision attached to every websocket state message.
+///
+/// Clients apply patches only when the revision follows the one they last
+/// saw and request a full resync on any gap; a new connection receives the
+/// current revision without advancing it.
+static WS_REVISION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+fn current_ws_revision() -> u64 {
+    WS_REVISION.load(Ordering::SeqCst)
+}
+
+fn next_ws_revision() -> u64 {
+    WS_REVISION.fetch_add(1, Ordering::SeqCst) + 1
+}
+
 #[derive(Serialize)]
 struct StateUpdateRef<'a> {
+    revision: u64,
     devices: DevicesState,
     scenes: &'a FlattenedScenesConfig,
     groups: &'a FlattenedGroupsConfig,
@@ -1461,6 +1518,7 @@ struct DevicesPatchRef<'a> {
 
 #[derive(Serialize)]
 struct StatePatchRef<'a> {
+    revision: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     devices: Option<DevicesPatchRef<'a>>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1505,6 +1563,7 @@ pub async fn send_state_ws_from_snapshot(
         .collect();
 
     let message = WebSocketResponseRef::State(StateUpdateRef {
+        revision: current_ws_revision(),
         devices: DevicesState(devices_converted),
         scenes: snap.flattened_scenes.as_ref(),
         groups: snap.flattened_groups.as_ref(),
@@ -1896,6 +1955,7 @@ pub async fn send_state_ws_patch_from_snapshot(
     };
 
     let message = WebSocketPatchResponseRef::Patch(StatePatchRef {
+        revision: next_ws_revision(),
         devices,
         scenes: update
             .changes

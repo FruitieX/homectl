@@ -7,4 +7,8 @@ import type { RoutineStatuses } from "./RoutineStatuses";
 import type { TimerRuntimeStatus } from "./TimerRuntimeStatus";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type StatePatch = { devices: DevicesPatch | null, scenes: FlattenedScenesConfig | null, groups: FlattenedGroupsConfig | null, routine_statuses: RoutineStatuses | null, timers: Array<TimerRuntimeStatus> | null, helper_statuses: Array<HelperRuntimeStatus> | null, ui_state: { [key in string]?: JsonValue } | null, };
+export type StatePatch = { 
+/**
+ * Revision of this patch; apply only when it follows the last seen one.
+ */
+revision: number, devices: DevicesPatch | null, scenes: FlattenedScenesConfig | null, groups: FlattenedGroupsConfig | null, routine_statuses: RoutineStatuses | null, timers: Array<TimerRuntimeStatus> | null, helper_statuses: Array<HelperRuntimeStatus> | null, ui_state: { [key in string]?: JsonValue } | null, };

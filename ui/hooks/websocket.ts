@@ -18,6 +18,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { useAppConfig } from './appConfig';
 import { selectAtom } from 'jotai/utils';
+import { decidePatchAction } from '@/lib/websocketRevision';
 
 type UiState = { [key in string]?: JsonValue };
 
@@ -28,7 +29,9 @@ const routineStatusesStateAtom = atom<RoutineStatuses | null>(null);
 const timersStateAtom = atom<TimerRuntimeStatus[] | null>(null);
 const helperStatusesStateAtom = atom<HelperRuntimeStatus[] | null>(null);
 const websocketUiStateAtom = atom<UiState | null>(null);
+const websocketRevisionAtom = atom<number | null>(null);
 const websocketStateAtom = atom<StateUpdate | null>((get) => {
+  const revision = get(websocketRevisionAtom);
   const devices = get(devicesAtom);
   const scenes = get(scenesAtom);
   const groups = get(groupsAtom);
@@ -38,6 +41,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
   const uiState = get(websocketUiStateAtom);
 
   if (
+    revision === null ||
     devices === null ||
     scenes === null ||
     groups === null ||
@@ -50,6 +54,7 @@ const websocketStateAtom = atom<StateUpdate | null>((get) => {
   }
 
   return {
+    revision,
     devices,
     scenes,
     groups,
@@ -97,11 +102,13 @@ export const useProvideWebsocketState = () => {
   const setTimers = useSetAtom(timersStateAtom);
   const setHelperStatuses = useSetAtom(helperStatusesStateAtom);
   const setUiState = useSetAtom(websocketUiStateAtom);
+  const setRevision = useSetAtom(websocketRevisionAtom);
   const setWebsocket = useSetAtom(websocketAtom);
   const setConnectionStatus = useSetAtom(connectionStatusAtom);
 
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
+  const revisionRef = useRef<number | null>(null);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -146,6 +153,7 @@ export const useProvideWebsocketState = () => {
 
       ws.onopen = () => {
         reconnectAttempts.current = 0;
+        revisionRef.current = null;
         setConnectionStatus('connected');
       };
 
@@ -165,6 +173,8 @@ export const useProvideWebsocketState = () => {
         } else if ('Command' in msg && msg.Command === 'reload') {
           window.location.reload();
         } else if ('State' in msg) {
+          revisionRef.current = msg.State.revision ?? null;
+          setRevision(msg.State.revision ?? null);
           setDevices(msg.State.devices);
           setScenes(msg.State.scenes);
           setGroups(msg.State.groups);
@@ -174,6 +184,21 @@ export const useProvideWebsocketState = () => {
           setUiState(msg.State.ui_state);
         } else if ('Patch' in msg) {
           const patch = msg.Patch;
+          const decision = decidePatchAction(
+            revisionRef.current,
+            patch.revision ?? -1,
+          );
+          if (decision === 'ignore') {
+            return;
+          }
+          if (decision === 'resync') {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ Resync: {} }));
+            }
+            return;
+          }
+          revisionRef.current = patch.revision ?? null;
+          setRevision(patch.revision ?? null);
           const devicesPatch = patch.devices;
           if (devicesPatch) {
             setDevices((current) => applyDevicesPatch(current, devicesPatch));
@@ -235,6 +260,7 @@ export const useProvideWebsocketState = () => {
     setTimers,
     setHelperStatuses,
     setUiState,
+    setRevision,
     setWebsocket,
     setConnectionStatus,
     wsEndpoint,

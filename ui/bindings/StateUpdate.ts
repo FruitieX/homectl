@@ -7,7 +7,11 @@ import type { RoutineStatuses } from "./RoutineStatuses";
 import type { TimerRuntimeStatus } from "./TimerRuntimeStatus";
 import type { JsonValue } from "./serde_json/JsonValue";
 
-export type StateUpdate = { devices: DevicesState, scenes: FlattenedScenesConfig, groups: FlattenedGroupsConfig, routine_statuses: RoutineStatuses, 
+export type StateUpdate = { 
+/**
+ * Monotonic revision of this full state.
+ */
+revision: number, devices: DevicesState, scenes: FlattenedScenesConfig, groups: FlattenedGroupsConfig, routine_statuses: RoutineStatuses, 
 /**
  * Live named timer jobs (P09). `remaining_ms` is a publish-time sample;
  * clients should count down from `due_wall_ms`.

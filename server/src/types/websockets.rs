@@ -19,11 +19,20 @@ pub enum WebSocketRequest {
     DeviceCommand(super::device_command::DeviceCommand),
     SceneCommand(super::scene_command::SceneCommand),
     EventMessage(Box<Event>),
+    /// Ask the server to resend the full state after a detected revision gap.
+    Resync(ResyncRequest),
 }
 
 #[derive(TS, Deserialize, Serialize, Debug)]
 #[ts(export)]
+pub struct ResyncRequest {}
+
+#[derive(TS, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct StateUpdate {
+    /// Monotonic revision of this full state.
+    #[ts(type = "number")]
+    pub revision: u64,
     pub devices: DevicesState,
     pub scenes: FlattenedScenesConfig,
     pub groups: FlattenedGroupsConfig,
@@ -47,6 +56,9 @@ pub struct DevicesPatch {
 #[derive(TS, Deserialize, Serialize, Debug)]
 #[ts(export)]
 pub struct StatePatch {
+    /// Revision of this patch; apply only when it follows the last seen one.
+    #[ts(type = "number")]
+    pub revision: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub devices: Option<DevicesPatch>,
     #[serde(skip_serializing_if = "Option::is_none")]

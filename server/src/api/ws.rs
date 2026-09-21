@@ -132,6 +132,11 @@ async fn user_connected(
                 Ok(WebSocketRequest::EventMessage(event)) => {
                     event_tx.send(*event);
                 }
+                Ok(WebSocketRequest::Resync(_)) => {
+                    // Client detected a revision gap (or lost sync); resend
+                    // the full state to this peer only.
+                    send_state_ws_from_snapshot(&snapshot, &ws_handle, Some(my_id)).await;
+                }
                 Err(e) => warn!("Error while deserializing websocket message: {e}"),
             }
         }

@@ -212,6 +212,66 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn device_command_broadcasts_a_targeted_patch() {
+        let (state, command, _event_rx) = fixture(ManageKind::Unmanaged, true);
+        let snapshot = state.snapshot.clone();
+        let ws = state.ws.clone();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        ws.user_connected(1, tx).await;
+        let (work_tx, _work_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), work_tx);
+
+        let result = handle.control_device(command.clone()).await.unwrap();
+        assert!(result.applied, "{:?}", result.error);
+
+        let message = tokio::time::timeout(std::time::Duration::from_secs(2), rx.recv())
+            .await
+            .expect("patch broadcast timed out")
+            .expect("patch message");
+        let value: serde_json::Value = serde_json::from_str(message.to_str().unwrap()).unwrap();
+        let patch = value.get("Patch").expect("expected a state patch");
+        assert!(patch.get("revision").is_some());
+        let upserted = patch
+            .pointer("/devices/upserted")
+            .and_then(|value| value.as_object())
+            .expect("upserted devices");
+        assert_eq!(upserted.len(), 1, "only the commanded device is sent");
+        assert!(upserted.contains_key("dummy/lamp"));
+        assert!(patch
+            .pointer("/devices/removed")
+            .and_then(|value| value.as_array())
+            .is_some_and(|removed| removed.is_empty()));
+    }
+
+    #[tokio::test]
+    async fn unchanged_device_command_sends_no_patch() {
+        let (state, command, _event_rx) = fixture(ManageKind::Unmanaged, true);
+        let snapshot = state.snapshot.clone();
+        let ws = state.ws.clone();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+        ws.user_connected(1, tx).await;
+        let (work_tx, _work_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot.clone(), work_tx);
+
+        // The fixture lamp is already on at the commanded power; the rebuild
+        // produces no observable difference and must not broadcast anything.
+        let first = handle.control_device(command.clone()).await.unwrap();
+        assert!(first.applied, "{:?}", first.error);
+        let _ = tokio::time::timeout(std::time::Duration::from_millis(400), rx.recv()).await;
+
+        let mut repeat = command;
+        repeat.request_id = "test-2".into();
+        let second = handle.control_device(repeat).await.unwrap();
+        assert!(second.applied, "{:?}", second.error);
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(400), rx.recv())
+                .await
+                .is_err(),
+            "no patch should be broadcast for an unchanged device"
+        );
+    }
+
+    #[tokio::test]
     async fn off_color_lights_keep_dimming_capability_and_explicit_false_wins() {
         for explicit in [None, Some(false)] {
             let data = ControllableDevice::new(
