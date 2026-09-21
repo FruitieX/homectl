@@ -582,7 +582,10 @@ fn assistant_stored_settings_override_environment() {
         .unwrap();
 
     let status: Value = client
-        .get(format!("{}/api/v1/config/assistant/status", server.base_url))
+        .get(format!(
+            "{}/api/v1/config/assistant/status",
+            server.base_url
+        ))
         .send()
         .unwrap()
         .json()

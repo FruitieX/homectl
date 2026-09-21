@@ -118,10 +118,8 @@ impl AssistantConfig {
                 .filter(|value| *value > 0)
                 .map(|value| value as u32)
                 .unwrap_or(DEFAULT_MAX_TOKENS),
-            reasoning_effort: source.string(
-                "reasoning_effort",
-                "HOMECTL_ASSISTANT_REASONING_EFFORT",
-            ),
+            reasoning_effort: source
+                .string("reasoning_effort", "HOMECTL_ASSISTANT_REASONING_EFFORT"),
             timezone: source.string("timezone", "HOMECTL_ASSISTANT_TIMEZONE"),
         })
     }
@@ -350,9 +348,7 @@ async fn assistant_status(snapshot: SnapshotHandle) -> Result<impl Reply, warp::
     Ok(ApiResponse::success(data))
 }
 
-async fn get_assistant_settings(
-    snapshot: SnapshotHandle,
-) -> Result<impl Reply, warp::Rejection> {
+async fn get_assistant_settings(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
     let snapshot = snapshot.load();
     Ok(ApiResponse::success(assistant_settings_view(
         &snapshot.runtime_config.widget_settings,
