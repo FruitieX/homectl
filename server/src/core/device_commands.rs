@@ -241,6 +241,18 @@ mod tests {
             .pointer("/devices/removed")
             .and_then(|value| value.as_array())
             .is_some_and(|removed| removed.is_empty()));
+        assert!(
+            patch.get("scenes").is_none(),
+            "unchanged scenes must not be broadcast"
+        );
+        assert!(
+            patch.get("groups").is_none(),
+            "unchanged groups must not be broadcast"
+        );
+        assert!(
+            patch.get("routine_statuses").is_none(),
+            "unchanged routine statuses must not be broadcast"
+        );
     }
 
     #[tokio::test]

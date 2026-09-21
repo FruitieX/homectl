@@ -256,6 +256,32 @@ impl AppState {
             },
             warming_up: self.warming_up,
         };
+        // Collections other than devices travel whole, so drop them from the
+        // broadcast when recomputing produced identical content. Device state
+        // changes routinely invalidate scenes and routine statuses without
+        // changing them, which used to ship tens of kilobytes per update.
+        if update.changes.flattened_groups && snapshot.flattened_groups == previous.flattened_groups
+        {
+            update.changes.flattened_groups = false;
+        }
+        if update.changes.flattened_scenes && snapshot.flattened_scenes == previous.flattened_scenes
+        {
+            update.changes.flattened_scenes = false;
+        }
+        if update.changes.routine_statuses && snapshot.routine_statuses == previous.routine_statuses
+        {
+            update.changes.routine_statuses = false;
+        }
+        if update.changes.helper_statuses && snapshot.helper_statuses == previous.helper_statuses {
+            update.changes.helper_statuses = false;
+        }
+        if update.changes.timers && snapshot.timers == previous.timers {
+            update.changes.timers = false;
+        }
+        if update.changes.ui_state && snapshot.ui_state == previous.ui_state {
+            update.changes.ui_state = false;
+        }
+
         self.snapshot.store(Arc::new(snapshot));
 
         // Broadcast after storing so the scheduled task reads the snapshot
