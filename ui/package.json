@@ -7,7 +7,7 @@
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,ts,tsx}\"",
     "tsc": "tsc --noEmit",
-    "test": "node --test 'lib/**/*.test.ts'"
+    "test": "node --experimental-strip-types --test 'lib/**/*.test.ts'"
   },
   "prettier": {
     "arrowParens": "always",
