@@ -71,6 +71,52 @@ export function useAssistantStatus() {
   };
 }
 
+export interface AssistantAppliedChange {
+  device_key: string;
+  name?: string;
+  ok: boolean;
+  error?: string | null;
+}
+
+export interface AssistantApplyResult {
+  summary?: string | null;
+  applied: AssistantAppliedChange[];
+  applied_count: number;
+  model: string;
+}
+
+export interface AssistantApplyRequest {
+  prompt: string;
+  /** Optional scope; the model may only address these device keys. */
+  deviceKeys?: string[];
+}
+
+/** Applies a one-off light state request to live devices. */
+export function useApplyAssistantAction() {
+  const { apiEndpoint } = useAppConfig();
+
+  return useMutation({
+    mutationFn: async (request: AssistantApplyRequest) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/apply`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+        },
+      );
+      const result = await readAssistantResponse<AssistantApplyResult>(
+        response,
+        'Failed to apply assistant action',
+      );
+      if (!result.data) {
+        throw new Error('Failed to apply assistant action');
+      }
+      return result.data;
+    },
+  });
+}
+
 /** Drafts a v2 definition from a prompt. Drafts are never saved automatically. */
 export function useDraftRoutine() {
   const { apiEndpoint } = useAppConfig();

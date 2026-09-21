@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { SlidersHorizontal } from 'lucide-react';
+import { SlidersHorizontal, Sparkles } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   useDevicesByKeysState,
@@ -24,7 +24,9 @@ import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { getSensorConfigRef } from '@/lib/sensorInteraction';
 import { excludeUndefined } from 'utils/excludeUndefined';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
+import { useAssistantStatus } from '@/hooks/useAssistant';
 import { PixiFloorplanRenderer } from '@/ui/floorplan';
+import { AssistantActionDialog } from './AssistantActionDialog';
 import { SensorActionModal } from '@/ui/SensorActionModal';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -61,6 +63,8 @@ export const Viewport = () => {
   >('default');
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const { enabled: assistantEnabled } = useAssistantStatus();
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
   const { setOpen: setSaveSceneOpen } = useSaveSceneModalState();
@@ -334,6 +338,17 @@ export const Viewport = () => {
                 </details>
               </PopoverContent>
             </Popover>
+            {assistantEnabled && (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Ask the assistant to change lights"
+                onClick={() => setAssistantOpen(true)}
+              >
+                <Sparkles />
+                Ask AI
+              </Button>
+            )}
           </>,
           toolbar,
         )}
@@ -440,6 +455,11 @@ export const Viewport = () => {
         open={activeSensor !== null}
         onClose={() => setActiveSensorKey(null)}
         presentation="floorplan"
+      />
+      <AssistantActionDialog
+        open={assistantOpen}
+        onOpenChange={setAssistantOpen}
+        deviceKeys={selectedDevices}
       />
     </div>
   );

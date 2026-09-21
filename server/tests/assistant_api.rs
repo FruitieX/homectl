@@ -597,3 +597,136 @@ fn assistant_stored_settings_override_environment() {
     assert_eq!(env_provider.requests.load(Ordering::SeqCst), 0);
     assert_eq!(stored_provider.requests.load(Ordering::SeqCst), 1);
 }
+
+fn apply(base_url: &str, client: &Client, prompt: &str, device_keys: Option<Vec<&str>>) -> reqwest::blocking::Response {
+    let mut body = json!({ "prompt": prompt });
+    if let Some(keys) = device_keys {
+        body["deviceKeys"] = json!(keys);
+    }
+    client
+        .post(format!("{base_url}/api/v1/config/assistant/apply"))
+        .json(&body)
+        .send()
+        .unwrap()
+}
+
+fn device_state(base_url: &str, client: &Client, integration_id: &str, device_id: &str) -> Value {
+    let devices: Value = client
+        .get(format!("{base_url}/api/v1/devices"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    devices["devices"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|device| {
+            device["integration_id"] == integration_id && device["id"] == device_id
+        })
+        .cloned()
+        .expect("device")
+}
+
+#[test]
+fn assistant_applies_light_state_changes() {
+    let content = json!({
+        "summary": "Living room lamp set to tropical",
+        "changes": [{
+            "device_key": "dummy/lamp",
+            "power": true,
+            "brightness": 0.4,
+            "color": {"h": 320, "s": 0.8}
+        }]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = apply(
+        &server.base_url,
+        &client,
+        "make the hallway lamp tropical",
+        None,
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let result: Value = response.json().unwrap();
+    assert_eq!(result["data"]["applied_count"], 1);
+    assert_eq!(result["data"]["applied"][0]["device_key"], "dummy/lamp");
+    assert_eq!(result["data"]["applied"][0]["ok"], true);
+    assert_eq!(result["data"]["model"], "mock-model");
+
+    let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
+    let state = &lamp["data"]["Controllable"]["state"];
+    assert_eq!(state["power"], true);
+    assert!((state["brightness"].as_f64().unwrap() - 0.4).abs() < 0.01);
+    assert_eq!(state["color"]["h"], 320);
+}
+
+#[test]
+fn assistant_apply_rejects_unknown_devices_and_reports_them() {
+    let content = json!({
+        "summary": "tried",
+        "changes": [{"device_key": "dummy/ghost", "power": true}]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = apply(&server.base_url, &client, "turn on the ghost", None);
+    assert_eq!(response.status(), StatusCode::OK);
+    let result: Value = response.json().unwrap();
+    assert_eq!(result["data"]["applied_count"], 0);
+    assert_eq!(result["data"]["applied"][0]["ok"], false);
+    assert_eq!(result["data"]["applied"][0]["error"], "Unknown device");
+
+    let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
+    assert_eq!(lamp["data"]["Controllable"]["state"]["power"], false);
+}
+
+#[test]
+fn assistant_apply_respects_the_requested_scope() {
+    let content = json!({
+        "summary": "scope escape",
+        "changes": [{"device_key": "dummy/lamp", "power": true}]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = apply(
+        &server.base_url,
+        &client,
+        "turn on the motion sensor",
+        Some(vec!["dummy/motion"]),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let result: Value = response.json().unwrap();
+    assert_eq!(result["data"]["applied"][0]["ok"], false);
+    assert_eq!(result["data"]["applied"][0]["error"], "Unknown device");
+
+    let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
+    assert_eq!(lamp["data"]["Controllable"]["state"]["power"], false);
+}
+
+#[test]
+fn assistant_apply_rejects_invalid_provider_output() {
+    let provider = MockProvider::start(vec![MockResponse::completion("not json at all")]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = apply(&server.base_url, &client, "do something", None);
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[test]
+fn assistant_apply_is_disabled_without_configuration() {
+    let server = start_server(None);
+    let client = Client::new();
+
+    let response = apply(&server.base_url, &client, "turn on the lamp", None);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}

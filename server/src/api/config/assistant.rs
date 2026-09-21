@@ -31,7 +31,9 @@ use serde_json::{json, Value};
 use super::*;
 use crate::core::automation::{self, ConfigCatalog};
 use crate::core::snapshot::RuntimeSnapshot;
-use crate::types::device::{DeviceData, DeviceRef};
+use crate::types::device::{DeviceData, DeviceKey, DeviceRef};
+use crate::types::device_command::DeviceCommand;
+use ordered_float::OrderedFloat;
 
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 const DEFAULT_MAX_TOKENS: u32 = 2_048;
@@ -335,7 +337,19 @@ pub(super) fn assistant_routes(
         .and(with_snapshot(snapshot))
         .and_then(draft_routine);
 
-    status.or(settings_get).or(settings_put).or(draft)
+    let apply = warp::path!("assistant" / "apply")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
+        .and_then(apply_assistant_action);
+
+    status
+        .or(settings_get)
+        .or(settings_put)
+        .or(draft)
+        .or(apply)
 }
 
 async fn assistant_status(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -928,6 +942,280 @@ CATALOG:
     )
 }
 
+const MAX_APPLY_CHANGES: usize = 24;
+const MAX_APPLY_DEVICES: usize = 120;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ApplyRequest {
+    prompt: String,
+    /// Optional scope (for example the floorplan selection). When present the
+    /// model may only address these devices.
+    #[serde(default)]
+    device_keys: Option<Vec<String>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplyEnvelope {
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default)]
+    changes: Vec<ApplyChange>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplyChange {
+    device_key: String,
+    #[serde(default)]
+    power: Option<bool>,
+    #[serde(default)]
+    brightness: Option<f64>,
+    #[serde(default)]
+    color: Option<ApplyColor>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ApplyColor {
+    h: f64,
+    s: f64,
+}
+
+/// Controllable devices plus their group names, for one-off light state
+/// requests. Group membership lets the model resolve room names itself.
+struct ControlCatalog {
+    value: Value,
+    devices: BTreeMap<String, DeviceKey>,
+}
+
+fn build_control_catalog(
+    snapshot: &RuntimeSnapshot,
+    scope: Option<&HashSet<String>>,
+) -> ControlCatalog {
+    let groups = &snapshot.runtime_config.groups;
+    let mut devices = BTreeMap::new();
+    let mut entries = Vec::new();
+
+    for (key, device) in snapshot.devices.0.iter() {
+        let key_string = key.to_string();
+        if scope.is_some_and(|scope| !scope.contains(&key_string)) {
+            continue;
+        }
+        let DeviceData::Controllable(data) = &device.data else {
+            continue;
+        };
+        if device.is_readonly() || entries.len() >= MAX_APPLY_DEVICES {
+            continue;
+        }
+        let rooms: Vec<&str> = groups
+            .iter()
+            .filter(|group| {
+                group.devices.iter().any(|member| {
+                    member.integration_id == key.integration_id.to_string()
+                        && member.device_id == key.device_id.to_string()
+                })
+            })
+            .map(|group| group.name.as_str())
+            .collect();
+        entries.push(json!({
+            "device_key": key_string,
+            "name": device.name,
+            "power": data.state.power,
+            "brightness": data.state.brightness.map(|value| value.0),
+            "color": data.state.color,
+            "capabilities": {
+                "brightness": data.capabilities.brightness,
+                "color": data.capabilities.hs
+                    || data.capabilities.rgb
+                    || data.capabilities.xy
+                    || data.capabilities.ct.is_some(),
+            },
+            "groups": rooms,
+        }));
+        devices.insert(key_string, key.clone());
+    }
+
+    let group_entries: Vec<Value> = groups
+        .iter()
+        .filter(|group| {
+            group.devices.iter().any(|member| {
+                devices.contains_key(&format!(
+                    "{}/{}",
+                    member.integration_id, member.device_id
+                ))
+            })
+        })
+        .map(|group| {
+            json!({
+                "name": group.name,
+                "device_keys": group
+                    .devices
+                    .iter()
+                    .map(|member| format!("{}/{}", member.integration_id, member.device_id))
+                    .filter(|key| devices.contains_key(key))
+                    .collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+
+    ControlCatalog {
+        value: json!({ "devices": entries, "groups": group_entries }),
+        devices,
+    }
+}
+
+fn control_system_prompt(catalog_json: &str) -> String {
+    format!(
+        "You control smart lights in a home. You receive a catalog of controllable devices, \
+         their current state, capabilities, and group names. Interpret the user's request and \
+         reply with a single JSON object using exactly this contract:\n\
+         {{\"summary\":\"one short sentence\",\"changes\":[{{\"device_key\":\"integration/device\",\"power\":true,\"brightness\":0.4,\"color\":{{\"h\":320,\"s\":0.8}}}}]}}\n\
+         Rules:\n\
+         - Only use device_key values from the catalog; never invent devices.\n\
+         - Omit any field you do not want to change (for example set only color).\n\
+         - brightness is 0..1; color h is 0..360 degrees and s is 0..1.\n\
+         - Only set color when the device's capabilities.color is true.\n\
+         - Resolve room or group names (for example \"living room\") to their member device_keys.\n\
+         - If the request cannot be fulfilled with light state changes, return an empty changes \
+         list and explain why in summary.\n\
+         - Return only the JSON object, without markdown or code fences.\n\n\
+         Catalog:\n{catalog_json}"
+    )
+}
+
+fn parse_apply_envelope(content: &str) -> Result<ApplyEnvelope, String> {
+    let value = extract_json_object(content)
+        .ok_or_else(|| "Assistant response did not contain a JSON object".to_string())?;
+    serde_json::from_value(value)
+        .map_err(|error| format!("Assistant response did not match the contract: {error}"))
+}
+
+async fn apply_assistant_action(
+    request: ApplyRequest,
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let prompt = request.prompt.trim();
+    if prompt.is_empty() {
+        return Ok(error_response(
+            "prompt is required",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    if prompt.chars().count() > MAX_PROMPT_CHARS {
+        return Ok(error_response(
+            &format!("prompt must be at most {MAX_PROMPT_CHARS} characters"),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let snapshot = snapshot.load();
+    let Some(config) = AssistantConfig::from_settings(&snapshot.runtime_config.widget_settings)
+    else {
+        return Ok(error_response(
+            "Assistant is not configured. Set the provider base URL and model in Settings.",
+            StatusCode::SERVICE_UNAVAILABLE,
+        ));
+    };
+
+    let scope = request
+        .device_keys
+        .map(|keys| keys.into_iter().collect::<HashSet<_>>())
+        .filter(|scope| !scope.is_empty());
+    let catalog = build_control_catalog(&snapshot, scope.as_ref());
+    let catalog_json = serde_json::to_string(&catalog.value).unwrap_or_else(|_| "{}".to_string());
+
+    let messages = vec![
+        json!({ "role": "system", "content": control_system_prompt(&catalog_json) }),
+        json!({ "role": "user", "content": prompt }),
+    ];
+    let mut options = ChatOptions {
+        json_mode: true,
+        reasoning_effort: config.reasoning_effort.is_some(),
+    };
+    let session_id = new_session_id();
+
+    let content = match chat(&config, &messages, &mut options, &session_id).await {
+        Ok(content) => content,
+        Err(error) => return Ok(provider_error_response(error)),
+    };
+    let envelope = match parse_apply_envelope(&content) {
+        Ok(envelope) => envelope,
+        Err(error) => return Ok(error_response(&error, StatusCode::UNPROCESSABLE_ENTITY)),
+    };
+    if envelope.changes.len() > MAX_APPLY_CHANGES {
+        return Ok(error_response(
+            &format!("Assistant returned more than {MAX_APPLY_CHANGES} changes"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ));
+    }
+
+    let mut applied = Vec::new();
+    let mut applied_count = 0usize;
+    for change in &envelope.changes {
+        let Some(device_key) = catalog.devices.get(&change.device_key).cloned() else {
+            applied.push(json!({
+                "device_key": change.device_key,
+                "ok": false,
+                "error": "Unknown device",
+            }));
+            continue;
+        };
+        let name = snapshot
+            .devices
+            .0
+            .get(&device_key)
+            .map(|device| device.name.clone())
+            .unwrap_or_default();
+        if change.power.is_none() && change.brightness.is_none() && change.color.is_none() {
+            applied.push(json!({
+                "device_key": change.device_key,
+                "name": name,
+                "ok": false,
+                "error": "No changes supplied",
+            }));
+            continue;
+        }
+
+        let command = DeviceCommand {
+            request_id: new_session_id(),
+            device_key,
+            power: change.power,
+            brightness: change
+                .brightness
+                .map(|value| value.clamp(0.0, 1.0) as f32),
+            color: change.color.as_ref().map(|color| {
+                crate::types::color::DeviceColor::Hs(crate::types::color::Hs {
+                    h: color.h.clamp(0.0, 360.0).round() as u64,
+                    s: OrderedFloat(color.s.clamp(0.0, 1.0) as f32),
+                })
+            }),
+            transition: None,
+            preserve_scene: false,
+        };
+        let result = handle.control_device(command).await;
+        let (ok, error) = match result {
+            Ok(result) => (result.applied, result.error),
+            Err(error) => (false, Some(error.to_string())),
+        };
+        if ok {
+            applied_count += 1;
+        }
+        applied.push(json!({
+            "device_key": change.device_key,
+            "name": name,
+            "ok": ok,
+            "error": error,
+        }));
+    }
+
+    Ok(ApiResponse::success(json!({
+        "summary": envelope.summary,
+        "applied": applied,
+        "applied_count": applied_count,
+        "model": config.model,
+    })))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1130,6 +1418,91 @@ mod tests {
         assert!(program_warning(&script).is_some());
         let native = json!({"program": {"kind": "native", "steps": []}});
         assert!(program_warning(&native).is_none());
+    }
+
+    fn control_snapshot() -> RuntimeSnapshot {
+        let mut export = empty_export();
+        export.groups = vec![GroupRow {
+            id: "living_room".to_string(),
+            name: "Living room".to_string(),
+            hidden: false,
+            devices: vec![config_queries::GroupDeviceRow {
+                integration_id: "dummy".to_string(),
+                device_id: "lamp".to_string(),
+            }],
+            linked_groups: Vec::new(),
+        }];
+        let lamp = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("lamp"),
+            "Living room lamp".to_string(),
+            DeviceData::Controllable(crate::types::device::ControllableDevice::new(
+                None,
+                false,
+                Some(0.2),
+                None,
+                None,
+                crate::types::color::Capabilities {
+                    brightness: Some(true),
+                    hs: true,
+                    ..Default::default()
+                },
+                crate::types::device::ManageKind::Unmanaged,
+            )),
+            None,
+        );
+        RuntimeSnapshot {
+            runtime_config: std::sync::Arc::new(export),
+            devices: std::sync::Arc::new(DevicesState(
+                [(lamp.get_device_key(), lamp)].into_iter().collect(),
+            )),
+            flattened_groups: Default::default(),
+            flattened_scenes: Default::default(),
+            routine_statuses: Default::default(),
+            helper_statuses: Default::default(),
+            timers: Default::default(),
+            ui_state: Default::default(),
+            warming_up: false,
+        }
+    }
+
+    #[test]
+    fn control_catalog_lists_controllable_devices_and_groups() {
+        let snapshot = control_snapshot();
+        let catalog = build_control_catalog(&snapshot, None);
+        assert!(catalog.devices.contains_key("dummy/lamp"));
+        assert_eq!(catalog.value["devices"][0]["name"], "Living room lamp");
+        assert_eq!(catalog.value["devices"][0]["capabilities"]["color"], true);
+        assert_eq!(catalog.value["devices"][0]["groups"][0], "Living room");
+        assert_eq!(catalog.value["groups"][0]["name"], "Living room");
+        assert_eq!(catalog.value["groups"][0]["device_keys"][0], "dummy/lamp");
+    }
+
+    #[test]
+    fn control_catalog_scope_limits_devices() {
+        let snapshot = control_snapshot();
+        let scope = HashSet::from(["dummy/other".to_string()]);
+        let catalog = build_control_catalog(&snapshot, Some(&scope));
+        assert!(catalog.devices.is_empty());
+        assert_eq!(catalog.value["devices"], json!([]));
+        assert_eq!(catalog.value["groups"], json!([]));
+    }
+
+    #[test]
+    fn parse_apply_envelope_validates_the_contract() {
+        let envelope = parse_apply_envelope(
+            "```json\n{\"summary\":\"done\",\"changes\":[{\"device_key\":\"dummy/lamp\",\"power\":true}]}\n```",
+        )
+        .unwrap();
+        assert_eq!(envelope.summary.as_deref(), Some("done"));
+        assert_eq!(envelope.changes.len(), 1);
+        assert_eq!(envelope.changes[0].device_key, "dummy/lamp");
+
+        let empty = parse_apply_envelope("{\"summary\":\"nothing to do\",\"changes\":[]}").unwrap();
+        assert!(empty.changes.is_empty());
+
+        assert!(parse_apply_envelope("not json").is_err());
+        assert!(parse_apply_envelope("{\"changes\":\"nope\"}").is_err());
     }
 
     #[test]

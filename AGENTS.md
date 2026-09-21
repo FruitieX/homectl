@@ -261,7 +261,17 @@ sole source of truth. The API key is masked in responses and redacted from
 exports unless `?include_secrets=true` is requested.
 
 Assistant drafts are validated by the v2 compiler and returned for review;
-they are never persisted or enabled automatically.
+they are never persisted or enabled automatically. The floorplan &quot;Ask AI&quot;
+action posts a one-off light-state request to
+`POST /api/v1/config/assistant/apply` with an optional `deviceKeys` scope; the
+server validates every change against the live catalog and applies it through
+the same device command path as manual controls.
+
+Device state travels to websocket clients as targeted `Patch` messages
+(upserted/removed devices only). `State`/`Patch` carry a monotonic `revision`;
+clients apply a patch only when it follows the last seen revision and send
+`{"Resync":{}}` when a gap means an update was missed. Full state is sent on
+connect and after explicit resyncs.
 
 ## CI/CD
 
