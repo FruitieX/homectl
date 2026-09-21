@@ -2,7 +2,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
-    core::{scenes::normalize_scene_config_value, snapshot::RuntimeSnapshot},
+    core::{
+        automation::sources::source_device_key, scenes::normalize_scene_config_value,
+        snapshot::RuntimeSnapshot,
+    },
     types::{
         config_diagnostics::{
             ConfigDiagnostic, ConfigDiagnostics, DiagnosticEntity, DiagnosticSeverity,
@@ -11,6 +14,23 @@ use crate::{
         scene::{ActivateSceneDescriptor, SceneDeviceConfig, SceneDeviceLink, SceneId},
     },
 };
+
+/// Resolve a device key against the snapshot, following computed-source
+/// aliases to their canonical `computed/<id>` device. Mirrors the runtime
+/// `Devices::get_device` lookup so diagnostics agree with scene resolution.
+fn resolve_snapshot_device_key(snapshot: &RuntimeSnapshot, key: &DeviceKey) -> Option<DeviceKey> {
+    if snapshot.devices.0.contains_key(key) {
+        return Some(key.clone());
+    }
+    snapshot
+        .runtime_config
+        .sources
+        .iter()
+        .filter(|source| source.enabled)
+        .find(|source| source.aliases.iter().any(|alias| alias == key))
+        .map(|source| source_device_key(&source.id))
+        .filter(|canonical| snapshot.devices.0.contains_key(canonical))
+}
 
 struct Inspector<'a> {
     snapshot: &'a RuntimeSnapshot,
@@ -80,7 +100,9 @@ impl Inspector<'_> {
             Ok(SceneDeviceConfig::DeviceLink(link)) => {
                 let DeviceRef::Id(reference) = link.device_ref;
                 let key = reference.into_device_key();
-                if !self.snapshot.devices.0.contains_key(&key) && !self.snapshot.warming_up {
+                if resolve_snapshot_device_key(self.snapshot, &key).is_none()
+                    && !self.snapshot.warming_up
+                {
                     self.issue(
                         Scene,
                         scene_id,
@@ -176,7 +198,7 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
                 let found =
                     serde_json::from_value::<DeviceKey>(serde_json::Value::String(key.clone()))
                         .ok()
-                        .is_some_and(|key| snapshot.devices.0.contains_key(&key));
+                        .is_some_and(|key| resolve_snapshot_device_key(snapshot, &key).is_some());
                 if !found {
                     check.issue(Group, &group.id, &group.name, "missing_group_device", &key, Warning,
                         format!("Device {key} is not available in the current runtime."), "Check its integration, replace the device reference, or remove it from this group.");
@@ -194,7 +216,8 @@ pub fn inspect_config(snapshot: &RuntimeSnapshot) -> ConfigDiagnostics {
             let device =
                 serde_json::from_value::<DeviceKey>(serde_json::Value::String(target.clone()))
                     .ok()
-                    .and_then(|key| snapshot.devices.0.get(&key));
+                    .and_then(|key| resolve_snapshot_device_key(snapshot, &key))
+                    .and_then(|canonical| snapshot.devices.0.get(&canonical));
             match device {
                 None if !snapshot.warming_up => check.issue(Scene, &scene.id, &scene.name, "missing_scene_device", target, Warning,
                     format!("Target device {target} is not available."), "Check its integration or update the scene target."),
@@ -292,8 +315,10 @@ mod tests {
         core::event::tests::test_state,
         db::config_queries::{GroupDeviceRow, GroupRow, SceneRow},
         types::{
+            automation_definition::SourceId,
+            automation_source::{SourceCompute, SourceDefinition},
             color::Capabilities,
-            device::{ControllableDevice, Device, DeviceId, ManageKind},
+            device::{ControllableDevice, Device, DeviceData, DeviceId, DeviceKey, ManageKind},
             integration::IntegrationId,
         },
     };
@@ -402,6 +427,110 @@ mod tests {
         assert!(codes.contains(&"unresolved_active_scene".into()));
         assert!(codes.contains(&"readonly_scene_target".into()));
         assert_eq!(serde_json::to_value(&*snapshot.devices).unwrap(), before);
+    }
+
+    #[test]
+    fn source_aliases_satisfy_links_groups_and_scene_targets() {
+        let mut snapshot = snapshot();
+        let canonical = DeviceKey::new(
+            IntegrationId::from("computed".to_string()),
+            DeviceId::new("circadian"),
+        );
+        let alias = DeviceKey::new(
+            IntegrationId::from("circadian".to_string()),
+            DeviceId::new("color"),
+        );
+        let device = Device::new(
+            canonical.integration_id.clone(),
+            canonical.device_id.clone(),
+            "Circadian".into(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                false,
+                None,
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::UnmanagedReadOnly,
+            )),
+            None,
+        );
+        Arc::make_mut(&mut snapshot.devices)
+            .0
+            .insert(canonical.clone(), device);
+        let target_device = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("target"),
+            "Target".into(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                false,
+                None,
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Unmanaged,
+            )),
+            None,
+        );
+        Arc::make_mut(&mut snapshot.devices)
+            .0
+            .insert(target_device.get_device_key(), target_device);
+        Arc::make_mut(&mut snapshot.runtime_config)
+            .sources
+            .push(SourceDefinition {
+                id: SourceId("circadian".into()),
+                name: "Circadian".into(),
+                enabled: true,
+                revision: 1,
+                timezone: "Europe/Helsinki".into(),
+                refresh_interval_ms: 60_000,
+                aliases: vec![alias.clone()],
+                compute: SourceCompute::Script {
+                    preset: None,
+                    source_body: Some("return null;".into()),
+                    params: serde_json::Value::Null,
+                },
+            });
+
+        let mut aliased_group = group("aliased", &[]);
+        aliased_group.devices.push(GroupDeviceRow {
+            integration_id: "circadian".into(),
+            device_id: "color".into(),
+        });
+        Arc::make_mut(&mut snapshot.runtime_config).groups = vec![aliased_group];
+        Arc::make_mut(&mut snapshot.runtime_config)
+            .scenes
+            .push(SceneRow {
+                id: "aliased".into(),
+                name: "Aliased".into(),
+                hidden: false,
+                script: None,
+                device_states: std::collections::HashMap::from([
+                    (
+                        "dummy/target".into(),
+                        json!({"integration_id": "circadian", "id": "color"}),
+                    ),
+                    ("circadian/color".into(), json!({"power": true})),
+                ]),
+                group_states: Default::default(),
+                group_state_order: Vec::new(),
+            });
+
+        let codes = codes(&snapshot);
+        assert!(
+            !codes.contains(&"missing_device_link".into()),
+            "alias should satisfy device links: {codes:?}"
+        );
+        assert!(
+            !codes.contains(&"missing_group_device".into()),
+            "alias should satisfy group membership: {codes:?}"
+        );
+        assert!(
+            !codes.contains(&"missing_scene_device".into()),
+            "alias should satisfy scene targets: {codes:?}"
+        );
+        assert!(codes.contains(&"readonly_scene_target".into()));
     }
 
     #[test]
