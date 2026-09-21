@@ -1597,17 +1597,16 @@ impl Compiler<'_> {
                     }
                 },
             },
-            (None, Some(_)) => {
+            (None, Some(_))
                 if schedule.backlog != BacklogPolicy::Skip
-                    || schedule.catch_up_lateness_ms.is_some()
-                {
-                    self.report.error_at_node(
-                        format!("{path}/backlog"),
-                        node,
-                        "schedule_policy_not_applicable",
-                        "Calendar backlog policy applies to cron schedules only.",
-                    );
-                }
+                    || schedule.catch_up_lateness_ms.is_some() =>
+            {
+                self.report.error_at_node(
+                    format!("{path}/backlog"),
+                    node,
+                    "schedule_policy_not_applicable",
+                    "Calendar backlog policy applies to cron schedules only.",
+                );
             }
             _ => {}
         }

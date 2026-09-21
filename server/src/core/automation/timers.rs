@@ -403,6 +403,7 @@ impl TimerStore {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert(
         &mut self,
         owner: &RoutineId,
