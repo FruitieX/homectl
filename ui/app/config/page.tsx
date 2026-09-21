@@ -3,6 +3,7 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  Check,
   ChevronRight,
   Download,
   Layers3,
@@ -334,6 +335,19 @@ export default function ConfigPage() {
         </div>
       </section>
 
+      <SetupChecklist
+        integrationCount={integrations?.length ?? 0}
+        deviceCount={Object.keys(devicesState ?? {}).length}
+        unassignedCount={
+          attentionItems.some((item) => item.key === 'unassigned-devices')
+            ? 1
+            : 0
+        }
+        sceneCount={Object.keys(scenesState ?? {}).length}
+        routineCount={routines?.length ?? 0}
+        onNavigate={open}
+      />
+
       {attentionItems.length > 0 ? (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
@@ -419,6 +433,123 @@ export default function ConfigPage() {
         </p>
       </footer>
     </div>
+  );
+}
+
+function SetupChecklist({
+  integrationCount,
+  deviceCount,
+  unassignedCount,
+  sceneCount,
+  routineCount,
+  onNavigate,
+}: {
+  integrationCount: number;
+  deviceCount: number;
+  unassignedCount: number;
+  sceneCount: number;
+  routineCount: number;
+  onNavigate: (key: string, href: string) => void;
+}) {
+  const [dismissed, setDismissed] = useState(false);
+
+  const steps = [
+    {
+      key: 'setup:integration',
+      label: 'Connect an integration',
+      detail: 'Bring devices in from MQTT, circadian, timers, or a plugin.',
+      href: '/config/integrations',
+      done: integrationCount > 0,
+    },
+    {
+      key: 'setup:rooms',
+      label: 'Assign devices to rooms',
+      detail:
+        deviceCount === 0
+          ? 'Waiting for devices to appear.'
+          : 'Rooms let scenes and routines target groups of lights.',
+      href: '/config/devices',
+      done: deviceCount > 0 && unassignedCount === 0,
+    },
+    {
+      key: 'setup:scene',
+      label: 'Create your first scene',
+      detail: 'Capture the current light state or compose one by hand.',
+      href: '/config/scenes?new=1',
+      done: sceneCount > 0,
+    },
+    {
+      key: 'setup:routine',
+      label: 'Create your first routine',
+      detail: 'React to motion, buttons, time, or helpers.',
+      href: '/config/routines?new=1',
+      done: routineCount > 0,
+    },
+  ];
+
+  const completed = steps.filter((step) => step.done).length;
+  if (dismissed || completed === steps.length) return null;
+
+  return (
+    <section className="space-y-3 rounded-3xl border border-border bg-card/70 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Set up your home</h2>
+          <p className="text-xs text-muted-foreground">
+            {completed} of {steps.length} done. Each step links straight to the
+            right page.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="text-xs text-muted-foreground transition hover:text-foreground"
+        >
+          Hide
+        </button>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+        <div
+          className="h-full rounded-full bg-primary transition-all"
+          style={{ width: `${(completed / steps.length) * 100}%` }}
+        />
+      </div>
+      <ol className="grid gap-2 sm:grid-cols-2">
+        {steps.map((step) => (
+          <li key={step.key}>
+            <button
+              type="button"
+              onClick={() => onNavigate(step.key, step.href)}
+              className="flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-background/70 p-3 text-left transition hover:bg-accent"
+            >
+              <span
+                className={
+                  step.done
+                    ? 'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground'
+                    : 'mt-0.5 size-4 shrink-0 rounded-full border border-border'
+                }
+              >
+                {step.done ? <Check className="size-3" /> : null}
+              </span>
+              <span className="min-w-0">
+                <span
+                  className={
+                    step.done
+                      ? 'block text-sm font-medium text-muted-foreground line-through'
+                      : 'block text-sm font-medium'
+                  }
+                >
+                  {step.label}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {step.detail}
+                </span>
+              </span>
+            </button>
+          </li>
+        ))}
+      </ol>
+    </section>
   );
 }
 

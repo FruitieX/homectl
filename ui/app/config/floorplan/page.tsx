@@ -23,6 +23,9 @@ import {
   ConfigFormActions,
   ConfigFormSection,
 } from '@/ui/config-form';
+import { useMediaQuery } from 'usehooks-ts';
+import { Link } from 'react-router-dom';
+
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
@@ -76,6 +79,7 @@ export default function FloorplanPage() {
     remove: removeFloorplan,
   } = useFloorplans();
   const { data: groups } = useGroups();
+  const isNarrow = useMediaQuery('(max-width: 767px)');
   const [loading, setLoading] = useState(false);
   const [floorplanLoading, setFloorplanLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -457,6 +461,19 @@ export default function FloorplanPage() {
 
   return (
     <div className="space-y-6">
+      {isNarrow ? (
+        <Alert>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              The grid editor is built for larger screens. You can keep
+              editing, or open the read-only map view.
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/map">Open map view</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
       <ConfigPageHeader
         title="Floorplan Editor"
         description="Manage floorplan canvases, background images, device placements, and group masks."
