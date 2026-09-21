@@ -376,6 +376,9 @@ async fn s04_allocation_abuse_is_contained_by_the_address_space_limit() {
     const LIMIT: u64 = 256 * 1024 * 1024;
     let mut config = test_config(1);
     config.address_space_limit_bytes = LIMIT;
+    // The probe touches every allocated page; debug builds on slow CI runners
+    // need more than the default 500ms to reach the bound.
+    config.invocation_timeout = Duration::from_secs(10);
     let pool = JsWorkerPool::new(config).await.unwrap();
 
     let start = Instant::now();
@@ -404,7 +407,11 @@ async fn s04_allocation_abuse_is_contained_by_the_address_space_limit() {
 
 #[tokio::test]
 async fn s04_output_abuse_is_bounded_and_keeps_the_worker() {
-    let pool = test_pool(1).await;
+    let mut config = test_config(1);
+    // Building the oversized string in a debug build on a slow CI runner can
+    // exceed the default 500ms budget before the output cap is reached.
+    config.invocation_timeout = Duration::from_secs(10);
+    let pool = JsWorkerPool::new(config).await.unwrap();
     let before = pool.worker_pids();
 
     let error = pool
