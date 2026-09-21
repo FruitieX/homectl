@@ -1,7 +1,7 @@
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Monitor, Moon, Save, Server, Sun, Wifi } from 'lucide-react';
+import { Bot, Monitor, Moon, Save, Server, Sun, Trash2, Wifi } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -46,6 +46,14 @@ import {
   FormMessage,
 } from '@/ui/primitives/form';
 import { Input } from '@/ui/primitives/input';
+import { Label } from '@/ui/primitives/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/ui/primitives/select';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Switch } from '@/ui/primitives/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
@@ -155,7 +163,7 @@ export default function SettingsPage() {
   const recordWrite = useRecordConfigWrite();
   const { apiEndpoint, wsEndpoint } = useAppConfig();
   const [settingsTab, setSettingsTab] = useState<
-    'appearance' | 'core' | 'info'
+    'appearance' | 'core' | 'assistant' | 'info'
   >('appearance');
   const form = useForm<CoreConfigFormValues>({
     resolver: zodResolver(coreConfigFormSchema),
@@ -196,7 +204,12 @@ export default function SettingsPage() {
   };
 
   const changeSettingsTab = (value: string) => {
-    if (value === 'appearance' || value === 'core' || value === 'info') {
+    if (
+      value === 'appearance' ||
+      value === 'core' ||
+      value === 'assistant' ||
+      value === 'info'
+    ) {
       setSettingsTab(value);
     }
   };
@@ -236,9 +249,10 @@ export default function SettingsPage() {
         )}
 
         <Tabs value={settingsTab} onValueChange={changeSettingsTab}>
-          <TabsList className="grid h-auto w-full grid-cols-3">
+          <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="core">Core</TabsTrigger>
+            <TabsTrigger value="assistant">Assistant</TabsTrigger>
             <TabsTrigger value="info">Info</TabsTrigger>
           </TabsList>
 
@@ -394,6 +408,10 @@ export default function SettingsPage() {
                 </CardContent>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="assistant" className="mt-4">
+            <AssistantSettingsCard />
           </TabsContent>
 
           <TabsContent value="info" className="mt-4">
@@ -630,5 +648,325 @@ function DeveloperModeSetting() {
         aria-label="Enable developer mode"
       />
     </div>
+  );
+}
+
+const assistantSettingsSchema = z.object({
+  enabled: z.boolean(),
+  baseUrl: z.string().nullable().optional(),
+  model: z.string().nullable().optional(),
+  apiKeySet: z.boolean(),
+  reasoningEffort: z.enum(['low', 'medium', 'high']).nullable().optional(),
+  maxTokens: z.number(),
+  timeoutMs: z.number(),
+  timezone: z.string().nullable().optional(),
+});
+
+const assistantEnvelopeSchema = z.object({
+  success: z.boolean(),
+  data: assistantSettingsSchema.nullish(),
+  error: z.string().nullish(),
+  write: z
+    .object({
+      applied: z.boolean(),
+      persistence: z.enum(['persisted', 'memory_only', 'failed']),
+      warning: z.string().nullable(),
+    })
+    .optional(),
+});
+
+type AssistantSettings = z.infer<typeof assistantSettingsSchema>;
+
+type AssistantFormState = {
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  reasoningEffort: string;
+  maxTokens: string;
+  timeoutMs: string;
+  timezone: string;
+};
+
+function assistantFormFromSettings(
+  settings: AssistantSettings | null | undefined,
+): AssistantFormState {
+  return {
+    baseUrl: settings?.baseUrl ?? '',
+    model: settings?.model ?? '',
+    apiKey: '',
+    reasoningEffort: settings?.reasoningEffort ?? '',
+    maxTokens: String(settings?.maxTokens ?? 2048),
+    timeoutMs: String(settings?.timeoutMs ?? 60000),
+    timezone: settings?.timezone ?? '',
+  };
+}
+
+async function readAssistantSettings(apiEndpoint: string) {
+  const response = await fetch(
+    `${apiEndpoint}/api/v1/config/assistant/settings`,
+  );
+  const result = assistantEnvelopeSchema.parse(await response.json());
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'Failed to load assistant settings');
+  }
+
+  return result.data ?? null;
+}
+
+async function updateAssistantSettings(
+  apiEndpoint: string,
+  form: AssistantFormState,
+  includeApiKey: boolean,
+) {
+  const body: Record<string, unknown> = {
+    baseUrl: form.baseUrl,
+    model: form.model,
+    reasoningEffort: form.reasoningEffort,
+    maxTokens: form.maxTokens === '' ? 0 : Number(form.maxTokens),
+    timeoutMs: form.timeoutMs === '' ? 0 : Number(form.timeoutMs),
+    timezone: form.timezone,
+  };
+  if (includeApiKey) {
+    body.apiKey = form.apiKey;
+  }
+
+  const response = await fetch(
+    `${apiEndpoint}/api/v1/config/assistant/settings`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  const result = assistantEnvelopeSchema.parse(await response.json());
+
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'Failed to save assistant settings');
+  }
+
+  return { settings: result.data ?? null, write: result.write };
+}
+
+function AssistantSettingsCard() {
+  const recordWrite = useRecordConfigWrite();
+  const { apiEndpoint } = useAppConfig();
+  const [form, setForm] = useState<AssistantFormState>(() =>
+    assistantFormFromSettings(null),
+  );
+
+  const query = useQuery({
+    queryKey: ['config', apiEndpoint, 'assistant'],
+    queryFn: () => readAssistantSettings(apiEndpoint),
+  });
+
+  useEffect(() => {
+    if (query.data !== undefined) {
+      setForm(assistantFormFromSettings(query.data));
+    }
+  }, [query.data]);
+
+  const mutation = useMutation({
+    mutationFn: () =>
+      updateAssistantSettings(apiEndpoint, form, form.apiKey.length > 0),
+    onSuccess: ({ settings, write }) => {
+      setForm(assistantFormFromSettings(settings));
+      recordWrite('Assistant settings', write);
+      if (write?.persistence === 'persisted')
+        toast.success('Assistant settings saved');
+      else if (write)
+        toast.warning(write.warning ?? 'Applied in memory only.');
+      else toast.success('Assistant settings applied');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to save assistant settings',
+      );
+    },
+  });
+
+  const clearKey = useMutation({
+    mutationFn: () =>
+      updateAssistantSettings(apiEndpoint, { ...form, apiKey: '' }, true),
+    onSuccess: ({ settings, write }) => {
+      setForm(assistantFormFromSettings(settings));
+      recordWrite('Assistant API key', write);
+      toast.success('Stored API key cleared');
+    },
+    onError: (error) => {
+      toast.error(
+        error instanceof Error ? error.message : 'Failed to clear API key',
+      );
+    },
+  });
+
+  const fieldProps = (key: keyof AssistantFormState) => ({
+    value: form[key],
+    onChange: (event: React.ChangeEvent<HTMLInputElement>) =>
+      setForm((previous) => ({ ...previous, [key]: event.target.value })),
+  });
+
+  const enabled = form.baseUrl.length > 0 && form.model.length > 0;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Bot className="size-4" />
+          Routine Assistant
+        </CardTitle>
+        <CardDescription>
+          OpenAI-compatible provider used by the routine editor&apos;s
+          &quot;Draft with AI&quot; action. The API key is stored server-side
+          and never sent back to the browser.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        {query.isLoading && !query.data ? (
+          <Skeleton className="h-44" />
+        ) : query.error && query.data === undefined ? (
+          <Alert variant="destructive">
+            <AlertTitle>Could not load assistant settings</AlertTitle>
+            <AlertDescription className="mt-2 flex flex-col gap-3">
+              <span>
+                {query.error instanceof Error
+                  ? query.error.message
+                  : 'Failed to connect to server'}
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => void query.refetch()}
+              >
+                Retry
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : (
+          <>
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span
+                className={cn(
+                  'size-2 rounded-full',
+                  enabled ? 'bg-emerald-500' : 'bg-muted-foreground/40',
+                )}
+              />
+              {enabled
+                ? `Active — drafting with ${form.model}`
+                : 'Inactive — set a base URL and model to enable drafting.'}
+            </p>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor="assistant-base-url">Base URL</Label>
+                <Input
+                  id="assistant-base-url"
+                  placeholder="https://opencode.ai/zen/go/v1"
+                  {...fieldProps('baseUrl')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assistant-model">Model</Label>
+                <Input
+                  id="assistant-model"
+                  placeholder="deepseek-v4.1-flash"
+                  {...fieldProps('model')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assistant-api-key">API key</Label>
+                <Input
+                  id="assistant-api-key"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={
+                    query.data?.apiKeySet
+                      ? 'Stored — leave blank to keep'
+                      : 'Optional'
+                  }
+                  {...fieldProps('apiKey')}
+                />
+                {query.data?.apiKeySet && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto px-0 text-xs text-muted-foreground"
+                    disabled={clearKey.isPending}
+                    onClick={() => clearKey.mutate()}
+                  >
+                    <Trash2 className="size-3" />
+                    Clear stored key
+                  </Button>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assistant-effort">Reasoning effort</Label>
+                <Select
+                  value={form.reasoningEffort || 'default'}
+                  onValueChange={(value) =>
+                    setForm((previous) => ({
+                      ...previous,
+                      reasoningEffort: value === 'default' ? '' : value,
+                    }))
+                  }
+                >
+                  <SelectTrigger id="assistant-effort">
+                    <SelectValue placeholder="Provider default" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="default">Provider default</SelectItem>
+                    <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assistant-timezone">Timezone</Label>
+                <Input
+                  id="assistant-timezone"
+                  placeholder="Europe/Helsinki"
+                  {...fieldProps('timezone')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assistant-max-tokens">Max tokens</Label>
+                <Input
+                  id="assistant-max-tokens"
+                  type="number"
+                  min={1}
+                  inputMode="numeric"
+                  {...fieldProps('maxTokens')}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="assistant-timeout">Timeout (ms)</Label>
+                <Input
+                  id="assistant-timeout"
+                  type="number"
+                  min={1000}
+                  step={1000}
+                  inputMode="numeric"
+                  {...fieldProps('timeoutMs')}
+                />
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              disabled={mutation.isPending || clearKey.isPending}
+              onClick={() => mutation.mutate()}
+            >
+              <Save />
+              {mutation.isPending ? 'Saving…' : 'Save assistant settings'}
+            </Button>
+          </>
+        )}
+      </CardContent>
+    </Card>
   );
 }

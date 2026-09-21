@@ -1627,7 +1627,7 @@ pub fn config(
             .or(routines_routes(snapshot, handle))
             .or(helpers_routes(snapshot, handle))
             .or(sources_routes(snapshot, handle))
-            .or(assistant_routes(snapshot))
+            .or(assistant_routes(snapshot, handle))
             .or(floorplans_routes(snapshot, handle))
             .or(floorplan_routes(snapshot, handle))
             .or(dashboard_routes(snapshot, handle))
@@ -2831,7 +2831,7 @@ mod sources;
 use sources::sources_routes;
 
 mod assistant;
-use assistant::assistant_routes;
+use assistant::{assistant_routes, ASSISTANT_SETTING_KEY};
 
 fn floorplans_routes(
     snapshot: &SnapshotHandle,
@@ -3497,6 +3497,7 @@ fn secret_widget_field(setting_key: &str) -> Option<&'static str> {
     match setting_key {
         INFLUXDB_SETTING_KEY => Some(TOKEN_FIELD),
         CALENDAR_SETTING_KEY => Some(ICS_URL_FIELD),
+        ASSISTANT_SETTING_KEY => Some("api_key"),
         _ => None,
     }
 }

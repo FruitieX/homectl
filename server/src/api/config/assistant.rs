@@ -5,8 +5,12 @@
 //! Drafts are never persisted or enabled by the server; the client loads them
 //! into the editor for review.
 //!
-//! Provider configuration lives in the deployment environment so secrets never
-//! reach the browser or text exports:
+//! Provider configuration lives in a reserved `assistant` widget setting so it
+//! is editable from the settings UI and persisted in the database. The API key
+//! never leaves the server: it is masked in responses and dropped from exports
+//! unless a secret-inclusive backup is requested. The `HOMECTL_ASSISTANT_*`
+//! deployment environment variables remain as a fallback used only while no
+//! stored settings exist:
 //! - `HOMECTL_ASSISTANT_BASE_URL` (OpenAI-compatible base, e.g.
 //!   `http://ollama.lan:11434/v1` or `https://api.openai.com/v1`)
 //! - `HOMECTL_ASSISTANT_MODEL`
@@ -34,6 +38,17 @@ const DEFAULT_MAX_TOKENS: u32 = 2_048;
 const MAX_PROMPT_CHARS: usize = 2_000;
 const MAX_ATTEMPTS: usize = 2;
 const MAX_CATALOG_DEVICES: usize = 250;
+const MIN_TIMEOUT_MS: u64 = 1_000;
+const MAX_TIMEOUT_MS: u64 = 600_000;
+const MAX_MAX_TOKENS: u64 = 1_000_000;
+const REASONING_EFFORTS: [&str; 3] = ["low", "medium", "high"];
+
+/// Reserved `widget_settings` key holding assistant provider configuration.
+///
+/// The assistant is a server feature rather than a dashboard widget, but
+/// storing it as a widget setting lets it share the existing secret
+/// redaction/export rules.
+pub(super) const ASSISTANT_SETTING_KEY: &str = "assistant";
 
 #[derive(Clone, Debug)]
 struct AssistantConfig {
@@ -46,30 +61,212 @@ struct AssistantConfig {
     timezone: Option<String>,
 }
 
+/// Where assistant settings are read from: stored database settings once they
+/// exist, deployment environment only until then.
+enum SettingSource<'a> {
+    Stored(&'a serde_json::Map<String, Value>),
+    Environment,
+}
+
+impl SettingSource<'_> {
+    fn string(&self, field: &str, env_name: &str) -> Option<String> {
+        match self {
+            Self::Stored(stored) => stored
+                .get(field)
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string),
+            Self::Environment => env_string(env_name),
+        }
+    }
+
+    fn u64(&self, field: &str, env_name: &str) -> Option<u64> {
+        match self {
+            Self::Stored(stored) => stored.get(field).and_then(Value::as_u64),
+            Self::Environment => env_string(env_name).and_then(|value| value.parse().ok()),
+        }
+    }
+}
+
+fn setting_source(settings: &[config_queries::WidgetSettingRow]) -> SettingSource<'_> {
+    match settings
+        .iter()
+        .find(|row| row.key == ASSISTANT_SETTING_KEY)
+        .and_then(|row| row.config.as_object())
+    {
+        Some(stored) => SettingSource::Stored(stored),
+        None => SettingSource::Environment,
+    }
+}
+
 impl AssistantConfig {
-    fn from_env() -> Option<Self> {
-        let base_url = env_string("HOMECTL_ASSISTANT_BASE_URL")?;
-        let model = env_string("HOMECTL_ASSISTANT_MODEL")?;
+    fn from_settings(settings: &[config_queries::WidgetSettingRow]) -> Option<Self> {
+        let source = setting_source(settings);
+        let base_url = source.string("base_url", "HOMECTL_ASSISTANT_BASE_URL")?;
+        let model = source.string("model", "HOMECTL_ASSISTANT_MODEL")?;
         Some(Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            api_key: env_string("HOMECTL_ASSISTANT_API_KEY"),
+            api_key: source.string("api_key", "HOMECTL_ASSISTANT_API_KEY"),
             model,
-            timeout_ms: env_string("HOMECTL_ASSISTANT_TIMEOUT_MS")
-                .and_then(|value| value.parse::<u64>().ok())
+            timeout_ms: source
+                .u64("timeout_ms", "HOMECTL_ASSISTANT_TIMEOUT_MS")
                 .filter(|value| *value > 0)
                 .unwrap_or(DEFAULT_TIMEOUT_MS),
-            max_tokens: env_string("HOMECTL_ASSISTANT_MAX_TOKENS")
-                .and_then(|value| value.parse::<u32>().ok())
+            max_tokens: source
+                .u64("max_tokens", "HOMECTL_ASSISTANT_MAX_TOKENS")
                 .filter(|value| *value > 0)
+                .map(|value| value as u32)
                 .unwrap_or(DEFAULT_MAX_TOKENS),
-            reasoning_effort: env_string("HOMECTL_ASSISTANT_REASONING_EFFORT"),
-            timezone: env_string("HOMECTL_ASSISTANT_TIMEZONE"),
+            reasoning_effort: source.string(
+                "reasoning_effort",
+                "HOMECTL_ASSISTANT_REASONING_EFFORT",
+            ),
+            timezone: source.string("timezone", "HOMECTL_ASSISTANT_TIMEZONE"),
         })
     }
 
     fn chat_completions_url(&self) -> String {
         format!("{}/chat/completions", self.base_url)
     }
+}
+
+/// Browser-safe view of the effective assistant settings. The API key is never
+/// included, only whether one is set.
+fn assistant_settings_view(settings: &[config_queries::WidgetSettingRow]) -> Value {
+    let source = setting_source(settings);
+    let base_url = source.string("base_url", "HOMECTL_ASSISTANT_BASE_URL");
+    let model = source.string("model", "HOMECTL_ASSISTANT_MODEL");
+    json!({
+        "enabled": base_url.is_some() && model.is_some(),
+        "baseUrl": base_url,
+        "model": model,
+        "apiKeySet": source
+            .string("api_key", "HOMECTL_ASSISTANT_API_KEY")
+            .is_some(),
+        "reasoningEffort": source.string(
+            "reasoning_effort",
+            "HOMECTL_ASSISTANT_REASONING_EFFORT",
+        ),
+        "maxTokens": source
+            .u64("max_tokens", "HOMECTL_ASSISTANT_MAX_TOKENS")
+            .filter(|value| *value > 0)
+            .map(|value| value as u32)
+            .unwrap_or(DEFAULT_MAX_TOKENS),
+        "timeoutMs": source
+            .u64("timeout_ms", "HOMECTL_ASSISTANT_TIMEOUT_MS")
+            .filter(|value| *value > 0)
+            .unwrap_or(DEFAULT_TIMEOUT_MS),
+        "timezone": source.string("timezone", "HOMECTL_ASSISTANT_TIMEZONE"),
+    })
+}
+
+/// Settings update from the settings form. An absent field keeps its stored
+/// value; an empty string (or zero) clears it.
+#[derive(Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AssistantSettingsPatch {
+    #[serde(default)]
+    base_url: Option<String>,
+    #[serde(default)]
+    model: Option<String>,
+    #[serde(default)]
+    api_key: Option<String>,
+    #[serde(default)]
+    reasoning_effort: Option<String>,
+    #[serde(default)]
+    max_tokens: Option<u64>,
+    #[serde(default)]
+    timeout_ms: Option<u64>,
+    #[serde(default)]
+    timezone: Option<String>,
+}
+
+fn apply_assistant_settings_patch(
+    mut stored: serde_json::Map<String, Value>,
+    patch: AssistantSettingsPatch,
+) -> Result<serde_json::Map<String, Value>, String> {
+    if let Some(value) = patch.base_url {
+        set_stored_string(&mut stored, "base_url", &value);
+    }
+    if let Some(value) = patch.model {
+        set_stored_string(&mut stored, "model", &value);
+    }
+    if let Some(value) = patch.api_key {
+        set_stored_string(&mut stored, "api_key", &value);
+    }
+    if let Some(value) = patch.reasoning_effort {
+        let value = value.trim().to_lowercase();
+        if value.is_empty() {
+            stored.remove("reasoning_effort");
+        } else if REASONING_EFFORTS.contains(&value.as_str()) {
+            stored.insert("reasoning_effort".to_string(), json!(value));
+        } else {
+            return Err(format!(
+                "reasoningEffort must be one of {}",
+                REASONING_EFFORTS.join(", ")
+            ));
+        }
+    }
+    if let Some(value) = patch.timezone {
+        let value = value.trim();
+        if value.is_empty() {
+            stored.remove("timezone");
+        } else if value.parse::<chrono_tz::Tz>().is_err() {
+            return Err(format!("unknown timezone: {value}"));
+        } else {
+            stored.insert("timezone".to_string(), json!(value));
+        }
+    }
+    if let Some(value) = patch.max_tokens {
+        set_stored_u64(
+            &mut stored,
+            "max_tokens",
+            value,
+            1,
+            MAX_MAX_TOKENS,
+            "maxTokens",
+        )?;
+    }
+    if let Some(value) = patch.timeout_ms {
+        set_stored_u64(
+            &mut stored,
+            "timeout_ms",
+            value,
+            MIN_TIMEOUT_MS,
+            MAX_TIMEOUT_MS,
+            "timeoutMs",
+        )?;
+    }
+    Ok(stored)
+}
+
+fn set_stored_string(stored: &mut serde_json::Map<String, Value>, field: &str, value: &str) {
+    let value = value.trim();
+    if value.is_empty() {
+        stored.remove(field);
+    } else {
+        stored.insert(field.to_string(), json!(value));
+    }
+}
+
+fn set_stored_u64(
+    stored: &mut serde_json::Map<String, Value>,
+    field: &str,
+    value: u64,
+    min: u64,
+    max: u64,
+    label: &str,
+) -> Result<(), String> {
+    if value == 0 {
+        stored.remove(field);
+        return Ok(());
+    }
+    if value < min || value > max {
+        return Err(format!("{label} must be between {min} and {max}"));
+    }
+    stored.insert(field.to_string(), json!(value));
+    Ok(())
 }
 
 fn env_string(name: &str) -> Option<String> {
@@ -111,11 +308,27 @@ enum ProviderError {
 
 pub(super) fn assistant_routes(
     snapshot: &SnapshotHandle,
+    handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
     let status = warp::path!("assistant" / "status")
         .and(warp::path::end())
         .and(warp::get())
+        .and(with_snapshot(snapshot))
         .and_then(assistant_status);
+
+    let settings_get = warp::path!("assistant" / "settings")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_snapshot(snapshot))
+        .and_then(get_assistant_settings);
+
+    let settings_put = warp::path!("assistant" / "settings")
+        .and(warp::path::end())
+        .and(warp::put())
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
+        .and_then(update_assistant_settings);
 
     let draft = warp::path!("assistant" / "draft")
         .and(warp::path::end())
@@ -124,24 +337,88 @@ pub(super) fn assistant_routes(
         .and(with_snapshot(snapshot))
         .and_then(draft_routine);
 
-    status.or(draft)
+    status.or(settings_get).or(settings_put).or(draft)
 }
 
-async fn assistant_status() -> Result<impl Reply, warp::Rejection> {
-    let data = match AssistantConfig::from_env() {
+async fn assistant_status(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
+    let snapshot = snapshot.load();
+    let settings = &snapshot.runtime_config.widget_settings;
+    let data = match AssistantConfig::from_settings(settings) {
         Some(config) => json!({ "enabled": true, "model": config.model }),
         None => json!({ "enabled": false }),
     };
     Ok(ApiResponse::success(data))
 }
 
+async fn get_assistant_settings(
+    snapshot: SnapshotHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let snapshot = snapshot.load();
+    Ok(ApiResponse::success(assistant_settings_view(
+        &snapshot.runtime_config.widget_settings,
+    )))
+}
+
+async fn update_assistant_settings(
+    patch: AssistantSettingsPatch,
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    let stored = snapshot
+        .load()
+        .runtime_config
+        .widget_settings
+        .iter()
+        .find(|row| row.key == ASSISTANT_SETTING_KEY)
+        .and_then(|row| row.config.as_object().cloned())
+        .unwrap_or_default();
+    let updated = match apply_assistant_settings_patch(stored, patch) {
+        Ok(updated) => updated,
+        Err(error) => return Ok(error_response(&error, StatusCode::BAD_REQUEST)),
+    };
+    let setting = config_queries::WidgetSettingRow {
+        key: ASSISTANT_SETTING_KEY.to_string(),
+        config: Value::Object(updated),
+    };
+    let persistence_setting = setting.clone();
+
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_widget_setting(setting);
+                assistant_settings_view(&state.runtime_config.widget_settings)
+            })
+        })
+        .await;
+    let response = match result {
+        Ok(response) => response,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_upsert_widget_setting(&persistence_setting).await;
+    Ok(config_write_response(
+        response,
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
 async fn draft_routine(
     request: DraftRequest,
     snapshot: SnapshotHandle,
 ) -> Result<impl Reply, warp::Rejection> {
-    let Some(config) = AssistantConfig::from_env() else {
+    let snapshot = snapshot.load();
+    let Some(config) = AssistantConfig::from_settings(&snapshot.runtime_config.widget_settings)
+    else {
         return Ok(error_response(
-            "Assistant is not configured. Set HOMECTL_ASSISTANT_BASE_URL and HOMECTL_ASSISTANT_MODEL.",
+            "Assistant is not configured. Set the provider base URL and model in Settings.",
             StatusCode::SERVICE_UNAVAILABLE,
         ));
     };
@@ -160,7 +437,6 @@ async fn draft_routine(
         ));
     }
 
-    let snapshot = snapshot.load();
     let catalog = build_catalog(&snapshot, config.timezone.as_deref());
     let catalog_json = serde_json::to_string(&catalog.value).unwrap_or_else(|_| "{}".to_string());
     let compile_catalog = catalog_from_snapshot_export(&snapshot);
@@ -865,5 +1141,135 @@ mod tests {
         let value = serde_json::to_value(DeviceRef::from(&dummy_key())).unwrap();
         assert_eq!(value["integration_id"], "dummy");
         assert_eq!(value["device_id"], "sensor");
+    }
+
+    fn assistant_setting_row(config: Value) -> config_queries::WidgetSettingRow {
+        config_queries::WidgetSettingRow {
+            key: ASSISTANT_SETTING_KEY.to_string(),
+            config,
+        }
+    }
+
+    fn stored_settings() -> Vec<config_queries::WidgetSettingRow> {
+        vec![assistant_setting_row(json!({
+            "base_url": "https://opencode.ai/zen/go/v1",
+            "model": "deepseek-v4.1-flash",
+            "api_key": "sk-secret",
+            "reasoning_effort": "high",
+            "max_tokens": 8192,
+            "timeout_ms": 120000,
+            "timezone": "Europe/Helsinki"
+        }))]
+    }
+
+    #[test]
+    fn settings_view_masks_api_key() {
+        let view = assistant_settings_view(&stored_settings());
+        assert_eq!(view["enabled"], true);
+        assert_eq!(view["baseUrl"], "https://opencode.ai/zen/go/v1");
+        assert_eq!(view["model"], "deepseek-v4.1-flash");
+        assert_eq!(view["apiKeySet"], true);
+        assert_eq!(view["reasoningEffort"], "high");
+        assert_eq!(view["maxTokens"], 8192);
+        assert_eq!(view["timeoutMs"], 120000);
+        assert_eq!(view["timezone"], "Europe/Helsinki");
+        assert!(view.get("apiKey").is_none());
+        assert!(!view.to_string().contains("sk-secret"));
+    }
+
+    #[test]
+    fn config_prefers_stored_settings() {
+        let config = AssistantConfig::from_settings(&stored_settings()).unwrap();
+        assert_eq!(config.base_url, "https://opencode.ai/zen/go/v1");
+        assert_eq!(config.model, "deepseek-v4.1-flash");
+        assert_eq!(config.api_key.as_deref(), Some("sk-secret"));
+        assert_eq!(config.max_tokens, 8192);
+        assert_eq!(config.timeout_ms, 120000);
+        assert_eq!(config.timezone.as_deref(), Some("Europe/Helsinki"));
+    }
+
+    #[test]
+    fn stored_settings_disable_assistant_when_cleared() {
+        let settings = vec![assistant_setting_row(json!({"max_tokens": 4096}))];
+        assert!(AssistantConfig::from_settings(&settings).is_none());
+        let view = assistant_settings_view(&settings);
+        assert_eq!(view["enabled"], false);
+        assert_eq!(view["baseUrl"], Value::Null);
+        assert_eq!(view["apiKeySet"], false);
+        assert_eq!(view["maxTokens"], 4096);
+        assert_eq!(view["timeoutMs"], DEFAULT_TIMEOUT_MS);
+    }
+
+    #[test]
+    fn settings_patch_sets_and_clears_fields() {
+        let updated = apply_assistant_settings_patch(
+            serde_json::Map::new(),
+            AssistantSettingsPatch {
+                base_url: Some("https://api.openai.com/v1/".to_string()),
+                model: Some("gpt-test".to_string()),
+                api_key: Some("sk-new".to_string()),
+                reasoning_effort: Some("HIGH".to_string()),
+                max_tokens: Some(4096),
+                timeout_ms: Some(30_000),
+                timezone: Some("UTC".to_string()),
+            },
+        )
+        .unwrap();
+        assert_eq!(updated["base_url"], "https://api.openai.com/v1/");
+        assert_eq!(updated["reasoning_effort"], "high");
+        assert_eq!(updated["max_tokens"], 4096);
+
+        // Omitted fields keep their values; empty values clear them.
+        let cleared = apply_assistant_settings_patch(
+            updated,
+            AssistantSettingsPatch {
+                api_key: Some(String::new()),
+                reasoning_effort: Some(String::new()),
+                timezone: Some(String::new()),
+                max_tokens: Some(0),
+                timeout_ms: None,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(cleared.get("api_key").is_none());
+        assert!(cleared.get("reasoning_effort").is_none());
+        assert!(cleared.get("timezone").is_none());
+        assert!(cleared.get("max_tokens").is_none());
+        assert_eq!(cleared["timeout_ms"], 30_000);
+        assert_eq!(cleared["model"], "gpt-test");
+    }
+
+    #[test]
+    fn settings_patch_rejects_invalid_values() {
+        let error = apply_assistant_settings_patch(
+            serde_json::Map::new(),
+            AssistantSettingsPatch {
+                reasoning_effort: Some("extreme".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("reasoningEffort"));
+
+        let error = apply_assistant_settings_patch(
+            serde_json::Map::new(),
+            AssistantSettingsPatch {
+                timezone: Some("Mars/Olympus".to_string()),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("timezone"));
+
+        let error = apply_assistant_settings_patch(
+            serde_json::Map::new(),
+            AssistantSettingsPatch {
+                timeout_ms: Some(10),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert!(error.contains("timeoutMs"));
     }
 }

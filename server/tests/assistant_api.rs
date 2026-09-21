@@ -444,3 +444,153 @@ fn assistant_reports_provider_failures() {
     assert_eq!(response.status(), StatusCode::BAD_GATEWAY);
     assert_eq!(provider.requests.load(Ordering::SeqCst), 1);
 }
+
+#[test]
+fn assistant_settings_round_trip_masks_api_key() {
+    let server = start_server(None);
+    let client = Client::new();
+    let base = &server.base_url;
+    let settings_url = format!("{base}/api/v1/config/assistant/settings");
+
+    let initial: Value = client.get(&settings_url).send().unwrap().json().unwrap();
+    assert_eq!(initial["data"]["enabled"], false);
+    assert_eq!(initial["data"]["apiKeySet"], false);
+    assert_eq!(initial["data"]["maxTokens"], 2048);
+    assert_eq!(initial["data"]["timeoutMs"], 60000);
+
+    let updated: Value = client
+        .put(&settings_url)
+        .json(&json!({
+            "baseUrl": "http://127.0.0.1:9/v1",
+            "model": "mock-model",
+            "apiKey": "sk-secret",
+            "reasoningEffort": "high",
+            "maxTokens": 4096,
+            "timeoutMs": 30000,
+            "timezone": "UTC"
+        }))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(updated["success"], true);
+    assert_eq!(updated["data"]["enabled"], true);
+    assert_eq!(updated["data"]["apiKeySet"], true);
+    assert_eq!(updated["data"]["reasoningEffort"], "high");
+    assert_eq!(updated["data"]["maxTokens"], 4096);
+    assert!(!updated.to_string().contains("sk-secret"));
+    assert!(updated["data"].get("apiKey").is_none());
+
+    let status: Value = client
+        .get(format!("{base}/api/v1/config/assistant/status"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(status["data"]["enabled"], true);
+    assert_eq!(status["data"]["model"], "mock-model");
+
+    // Default exports redact the key; secret-inclusive backups carry it.
+    let exported: Value = client
+        .get(format!("{base}/api/v1/config/export"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let row = exported["data"]["widget_settings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["key"] == "assistant")
+        .expect("assistant settings exported");
+    assert!(row["config"].get("api_key").is_none());
+    assert!(!exported.to_string().contains("sk-secret"));
+
+    let backup: Value = client
+        .get(format!("{base}/api/v1/config/export?include_secrets=true"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let row = backup["data"]["widget_settings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|row| row["key"] == "assistant")
+        .expect("assistant settings exported");
+    assert_eq!(row["config"]["api_key"], "sk-secret");
+
+    // Importing a redacted export keeps the stored key.
+    client
+        .post(format!("{base}/api/v1/config/import"))
+        .json(&exported["data"])
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+    let after: Value = client.get(&settings_url).send().unwrap().json().unwrap();
+    assert_eq!(after["data"]["apiKeySet"], true);
+
+    // An explicit empty key clears it.
+    let cleared: Value = client
+        .put(&settings_url)
+        .json(&json!({ "apiKey": "" }))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(cleared["data"]["apiKeySet"], false);
+    assert_eq!(cleared["data"]["enabled"], true);
+}
+
+#[test]
+fn assistant_rejects_invalid_settings() {
+    let server = start_server(None);
+    let client = Client::new();
+    let settings_url = format!("{}/api/v1/config/assistant/settings", server.base_url);
+
+    for patch in [
+        json!({ "reasoningEffort": "extreme" }),
+        json!({ "timezone": "Mars/Olympus" }),
+        json!({ "timeoutMs": 10 }),
+        json!({ "maxTokens": 10_000_000 }),
+    ] {
+        let response = client.put(&settings_url).json(&patch).send().unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+}
+
+#[test]
+fn assistant_stored_settings_override_environment() {
+    let env_provider = MockProvider::start(vec![MockResponse::completion(&valid_draft())]);
+    let stored_provider = MockProvider::start(vec![MockResponse::completion(&valid_draft())]);
+    let server = start_server(Some(&env_provider));
+    let client = Client::new();
+
+    client
+        .put(format!(
+            "{}/api/v1/config/assistant/settings",
+            server.base_url
+        ))
+        .json(&json!({
+            "baseUrl": stored_provider.base_url,
+            "model": "stored-model"
+        }))
+        .send()
+        .unwrap()
+        .error_for_status()
+        .unwrap();
+
+    let status: Value = client
+        .get(format!("{}/api/v1/config/assistant/status", server.base_url))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(status["data"]["model"], "stored-model");
+
+    let response = draft(&server.base_url, &client, "Hallway light on motion");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(env_provider.requests.load(Ordering::SeqCst), 0);
+    assert_eq!(stored_provider.requests.load(Ordering::SeqCst), 1);
+}
