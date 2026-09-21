@@ -35,6 +35,7 @@ import {
   resolveSceneColor,
   type SceneTargetKind,
 } from '@/ui/SceneResolvedColorPreview';
+import { ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -682,7 +683,9 @@ function SceneEditorForm({
       <Tabs value={editTab} onValueChange={changeTab}>
         <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
           <TabsTrigger value="basics">Basics</TabsTrigger>
-          <TabsTrigger value="script">Script</TabsTrigger>
+          <ExperienceOnly minimum="standard">
+            <TabsTrigger value="script">Script</TabsTrigger>
+          </ExperienceOnly>
           <TabsTrigger value="devices">Devices</TabsTrigger>
           <TabsTrigger value="groups">Groups</TabsTrigger>
         </TabsList>
@@ -715,7 +718,8 @@ function SceneEditorForm({
           </ConfigFormSection>
         </TabsContent>
 
-        <TabsContent value="script" className="mt-4 space-y-4">
+        <ExperienceOnly minimum="standard">
+          <TabsContent value="script" className="mt-4 space-y-4">
           <ConfigFormSection
             title="Script"
             description="Optional JavaScript expression for advanced scene state generation."
@@ -737,7 +741,8 @@ function SceneEditorForm({
               />
             </ConfigField>
           </ConfigFormSection>
-        </TabsContent>
+          </TabsContent>
+        </ExperienceOnly>
 
         <TabsContent value="devices" className="mt-4">
           <ConfigFormSection

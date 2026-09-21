@@ -22,6 +22,7 @@ import {
 } from '@/ui/config-form';
 import { toast } from 'sonner';
 
+import { ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -1774,7 +1775,9 @@ function IntegrationOverlay({
         <Tabs value={editTab} onValueChange={changeTab}>
           <TabsList className="grid h-auto w-full grid-cols-2">
             <TabsTrigger value="settings">Settings</TabsTrigger>
-            <TabsTrigger value="json">JSON</TabsTrigger>
+            <ExperienceOnly minimum="expert">
+              <TabsTrigger value="json">JSON</TabsTrigger>
+            </ExperienceOnly>
           </TabsList>
 
           <TabsContent value="settings" className="mt-4 space-y-4">
@@ -1865,7 +1868,8 @@ function IntegrationOverlay({
             ) : null}
           </TabsContent>
 
-          <TabsContent value="json" className="mt-4">
+          <ExperienceOnly minimum="expert">
+            <TabsContent value="json" className="mt-4">
             <ConfigFormSection
               title="Advanced JSON"
               description="Use this for unknown or advanced plugin settings. Values edited here are preserved when returning to Settings."
@@ -1877,7 +1881,8 @@ function IntegrationOverlay({
                 onChange={(event) => setJsonText(event.target.value)}
               />
             </ConfigFormSection>
-          </TabsContent>
+            </TabsContent>
+          </ExperienceOnly>
         </Tabs>
 
         <ConfigFormActions>

@@ -26,6 +26,9 @@ import {
   useTimers,
 } from '@/hooks/websocket';
 import { ConfigTabs } from '@/ui/ConfigTabs';
+import { Button as UiButton } from '@/ui/primitives/button';
+import { Checkbox } from '@/ui/primitives/checkbox';
+import { EmptyState } from '@/ui/primitives/empty-state';
 import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
@@ -45,6 +48,7 @@ import {
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
 import { toast } from 'sonner';
 
+import { Advanced, ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
@@ -91,7 +95,51 @@ export default function RoutinesPage() {
   const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useSearchParamState();
   const [showCreate, setShowCreate] = useState(false);
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   useCreateDeepLink(useCallback(() => setShowCreate(true), []));
+
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const bulkSetEnabled = useCallback(
+    async (enabled: boolean) => {
+      const ids = [...selectedIds];
+      for (const id of ids) {
+        await update(id, { enabled });
+      }
+      setSelectedIds(new Set());
+    },
+    [selectedIds, update],
+  );
+
+  const bulkDelete = useCallback(async () => {
+    const ids = [...selectedIds];
+    if (
+      !(await confirmDestructive(
+        ids.length === 1
+          ? 'Delete 1 routine?'
+          : `Delete ${ids.length} routines?`,
+        'Their triggers, conditions, and programs are removed. v1 fallback rules are deleted with them.',
+      ))
+    ) {
+      return;
+    }
+    for (const id of ids) {
+      await remove(id);
+    }
+    setSelectedIds(new Set());
+    setSelectMode(false);
+  }, [remove, selectedIds]);
   const { devicesState: apiDevices } = useDevicesApi();
   const liveDevices = useDevicesState();
   // Merge live websocket device state over the REST snapshot so editors (for
@@ -143,7 +191,18 @@ export default function RoutinesPage() {
       <ConfigPageHeader
         title="Routines"
         actions={
-          <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
+          <>
+            <UiButton
+              variant="outline"
+              onClick={() => {
+                setSelectMode((current) => !current);
+                setSelectedIds(new Set());
+              }}
+            >
+              {selectMode ? 'Done selecting' : 'Select'}
+            </UiButton>
+            <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
+          </>
         }
       />
 
@@ -163,14 +222,37 @@ export default function RoutinesPage() {
       />
 
       {visibleRoutines.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-          No routines match the current search.
-        </div>
+        <EmptyState
+          title={routines.length === 0 ? 'No routines yet' : 'No matching routines'}
+          description={
+            routines.length === 0
+              ? 'Routines react to device reports, helpers, and schedules. Start from a template or a blank trigger.'
+              : 'Try a different search term or clear the search to see all routines.'
+          }
+          action={
+            routines.length === 0 ? (
+              <Button onClick={() => setShowCreate(true)}>Add your first routine</Button>
+            ) : (
+              <UiButton variant="outline" onClick={() => setSearch('')}>
+                Clear search
+              </UiButton>
+            )
+          }
+        />
       ) : (
         <div className="grid gap-4">
           {visibleRoutines.map((routine) => (
+            <div key={routine.id} className="flex items-start gap-2">
+              {selectMode ? (
+                <Checkbox
+                  checked={selectedIds.has(routine.id)}
+                  onCheckedChange={() => toggleSelected(routine.id)}
+                  aria-label={`Select ${routine.name}`}
+                  className="mt-4"
+                />
+              ) : null}
+              <div className="min-w-0 flex-1">
             <RoutineCard
-              key={routine.id}
               routine={routine}
               isEditing={editingId === routine.id}
               isOpen={openId === routine.id}
@@ -211,9 +293,39 @@ export default function RoutinesPage() {
                 }
               }}
             />
+              </div>
+            </div>
           ))}
         </div>
       )}
+
+      {selectMode && selectedIds.size > 0 ? (
+        <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-popover/95 p-2 shadow-lg backdrop-blur">
+          <span className="px-2 text-sm font-medium">
+            {selectedIds.size} selected
+          </span>
+          <UiButton size="sm" variant="outline" onClick={() => void bulkSetEnabled(true)}>
+            Enable
+          </UiButton>
+          <UiButton size="sm" variant="outline" onClick={() => void bulkSetEnabled(false)}>
+            Disable
+          </UiButton>
+          <UiButton
+            size="sm"
+            variant="destructive"
+            onClick={() => void bulkDelete()}
+          >
+            Delete
+          </UiButton>
+          <UiButton
+            size="sm"
+            variant="ghost"
+            onClick={() => setSelectedIds(new Set())}
+          >
+            Clear
+          </UiButton>
+        </div>
+      ) : null}
 
       {showCreate && (
         <CreateRoutineModal
@@ -450,9 +562,11 @@ function RoutineCard({
           ) : null}
           {isV2 ? <TabsTrigger value="program">Program</TabsTrigger> : null}
           {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
-          <TabsTrigger value="json">
-            {isV2 ? 'Definition' : 'JSON'}
-          </TabsTrigger>
+          <ExperienceOnly minimum="expert">
+            <TabsTrigger value="json">
+              {isV2 ? 'Definition' : 'JSON'}
+            </TabsTrigger>
+          </ExperienceOnly>
         </TabsList>
 
         <TabsContent value="basics" className="mt-4">
@@ -555,8 +669,8 @@ function RoutineCard({
                 helpers={helpers}
               />
             </ConfigFormSection>
-            <ConfigFormSection
-              title="Execution"
+            <Advanced
+              label="Execution policy"
               description="How overlapping invocations, the per-run action budget, and rate limits are handled."
             >
               <RoutineExecutionPolicyEditor
@@ -565,7 +679,7 @@ function RoutineCard({
                   setDefinition((current) => ({ ...current, execution }))
                 }
               />
-            </ConfigFormSection>
+            </Advanced>
           </TabsContent>
         ) : null}
 
@@ -584,7 +698,8 @@ function RoutineCard({
           </TabsContent>
         ) : null}
 
-        <TabsContent value="json" className="mt-4">
+        <ExperienceOnly minimum="expert">
+          <TabsContent value="json" className="mt-4">
           <ConfigFormSection
             title="Advanced JSON"
             description={
@@ -624,7 +739,8 @@ function RoutineCard({
               </div>
             )}
           </ConfigFormSection>
-        </TabsContent>
+          </TabsContent>
+        </ExperienceOnly>
       </Tabs>
 
       <ConfigFormActions>

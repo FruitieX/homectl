@@ -49,6 +49,7 @@ import {
 } from '@/ui/config-form';
 import { toast } from 'sonner';
 
+import { ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import {
   confirmDestructive,
@@ -1484,7 +1485,9 @@ export default function DevicesPage() {
                     <TabsTrigger value="runtime">Runtime</TabsTrigger>
                     <TabsTrigger value="config">Config</TabsTrigger>
                     <TabsTrigger value="actions">Actions</TabsTrigger>
-                    <TabsTrigger value="raw">Raw</TabsTrigger>
+                    <ExperienceOnly minimum="expert">
+                      <TabsTrigger value="raw">Raw</TabsTrigger>
+                    </ExperienceOnly>
                   </TabsList>
 
                   <TabsContent value="state" className="mt-4 space-y-4">
@@ -1852,7 +1855,8 @@ export default function DevicesPage() {
                     </ConfigFormSection>
                   </TabsContent>
 
-                  <TabsContent value="raw" className="mt-4">
+                  <ExperienceOnly minimum="expert">
+                    <TabsContent value="raw" className="mt-4">
                     <ConfigFormSection
                       title="Raw JSON payload"
                       description="Latest raw payload published by the integration."
@@ -1872,7 +1876,8 @@ export default function DevicesPage() {
                         </p>
                       )}
                     </ConfigFormSection>
-                  </TabsContent>
+                    </TabsContent>
+                  </ExperienceOnly>
                 </Tabs>
               ) : null}
             </ExpandableConfigCard>
