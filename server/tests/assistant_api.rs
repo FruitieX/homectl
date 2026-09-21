@@ -157,6 +157,13 @@ fn blank_backup_config() -> Value {
 }
 
 fn start_server(provider: Option<&MockProvider>) -> TestServer {
+    start_server_with_env(provider, Vec::new())
+}
+
+fn start_server_with_env(
+    provider: Option<&MockProvider>,
+    mut extra: Vec<(String, String)>,
+) -> TestServer {
     let mut extra_env = Vec::new();
     if let Some(provider) = provider {
         extra_env.push((
@@ -176,6 +183,8 @@ fn start_server(provider: Option<&MockProvider>) -> TestServer {
             "5000".to_string(),
         ));
     }
+
+    extra_env.append(&mut extra);
 
     TestServer::with_config(TestServerConfig {
         config_content: Some(assistant_config().to_string()),
@@ -339,6 +348,29 @@ fn assistant_retries_without_json_mode_when_rejected() {
     let body: Value = response.json().unwrap();
     assert_eq!(body["data"]["attempts"], 1);
     assert_eq!(provider.requests.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn assistant_drops_reasoning_effort_when_rejected() {
+    let provider = MockProvider::start(vec![
+        MockResponse::error(400, "unknown parameter: reasoning_effort"),
+        MockResponse::error(400, "unknown parameter: reasoning_effort"),
+        MockResponse::completion(&valid_draft()),
+    ]);
+    let server = start_server_with_env(
+        Some(&provider),
+        vec![(
+            "HOMECTL_ASSISTANT_REASONING_EFFORT".to_string(),
+            "high".to_string(),
+        )],
+    );
+    let client = Client::new();
+
+    let response = draft(&server.base_url, &client, "Hallway light on motion");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    assert_eq!(body["data"]["attempts"], 1);
+    assert_eq!(provider.requests.load(Ordering::SeqCst), 3);
 }
 
 #[test]

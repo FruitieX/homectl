@@ -243,6 +243,9 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
 - `HOMECTL_ASSISTANT_API_KEY` – Optional bearer token for the assistant
   provider; local endpoints usually omit it
 - `HOMECTL_ASSISTANT_TIMEOUT_MS` – Optional provider timeout, default 60000
+- `HOMECTL_ASSISTANT_MAX_TOKENS` – Optional completion token cap, default 2048
+- `HOMECTL_ASSISTANT_REASONING_EFFORT` – Optional `reasoning_effort` value for
+  thinking models (e.g. `high`); dropped automatically when a provider rejects it
 - `HOMECTL_ASSISTANT_TIMEZONE` – Optional IANA zone used for drafted
   schedules; inferred from existing routines when unset
 

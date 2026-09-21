@@ -12,6 +12,9 @@
 //! - `HOMECTL_ASSISTANT_MODEL`
 //! - `HOMECTL_ASSISTANT_API_KEY` (optional; local endpoints usually omit it)
 //! - `HOMECTL_ASSISTANT_TIMEOUT_MS` (optional, default 60000)
+//! - `HOMECTL_ASSISTANT_MAX_TOKENS` (optional, default 2048)
+//! - `HOMECTL_ASSISTANT_REASONING_EFFORT` (optional; sent as `reasoning_effort`
+//!   for thinking models, e.g. `high`)
 //! - `HOMECTL_ASSISTANT_TIMEZONE` (optional IANA zone for drafted schedules;
 //!   inferred from existing routines when unset)
 
@@ -27,10 +30,10 @@ use crate::core::snapshot::RuntimeSnapshot;
 use crate::types::device::{DeviceData, DeviceRef};
 
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
+const DEFAULT_MAX_TOKENS: u32 = 2_048;
 const MAX_PROMPT_CHARS: usize = 2_000;
 const MAX_ATTEMPTS: usize = 2;
 const MAX_CATALOG_DEVICES: usize = 250;
-const MAX_TOKENS: u32 = 2_048;
 
 #[derive(Clone, Debug)]
 struct AssistantConfig {
@@ -38,6 +41,8 @@ struct AssistantConfig {
     api_key: Option<String>,
     model: String,
     timeout_ms: u64,
+    max_tokens: u32,
+    reasoning_effort: Option<String>,
     timezone: Option<String>,
 }
 
@@ -53,6 +58,11 @@ impl AssistantConfig {
                 .and_then(|value| value.parse::<u64>().ok())
                 .filter(|value| *value > 0)
                 .unwrap_or(DEFAULT_TIMEOUT_MS),
+            max_tokens: env_string("HOMECTL_ASSISTANT_MAX_TOKENS")
+                .and_then(|value| value.parse::<u32>().ok())
+                .filter(|value| *value > 0)
+                .unwrap_or(DEFAULT_MAX_TOKENS),
+            reasoning_effort: env_string("HOMECTL_ASSISTANT_REASONING_EFFORT"),
             timezone: env_string("HOMECTL_ASSISTANT_TIMEZONE"),
         })
     }
@@ -160,11 +170,14 @@ async fn draft_routine(
         json!({ "role": "user", "content": user_prompt(prompt, request.focus.as_deref()) }),
     ];
 
-    let mut json_mode = true;
+    let mut options = ChatOptions {
+        json_mode: true,
+        reasoning_effort: config.reasoning_effort.is_some(),
+    };
     let mut last_errors = String::new();
 
     for attempt in 1..=MAX_ATTEMPTS {
-        let content = match chat(&config, &messages, &mut json_mode).await {
+        let content = match chat(&config, &messages, &mut options).await {
             Ok(content) => content,
             Err(error) => return Ok(provider_error_response(error)),
         };
@@ -226,40 +239,63 @@ fn provider_error_response(error: ProviderError) -> warp::reply::WithStatus<warp
     }
 }
 
+/// Optional request features that are dropped one at a time when a provider
+/// rejects them with HTTP 400.
+#[derive(Clone, Copy, Debug)]
+struct ChatOptions {
+    json_mode: bool,
+    reasoning_effort: bool,
+}
+
 async fn chat(
     config: &AssistantConfig,
     messages: &[Value],
-    json_mode: &mut bool,
+    options: &mut ChatOptions,
 ) -> Result<String, ProviderError> {
-    if *json_mode {
-        match post_chat(config, messages, true).await {
+    loop {
+        match post_chat(config, messages, *options).await {
             Ok(content) => return Ok(content),
-            Err(ProviderError::Status(400, body)) => {
+            Err(ProviderError::Status(400, body)) if options.json_mode => {
                 log::warn!(
                     "Assistant provider rejected response_format, retrying without it: {body}"
                 );
-                *json_mode = false;
+                options.json_mode = false;
+            }
+            Err(ProviderError::Status(400, body)) if options.reasoning_effort => {
+                log::warn!(
+                    "Assistant provider rejected reasoning_effort, retrying without it: {body}"
+                );
+                options.reasoning_effort = false;
             }
             Err(error) => return Err(error),
         }
     }
-    post_chat(config, messages, false).await
+}
+
+fn chat_request_body(config: &AssistantConfig, messages: &[Value], options: ChatOptions) -> Value {
+    let mut body = json!({
+        "model": config.model,
+        "messages": messages,
+        "temperature": 0.2,
+        "max_tokens": config.max_tokens,
+    });
+    if options.json_mode {
+        body["response_format"] = json!({ "type": "json_object" });
+    }
+    if options.reasoning_effort {
+        if let Some(effort) = &config.reasoning_effort {
+            body["reasoning_effort"] = json!(effort);
+        }
+    }
+    body
 }
 
 async fn post_chat(
     config: &AssistantConfig,
     messages: &[Value],
-    json_mode: bool,
+    options: ChatOptions,
 ) -> Result<String, ProviderError> {
-    let mut body = json!({
-        "model": config.model,
-        "messages": messages,
-        "temperature": 0.2,
-        "max_tokens": MAX_TOKENS,
-    });
-    if json_mode {
-        body["response_format"] = json!({ "type": "json_object" });
-    }
+    let body = chat_request_body(config, messages, options);
 
     let mut request = http_client()
         .post(config.chat_completions_url())
@@ -755,6 +791,48 @@ mod tests {
         assert!(prompt.contains("RoutineDefinitionV2"));
         assert!(prompt.contains("predicate_for"));
         assert!(prompt.contains("\"devices\":[]"));
+    }
+
+    fn test_config() -> AssistantConfig {
+        AssistantConfig {
+            base_url: "http://localhost/v1".to_string(),
+            api_key: None,
+            model: "mock-model".to_string(),
+            timeout_ms: 1_000,
+            max_tokens: 4_096,
+            reasoning_effort: Some("high".to_string()),
+            timezone: None,
+        }
+    }
+
+    #[test]
+    fn request_body_includes_reasoning_effort_and_limits() {
+        let config = test_config();
+        let messages = vec![json!({"role": "user", "content": "hi"})];
+
+        let body = chat_request_body(
+            &config,
+            &messages,
+            ChatOptions {
+                json_mode: true,
+                reasoning_effort: true,
+            },
+        );
+        assert_eq!(body["model"], "mock-model");
+        assert_eq!(body["max_tokens"], 4_096);
+        assert_eq!(body["reasoning_effort"], "high");
+        assert_eq!(body["response_format"]["type"], "json_object");
+
+        let body = chat_request_body(
+            &config,
+            &messages,
+            ChatOptions {
+                json_mode: false,
+                reasoning_effort: false,
+            },
+        );
+        assert!(body.get("reasoning_effort").is_none());
+        assert!(body.get("response_format").is_none());
     }
 
     #[test]
