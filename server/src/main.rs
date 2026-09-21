@@ -346,7 +346,9 @@ async fn run_event_loop(
     );
 
     let mut devices = Devices::new(event_tx.clone(), cli);
-    devices.refresh_db_devices(&scenes).await;
+    devices
+        .refresh_db_devices(&runtime_config.config.integrations, &scenes)
+        .await;
 
     let clock = Arc::new(homectl_server::core::clock::SystemClock::new());
 

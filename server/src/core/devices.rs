@@ -1,6 +1,6 @@
 use crate::db::{
-    actions::{db_get_devices, db_update_device},
-    config_queries::DevicePositionRow,
+    actions::{db_delete_device, db_get_devices, db_update_device},
+    config_queries::{DevicePositionRow, IntegrationRow},
 };
 use crate::types::integration::IntegrationId;
 use crate::utils::cli::Cli;
@@ -322,6 +322,19 @@ impl Devices {
             self.state.0.remove(key);
         }
 
+        if !keys_to_remove.is_empty() {
+            {
+                let mut pending = self
+                    .pending_db_updates
+                    .lock()
+                    .expect("pending_db_updates lock poisoned");
+                for key in &keys_to_remove {
+                    pending.remove(key);
+                }
+            }
+            spawn_device_db_deletes(keys_to_remove.clone());
+        }
+
         keys_to_remove
     }
 
@@ -329,22 +342,48 @@ impl Devices {
         let removed = self.state.0.remove(device_key).is_some();
 
         if removed {
-            let mut pending = self
-                .pending_db_updates
-                .lock()
-                .expect("pending_db_updates lock poisoned");
-            pending.remove(device_key);
+            {
+                let mut pending = self
+                    .pending_db_updates
+                    .lock()
+                    .expect("pending_db_updates lock poisoned");
+                pending.remove(device_key);
+            }
+            spawn_device_db_deletes(vec![device_key.clone()]);
         }
 
         removed
     }
 
-    pub async fn refresh_db_devices(&mut self, _scenes: &Scenes) {
+    /// Restore persisted device state for integrations that are still enabled.
+    ///
+    /// Device rows whose integration is disabled or no longer configured are
+    /// dropped instead of restored: a resurrected stale device would shadow a
+    /// computed-source alias (D07) and keep feeding frozen values to scene
+    /// device links.
+    pub async fn refresh_db_devices(&mut self, integrations: &[IntegrationRow], _scenes: &Scenes) {
+        let enabled_integrations: HashSet<IntegrationId> = integrations
+            .iter()
+            .filter(|row| row.enabled)
+            .map(|row| IntegrationId::from(row.id.clone()))
+            .collect();
+
         let db_devices = db_get_devices().await;
 
         match db_devices {
             Ok(db_devices) => {
-                for (_, db_device) in db_devices {
+                for (key, db_device) in db_devices {
+                    if !enabled_integrations.contains(&db_device.integration_id) {
+                        warn!(
+                            "Dropping persisted device {key} of disabled integration {integration_id}",
+                            integration_id = db_device.integration_id,
+                        );
+                        if let Err(error) = db_delete_device(&key).await {
+                            warn!("Failed to delete stale device {key} from DB: {error}");
+                        }
+                        continue;
+                    }
+
                     debug!(
                         "Restoring device from DB: {integration_id}/{name}",
                         integration_id = db_device.integration_id,
@@ -368,7 +407,28 @@ impl Devices {
             }
         }
     }
+}
 
+/// Delete persisted rows for devices that left the runtime.
+///
+/// Device state is persisted for restart recovery, so removals must reach the
+/// database too; otherwise a disabled integration's device comes back on the
+/// next startup.
+fn spawn_device_db_deletes(keys: Vec<DeviceKey>) {
+    if keys.is_empty() {
+        return;
+    }
+
+    tokio::spawn(async move {
+        for key in keys {
+            if let Err(error) = db_delete_device(&key).await {
+                warn!("Failed to delete device {key} from DB: {error}");
+            }
+        }
+    });
+}
+
+impl Devices {
     /// Recomputes scene state for all devices and updates both internal and
     /// external state accordingly
     pub fn invalidate(
