@@ -10,9 +10,10 @@ import {
   getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
 import { useAppConfig } from '@/hooks/appConfig';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
+import { useCreateDeepLink } from '@/hooks/useDeepLink';
 import { ConfigPageHeader } from '../page-header';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -118,6 +119,7 @@ export default function ScenesPage() {
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [showCreate, setShowCreate] = useState(false);
+  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const location = useLocation();
   const requestedSceneId = searchParams.get('scene');
   const requestedDeviceKey = searchParams.get('device');

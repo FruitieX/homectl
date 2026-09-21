@@ -4,14 +4,17 @@ import {
   ChevronLeft,
   Expand,
   Plus,
+  Search,
   Settings2,
   Shrink,
 } from 'lucide-react';
+import { useSetAtom } from 'jotai';
 import { useCallback } from 'react';
 import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
 import { useGroupsState } from '@/hooks/websocket';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
+import { commandPaletteOpenAtom } from '@/ui/CommandPalette';
 import { Button } from '@/ui/primitives/button';
 
 export const Navbar = () => {
@@ -105,6 +108,7 @@ export const Navbar = () => {
           {title}
         </h1>
       </div>
+      <CommandPaletteTrigger />
       {pathname === '/map' && (
         <div
           id="floorplan-toolbar"
@@ -158,5 +162,45 @@ export const Navbar = () => {
         </>
       )}
     </header>
+  );
+};
+
+/**
+ * Search affordance for the command palette. A full search field on desktop
+ * (the primary accelerator is Ctrl+K / Ctrl+P) and an icon button on mobile.
+ */
+export const CommandPaletteTrigger = () => {
+  const openPalette = useSetAtom(commandPaletteOpenAtom);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => openPalette(true)}
+        aria-label="Open command palette"
+        className="hidden items-center gap-2 rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground transition hover:bg-muted/70 hover:text-foreground sm:flex"
+      >
+        <Search className="size-4" />
+        <span>Search…</span>
+        <span className="ml-2 flex items-center gap-1 text-[0.65rem]">
+          <kbd className="rounded border border-border bg-background px-1.5 py-0.5 font-sans">
+            Ctrl
+          </kbd>
+          <kbd className="rounded border border-border bg-background px-1.5 py-0.5 font-sans">
+            K
+          </kbd>
+        </span>
+      </button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        aria-label="Open command palette"
+        className="sm:hidden"
+        onClick={() => openPalette(true)}
+      >
+        <Search />
+      </Button>
+    </>
   );
 };

@@ -14,6 +14,7 @@ import { Navbar } from '@/ui/Navbar';
 import { useProvideAppConfig } from '@/hooks/appConfig';
 import { useApplyAppearance } from '@/hooks/preferences';
 import { useApplyTheme } from '@/hooks/theme';
+import { CommandPalette } from '@/ui/CommandPalette';
 import { ConfirmDialogHost } from '@/ui/primitives/confirm-dialog';
 import { useApplyBackdropBlurEffects } from '@/hooks/visualEffects';
 import { createHomectlQueryClient } from '@/lib/query-client';
@@ -171,6 +172,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
         </main>
         <HomectlBottomNavigation />
       </div>
+      <CommandPalette />
       <Suspense fallback={null}>
         <ColorPickerModal />
         <SaveSceneModal />

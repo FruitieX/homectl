@@ -4,6 +4,7 @@ import type { HelperPersistence } from '@/bindings/HelperPersistence';
 import type { HelperRuntimeStatus } from '@/bindings/HelperRuntimeStatus';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useHelpers, useSetHelperValue } from '@/hooks/useConfig';
+import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { useHelperStatuses } from '@/hooks/websocket';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
@@ -23,7 +24,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 
 import { ConfigPageHeader } from '../page-header';
 
@@ -512,13 +513,19 @@ export default function HelpersConfigPage() {
   const { data, loading, error, update, remove } = useHelpers();
   const liveStatuses = useHelperStatuses();
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchParamState();
   const [editing, setEditing] = useState<{
     draft: HelperDefinition;
     isNew: boolean;
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const openCreate = useCallback(() => {
+    setEditing({ draft: newHelperDraft(), isNew: true });
+    setSaveError(null);
+  }, []);
+  useCreateDeepLink(openCreate);
 
   const statuses = useMemo(() => {
     const source = liveStatuses ?? data;
@@ -541,11 +548,6 @@ export default function HelpersConfigPage() {
       formatValue(status.value),
     ),
   );
-
-  const openCreate = () => {
-    setEditing({ draft: newHelperDraft(), isNew: true });
-    setSaveError(null);
-  };
 
   const openEdit = (status: HelperRuntimeStatus) => {
     setEditing({

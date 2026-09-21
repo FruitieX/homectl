@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import {
   type Integration,
@@ -7,6 +7,7 @@ import {
   useIntegrationConfigSchemas,
   useIntegrations,
 } from '@/hooks/useConfig';
+import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ConfigPageHeader } from '../page-header';
@@ -577,8 +578,9 @@ export default function IntegrationsPage() {
     error: schemasError,
   } = useIntegrationConfigSchemas();
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchParamState();
   const [showCreate, setShowCreate] = useState(false);
+  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const [createPlugin, setCreatePlugin] = useState<string | null>(null);
   const editingIntegration = integrations.find(
     (integration) => integration.id === editingId,

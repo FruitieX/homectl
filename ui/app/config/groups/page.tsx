@@ -1,5 +1,5 @@
 import { useSearchParams } from 'react-router-dom';
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 
 import { type Device } from '@/bindings/Device';
 import {
@@ -7,6 +7,7 @@ import {
   useDeviceDisplayNames,
   useGroups,
 } from '@/hooks/useConfig';
+import { useCreateDeepLink } from '@/hooks/useDeepLink';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { getDeviceKey } from '@/lib/device';
 import {
@@ -86,6 +87,7 @@ export default function GroupsPage() {
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
   const [showCreate, setShowCreate] = useState(false);
+  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const editingGroup = groups.find((group) => group.id === editingId);
   const deviceDisplayNameMap = Object.fromEntries(
     deviceDisplayNames.map((row) => [row.device_key, row.display_name]),

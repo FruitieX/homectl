@@ -3,6 +3,7 @@ import {
   ConfigExport,
   useRuntimeStatus,
 } from '@/hooks/useConfig';
+import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
@@ -81,8 +82,14 @@ export default function ImportExportPage() {
   return (
     <div className="max-w-5xl space-y-5">
       <ConfigPageHeader
-        title="Import / Export Configuration"
-        description="Create durable JSON backups and restore runtime configuration safely."
+        title="Backups & Migration"
+        description="Create durable JSON backups, restore runtime configuration, and import legacy TOML."
+      />
+      <ConfigTabs
+        tabs={[
+          { label: 'Backups', to: '/config/import-export', active: true },
+          { label: 'Migration', to: '/config/migration' },
+        ]}
       />
 
       <Alert variant={isMemoryOnly ? 'warning' : 'default'}>

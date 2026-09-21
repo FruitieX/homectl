@@ -142,18 +142,20 @@ export const configSections = [
   },
   {
     href: '/config/import-export',
-    label: 'Import/Export',
-    description: 'JSON backups, restores, exports, and runtime snapshots.',
-    group: 'Operations',
-    keywords: ['backup', 'restore', 'json', 'snapshot'],
-  },
-  {
-    href: '/config/migration',
-    label: 'TOML Migration',
+    label: 'Backups & Migration',
     description:
-      'Import legacy TOML config into database-backed runtime config.',
+      'JSON backups, restores, runtime snapshots, and legacy TOML import.',
     group: 'Operations',
-    keywords: ['toml', 'legacy', 'migration', 'database'],
+    keywords: [
+      'backup',
+      'restore',
+      'json',
+      'snapshot',
+      'toml',
+      'legacy',
+      'migration',
+      'database',
+    ],
   },
 ] satisfies ConfigSection[];
 

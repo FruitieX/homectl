@@ -1,8 +1,10 @@
 import { HomectlLogo } from '@/ui/HomectlLogo';
 import { Link, useLocation } from 'react-router-dom';
-import { Cog, House, Layers3, Map, RefreshCw } from 'lucide-react';
+import { useSetAtom } from 'jotai';
+import { Cog, House, Layers3, Map, RefreshCw, Search } from 'lucide-react';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
+import { commandPaletteOpenAtom } from '@/ui/CommandPalette';
 import { Button } from '@/ui/primitives/button';
 import { cn } from '@/lib/cn';
 
@@ -32,6 +34,7 @@ export const HomectlBottomNavigation = () => {
 
   const [isFullscreen] = useIsFullscreen();
   const [developerMode] = useDeveloperMode();
+  const openPalette = useSetAtom(commandPaletteOpenAtom);
 
   if (isFullscreen) {
     return null;
@@ -55,32 +58,25 @@ export const HomectlBottomNavigation = () => {
         aria-label="Primary navigation"
         className={cn(
           'grid gap-1.5',
-          developerMode ? 'grid-cols-5' : 'grid-cols-4',
+          developerMode ? 'grid-cols-6' : 'grid-cols-5',
         )}
       >
-        {items.map((item) => {
-          const Icon = item.icon;
-          const active = route === item.route;
-
-          return (
-            <Button
-              key={item.route}
-              asChild
-              variant={active ? 'secondary' : 'ghost'}
-              className={cn(
-                'relative h-14 min-w-0 flex-col gap-1.5 rounded-2xl px-1 py-1.5 text-[0.68rem] font-semibold leading-tight',
-                active && 'bg-primary/10 text-primary shadow-none',
-              )}
-            >
-              <Link to={item.to} aria-current={active ? 'page' : undefined}>
-                <Icon className="size-4" />
-                <span className="max-w-full truncate leading-tight">
-                  {item.label}
-                </span>
-              </Link>
-            </Button>
-          );
-        })}
+        {items.slice(0, 1).map((item) => (
+          <BottomNavLink key={item.route} item={item} active={route === item.route} />
+        ))}
+        <Button
+          type="button"
+          variant="ghost"
+          aria-label="Search"
+          className="relative h-14 min-w-0 flex-col gap-1.5 rounded-2xl px-1 py-1.5 text-[0.68rem] font-semibold leading-tight"
+          onClick={() => openPalette(true)}
+        >
+          <Search className="size-4" />
+          <span className="max-w-full truncate leading-tight">Search</span>
+        </Button>
+        {items.slice(1).map((item) => (
+          <BottomNavLink key={item.route} item={item} active={route === item.route} />
+        ))}
         {developerMode ? (
           <Button
             type="button"
@@ -97,11 +93,37 @@ export const HomectlBottomNavigation = () => {
   );
 };
 
+const BottomNavLink = ({
+  item,
+  active,
+}: {
+  item: { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
+  active: boolean;
+}) => {
+  const Icon = item.icon;
+  return (
+    <Button
+      asChild
+      variant={active ? 'secondary' : 'ghost'}
+      className={cn(
+        'relative h-14 min-w-0 flex-col gap-1.5 rounded-2xl px-1 py-1.5 text-[0.68rem] font-semibold leading-tight',
+        active && 'bg-primary/10 text-primary shadow-none',
+      )}
+    >
+      <Link to={item.to} aria-current={active ? 'page' : undefined}>
+        <Icon className="size-4" />
+        <span className="max-w-full truncate leading-tight">{item.label}</span>
+      </Link>
+    </Button>
+  );
+};
+
 export const HomectlNavigationRail = () => {
   const pathname = useLocation().pathname;
   const route = getRoute(pathname);
   const [isFullscreen] = useIsFullscreen();
   const [developerMode] = useDeveloperMode();
+  const openPalette = useSetAtom(commandPaletteOpenAtom);
 
   if (isFullscreen) return null;
 
@@ -125,6 +147,15 @@ export const HomectlNavigationRail = () => {
         aria-label="Primary navigation"
         className="flex w-full flex-1 flex-col gap-2"
       >
+        <Button
+          type="button"
+          variant="ghost"
+          className="relative h-[4.6rem] w-full flex-col gap-2 rounded-[1.35rem] px-1 text-[0.68rem] font-semibold text-muted-foreground hover:bg-muted/50"
+          onClick={() => openPalette(true)}
+        >
+          <Search className="!size-5" strokeWidth={1.8} />
+          <span>Search</span>
+        </Button>
         {items.map((item) => {
           const Icon = item.icon;
           const active = route === item.route;

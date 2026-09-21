@@ -8,6 +8,7 @@ import { type PlannedRunStatus } from '@/bindings/PlannedRunStatus';
 import { type RuleRuntimeStatus } from '@/bindings/RuleRuntimeStatus';
 import { type TruthValue } from '@/bindings/TruthValue';
 import { type UnknownReason } from '@/bindings/UnknownReason';
+import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
@@ -340,6 +341,12 @@ export default function RoutineHistoryPage() {
 
   return (
     <div className="max-w-6xl space-y-5">
+      <ConfigTabs
+        tabs={[
+          { label: 'Routines', to: '/config/routines' },
+          { label: 'History', to: '/config/routine-history', active: true },
+        ]}
+      />
       <ConfigPageHeader
         title="Routine History"
         description="Recent routine activations, trigger sources, action counts, and rule traces from the in-memory runtime buffer."

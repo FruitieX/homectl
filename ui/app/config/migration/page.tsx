@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCircle2, Info, Upload, X } from 'lucide-react';
 
 import { useAppConfig } from '@/hooks/appConfig';
 import { cn } from '@/lib/cn';
+import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
@@ -365,8 +366,14 @@ export default function MigrationPage() {
   return (
     <div className="max-w-6xl space-y-5">
       <ConfigPageHeader
-        title="TOML Migration"
+        title="Backups & Migration"
         description="Import legacy Settings.toml sections in controlled passes."
+      />
+      <ConfigTabs
+        tabs={[
+          { label: 'Backups', to: '/config/import-export' },
+          { label: 'Migration', to: '/config/migration', active: true },
+        ]}
       />
 
       <Alert variant="warning">

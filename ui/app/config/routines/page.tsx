@@ -17,13 +17,15 @@ import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import {
   useDevicesState,
   useRoutineStatuses,
   useTimers,
 } from '@/hooks/websocket';
+import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
 import { RuleBuilder, Rule } from '@/ui/RuleBuilder';
 import { ActionBuilder, Action, validateActions } from '@/ui/ActionBuilder';
@@ -87,8 +89,9 @@ export default function RoutinesPage() {
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchParamState();
   const [showCreate, setShowCreate] = useState(false);
+  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const { devicesState: apiDevices } = useDevicesApi();
   const liveDevices = useDevicesState();
   // Merge live websocket device state over the REST snapshot so editors (for
@@ -142,6 +145,13 @@ export default function RoutinesPage() {
         actions={
           <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
         }
+      />
+
+      <ConfigTabs
+        tabs={[
+          { label: 'Routines', to: '/config/routines', active: true },
+          { label: 'History', to: '/config/routine-history' },
+        ]}
       />
 
       <ConfigListSearchBar
