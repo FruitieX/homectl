@@ -237,7 +237,11 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
   origins are always allowed; all other origins are rejected before routing)
 - `HOMECTL_ASSISTANT_BASE_URL` – Optional OpenAI-compatible API base (hosted
   provider or a local runtime such as Ollama) that enables the routine drafting
-  assistant. The feature stays hidden in the UI while unset.
+  assistant. The feature stays hidden in the UI while unset. OpenCode Zen uses
+  `https://opencode.ai/zen/v1` and the Go subscription uses
+  `https://opencode.ai/zen/go/v1` (both with model `deepseek-v4.1-flash`).
+  Requests identify themselves with a `homectl-assistant` user agent and a
+  stable per-draft `x-opencode-session` header.
 - `HOMECTL_ASSISTANT_MODEL` – Model name used for drafting (required with the
   base URL)
 - `HOMECTL_ASSISTANT_API_KEY` – Optional bearer token for the assistant

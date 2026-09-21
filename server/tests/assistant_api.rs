@@ -12,7 +12,7 @@ use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 
 struct MockResponse {
@@ -46,6 +46,7 @@ impl MockResponse {
 struct MockProvider {
     base_url: String,
     requests: Arc<AtomicUsize>,
+    request_headers: Arc<Mutex<Vec<String>>>,
 }
 
 impl MockProvider {
@@ -55,6 +56,8 @@ impl MockProvider {
         let port = listener.local_addr().unwrap().port();
         let requests = Arc::new(AtomicUsize::new(0));
         let counter = requests.clone();
+        let request_headers = Arc::new(Mutex::new(Vec::new()));
+        let headers_sink = request_headers.clone();
 
         thread::spawn(move || {
             for stream in listener.incoming() {
@@ -67,23 +70,31 @@ impl MockProvider {
 
                 let mut buffer = Vec::new();
                 let mut chunk = [0u8; 4096];
+                let mut header_end = None;
+                let mut content_length = 0usize;
                 while let Ok(read) = stream.read(&mut chunk) {
                     if read == 0 {
                         break;
                     }
                     buffer.extend_from_slice(&chunk[..read]);
-                    if let Some(header_end) = find_header_end(&buffer) {
-                        let headers = String::from_utf8_lossy(&buffer[..header_end]);
-                        let content_length = headers
-                            .lines()
-                            .find_map(|line| {
-                                let (name, value) = line.split_once(':')?;
-                                name.eq_ignore_ascii_case("content-length")
-                                    .then(|| value.trim().parse::<usize>().ok())
-                                    .flatten()
-                            })
-                            .unwrap_or(0);
-                        if buffer.len() >= header_end + 4 + content_length {
+                    if header_end.is_none() {
+                        if let Some(position) = find_header_end(&buffer) {
+                            let headers = String::from_utf8_lossy(&buffer[..position]);
+                            headers_sink.lock().unwrap().push(headers.to_string());
+                            content_length = headers
+                                .lines()
+                                .find_map(|line| {
+                                    let (name, value) = line.split_once(':')?;
+                                    name.eq_ignore_ascii_case("content-length")
+                                        .then(|| value.trim().parse::<usize>().ok())
+                                        .flatten()
+                                })
+                                .unwrap_or(0);
+                            header_end = Some(position);
+                        }
+                    }
+                    if let Some(position) = header_end {
+                        if buffer.len() >= position + 4 + content_length {
                             break;
                         }
                     }
@@ -102,7 +113,23 @@ impl MockProvider {
         Self {
             base_url: format!("http://127.0.0.1:{port}/v1"),
             requests,
+            request_headers,
         }
+    }
+
+    fn request_headers(&self) -> Vec<String> {
+        self.request_headers.lock().unwrap().clone()
+    }
+
+    fn header_value(&self, name: &str) -> Option<String> {
+        self.request_headers().iter().find_map(|headers| {
+            headers.lines().find_map(|line| {
+                let (header, value) = line.split_once(':')?;
+                header
+                    .eq_ignore_ascii_case(name)
+                    .then(|| value.trim().to_string())
+            })
+        })
     }
 }
 
@@ -296,6 +323,14 @@ fn assistant_drafts_a_validated_definition() {
         "set_power"
     );
     assert_eq!(provider.requests.load(Ordering::SeqCst), 1);
+    assert!(provider
+        .header_value("user-agent")
+        .unwrap()
+        .starts_with("homectl-assistant/"));
+    assert!(provider
+        .header_value("x-opencode-session")
+        .unwrap()
+        .starts_with("homectl-"));
 }
 
 #[test]
@@ -312,6 +347,21 @@ fn assistant_repairs_an_invalid_draft() {
     let body: Value = response.json().unwrap();
     assert_eq!(body["data"]["attempts"], 2);
     assert_eq!(provider.requests.load(Ordering::SeqCst), 2);
+
+    let sessions: Vec<String> = provider
+        .request_headers()
+        .iter()
+        .filter_map(|headers| {
+            headers.lines().find_map(|line| {
+                let (header, value) = line.split_once(':')?;
+                header
+                    .eq_ignore_ascii_case("x-opencode-session")
+                    .then(|| value.trim().to_string())
+            })
+        })
+        .collect();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0], sessions[1]);
 }
 
 #[test]

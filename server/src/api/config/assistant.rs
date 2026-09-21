@@ -174,10 +174,13 @@ async fn draft_routine(
         json_mode: true,
         reasoning_effort: config.reasoning_effort.is_some(),
     };
+    // One conversation per draft, including repair attempts, so gateways can
+    // route and cache consistently (OpenCode Go asks for a stable session id).
+    let session_id = new_session_id();
     let mut last_errors = String::new();
 
     for attempt in 1..=MAX_ATTEMPTS {
-        let content = match chat(&config, &messages, &mut options).await {
+        let content = match chat(&config, &messages, &mut options, &session_id).await {
             Ok(content) => content,
             Err(error) => return Ok(provider_error_response(error)),
         };
@@ -247,13 +250,24 @@ struct ChatOptions {
     reasoning_effort: bool,
 }
 
+fn new_session_id() -> String {
+    let first: u64 = rand::random();
+    let second: u64 = rand::random();
+    format!("homectl-{first:016x}{second:016x}")
+}
+
+fn user_agent() -> String {
+    format!("homectl-assistant/{}", env!("CARGO_PKG_VERSION"))
+}
+
 async fn chat(
     config: &AssistantConfig,
     messages: &[Value],
     options: &mut ChatOptions,
+    session_id: &str,
 ) -> Result<String, ProviderError> {
     loop {
-        match post_chat(config, messages, *options).await {
+        match post_chat(config, messages, *options, session_id).await {
             Ok(content) => return Ok(content),
             Err(ProviderError::Status(400, body)) if options.json_mode => {
                 log::warn!(
@@ -294,11 +308,14 @@ async fn post_chat(
     config: &AssistantConfig,
     messages: &[Value],
     options: ChatOptions,
+    session_id: &str,
 ) -> Result<String, ProviderError> {
     let body = chat_request_body(config, messages, options);
 
     let mut request = http_client()
         .post(config.chat_completions_url())
+        .header(reqwest::header::USER_AGENT, user_agent())
+        .header("x-opencode-session", session_id)
         .json(&body);
     if let Some(api_key) = &config.api_key {
         request = request.bearer_auth(api_key);
