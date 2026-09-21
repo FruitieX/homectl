@@ -50,6 +50,8 @@ import { toast } from 'sonner';
 
 import { Advanced, ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import type { AssistantDraft } from '@/hooks/useAssistant';
+import { AssistantDraftPanel } from './assistant-draft-panel';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -920,6 +922,15 @@ type V2DraftKind =
   | 'occupancy'
   | 'schedule';
 
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
 function v2Draft(kind: V2DraftKind): RoutineDefinitionV2Body {
   const trigger: TriggerSpec =
     kind === 'sensor'
@@ -1109,6 +1120,21 @@ function CreateRoutineModal({
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
 
+  const applyAssistantDraft = (draft: AssistantDraft) => {
+    setDefinition(draft.definition);
+    setPreview(false);
+    setError(null);
+    if (!name.trim() && draft.name) {
+      setName(draft.name);
+      if (!id.trim()) {
+        const slug = slugify(draft.name);
+        if (slug) {
+          setId(slug);
+        }
+      }
+    }
+  };
+
   return (
     <ResponsiveOverlay
       open
@@ -1271,6 +1297,12 @@ function CreateRoutineModal({
             />
           </ConfigToggleRow>
         </ConfigFormSection>
+
+        {semantics === 2 ? (
+          <div className="mt-4">
+            <AssistantDraftPanel onDraft={applyAssistantDraft} />
+          </div>
+        ) : null}
 
         <div className="mt-4 space-y-4">
           {semantics === 2 ? (
