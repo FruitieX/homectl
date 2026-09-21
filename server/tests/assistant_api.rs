@@ -598,7 +598,12 @@ fn assistant_stored_settings_override_environment() {
     assert_eq!(stored_provider.requests.load(Ordering::SeqCst), 1);
 }
 
-fn apply(base_url: &str, client: &Client, prompt: &str, device_keys: Option<Vec<&str>>) -> reqwest::blocking::Response {
+fn apply(
+    base_url: &str,
+    client: &Client,
+    prompt: &str,
+    device_keys: Option<Vec<&str>>,
+) -> reqwest::blocking::Response {
     let mut body = json!({ "prompt": prompt });
     if let Some(keys) = device_keys {
         body["deviceKeys"] = json!(keys);
@@ -621,9 +626,7 @@ fn device_state(base_url: &str, client: &Client, integration_id: &str, device_id
         .as_array()
         .unwrap()
         .iter()
-        .find(|device| {
-            device["integration_id"] == integration_id && device["id"] == device_id
-        })
+        .find(|device| device["integration_id"] == integration_id && device["id"] == device_id)
         .cloned()
         .expect("device")
 }

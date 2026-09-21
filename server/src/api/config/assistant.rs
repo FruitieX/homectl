@@ -345,11 +345,7 @@ pub(super) fn assistant_routes(
         .and(with_handle(handle))
         .and_then(apply_assistant_action);
 
-    status
-        .or(settings_get)
-        .or(settings_put)
-        .or(draft)
-        .or(apply)
+    status.or(settings_get).or(settings_put).or(draft).or(apply)
 }
 
 async fn assistant_status(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -1038,10 +1034,7 @@ fn build_control_catalog(
         .iter()
         .filter(|group| {
             group.devices.iter().any(|member| {
-                devices.contains_key(&format!(
-                    "{}/{}",
-                    member.integration_id, member.device_id
-                ))
+                devices.contains_key(&format!("{}/{}", member.integration_id, member.device_id))
             })
         })
         .map(|group| {
@@ -1180,9 +1173,7 @@ async fn apply_assistant_action(
             request_id: new_session_id(),
             device_key,
             power: change.power,
-            brightness: change
-                .brightness
-                .map(|value| value.clamp(0.0, 1.0) as f32),
+            brightness: change.brightness.map(|value| value.clamp(0.0, 1.0) as f32),
             color: change.color.as_ref().map(|color| {
                 crate::types::color::DeviceColor::Hs(crate::types::color::Hs {
                     h: color.h.clamp(0.0, 360.0).round() as u64,
