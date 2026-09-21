@@ -9,6 +9,7 @@ use super::{
     event::Event,
     group::FlattenedGroupsConfig,
     routine_status::RoutineStatuses,
+    rule::RoutineId,
     scene::FlattenedScenesConfig,
     timer_status::TimerRuntimeStatus,
 };
@@ -55,6 +56,13 @@ pub struct DevicesPatch {
 
 #[derive(TS, Deserialize, Serialize, Debug)]
 #[ts(export)]
+pub struct RoutineStatusesPatch {
+    pub upserted: RoutineStatuses,
+    pub removed: Vec<RoutineId>,
+}
+
+#[derive(TS, Deserialize, Serialize, Debug)]
+#[ts(export)]
 pub struct StatePatch {
     /// Revision of this patch; apply only when it follows the last seen one.
     #[ts(type = "number")]
@@ -66,7 +74,7 @@ pub struct StatePatch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub groups: Option<FlattenedGroupsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub routine_statuses: Option<RoutineStatuses>,
+    pub routine_statuses: Option<RoutineStatusesPatch>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timers: Option<Vec<TimerRuntimeStatus>>,
     #[serde(skip_serializing_if = "Option::is_none")]

@@ -9,7 +9,8 @@ use crate::types::{
     event::TxEventChannel,
     group::FlattenedGroupsConfig,
     integration::IntegrationId,
-    routine_status::RoutineStatuses,
+    routine_status::{RoutineRuntimeStatus, RoutineStatuses},
+    rule::RoutineId,
     scene::FlattenedScenesConfig,
 };
 
@@ -32,6 +33,7 @@ use super::{
     websockets::WebSockets,
 };
 use crate::types::device::{Device, DeviceData};
+use crate::types::websockets::RoutineStatusesPatch;
 
 use color_eyre::Result;
 use ordered_float::OrderedFloat;
@@ -52,6 +54,8 @@ pub struct PendingWsUpdate {
     changes: SnapshotChanges,
     device_upserts: BTreeSet<DeviceKey>,
     device_removals: BTreeSet<DeviceKey>,
+    routine_status_upserts: HashMap<RoutineId, RoutineRuntimeStatus>,
+    routine_status_removals: BTreeSet<RoutineId>,
 }
 
 impl PendingWsUpdate {
@@ -86,6 +90,10 @@ impl PendingWsUpdate {
         self.changes.include(other.changes);
         self.device_upserts.extend(other.device_upserts);
         self.device_removals.extend(other.device_removals);
+        self.routine_status_upserts
+            .extend(other.routine_status_upserts);
+        self.routine_status_removals
+            .extend(other.routine_status_removals);
     }
 
     fn has_websocket_changes(&self) -> bool {
@@ -268,9 +276,25 @@ impl AppState {
         {
             update.changes.flattened_scenes = false;
         }
-        if update.changes.routine_statuses && snapshot.routine_statuses == previous.routine_statuses
-        {
-            update.changes.routine_statuses = false;
+        if update.changes.routine_statuses {
+            if snapshot.routine_statuses == previous.routine_statuses {
+                update.changes.routine_statuses = false;
+            } else {
+                // Routine statuses travel as per-routine deltas; the whole map
+                // is ~1.5 kB per routine and would dwarf the device update.
+                for (id, status) in snapshot.routine_statuses.0.iter() {
+                    if previous.routine_statuses.0.get(id) != Some(status) {
+                        update
+                            .routine_status_upserts
+                            .insert(id.clone(), status.clone());
+                    }
+                }
+                for id in previous.routine_statuses.0.keys() {
+                    if !snapshot.routine_statuses.0.contains_key(id) {
+                        update.routine_status_removals.insert(id.clone());
+                    }
+                }
+            }
         }
         if update.changes.helper_statuses && snapshot.helper_statuses == previous.helper_statuses {
             update.changes.helper_statuses = false;
@@ -1552,7 +1576,7 @@ struct StatePatchRef<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     groups: Option<&'a FlattenedGroupsConfig>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    routine_statuses: Option<&'a RoutineStatuses>,
+    routine_statuses: Option<RoutineStatusesPatch>,
     #[serde(skip_serializing_if = "Option::is_none")]
     timers: Option<&'a [crate::types::timer_status::TimerRuntimeStatus]>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1991,10 +2015,13 @@ pub async fn send_state_ws_patch_from_snapshot(
             .changes
             .flattened_groups
             .then_some(snap.flattened_groups.as_ref()),
-        routine_statuses: update
-            .changes
-            .routine_statuses
-            .then_some(snap.routine_statuses.as_ref()),
+        routine_statuses: (update.changes.routine_statuses
+            && !(update.routine_status_upserts.is_empty()
+                && update.routine_status_removals.is_empty()))
+        .then_some(RoutineStatusesPatch {
+            upserted: RoutineStatuses(update.routine_status_upserts),
+            removed: update.routine_status_removals.into_iter().collect(),
+        }),
         timers: update.changes.timers.then_some(snap.timers.as_slice()),
         helper_statuses: update
             .changes

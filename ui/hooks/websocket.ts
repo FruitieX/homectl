@@ -210,7 +210,14 @@ export const useProvideWebsocketState = () => {
             setGroups(patch.groups);
           }
           if (patch.routine_statuses) {
-            setRoutineStatuses(patch.routine_statuses);
+            const { upserted, removed } = patch.routine_statuses;
+            setRoutineStatuses((current) => {
+              const next: RoutineStatuses = { ...(current ?? {}) };
+              for (const routineId of removed) {
+                delete next[routineId];
+              }
+              return { ...next, ...upserted };
+            });
           }
           if (patch.timers) {
             setTimers(patch.timers);
