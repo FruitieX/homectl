@@ -35,6 +35,7 @@ import {
   Activity,
   AlertTriangle,
   CheckCircle2,
+  Info,
   RefreshCw,
   Zap,
 } from 'lucide-react';
@@ -108,6 +109,61 @@ function countV2Errors(entry: RoutineHistoryEntry) {
 
 function countEntryErrors(entry: RoutineHistoryEntry) {
   return entry.v2 ? countV2Errors(entry) : countRuleErrors(entry);
+}
+
+/**
+ * Plain-language "why it ran or did not run" summary for one history entry,
+ * built from the recorded trigger, condition, and plan outcome.
+ */
+function explainEntry(entry: RoutineHistoryEntry): string {
+  const v2 = entry.v2;
+  if (!v2) {
+    if (entry.trigger_kind === 'force_trigger') {
+      return `Manually triggered: ${entry.action_count} stored v1 action${entry.action_count === 1 ? '' : 's'} replayed.`;
+    }
+    return entry.status?.will_trigger
+      ? `Rules matched${entry.event_source_device_key ? ` from ${entry.event_source_device_key}` : ''}; ${entry.action_count} action${entry.action_count === 1 ? '' : 's'} dispatched.`
+      : 'Rules were evaluated but did not all match, so nothing ran.';
+  }
+
+  if (v2.condition.error) {
+    return `Not run: the condition errored (${v2.condition.error}).`;
+  }
+  if (v2.condition.truth === 'unknown') {
+    return `Not run: ${v2.condition.unknown_reason ? describeUnknownReason(v2.condition.unknown_reason) : 'part of the condition could not be evaluated'}.`;
+  }
+  if (v2.condition.truth === 'false') {
+    return `Triggered, but the condition was false, so nothing ran.`;
+  }
+
+  const steps = v2.last_run?.steps ?? [];
+  const suppressed = steps.filter(
+    (step) => step.disposition === 'suppressed',
+  );
+  const dispatched = steps.filter(
+    (step) => step.disposition === 'dispatched',
+  ).length;
+
+  if (v2.last_run && !v2.last_run.accepted) {
+    const reason = suppressed.find((step) => step.reason)?.reason;
+    return `Blocked by the execution policy: ${reason ?? 'the plan was rejected before dispatch'}.`;
+  }
+
+  const triggerText =
+    v2.matched_trigger_ids.length > 0
+      ? v2.matched_trigger_ids.join(', ')
+      : 'a trigger';
+  let summary = `Ran because ${triggerText} matched and the condition was true.`;
+  if (dispatched > 0) {
+    summary += ` ${dispatched} step${dispatched === 1 ? '' : 's'} dispatched.`;
+  }
+  if (suppressed.length > 0) {
+    summary += ` ${suppressed.length} step${suppressed.length === 1 ? '' : 's'} suppressed (${suppressed[0].reason ?? 'no reason recorded'}).`;
+  }
+  if (v2.last_run && v2.last_run.dropped > 0n) {
+    summary += ` ${v2.last_run.dropped.toString()} dropped by the bounded queue.`;
+  }
+  return summary;
 }
 
 function matchesTriggerFilter(
@@ -532,6 +588,10 @@ export default function RoutineHistoryPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <p className="flex items-start gap-2 rounded-2xl border border-border/70 bg-muted/25 p-3 text-sm">
+                    <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                    <span>{explainEntry(entry)}</span>
+                  </p>
                   <div className="grid gap-2 rounded-2xl bg-muted/40 p-3 text-sm sm:grid-cols-3">
                     <div>
                       <span className="text-muted-foreground">Actions</span>
