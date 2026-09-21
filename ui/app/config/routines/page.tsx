@@ -41,7 +41,10 @@ import {
   ConfigToggleRow,
 } from '@/ui/config-form';
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
+import { toast } from 'sonner';
+
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -185,7 +188,12 @@ export default function RoutinesPage() {
               }}
               onCancel={() => setEditingId(null)}
               onDelete={async () => {
-                if (confirm(`Delete routine "${routine.name}"?`)) {
+                if (
+                  await confirmDestructive(
+                    `Delete routine "${routine.name}"?`,
+                    'Its triggers, conditions, and program are removed. The v1 fallback rules are deleted with it.',
+                  )
+                ) {
                   await remove(routine.id);
                   setOpenId((current) =>
                     current === routine.id ? null : current,
@@ -326,7 +334,7 @@ function RoutineCard({
           setActions(JSON.parse(actionsJson));
         }
       } catch {
-        alert('Invalid JSON - fix before leaving the JSON tab');
+        toast.error('Invalid JSON - fix before leaving the JSON tab');
         return;
       }
     }
@@ -626,7 +634,7 @@ function RoutineCard({
                   ? JSON.parse(definitionJson)
                   : definition;
               } catch {
-                alert('Invalid JSON in the native definition');
+                toast.error('Invalid JSON in the native definition');
                 return;
               }
 
@@ -641,7 +649,7 @@ function RoutineCard({
                   actions: routine.actions,
                 });
               } catch (error) {
-                alert(
+                toast.error(
                   error instanceof Error
                     ? error.message
                     : 'Failed to save routine',
@@ -657,7 +665,7 @@ function RoutineCard({
               finalRules = saveFromJson ? JSON.parse(rulesJson) : rules;
               finalActions = saveFromJson ? JSON.parse(actionsJson) : actions;
             } catch {
-              alert('Invalid JSON in rules or actions');
+              toast.error('Invalid JSON in rules or actions');
               return;
             }
 
@@ -666,7 +674,7 @@ function RoutineCard({
                 finalActions as Action[],
               );
               if (rolloutValidationError) {
-                alert(rolloutValidationError);
+                toast.error(rolloutValidationError);
                 return;
               }
             }
@@ -680,7 +688,7 @@ function RoutineCard({
                 actions: finalActions,
               });
             } catch (error) {
-              alert(
+              toast.error(
                 error instanceof Error
                   ? error.message
                   : 'Failed to save routine',

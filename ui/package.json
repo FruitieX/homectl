@@ -6,7 +6,8 @@
     "start": "vite preview --host 0.0.0.0 --port 3000",
     "lint": "eslint .",
     "format": "prettier --write \"**/*.{js,ts,tsx}\"",
-    "tsc": "tsc --noEmit"
+    "tsc": "tsc --noEmit",
+    "test": "node --test 'lib/**/*.test.ts'"
   },
   "prettier": {
     "arrowParens": "always",

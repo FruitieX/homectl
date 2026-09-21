@@ -15,6 +15,7 @@ import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigPageHeader } from '../page-header';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
   ConfigField,
@@ -335,7 +336,12 @@ export default function ScenesPage() {
                 }}
                 onCancel={() => setEditingId(null)}
                 onDelete={async () => {
-                  if (confirm(`Delete scene "${scene.name}"?`)) {
+                  if (
+                    await confirmDestructive(
+                      `Delete scene "${scene.name}"?`,
+                      'Routines and links that reference this scene will stop resolving.',
+                    )
+                  ) {
                     await remove(scene.id);
                     setOpenId((current) =>
                       current === scene.id ? null : current,

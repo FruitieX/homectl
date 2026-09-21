@@ -1046,13 +1046,78 @@
   --warning: 39 92% 58%;
 }
 
+/* Accent presets. Emerald is the default token set above. */
+html[data-accent='indigo'] {
+  --primary: 243 58% 45%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 243 58% 45%;
+  --chart-1: 243 58% 55%;
+}
+
+html[data-accent='indigo'].dark {
+  --primary: 235 75% 68%;
+  --primary-foreground: 240 30% 10%;
+  --ring: 235 75% 68%;
+  --chart-1: 235 75% 68%;
+}
+
+html[data-accent='sky'] {
+  --primary: 199 80% 38%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 199 80% 38%;
+  --chart-1: 199 80% 48%;
+}
+
+html[data-accent='sky'].dark {
+  --primary: 199 85% 60%;
+  --primary-foreground: 200 45% 8%;
+  --ring: 199 85% 60%;
+  --chart-1: 199 85% 60%;
+}
+
+html[data-accent='amber'] {
+  --primary: 32 85% 40%;
+  --primary-foreground: 40 40% 98%;
+  --ring: 32 85% 40%;
+  --chart-1: 32 85% 50%;
+}
+
+html[data-accent='amber'].dark {
+  --primary: 38 92% 60%;
+  --primary-foreground: 30 45% 8%;
+  --ring: 38 92% 60%;
+  --chart-1: 38 92% 60%;
+}
+
+html[data-accent='rose'] {
+  --primary: 343 65% 45%;
+  --primary-foreground: 0 0% 100%;
+  --ring: 343 65% 45%;
+  --chart-1: 343 65% 55%;
+}
+
+html[data-accent='rose'].dark {
+  --primary: 345 80% 68%;
+  --primary-foreground: 340 35% 10%;
+  --ring: 345 80% 68%;
+  --chart-1: 345 80% 68%;
+}
+
+/* Density scales rem-based spacing and type together. */
+html[data-density='compact'] {
+  font-size: 14px;
+}
+
+html[data-density='comfortable'] {
+  font-size: 16px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    animation-duration: 0.01ms !important;
+    animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
-    scroll-behavior: auto !important;
-    transition-duration: 0.01ms !important;
+    transition-duration: 0.001ms !important;
   }
 }

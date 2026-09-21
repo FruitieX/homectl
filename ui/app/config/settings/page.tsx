@@ -7,11 +7,24 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
+import { useAtom } from 'jotai';
+
 import { useAppConfig } from '@/hooks/appConfig';
+import {
+  accentAtom,
+  densityAtom,
+  useExperience,
+} from '@/hooks/preferences';
 import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { cn } from '@/lib/cn';
+import {
+  accents,
+  densities,
+  experienceDescriptions,
+  experienceLevels,
+} from '@/lib/preferences';
 import { normalizeBuildInfo } from '@/lib/buildInfo';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
@@ -452,6 +465,9 @@ export default function SettingsPage() {
 function AppearanceSettingsCard() {
   const [themeMode, setThemeMode] = useTheme();
   const [blurEffectsEnabled, setBlurEffectsEnabled] = useBackdropBlurEffects();
+  const [accent, setAccent] = useAtom(accentAtom);
+  const [density, setDensity] = useAtom(densityAtom);
+  const { level, setLevel } = useExperience();
 
   return (
     <Card>
@@ -485,6 +501,89 @@ function AppearanceSettingsCard() {
               ? 'Theme follows your system preference.'
               : `Using ${themeMode} theme.`}
           </p>
+
+          <div className="space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                Accent color
+              </span>
+              <span className="block text-xs leading-5 text-muted-foreground">
+                Tints primary buttons, focus rings, and charts.
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {accents.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  aria-label={`Use ${option.label} accent`}
+                  aria-pressed={accent === option.id}
+                  onClick={() => setAccent(option.id)}
+                  className={cn(
+                    'size-9 rounded-full border-2 transition',
+                    accent === option.id
+                      ? 'border-foreground'
+                      : 'border-transparent hover:border-border',
+                  )}
+                  style={{ backgroundColor: option.swatch }}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                Density
+              </span>
+              <span className="block text-xs leading-5 text-muted-foreground">
+                Compact fits more rows on screen; comfortable keeps larger
+                touch targets.
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
+              {densities.map((option) => (
+                <Button
+                  key={option}
+                  type="button"
+                  variant={density === option ? 'default' : 'ghost'}
+                  className={cn('h-11 rounded-xl', density === option && 'shadow-sm')}
+                  onClick={() => setDensity(option)}
+                >
+                  {option === 'compact' ? 'Compact' : 'Comfortable'}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
+            <div className="space-y-1">
+              <span className="block text-sm font-medium text-foreground">
+                Experience level
+              </span>
+              <span className="block text-xs leading-5 text-muted-foreground">
+                Controls how much of the configuration UI is shown. Advanced
+                fields stay reachable behind expanders at every level.
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted p-1">
+              {experienceLevels.map((option) => (
+                <Button
+                  key={option}
+                  type="button"
+                  variant={level === option ? 'default' : 'ghost'}
+                  className={cn('h-11 rounded-xl', level === option && 'shadow-sm')}
+                  onClick={() => setLevel(option)}
+                >
+                  {experienceDescriptions[option].label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {experienceDescriptions[level].description}
+            </p>
+          </div>
+
           <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
             <span className="space-y-1">
               <span className="block text-sm font-medium text-foreground">

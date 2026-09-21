@@ -25,6 +25,7 @@ import {
   ConfigToggleRow,
 } from '@/ui/config-form';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -147,7 +148,12 @@ export default function GroupsPage() {
               devicesByKey={devicesByKey}
               onEdit={() => setEditingId(group.id)}
               onDelete={async () => {
-                if (confirm(`Delete group "${group.name}"?`)) {
+                if (
+                  await confirmDestructive(
+                    `Delete group "${group.name}"?`,
+                    'Scenes, links, and routines that target this room will stop resolving.',
+                  )
+                ) {
                   await remove(group.id);
                 }
               }}

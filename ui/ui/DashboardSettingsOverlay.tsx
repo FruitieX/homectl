@@ -12,6 +12,7 @@ import { ConfigField, ConfigFormSection } from '@/ui/config-form';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
@@ -77,7 +78,14 @@ export function DashboardSettingsOverlay({
   };
 
   const deleteLayout = async (layout: DashboardLayout) => {
-    if (!confirm(`Delete layout "${layout.name}"?`)) return;
+    if (
+      !(await confirmDestructive(
+        `Delete layout "${layout.name}"?`,
+        'Widgets stay available in the widget gallery; only this layout arrangement is removed.',
+      ))
+    ) {
+      return;
+    }
 
     try {
       setActionError(null);

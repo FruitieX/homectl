@@ -1,8 +1,10 @@
 import { useMediaQuery } from 'usehooks-ts';
-import { type ReactNode } from 'react';
+import { useCallback, type ReactNode } from 'react';
 import { FloorplanInspector } from '@/ui/FloorplanInspector';
 
 import { cn } from '@/lib/cn';
+import { useUnsavedChanges } from '@/hooks/unsavedChanges';
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import {
   Dialog,
   DialogContent,
@@ -27,6 +29,16 @@ interface ResponsiveOverlayProps {
   className?: string;
   presentation?: 'default' | 'fullscreen';
   desktopPresentation?: 'dialog' | 'sidepanel' | 'floorplan';
+  /**
+   * When `dirty` is true, closing the overlay (Esc, overlay click, drawer
+   * drag, or an explicit onOpenChange(false)) asks for confirmation first.
+   */
+  guard?: {
+    dirty: boolean;
+    title?: ReactNode;
+    description?: ReactNode;
+    confirmLabel?: string;
+  };
 }
 
 export function ResponsiveOverlay({
@@ -38,8 +50,33 @@ export function ResponsiveOverlay({
   className,
   presentation = 'default',
   desktopPresentation = 'dialog',
+  guard,
 }: ResponsiveOverlayProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
+  const isDirty = guard?.dirty ?? false;
+
+  useUnsavedChanges(isDirty);
+
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (next || !isDirty) {
+        onOpenChange(next);
+        return;
+      }
+
+      void confirmDialog({
+        title: guard?.title ?? 'Discard unsaved changes?',
+        description:
+          guard?.description ??
+          'This editor has changes that have not been saved yet.',
+        confirmLabel: guard?.confirmLabel ?? 'Discard changes',
+        destructive: true,
+      }).then((confirmed) => {
+        if (confirmed) onOpenChange(false);
+      });
+    },
+    [guard, isDirty, onOpenChange],
+  );
   const isFullscreen = presentation === 'fullscreen';
   const contentClassName = cn(
     'grid max-h-[calc(100dvh-2rem)] grid-rows-[auto_minmax(0,1fr)] overflow-hidden',
@@ -54,7 +91,7 @@ export function ResponsiveOverlay({
 
   if (desktopPresentation === 'floorplan') {
     return open ? (
-      <FloorplanInspector title={title} onClose={() => onOpenChange(false)}>
+      <FloorplanInspector title={title} onClose={() => handleOpenChange(false)}>
         {children}
       </FloorplanInspector>
     ) : null;
@@ -62,7 +99,7 @@ export function ResponsiveOverlay({
 
   if (isDesktop) {
     return (
-      <Dialog open={open} onOpenChange={onOpenChange} modal={!isSidePanel}>
+      <Dialog open={open} onOpenChange={handleOpenChange} modal={!isSidePanel}>
         <DialogContent
           showOverlay={!isSidePanel}
           onInteractOutside={
@@ -87,7 +124,7 @@ export function ResponsiveOverlay({
   }
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
+    <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerContent
         className={cn(
           'h-auto max-h-[92dvh] overflow-hidden',

@@ -22,6 +22,7 @@ import { useIsFullscreen } from '@/hooks/isFullscreen';
 import { getDashboardWidgetResponsiveGridStyle } from '@/lib/dashboard-layout';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { DashboardWidgetCard } from '@/ui/DashboardWidgetCard';
@@ -249,9 +250,15 @@ export default function Page() {
               screenSimulation={editingSettings.screenSimulation}
               onEdit={setEditingWidget}
               onRemove={(widget) => {
-                if (confirm(`Remove widget "${widget.title}"?`)) {
-                  void removeWidget(widget.id);
-                }
+                void confirmDialog({
+                  title: `Remove widget "${widget.title}"?`,
+                  description:
+                    'The widget is removed from this dashboard layout. You can add it again later.',
+                  confirmLabel: 'Remove',
+                  destructive: true,
+                }).then((confirmed) => {
+                  if (confirmed) void removeWidget(widget.id);
+                });
               }}
               onUpdateWidget={updateWidget}
               onReorderWidgets={reorderWidgets}

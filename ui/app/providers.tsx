@@ -12,7 +12,9 @@ import {
 } from '@/ui/BottomNavigation';
 import { Navbar } from '@/ui/Navbar';
 import { useProvideAppConfig } from '@/hooks/appConfig';
+import { useApplyAppearance } from '@/hooks/preferences';
 import { useApplyTheme } from '@/hooks/theme';
+import { ConfirmDialogHost } from '@/ui/primitives/confirm-dialog';
 import { useApplyBackdropBlurEffects } from '@/hooks/visualEffects';
 import { createHomectlQueryClient } from '@/lib/query-client';
 import { Toaster } from '@/ui/primitives/toaster';
@@ -51,6 +53,7 @@ export const Providers = ({ children }: { children: ReactNode }) => {
         <TooltipProvider delayDuration={250}>
           {children}
           <Toaster richColors position="top-center" />
+          <ConfirmDialogHost />
         </TooltipProvider>
       </QueryClientProvider>
     </JotaiProvider>
@@ -124,6 +127,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
   useProvideWebsocketState();
   const connectionStatus = useConnectionStatus();
   useApplyTheme();
+  useApplyAppearance();
   useApplyBackdropBlurEffects();
 
   // Reload app at 4am

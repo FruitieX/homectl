@@ -24,6 +24,7 @@ import {
   ConfigFormSection,
 } from '@/ui/config-form';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
 import {
   Card,
@@ -433,9 +434,10 @@ export default function FloorplanPage() {
       (floorplan) => floorplan.id === selectedFloorplanId,
     );
     if (
-      !confirm(
+      !(await confirmDestructive(
         `Delete floorplan "${selectedFloorplan?.name ?? selectedFloorplanId}"?`,
-      )
+        'Devices keep their positions in other floorplans; only this floorplan and its background image are removed.',
+      ))
     ) {
       return;
     }

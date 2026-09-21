@@ -23,6 +23,7 @@ import {
 } from '@/ui/SourceParamsForm';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
 import {
   ConfigField,
@@ -659,7 +660,12 @@ export default function SourcesConfigPage() {
     if (!draft || editorMode === 'create') {
       return;
     }
-    if (!confirm(`Delete source "${draft.name}"?`)) {
+    if (
+      !(await confirmDestructive(
+        `Delete source "${draft.name}"?`,
+        'Routines, scripts, and widgets that reference this source will stop resolving until it is recreated.',
+      ))
+    ) {
       return;
     }
     setSaving(true);

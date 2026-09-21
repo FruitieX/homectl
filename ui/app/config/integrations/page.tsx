@@ -19,8 +19,11 @@ import {
   ConfigReadOnlyItem,
   ConfigToggleRow,
 } from '@/ui/config-form';
+import { toast } from 'sonner';
+
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
@@ -650,7 +653,12 @@ export default function IntegrationsPage() {
               integration={integration}
               onEdit={() => setEditingId(integration.id)}
               onDelete={async () => {
-                if (confirm(`Delete integration "${integration.id}"?`)) {
+                if (
+                  await confirmDestructive(
+                    `Delete integration "${integration.id}"?`,
+                    'Devices and routines that depend on it will stop updating until it is recreated.',
+                  )
+                ) {
                   await remove(integration.id);
                 }
               }}
@@ -1692,7 +1700,7 @@ function IntegrationOverlay({
     if (editTab === 'json') {
       const parsedConfig = parseConfigJsonText(jsonText);
       if (!parsedConfig) {
-        alert('Invalid JSON - fix before leaving the JSON tab');
+        toast.error('Invalid JSON - fix before leaving the JSON tab');
         return;
       }
 
@@ -1710,7 +1718,7 @@ function IntegrationOverlay({
     if (editTab === 'json') {
       const parsedConfig = parseConfigJsonText(jsonText);
       if (!parsedConfig) {
-        alert('Invalid JSON in configuration');
+        toast.error('Invalid JSON in configuration');
         return;
       }
 
@@ -1722,14 +1730,16 @@ function IntegrationOverlay({
       effectiveConfig,
     );
     if (missingRequiredFields.length > 0) {
-      alert(`Missing required fields: ${missingRequiredFields.join(', ')}`);
+      toast.error(
+        `Missing required fields: ${missingRequiredFields.join(', ')}`,
+      );
       return;
     }
 
     const nextProfileValidationError =
       plugin === 'mqtt' ? mqttProfileValidationError(effectiveConfig) : null;
     if (nextProfileValidationError) {
-      alert(nextProfileValidationError);
+      toast.error(nextProfileValidationError);
       return;
     }
 

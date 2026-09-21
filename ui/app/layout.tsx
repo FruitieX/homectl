@@ -30,6 +30,21 @@ const visualEffectsScript = `
 })();
 `;
 
+// Script to apply density and accent before React hydrates to prevent flash
+const appearanceScript = `
+(function() {
+  try {
+    const density = JSON.parse(localStorage.getItem('homectl-density') || '"comfortable"');
+    const accent = JSON.parse(localStorage.getItem('homectl-accent') || '"emerald"');
+    document.documentElement.dataset.density = density;
+    document.documentElement.dataset.accent = accent;
+  } catch (e) {
+    document.documentElement.dataset.density = 'comfortable';
+    document.documentElement.dataset.accent = 'emerald';
+  }
+})();
+`;
+
 export default function RootLayout({
   children,
 }: {
@@ -40,6 +55,7 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: visualEffectsScript }} />
+        <script dangerouslySetInnerHTML={{ __html: appearanceScript }} />
         <meta
           name="viewport"
           content="minimum-scale=1, initial-scale=1, width=device-width, shrink-to-fit=no, user-scalable=no, viewport-fit=cover"

@@ -47,7 +47,13 @@ import {
   ConfigFormSection,
   ConfigHelpPanel,
 } from '@/ui/config-form';
+import { toast } from 'sonner';
+
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import {
+  confirmDestructive,
+  confirmDialog,
+} from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
@@ -1023,9 +1029,12 @@ export default function DevicesPage() {
     }
 
     if (
-      !confirm(
-        `Replace all references to "${getDefaultDeviceLabel(device)}" with "${replacementOption.label}" and delete the current device from memory and the database?`,
-      )
+      !(await confirmDialog({
+        title: `Replace "${getDefaultDeviceLabel(device)}"?`,
+        description: `All references are rewritten to "${replacementOption.label}", then the current device is deleted from memory and the database.`,
+        confirmLabel: 'Replace device',
+        destructive: true,
+      }))
     ) {
       return;
     }
@@ -1072,9 +1081,10 @@ export default function DevicesPage() {
     const deviceKey = getDeviceKey(device);
 
     if (
-      !confirm(
-        `Delete "${getDefaultDeviceLabel(device)}" from runtime memory and the database, and remove its config references?`,
-      )
+      !(await confirmDestructive(
+        `Delete "${getDefaultDeviceLabel(device)}"?`,
+        'The device is removed from runtime memory and the database, and its config references are cleaned up.',
+      ))
     ) {
       return;
     }

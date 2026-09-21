@@ -17,6 +17,7 @@ import {
   ConfigToggleRow,
 } from '@/ui/config-form';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -588,7 +589,12 @@ export default function HelpersConfigPage() {
     if (!editing || editing.isNew) {
       return;
     }
-    if (!confirm(`Delete helper "${editing.draft.name || editing.draft.id}"?`)) {
+    if (
+      !(await confirmDestructive(
+        `Delete helper "${editing.draft.name || editing.draft.id}"?`,
+        'Routines and scripts that read or write this helper will fail to compile.',
+      ))
+    ) {
       return;
     }
     setSaving(true);
