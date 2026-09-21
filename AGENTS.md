@@ -235,6 +235,19 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
 - `HOMECTL_ALLOWED_ORIGINS` – Comma separated list of additional browser
   origins allowed to call the API cross-origin (same-origin and loopback
   origins are always allowed; all other origins are rejected before routing)
+- `HOMECTL_ASSISTANT_BASE_URL` – Optional OpenAI-compatible API base (hosted
+  provider or a local runtime such as Ollama) that enables the routine drafting
+  assistant. The feature stays hidden in the UI while unset.
+- `HOMECTL_ASSISTANT_MODEL` – Model name used for drafting (required with the
+  base URL)
+- `HOMECTL_ASSISTANT_API_KEY` – Optional bearer token for the assistant
+  provider; local endpoints usually omit it
+- `HOMECTL_ASSISTANT_TIMEOUT_MS` – Optional provider timeout, default 60000
+- `HOMECTL_ASSISTANT_TIMEZONE` – Optional IANA zone used for drafted
+  schedules; inferred from existing routines when unset
+
+Assistant drafts are validated by the v2 compiler and returned for review;
+they are never persisted or enabled automatically.
 
 ## CI/CD
 
