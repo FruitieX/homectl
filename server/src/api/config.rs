@@ -1627,6 +1627,7 @@ pub fn config(
             .or(routines_routes(snapshot, handle))
             .or(helpers_routes(snapshot, handle))
             .or(sources_routes(snapshot, handle))
+            .or(assistant_routes(snapshot))
             .or(floorplans_routes(snapshot, handle))
             .or(floorplan_routes(snapshot, handle))
             .or(dashboard_routes(snapshot, handle))
@@ -2828,6 +2829,9 @@ use routines::routines_routes;
 
 mod sources;
 use sources::sources_routes;
+
+mod assistant;
+use assistant::assistant_routes;
 
 fn floorplans_routes(
     snapshot: &SnapshotHandle,
