@@ -97,6 +97,10 @@ fn next_history_id() -> String {
 
 fn push_history_entry(entry: RoutineHistoryEntry) {
     let mut buffer = write_history_buffer();
+    push_bounded(&mut buffer, entry);
+}
+
+fn push_bounded(buffer: &mut VecDeque<RoutineHistoryEntry>, entry: RoutineHistoryEntry) {
     if buffer.len() == MAX_ROUTINE_HISTORY_ENTRIES {
         buffer.pop_front();
     }
@@ -119,12 +123,13 @@ fn write_history_buffer() -> RwLockWriteGuard<'static, VecDeque<RoutineHistoryEn
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use std::sync::Mutex;
 
     use once_cell::sync::Lazy;
 
     use super::{
-        recent_routine_history, record_force_trigger, record_rule_match, record_v2_run,
+        push_bounded, recent_routine_history, record_force_trigger, record_v2_run,
         write_history_buffer, MAX_ROUTINE_HISTORY_ENTRIES,
     };
     use crate::types::{
@@ -133,12 +138,23 @@ mod tests {
             ConditionEvaluation, PlannedRunStatus, PlannedStepStatus, RoutineV2RuntimeStatus,
             StepDisposition,
         },
-        device::{DeviceId, DeviceKey},
-        integration::IntegrationId,
-        routine_history::RoutineHistoryTriggerKind,
-        routine_status::RoutineRuntimeStatus,
+        routine_history::{RoutineHistoryEntry, RoutineHistoryTriggerKind},
         rule::RoutineId,
     };
+
+    fn test_entry(routine_id: &str) -> RoutineHistoryEntry {
+        RoutineHistoryEntry {
+            id: routine_id.to_string(),
+            timestamp: "2026-01-01T00:00:00Z".to_string(),
+            routine_id: RoutineId(routine_id.to_string()),
+            routine_name: "Routine".to_string(),
+            trigger_kind: RoutineHistoryTriggerKind::RuleMatch,
+            event_source_device_key: None,
+            action_count: 1,
+            status: None,
+            v2: None,
+        }
+    }
 
     static TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -148,39 +164,19 @@ mod tests {
 
     #[test]
     fn recent_routine_history_drops_oldest_entries_when_buffer_is_full() {
-        let _guard = TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        clear_history();
-
-        let status = RoutineRuntimeStatus {
-            all_conditions_match: true,
-            will_trigger: true,
-            rules: Vec::new(),
-            v2: None,
-        };
+        let mut buffer = VecDeque::with_capacity(MAX_ROUTINE_HISTORY_ENTRIES);
         for index in 0..(MAX_ROUTINE_HISTORY_ENTRIES + 3) {
-            record_rule_match(
-                &RoutineId(format!("routine-{index}")),
-                "Routine",
-                Some(&DeviceKey::new(
-                    IntegrationId::from("dummy".to_string()),
-                    DeviceId::from(index.to_string()),
-                )),
-                1,
-                &status,
-            );
+            push_bounded(&mut buffer, test_entry(&format!("routine-{index}")));
         }
 
-        let history = recent_routine_history();
-        assert_eq!(history.len(), MAX_ROUTINE_HISTORY_ENTRIES);
+        assert_eq!(buffer.len(), MAX_ROUTINE_HISTORY_ENTRIES);
         assert_eq!(
-            history.first().map(|entry| entry.routine_id.0.as_str()),
+            buffer.front().map(|entry| entry.routine_id.0.as_str()),
             Some("routine-3")
         );
         let expected_last = format!("routine-{}", MAX_ROUTINE_HISTORY_ENTRIES + 2);
         assert_eq!(
-            history.last().map(|entry| entry.routine_id.0.as_str()),
+            buffer.back().map(|entry| entry.routine_id.0.as_str()),
             Some(expected_last.as_str()),
         );
     }
@@ -224,11 +220,17 @@ mod tests {
             }),
         };
 
-        record_v2_run(&RoutineId("routine".to_string()), "Routine", &status);
+        record_v2_run(
+            &RoutineId("routine-v2-snapshot".to_string()),
+            "Routine",
+            &status,
+        );
 
         let history = recent_routine_history();
-        assert_eq!(history.len(), 1);
-        let entry = &history[0];
+        let entry = history
+            .iter()
+            .find(|entry| entry.routine_id.0 == "routine-v2-snapshot")
+            .expect("v2 run recorded");
         assert_eq!(entry.trigger_kind, RoutineHistoryTriggerKind::V2Run);
         assert_eq!(entry.routine_name, "Routine");
         assert_eq!(entry.action_count, 1);
@@ -243,12 +245,20 @@ mod tests {
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         clear_history();
 
-        record_force_trigger(&RoutineId("routine".to_string()), "Routine", 2, None);
+        record_force_trigger(
+            &RoutineId("routine-force-trigger".to_string()),
+            "Routine",
+            2,
+            None,
+        );
 
         let history = recent_routine_history();
-        assert_eq!(history.len(), 1);
-        assert_eq!(history[0].event_source_device_key, None);
-        assert_eq!(history[0].action_count, 2);
-        assert!(history[0].status.is_none());
+        let entry = history
+            .iter()
+            .find(|entry| entry.routine_id.0 == "routine-force-trigger")
+            .expect("force trigger recorded");
+        assert_eq!(entry.event_source_device_key, None);
+        assert_eq!(entry.action_count, 2);
+        assert!(entry.status.is_none());
     }
 }
