@@ -20,6 +20,8 @@ import { cn } from '@/lib/cn';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 
+import { ActionFloorplanPreview } from './ActionFloorplanPreview';
+
 function expiryLabel(action: AssistantAction, now: number): string {
   const remainingMs = Number(action.expiresAtMs) - now;
   if (remainingMs <= 0) {
@@ -119,6 +121,10 @@ export function ActionCard({
           </div>
         </div>
       </div>
+
+      {action.changes.length > 0 ? (
+        <ActionFloorplanPreview changes={action.changes} className="h-40" />
+      ) : null}
 
       <ul className="space-y-1.5">
         {action.changes.map((change) => {

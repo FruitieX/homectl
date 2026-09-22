@@ -13,7 +13,7 @@ export type MatchingPoint = HsCalibrationPoint & {
   matched: boolean;
 };
 
-function hsToRgb(color: Hs): [number, number, number] {
+export function hsToRgb(color: Hs): [number, number, number] {
   const hue = ((color.h % 360) + 360) % 360;
   const saturation = Math.max(0, Math.min(1, color.s));
   const chroma = saturation;
@@ -38,9 +38,7 @@ function hsToRgb(color: Hs): [number, number, number] {
 function rgbToXy(red: number, green: number, blue: number) {
   const linear = (channel: number) => {
     const value = Math.max(0, Math.min(1, channel));
-    return value <= 0.04045
-      ? value / 12.92
-      : ((value + 0.055) / 1.055) ** 2.4;
+    return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
   };
   const r = linear(red),
     g = linear(green),
@@ -134,9 +132,7 @@ function deviceColorToHs(color: DeviceColor): Hs | null {
   if ('ct' in color) return null;
   if ('h' in color) return { ...color };
   const xy =
-    'x' in color
-      ? color
-      : rgbToXy(color.r / 255, color.g / 255, color.b / 255);
+    'x' in color ? color : rgbToXy(color.r / 255, color.g / 255, color.b / 255);
   return uvToHs(xyToUv(xy));
 }
 
