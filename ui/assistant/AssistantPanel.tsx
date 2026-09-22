@@ -1,16 +1,23 @@
-import { Loader2, Send, Sparkles } from 'lucide-react';
+import { Loader2, Search, Send, Sparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 
 import type { AssistantAttachment } from '@/bindings/AssistantAttachment';
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
-import { useAssistantPlan, useAssistantStatus } from '@/hooks/useAssistant';
+import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
+import {
+  useAssistantEntitySearch,
+  useAssistantPlan,
+  useAssistantStatus,
+} from '@/hooks/useAssistant';
+import { upsertAssistantAttachment } from '@/lib/assistant-diff';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
+import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Textarea } from '@/ui/primitives/textarea';
 
-import { AttachmentChip } from './AttachmentChip';
+import { AssistantEntityIcon, AttachmentChip } from './AttachmentChip';
 import { PlanCard } from './PlanCard';
 import {
   assistantPanelAtom,
@@ -41,14 +48,19 @@ export function AssistantPanel() {
   const { enabled, model } = useAssistantStatus();
   const planMutation = useAssistantPlan();
   const [prompt, setPrompt] = useState('');
+  const [attachQuery, setAttachQuery] = useState('');
   const [messages, setMessages] = useState<PanelMessage[]>([]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const nextMessageId = useRef(1);
+  const searchQuery = attachQuery.trim();
+  const searchResults = useAssistantEntitySearch(searchQuery);
+  const searchHits: AssistantSearchResult[] = searchResults.data ?? [];
 
   useEffect(() => {
     if (!state.open) {
       setMessages([]);
       setPrompt('');
+      setAttachQuery('');
     }
   }, [state.open]);
 
@@ -115,6 +127,17 @@ export function AssistantPanel() {
           !(entry.kind === attachment.kind && entry.id === attachment.id),
       ),
     );
+  };
+
+  const addAttachment = (hit: AssistantSearchResult) => {
+    setAttachments(
+      upsertAssistantAttachment(state.attachments, {
+        kind: hit.kind,
+        id: hit.id,
+        label: hit.label,
+      }),
+    );
+    setAttachQuery('');
   };
 
   const discardMessage = (id: string) => {
@@ -226,6 +249,59 @@ export function AssistantPanel() {
                   onRemove={removeAttachment}
                 />
               ))}
+            </div>
+          ) : null}
+          {enabled ? (
+            <div className="space-y-1.5">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
+                <Input
+                  className="pl-9"
+                  aria-label="Search entities to attach"
+                  placeholder="Attach an entity: search routines, scenes, devices…"
+                  value={attachQuery}
+                  onChange={(event) => setAttachQuery(event.target.value)}
+                />
+              </div>
+              {searchQuery.length >= 2 ? (
+                <div
+                  role="listbox"
+                  aria-label="Entity search results"
+                  className="max-h-44 overflow-y-auto rounded-xl border border-border bg-card p-1"
+                >
+                  {searchResults.isFetching ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">
+                      Searching…
+                    </p>
+                  ) : searchHits.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">
+                      No matching entities.
+                    </p>
+                  ) : (
+                    searchHits.map((hit) => (
+                      <button
+                        key={`${hit.kind}:${hit.id}`}
+                        type="button"
+                        role="option"
+                        aria-selected={false}
+                        className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        onClick={() => addAttachment(hit)}
+                      >
+                        <AssistantEntityIcon
+                          kind={hit.kind}
+                          className="text-muted-foreground"
+                        />
+                        <span className="min-w-0 flex-1 truncate">
+                          {hit.label}
+                        </span>
+                        <span className="max-w-[45%] truncate text-xs text-muted-foreground">
+                          {hit.summary}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
           <Textarea

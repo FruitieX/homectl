@@ -5,7 +5,10 @@ import { toast } from 'sonner';
 import type { AssistantOperation } from '@/bindings/AssistantOperation';
 import type { AssistantOperationResult } from '@/bindings/AssistantOperationResult';
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
-import { useApplyAssistantPlan } from '@/hooks/useAssistant';
+import {
+  useApplyAssistantPlan,
+  useDiscardAssistantPlan,
+} from '@/hooks/useAssistant';
 import {
   acceptedByDefault,
   isDestructiveOperation,
@@ -102,6 +105,7 @@ export function PlanCard({
   onDiscard: () => void;
 }) {
   const applyPlan = useApplyAssistantPlan();
+  const discardPlan = useDiscardAssistantPlan();
   const [accepted, setAccepted] = useState<Set<string>>(
     () =>
       new Set(
@@ -174,6 +178,16 @@ export function PlanCard({
         },
       },
     );
+  };
+
+  const discard = () => {
+    if (applied || expired) {
+      onDiscard();
+      return;
+    }
+    discardPlan.mutate(plan.planId, {
+      onSettled: () => onDiscard(),
+    });
   };
 
   return (
@@ -271,7 +285,8 @@ export function PlanCard({
         <Button
           type="button"
           variant="ghost"
-          onClick={onDiscard}
+          disabled={discardPlan.isPending}
+          onClick={discard}
           className="sm:mr-auto"
         >
           <Trash2 />

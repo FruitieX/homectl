@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { ApplyAssistantPlanResponse } from '@/bindings/ApplyAssistantPlanResponse';
+import type { AssistantEntityKind } from '@/bindings/AssistantEntityKind';
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import type { AssistantPlanRequest } from '@/bindings/AssistantPlanRequest';
+import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
 
 import { useAppConfig } from './appConfig';
 import type { RoutineDefinitionV2Body } from './useConfig';
@@ -179,6 +181,61 @@ export function useAssistantPlan() {
 export interface ApplyAssistantPlanVariables {
   planId: string;
   acceptedOperationIds: string[];
+}
+
+/**
+ * Deterministic entity search across the live snapshot. Used by the panel to
+ * attach entities without leaving the prompt. Results are ranked by
+ * exact/prefix/substring match on the server.
+ */
+export function useAssistantEntitySearch(
+  query: string,
+  kind?: AssistantEntityKind,
+) {
+  const { apiEndpoint } = useAppConfig();
+  const trimmed = query.trim();
+
+  return useQuery({
+    queryKey: ['assistant', 'search', apiEndpoint, kind ?? 'all', trimmed],
+    queryFn: async () => {
+      const params = new URLSearchParams({ q: trimmed });
+      if (kind) {
+        params.set('kind', kind);
+      }
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/search?${params.toString()}`,
+      );
+      const result = await readAssistantResponse<AssistantSearchResult[]>(
+        response,
+        'Assistant search failed',
+      );
+      return result.data ?? [];
+    },
+    enabled: trimmed.length >= 2,
+    staleTime: 30 * 1000,
+    retry: false,
+  });
+}
+
+/**
+ * Discards a stored plan without applying it. The UI hides the review card
+ * regardless of the response, so an expired or already-consumed plan is fine.
+ */
+export function useDiscardAssistantPlan() {
+  const { apiEndpoint } = useAppConfig();
+
+  return useMutation({
+    mutationFn: async (planId: string) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/plans/${encodeURIComponent(planId)}`,
+        { method: 'DELETE' },
+      );
+      await readAssistantResponse<boolean>(
+        response,
+        'Failed to discard assistant plan',
+      );
+    },
+  });
 }
 
 /**

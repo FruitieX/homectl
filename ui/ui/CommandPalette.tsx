@@ -1,4 +1,4 @@
-import { atom, useAtom } from 'jotai';
+import { atom, useAtom, useSetAtom } from 'jotai';
 import {
   Activity,
   ArrowRight,
@@ -13,12 +13,14 @@ import {
   MonitorCog,
   Moon,
   Plus,
+  Sparkles,
   Sun,
   Wand2,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+import { openAssistantPanelAtom } from '@/assistant/state';
 import { configSections } from '../app/config/sections';
 import {
   densityAtom,
@@ -106,6 +108,7 @@ export function CommandPalette() {
   const { level, setLevel } = useExperience();
   const [themeMode, setThemeMode] = useTheme();
   const [density, setDensity] = useAtom(densityAtom);
+  const openAssistant = useSetAtom(openAssistantPanelAtom);
 
   const devicesState = useDevicesState();
   const scenesState = useScenesState();
@@ -197,14 +200,28 @@ export function CommandPalette() {
         icon: <LayoutGrid />,
         run: () => go('action:connect-integration', '/config/integrations'),
       },
+      {
+        key: 'action:ask-assistant',
+        label: 'Ask the assistant',
+        description: 'Plan a configuration change in natural language',
+        group: 'Create',
+        icon: <Sparkles />,
+        run: () => {
+          setOpen(false);
+          openAssistant();
+        },
+      },
     );
 
-    const themeOptions: { mode: ThemeMode; label: string; icon: React.ReactNode }[] =
-      [
-        { mode: 'light', label: 'Theme: Light', icon: <Sun /> },
-        { mode: 'dark', label: 'Theme: Dark', icon: <Moon /> },
-        { mode: 'auto', label: 'Theme: Auto', icon: <MonitorCog /> },
-      ];
+    const themeOptions: {
+      mode: ThemeMode;
+      label: string;
+      icon: React.ReactNode;
+    }[] = [
+      { mode: 'light', label: 'Theme: Light', icon: <Sun /> },
+      { mode: 'dark', label: 'Theme: Dark', icon: <Moon /> },
+      { mode: 'auto', label: 'Theme: Auto', icon: <MonitorCog /> },
+    ];
     for (const option of themeOptions) {
       result.push({
         key: `theme:${option.mode}`,
@@ -282,7 +299,10 @@ export function CommandPalette() {
         group: 'Devices',
         icon: <Lightbulb />,
         run: () =>
-          go(`device:${key}`, `/config/devices?device=${encodeURIComponent(key)}`),
+          go(
+            `device:${key}`,
+            `/config/devices?device=${encodeURIComponent(key)}`,
+          ),
       });
     }
 
@@ -296,10 +316,7 @@ export function CommandPalette() {
         group: 'Scenes',
         icon: <Lightbulb />,
         run: () =>
-          go(
-            `scene:${key}`,
-            `/config/scenes?scene=${encodeURIComponent(key)}`,
-          ),
+          go(`scene:${key}`, `/config/scenes?scene=${encodeURIComponent(key)}`),
       });
     }
 
@@ -325,7 +342,10 @@ export function CommandPalette() {
         group: 'Routines',
         icon: <Wand2 />,
         run: () =>
-          go(`routine:${routine.id}`, `/config/routines?q=${encodeURIComponent(routine.name)}`),
+          go(
+            `routine:${routine.id}`,
+            `/config/routines?q=${encodeURIComponent(routine.name)}`,
+          ),
       });
     }
 
@@ -338,7 +358,10 @@ export function CommandPalette() {
         group: 'Helpers',
         icon: <Cog />,
         run: () =>
-          go(`helper:${helper.id}`, `/config/helpers?q=${encodeURIComponent(helper.name || helper.id)}`),
+          go(
+            `helper:${helper.id}`,
+            `/config/helpers?q=${encodeURIComponent(helper.name || helper.id)}`,
+          ),
       });
     }
 
@@ -367,6 +390,7 @@ export function CommandPalette() {
     helpers,
     integrations,
     level,
+    openAssistant,
     routines,
     scenesState,
     setDensity,
@@ -378,12 +402,7 @@ export function CommandPalette() {
 
   const ranked = useMemo(() => {
     const favoriteList = Array.from(favorites);
-    return rankByPreference(
-      items,
-      (item) => item.key,
-      favoriteList,
-      recents,
-    );
+    return rankByPreference(items, (item) => item.key, favoriteList, recents);
   }, [favorites, items, recents]);
 
   const recentItems = useMemo(() => {

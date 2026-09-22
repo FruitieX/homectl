@@ -10,6 +10,8 @@ import { DeviceRow, DeviceQuickControls } from '@/ui/DeviceControls';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { EmptyState } from '@/ui/primitives/empty-state';
+import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import type { Device } from '@/bindings/Device';
 
 export default function Page() {
@@ -80,6 +82,13 @@ export default function Page() {
           >
             On only
           </Button>
+          <AssistantButton
+            variant="outline"
+            attachment={{ kind: 'group' }}
+            label={
+              view === 'rooms' ? 'Ask AI about rooms' : 'Ask AI about devices'
+            }
+          />
         </div>
         {!state || !groups ? (
           <p role="status" className="text-sm text-muted-foreground">
@@ -112,6 +121,11 @@ export default function Page() {
                       <span className="truncate">{group.name}</span>
                       <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
                     </Link>
+                    <GroupFloorplanPreview
+                      groupId={id}
+                      group={group}
+                      className="h-28"
+                    />
                     <DeviceQuickControls devices={roomDevices} compact />
                     <p className="text-sm text-muted-foreground">
                       {roomDevices.length} devices

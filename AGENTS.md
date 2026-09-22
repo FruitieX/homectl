@@ -183,6 +183,35 @@ Server runs on port **45289** by default.
 ### WebSocket
 Real-time updates available via WebSocket connection for device state changes and events.
 
+### AI configuration assistant
+
+Optional natural-language configuration assistant. It is disabled unless
+provider settings exist; `GET /api/v1/config/assistant/status` reports whether
+it is enabled and which model it uses.
+
+- `GET`/`PUT /api/v1/config/assistant/settings` – stored provider settings (API
+  key masked in responses)
+- `POST /api/v1/config/assistant/draft` – draft a v2 routine definition for
+  editor review; never persisted automatically
+- `POST /api/v1/config/assistant/apply` – one-off light-state request with an
+  optional `deviceKeys` scope, applied through the normal device command path
+- `GET /api/v1/config/assistant/search?kind=&q=` – deterministic entity search
+  (exact > prefix > substring on id/name); used by the plan context builder and
+  by the UI to attach entities
+- `POST /api/v1/config/assistant/plan` – build a reviewed plan from a prompt and
+  attachment list
+- `GET /api/v1/config/assistant/plans/{plan_id}` – fetch a stored plan
+- `DELETE /api/v1/config/assistant/plans/{plan_id}` – discard a stored plan
+- `POST /api/v1/config/assistant/plans/{plan_id}/apply` – apply accepted
+  operation ids
+
+Plans live in an in-memory TTL store (15 min default,
+`HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides), are capped, and are single-use:
+applying or discarding removes them, and unknown/expired ids return 404. Every
+operation is re-validated against the live snapshot at apply time and executed
+through the existing `StateHandle`/config write paths; secrets are masked in
+plans and preserved when an update omits them.
+
 ## Configuration
 
 The server uses **TOML** configuration (`Settings.toml`) for normal startup, and
@@ -266,6 +295,25 @@ action posts a one-off light-state request to
 `POST /api/v1/config/assistant/apply` with an optional `deviceKeys` scope; the
 server validates every change against the live catalog and applies it through
 the same device command path as manual controls.
+
+The assistant panel (`ui/assistant/AssistantPanel.tsx`) is the review surface
+for plans. It opens from the header button, the command palette, config pages,
+the floorplan toolbar, and room pages; entry points may preload an attachment
+chip, and the panel itself can search for entities to attach via
+`GET /api/v1/config/assistant/search`. Each response renders as a `PlanCard`:
+collapsed rows show the operation and target entity, expanding reveals
+field-level diffs, destructive operations are never selected by default, and
+Apply submits only the accepted op ids. Discard calls
+`DELETE /api/v1/config/assistant/plans/{id}` and removes the card client-side
+even if that request fails. Nothing is written before Apply.
+
+Room previews (`GroupFloorplanPreview` in `ui/ui/floorplan/`) render on the
+rooms list and room detail pages. The floorplan is picked by the group's
+placement mask (`grid.groups[groupId]`) when one exists, otherwise by which
+floorplan holds the most of the group's nested-resolved member devices, with
+deterministic tie-breaks; the Pixi renderer's `focusBounds` option zooms to the
+bounding box of the group's placed devices plus padding. Groups with no placed
+devices render no preview.
 
 Device state travels to websocket clients as targeted `Patch` messages
 (upserted/removed devices only). `State`/`Patch` carry a monotonic `revision`;

@@ -20,6 +20,11 @@ interface PixiFloorplanRendererProps {
   selectedDeviceKeys?: readonly string[];
   interactive?: boolean;
   fitPadding?: number;
+  /**
+   * Scene-space rectangle to frame instead of the whole floorplan. Used by
+   * group previews to zoom to the group's placed devices.
+   */
+  focusBounds?: { x: number; y: number; width: number; height: number } | null;
   fitOnResize?: boolean;
   renderLabels?: boolean;
   onDevicePress?: (deviceKey: string) => void;
@@ -924,12 +929,26 @@ function getFitTransform(
   container: HTMLDivElement,
   scene: FloorplanScene,
   fitPadding: number,
+  focusBounds?: { x: number; y: number; width: number; height: number } | null,
 ) {
   const width = container.clientWidth;
   const height = container.clientHeight;
 
   if (width <= 0 || height <= 0 || scene.width <= 0 || scene.height <= 0) {
     return { x: 0, y: 0, scale: 1 };
+  }
+
+  if (focusBounds && focusBounds.width > 0 && focusBounds.height > 0) {
+    const scale = clampScale(
+      fitPadding *
+        Math.min(width / focusBounds.width, height / focusBounds.height),
+    );
+
+    return {
+      scale,
+      x: (width - focusBounds.width * scale) / 2 - focusBounds.x * scale,
+      y: (height - focusBounds.height * scale) / 2 - focusBounds.y * scale,
+    };
   }
 
   const scale = clampScale(
@@ -1109,6 +1128,7 @@ export function PixiFloorplanRenderer({
   selectedDeviceKeys,
   interactive = true,
   fitPadding = 0.86,
+  focusBounds = null,
   fitOnResize = false,
   renderLabels = true,
   onDevicePress,
@@ -1125,8 +1145,12 @@ export function PixiFloorplanRenderer({
   const renderStateRef = useRef<SceneRenderState | null>(null);
   const latestSceneRef = useRef(scene);
   const selectedKeys = selectedDeviceKeys ?? emptySelection;
+  const focusBoundsKey = focusBounds
+    ? `${focusBounds.x}:${focusBounds.y}:${focusBounds.width}:${focusBounds.height}`
+    : '';
   const latestSelectedKeysRef = useRef(selectedKeys);
   const fitPaddingRef = useRef(fitPadding);
+  const focusBoundsRef = useRef(focusBounds);
   const renderLabelsRef = useRef(renderLabels);
   const handlersRef = useRef<RendererHandlers>({
     onDevicePress,
@@ -1180,9 +1204,11 @@ export function PixiFloorplanRenderer({
       onUnavailable,
     };
     fitPaddingRef.current = fitPadding;
+    focusBoundsRef.current = focusBounds;
     renderLabelsRef.current = renderLabels;
   }, [
     fitPadding,
+    focusBounds,
     onDevicePress,
     onDeviceLongPress,
     onGroupLongPress,
@@ -1211,6 +1237,7 @@ export function PixiFloorplanRenderer({
           container,
           latestSceneRef.current,
           fitPaddingRef.current,
+          focusBoundsRef.current,
         ),
       );
     };
@@ -1500,7 +1527,7 @@ export function PixiFloorplanRenderer({
 
     hasInteractedRef.current = false;
     fitSceneRef.current();
-  }, [fitPadding, scene.height, scene.width]);
+  }, [fitPadding, focusBoundsKey, scene.height, scene.width]);
 
   return (
     <div

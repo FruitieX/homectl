@@ -25,6 +25,7 @@ import { getSensorConfigRef } from '@/lib/sensorInteraction';
 import { excludeUndefined } from 'utils/excludeUndefined';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
 import { useAssistantStatus } from '@/hooks/useAssistant';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { PixiFloorplanRenderer } from '@/ui/floorplan';
 import { AssistantActionDialog } from './AssistantActionDialog';
 import { SensorActionModal } from '@/ui/SensorActionModal';
@@ -338,6 +339,21 @@ export const Viewport = () => {
                 </details>
               </PopoverContent>
             </Popover>
+            {assistantEnabled && effectiveSelectedFloorplanId ? (
+              <AssistantButton
+                variant="ghost"
+                size="sm"
+                label="Plan changes"
+                attachment={{
+                  kind: 'floorplan',
+                  id: effectiveSelectedFloorplanId,
+                  label: floorplans.find(
+                    (floorplan) =>
+                      floorplan.id === effectiveSelectedFloorplanId,
+                  )?.name,
+                }}
+              />
+            ) : null}
             {assistantEnabled && (
               <Button
                 variant="ghost"

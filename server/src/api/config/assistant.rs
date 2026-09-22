@@ -23,7 +23,8 @@
 //!   inferred from existing routines when unset)
 //!
 //! The configuration assistant plan flow (`assistant/search`, `assistant/plan`,
-//! `assistant/plans/{id}`, `assistant/plans/{id}/apply`) shares the same
+//! `assistant/plans/{id}`, `DELETE assistant/plans/{id}` to discard, and
+//! `assistant/plans/{id}/apply`) shares the same
 //! provider settings. Plans live in an in-memory TTL store; applying a plan
 //! re-validates the accepted operations against the live snapshot and writes
 //! them through the config API's state mutations. `HOMECTL_ASSISTANT_PLAN_TTL_MS`
@@ -399,6 +400,12 @@ pub(super) fn assistant_routes(
         .and(with_plan_store(&plans))
         .and_then(get_assistant_plan);
 
+    let discard_plan = warp::path!("assistant" / "plans" / String)
+        .and(warp::path::end())
+        .and(warp::delete())
+        .and(with_plan_store(&plans))
+        .and_then(discard_assistant_plan);
+
     let apply_plan = warp::path!("assistant" / "plans" / String / "apply")
         .and(warp::path::end())
         .and(warp::post())
@@ -416,6 +423,7 @@ pub(super) fn assistant_routes(
         .or(search)
         .or(plan)
         .or(get_plan)
+        .or(discard_plan)
         .or(apply_plan)
 }
 
@@ -1804,6 +1812,18 @@ async fn get_assistant_plan(
 ) -> Result<impl Reply, warp::Rejection> {
     match plans.get(&plan_id) {
         Some(plan) => Ok(ApiResponse::success(plan)),
+        None => Ok(not_found("Assistant plan")),
+    }
+}
+
+/// Discard a stored plan without applying it. The UI calls this when the user
+/// dismisses a review card; unknown or expired ids are a clean 404.
+async fn discard_assistant_plan(
+    plan_id: String,
+    plans: Arc<PlanStore>,
+) -> Result<impl Reply, warp::Rejection> {
+    match plans.remove(&plan_id) {
+        Some(_) => Ok(ApiResponse::success(true)),
         None => Ok(not_found("Assistant plan")),
     }
 }

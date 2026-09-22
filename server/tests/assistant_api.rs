@@ -1314,6 +1314,43 @@ fn assistant_plan_apply_is_not_found_for_unknown_plans() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
+fn discard_plan(base_url: &str, client: &Client, plan_id: &str) -> reqwest::blocking::Response {
+    client
+        .delete(format!(
+            "{base_url}/api/v1/config/assistant/plans/{plan_id}"
+        ))
+        .send()
+        .unwrap()
+}
+
+#[test]
+fn assistant_plan_discard_removes_the_plan() {
+    let provider = MockProvider::start(vec![MockResponse::completion(&valid_plan())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let (plan_id, _) = create_plan(base, &client, json!({"prompt": "rename the hallway group"}));
+
+    let response = discard_plan(base, &client, &plan_id);
+    assert_eq!(response.status(), StatusCode::OK);
+
+    assert_eq!(
+        get_plan(base, &client, &plan_id).status(),
+        StatusCode::NOT_FOUND
+    );
+    // Discarding is idempotent: a second call is a clean not-found.
+    assert_eq!(
+        discard_plan(base, &client, &plan_id).status(),
+        StatusCode::NOT_FOUND
+    );
+    // A discarded plan can no longer be applied.
+    assert_eq!(
+        apply_plan(base, &client, &plan_id, &["op-1"]).status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
 #[test]
 fn assistant_plan_masks_integration_secrets_and_keeps_them_on_apply() {
     let content = json!({
