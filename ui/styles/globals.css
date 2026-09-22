@@ -943,6 +943,17 @@
     }
   }
 
+  /*
+   * A single grid row (a quarter of a widget unit) is shorter than any text
+   * line. Collapse the card body entirely so nothing spills out of the card
+   * at this size; the next row size restores the compact heading.
+   */
+  @container dashboard-widget (max-height: 1.25rem) {
+    .dashboard-widget-container > * {
+      display: none;
+    }
+  }
+
   .content-visibility-row {
     contain-intrinsic-size: auto 4.5rem;
     content-visibility: auto;
