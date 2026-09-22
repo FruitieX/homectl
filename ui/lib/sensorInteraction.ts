@@ -11,7 +11,9 @@ export type SensorInteractionKind =
   | 'on_off_buttons'
   | 'hue_dimmer';
 
-export type ResolvedSensorInteractionKind = Exclude<SensorInteractionKind, 'auto'> | 'unknown';
+export type ResolvedSensorInteractionKind =
+  | Exclude<SensorInteractionKind, 'auto'>
+  | 'unknown';
 
 export interface DeviceSensorConfig {
   device_ref: string;
@@ -23,7 +25,11 @@ export type SensorDetails =
   | { kind: 'boolean'; value: boolean; payload: { value: boolean } }
   | { kind: 'number'; value: number; payload: { value: number } }
   | { kind: 'text'; value: string; payload: { value: string } }
-  | { kind: 'state'; value: Record<string, unknown>; payload: Record<string, unknown> }
+  | {
+      kind: 'state';
+      value: Record<string, unknown>;
+      payload: Record<string, unknown>;
+    }
   | { kind: 'unknown'; value: unknown; payload: unknown };
 
 export const SENSOR_INTERACTION_OPTIONS: Array<{
@@ -146,7 +152,9 @@ export const normalizeSensorInteractionConfig = (
   return baseConfig;
 };
 
-const inferTextInteractionKind = (value: string): ResolvedSensorInteractionKind => {
+const inferTextInteractionKind = (
+  value: string,
+): ResolvedSensorInteractionKind => {
   const normalized = value.trim().toLowerCase();
   if (/^(on_press|off_press|up_press|down_press)(_.+)?$/.test(normalized)) {
     return 'hue_dimmer';
@@ -183,7 +191,9 @@ export const resolveSensorInteraction = (
   config: Record<string, string>;
   source: 'saved' | 'inferred';
 } => {
-  const savedKind = normalizeSensorInteractionKind(savedConfig?.interaction_kind);
+  const savedKind = normalizeSensorInteractionKind(
+    savedConfig?.interaction_kind,
+  );
   if (savedKind !== 'auto') {
     return {
       kind: savedKind,

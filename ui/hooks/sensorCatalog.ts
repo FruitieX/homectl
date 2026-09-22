@@ -61,5 +61,10 @@ export function useSensorCatalog() {
     },
   });
 
-  return { ...query, catalog: query.data, saveCatalog: mutation.mutateAsync, saving: mutation.isPending };
+  return {
+    ...query,
+    catalog: query.data,
+    saveCatalog: mutation.mutateAsync,
+    saving: mutation.isPending,
+  };
 }

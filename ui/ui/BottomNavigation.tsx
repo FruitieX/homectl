@@ -62,7 +62,11 @@ export const HomectlBottomNavigation = () => {
         )}
       >
         {items.slice(0, 1).map((item) => (
-          <BottomNavLink key={item.route} item={item} active={route === item.route} />
+          <BottomNavLink
+            key={item.route}
+            item={item}
+            active={route === item.route}
+          />
         ))}
         <Button
           type="button"
@@ -75,7 +79,11 @@ export const HomectlBottomNavigation = () => {
           <span className="max-w-full truncate leading-tight">Search</span>
         </Button>
         {items.slice(1).map((item) => (
-          <BottomNavLink key={item.route} item={item} active={route === item.route} />
+          <BottomNavLink
+            key={item.route}
+            item={item}
+            active={route === item.route}
+          />
         ))}
         {developerMode ? (
           <Button
@@ -97,7 +105,11 @@ const BottomNavLink = ({
   item,
   active,
 }: {
-  item: { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
+  item: {
+    to: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  };
   active: boolean;
 }) => {
   const Icon = item.icon;

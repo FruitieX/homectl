@@ -55,7 +55,9 @@ export function useGroupsState(): FlattenedGroupsConfig {
     for (const group of groups) {
       const deviceKeys =
         group.device_keys ??
-        group.devices.map((device) => `${device.integration_id}/${device.device_id}`);
+        group.devices.map(
+          (device) => `${device.integration_id}/${device.device_id}`,
+        );
 
       state[group.id] = {
         name: group.name,

@@ -243,7 +243,8 @@ export const widgetRegistry: Record<
   },
   custom: {
     name: 'Custom HTML',
-    description: 'Custom HTML and inline CSS, rendered sandboxed without scripts',
+    description:
+      'Custom HTML and inline CSS, rendered sandboxed without scripts',
     defaultOptions: { content: '' },
   },
 };

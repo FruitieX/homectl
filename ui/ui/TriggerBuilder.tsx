@@ -8,10 +8,7 @@ import type { ScheduleSpec } from '@/bindings/ScheduleSpec';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useSchedulePreview } from '@/hooks/useConfig';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
-import {
-  ConditionDatalists,
-  ConditionEditor,
-} from '@/ui/ConditionBuilder';
+import { ConditionDatalists, ConditionEditor } from '@/ui/ConditionBuilder';
 import { DeviceSelect, splitDeviceKey } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
@@ -70,7 +67,12 @@ function defaultTrigger(kind: TriggerKind, id: string): TriggerSpec {
         schedule: { backlog: 'skip' },
       };
     case 'state_change':
-      return { kind: 'state_change', id, device: emptyDevice, mode: 'transition' };
+      return {
+        kind: 'state_change',
+        id,
+        device: emptyDevice,
+        mode: 'transition',
+      };
     case 'report':
       return { kind: 'report', id, device: emptyDevice };
     case 'predicate_for':
@@ -219,7 +221,11 @@ function TriggerFields({
                 if (event.target.value === 'cron') {
                   onChange({
                     ...trigger,
-                    schedule: { ...schedule, cron: schedule.cron ?? '', every_ms: undefined },
+                    schedule: {
+                      ...schedule,
+                      cron: schedule.cron ?? '',
+                      every_ms: undefined,
+                    },
                   });
                 } else {
                   onChange({
@@ -445,7 +451,10 @@ function TriggerFields({
               <DurationInput
                 valueMs={Number(trigger.duration_ms)}
                 onChange={(duration_ms) =>
-                  onChange({ ...trigger, duration_ms } as unknown as TriggerSpec)
+                  onChange({
+                    ...trigger,
+                    duration_ms,
+                  } as unknown as TriggerSpec)
                 }
               />
             </ConfigField>
@@ -583,7 +592,10 @@ export function TriggerBuilder({
                           onChange(
                             triggers.map((candidate, candidateIndex) =>
                               candidateIndex === index
-                                ? ({ ...candidate, id: event.target.value } as TriggerSpec)
+                                ? ({
+                                    ...candidate,
+                                    id: event.target.value,
+                                  } as TriggerSpec)
                                 : candidate,
                             ),
                           )

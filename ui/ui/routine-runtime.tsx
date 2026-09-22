@@ -63,7 +63,9 @@ function formatDuration(ms: number): string {
 export function formatDue(dueWallMs: number, nowMs: number): string {
   const delta = dueWallMs - nowMs;
   const relative =
-    delta >= 0 ? `in ${formatDuration(delta)}` : `${formatDuration(-delta)} overdue`;
+    delta >= 0
+      ? `in ${formatDuration(delta)}`
+      : `${formatDuration(-delta)} overdue`;
   const clock = new Date(dueWallMs).toLocaleTimeString([], {
     hour: '2-digit',
     minute: '2-digit',
@@ -279,8 +281,9 @@ export function RoutineRuntimePanel({
   );
   const [now, setNow] = useState(() => Date.now());
   const hasCountdown =
-    Boolean(v2?.triggers.some((trigger) => trigger.armed && trigger.due_wall_ms)) ||
-    routineTimers.length > 0;
+    Boolean(
+      v2?.triggers.some((trigger) => trigger.armed && trigger.due_wall_ms),
+    ) || routineTimers.length > 0;
   useInterval(() => setNow(Date.now()), hasCountdown ? 15000 : null);
 
   if (!v2 && routineTimers.length === 0) {
@@ -307,11 +310,7 @@ export function RoutineRuntimePanel({
               const spec = triggerSpecs.find(
                 (candidate) => candidate.id === trigger.trigger_id,
               );
-              const label = triggerLabel(
-                spec,
-                devices,
-                deviceDisplayNameMap,
-              );
+              const label = triggerLabel(spec, devices, deviceDisplayNameMap);
 
               return (
                 <div
@@ -409,7 +408,9 @@ export function RoutineRuntimePanel({
               className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-background/70 p-3"
             >
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-medium">Timer &quot;{timer.timer}&quot;</span>
+                <span className="font-medium">
+                  Timer &quot;{timer.timer}&quot;
+                </span>
                 <Badge variant="outline">
                   {timer.persistence === 'durable' ? 'Durable' : 'Session'}
                 </Badge>

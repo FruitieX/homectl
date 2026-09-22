@@ -31,9 +31,7 @@ const confirmRequestAtom = atom<ConfirmRequest | null>(null);
  * Imperative replacement for window.confirm() that renders a themed,
  * accessible AlertDialog. Resolves true when the user confirms.
  */
-export function confirmDialog(
-  options: ConfirmDialogOptions,
-): Promise<boolean> {
+export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
   const store = getDefaultStore();
   return new Promise<boolean>((resolve) => {
     store.set(confirmRequestAtom, { ...options, resolve });

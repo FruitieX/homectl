@@ -137,9 +137,7 @@ function explainEntry(entry: RoutineHistoryEntry): string {
   }
 
   const steps = v2.last_run?.steps ?? [];
-  const suppressed = steps.filter(
-    (step) => step.disposition === 'suppressed',
-  );
+  const suppressed = steps.filter((step) => step.disposition === 'suppressed');
   const dispatched = steps.filter(
     (step) => step.disposition === 'dispatched',
   ).length;
@@ -264,9 +262,7 @@ function ConditionTraceTree({ node }: { node: ConditionTraceNode }) {
           <Badge variant="outline">not evaluated</Badge>
         ) : null}
         {node.error ? <Badge variant="destructive">error</Badge> : null}
-        {node.unknown_reason ? (
-          <Badge variant="muted">unknown</Badge>
-        ) : null}
+        {node.unknown_reason ? <Badge variant="muted">unknown</Badge> : null}
       </div>
       {node.error ? (
         <p className="mt-2 rounded-xl bg-destructive/10 p-2 text-sm text-destructive">

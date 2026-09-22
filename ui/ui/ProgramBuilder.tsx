@@ -247,7 +247,9 @@ function HelperValueEditor({
     return (
       <Input
         className="font-mono"
-        value={typeof value === 'string' ? value : JSON.stringify(value ?? null)}
+        value={
+          typeof value === 'string' ? value : JSON.stringify(value ?? null)
+        }
         placeholder='true, 42, "text"'
         onChange={(event) => onChange(parseJsonish(event.target.value))}
       />
@@ -311,7 +313,9 @@ function parseJsonish(text: string): JsonValue {
   }
 }
 
-function helperDefaultValue(helper: HelperRuntimeStatus | undefined): JsonValue {
+function helperDefaultValue(
+  helper: HelperRuntimeStatus | undefined,
+): JsonValue {
   if (!helper) {
     return null;
   }
@@ -676,7 +680,9 @@ function SceneSelectionEditor({
           }
         >
           <option value="helper_enum">Map a helper value to a scene</option>
-          <option value="group_active">Mirror a group&apos;s active scene</option>
+          <option value="group_active">
+            Mirror a group&apos;s active scene
+          </option>
         </select>
       </ConfigField>
       {selection.kind === 'helper_enum' ? (
@@ -1148,7 +1154,10 @@ function StepFields({
                 value={step.step}
                 onChange={(event) => {
                   const parsed = event.target.valueAsNumber;
-                  onChange({ ...step, step: Number.isNaN(parsed) ? 0 : parsed });
+                  onChange({
+                    ...step,
+                    step: Number.isNaN(parsed) ? 0 : parsed,
+                  });
                 }}
               />
             </ConfigField>
@@ -1335,7 +1344,9 @@ function StepFields({
             className="font-mono"
             value={step.timer}
             placeholder="off"
-            onChange={(event) => onChange({ ...step, timer: event.target.value })}
+            onChange={(event) =>
+              onChange({ ...step, timer: event.target.value })
+            }
           />
         </ConfigField>
       );
@@ -1500,7 +1511,10 @@ function StepEditor({
                   ))}
                 </select>
               </ConfigField>
-              <ConfigField label="Step ID" description="Stable node id used in logs.">
+              <ConfigField
+                label="Step ID"
+                description="Stable node id used in logs."
+              >
                 <Input
                   className="font-mono"
                   value={step.id}
@@ -1562,7 +1576,9 @@ function StepEditor({
   );
 }
 
-function defaultDeclaration(kind: ScriptDeclaration['kind']): ScriptDeclaration {
+function defaultDeclaration(
+  kind: ScriptDeclaration['kind'],
+): ScriptDeclaration {
   switch (kind) {
     case 'device':
       return {
@@ -1604,7 +1620,10 @@ function ScriptProgramEditor({
   const addDeclaration = () => {
     onChange({
       ...spec,
-      declarations: [...spec.declarations, defaultDeclaration(newDeclarationKind)],
+      declarations: [
+        ...spec.declarations,
+        defaultDeclaration(newDeclarationKind),
+      ],
     });
   };
 
@@ -1855,9 +1874,7 @@ export function ProgramBuilder({
   const steps = program?.kind === 'native' ? program.steps : [];
   const existingIds = collectStepIds(steps);
   const duplicateIds = new Set(
-    existingIds.filter(
-      (id, index) => existingIds.indexOf(id) !== index,
-    ),
+    existingIds.filter((id, index) => existingIds.indexOf(id) !== index),
   );
 
   const addStep = (kind: StepKind) => {
@@ -1865,10 +1882,7 @@ export function ProgramBuilder({
       kind: 'native',
       steps: [
         ...steps,
-        defaultStep(
-          kind,
-          nextNodeId(kind, [...existingIds, ...duplicateIds]),
-        ),
+        defaultStep(kind, nextNodeId(kind, [...existingIds, ...duplicateIds])),
       ],
     });
   };

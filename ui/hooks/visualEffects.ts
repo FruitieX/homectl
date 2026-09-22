@@ -12,10 +12,7 @@ const noBackdropBlurClassName = 'homectl-disable-backdrop-blur';
 const applyBackdropBlurEffects = (enabled: boolean) => {
   if (typeof document === 'undefined') return;
 
-  document.documentElement.classList.toggle(
-    noBackdropBlurClassName,
-    !enabled,
-  );
+  document.documentElement.classList.toggle(noBackdropBlurClassName, !enabled);
 };
 
 export const useBackdropBlurEffects = () => {

@@ -22,7 +22,10 @@ function stringifyConfigSearchValue(value: unknown): string {
   }
 }
 
-export function matchesConfigSearch(search: string, ...values: unknown[]): boolean {
+export function matchesConfigSearch(
+  search: string,
+  ...values: unknown[]
+): boolean {
   const normalizedSearch = search.trim().toLowerCase();
   if (!normalizedSearch) {
     return true;

@@ -33,7 +33,8 @@ function brightnessPath(samples: SourcePreviewSample[]) {
     const x =
       CHART_PADDING_X +
       (samples.length <= 1 ? 0 : (index / (samples.length - 1)) * plotWidth);
-    const y = CHART_PADDING_Y + (1 - Math.min(1, Math.max(0, brightness))) * plotHeight;
+    const y =
+      CHART_PADDING_Y + (1 - Math.min(1, Math.max(0, brightness))) * plotHeight;
     points.push([x, y]);
   });
   return points.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
@@ -83,8 +84,12 @@ function SourcePreviewChart({ samples }: { samples: SourcePreviewSample[] }) {
             key={fraction}
             x1={CHART_PADDING_X}
             x2={CHART_WIDTH - CHART_PADDING_X}
-            y1={CHART_PADDING_Y + fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)}
-            y2={CHART_PADDING_Y + fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)}
+            y1={
+              CHART_PADDING_Y + fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)
+            }
+            y2={
+              CHART_PADDING_Y + fraction * (CHART_HEIGHT - CHART_PADDING_Y * 2)
+            }
             stroke="currentColor"
             strokeDasharray="4 6"
             className="text-border"
@@ -128,7 +133,9 @@ function SourcePreviewChart({ samples }: { samples: SourcePreviewSample[] }) {
           <div
             key={`${sample.time_ms}-${index}`}
             className="h-6 flex-1"
-            style={{ backgroundColor: deviceColorPreview(sample.profile.color) }}
+            style={{
+              backgroundColor: deviceColorPreview(sample.profile.color),
+            }}
             title={`${sample.local_time} · ${
               sample.profile.color
                 ? JSON.stringify(sample.profile.color)

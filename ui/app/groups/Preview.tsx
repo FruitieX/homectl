@@ -1,6 +1,9 @@
 import { type Device } from '@/bindings/Device';
 import { useImageState } from '@/hooks/useImageState';
-import { type StoredFloorplan, useAllFloorplans } from '@/hooks/useStoredFloorplan';
+import {
+  type StoredFloorplan,
+  useAllFloorplans,
+} from '@/hooks/useStoredFloorplan';
 import { getResolvedDeviceColorState } from '@/lib/colors';
 import { getDeviceKey } from '@/lib/device';
 import {
@@ -188,7 +191,14 @@ function drawControllableDevice(
   const gradientRadius = (100 + 200 * brightness) * deviceScale * scale;
 
   if (power && brightness > 0 && gradientRadius > 0) {
-    const gradient = context.createRadialGradient(x, y, 0, x, y, gradientRadius);
+    const gradient = context.createRadialGradient(
+      x,
+      y,
+      0,
+      x,
+      y,
+      gradientRadius,
+    );
     gradient.addColorStop(0, color.alpha(0.2).rgb().string());
     gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
     context.fillStyle = gradient;
@@ -225,7 +235,8 @@ function drawSensorDevice(
   const sensor = 'Sensor' in device.data ? device.data.Sensor : null;
   const active = Boolean(sensor && 'value' in sensor && sensor.value === true);
 
-  context.fillStyle = overrideColor?.rgb().string() ?? (active ? '#22c55e' : '#38bdf8');
+  context.fillStyle =
+    overrideColor?.rgb().string() ?? (active ? '#22c55e' : '#38bdf8');
   context.strokeStyle = '#0f172a';
   context.lineWidth = Math.max(1, 2 * deviceScale * scale);
   context.beginPath();

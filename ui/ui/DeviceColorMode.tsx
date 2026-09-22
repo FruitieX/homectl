@@ -55,18 +55,16 @@ export function DeviceColorMode({
     ([mode]) =>
       (!temperatureOnly || mode === 'ct') &&
       eligible.length > 0 &&
-      eligible.every(
-        (d) => {
-          if (!('Controllable' in d.data)) return false;
-          const capabilities = d.data.Controllable.capabilities;
-          // HSV is a useful editing representation even when the device only
-          // accepts RGB. The backend converts the command to the device's
-          // preferred supported mode before sending it.
-          return mode === 'hs'
-            ? capabilities.hs || capabilities.rgb
-            : Boolean(capabilities[mode]);
-        },
-      ),
+      eligible.every((d) => {
+        if (!('Controllable' in d.data)) return false;
+        const capabilities = d.data.Controllable.capabilities;
+        // HSV is a useful editing representation even when the device only
+        // accepts RGB. The backend converts the command to the device's
+        // preferred supported mode before sending it.
+        return mode === 'hs'
+          ? capabilities.hs || capabilities.rgb
+          : Boolean(capabilities[mode]);
+      }),
   );
   const colors = eligible.map((d) => {
     if (!('Controllable' in d.data)) return null;

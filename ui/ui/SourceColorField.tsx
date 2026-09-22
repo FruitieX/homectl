@@ -7,7 +7,8 @@ const selectClassName =
   'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 const rangeClassName =
   'h-2 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary';
-const panelClassName = 'space-y-3 rounded-2xl border border-border bg-muted/30 p-3';
+const panelClassName =
+  'space-y-3 rounded-2xl border border-border bg-muted/30 p-3';
 
 function isKelvinColor(color?: DeviceColor): color is { ct: number } {
   return Boolean(color && 'ct' in color);
@@ -49,7 +50,10 @@ export function SourceColorField({
       </ConfigField>
 
       <div className={panelClassName}>
-        <div className="h-8 w-full rounded" style={{ backgroundColor: preview }} />
+        <div
+          className="h-8 w-full rounded"
+          style={{ backgroundColor: preview }}
+        />
 
         {isKelvinColor(color) ? (
           <ConfigField
@@ -82,9 +86,7 @@ export function SourceColorField({
                 }
               />
             </ConfigField>
-            <ConfigField
-              label={`Saturation: ${Math.round(color.s * 100)}%`}
-            >
+            <ConfigField label={`Saturation: ${Math.round(color.s * 100)}%`}>
               <input
                 className={rangeClassName}
                 max="100"

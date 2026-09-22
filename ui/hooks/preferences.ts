@@ -23,15 +23,9 @@ export const densityAtom = atomWithStorage<Density>(
 
 export const accentAtom = atomWithStorage<Accent>('homectl-accent', 'emerald');
 
-export const favoritesAtom = atomWithStorage<string[]>(
-  'homectl-favorites',
-  [],
-);
+export const favoritesAtom = atomWithStorage<string[]>('homectl-favorites', []);
 
-export const recentsAtom = atomWithStorage<string[]>(
-  'homectl-recents',
-  [],
-);
+export const recentsAtom = atomWithStorage<string[]>('homectl-recents', []);
 
 export const favoriteKeysAtom = atom((get) => new Set(get(favoritesAtom)));
 

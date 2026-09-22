@@ -63,7 +63,10 @@ export function circadianParamsFromJson(value: unknown): SourceCircadianParams {
       typeof record.night_fade_duration_hours === 'number'
         ? record.night_fade_duration_hours
         : DEFAULT_CIRCADIAN_PARAMS.night_fade_duration_hours,
-    night_color: color(record.night_color, DEFAULT_CIRCADIAN_PARAMS.night_color),
+    night_color: color(
+      record.night_color,
+      DEFAULT_CIRCADIAN_PARAMS.night_color,
+    ),
     night_brightness: brightness(record.night_brightness),
   };
 }
@@ -102,9 +105,7 @@ function BrightnessField({
           checked={value != null}
           className="size-4 rounded border border-input accent-primary"
           type="checkbox"
-          onChange={(event) =>
-            onChange(event.target.checked ? 0.5 : null)
-          }
+          onChange={(event) => onChange(event.target.checked ? 0.5 : null)}
         />
         <span className="text-sm font-medium">{label}</span>
       </label>

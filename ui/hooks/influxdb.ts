@@ -180,11 +180,17 @@ export const useSensorData = (
     const configuredDeviceIds =
       selectedSensorIds.length > 0 ? selectedSensorIds : discoveredDeviceIds;
     const catalogItems = catalog?.sensors ?? [];
-    const catalogNames = new Map(catalogItems.map((sensor) => [sensor.id, sensor.name]));
-    const defaultIndoorIds = catalog?.groups.find((group) => group.id === 'indoor')?.sensorIds ?? [];
+    const catalogNames = new Map(
+      catalogItems.map((sensor) => [sensor.id, sensor.name]),
+    );
+    const defaultIndoorIds =
+      catalog?.groups.find((group) => group.id === 'indoor')?.sensorIds ?? [];
     const effectiveIndoorIds = defaultIndoorIds;
     const knownDeviceIds = Array.from(
-      new Set([...catalogItems.map((sensor) => sensor.id), ...configuredDeviceIds]),
+      new Set([
+        ...catalogItems.map((sensor) => sensor.id),
+        ...configuredDeviceIds,
+      ]),
     );
 
     knownDeviceIds.forEach((deviceId, index) => {
@@ -245,7 +251,6 @@ export const useSensorData = (
 
   return sensorData;
 };
-
 
 interface SpotPriceRow {
   _time: Date;

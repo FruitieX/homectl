@@ -41,11 +41,7 @@ export const experienceDescriptions: Record<
   },
 };
 
-export function pushRecent(
-  list: string[],
-  key: string,
-  max = 8,
-): string[] {
+export function pushRecent(list: string[], key: string, max = 8): string[] {
   const next = [key, ...list.filter((entry) => entry !== key)];
   return next.slice(0, max);
 }

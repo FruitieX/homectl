@@ -148,7 +148,8 @@ const CONTEXT_COMPLETIONS: CompletionEntry[] = [
   },
   {
     label: 'local',
-    detail: 'local: { timezone, time, minutes_of_day, seconds_of_day, day_fraction }',
+    detail:
+      'local: { timezone, time, minutes_of_day, seconds_of_day, day_fraction }',
     insertText: 'local',
     documentation: 'Timezone-aware civil time for this invocation.',
   },
@@ -240,7 +241,8 @@ export default function SourceScriptEditor({
               kind: monacoApi.languages.CompletionItemKind.Function,
               insertText: entry.insertText,
               insertTextRules:
-                monacoApi.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                monacoApi.languages.CompletionItemInsertTextRule
+                  .InsertAsSnippet,
               detail: entry.detail,
               documentation: entry.documentation,
               range,

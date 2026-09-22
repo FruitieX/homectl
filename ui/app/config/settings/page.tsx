@@ -1,7 +1,16 @@
 import { useRecordConfigWrite } from '@/hooks/configWriteStatus';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bot, Monitor, Moon, Save, Server, Sun, Trash2, Wifi } from 'lucide-react';
+import {
+  Bot,
+  Monitor,
+  Moon,
+  Save,
+  Server,
+  Sun,
+  Trash2,
+  Wifi,
+} from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
@@ -10,11 +19,7 @@ import { z } from 'zod';
 import { useAtom } from 'jotai';
 
 import { useAppConfig } from '@/hooks/appConfig';
-import {
-  accentAtom,
-  densityAtom,
-  useExperience,
-} from '@/hooks/preferences';
+import { accentAtom, densityAtom, useExperience } from '@/hooks/preferences';
 import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
@@ -555,8 +560,8 @@ function AppearanceSettingsCard() {
                 Density
               </span>
               <span className="block text-xs leading-5 text-muted-foreground">
-                Compact fits more rows on screen; comfortable keeps larger
-                touch targets.
+                Compact fits more rows on screen; comfortable keeps larger touch
+                targets.
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 rounded-2xl bg-muted p-1">
@@ -565,7 +570,10 @@ function AppearanceSettingsCard() {
                   key={option}
                   type="button"
                   variant={density === option ? 'default' : 'ghost'}
-                  className={cn('h-11 rounded-xl', density === option && 'shadow-sm')}
+                  className={cn(
+                    'h-11 rounded-xl',
+                    density === option && 'shadow-sm',
+                  )}
                   onClick={() => setDensity(option)}
                 >
                   {option === 'compact' ? 'Compact' : 'Comfortable'}
@@ -590,7 +598,10 @@ function AppearanceSettingsCard() {
                   key={option}
                   type="button"
                   variant={level === option ? 'default' : 'ghost'}
-                  className={cn('h-11 rounded-xl', level === option && 'shadow-sm')}
+                  className={cn(
+                    'h-11 rounded-xl',
+                    level === option && 'shadow-sm',
+                  )}
                   onClick={() => setLevel(option)}
                 >
                   {experienceDescriptions[option].label}
@@ -774,8 +785,7 @@ function AssistantSettingsCard() {
       recordWrite('Assistant settings', write);
       if (write?.persistence === 'persisted')
         toast.success('Assistant settings saved');
-      else if (write)
-        toast.warning(write.warning ?? 'Applied in memory only.');
+      else if (write) toast.warning(write.warning ?? 'Applied in memory only.');
       else toast.success('Assistant settings applied');
     },
     onError: (error) => {

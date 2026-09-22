@@ -63,9 +63,7 @@ export default function RootLayout({
         <link rel="icon" type="image/png" href="/homectl-icon.png" />
         <link rel="manifest" href="/manifest.json" />
       </head>
-      <body
-        className="flex flex-col overflow-hidden bg-background text-foreground antialiased"
-      >
+      <body className="flex flex-col overflow-hidden bg-background text-foreground antialiased">
         <Providers>
           <ProvideAppConfig>
             <Layout>{children}</Layout>

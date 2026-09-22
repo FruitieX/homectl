@@ -7,7 +7,11 @@ import type { ValueSource } from '@/bindings/ValueSource';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useSources } from '@/hooks/useConfig';
 import { selectClassName } from '@/ui/builder-fields';
-import { DeviceSelect, GroupSelect, splitDeviceKey } from '@/ui/config-selectors';
+import {
+  DeviceSelect,
+  GroupSelect,
+  splitDeviceKey,
+} from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
@@ -15,21 +19,25 @@ import { useState } from 'react';
 
 export type ConditionKind = ConditionExpr['kind'];
 
-export const operatorOptions: Array<{ value: RawRuleOperator; label: string }> = [
-  { value: 'eq', label: 'Equals' },
-  { value: 'ne', label: 'Not equal' },
-  { value: 'gt', label: 'Greater than' },
-  { value: 'gte', label: 'Greater than or equal' },
-  { value: 'lt', label: 'Less than' },
-  { value: 'lte', label: 'Less than or equal' },
-  { value: 'contains', label: 'Contains' },
-  { value: 'starts_with', label: 'Starts with' },
-  { value: 'exists', label: 'Exists' },
-  { value: 'truthy', label: 'Truthy' },
-  { value: 'regex', label: 'Regex match' },
-];
+export const operatorOptions: Array<{ value: RawRuleOperator; label: string }> =
+  [
+    { value: 'eq', label: 'Equals' },
+    { value: 'ne', label: 'Not equal' },
+    { value: 'gt', label: 'Greater than' },
+    { value: 'gte', label: 'Greater than or equal' },
+    { value: 'lt', label: 'Less than' },
+    { value: 'lte', label: 'Less than or equal' },
+    { value: 'contains', label: 'Contains' },
+    { value: 'starts_with', label: 'Starts with' },
+    { value: 'exists', label: 'Exists' },
+    { value: 'truthy', label: 'Truthy' },
+    { value: 'regex', label: 'Regex match' },
+  ];
 
-export const operatorsWithoutValue = new Set<RawRuleOperator>(['exists', 'truthy']);
+export const operatorsWithoutValue = new Set<RawRuleOperator>([
+  'exists',
+  'truthy',
+]);
 
 export const sensorPathSuggestions = [
   '/value',
@@ -254,7 +262,9 @@ function ValueSourceEditor({
           className={selectClassName}
           value={sourceKind}
           onChange={(event) =>
-            onChange(defaultValueSource(event.target.value as ValueSource['kind']))
+            onChange(
+              defaultValueSource(event.target.value as ValueSource['kind']),
+            )
           }
         >
           <option value="device">Device value</option>
@@ -290,10 +300,13 @@ function ValueSourceEditor({
           >
             <Input
               list={
-                devices[`${source.device.integration_id}/${source.device.device_id}`]
-                  ?.data && 'Sensor' in
-                  devices[`${source.device.integration_id}/${source.device.device_id}`]!
-                    .data
+                devices[
+                  `${source.device.integration_id}/${source.device.device_id}`
+                ]?.data &&
+                'Sensor' in
+                  devices[
+                    `${source.device.integration_id}/${source.device.device_id}`
+                  ]!.data
                   ? 'v2-sensor-paths'
                   : 'v2-controllable-paths'
               }
@@ -350,9 +363,7 @@ function ValueSourceEditor({
               ))}
               {source.source !== '' &&
               !sources.some((item) => item.id === source.source) ? (
-                <option value={source.source}>
-                  {source.source} — unknown
-                </option>
+                <option value={source.source}>{source.source} — unknown</option>
               ) : null}
             </select>
           </ConfigField>
@@ -409,7 +420,10 @@ export function ConditionEditor({
     </select>
   );
 
-  const renderChildren = (children: ConditionExpr[], update: (next: ConditionExpr[]) => void) => (
+  const renderChildren = (
+    children: ConditionExpr[],
+    update: (next: ConditionExpr[]) => void,
+  ) => (
     <div className="space-y-3">
       {children.map((child, index) => (
         <div key={index} className="flex items-start gap-2">
@@ -437,7 +451,11 @@ export function ConditionEditor({
             className="text-destructive hover:text-destructive"
             aria-label="Remove condition"
             onClick={() =>
-              update(children.filter((_, candidateIndex) => candidateIndex !== index))
+              update(
+                children.filter(
+                  (_, candidateIndex) => candidateIndex !== index,
+                ),
+              )
             }
           >
             ✕

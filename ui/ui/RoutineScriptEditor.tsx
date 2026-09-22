@@ -25,7 +25,10 @@ function unwrapBody(text: string) {
     text.startsWith(`${BODY_HEADER}\n`) &&
     text.endsWith(`\n${BODY_FOOTER}`)
   ) {
-    return text.slice(BODY_HEADER.length + 1, text.length - BODY_FOOTER.length - 1);
+    return text.slice(
+      BODY_HEADER.length + 1,
+      text.length - BODY_FOOTER.length - 1,
+    );
   }
   return text;
 }
@@ -118,14 +121,14 @@ const ACTION_COMPLETIONS: CompletionEntry[] = [
   {
     label: 'dim',
     detail: 'dim',
-    insertText: "dim({ targets: { devices: [] }, step: ${1:-0.1} })",
+    insertText: 'dim({ targets: { devices: [] }, step: ${1:-0.1} })',
     documentation: 'Relative dim step in the -1.0..=1.0 range.',
   },
   {
     label: 'randomizeColor',
     detail: 'randomize_color',
     insertText:
-      "randomizeColor({ targets: { devices: [] }, minSaturation: 0.2, maxSaturation: 1, transitionMs: ${1:250} })",
+      'randomizeColor({ targets: { devices: [] }, minSaturation: 0.2, maxSaturation: 1, transitionMs: ${1:250} })',
     documentation: 'Randomize hue and saturation once for the targets.',
   },
   {
@@ -459,8 +462,8 @@ export default function RoutineScriptEditor({
           Insert example
         </Button>
         <span className="text-xs text-muted-foreground">
-          The editor wraps the body in a function so `return` is valid; only
-          the body is saved. Examples insert at the cursor.
+          The editor wraps the body in a function so `return` is valid; only the
+          body is saved. Examples insert at the cursor.
         </span>
       </div>
     </div>

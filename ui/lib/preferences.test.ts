@@ -22,12 +22,7 @@ test('toggleFavoriteKey adds and removes keys', () => {
 
 test('rankByPreference orders favorites, then recents, then original', () => {
   const items = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }];
-  const ranked = rankByPreference(
-    items,
-    (item) => item.id,
-    ['c'],
-    ['b', 'd'],
-  );
+  const ranked = rankByPreference(items, (item) => item.id, ['c'], ['b', 'd']);
   assert.deepEqual(
     ranked.map((item) => item.id),
     ['c', 'b', 'd', 'a'],
@@ -36,7 +31,10 @@ test('rankByPreference orders favorites, then recents, then original', () => {
 
 test('rankByPreference keeps original order without preferences', () => {
   const items = [{ id: 'a' }, { id: 'b' }];
-  assert.deepEqual(rankByPreference(items, (item) => item.id, [], []), items);
+  assert.deepEqual(
+    rankByPreference(items, (item) => item.id, [], []),
+    items,
+  );
 });
 
 test('advancedDefaultOpen follows the level unless toggled', () => {

@@ -138,14 +138,10 @@ export const HelperModeCard = ({ widget }: { widget?: DashboardWidget }) => {
                   type={helper.kind.kind === 'number' ? 'number' : 'text'}
                   value={draft}
                   min={
-                    helper.kind.kind === 'number'
-                      ? helper.kind.min
-                      : undefined
+                    helper.kind.kind === 'number' ? helper.kind.min : undefined
                   }
                   max={
-                    helper.kind.kind === 'number'
-                      ? helper.kind.max
-                      : undefined
+                    helper.kind.kind === 'number' ? helper.kind.max : undefined
                   }
                   placeholder={
                     helper.kind.kind === 'number'

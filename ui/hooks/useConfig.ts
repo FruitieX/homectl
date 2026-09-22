@@ -490,13 +490,7 @@ export function useSetHelperValue() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({
-      id,
-      value,
-    }: {
-      id: string;
-      value: unknown;
-    }) => {
+    mutationFn: async ({ id, value }: { id: string; value: unknown }) => {
       const response = await fetch(
         `${apiEndpoint}/api/v1/config/helpers/${encodeURIComponent(id)}/value`,
         {

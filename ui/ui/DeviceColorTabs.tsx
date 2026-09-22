@@ -235,8 +235,7 @@ const SlidersTab = ({
   }, [brightness, color, inputFocused, open]);
 
   const currentColor = useCallback(
-    (nextHue = hue, nextSat = sat) =>
-      Color({ h: nextHue, s: nextSat, v: 100 }),
+    (nextHue = hue, nextSat = sat) => Color({ h: nextHue, s: nextSat, v: 100 }),
     [hue, sat],
   );
   const complete = useCallback(
@@ -306,7 +305,9 @@ const SlidersTab = ({
           className="flex-1"
           channel="hue"
           color={Color.hsv(hue, sat, 100)}
-          onChange={(event) => update(Number(event.currentTarget.value), sat, bri)}
+          onChange={(event) =>
+            update(Number(event.currentTarget.value), sat, bri)
+          }
           onTouchEnd={complete}
           onMouseUp={complete}
           min={0}
@@ -323,7 +324,9 @@ const SlidersTab = ({
           className="flex-1"
           channel="saturation"
           color={Color.hsv(hue, sat, 100)}
-          onChange={(event) => update(hue, Number(event.currentTarget.value), bri)}
+          onChange={(event) =>
+            update(hue, Number(event.currentTarget.value), bri)
+          }
           onTouchEnd={complete}
           onMouseUp={complete}
           min={0}
@@ -560,7 +563,8 @@ export function DeviceColorTabs({
   onNativeChange,
 }: DeviceColorTabsProps) {
   const colorDevices = devices.filter((device) => {
-    if (!('Controllable' in device.data) || isDeviceReadOnly(device)) return false;
+    if (!('Controllable' in device.data) || isDeviceReadOnly(device))
+      return false;
     const capabilities = device.data.Controllable.capabilities;
     return Boolean(
       capabilities.hs || capabilities.xy || capabilities.rgb || capabilities.ct,
@@ -629,7 +633,10 @@ export function DeviceColorTabs({
           )}
         </TabsList>
         <div className="mt-3 min-h-0 rounded-2xl border border-border/60 p-3">
-          <TabsContent value="wheel" className="m-0 flex min-h-72 flex-col gap-3">
+          <TabsContent
+            value="wheel"
+            className="m-0 flex min-h-72 flex-col gap-3"
+          >
             <ColorWheelTab
               color={deviceColor}
               brightness={deviceBrightness}
@@ -638,10 +645,7 @@ export function DeviceColorTabs({
               open={open}
             />
           </TabsContent>
-          <TabsContent
-            value="swatches"
-            className="m-0 flex min-h-72 flex-col"
-          >
+          <TabsContent value="swatches" className="m-0 flex min-h-72 flex-col">
             <SwatchesTab
               color={deviceColor}
               brightness={deviceBrightness}

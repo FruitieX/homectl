@@ -34,10 +34,14 @@ export function DurationInput({
   onChange: (ms: number | undefined) => void;
   placeholder?: string;
 }) {
-  const [unit, setUnit] = useState<DurationUnit>(() => guessDurationUnit(valueMs));
+  const [unit, setUnit] = useState<DurationUnit>(() =>
+    guessDurationUnit(valueMs),
+  );
   const factor = durationUnits.find((entry) => entry.value === unit)!.factor;
   const amount =
-    valueMs === undefined ? '' : String(Math.round((valueMs / factor) * 1000) / 1000);
+    valueMs === undefined
+      ? ''
+      : String(Math.round((valueMs / factor) * 1000) / 1000);
 
   return (
     <div className="flex gap-2">
