@@ -11,7 +11,7 @@ import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { Device } from '@/bindings/Device';
 
 export default function Page() {
@@ -28,6 +28,7 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'rooms' | 'devices'>('rooms');
   const [onOnly, setOnOnly] = useState(false);
+  useAssistantPageContext({ kind: 'group' });
   const devices = Object.values(state ?? {}).filter(
     (device): device is Device => Boolean(device),
   );
@@ -82,13 +83,6 @@ export default function Page() {
           >
             On only
           </Button>
-          <AssistantButton
-            variant="outline"
-            attachment={{ kind: 'group' }}
-            label={
-              view === 'rooms' ? 'Ask AI about rooms' : 'Ask AI about devices'
-            }
-          />
         </div>
         {!state || !groups ? (
           <p role="status" className="text-sm text-muted-foreground">

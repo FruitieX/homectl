@@ -6,7 +6,7 @@ import { DeviceRow, DeviceQuickControls } from '@/ui/DeviceControls';
 import { EmptyState } from '@/ui/primitives/empty-state';
 import { Button } from '@/ui/primitives/button';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { SceneList } from './[id]/SceneList';
 import { SensorRow } from './page';
 
@@ -23,6 +23,9 @@ export default function RoomPage() {
     [overrides],
   );
   const group = id ? groups?.[id] : null;
+  useAssistantPageContext(
+    group && id ? { kind: 'group', id, label: group.name } : { kind: 'group' },
+  );
   if (!groups || !devices)
     return (
       <p role="status" className="p-6 text-muted-foreground">
@@ -49,7 +52,6 @@ export default function RoomPage() {
         <GroupFloorplanPreview
           groupId={id ?? ''}
           group={group}
-          showCaption
           className="h-64 sm:h-80"
         />
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
@@ -68,11 +70,6 @@ export default function RoomPage() {
           <section className="space-y-3">
             <div className="flex items-center justify-between gap-3">
               <h2 className="text-base font-semibold">Devices</h2>
-              <AssistantButton
-                variant="outline"
-                size="sm"
-                attachment={{ kind: 'group', id: id ?? '', label: group.name }}
-              />
             </div>
             {group.device_keys.map((key) => {
               const device = devices[key];

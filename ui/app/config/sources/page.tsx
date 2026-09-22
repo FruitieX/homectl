@@ -40,7 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Textarea } from '@/ui/primitives/textarea';
 import { useMemo, useState } from 'react';
 
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 
 const selectClassName =
@@ -578,16 +578,6 @@ function SourceEditor({
       ) : null}
 
       <ConfigFormActions>
-        <AssistantButton
-          size="sm"
-          variant="outline"
-          className="sm:mr-auto"
-          attachment={{
-            kind: 'computed_source',
-            id: draft.id.trim() ? draft.id : undefined,
-            label: draft.name || draft.id || 'New source',
-          }}
-        />
         {onDelete ? (
           <Button
             className="sm:mr-auto"
@@ -627,6 +617,16 @@ export default function SourcesConfigPage() {
         matchesConfigSearch(search, ...sourceSearchValues(source)),
       ),
     [search, sources],
+  );
+
+  useAssistantPageContext(
+    draft
+      ? {
+          kind: 'computed_source',
+          id: draft.id.trim() ? draft.id : undefined,
+          label: draft.name || draft.id || 'New source',
+        }
+      : { kind: 'computed_source' },
   );
 
   const openEditor = (source: SourceConfig) => {
@@ -713,15 +713,9 @@ export default function SourcesConfigPage() {
         title="Computed sources"
         description="Server-owned values computed from pure inputs and published as read-only sensors under computed/<id>."
         actions={
-          <>
-            <AssistantButton
-              variant="outline"
-              attachment={{ kind: 'computed_source' }}
-            />
-            <Button type="button" onClick={openCreate}>
-              New source
-            </Button>
-          </>
+          <Button type="button" onClick={openCreate}>
+            New source
+          </Button>
         }
       />
 

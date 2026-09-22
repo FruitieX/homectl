@@ -50,7 +50,7 @@ import { toast } from 'sonner';
 
 import { Advanced, ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { AssistantDraft } from '@/hooks/useAssistant';
 import { AssistantDraftPanel } from './assistant-draft-panel';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -172,6 +172,13 @@ export default function RoutinesPage() {
   const visibleRoutines = routines.filter((routine) =>
     matchesConfigSearch(search, ...getRoutineSearchValues(routine)),
   );
+  const editingRoutine =
+    routines.find((routine) => routine.id === editingId) ?? null;
+  useAssistantPageContext(
+    editingRoutine
+      ? { kind: 'routine', id: editingRoutine.id, label: editingRoutine.name }
+      : { kind: 'routine' },
+  );
 
   if (loading || scenesLoading) {
     return (
@@ -195,10 +202,6 @@ export default function RoutinesPage() {
         title="Routines"
         actions={
           <>
-            <AssistantButton
-              variant="outline"
-              attachment={{ kind: 'routine' }}
-            />
             <UiButton
               variant="outline"
               onClick={() => {
@@ -763,16 +766,6 @@ function RoutineCard({
       </Tabs>
 
       <ConfigFormActions>
-        <AssistantButton
-          size="sm"
-          variant="outline"
-          className="sm:mr-auto"
-          attachment={{
-            kind: 'routine',
-            id: routine.id,
-            label: name || routine.name,
-          }}
-        />
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>

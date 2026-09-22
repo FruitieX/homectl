@@ -26,7 +26,7 @@ import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { useCallback, useMemo, useState } from 'react';
 
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 
 const selectClassName =
@@ -487,16 +487,6 @@ function HelperEditor({
       ) : null}
 
       <ConfigFormActions>
-        <AssistantButton
-          size="sm"
-          variant="outline"
-          className="sm:mr-auto"
-          attachment={{
-            kind: 'helper',
-            id: draft.id.trim() ? draft.id : undefined,
-            label: draft.name || draft.id || 'New helper',
-          }}
-        />
         {onDelete ? (
           <Button
             className="sm:mr-auto"
@@ -535,6 +525,16 @@ export default function HelpersConfigPage() {
     setSaveError(null);
   }, []);
   useCreateDeepLink(openCreate);
+
+  useAssistantPageContext(
+    editing
+      ? {
+          kind: 'helper',
+          id: editing.draft.id.trim() ? editing.draft.id : undefined,
+          label: editing.draft.name || editing.draft.id || 'New helper',
+        }
+      : { kind: 'helper' },
+  );
 
   const statuses = useMemo(() => {
     const source = liveStatuses ?? data;
@@ -638,15 +638,9 @@ export default function HelpersConfigPage() {
         title="Helpers"
         description="Typed values routines, scripts, and widgets read and write. The server validates every write against the declared kind."
         actions={
-          <>
-            <AssistantButton
-              variant="outline"
-              attachment={{ kind: 'helper' }}
-            />
-            <Button type="button" onClick={openCreate}>
-              New helper
-            </Button>
-          </>
+          <Button type="button" onClick={openCreate}>
+            New helper
+          </Button>
         }
       />
 

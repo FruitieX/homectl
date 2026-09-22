@@ -14,7 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { useCreateDeepLink } from '@/hooks/useDeepLink';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -203,6 +203,13 @@ export default function ScenesPage() {
     search,
   ]);
 
+  const editingScene = scenes?.find((scene) => scene.id === editingId) ?? null;
+  useAssistantPageContext(
+    editingScene
+      ? { kind: 'scene', id: editingScene.id, label: editingScene.name }
+      : { kind: 'scene' },
+  );
+
   const activateScene = async (scene: Scene) => {
     setActivatingSceneId(scene.id);
     setActivationError(null);
@@ -245,12 +252,7 @@ export default function ScenesPage() {
       <ConfigPageHeader
         title="Scenes"
         description="Compose scripted and linked scene presets for devices and groups."
-        actions={
-          <>
-            <AssistantButton variant="outline" attachment={{ kind: 'scene' }} />
-            <Button onClick={() => setShowCreate(true)}>Add Scene</Button>
-          </>
-        }
+        actions={<Button onClick={() => setShowCreate(true)}>Add Scene</Button>}
       />
 
       {activationError && openId === null && (
@@ -807,16 +809,6 @@ function SceneEditorForm({
       )}
 
       <ConfigFormActions>
-        <AssistantButton
-          size="sm"
-          variant="outline"
-          className="sm:mr-auto"
-          attachment={{
-            kind: 'scene',
-            id: scene.id,
-            label: name || scene.name,
-          }}
-        />
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>

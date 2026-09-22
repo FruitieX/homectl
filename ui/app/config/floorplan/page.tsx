@@ -7,7 +7,7 @@ import {
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
@@ -252,6 +252,16 @@ export default function FloorplanPage() {
     loadedFloorplanId === selectedFloorplanId &&
     !floorplanLoading;
 
+  useAssistantPageContext(
+    selectedFloorplanId
+      ? {
+          kind: 'floorplan',
+          id: selectedFloorplanId,
+          label: selectedFloorplanName || selectedFloorplanId,
+        }
+      : { kind: 'floorplan' },
+  );
+
   const handleSave = async () => {
     if (!selectedFloorplanId) {
       return;
@@ -480,21 +490,6 @@ export default function FloorplanPage() {
         description="Manage floorplan canvases, background images, device placements, and group masks."
         actions={
           <>
-            <AssistantButton
-              variant="outline"
-              attachment={
-                selectedFloorplanId
-                  ? {
-                      kind: 'floorplan',
-                      id: selectedFloorplanId,
-                      label:
-                        floorplans.find(
-                          (floorplan) => floorplan.id === selectedFloorplanId,
-                        )?.name ?? selectedFloorplanId,
-                    }
-                  : { kind: 'floorplan' }
-              }
-            />
             <Button
               variant={hasChanges ? 'secondary' : 'default'}
               onClick={handleSave}

@@ -16,7 +16,7 @@ import {
 } from '@/lib/deviceLabel';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import {
   ConfigField,
@@ -90,6 +90,11 @@ export default function GroupsPage() {
   const [showCreate, setShowCreate] = useState(false);
   useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const editingGroup = groups.find((group) => group.id === editingId);
+  useAssistantPageContext(
+    editingGroup
+      ? { kind: 'group', id: editingGroup.id, label: editingGroup.name }
+      : { kind: 'group' },
+  );
   const deviceDisplayNameMap = Object.fromEntries(
     deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
   );
@@ -124,12 +129,7 @@ export default function GroupsPage() {
       <ConfigPageHeader
         title="Groups"
         description="Organize devices and nested groups into controllable targets."
-        actions={
-          <>
-            <AssistantButton variant="outline" attachment={{ kind: 'group' }} />
-            <Button onClick={() => setShowCreate(true)}>Add Group</Button>
-          </>
-        }
+        actions={<Button onClick={() => setShowCreate(true)}>Add Group</Button>}
       />
 
       <ConfigListSearchBar
@@ -612,16 +612,6 @@ function GroupOverlay({
         </Tabs>
 
         <ConfigFormActions>
-          <AssistantButton
-            size="sm"
-            variant="outline"
-            className="sm:mr-auto"
-            attachment={{
-              kind: 'group',
-              id: id.trim() ? id.trim() : undefined,
-              label: name || group?.name || 'New group',
-            }}
-          />
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

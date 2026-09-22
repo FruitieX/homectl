@@ -8,11 +8,13 @@ import {
   Shrink,
 } from 'lucide-react';
 import { useCallback } from 'react';
+import { useAtomValue } from 'jotai';
 import { Link, useLocation, useNavigate, useMatch } from 'react-router-dom';
 import { useGroupsState } from '@/hooks/websocket';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
 import { AssistantButton } from '@/assistant/AssistantButton';
+import { assistantPageContextAtom } from '@/assistant/state';
 import { Button } from '@/ui/primitives/button';
 
 export const Navbar = () => {
@@ -55,6 +57,7 @@ export const Navbar = () => {
   }, [back, navigate]);
 
   const [isFullscreen, setIsFullscreen] = useIsFullscreen();
+  const assistantContext = useAtomValue(assistantPageContextAtom);
 
   const toggleFullscreen = useCallback(() => {
     if (document.fullscreenElement === undefined) {
@@ -114,7 +117,12 @@ export const Navbar = () => {
         size="icon"
         iconOnly
         label="Ask AI"
-        title="Ask AI"
+        title={
+          assistantContext
+            ? `Ask AI about ${assistantContext.label ?? assistantContext.id ?? assistantContext.kind}`
+            : 'Ask AI'
+        }
+        attachment={assistantContext ?? undefined}
       />
       {pathname === '/map' && (
         <div

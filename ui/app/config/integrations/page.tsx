@@ -10,7 +10,7 @@ import {
 import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import {
   ConfigField,
@@ -590,6 +590,15 @@ export default function IntegrationsPage() {
   const visibleIntegrations = integrations.filter((integration) =>
     matchesConfigSearch(search, ...getIntegrationSearchValues(integration)),
   );
+  useAssistantPageContext(
+    editingIntegration
+      ? {
+          kind: 'integration',
+          id: editingIntegration.id,
+          label: editingIntegration.id,
+        }
+      : { kind: 'integration' },
+  );
 
   if (loading || schemasLoading) {
     return (
@@ -613,20 +622,14 @@ export default function IntegrationsPage() {
         title="Integrations"
         description="Connect plugins, schedules, and virtual devices to the runtime."
         actions={
-          <>
-            <AssistantButton
-              variant="outline"
-              attachment={{ kind: 'integration' }}
-            />
-            <Button
-              onClick={() => {
-                setCreatePlugin(null);
-                setShowCreate(true);
-              }}
-            >
-              Add Integration
-            </Button>
-          </>
+          <Button
+            onClick={() => {
+              setCreatePlugin(null);
+              setShowCreate(true);
+            }}
+          >
+            Add Integration
+          </Button>
         }
       />
 
@@ -1893,16 +1896,6 @@ function IntegrationOverlay({
         </Tabs>
 
         <ConfigFormActions>
-          <AssistantButton
-            size="sm"
-            variant="outline"
-            className="sm:mr-auto"
-            attachment={{
-              kind: 'integration',
-              id: id.trim() ? id.trim() : undefined,
-              label: id || 'New integration',
-            }}
-          />
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

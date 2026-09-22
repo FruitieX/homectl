@@ -48,6 +48,13 @@ export const assistantPanelAtom = atom<AssistantPanelState>({
   attachments: [],
 });
 
+/**
+ * Context published by the active page (for example the entity open in a
+ * detail overlay). The AppBar Ask AI button attaches it automatically so
+ * pages do not need their own assistant entry points.
+ */
+export const assistantPageContextAtom = atom<AssistantAttachment | null>(null);
+
 export const assistantThreadAtom = atom<AssistantThreadMessage[]>([]);
 
 /** Persisted thread id of the active conversation, when one exists. */
