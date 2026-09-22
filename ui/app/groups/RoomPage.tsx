@@ -50,7 +50,6 @@ export default function RoomPage() {
           groupId={id ?? ''}
           group={group}
           showCaption
-          interactive
           className="h-64 sm:h-80"
         />
         <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">

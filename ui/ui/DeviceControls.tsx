@@ -114,6 +114,43 @@ export function DeviceRow({
   );
 }
 
+/**
+ * Single icon button toggling every controllable device in a group at once.
+ * Used by room cards where the full quick controls are too tall; it mirrors
+ * the aggregate On/Off buttons: all on turns everything off, otherwise
+ * everything on.
+ */
+export function DevicePowerToggle({
+  devices,
+  label,
+  className,
+}: {
+  devices: Device[];
+  label?: string;
+  className?: string;
+}) {
+  const connected = useConnectionStatus() === 'connected';
+  const setState = useLiveDeviceControls();
+  const controllable = devices.filter(
+    (device) => 'Controllable' in device.data && !isDeviceReadOnly(device),
+  );
+  if (controllable.length === 0) return null;
+  const allOn = controllable.every((device) => getPower(device.data));
+  return (
+    <Button
+      variant={allOn ? 'secondary' : 'outline'}
+      size="icon"
+      className={className}
+      aria-label={`Turn ${label ?? 'all devices'} ${allOn ? 'off' : 'on'}`}
+      aria-pressed={allOn}
+      disabled={!connected}
+      onClick={() => controllable.forEach((device) => setState(device, !allOn))}
+    >
+      <Power />
+    </Button>
+  );
+}
+
 export function DeviceQuickControls({
   devices,
   compact = false,

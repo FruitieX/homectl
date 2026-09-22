@@ -27,12 +27,16 @@ interface PixiFloorplanRendererProps {
   focusBounds?: { x: number; y: number; width: number; height: number } | null;
   fitOnResize?: boolean;
   renderLabels?: boolean;
+  /** Stop the render ticker while the renderer is offscreen. */
+  paused?: boolean;
   onDevicePress?: (deviceKey: string) => void;
   onDeviceLongPress?: (deviceKey: string) => void;
   onSensorPress?: (deviceKey: string) => void;
   onGroupPress?: (groupId: string) => void;
   onGroupLongPress?: (groupId: string) => void;
   onUnavailable?: () => void;
+  /** The WebGL context was lost; the owner can remount to recover. */
+  onContextLost?: () => void;
   className?: string;
 }
 
@@ -43,6 +47,7 @@ interface RendererHandlers {
   onGroupPress?: (groupId: string) => void;
   onGroupLongPress?: (groupId: string) => void;
   onUnavailable?: () => void;
+  onContextLost?: () => void;
 }
 
 interface ViewTransform {
@@ -1131,12 +1136,14 @@ export function PixiFloorplanRenderer({
   focusBounds = null,
   fitOnResize = false,
   renderLabels = true,
+  paused = false,
   onDevicePress,
   onDeviceLongPress,
   onSensorPress,
   onGroupPress,
   onGroupLongPress,
   onUnavailable,
+  onContextLost,
   className,
 }: PixiFloorplanRendererProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1159,9 +1166,11 @@ export function PixiFloorplanRenderer({
     onGroupPress,
     onGroupLongPress,
     onUnavailable,
+    onContextLost,
   });
   const viewRef = useRef<ViewTransform>({ x: 0, y: 0, scale: 1 });
   const hasInteractedRef = useRef(false);
+  const pausedRef = useRef(paused);
   const pointersRef = useRef(new Map<number, ScreenPoint>());
   const fitSceneRef = useRef<() => void>(() => {});
   const activeGestureRef = useRef<ActiveGesture | null>(null);
@@ -1202,6 +1211,7 @@ export function PixiFloorplanRenderer({
       onGroupPress,
       onGroupLongPress,
       onUnavailable,
+      onContextLost,
     };
     fitPaddingRef.current = fitPadding;
     focusBoundsRef.current = focusBounds;
@@ -1215,8 +1225,23 @@ export function PixiFloorplanRenderer({
     onGroupPress,
     onSensorPress,
     onUnavailable,
+    onContextLost,
     renderLabels,
   ]);
+
+  useEffect(() => {
+    pausedRef.current = paused;
+    const app = appRef.current;
+    if (!app) {
+      return;
+    }
+
+    if (paused) {
+      app.stop();
+    } else {
+      app.start();
+    }
+  }, [paused]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -1244,7 +1269,26 @@ export function PixiFloorplanRenderer({
 
     const handleContextLost = (event: Event) => {
       event.preventDefault();
-      handlersRef.current.onUnavailable?.();
+      handlersRef.current.onContextLost?.();
+    };
+
+    // Browsers usually restore lost contexts themselves (GPU reset, tab
+    // restore). Re-frame the scene when that happens so the canvas is not
+    // left blank.
+    const handleContextRestored = () => {
+      fitSceneRef.current();
+      const renderState = renderStateRef.current;
+      if (renderState) {
+        syncScene(
+          renderState,
+          latestSceneRef.current,
+          latestSelectedKeysRef.current,
+          qualityRef.current ?? getRendererQuality(),
+          renderLabelsRef.current,
+          viewRef.current.scale,
+        );
+      }
+      app.render();
     };
 
     const handlePointerDown = (event: PointerEvent) => {
@@ -1453,6 +1497,7 @@ export function PixiFloorplanRenderer({
         app.stage.addChild(world);
         container.appendChild(canvas);
         canvas.addEventListener('webglcontextlost', handleContextLost);
+        canvas.addEventListener('webglcontextrestored', handleContextRestored);
         fitSceneRef.current();
         syncScene(
           renderState,
@@ -1462,6 +1507,10 @@ export function PixiFloorplanRenderer({
           renderLabelsRef.current,
           viewRef.current.scale,
         );
+
+        if (pausedRef.current) {
+          app.stop();
+        }
 
         resizeObserver = new ResizeObserver(() => {
           app.resize();
@@ -1490,6 +1539,10 @@ export function PixiFloorplanRenderer({
       }
       const canvas = getApplicationCanvas(app);
       canvas?.removeEventListener('webglcontextlost', handleContextLost);
+      canvas?.removeEventListener(
+        'webglcontextrestored',
+        handleContextRestored,
+      );
       canvas?.remove();
       pointers.clear();
       activeGestureRef.current = null;

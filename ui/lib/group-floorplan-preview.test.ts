@@ -112,7 +112,8 @@ test('getGroupFocusBounds pads and clamps to the floorplan', () => {
     0.5,
   );
 
-  assert.deepEqual(bounds, { x: 0, y: 10, width: 40, height: 20 });
+  // minSpan = 25 (25% of the longest edge), padding = 12.5.
+  assert.deepEqual(bounds, { x: 0, y: 0, width: 50, height: 50 });
 });
 
 test('getGroupFocusBounds ignores unplaced devices and empty input', () => {
@@ -127,5 +128,57 @@ test('getGroupFocusBounds ignores unplaced devices and empty input', () => {
     { width: 100, height: 100 },
     0,
   );
-  assert.deepEqual(bounds, { x: 50, y: 50, width: 1, height: 1 });
+  assert.deepEqual(bounds, { x: 37.5, y: 37.5, width: 25, height: 25 });
+});
+
+test('getGroupFocusBounds caps a lone device zoom with a minimum span', () => {
+  const bounds = getGroupFocusBounds(
+    { 'mqtt/lamp': { x: 600, y: 400 } },
+    ['mqtt/lamp'],
+    { width: 1200, height: 800 },
+  );
+
+  // minSpan = 300 (25% of 1200), padding = 75 -> 450x450 box.
+  assert.deepEqual(bounds, { x: 375, y: 175, width: 450, height: 450 });
+});
+
+test('getGroupFocusBounds keeps tight bounds when the minimum span is disabled', () => {
+  const bounds = getGroupFocusBounds(
+    { 'mqtt/lamp': { x: 600, y: 400 } },
+    ['mqtt/lamp'],
+    { width: 1200, height: 800 },
+    0,
+    0,
+  );
+
+  assert.deepEqual(bounds, { x: 600, y: 400, width: 1, height: 1 });
+});
+
+test('getGroupFocusBounds shifts at floorplan edges to keep the minimum span', () => {
+  const nearLeft = getGroupFocusBounds(
+    { 'mqtt/lamp': { x: 2, y: 50 } },
+    ['mqtt/lamp'],
+    { width: 100, height: 100 },
+    0,
+  );
+  assert.deepEqual(nearLeft, { x: 0, y: 37.5, width: 25, height: 25 });
+
+  const nearRight = getGroupFocusBounds(
+    { 'mqtt/lamp': { x: 98, y: 50 } },
+    ['mqtt/lamp'],
+    { width: 100, height: 100 },
+    0,
+  );
+  assert.deepEqual(nearRight, { x: 75, y: 37.5, width: 25, height: 25 });
+});
+
+test('getGroupFocusBounds keeps wide clusters at their own span', () => {
+  const bounds = getGroupFocusBounds(
+    { 'mqtt/lamp': { x: 0, y: 100 }, 'mqtt/sensor': { x: 600, y: 100 } },
+    ['mqtt/lamp', 'mqtt/sensor'],
+    { width: 1200, height: 800 },
+    0,
+  );
+
+  assert.deepEqual(bounds, { x: 0, y: 0, width: 600, height: 300 });
 });

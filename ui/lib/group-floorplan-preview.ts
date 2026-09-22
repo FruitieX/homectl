@@ -191,12 +191,18 @@ export function selectGroupFloorplan<T extends FloorplanPreviewSource>(
  * Bounding box covering the given device positions, padded by a fraction of
  * its longest edge and clamped to the floorplan. Returns null when none of the
  * keys are placed.
+ *
+ * A lone device (or a very tight cluster) gets `minSpanRatio` of the
+ * floorplan's longest edge as its minimum span, so previews show the
+ * surrounding rooms instead of zooming into a single marker. The resulting
+ * span is at least `max(deviceSpan, minSpan) * (1 + 2 * paddingRatio)`.
  */
 export function getGroupFocusBounds(
   positions: Readonly<Record<string, PreviewPoint | undefined>>,
   deviceKeys: readonly string[],
   sceneSize: { width: number; height: number },
   paddingRatio = 0.25,
+  minSpanRatio = 0.25,
 ): PreviewBounds | null {
   let minX = Number.POSITIVE_INFINITY;
   let minY = Number.POSITIVE_INFINITY;
@@ -225,12 +231,37 @@ export function getGroupFocusBounds(
     return null;
   }
 
-  const padding =
-    Math.max(maxX - minX, maxY - minY) * Math.max(0, paddingRatio);
-  const x = Math.max(0, minX - padding);
-  const y = Math.max(0, minY - padding);
-  const right = Math.min(sceneSize.width, maxX + padding);
-  const bottom = Math.min(sceneSize.height, maxY + padding);
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const minSpan =
+    Math.max(0, minSpanRatio) * Math.max(sceneSize.width, sceneSize.height);
+  const spanX = Math.max(maxX - minX, minSpan);
+  const spanY = Math.max(maxY - minY, minSpan);
+  const padding = Math.max(spanX, spanY) * Math.max(0, paddingRatio);
+
+  // Shift (rather than shrink) the box at floorplan edges so the minimum
+  // span survives clamping and the zoom cap still applies.
+  let x = centerX - spanX / 2 - padding;
+  let right = centerX + spanX / 2 + padding;
+  if (x < 0) {
+    right = Math.min(sceneSize.width, right - x);
+    x = 0;
+  }
+  if (right > sceneSize.width) {
+    x = Math.max(0, x - (right - sceneSize.width));
+    right = sceneSize.width;
+  }
+
+  let y = centerY - spanY / 2 - padding;
+  let bottom = centerY + spanY / 2 + padding;
+  if (y < 0) {
+    bottom = Math.min(sceneSize.height, bottom - y);
+    y = 0;
+  }
+  if (bottom > sceneSize.height) {
+    y = Math.max(0, y - (bottom - sceneSize.height));
+    bottom = sceneSize.height;
+  }
 
   return {
     x,

@@ -6,7 +6,7 @@ import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { getPower } from '@/lib/colors';
-import { DeviceRow, DeviceQuickControls } from '@/ui/DeviceControls';
+import { DeviceRow, DevicePowerToggle } from '@/ui/DeviceControls';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { EmptyState } from '@/ui/primitives/empty-state';
@@ -112,27 +112,35 @@ export default function Page() {
                 return (
                   <section
                     key={id}
-                    className="space-y-3 rounded-xl border border-border bg-card p-4"
+                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
                   >
-                    <Link
-                      to={`/groups/${encodeURIComponent(id)}`}
-                      className="flex min-h-11 items-center justify-between gap-3 rounded-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className="truncate">{group.name}</span>
-                      <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
-                    </Link>
+                    <div className="flex min-w-0 items-start justify-between gap-3">
+                      <Link
+                        to={`/groups/${encodeURIComponent(id)}`}
+                        className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{group.name}</span>
+                          <span className="block text-xs font-normal text-muted-foreground">
+                            {roomDevices.length}{' '}
+                            {roomDevices.length === 1 ? 'device' : 'devices'}
+                            {roomDevices.length !== group.device_keys.length
+                              ? ` · ${group.device_keys.length - roomDevices.length} unavailable`
+                              : ''}
+                          </span>
+                        </span>
+                        <ChevronRight className="size-5 shrink-0 text-muted-foreground" />
+                      </Link>
+                      <DevicePowerToggle
+                        devices={roomDevices}
+                        label={group.name}
+                      />
+                    </div>
                     <GroupFloorplanPreview
                       groupId={id}
                       group={group}
-                      className="h-28"
+                      className="h-40"
                     />
-                    <DeviceQuickControls devices={roomDevices} compact />
-                    <p className="text-sm text-muted-foreground">
-                      {roomDevices.length} devices
-                      {roomDevices.length !== group.device_keys.length
-                        ? ` · ${group.device_keys.length - roomDevices.length} unavailable`
-                        : ''}
-                    </p>
                   </section>
                 );
               })}

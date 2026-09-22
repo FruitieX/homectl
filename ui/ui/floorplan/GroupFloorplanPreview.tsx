@@ -1,5 +1,11 @@
 import { MapPin } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { useIntersectionObserver } from 'usehooks-ts';
 
 import type { FlattenedGroupConfig } from '@/bindings/FlattenedGroupConfig';
@@ -18,6 +24,7 @@ import {
   resolveGroupDeviceKeys,
   selectGroupFloorplan,
 } from '@/lib/group-floorplan-preview';
+import { previewMountBudget } from '@/lib/preview-mount-budget';
 import { excludeUndefined } from 'utils/excludeUndefined';
 
 import { PixiFloorplanRenderer } from './PixiFloorplanRenderer';
@@ -34,9 +41,41 @@ type GroupFloorplanPreviewProps = {
 };
 
 /**
+ * Claims a slot in the shared preview mount budget while `active`. Once
+ * claimed, the slot is kept while the budget has room even if the preview
+ * scrolls away, so an already-rendered preview shows immediately when it comes
+ * back into view.
+ */
+function usePreviewMountSlot(id: string, active: boolean, visible: boolean) {
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    previewMountBudget.register(id);
+    return () => previewMountBudget.unregister(id);
+  }, [active, id]);
+
+  useEffect(() => {
+    if (!active) {
+      return;
+    }
+
+    previewMountBudget.setVisible(id, visible);
+  }, [active, id, visible]);
+
+  return useSyncExternalStore(
+    previewMountBudget.subscribe,
+    () => active && previewMountBudget.isMounted(id),
+    () => false,
+  );
+}
+
+/**
  * Zoomed floorplan preview for a room/group. Picks the floorplan the group is
  * placed on, or else the one holding the most of its (nested-resolved) devices,
- * then frames the bounding box of those placed devices.
+ * then frames the bounding box of those placed devices. Only the group's
+ * member devices are drawn; other devices on the floorplan are hidden.
  */
 export function GroupFloorplanPreview({
   groupId,
@@ -49,10 +88,12 @@ export function GroupFloorplanPreview({
   const groups = useGroupsState();
   const { data: displayNames } = useDeviceDisplayNames();
   const [unavailable, setUnavailable] = useState(false);
-  // Mount the Pixi app only while near the viewport so a long rooms list
-  // never keeps dozens of WebGL contexts alive at once.
+  const [rendererGeneration, setRendererGeneration] = useState(0);
+  const previewId = useId();
+  // Watch intersections over a margin wider than the viewport so a preview
+  // does not flap near the fold; the mount budget decides what stays alive.
   const { ref: containerRef, isIntersecting } = useIntersectionObserver({
-    rootMargin: '200px',
+    rootMargin: '400px',
   });
 
   const groupDeviceKeys = useMemo(
@@ -71,12 +112,11 @@ export function GroupFloorplanPreview({
     [groupId, groupDeviceKeys, floorplans],
   );
   const selectedFloorplan = selection?.floorplan ?? null;
-
   const placedKeys = useMemo(
-    () =>
-      selectedFloorplan?.grid?.devices.map((device) => device.deviceKey) ?? [],
-    [selectedFloorplan],
+    () => selection?.placedDeviceKeys ?? [],
+    [selection],
   );
+
   const devicesByKey = useDevicesByKeysState(placedKeys);
   const devices = useMemo(
     () => Object.values(excludeUndefined(devicesByKey ?? undefined)),
@@ -98,8 +138,9 @@ export function GroupFloorplanPreview({
         devices,
         groups: groups ?? {},
         displayNames: displayNameMap,
+        deviceKeys: placedKeys,
       }),
-    [selectedFloorplan, image, devices, groups, displayNameMap],
+    [selectedFloorplan, image, devices, groups, displayNameMap, placedKeys],
   );
   const focusBounds = useMemo(() => {
     if (!selectedFloorplan?.grid || !selection) {
@@ -123,6 +164,11 @@ export function GroupFloorplanPreview({
     selection !== null &&
     scene.width > 0 &&
     scene.height > 0;
+  const canMountRenderer = usePreviewMountSlot(
+    previewId,
+    canRender,
+    isIntersecting,
+  );
 
   if (!group || !canRender || !selectedFloorplan || !selection) {
     return null;
@@ -145,17 +191,20 @@ export function GroupFloorplanPreview({
           className,
         )}
       >
-        {isIntersecting ? (
+        {canMountRenderer ? (
           <PixiFloorplanRenderer
-            key={selectedFloorplan.id}
+            key={`${selectedFloorplan.id}:${rendererGeneration}`}
             scene={scene}
             className="size-full"
             fitOnResize
             focusBounds={focusBounds}
             interactive={interactive}
+            paused={!isIntersecting}
             renderLabels
-            selectedDeviceKeys={groupDeviceKeys}
             onUnavailable={() => setUnavailable(true)}
+            onContextLost={() =>
+              setRendererGeneration((current) => current + 1)
+            }
           />
         ) : null}
       </div>

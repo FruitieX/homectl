@@ -74,6 +74,12 @@ interface BuildFloorplanSceneInput {
   displayNames?: Record<string, string>;
   deviceVisualOverrides?: Record<string, DeviceVisualOverride>;
   includeGroups?: boolean;
+  /**
+   * When set, only devices with an allowed key are drawn. Previews use this
+   * to hide devices that are not part of the group instead of overlaying
+   * selection markers on members.
+   */
+  deviceKeys?: readonly string[] | null;
 }
 
 interface DeviceVisualOverride {
@@ -470,18 +476,20 @@ export function buildFloorplanScene({
   displayNames,
   deviceVisualOverrides,
   includeGroups = true,
+  deviceKeys,
 }: BuildFloorplanSceneInput): FloorplanScene {
   const staticScene = buildStaticFloorplanScene(grid, image);
   const positions = staticScene.positions;
   const deviceScale = grid?.deviceScale ?? 1;
   const lights: FloorplanSceneLight[] = [];
   const sensors: FloorplanSceneSensor[] = [];
+  const allowedKeys = deviceKeys ? new Set(deviceKeys) : null;
 
   for (const device of devices) {
     const deviceKey = getDeviceKey(device);
     const position = positions[deviceKey];
 
-    if (!position) {
+    if (!position || (allowedKeys && !allowedKeys.has(deviceKey))) {
       continue;
     }
 
