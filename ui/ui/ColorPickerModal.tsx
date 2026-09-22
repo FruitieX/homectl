@@ -919,11 +919,14 @@ export const ColorPickerModal = () => {
     else if (deviceModalState.length > 1)
       groupSelection.current = deviceModalState;
   }, [deviceModalOpen, deviceModalState]);
+  useEffect(() => {
+    if (!deviceModalOpen) setFloorplanSection('controls');
+  }, [deviceModalOpen]);
   const section =
     floorplanSection === 'color' && colorDevices.length === 0
       ? 'controls'
       : floorplanSection;
-  const ColorSection = inFloorplan ? 'div' : 'details';
+  const ColorSection = 'div';
   return (
     <ResponsiveOverlay
       open={deviceModalOpen}
@@ -1027,7 +1030,7 @@ export const ColorPickerModal = () => {
               </select>
             </label>
           )}
-        {inFloorplan && (
+        {deviceModalState.length > 0 && (
           <Tabs value={section} onValueChange={setFloorplanSection}>
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="controls">Controls</TabsTrigger>
@@ -1038,17 +1041,15 @@ export const ColorPickerModal = () => {
             </TabsList>
           </Tabs>
         )}
-        {(!inFloorplan || section === 'controls') && (
+        {section === 'controls' && (
           <DeviceQuickControls
             key={deviceModalState.join(',')}
             devices={selected}
             showColorTabs={false}
           />
         )}
-        {(!inFloorplan || section === 'scenes') && (
-          <ScenesTab deviceKeys={deviceModalState} />
-        )}
-        {colorDevices.length > 0 && (!inFloorplan || section === 'color') && (
+        {section === 'scenes' && <ScenesTab deviceKeys={deviceModalState} />}
+        {colorDevices.length > 0 && section === 'color' && (
           <ColorSection
             className={
               inFloorplan
@@ -1056,17 +1057,6 @@ export const ColorPickerModal = () => {
                 : 'rounded-xl border border-border p-4'
             }
           >
-            {!inFloorplan && (
-              <summary
-                className={
-                  inFloorplan
-                    ? 'hidden'
-                    : 'cursor-pointer py-2 text-sm font-medium'
-                }
-              >
-                Color options
-              </summary>
-            )}
             {colorDevices.length !== selected.length && (
               <p className="my-2 text-sm text-muted-foreground">
                 Color changes apply to {colorDevices.length} compatible devices.
