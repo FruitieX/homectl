@@ -128,6 +128,26 @@
   }
 
   /*
+   * The price chart is the point of this card: at short heights move the
+   * "Now" price into the heading and drop the summary row so the chart keeps
+   * as much height as possible.
+   */
+  @container dashboard-widget (max-height: 12rem) {
+    .dashboard-spot-card > * {
+      --widget-padding: 0.75rem;
+    }
+
+    .dashboard-spot-card .dashboard-spot-summary {
+      display: none;
+    }
+
+    .dashboard-spot-card .dashboard-widget-heading-compact-value {
+      display: inline-flex;
+      font-size: 0.7rem;
+    }
+  }
+
+  /*
    * A dashboard with scrolling disabled gives every row a share of the
    * available height. Use the card's height, rather than the viewport, to
    * progressively trade decoration and secondary information for legibility.
@@ -508,6 +528,30 @@
     }
   }
 
+  /*
+   * Short-but-not-tiny sensor cards: drop the humidity row and compact the
+   * name/value rows so the sparkline still has a readable band at the bottom.
+   */
+  @container dashboard-widget (max-height: 9.5rem) {
+    .dashboard-sensor-chip {
+      padding: 0.4rem 0.5rem;
+    }
+
+    .dashboard-sensor-chip .mb-2 {
+      margin-bottom: 0.125rem;
+    }
+
+    .dashboard-sensor-chip .text-sm {
+      font-size: 0.75rem;
+      line-height: 1rem;
+      gap: 0.25rem;
+    }
+
+    .dashboard-sensor-chip .dashboard-sensor-humidity {
+      display: none;
+    }
+  }
+
   @container dashboard-widget (max-height: 8rem) {
     .dashboard-widget-container > * {
       --widget-padding: 0.65rem;
@@ -658,7 +702,7 @@
       gap: 0.25rem;
     }
 
-    .dashboard-sensor-chip svg {
+    .dashboard-sensor-chip svg.lucide {
       width: 0.75rem;
       height: 0.75rem;
     }

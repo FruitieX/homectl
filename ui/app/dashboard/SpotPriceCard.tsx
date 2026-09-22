@@ -1,6 +1,4 @@
 import { useMemo, useState } from 'react';
-import { useDashboardSpacing } from '@/hooks/dashboardSpacing';
-import { useDashboardScroll } from '@/hooks/dashboardScroll';
 import { Zap } from 'lucide-react';
 import { useTimeout } from 'usehooks-ts';
 
@@ -28,8 +26,6 @@ const formatPrice = (value: number | undefined) =>
   value === undefined ? '—' : `${value.toFixed(2)} c/kWh`;
 
 export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
-  const [spacing] = useDashboardSpacing();
-  const [dashboardScrollEnabled] = useDashboardScroll();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [chartInteracting, setChartInteracting] = useState(false);
   const isIdle = useIdle();
@@ -146,14 +142,7 @@ export const SpotPriceCard = ({ widget }: { widget?: DashboardWidget }) => {
               onPointerLeave={() => setChartInteracting(false)}
             >
               <ResponsiveChart
-                height={
-                  spacing === 'compact'
-                    ? 180
-                    : spacing === 'spacious'
-                      ? 245
-                      : 215
-                }
-                fit={!dashboardScrollEnabled}
+                fit
                 className="dashboard-spot-chart mt-1 h-full min-h-0 min-w-0 overflow-hidden"
               >
                 {({ width, height }) => (

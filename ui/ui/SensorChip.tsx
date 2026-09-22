@@ -83,14 +83,14 @@ export function SensorChip({
         </span>
       </div>
       {compact && !onCheckedChange && (
-        <div className="mt-2 min-h-0 flex-1">
+        <div className="relative mt-1.5 max-h-20 min-h-0 flex-1 overflow-hidden">
           <Sparkline
             points={
               sensor.temp_data.length >= 2
                 ? sensor.temp_data
                 : sensor.humidity_data
             }
-            className="h-full w-full text-muted-foreground/70"
+            className="dashboard-sensor-sparkline absolute inset-0 h-full w-full text-muted-foreground/70"
           />
         </div>
       )}
@@ -101,7 +101,7 @@ export function SensorChip({
   return (
     <div
       className={cn(
-        'dashboard-sensor-chip relative flex h-full flex-col rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
+        'dashboard-sensor-chip relative flex h-full flex-col overflow-hidden rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
         compact ? 'min-w-[5.6rem]' : 'min-w-28',
         (selectable || onOpen) &&
           'cursor-pointer transition hover:border-primary/60 hover:bg-muted/20',
