@@ -17,6 +17,7 @@ use std::thread;
 
 struct MockResponse {
     status: u16,
+    content_type: &'static str,
     body: String,
 }
 
@@ -29,15 +30,49 @@ impl MockResponse {
                 "index": 0,
                 "message": { "role": "assistant", "content": content },
                 "finish_reason": "stop"
-            }]
+            }],
+            "usage": {
+                "prompt_tokens": 42,
+                "completion_tokens": 7,
+                "total_tokens": 49
+            }
         })
         .to_string();
-        Self { status: 200, body }
+        Self {
+            status: 200,
+            content_type: "application/json",
+            body,
+        }
+    }
+
+    /// OpenAI-compatible SSE completion: the content arrives in two deltas and
+    /// the usage chunk closes the stream.
+    fn completion_stream(content: &str) -> Self {
+        let split = content
+            .char_indices()
+            .map(|(index, _)| index)
+            .find(|index| *index >= content.len() / 2)
+            .unwrap_or(content.len());
+        let body = format!(
+            "data: {}\n\ndata: {}\n\ndata: {}\n\ndata: [DONE]\n\n",
+            json!({"choices": [{"index": 0, "delta": {"content": &content[..split]}}]}),
+            json!({"choices": [{"index": 0, "delta": {"content": &content[split..]}}]}),
+            json!({
+                "choices": [],
+                "usage": {"prompt_tokens": 42, "completion_tokens": 7, "total_tokens": 49}
+            }),
+        );
+        Self {
+            status: 200,
+            content_type: "text/event-stream",
+            body,
+        }
     }
 
     fn error(status: u16, message: &str) -> Self {
         Self {
             status,
+            content_type: "application/json",
             body: json!({ "error": { "message": message } }).to_string(),
         }
     }
@@ -114,8 +149,9 @@ impl MockProvider {
                 }
 
                 let reply = format!(
-                    "HTTP/1.1 {} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    "HTTP/1.1 {} OK\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     response.status,
+                    response.content_type,
                     response.body.len(),
                     response.body
                 );
@@ -1452,4 +1488,292 @@ fn assistant_plan_repairs_invalid_output() {
         .collect();
     assert_eq!(sessions.len(), 2);
     assert_eq!(sessions[0], sessions[1]);
+}
+
+// ============================================================================
+// Unified streaming chat
+// ============================================================================
+
+fn chat(base_url: &str, client: &Client, body: Value) -> reqwest::blocking::Response {
+    client
+        .post(format!("{base_url}/api/v1/config/assistant/chat"))
+        .json(&body)
+        .send()
+        .unwrap()
+}
+
+/// Extract the JSON payload of the first SSE event with the given name.
+fn sse_event_data(body: &str, event: &str) -> Option<Value> {
+    sse_event_datas(body, event).into_iter().next()
+}
+
+/// Extract the JSON payloads of every SSE event with the given name.
+fn sse_event_datas(body: &str, event: &str) -> Vec<Value> {
+    let mut payloads = Vec::new();
+    let mut lines = body.lines();
+    while let Some(line) = lines.next() {
+        if line == format!("event: {event}") {
+            let Some(data) = lines.next() else { break };
+            let data = data.strip_prefix("data: ").unwrap_or(data);
+            if let Ok(value) = serde_json::from_str(data) {
+                payloads.push(value);
+            }
+        }
+    }
+    payloads
+}
+
+fn messages_from_request(body: &str) -> Vec<Value> {
+    let parsed: Value = serde_json::from_str(body).expect("provider request body");
+    parsed["messages"].as_array().cloned().unwrap_or_default()
+}
+
+#[test]
+fn assistant_chat_streams_deltas_and_returns_a_plan() {
+    let provider = MockProvider::start(vec![MockResponse::completion_stream(&valid_plan())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "rename the hallway group to hallway lights"}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers()["content-type"]
+        .to_str()
+        .unwrap()
+        .contains("text/event-stream"));
+    let body = response.text().unwrap();
+
+    assert_eq!(sse_event_data(&body, "status").unwrap()["phase"], "context");
+    // The provider content arrived in deltas that only parse once reassembled.
+    let deltas = sse_event_datas(&body, "delta");
+    assert!(deltas.len() >= 2);
+    let streamed: String = deltas
+        .iter()
+        .filter_map(|delta| delta["text"].as_str())
+        .collect();
+    let streamed: Value = serde_json::from_str(&streamed).expect("streamed JSON");
+    assert_eq!(streamed["summary"], "Rename the hallway group");
+    let usage = sse_event_data(&body, "usage").unwrap();
+    assert_eq!(usage["promptTokens"], 42);
+    assert_eq!(usage["totalTokens"], 49);
+    assert_eq!(usage["approximate"], false);
+    assert!(usage["contextWindow"].as_u64().unwrap() > 0);
+
+    let plan = sse_event_data(&body, "plan").unwrap();
+    assert!(plan["planId"].as_str().unwrap().starts_with("plan-"));
+    assert_eq!(plan["operations"][0]["op"], "update");
+    assert!(!body.contains("event: action"));
+}
+
+#[test]
+fn assistant_chat_routes_light_state_requests_to_a_stored_action() {
+    let content = json!({
+        "kind": "action",
+        "summary": "Dim the hallway lamp",
+        "changes": [{"device_key": "dummy/lamp", "power": true, "brightness": 0.2}]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion_stream(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "dim the hallway lamp to 20%"}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    let action = sse_event_data(&body, "action").expect("action event");
+    let action_id = action["actionId"].as_str().unwrap().to_string();
+    assert_eq!(action["changes"][0]["deviceKey"], "dummy/lamp");
+    assert_eq!(action["changes"][0]["name"], "Hallway lamp");
+    assert!(action["expiresAtMs"].as_i64().unwrap() > action["createdAtMs"].as_i64().unwrap());
+
+    // Nothing is written before the user applies the stored action.
+    let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
+    assert_eq!(lamp["data"]["Controllable"]["state"]["power"], false);
+
+    let applied: Value = client
+        .post(format!(
+            "{}/api/v1/config/assistant/actions/{action_id}/apply",
+            server.base_url
+        ))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(applied["success"], true);
+    assert_eq!(applied["data"]["appliedCount"], 1);
+    assert_eq!(applied["data"]["results"][0]["ok"], true);
+
+    let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
+    let state = &lamp["data"]["Controllable"]["state"];
+    assert_eq!(state["power"], true);
+    assert!((state["brightness"].as_f64().unwrap() - 0.2).abs() < 0.01);
+
+    // Actions are single-use: a second apply is a clean 404.
+    let again = client
+        .post(format!(
+            "{}/api/v1/config/assistant/actions/{action_id}/apply",
+            server.base_url
+        ))
+        .send()
+        .unwrap();
+    assert_eq!(again.status(), StatusCode::NOT_FOUND);
+
+    let unknown = client
+        .post(format!(
+            "{}/api/v1/config/assistant/actions/action-unknown/apply",
+            server.base_url
+        ))
+        .send()
+        .unwrap();
+    assert_eq!(unknown.status(), StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn assistant_chat_discards_stored_actions_and_enforces_scope() {
+    let content = json!({
+        "kind": "action",
+        "summary": "scope escape",
+        "changes": [{"device_key": "dummy/lamp", "power": true}]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion_stream(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    // The model may only address devices inside the requested scope.
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "turn on everything", "deviceKeys": ["dummy/motion"]}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    assert!(sse_event_data(&body, "action").is_none());
+    let error = sse_event_data(&body, "error").expect("error event");
+    assert!(error["message"]
+        .as_str()
+        .unwrap()
+        .contains("unknown device key"));
+
+    let lamp = device_state(&server.base_url, &client, "dummy", "lamp");
+    assert_eq!(lamp["data"]["Controllable"]["state"]["power"], false);
+}
+
+#[test]
+fn assistant_chat_and_plan_forward_history() {
+    let provider = MockProvider::start(vec![
+        MockResponse::completion_stream(&valid_plan()),
+        MockResponse::completion(&valid_plan()),
+    ]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let history = json!([
+        {"role": "user", "content": "add a movie night scene"},
+        {"role": "assistant", "content": "Plan: 1 proposed operation"},
+        {"role": "user", "content": ""}
+    ]);
+
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "now also dim the hallway lamp", "history": history}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.text().unwrap();
+    let messages = messages_from_request(&provider.request_bodies().pop().unwrap());
+    assert_eq!(messages[0]["role"], "system");
+    assert_eq!(messages[1]["role"], "user");
+    assert_eq!(messages[1]["content"], "add a movie night scene");
+    assert_eq!(messages[2]["role"], "assistant");
+    assert_eq!(messages[2]["content"], "Plan: 1 proposed operation");
+    assert_eq!(messages[3]["role"], "user");
+    assert_eq!(messages[3]["content"], "now also dim the hallway lamp");
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({
+            "prompt": "make it two scenes",
+            "history": [{"role": "assistant", "content": "Plan: 1 proposed operation"}]
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let messages = messages_from_request(&provider.request_bodies().pop().unwrap());
+    assert_eq!(messages[1]["role"], "assistant");
+    assert_eq!(messages[1]["content"], "Plan: 1 proposed operation");
+    assert_eq!(messages[2]["role"], "user");
+}
+
+#[test]
+fn assistant_chat_caps_history_server_side() {
+    let provider = MockProvider::start(vec![MockResponse::completion_stream(&valid_plan())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let history: Vec<Value> = (0..40)
+        .map(|index| json!({"role": "user", "content": format!("turn {index}")}))
+        .collect();
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "continue", "history": history}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let _ = response.text().unwrap();
+
+    // system + at most 16 capped turns + the current prompt.
+    let messages = messages_from_request(&provider.request_bodies().pop().unwrap());
+    assert!(
+        messages.len() <= 18,
+        "unexpected message count: {}",
+        messages.len()
+    );
+    let first_history = messages[1]["content"].as_str().unwrap();
+    assert!(first_history.starts_with("turn "), "{first_history}");
+    assert_eq!(messages.last().unwrap()["content"], "continue");
+}
+
+#[test]
+fn assistant_chat_is_disabled_without_configuration() {
+    let server = start_server(None);
+    let client = Client::new();
+
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "turn on the lamp"}),
+    );
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[test]
+fn assistant_chat_falls_back_when_the_provider_rejects_streaming() {
+    let provider = MockProvider::start(vec![
+        MockResponse::error(400, "stream not supported"),
+        MockResponse::completion(&valid_plan()),
+    ]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "rename the hallway group"}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.text().unwrap();
+    assert!(!body.contains("event: delta"));
+    let plan = sse_event_data(&body, "plan").expect("plan event after fallback");
+    assert_eq!(plan["operations"][0]["op"], "update");
+    let usage = sse_event_data(&body, "usage").unwrap();
+    assert_eq!(usage["approximate"], false);
+    assert_eq!(provider.requests.load(Ordering::SeqCst), 2);
 }

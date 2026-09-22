@@ -3,9 +3,11 @@ use std::path::PathBuf;
 use homectl_server::types::{
     action::Action,
     assistant::{
-        ApplyAssistantPlanRequest, ApplyAssistantPlanResponse, AssistantAttachment,
-        AssistantEntityKind, AssistantOpKind, AssistantOperation, AssistantOperationResult,
-        AssistantPlan, AssistantPlanRequest, AssistantSearchResult,
+        ApplyAssistantActionResponse, ApplyAssistantPlanRequest, ApplyAssistantPlanResponse,
+        AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
+        AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
+        AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
+        AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantUsage,
     },
     automation_definition::{
         ChooseBranch, ConditionExpr, ExecutionPolicy, HelperId, NativeAction, NativeProgram,
@@ -50,16 +52,25 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         manifest_dir.join("../ui/bindings"),
     ] {
         Action::export_all_to(&output_dir)?;
+        ApplyAssistantActionResponse::export_all_to(&output_dir)?;
         ApplyAssistantPlanRequest::export_all_to(&output_dir)?;
         ApplyAssistantPlanResponse::export_all_to(&output_dir)?;
+        AssistantAction::export_all_to(&output_dir)?;
+        AssistantActionChange::export_all_to(&output_dir)?;
+        AssistantActionChangeResult::export_all_to(&output_dir)?;
+        AssistantActionColor::export_all_to(&output_dir)?;
         AssistantAttachment::export_all_to(&output_dir)?;
+        AssistantChatRequest::export_all_to(&output_dir)?;
         AssistantEntityKind::export_all_to(&output_dir)?;
+        AssistantHistoryMessage::export_all_to(&output_dir)?;
+        AssistantMessageRole::export_all_to(&output_dir)?;
         AssistantOpKind::export_all_to(&output_dir)?;
         AssistantOperation::export_all_to(&output_dir)?;
         AssistantOperationResult::export_all_to(&output_dir)?;
         AssistantPlan::export_all_to(&output_dir)?;
         AssistantPlanRequest::export_all_to(&output_dir)?;
         AssistantSearchResult::export_all_to(&output_dir)?;
+        AssistantUsage::export_all_to(&output_dir)?;
         homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all_to(&output_dir)?;
         homectl_server::types::config_write::ConfigWriteStatus::export_all_to(&output_dir)?;
         ChooseBranch::export_all_to(&output_dir)?;

@@ -1,0 +1,205 @@
+import {
+  CheckCircle2,
+  Lightbulb,
+  Loader2,
+  Trash2,
+  XCircle,
+} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+
+import { toast } from 'sonner';
+
+import type { AssistantAction } from '@/bindings/AssistantAction';
+import type { AssistantActionChangeResult } from '@/bindings/AssistantActionChangeResult';
+import {
+  useApplyAssistantActionPlan,
+  useDiscardAssistantAction,
+} from '@/hooks/useAssistant';
+import { describeAssistantActionChange } from '@/lib/assistant-stream';
+import { cn } from '@/lib/cn';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+
+function expiryLabel(action: AssistantAction, now: number): string {
+  const remainingMs = Number(action.expiresAtMs) - now;
+  if (remainingMs <= 0) {
+    return 'Expired';
+  }
+  return `Expires in ${Math.ceil(remainingMs / 60000)} min`;
+}
+
+export function ActionCard({
+  action,
+  results,
+  onApplied,
+  onDiscard,
+}: {
+  action: AssistantAction;
+  results: AssistantActionChangeResult[] | null;
+  onApplied: (results: AssistantActionChangeResult[]) => void;
+  onDiscard: () => void;
+}) {
+  const applyAction = useApplyAssistantActionPlan();
+  const discardAction = useDiscardAssistantAction();
+  const [now, setNow] = useState(() => Date.now());
+
+  const applied = results !== null;
+  const expired = Number(action.expiresAtMs) <= now;
+  const resultsByDevice = useMemo(
+    () => new Map((results ?? []).map((result) => [result.deviceKey, result])),
+    [results],
+  );
+
+  useEffect(() => {
+    if (applied) {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, [applied]);
+
+  const apply = () => {
+    if (action.changes.length === 0 || applyAction.isPending || expired) {
+      return;
+    }
+    applyAction.mutate(action.actionId, {
+      onSuccess: (response) => {
+        onApplied(response.results);
+        const failed = response.results.filter((result) => !result.ok);
+        if (failed.length === 0) {
+          toast.success(
+            `Updated ${response.appliedCount} device${response.appliedCount === 1 ? '' : 's'}`,
+          );
+        } else {
+          toast.warning(
+            `Updated ${response.appliedCount} of ${response.results.length} devices`,
+          );
+        }
+      },
+      onError: (error) => {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : 'Failed to apply assistant action',
+        );
+      },
+    });
+  };
+
+  const discard = () => {
+    if (applied || expired) {
+      onDiscard();
+      return;
+    }
+    discardAction.mutate(action.actionId, {
+      onSettled: () => onDiscard(),
+    });
+  };
+
+  return (
+    <div className="space-y-3 rounded-3xl border border-border bg-card p-3 shadow-sm">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-300">
+          <Lightbulb className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="text-sm leading-relaxed">{action.summary}</p>
+          <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <Badge className="border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300">
+              {action.changes.length} light
+              {action.changes.length === 1 ? '' : 's'}
+            </Badge>
+            <span
+              className={cn(
+                expired && !applied && 'font-medium text-destructive',
+              )}
+            >
+              {applied ? 'Applied' : expiryLabel(action, now)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <ul className="space-y-1.5">
+        {action.changes.map((change) => {
+          const result = resultsByDevice.get(change.deviceKey);
+          return (
+            <li
+              key={change.deviceKey}
+              className={cn(
+                'flex items-start gap-2 rounded-2xl border border-border/60 px-2.5 py-2 text-sm',
+                result && !result.ok && 'border-destructive/40',
+              )}
+            >
+              {result ? (
+                result.ok ? (
+                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                ) : (
+                  <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                )
+              ) : (
+                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">
+                  {change.name || change.deviceKey}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {result && !result.ok
+                    ? (result.error ?? 'Failed')
+                    : describeAssistantActionChange(change)}
+                </p>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      {action.changes.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          The assistant did not propose any light changes.
+        </p>
+      ) : null}
+
+      {expired && !applied ? (
+        <p className="text-xs text-muted-foreground">
+          This proposal expired and can no longer be applied. Ask again to
+          produce a fresh one.
+        </p>
+      ) : null}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={discardAction.isPending}
+          onClick={discard}
+          className="sm:mr-auto"
+        >
+          <Trash2 />
+          {applied ? 'Dismiss' : 'Discard'}
+        </Button>
+        {!applied ? (
+          <Button
+            type="button"
+            disabled={
+              action.changes.length === 0 || applyAction.isPending || expired
+            }
+            onClick={apply}
+          >
+            {applyAction.isPending ? (
+              <Loader2 className="animate-spin" />
+            ) : null}
+            {applyAction.isPending ? 'Applying…' : 'Apply now'}
+          </Button>
+        ) : null}
+      </div>
+
+      {!applied ? (
+        <p className="text-[0.7rem] text-muted-foreground">
+          Lights change only when you apply. Nothing is written before that.
+        </p>
+      ) : null}
+    </div>
+  );
+}

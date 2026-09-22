@@ -193,24 +193,44 @@ it is enabled and which model it uses.
   key masked in responses)
 - `POST /api/v1/config/assistant/draft` – draft a v2 routine definition for
   editor review; never persisted automatically
-- `POST /api/v1/config/assistant/apply` – one-off light-state request with an
-  optional `deviceKeys` scope, applied through the normal device command path
+- `POST /api/v1/config/assistant/chat` – the unified assistant turn used by the
+  UI. Responds with `text/event-stream`: `status` (progress), `delta` (provider
+  text deltas when the provider streams), `usage` (token counts, approximate
+  when the provider reports none), then exactly one of `plan` or `action`, or
+  `error`. Accepts `history` (capped/truncated server-side) and an optional
+  `deviceKeys` light-state scope; aborts upstream work when the client
+  disconnects.
+- `POST /api/v1/config/assistant/actions/{action_id}/apply` – apply a stored
+  light-state action through the normal device command path (single-use,
+  re-validated against the live catalog)
+- `DELETE /api/v1/config/assistant/actions/{action_id}` – discard a stored
+  action
+- `POST /api/v1/config/assistant/apply` – legacy one-off light-state request
+  with an optional `deviceKeys` scope, applied immediately; kept for
+  compatibility, the UI no longer calls it
 - `GET /api/v1/config/assistant/search?kind=&q=` – deterministic entity search
   (exact > prefix > substring on id/name); used by the plan context builder and
   by the UI to attach entities
 - `POST /api/v1/config/assistant/plan` – build a reviewed plan from a prompt and
-  attachment list
+  attachment list (optional `history`); the non-streaming predecessor of
+  `assistant/chat`, kept for compatibility
 - `GET /api/v1/config/assistant/plans/{plan_id}` – fetch a stored plan
 - `DELETE /api/v1/config/assistant/plans/{plan_id}` – discard a stored plan
 - `POST /api/v1/config/assistant/plans/{plan_id}/apply` – apply accepted
   operation ids
 
-Plans live in an in-memory TTL store (15 min default,
+Plans and light-state actions live in an in-memory TTL store (15 min default,
 `HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides), are capped, and are single-use:
 applying or discarding removes them, and unknown/expired ids return 404. Every
 operation is re-validated against the live snapshot at apply time and executed
 through the existing `StateHandle`/config write paths; secrets are masked in
-plans and preserved when an update omits them.
+plans and preserved when an update omits them. A unified `assistant/chat` turn
+classifies the prompt into either a plan or a light-state action with one
+provider call (`kind` field, inferred from `changes` vs `operations` when
+absent); light-state actions are never written before the user applies them.
+Conversation history is client-held and session-only: it is sent with each
+request and capped/truncated server-side (16 messages / 8000 chars, 2000 chars
+per message).
 
 ## Configuration
 
@@ -277,6 +297,9 @@ The server uses **ts-rs** to generate TypeScript types from Rust structs. Genera
   provider; local endpoints usually omit it
 - `HOMECTL_ASSISTANT_TIMEOUT_MS` – Optional provider timeout, default 60000
 - `HOMECTL_ASSISTANT_MAX_TOKENS` – Optional completion token cap, default 2048
+- `HOMECTL_ASSISTANT_CONTEXT_WINDOW` – Optional context window (tokens) used by
+  the UI context meter, default 128000; also editable as `contextWindow` in the
+  stored assistant settings
 - `HOMECTL_ASSISTANT_REASONING_EFFORT` – Optional `reasoning_effort` value for
   thinking models (e.g. `high`); dropped automatically when a provider rejects it
 - `HOMECTL_ASSISTANT_TIMEZONE` – Optional IANA zone used for drafted
@@ -290,22 +313,31 @@ sole source of truth. The API key is masked in responses and redacted from
 exports unless `?include_secrets=true` is requested.
 
 Assistant drafts are validated by the v2 compiler and returned for review;
-they are never persisted or enabled automatically. The floorplan &quot;Ask AI&quot;
-action posts a one-off light-state request to
-`POST /api/v1/config/assistant/apply` with an optional `deviceKeys` scope; the
-server validates every change against the live catalog and applies it through
-the same device command path as manual controls.
+they are never persisted or enabled automatically.
 
-The assistant panel (`ui/assistant/AssistantPanel.tsx`) is the review surface
-for plans. It opens from the header button, the command palette, config pages,
-the floorplan toolbar, and room pages; entry points may preload an attachment
-chip, and the panel itself can search for entities to attach via
-`GET /api/v1/config/assistant/search`. Each response renders as a `PlanCard`:
-collapsed rows show the operation and target entity, expanding reveals
-field-level diffs, destructive operations are never selected by default, and
-Apply submits only the accepted op ids. Discard calls
-`DELETE /api/v1/config/assistant/plans/{id}` and removes the card client-side
-even if that request fails. Nothing is written before Apply.
+The assistant panel (`ui/assistant/AssistantPanel.tsx`) is the single review
+surface for both configuration plans and light-state actions. It opens from the
+header button (the only assistant button on every page, including the
+floorplan AppBar; it is icon-only), the command palette, config pages, and room
+pages; entry points may preload an attachment chip, and the panel itself can
+search for entities to attach via `GET /api/v1/config/assistant/search`. A turn
+streams over `POST /api/v1/config/assistant/chat`: provider deltas and progress
+states appear live, a Cancel button aborts the turn (the server stops provider
+work on disconnect), and a context meter shows approximate tokens used this
+thread against the configured context window. The thread is in-memory only, is
+sent back as `history` with each request, and a "New thread" button clears it
+along with the attachment chips.
+
+Plan responses render as a `PlanCard`: collapsed rows show the operation and
+target entity, expanding reveals field-level diffs, destructive operations are
+never selected by default, and Apply submits only the accepted op ids. Discard
+calls `DELETE /api/v1/config/assistant/plans/{id}` and removes the card
+client-side even if that request fails. Light-state responses render as an
+`ActionCard` with a per-device change list and an explicit "Apply now" button;
+applying calls `POST /api/v1/config/assistant/actions/{id}/apply`, which
+re-validates and applies through the normal device command path. Nothing is
+written before the user applies. The AppBar has no search field: search lives
+in the navigation rail / bottom navigation and the Ctrl+K command palette.
 
 Room previews (`GroupFloorplanPreview` in `ui/ui/floorplan/`) render on the
 rooms list and room detail pages. The floorplan is picked by the group's

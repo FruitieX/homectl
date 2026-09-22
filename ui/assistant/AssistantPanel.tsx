@@ -1,15 +1,22 @@
-import { Loader2, Search, Send, Sparkles } from 'lucide-react';
+import { Loader2, Plus, Search, Send, Sparkles, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 
+import type { AssistantActionChangeResult } from '@/bindings/AssistantActionChangeResult';
 import type { AssistantAttachment } from '@/bindings/AssistantAttachment';
-import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
 import {
+  useAssistantChat,
   useAssistantEntitySearch,
-  useAssistantPlan,
   useAssistantStatus,
+  type AssistantChatStatus,
 } from '@/hooks/useAssistant';
+import {
+  buildAssistantHistory,
+  contextUsagePercent,
+  formatTokenCount,
+  type AssistantHistoryEntry,
+} from '@/lib/assistant-stream';
 import { upsertAssistantAttachment } from '@/lib/assistant-diff';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
@@ -17,107 +24,166 @@ import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Textarea } from '@/ui/primitives/textarea';
 
+import { ActionCard } from './ActionCard';
 import { AssistantEntityIcon, AttachmentChip } from './AttachmentChip';
 import { PlanCard } from './PlanCard';
 import {
   assistantPanelAtom,
+  assistantThreadAtom,
+  assistantUsageAtom,
   closeAssistantPanelAtom,
+  createAssistantMessageId,
+  newAssistantThreadAtom,
   setAssistantAttachmentsAtom,
+  type AssistantThreadMessage,
 } from './state';
-
-type PanelMessage =
-  | {
-      id: string;
-      role: 'user';
-      text: string;
-      attachments: AssistantAttachment[];
-    }
-  | { id: string; role: 'assistant'; plan: AssistantPlan }
-  | { id: string; role: 'assistant'; error: string };
 
 const suggestionPrompts = [
   'Turn off all lights when nobody is home',
   'Add a scene for movie night',
-  'Create a room for the upstairs hallway',
+  'Dim the living room lights to 20%',
 ];
+
+/** Compact text form of a thread turn for the provider history payload. */
+function threadHistory(
+  thread: AssistantThreadMessage[],
+): AssistantHistoryEntry[] {
+  const entries: AssistantHistoryEntry[] = [];
+  for (const message of thread) {
+    if (message.role === 'user') {
+      entries.push({ role: 'user', content: message.text });
+    } else if (message.kind === 'plan') {
+      const operations = message.plan.operations
+        .map(
+          (operation) =>
+            `- ${operation.op} ${operation.kind}: ${operation.label}`,
+        )
+        .join('\n');
+      entries.push({
+        role: 'assistant',
+        content: `Plan: ${message.plan.summary}${operations ? `\n${operations}` : ''}`,
+      });
+    } else if (message.kind === 'action') {
+      entries.push({
+        role: 'assistant',
+        content: `Action: ${message.action.summary}`,
+      });
+    } else {
+      entries.push({ role: 'assistant', content: `Error: ${message.error}` });
+    }
+  }
+  return entries;
+}
 
 export function AssistantPanel() {
   const state = useAtomValue(assistantPanelAtom);
   const closePanel = useSetAtom(closeAssistantPanelAtom);
   const setAttachments = useSetAtom(setAssistantAttachmentsAtom);
+  const thread = useAtomValue(assistantThreadAtom);
+  const setThread = useSetAtom(assistantThreadAtom);
+  const usage = useAtomValue(assistantUsageAtom);
+  const setUsage = useSetAtom(assistantUsageAtom);
+  const startNewThread = useSetAtom(newAssistantThreadAtom);
   const { enabled, model } = useAssistantStatus();
-  const planMutation = useAssistantPlan();
+  const { send, cancel, isStreaming } = useAssistantChat();
   const [prompt, setPrompt] = useState('');
   const [attachQuery, setAttachQuery] = useState('');
-  const [messages, setMessages] = useState<PanelMessage[]>([]);
+  const [streamText, setStreamText] = useState('');
+  const [status, setStatus] = useState<AssistantChatStatus | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const nextMessageId = useRef(1);
   const searchQuery = attachQuery.trim();
   const searchResults = useAssistantEntitySearch(searchQuery);
   const searchHits: AssistantSearchResult[] = searchResults.data ?? [];
-
-  useEffect(() => {
-    if (!state.open) {
-      setMessages([]);
-      setPrompt('');
-      setAttachQuery('');
-    }
-  }, [state.open]);
 
   useEffect(() => {
     const container = scrollRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [messages, planMutation.isPending]);
+  }, [thread, streamText, isStreaming, status]);
 
-  const appendMessage = (message: PanelMessage) => {
-    setMessages((current) => [...current, message]);
-  };
-
-  const createMessageId = () => {
-    const id = `assistant-message-${nextMessageId.current}`;
-    nextMessageId.current += 1;
-    return id;
+  const appendMessage = (message: AssistantThreadMessage) => {
+    setThread((current) => [...current, message]);
   };
 
   const submit = () => {
     const trimmed = prompt.trim();
-    if (!trimmed || planMutation.isPending) {
+    if (!trimmed || isStreaming) {
       return;
     }
     const attachments = state.attachments;
     appendMessage({
-      id: createMessageId(),
+      id: createAssistantMessageId(),
       role: 'user',
       text: trimmed,
       attachments,
     });
     setPrompt('');
-    planMutation.mutate(
-      { prompt: trimmed, attachments },
+    setAttachments([]);
+    setStreamText('');
+    setStatus({ phase: 'sending', message: 'Sending…' });
+    const history = buildAssistantHistory(threadHistory(thread));
+
+    void send(
+      { prompt: trimmed, attachments, history },
       {
-        onSuccess: (plan) => {
+        onStatus: (next) => {
+          setStatus(next);
+          if ((next.attempt ?? 1) > 1) {
+            setStreamText('');
+          }
+        },
+        onDelta: (text) => setStreamText((current) => current + text),
+        onUsage: (nextUsage) => setUsage(nextUsage),
+        onPlan: (plan) => {
           appendMessage({
-            id: createMessageId(),
+            id: createAssistantMessageId(),
             role: 'assistant',
+            kind: 'plan',
             plan,
           });
-          setAttachments([]);
+          setStreamText('');
+          setStatus(null);
         },
-        onError: (error) => {
-          const message =
-            error instanceof Error
-              ? error.message
-              : 'The assistant request failed';
+        onAction: (action) => {
           appendMessage({
-            id: createMessageId(),
+            id: createAssistantMessageId(),
             role: 'assistant',
+            kind: 'action',
+            action,
+          });
+          setStreamText('');
+          setStatus(null);
+        },
+        onError: (message) => {
+          appendMessage({
+            id: createAssistantMessageId(),
+            role: 'assistant',
+            kind: 'error',
             error: message,
           });
+          setStreamText('');
+          setStatus(null);
         },
       },
     );
+  };
+
+  const stop = () => {
+    cancel();
+    setStreamText('');
+    setStatus(null);
+  };
+
+  const startFreshThread = () => {
+    if (isStreaming) {
+      cancel();
+    }
+    startNewThread();
+    setPrompt('');
+    setAttachQuery('');
+    setStreamText('');
+    setStatus(null);
   };
 
   const removeAttachment = (attachment: AssistantAttachment) => {
@@ -141,7 +207,22 @@ export function AssistantPanel() {
   };
 
   const discardMessage = (id: string) => {
-    setMessages((current) => current.filter((message) => message.id !== id));
+    setThread((current) => current.filter((message) => message.id !== id));
+  };
+
+  const recordActionResults = (
+    id: string,
+    results: AssistantActionChangeResult[],
+  ) => {
+    setThread((current) =>
+      current.map((message) =>
+        message.id === id &&
+        message.role === 'assistant' &&
+        message.kind === 'action'
+          ? { ...message, results }
+          : message,
+      ),
+    );
   };
 
   return (
@@ -158,19 +239,42 @@ export function AssistantPanel() {
           AI assistant
         </span>
       }
-      description="Describe a change. The assistant proposes a plan you review and accept before anything is written."
+      description="Describe a change. The assistant proposes a plan or light change you review and apply before anything is written."
       className="h-[min(82dvh,44rem)] max-w-3xl"
     >
       <div className="flex h-full min-h-0 flex-col gap-3 px-5 pb-5 md:px-0 md:pb-0">
+        <div className="flex shrink-0 items-center justify-between gap-2">
+          <p className="text-xs text-muted-foreground">
+            {thread.length > 0
+              ? `${thread.length} message${thread.length === 1 ? '' : 's'} in this thread`
+              : 'New conversation'}
+          </p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            disabled={
+              thread.length === 0 &&
+              state.attachments.length === 0 &&
+              !isStreaming
+            }
+            onClick={startFreshThread}
+          >
+            <Plus className="size-3.5" />
+            New thread
+          </Button>
+        </div>
+
         <div
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1"
         >
-          {messages.length === 0 ? (
+          {thread.length === 0 ? (
             <div className="space-y-3 rounded-3xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
               <p className="text-sm text-muted-foreground">
                 {enabled
-                  ? 'Ask for a new automation, a change to an existing entity, or attach one from the page you came from.'
+                  ? 'Ask for a new automation, a change to an existing entity, or a quick light change. Attach entities from the page you came from.'
                   : 'The assistant is not configured on this server. Set the provider base URL and model under Settings → Assistant.'}
               </p>
               {enabled ? (
@@ -192,7 +296,7 @@ export function AssistantPanel() {
             </div>
           ) : null}
 
-          {messages.map((message) => {
+          {thread.map((message) => {
             if (message.role === 'user') {
               return (
                 <div
@@ -215,11 +319,24 @@ export function AssistantPanel() {
                 </div>
               );
             }
-            if ('error' in message) {
+            if (message.kind === 'error') {
               return (
                 <Alert key={message.id} variant="destructive">
                   <AlertDescription>{message.error}</AlertDescription>
                 </Alert>
+              );
+            }
+            if (message.kind === 'action') {
+              return (
+                <ActionCard
+                  key={message.id}
+                  action={message.action}
+                  results={message.results ?? null}
+                  onApplied={(results) =>
+                    recordActionResults(message.id, results)
+                  }
+                  onDiscard={() => discardMessage(message.id)}
+                />
               );
             }
             return (
@@ -231,10 +348,19 @@ export function AssistantPanel() {
             );
           })}
 
-          {planMutation.isPending ? (
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Building a plan…
+          {isStreaming ? (
+            <div className="space-y-2 rounded-2xl border border-border/60 bg-muted/20 p-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 shrink-0 animate-spin" />
+                <span className="min-w-0 flex-1 truncate">
+                  {status?.message ?? 'Thinking…'}
+                </span>
+              </div>
+              {streamText ? (
+                <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-[0.7rem] leading-relaxed text-muted-foreground">
+                  {streamText}
+                </pre>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -308,7 +434,7 @@ export function AssistantPanel() {
             rows={2}
             value={prompt}
             placeholder="Describe the change, for example “dim the office lights at sunset”"
-            disabled={!enabled || planMutation.isPending}
+            disabled={!enabled || isStreaming}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
@@ -318,23 +444,46 @@ export function AssistantPanel() {
             }}
           />
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[0.7rem] text-muted-foreground">
-              {model
-                ? `Using ${model}. Nothing is written before you apply.`
-                : 'Nothing is written before you apply.'}
-            </p>
-            <Button
-              type="button"
-              disabled={!enabled || !prompt.trim() || planMutation.isPending}
-              onClick={submit}
-            >
-              {planMutation.isPending ? (
-                <Loader2 className="animate-spin" />
+            <div className="min-w-0 flex-1">
+              {usage ? (
+                <div className="space-y-1">
+                  <div className="h-1 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-primary transition-[width]"
+                      style={{ width: `${contextUsagePercent(usage)}%` }}
+                    />
+                  </div>
+                  <p className="truncate text-[0.7rem] text-muted-foreground">
+                    {usage.approximate ? '≈' : ''}
+                    {formatTokenCount(usage.totalTokens)} /{' '}
+                    {formatTokenCount(usage.contextWindow)} tokens this thread
+                    (approximate)
+                  </p>
+                </div>
               ) : (
-                <Send />
+                <p className="text-[0.7rem] text-muted-foreground">
+                  {model
+                    ? `Using ${model}. Nothing is written before you apply.`
+                    : 'Nothing is written before you apply.'}
+                </p>
               )}
-              Plan
-            </Button>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              {isStreaming ? (
+                <Button type="button" variant="outline" onClick={stop}>
+                  <Square />
+                  Cancel
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                disabled={!enabled || !prompt.trim() || isStreaming}
+                onClick={submit}
+              >
+                {isStreaming ? <Loader2 className="animate-spin" /> : <Send />}
+                Send
+              </Button>
+            </div>
           </div>
         </div>
       </div>

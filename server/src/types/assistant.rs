@@ -66,6 +66,34 @@ pub struct AssistantAttachment {
     pub label: Option<String>,
 }
 
+/// Who authored one turn of the conversation history.
+#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[ts(export)]
+pub enum AssistantMessageRole {
+    User,
+    Assistant,
+}
+
+impl AssistantMessageRole {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Assistant => "assistant",
+        }
+    }
+}
+
+/// One earlier conversation turn sent back with a new request. History is
+/// client-held and session-only; the server caps and truncates it.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantHistoryMessage {
+    pub role: AssistantMessageRole,
+    pub content: String,
+}
+
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -73,6 +101,113 @@ pub struct AssistantPlanRequest {
     pub prompt: String,
     #[serde(default)]
     pub attachments: Vec<AssistantAttachment>,
+    /// Prior plan turns, oldest first. Capped and truncated server-side.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub history: Option<Vec<AssistantHistoryMessage>>,
+}
+
+/// Unified assistant request: one prompt that the server routes to either a
+/// reviewed configuration plan or a proposed light-state action.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantChatRequest {
+    pub prompt: String,
+    #[serde(default)]
+    pub attachments: Vec<AssistantAttachment>,
+    /// Optional device scope for light-state actions (for example the current
+    /// floorplan selection). Empty means every controllable device.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub device_keys: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub history: Option<Vec<AssistantHistoryMessage>>,
+}
+
+/// Color component of a proposed light-state change.
+#[derive(TS, Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantActionColor {
+    pub h: f64,
+    pub s: f64,
+}
+
+/// One proposed light-state change. Values are clamped during validation and
+/// applied through the normal device command path only when the user applies.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantActionChange {
+    pub device_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub power: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub brightness: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub color: Option<AssistantActionColor>,
+}
+
+/// A stored, reviewable light-state action produced by the unified assistant.
+/// Like plans, actions are in-memory only, single-use, and expire.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantAction {
+    pub action_id: String,
+    pub summary: String,
+    pub changes: Vec<AssistantActionChange>,
+    pub created_at_ms: i64,
+    pub expires_at_ms: i64,
+    pub model: String,
+}
+
+/// Result of one applied (or rejected) action change.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantActionChangeResult {
+    pub device_key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub name: Option<String>,
+    pub ok: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub error: Option<String>,
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ApplyAssistantActionResponse {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub summary: Option<String>,
+    pub results: Vec<AssistantActionChangeResult>,
+    pub applied_count: u32,
+}
+
+/// Approximate context usage for the current thread. Token counts come from
+/// the provider when it reports them and are estimated from character counts
+/// otherwise (`approximate` is true in that case).
+#[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantUsage {
+    pub prompt_tokens: u64,
+    pub completion_tokens: u64,
+    pub total_tokens: u64,
+    pub context_window: u64,
+    pub approximate: bool,
 }
 
 #[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

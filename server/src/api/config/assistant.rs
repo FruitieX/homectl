@@ -32,20 +32,28 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
+use std::pin::Pin;
 use std::sync::{Arc, Mutex as StdMutex};
+use std::task::{Context, Poll};
 use std::time::Duration;
 
+use bytes::Bytes;
+use futures_util::{Stream, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::sync::{mpsc, watch};
+use tokio_stream::wrappers::ReceiverStream;
 
 use super::*;
 use crate::core::automation::{self, ConfigCatalog};
 use crate::core::integrations::integration_config_schemas;
 use crate::core::snapshot::RuntimeSnapshot;
 use crate::types::assistant::{
-    ApplyAssistantPlanRequest, ApplyAssistantPlanResponse, AssistantAttachment,
-    AssistantEntityKind, AssistantOpKind, AssistantOperation, AssistantOperationResult,
-    AssistantPlan, AssistantPlanRequest, AssistantSearchResult,
+    ApplyAssistantActionResponse, ApplyAssistantPlanRequest, ApplyAssistantPlanResponse,
+    AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
+    AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
+    AssistantOpKind, AssistantOperation, AssistantOperationResult, AssistantPlan,
+    AssistantPlanRequest, AssistantSearchResult, AssistantUsage,
 };
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
@@ -64,6 +72,20 @@ const MIN_TIMEOUT_MS: u64 = 1_000;
 const MAX_TIMEOUT_MS: u64 = 600_000;
 const MAX_MAX_TOKENS: u64 = 1_000_000;
 const REASONING_EFFORTS: [&str; 3] = ["low", "medium", "high"];
+
+/// Fallback context window used by the UI's approximate context meter when the
+/// deployment did not configure the model's real window.
+const DEFAULT_CONTEXT_WINDOW: u64 = 128_000;
+const MIN_CONTEXT_WINDOW: u64 = 1_000;
+const MAX_CONTEXT_WINDOW: u64 = 100_000_000;
+
+/// History caps: the newest turns survive; older turns and oversized messages
+/// are dropped before the provider sees them.
+const MAX_HISTORY_MESSAGES: usize = 16;
+const MAX_HISTORY_CHARS: usize = 8_000;
+const MAX_HISTORY_MESSAGE_CHARS: usize = 2_000;
+/// Rough token estimate used when the provider reports no usage.
+const CHARS_PER_TOKEN: u64 = 4;
 
 /// Plan store TTL and cap. Both are deliberately small: a plan is an
 /// ephemeral review artifact, never a persisted record.
@@ -91,6 +113,7 @@ struct AssistantConfig {
     model: String,
     timeout_ms: u64,
     max_tokens: u32,
+    context_window: u64,
     reasoning_effort: Option<String>,
     timezone: Option<String>,
 }
@@ -152,6 +175,10 @@ impl AssistantConfig {
                 .filter(|value| *value > 0)
                 .map(|value| value as u32)
                 .unwrap_or(DEFAULT_MAX_TOKENS),
+            context_window: source
+                .u64("context_window", "HOMECTL_ASSISTANT_CONTEXT_WINDOW")
+                .filter(|value| *value >= MIN_CONTEXT_WINDOW)
+                .unwrap_or(DEFAULT_CONTEXT_WINDOW),
             reasoning_effort: source
                 .string("reasoning_effort", "HOMECTL_ASSISTANT_REASONING_EFFORT"),
             timezone: source.string("timezone", "HOMECTL_ASSISTANT_TIMEZONE"),
@@ -189,6 +216,10 @@ fn assistant_settings_view(settings: &[config_queries::WidgetSettingRow]) -> Val
             .u64("timeout_ms", "HOMECTL_ASSISTANT_TIMEOUT_MS")
             .filter(|value| *value > 0)
             .unwrap_or(DEFAULT_TIMEOUT_MS),
+        "contextWindow": source
+            .u64("context_window", "HOMECTL_ASSISTANT_CONTEXT_WINDOW")
+            .filter(|value| *value >= MIN_CONTEXT_WINDOW)
+            .unwrap_or(DEFAULT_CONTEXT_WINDOW),
         "timezone": source.string("timezone", "HOMECTL_ASSISTANT_TIMEZONE"),
     })
 }
@@ -210,6 +241,8 @@ struct AssistantSettingsPatch {
     max_tokens: Option<u64>,
     #[serde(default)]
     timeout_ms: Option<u64>,
+    #[serde(default)]
+    context_window: Option<u64>,
     #[serde(default)]
     timezone: Option<String>,
 }
@@ -268,6 +301,16 @@ fn apply_assistant_settings_patch(
             MIN_TIMEOUT_MS,
             MAX_TIMEOUT_MS,
             "timeoutMs",
+        )?;
+    }
+    if let Some(value) = patch.context_window {
+        set_stored_u64(
+            &mut stored,
+            "context_window",
+            value,
+            MIN_CONTEXT_WINDOW,
+            MAX_CONTEXT_WINDOW,
+            "contextWindow",
         )?;
     }
     Ok(stored)
@@ -415,6 +458,28 @@ pub(super) fn assistant_routes(
         .and(with_plan_store(&plans))
         .and_then(apply_assistant_plan);
 
+    let chat = warp::path!("assistant" / "chat")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and(with_plan_store(&plans))
+        .and_then(chat_assistant);
+
+    let apply_action = warp::path!("assistant" / "actions" / String / "apply")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
+        .and(with_plan_store(&plans))
+        .and_then(apply_stored_action);
+
+    let discard_action = warp::path!("assistant" / "actions" / String)
+        .and(warp::path::end())
+        .and(warp::delete())
+        .and(with_plan_store(&plans))
+        .and_then(discard_stored_action);
+
     status
         .or(settings_get)
         .or(settings_put)
@@ -425,6 +490,9 @@ pub(super) fn assistant_routes(
         .or(get_plan)
         .or(discard_plan)
         .or(apply_plan)
+        .or(chat)
+        .or(apply_action)
+        .or(discard_action)
 }
 
 fn with_plan_store(
@@ -549,7 +617,7 @@ async fn draft_routine(
 
     for attempt in 1..=MAX_ATTEMPTS {
         let content = match chat(&config, &messages, &mut options, &session_id).await {
-            Ok(content) => content,
+            Ok(completion) => completion.content,
             Err(error) => return Ok(provider_error_response(error)),
         };
 
@@ -628,15 +696,51 @@ fn user_agent() -> String {
     format!("homectl-assistant/{}", env!("CARGO_PKG_VERSION"))
 }
 
+/// Token usage reported by the provider. Missing for providers that omit the
+/// `usage` object; callers then estimate from character counts.
+#[derive(Clone, Copy, Debug, Default)]
+struct ProviderUsage {
+    prompt_tokens: u64,
+    completion_tokens: u64,
+    total_tokens: u64,
+}
+
+impl ProviderUsage {
+    fn from_value(value: &Value) -> Option<Self> {
+        let usage = value.get("usage")?;
+        let prompt_tokens = usage.get("prompt_tokens").and_then(Value::as_u64)?;
+        let completion_tokens = usage
+            .get("completion_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(0);
+        let total_tokens = usage
+            .get("total_tokens")
+            .and_then(Value::as_u64)
+            .unwrap_or(prompt_tokens + completion_tokens);
+        Some(Self {
+            prompt_tokens,
+            completion_tokens,
+            total_tokens,
+        })
+    }
+}
+
+/// One provider completion plus any usage it reported.
+#[derive(Clone, Debug)]
+struct Completion {
+    content: String,
+    usage: Option<ProviderUsage>,
+}
+
 async fn chat(
     config: &AssistantConfig,
     messages: &[Value],
     options: &mut ChatOptions,
     session_id: &str,
-) -> Result<String, ProviderError> {
+) -> Result<Completion, ProviderError> {
     loop {
         match post_chat(config, messages, *options, session_id).await {
-            Ok(content) => return Ok(content),
+            Ok(completion) => return Ok(completion),
             Err(ProviderError::Status(400, body)) if options.json_mode => {
                 log::warn!(
                     "Assistant provider rejected response_format, retrying without it: {body}"
@@ -677,7 +781,7 @@ async fn post_chat(
     messages: &[Value],
     options: ChatOptions,
     session_id: &str,
-) -> Result<String, ProviderError> {
+) -> Result<Completion, ProviderError> {
     let body = chat_request_body(config, messages, options);
 
     let mut request = http_client()
@@ -706,7 +810,7 @@ async fn post_chat(
 
     let value: Value = serde_json::from_str(&text)
         .map_err(|error| ProviderError::Transport(format!("invalid provider response: {error}")))?;
-    value
+    let content = value
         .pointer("/choices/0/message/content")
         .and_then(Value::as_str)
         .map(str::to_string)
@@ -714,7 +818,11 @@ async fn post_chat(
             ProviderError::Transport(
                 "provider response had no choices[0].message.content".to_string(),
             )
-        })
+        })?;
+    Ok(Completion {
+        content,
+        usage: ProviderUsage::from_value(&value),
+    })
 }
 
 fn http_client() -> reqwest::Client {
@@ -1171,6 +1279,89 @@ fn parse_apply_envelope(content: &str) -> Result<ApplyEnvelope, String> {
         .map_err(|error| format!("Assistant response did not match the contract: {error}"))
 }
 
+fn apply_change_to_action_change(change: &ApplyChange) -> AssistantActionChange {
+    AssistantActionChange {
+        device_key: change.device_key.clone(),
+        name: None,
+        power: change.power,
+        brightness: change.brightness,
+        color: change.color.as_ref().map(|color| AssistantActionColor {
+            h: color.h,
+            s: color.s,
+        }),
+    }
+}
+
+/// Validate and apply proposed light-state changes through the normal device
+/// command path. Unknown devices and no-op changes are reported per entry
+/// instead of failing the whole batch. Shared by the legacy one-off apply
+/// endpoint and the stored-action quick apply.
+async fn apply_device_changes(
+    handle: &StateHandle,
+    snapshot: &RuntimeSnapshot,
+    catalog: &ControlCatalog,
+    changes: &[AssistantActionChange],
+) -> (Vec<AssistantActionChangeResult>, u32) {
+    let mut results = Vec::with_capacity(changes.len());
+    let mut applied_count = 0u32;
+    for change in changes {
+        let Some(device_key) = catalog.devices.get(&change.device_key).cloned() else {
+            results.push(AssistantActionChangeResult {
+                device_key: change.device_key.clone(),
+                name: change.name.clone(),
+                ok: false,
+                error: Some("Unknown device".to_string()),
+            });
+            continue;
+        };
+        let name = snapshot
+            .devices
+            .0
+            .get(&device_key)
+            .map(|device| device.name.clone())
+            .or_else(|| change.name.clone());
+        if change.power.is_none() && change.brightness.is_none() && change.color.is_none() {
+            results.push(AssistantActionChangeResult {
+                device_key: change.device_key.clone(),
+                name,
+                ok: false,
+                error: Some("No changes supplied".to_string()),
+            });
+            continue;
+        }
+
+        let command = DeviceCommand {
+            request_id: new_session_id(),
+            device_key,
+            power: change.power,
+            brightness: change.brightness.map(|value| value.clamp(0.0, 1.0) as f32),
+            color: change.color.as_ref().map(|color| {
+                crate::types::color::DeviceColor::Hs(crate::types::color::Hs {
+                    h: color.h.clamp(0.0, 360.0).round() as u64,
+                    s: OrderedFloat(color.s.clamp(0.0, 1.0) as f32),
+                })
+            }),
+            transition: None,
+            preserve_scene: false,
+        };
+        let result = handle.control_device(command).await;
+        let (ok, error) = match result {
+            Ok(result) => (result.applied, result.error),
+            Err(error) => (false, Some(error.to_string())),
+        };
+        if ok {
+            applied_count += 1;
+        }
+        results.push(AssistantActionChangeResult {
+            device_key: change.device_key.clone(),
+            name,
+            ok,
+            error,
+        });
+    }
+    (results, applied_count)
+}
+
 async fn apply_assistant_action(
     request: ApplyRequest,
     snapshot: SnapshotHandle,
@@ -1217,7 +1408,7 @@ async fn apply_assistant_action(
     let session_id = new_session_id();
 
     let content = match chat(&config, &messages, &mut options, &session_id).await {
-        Ok(content) => content,
+        Ok(completion) => completion.content,
         Err(error) => return Ok(provider_error_response(error)),
     };
     let envelope = match parse_apply_envelope(&content) {
@@ -1231,62 +1422,24 @@ async fn apply_assistant_action(
         ));
     }
 
-    let mut applied = Vec::new();
-    let mut applied_count = 0usize;
-    for change in &envelope.changes {
-        let Some(device_key) = catalog.devices.get(&change.device_key).cloned() else {
-            applied.push(json!({
-                "device_key": change.device_key,
-                "ok": false,
-                "error": "Unknown device",
-            }));
-            continue;
-        };
-        let name = snapshot
-            .devices
-            .0
-            .get(&device_key)
-            .map(|device| device.name.clone())
-            .unwrap_or_default();
-        if change.power.is_none() && change.brightness.is_none() && change.color.is_none() {
-            applied.push(json!({
-                "device_key": change.device_key,
-                "name": name,
-                "ok": false,
-                "error": "No changes supplied",
-            }));
-            continue;
-        }
-
-        let command = DeviceCommand {
-            request_id: new_session_id(),
-            device_key,
-            power: change.power,
-            brightness: change.brightness.map(|value| value.clamp(0.0, 1.0) as f32),
-            color: change.color.as_ref().map(|color| {
-                crate::types::color::DeviceColor::Hs(crate::types::color::Hs {
-                    h: color.h.clamp(0.0, 360.0).round() as u64,
-                    s: OrderedFloat(color.s.clamp(0.0, 1.0) as f32),
-                })
-            }),
-            transition: None,
-            preserve_scene: false,
-        };
-        let result = handle.control_device(command).await;
-        let (ok, error) = match result {
-            Ok(result) => (result.applied, result.error),
-            Err(error) => (false, Some(error.to_string())),
-        };
-        if ok {
-            applied_count += 1;
-        }
-        applied.push(json!({
-            "device_key": change.device_key,
-            "name": name,
-            "ok": ok,
-            "error": error,
-        }));
-    }
+    let changes: Vec<AssistantActionChange> = envelope
+        .changes
+        .iter()
+        .map(apply_change_to_action_change)
+        .collect();
+    let (results, applied_count) =
+        apply_device_changes(&handle, &snapshot, &catalog, &changes).await;
+    let applied: Vec<Value> = results
+        .iter()
+        .map(|result| {
+            json!({
+                "device_key": result.device_key,
+                "name": result.name,
+                "ok": result.ok,
+                "error": result.error,
+            })
+        })
+        .collect();
 
     Ok(ApiResponse::success(json!({
         "summary": envelope.summary,
@@ -1300,14 +1453,15 @@ async fn apply_assistant_action(
 // Plan store
 // ============================================================================
 
-/// In-memory TTL store for assistant plans. Plans are ephemeral review
-/// artifacts: they are never persisted, and expired entries are swept whenever
-/// the store is touched. When the cap is exceeded the plan closest to expiry
-/// is dropped so an active review survives.
+/// In-memory TTL store for assistant plans and light-state actions. Both are
+/// ephemeral review artifacts: they are never persisted, and expired entries
+/// are swept whenever the store is touched. When a cap is exceeded the entry
+/// closest to expiry is dropped so an active review survives.
 struct PlanStore {
     ttl: Duration,
     capacity: usize,
     plans: StdMutex<HashMap<String, AssistantPlan>>,
+    actions: StdMutex<HashMap<String, AssistantAction>>,
 }
 
 impl PlanStore {
@@ -1316,6 +1470,7 @@ impl PlanStore {
             ttl,
             capacity,
             plans: StdMutex::new(HashMap::new()),
+            actions: StdMutex::new(HashMap::new()),
         }
     }
 
@@ -1333,43 +1488,108 @@ impl PlanStore {
         self.ttl.as_millis() as i64
     }
 
-    fn insert(&self, plan: AssistantPlan) {
-        let now = now_ms();
-        let mut plans = self.plans.lock().expect("plan store lock");
-        plans.retain(|_, stored| stored.expires_at_ms > now);
-        plans.insert(plan.plan_id.clone(), plan);
-        while plans.len() > self.capacity {
-            let Some(oldest) = plans
-                .values()
-                .min_by_key(|stored| stored.expires_at_ms)
-                .map(|stored| stored.plan_id.clone())
-            else {
-                break;
-            };
-            plans.remove(&oldest);
-        }
+    fn insert_plan(&self, plan: AssistantPlan) {
+        self.insert_capped(&self.plans, plan.plan_id.clone(), plan, |stored| {
+            (stored.plan_id.clone(), stored.expires_at_ms)
+        });
     }
 
-    fn get(&self, plan_id: &str) -> Option<AssistantPlan> {
-        let now = now_ms();
-        let mut plans = self.plans.lock().expect("plan store lock");
-        plans.retain(|_, stored| stored.expires_at_ms > now);
-        plans.get(plan_id).cloned()
+    fn get_plan(&self, plan_id: &str) -> Option<AssistantPlan> {
+        self.get_fresh(&self.plans, plan_id)
     }
 
     /// Remove a plan once it has been applied (or abandoned). Expired plans
     /// are swept first so a stale id cannot be applied.
-    fn remove(&self, plan_id: &str) -> Option<AssistantPlan> {
+    fn remove_plan(&self, plan_id: &str) -> Option<AssistantPlan> {
+        self.remove_fresh(&self.plans, plan_id)
+    }
+
+    fn insert_action(&self, action: AssistantAction) {
+        self.insert_capped(&self.actions, action.action_id.clone(), action, |stored| {
+            (stored.action_id.clone(), stored.expires_at_ms)
+        });
+    }
+
+    fn remove_action(&self, action_id: &str) -> Option<AssistantAction> {
+        self.remove_fresh(&self.actions, action_id)
+    }
+
+    fn insert_capped<T: Clone>(
+        &self,
+        entries: &StdMutex<HashMap<String, T>>,
+        key: String,
+        value: T,
+        describe: impl Fn(&T) -> (String, i64),
+    ) {
         let now = now_ms();
-        let mut plans = self.plans.lock().expect("plan store lock");
-        plans.retain(|_, stored| stored.expires_at_ms > now);
-        plans.remove(plan_id)
+        let mut entries = entries.lock().expect("plan store lock");
+        entries.retain(|_, stored| describe(stored).1 > now);
+        entries.insert(key, value);
+        while entries.len() > self.capacity {
+            let Some(oldest) = entries
+                .values()
+                .min_by_key(|stored| describe(stored).1)
+                .map(|stored| describe(stored).0)
+            else {
+                break;
+            };
+            entries.remove(&oldest);
+        }
+    }
+
+    fn get_fresh<T: Clone + Expiring>(
+        &self,
+        entries: &StdMutex<HashMap<String, T>>,
+        key: &str,
+    ) -> Option<T> {
+        let now = now_ms();
+        let mut entries = entries.lock().expect("plan store lock");
+        entries.retain(|_, stored| expires_at_ms(stored) > now);
+        entries.get(key).cloned()
+    }
+
+    fn remove_fresh<T: Clone + Expiring>(
+        &self,
+        entries: &StdMutex<HashMap<String, T>>,
+        key: &str,
+    ) -> Option<T> {
+        let now = now_ms();
+        let mut entries = entries.lock().expect("plan store lock");
+        entries.retain(|_, stored| expires_at_ms(stored) > now);
+        entries.remove(key)
     }
 
     #[cfg(test)]
-    fn len(&self) -> usize {
+    fn plan_len(&self) -> usize {
         self.plans.lock().expect("plan store lock").len()
     }
+
+    #[cfg(test)]
+    fn action_len(&self) -> usize {
+        self.actions.lock().expect("plan store lock").len()
+    }
+}
+
+/// Both stored artifacts expose `expires_at_ms`; used by the generic store
+/// helpers to sweep expired entries.
+trait Expiring {
+    fn expires_at_ms(&self) -> i64;
+}
+
+impl Expiring for AssistantPlan {
+    fn expires_at_ms(&self) -> i64 {
+        self.expires_at_ms
+    }
+}
+
+impl Expiring for AssistantAction {
+    fn expires_at_ms(&self) -> i64 {
+        self.expires_at_ms
+    }
+}
+
+fn expires_at_ms<T: Expiring>(value: &T) -> i64 {
+    value.expires_at_ms()
 }
 
 fn now_ms() -> i64 {
@@ -1746,10 +1966,12 @@ async fn plan_assistant_operations(
     let context_json = serde_json::to_string(&context).unwrap_or_else(|_| "{}".to_string());
     let catalog = catalog_from_snapshot_export(&snapshot);
 
-    let mut messages = vec![
-        json!({ "role": "system", "content": plan_system_prompt(&context_json) }),
-        json!({ "role": "user", "content": prompt }),
-    ];
+    let mut messages =
+        vec![json!({ "role": "system", "content": plan_system_prompt(&context_json) })];
+    messages.extend(history_messages(
+        request.history.as_deref().unwrap_or_default(),
+    ));
+    messages.push(json!({ "role": "user", "content": prompt }));
     let mut options = ChatOptions {
         json_mode: true,
         reasoning_effort: config.reasoning_effort.is_some(),
@@ -1759,7 +1981,7 @@ async fn plan_assistant_operations(
 
     for attempt in 1..=MAX_ATTEMPTS {
         let content = match chat(&config, &messages, &mut options, &session_id).await {
-            Ok(content) => content,
+            Ok(completion) => completion.content,
             Err(error) => return Ok(provider_error_response(error)),
         };
 
@@ -1782,7 +2004,7 @@ async fn plan_assistant_operations(
                     created_at_ms: now,
                     expires_at_ms: now + plans.ttl_ms(),
                 };
-                plans.insert(plan.clone());
+                plans.insert_plan(plan.clone());
                 return Ok(ApiResponse::success(plan));
             }
             Err(errors) => {
@@ -1810,7 +2032,7 @@ async fn get_assistant_plan(
     plan_id: String,
     plans: Arc<PlanStore>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match plans.get(&plan_id) {
+    match plans.get_plan(&plan_id) {
         Some(plan) => Ok(ApiResponse::success(plan)),
         None => Ok(not_found("Assistant plan")),
     }
@@ -1822,9 +2044,729 @@ async fn discard_assistant_plan(
     plan_id: String,
     plans: Arc<PlanStore>,
 ) -> Result<impl Reply, warp::Rejection> {
-    match plans.remove(&plan_id) {
+    match plans.remove_plan(&plan_id) {
         Some(_) => Ok(ApiResponse::success(true)),
         None => Ok(not_found("Assistant plan")),
+    }
+}
+
+// ============================================================================
+// Unified streaming chat
+// ============================================================================
+
+/// SSE event names emitted by `POST /assistant/chat`.
+const CHAT_EVENT_STATUS: &str = "status";
+const CHAT_EVENT_DELTA: &str = "delta";
+const CHAT_EVENT_USAGE: &str = "usage";
+const CHAT_EVENT_PLAN: &str = "plan";
+const CHAT_EVENT_ACTION: &str = "action";
+const CHAT_EVENT_ERROR: &str = "error";
+
+/// Cap and normalize client-held conversation history. The newest turns are
+/// kept; oversized messages are truncated and older ones dropped server-side.
+fn history_messages(history: &[AssistantHistoryMessage]) -> Vec<Value> {
+    let mut selected: Vec<Value> = Vec::new();
+    let mut chars = 0usize;
+    for message in history.iter().rev() {
+        if selected.len() >= MAX_HISTORY_MESSAGES {
+            break;
+        }
+        let content = message.content.trim();
+        if content.is_empty() {
+            continue;
+        }
+        let content = truncate(content, MAX_HISTORY_MESSAGE_CHARS);
+        let content_chars = content.chars().count();
+        if chars + content_chars > MAX_HISTORY_CHARS && !selected.is_empty() {
+            break;
+        }
+        chars += content_chars;
+        selected.push(json!({
+            "role": message.role.code(),
+            "content": content,
+        }));
+    }
+    selected.reverse();
+    selected
+}
+
+fn estimate_tokens(chars: usize) -> u64 {
+    (chars as u64).div_ceil(CHARS_PER_TOKEN)
+}
+
+fn message_content_chars(message: &Value) -> usize {
+    message
+        .get("content")
+        .and_then(Value::as_str)
+        .map(|content| content.chars().count())
+        .unwrap_or(0)
+}
+
+/// Approximate context usage for one turn: provider-reported when available,
+/// character-based estimate otherwise.
+fn assistant_usage(
+    config: &AssistantConfig,
+    completion: &Completion,
+    messages: &[Value],
+) -> AssistantUsage {
+    if let Some(usage) = completion.usage {
+        return AssistantUsage {
+            prompt_tokens: usage.prompt_tokens,
+            completion_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+            context_window: config.context_window,
+            approximate: false,
+        };
+    }
+    let prompt_tokens = estimate_tokens(messages.iter().map(message_content_chars).sum());
+    let completion_tokens = estimate_tokens(completion.content.chars().count());
+    AssistantUsage {
+        prompt_tokens,
+        completion_tokens,
+        total_tokens: prompt_tokens + completion_tokens,
+        context_window: config.context_window,
+        approximate: true,
+    }
+}
+
+fn provider_error_message(error: &ProviderError) -> String {
+    match error {
+        ProviderError::Status(status, body) => {
+            log::warn!("Assistant provider returned {status}: {body}");
+            format!("Assistant provider returned HTTP {status}")
+        }
+        ProviderError::Transport(message) => {
+            log::warn!("Assistant provider request failed: {message}");
+            "Assistant provider request failed".to_string()
+        }
+    }
+}
+
+/// Provider deltas + progress states for one turn.
+#[derive(Debug)]
+enum ChatStreamError {
+    Provider(ProviderError),
+    Cancelled,
+}
+
+/// SSE frames parsed from a provider stream.
+#[derive(Debug)]
+enum SseFrame {
+    Delta(String),
+    Usage(ProviderUsage),
+    Done,
+    Ignore,
+}
+
+/// Pull complete `\n\n`-separated frames out of the byte buffer. Decoding
+/// happens per frame so multi-byte characters split across HTTP chunks are
+/// reassembled before lossy UTF-8 conversion.
+fn drain_sse_frames(buffer: &mut Vec<u8>) -> Vec<SseFrame> {
+    let mut frames = Vec::new();
+    while let Some(position) = buffer.windows(2).position(|window| window == b"\n\n") {
+        let frame: Vec<u8> = buffer.drain(..position + 2).collect();
+        frames.push(parse_sse_frame(&String::from_utf8_lossy(
+            &frame[..position],
+        )));
+    }
+    frames
+}
+
+fn parse_sse_frame(frame: &str) -> SseFrame {
+    let mut data = String::new();
+    let mut has_data = false;
+    for line in frame.lines() {
+        let line = line.trim_end_matches('\r');
+        let Some(rest) = line.strip_prefix("data:") else {
+            continue;
+        };
+        has_data = true;
+        if !data.is_empty() {
+            data.push('\n');
+        }
+        data.push_str(rest.trim_start());
+    }
+    if !has_data {
+        return SseFrame::Ignore;
+    }
+    if data.trim() == "[DONE]" {
+        return SseFrame::Done;
+    }
+    let Ok(value) = serde_json::from_str::<Value>(&data) else {
+        return SseFrame::Ignore;
+    };
+    if let Some(text) = value
+        .pointer("/choices/0/delta/content")
+        .and_then(Value::as_str)
+    {
+        if !text.is_empty() {
+            return SseFrame::Delta(text.to_string());
+        }
+    }
+    if let Some(usage) = ProviderUsage::from_value(&value) {
+        return SseFrame::Usage(usage);
+    }
+    SseFrame::Ignore
+}
+
+/// Sends SSE frames to the response body. A failed send means the client went
+/// away, which cancels the turn; the cancellation watch also aborts in-flight
+/// provider requests.
+struct EventSink {
+    tx: mpsc::Sender<Bytes>,
+    cancel: watch::Receiver<bool>,
+}
+
+impl EventSink {
+    fn is_cancelled(&self) -> bool {
+        *self.cancel.borrow()
+    }
+
+    async fn wait_cancelled(&mut self) {
+        while !*self.cancel.borrow() {
+            if self.cancel.changed().await.is_err() {
+                return;
+            }
+        }
+    }
+
+    async fn send(&self, event: &str, data: &Value) -> bool {
+        if self.is_cancelled() {
+            return false;
+        }
+        let payload = format!("event: {event}\ndata: {data}\n\n");
+        self.tx.send(Bytes::from(payload)).await.is_ok()
+    }
+}
+
+fn chat_stream_request_body(
+    config: &AssistantConfig,
+    messages: &[Value],
+    options: ChatOptions,
+) -> Value {
+    let mut body = chat_request_body(config, messages, options);
+    body["stream"] = json!(true);
+    body["stream_options"] = json!({ "include_usage": true });
+    body
+}
+
+/// Request a streaming provider completion, forwarding deltas through the
+/// sink. Providers that reject or ignore streaming fall back to the regular
+/// non-streaming path (progress states are still streamed to the UI).
+async fn chat_streaming(
+    sink: &mut EventSink,
+    config: &AssistantConfig,
+    messages: &[Value],
+    options: &mut ChatOptions,
+    session_id: &str,
+) -> Result<Completion, ChatStreamError> {
+    let body = chat_stream_request_body(config, messages, *options);
+    let mut request = http_client()
+        .post(config.chat_completions_url())
+        .header(reqwest::header::USER_AGENT, user_agent())
+        .header("x-opencode-session", session_id)
+        .json(&body);
+    if let Some(api_key) = &config.api_key {
+        request = request.bearer_auth(api_key);
+    }
+
+    let mut response = tokio::select! {
+        _ = sink.wait_cancelled() => return Err(ChatStreamError::Cancelled),
+        result = tokio::time::timeout(Duration::from_millis(config.timeout_ms), request.send()) => {
+            match result {
+                Err(_) => {
+                    return Err(ChatStreamError::Provider(ProviderError::Transport(
+                        format!("timed out after {} ms", config.timeout_ms),
+                    )));
+                }
+                Ok(Err(error)) => {
+                    return Err(ChatStreamError::Provider(ProviderError::Transport(
+                        error.to_string(),
+                    )));
+                }
+                Ok(Ok(response)) => response,
+            }
+        }
+    };
+
+    let status = response.status();
+    if !status.is_success() {
+        // Streaming is a provider capability, not a correctness requirement:
+        // fall back to the non-streaming call so json_mode/reasoning retries
+        // still apply. Progress states keep the UI informed.
+        log::warn!(
+            "Assistant streaming request returned HTTP {status}; falling back to non-streaming"
+        );
+        let completion = tokio::select! {
+            _ = sink.wait_cancelled() => return Err(ChatStreamError::Cancelled),
+            result = chat(config, messages, options, session_id) => {
+                result.map_err(ChatStreamError::Provider)?
+            }
+        };
+        return Ok(completion);
+    }
+
+    let streaming = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.contains("text/event-stream"));
+    if !streaming {
+        let text = tokio::select! {
+            _ = sink.wait_cancelled() => return Err(ChatStreamError::Cancelled),
+            result = response.text() => {
+                result.map_err(|error| ChatStreamError::Provider(ProviderError::Transport(error.to_string())))?
+            }
+        };
+        let value: Value = serde_json::from_str(&text).map_err(|error| {
+            ChatStreamError::Provider(ProviderError::Transport(format!(
+                "invalid provider response: {error}"
+            )))
+        })?;
+        let content = value
+            .pointer("/choices/0/message/content")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                ChatStreamError::Provider(ProviderError::Transport(
+                    "provider response had no choices[0].message.content".to_string(),
+                ))
+            })?;
+        return Ok(Completion {
+            content,
+            usage: ProviderUsage::from_value(&value),
+        });
+    }
+
+    let mut buffer: Vec<u8> = Vec::new();
+    let mut content = String::new();
+    let mut usage = None;
+    let mut done = false;
+    while !done {
+        let chunk = tokio::select! {
+            _ = sink.wait_cancelled() => return Err(ChatStreamError::Cancelled),
+            chunk = response.chunk() => {
+                chunk.map_err(|error| ChatStreamError::Provider(ProviderError::Transport(error.to_string())))?
+            }
+        };
+        let Some(chunk) = chunk else { break };
+        buffer.extend_from_slice(&chunk);
+        for frame in drain_sse_frames(&mut buffer) {
+            match frame {
+                SseFrame::Delta(text) => {
+                    content.push_str(&text);
+                    if !sink.send(CHAT_EVENT_DELTA, &json!({ "text": text })).await {
+                        return Err(ChatStreamError::Cancelled);
+                    }
+                }
+                SseFrame::Usage(reported) => usage = Some(reported),
+                SseFrame::Done => done = true,
+                SseFrame::Ignore => {}
+            }
+        }
+    }
+
+    Ok(Completion { content, usage })
+}
+
+/// Validated unified response: either a configuration plan or a light-state
+/// action, both stored for review before anything is written.
+enum ChatOutcome {
+    Plan {
+        summary: String,
+        operations: Vec<AssistantOperation>,
+    },
+    Action {
+        summary: String,
+        changes: Vec<AssistantActionChange>,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum ChatEnvelopeKind {
+    Action,
+    Plan,
+}
+
+/// Unified provider envelope. `kind` routes to either the plan contract
+/// (`operations`) or the light-state action contract (`changes`); when it is
+/// absent, the populated field decides.
+#[derive(Debug, Deserialize)]
+struct ChatEnvelope {
+    #[serde(default)]
+    kind: Option<ChatEnvelopeKind>,
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default)]
+    changes: Vec<ApplyChange>,
+    #[serde(default)]
+    operations: Vec<ProviderOperation>,
+}
+
+fn parse_chat_envelope(content: &str) -> Result<ChatEnvelope, String> {
+    let value = extract_json_object(content)
+        .ok_or_else(|| "Assistant response did not contain a JSON object".to_string())?;
+    serde_json::from_value(value)
+        .map_err(|error| format!("Assistant response did not match the contract: {error}"))
+}
+
+fn validate_action_changes(
+    snapshot: &RuntimeSnapshot,
+    control: &ControlCatalog,
+    changes: &[ApplyChange],
+) -> Result<Vec<AssistantActionChange>, String> {
+    let mut validated = Vec::with_capacity(changes.len());
+    for change in changes {
+        let device_key = change.device_key.trim().to_string();
+        let Some(key) = control.devices.get(&device_key) else {
+            return Err(format!("unknown device key '{device_key}'"));
+        };
+        if change.power.is_none() && change.brightness.is_none() && change.color.is_none() {
+            return Err(format!("change for '{device_key}' has no state fields"));
+        }
+        validated.push(AssistantActionChange {
+            device_key,
+            name: snapshot
+                .devices
+                .0
+                .get(key)
+                .map(|device| device.name.clone()),
+            power: change.power,
+            brightness: change.brightness.map(|value| value.clamp(0.0, 1.0)),
+            color: change.color.as_ref().map(|color| AssistantActionColor {
+                h: color.h.clamp(0.0, 360.0),
+                s: color.s.clamp(0.0, 1.0),
+            }),
+        });
+    }
+    Ok(validated)
+}
+
+fn build_chat_outcome(
+    snapshot: &RuntimeSnapshot,
+    catalog: ConfigCatalog,
+    control: &ControlCatalog,
+    envelope: ChatEnvelope,
+) -> Result<ChatOutcome, String> {
+    let kind = envelope.kind.unwrap_or(
+        if !envelope.changes.is_empty() && envelope.operations.is_empty() {
+            ChatEnvelopeKind::Action
+        } else {
+            ChatEnvelopeKind::Plan
+        },
+    );
+    let summary = envelope
+        .summary
+        .map(|summary| summary.trim().to_string())
+        .filter(|summary| !summary.is_empty());
+
+    match kind {
+        ChatEnvelopeKind::Plan => {
+            if envelope.operations.len() > MAX_PLAN_OPERATIONS {
+                return Err(format!(
+                    "Assistant returned more than {MAX_PLAN_OPERATIONS} operations"
+                ));
+            }
+            let provider = ProviderPlan {
+                summary,
+                operations: envelope.operations,
+            };
+            let (summary, operations) = validate_plan_operations(snapshot, catalog, provider)?;
+            Ok(ChatOutcome::Plan {
+                summary,
+                operations,
+            })
+        }
+        ChatEnvelopeKind::Action => {
+            if envelope.changes.len() > MAX_APPLY_CHANGES {
+                return Err(format!(
+                    "Assistant returned more than {MAX_APPLY_CHANGES} changes"
+                ));
+            }
+            let changes = validate_action_changes(snapshot, control, &envelope.changes)?;
+            let summary =
+                summary.unwrap_or_else(|| format!("{} proposed light change(s)", changes.len()));
+            Ok(ChatOutcome::Action { summary, changes })
+        }
+    }
+}
+
+/// `POST /assistant/chat` handler. Returns immediately with an SSE response;
+/// the provider turn runs in a spawned task that stops when the client
+/// disconnects.
+async fn chat_assistant(
+    request: AssistantChatRequest,
+    snapshot: SnapshotHandle,
+    plans: Arc<PlanStore>,
+) -> Result<warp::reply::Response, warp::Rejection> {
+    let prompt = request.prompt.trim();
+    if prompt.is_empty() {
+        return Ok(error_response("prompt is required", StatusCode::BAD_REQUEST).into_response());
+    }
+    if prompt.chars().count() > MAX_PROMPT_CHARS {
+        return Ok(error_response(
+            &format!("prompt must be at most {MAX_PROMPT_CHARS} characters"),
+            StatusCode::BAD_REQUEST,
+        )
+        .into_response());
+    }
+    if AssistantConfig::from_settings(&snapshot.load().runtime_config.widget_settings).is_none() {
+        return Ok(error_response(
+            "Assistant is not configured. Set the provider base URL and model in Settings.",
+            StatusCode::SERVICE_UNAVAILABLE,
+        )
+        .into_response());
+    }
+
+    let (tx, rx) = mpsc::channel::<Bytes>(64);
+    let (cancel_tx, cancel_rx) = watch::channel(false);
+    tokio::spawn(run_assistant_chat(snapshot, plans, request, tx, cancel_rx));
+
+    let stream = CancelOnDrop {
+        inner: ReceiverStream::new(rx).map(Ok::<Bytes, Infallible>),
+        cancel: cancel_tx,
+    };
+    let body = warp::hyper::Body::wrap_stream(stream);
+    let response = warp::http::Response::builder()
+        .status(StatusCode::OK)
+        .header(
+            warp::http::header::CONTENT_TYPE,
+            "text/event-stream; charset=utf-8",
+        )
+        .header(warp::http::header::CACHE_CONTROL, "no-cache")
+        .body(body)
+        .expect("assistant SSE response");
+    Ok(response)
+}
+
+/// Streams the response body while holding the cancellation guard: dropping
+/// the body (client disconnect, server shutdown) stops the provider work.
+struct CancelOnDrop<S> {
+    inner: S,
+    cancel: watch::Sender<bool>,
+}
+
+impl<S: Stream + Unpin> Stream for CancelOnDrop<S> {
+    type Item = S::Item;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        Pin::new(&mut this.inner).poll_next(cx)
+    }
+}
+
+impl<S> Drop for CancelOnDrop<S> {
+    fn drop(&mut self) {
+        let _ = self.cancel.send(true);
+    }
+}
+
+async fn run_assistant_chat(
+    snapshot: SnapshotHandle,
+    plans: Arc<PlanStore>,
+    request: AssistantChatRequest,
+    tx: mpsc::Sender<Bytes>,
+    cancel: watch::Receiver<bool>,
+) {
+    let mut sink = EventSink { tx, cancel };
+    let prompt = request.prompt.trim().to_string();
+
+    let live = snapshot.load();
+    let Some(config) = AssistantConfig::from_settings(&live.runtime_config.widget_settings) else {
+        return;
+    };
+    let context = match build_plan_context(&live, &request.attachments, &prompt) {
+        Ok(context) => context,
+        Err(error) => {
+            sink.send(CHAT_EVENT_ERROR, &json!({ "message": error }))
+                .await;
+            return;
+        }
+    };
+    let scope: HashSet<String> = request
+        .device_keys
+        .clone()
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let scope = (!scope.is_empty()).then_some(scope);
+    let control = build_control_catalog(&live, scope.as_ref());
+    let catalog = catalog_from_snapshot_export(&live);
+
+    if !sink
+        .send(
+            CHAT_EVENT_STATUS,
+            &json!({ "phase": "context", "message": "Gathering context…" }),
+        )
+        .await
+    {
+        return;
+    }
+
+    let context_json = serde_json::to_string(&json!({
+        "config": context,
+        "controllable_devices": control.value,
+    }))
+    .unwrap_or_else(|_| "{}".to_string());
+
+    let mut messages = vec![json!({
+        "role": "system",
+        "content": chat_system_prompt(&context_json),
+    })];
+    messages.extend(history_messages(
+        request.history.as_deref().unwrap_or_default(),
+    ));
+    messages.push(json!({ "role": "user", "content": prompt }));
+
+    let mut options = ChatOptions {
+        json_mode: true,
+        reasoning_effort: config.reasoning_effort.is_some(),
+    };
+    let session_id = new_session_id();
+    let mut last_errors = String::new();
+
+    for attempt in 1..=MAX_ATTEMPTS {
+        if sink.is_cancelled() {
+            return;
+        }
+        if !sink
+            .send(
+                CHAT_EVENT_STATUS,
+                &json!({
+                    "phase": "thinking",
+                    "message": format!("Asking {}", config.model),
+                    "attempt": attempt,
+                }),
+            )
+            .await
+        {
+            return;
+        }
+
+        let completion =
+            match chat_streaming(&mut sink, &config, &messages, &mut options, &session_id).await {
+                Ok(completion) => completion,
+                Err(ChatStreamError::Cancelled) => return,
+                Err(ChatStreamError::Provider(error)) => {
+                    let message = provider_error_message(&error);
+                    sink.send(CHAT_EVENT_ERROR, &json!({ "message": message }))
+                        .await;
+                    return;
+                }
+            };
+
+        let usage = assistant_usage(&config, &completion, &messages);
+        if !sink
+            .send(
+                CHAT_EVENT_USAGE,
+                &serde_json::to_value(usage).unwrap_or(Value::Null),
+            )
+            .await
+        {
+            return;
+        }
+
+        let outcome = parse_chat_envelope(&completion.content)
+            .and_then(|envelope| build_chat_outcome(&live, catalog.clone(), &control, envelope));
+        match outcome {
+            Ok(ChatOutcome::Plan {
+                summary,
+                operations,
+            }) => {
+                let now = now_ms();
+                let plan = AssistantPlan {
+                    plan_id: format!("plan-{}", new_session_id()),
+                    summary,
+                    operations,
+                    created_at_ms: now,
+                    expires_at_ms: now + plans.ttl_ms(),
+                };
+                plans.insert_plan(plan.clone());
+                let _ = sink
+                    .send(
+                        CHAT_EVENT_PLAN,
+                        &serde_json::to_value(plan).unwrap_or(Value::Null),
+                    )
+                    .await;
+                return;
+            }
+            Ok(ChatOutcome::Action { summary, changes }) => {
+                let now = now_ms();
+                let action = AssistantAction {
+                    action_id: format!("action-{}", new_session_id()),
+                    summary,
+                    changes,
+                    created_at_ms: now,
+                    expires_at_ms: now + plans.ttl_ms(),
+                    model: config.model.clone(),
+                };
+                plans.insert_action(action.clone());
+                let _ = sink
+                    .send(
+                        CHAT_EVENT_ACTION,
+                        &serde_json::to_value(action).unwrap_or(Value::Null),
+                    )
+                    .await;
+                return;
+            }
+            Err(errors) => {
+                last_errors = errors;
+                if attempt < MAX_ATTEMPTS {
+                    messages.push(json!({ "role": "assistant", "content": completion.content }));
+                    messages.push(json!({
+                        "role": "user",
+                        "content": format!(
+                            "That response failed validation:\n{last_errors}\nReturn a corrected JSON object with the same contract."
+                        ),
+                    }));
+                }
+            }
+        }
+    }
+
+    let _ = sink
+        .send(
+            CHAT_EVENT_ERROR,
+            &json!({
+                "message": format!("Assistant could not produce a valid response: {last_errors}"),
+            }),
+        )
+        .await;
+}
+
+/// Apply a stored light-state action. Like plans, actions are single-use: the
+/// store entry is consumed before the device commands are sent, and every
+/// change is re-validated against the live catalog.
+async fn apply_stored_action(
+    action_id: String,
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
+    plans: Arc<PlanStore>,
+) -> Result<impl Reply, warp::Rejection> {
+    let Some(action) = plans.remove_action(&action_id) else {
+        return Ok(not_found("Assistant action"));
+    };
+    let live = snapshot.load();
+    let control = build_control_catalog(&live, None);
+    let (results, applied_count) =
+        apply_device_changes(&handle, &live, &control, &action.changes).await;
+
+    Ok(ApiResponse::success(ApplyAssistantActionResponse {
+        summary: Some(action.summary),
+        results,
+        applied_count,
+    }))
+}
+
+/// Discard a stored action without applying it.
+async fn discard_stored_action(
+    action_id: String,
+    plans: Arc<PlanStore>,
+) -> Result<impl Reply, warp::Rejection> {
+    match plans.remove_action(&action_id) {
+        Some(_) => Ok(ApiResponse::success(true)),
+        None => Ok(not_found("Assistant action")),
     }
 }
 
@@ -1873,7 +2815,7 @@ async fn apply_assistant_plan(
         ));
     }
 
-    let Some(plan) = plans.get(&plan_id) else {
+    let Some(plan) = plans.get_plan(&plan_id) else {
         return Ok(not_found("Assistant plan"));
     };
 
@@ -1898,7 +2840,7 @@ async fn apply_assistant_plan(
 
     // The plan is single-use: consume it before executing so it cannot be
     // applied twice.
-    plans.remove(&plan_id);
+    plans.remove_plan(&plan_id);
 
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
@@ -2773,10 +3715,25 @@ Computed source:
 {{"id": "<id>", "name": "<name>", "enabled": true, "timezone": "Europe/Helsinki", "refresh_interval_ms": 60000, "compute": <SourceCompute>}}
 - Prefer the circadian_compat compute shape shown in the catalog or an existing source snapshot; scripts are a last resort.
 
-{ROUTINE_DEFINITION_REFERENCE}
+    {ROUTINE_DEFINITION_REFERENCE}
 
 CONTEXT:
 {context_json}"#
+    )
+}
+
+/// Unified chat prompt: route the prompt to an immediate light-state action or
+/// to a reviewed configuration plan, then follow the matching contract.
+fn chat_system_prompt(context_json: &str) -> String {
+    format!(
+        r#"You are the homectl assistant. Decide which single JSON response fits the request and include a top-level "kind" field:
+- {{"kind": "action", "summary": "<one short sentence>", "changes": [{{"device_key": "integration/device", "power": true, "brightness": 0.4, "color": {{"h": 320, "s": 0.8}}}}]}} for one-off light-state changes to devices listed under "controllable_devices". Omit fields you do not want to change; brightness is 0..1; color h is degrees and s is 0..1 and only allowed when the device's capabilities allow color; resolve room or group names to their member device keys. Never invent device keys.
+- {{"kind": "plan", ...}} for configuration changes, following the plan contract below.
+
+When a request could be either, prefer "plan" unless it is clearly a one-off light-state change. Nothing is written until the user applies.
+
+{PLAN_PROMPT}"#,
+        PLAN_PROMPT = plan_system_prompt(context_json),
     )
 }
 
@@ -3650,6 +4607,7 @@ mod tests {
     use super::*;
     use crate::core::automation::sources::CIRCADIAN_COMPAT_PRESET_VERSION;
     use crate::db::config_queries::ConfigExport;
+    use crate::types::assistant::AssistantMessageRole;
     use crate::types::automation_source::{CircadianCompatParams, SourceCompute};
     use crate::types::color::DeviceColor;
     use crate::types::device::{Device, DeviceId, DeviceKey, DevicesState, SensorDevice};
@@ -3809,6 +4767,7 @@ mod tests {
             model: "mock-model".to_string(),
             timeout_ms: 1_000,
             max_tokens: 4_096,
+            context_window: DEFAULT_CONTEXT_WINDOW,
             reasoning_effort: Some("high".to_string()),
             timezone: None,
         }
@@ -4012,6 +4971,7 @@ mod tests {
                 reasoning_effort: Some("HIGH".to_string()),
                 max_tokens: Some(4096),
                 timeout_ms: Some(30_000),
+                context_window: Some(32_000),
                 timezone: Some("UTC".to_string()),
             },
         )
@@ -4019,6 +4979,7 @@ mod tests {
         assert_eq!(updated["base_url"], "https://api.openai.com/v1/");
         assert_eq!(updated["reasoning_effort"], "high");
         assert_eq!(updated["max_tokens"], 4096);
+        assert_eq!(updated["context_window"], 32_000);
 
         // Omitted fields keep their values; empty values clear them.
         let cleared = apply_assistant_settings_patch(
@@ -4505,24 +5466,24 @@ mod tests {
     fn plan_store_sweeps_expired_entries() {
         let store = PlanStore::new(Duration::from_millis(1), 10);
         let now = now_ms();
-        store.insert(test_plan("plan-1", now, now + 1));
+        store.insert_plan(test_plan("plan-1", now, now + 1));
         std::thread::sleep(Duration::from_millis(5));
-        assert!(store.get("plan-1").is_none());
-        assert_eq!(store.len(), 0);
+        assert!(store.get_plan("plan-1").is_none());
+        assert_eq!(store.plan_len(), 0);
     }
 
     #[test]
     fn plan_store_evicts_the_plan_closest_to_expiry() {
         let store = PlanStore::new(Duration::from_secs(60), 2);
         let now = now_ms();
-        store.insert(test_plan("plan-1", now, now + 1_000));
-        store.insert(test_plan("plan-2", now, now + 2_000));
-        store.insert(test_plan("plan-3", now, now + 3_000));
+        store.insert_plan(test_plan("plan-1", now, now + 1_000));
+        store.insert_plan(test_plan("plan-2", now, now + 2_000));
+        store.insert_plan(test_plan("plan-3", now, now + 3_000));
 
-        assert_eq!(store.len(), 2);
-        assert!(store.get("plan-1").is_none());
-        assert!(store.get("plan-2").is_some());
-        assert!(store.get("plan-3").is_some());
+        assert_eq!(store.plan_len(), 2);
+        assert!(store.get_plan("plan-1").is_none());
+        assert!(store.get_plan("plan-2").is_some());
+        assert!(store.get_plan("plan-3").is_some());
     }
 
     #[test]
@@ -4531,6 +5492,124 @@ mod tests {
         assert!(prompt.contains("target_id"));
         assert!(prompt.contains("RoutineDefinitionV2"));
         assert!(prompt.contains("\"devices\":[]"));
+    }
+
+    #[test]
+    fn chat_system_prompt_routes_actions_and_plans() {
+        let prompt = chat_system_prompt("{\"config\":{}}");
+        assert!(prompt.contains("\"kind\": \"action\""));
+        assert!(prompt.contains("controllable_devices"));
+        assert!(prompt.contains("target_id"));
+    }
+
+    #[test]
+    fn history_keeps_newest_turns_and_truncates_long_messages() {
+        let history: Vec<AssistantHistoryMessage> = (0..20)
+            .map(|index| AssistantHistoryMessage {
+                role: if index % 2 == 0 {
+                    AssistantMessageRole::User
+                } else {
+                    AssistantMessageRole::Assistant
+                },
+                content: format!("turn {index}"),
+            })
+            .chain(std::iter::once(AssistantHistoryMessage {
+                role: AssistantMessageRole::User,
+                content: "x".repeat(MAX_HISTORY_MESSAGE_CHARS + 500),
+            }))
+            .collect();
+
+        let messages = history_messages(&history);
+        assert_eq!(messages.len(), MAX_HISTORY_MESSAGES);
+        // The newest turn is the oversized one; it is truncated, not dropped.
+        assert_eq!(messages.first().unwrap()["content"], "turn 5");
+        assert_eq!(messages.last().unwrap()["role"], "user");
+        // `truncate` keeps the cap plus a trailing ellipsis marker.
+        assert!(
+            messages.last().unwrap()["content"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count()
+                <= MAX_HISTORY_MESSAGE_CHARS + 1
+        );
+    }
+
+    #[test]
+    fn sse_frames_split_deltas_usage_and_done() {
+        let mut buffer: Vec<u8> = Vec::new();
+        buffer.extend_from_slice(
+            b"data: {\"choices\":[{\"delta\":{\"content\":\"Hel\"}}]}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\"lo\"}}]}\n\n",
+        );
+        let frames = drain_sse_frames(&mut buffer);
+        assert_eq!(frames.len(), 2);
+        match &frames[0] {
+            SseFrame::Delta(text) => assert_eq!(text, "Hel"),
+            other => panic!("unexpected frame: {other:?}"),
+        }
+        // A partial trailing frame stays buffered.
+        buffer.extend_from_slice(b"data: {\"usage\":{\"prompt_tokens\":3");
+        assert!(drain_sse_frames(&mut buffer).is_empty());
+        buffer.extend_from_slice(b",\"completion_tokens\":2,\"total_tokens\":5}}\n\n");
+        match &drain_sse_frames(&mut buffer)[0] {
+            SseFrame::Usage(usage) => {
+                assert_eq!(usage.prompt_tokens, 3);
+                assert_eq!(usage.total_tokens, 5);
+            }
+            other => panic!("unexpected frame: {other:?}"),
+        }
+
+        buffer.extend_from_slice(b"data: [DONE]\n\n");
+        assert!(matches!(drain_sse_frames(&mut buffer)[0], SseFrame::Done));
+        buffer.extend_from_slice(b": keep-alive\n\n");
+        assert!(matches!(drain_sse_frames(&mut buffer)[0], SseFrame::Ignore));
+    }
+
+    #[test]
+    fn usage_falls_back_to_a_character_estimate() {
+        let config = test_config();
+        let messages = vec![json!({"role": "user", "content": "x".repeat(40)})];
+        let completion = Completion {
+            content: "y".repeat(8),
+            usage: None,
+        };
+        let usage = assistant_usage(&config, &completion, &messages);
+        assert!(usage.approximate);
+        assert_eq!(usage.prompt_tokens, 10);
+        assert_eq!(usage.completion_tokens, 2);
+        assert_eq!(usage.total_tokens, 12);
+        assert_eq!(usage.context_window, DEFAULT_CONTEXT_WINDOW);
+    }
+
+    #[test]
+    fn usage_prefers_provider_counts() {
+        let config = test_config();
+        let completion = Completion {
+            content: "hello".to_string(),
+            usage: Some(ProviderUsage {
+                prompt_tokens: 100,
+                completion_tokens: 20,
+                total_tokens: 120,
+            }),
+        };
+        let usage = assistant_usage(&config, &completion, &[]);
+        assert!(!usage.approximate);
+        assert_eq!(usage.total_tokens, 120);
+    }
+
+    #[test]
+    fn chat_envelope_infers_kind_from_content() {
+        let action: ChatEnvelope =
+            parse_chat_envelope("{\"changes\":[{\"device_key\":\"dummy/lamp\",\"power\":true}]}")
+                .unwrap();
+        assert!(action.changes.len() == 1);
+        assert!(action.operations.is_empty());
+
+        let plan: ChatEnvelope = parse_chat_envelope(
+            "{\"kind\":\"plan\",\"operations\":[{\"op\":\"update\",\"kind\":\"device\",\"target_id\":\"dummy/lamp\"}]}",
+        )
+        .unwrap();
+        assert_eq!(plan.kind, Some(ChatEnvelopeKind::Plan));
     }
 
     // ========================================================================

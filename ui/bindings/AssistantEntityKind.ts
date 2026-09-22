@@ -2,8 +2,5 @@
 
 /**
  * Entity kinds the assistant can plan operations for.
- *
- * Phase 1 supports `routine`, `scene`, and `group`; the remaining kinds are
- * part of the approved surface and are added kind by kind.
  */
 export type AssistantEntityKind = "routine" | "scene" | "group" | "device" | "floorplan" | "integration" | "helper" | "computed_source";

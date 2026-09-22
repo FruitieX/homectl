@@ -1,10 +1,19 @@
+import { useCallback, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import type { ApplyAssistantActionResponse } from '@/bindings/ApplyAssistantActionResponse';
 import type { ApplyAssistantPlanResponse } from '@/bindings/ApplyAssistantPlanResponse';
+import type { AssistantAction } from '@/bindings/AssistantAction';
+import type { AssistantChatRequest } from '@/bindings/AssistantChatRequest';
 import type { AssistantEntityKind } from '@/bindings/AssistantEntityKind';
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import type { AssistantPlanRequest } from '@/bindings/AssistantPlanRequest';
 import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
+import type { AssistantUsage } from '@/bindings/AssistantUsage';
+import {
+  parseAssistantSseEvents,
+  type AssistantSseEvent,
+} from '@/lib/assistant-stream';
 
 import { useAppConfig } from './appConfig';
 import type { RoutineDefinitionV2Body } from './useConfig';
@@ -77,52 +86,6 @@ export function useAssistantStatus() {
   };
 }
 
-export interface AssistantAppliedChange {
-  device_key: string;
-  name?: string;
-  ok: boolean;
-  error?: string | null;
-}
-
-export interface AssistantApplyResult {
-  summary?: string | null;
-  applied: AssistantAppliedChange[];
-  applied_count: number;
-  model: string;
-}
-
-export interface AssistantApplyRequest {
-  prompt: string;
-  /** Optional scope; the model may only address these device keys. */
-  deviceKeys?: string[];
-}
-
-/** Applies a one-off light state request to live devices. */
-export function useApplyAssistantAction() {
-  const { apiEndpoint } = useAppConfig();
-
-  return useMutation({
-    mutationFn: async (request: AssistantApplyRequest) => {
-      const response = await fetch(
-        `${apiEndpoint}/api/v1/config/assistant/apply`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request),
-        },
-      );
-      const result = await readAssistantResponse<AssistantApplyResult>(
-        response,
-        'Failed to apply assistant action',
-      );
-      if (!result.data) {
-        throw new Error('Failed to apply assistant action');
-      }
-      return result.data;
-    },
-  });
-}
-
 /** Drafts a v2 definition from a prompt. Drafts are never saved automatically. */
 export function useDraftRoutine() {
   const { apiEndpoint } = useAppConfig();
@@ -176,6 +139,136 @@ export function useAssistantPlan() {
       return result.data;
     },
   });
+}
+
+export interface AssistantChatStatus {
+  phase: string;
+  message: string;
+  attempt?: number;
+}
+
+export interface AssistantChatCallbacks {
+  onStatus?: (status: AssistantChatStatus) => void;
+  onDelta?: (text: string) => void;
+  onUsage?: (usage: AssistantUsage) => void;
+  onPlan?: (plan: AssistantPlan) => void;
+  onAction?: (action: AssistantAction) => void;
+  onError?: (message: string) => void;
+}
+
+async function readAssistantError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    if (typeof body.error === 'string' && body.error) {
+      return body.error;
+    }
+  } catch {
+    // Fall through to the generic message.
+  }
+  return 'Assistant request failed';
+}
+
+/**
+ * Unified assistant turn: streams SSE status/delta events, then exactly one
+ * `plan` or `action` result. `cancel` aborts the in-flight turn through the
+ * fetch AbortController; the server stops provider work on disconnect.
+ */
+export function useAssistantChat() {
+  const { apiEndpoint } = useAppConfig();
+  const [isStreaming, setIsStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const send = useCallback(
+    async (
+      request: AssistantChatRequest,
+      callbacks: AssistantChatCallbacks,
+    ) => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+      setIsStreaming(true);
+
+      const dispatch = (event: AssistantSseEvent) => {
+        switch (event.type) {
+          case 'status':
+            callbacks.onStatus?.(event);
+            break;
+          case 'delta':
+            callbacks.onDelta?.(event.text);
+            break;
+          case 'usage':
+            callbacks.onUsage?.(event.usage);
+            break;
+          case 'plan':
+            callbacks.onPlan?.(event.plan);
+            break;
+          case 'action':
+            callbacks.onAction?.(event.action);
+            break;
+          case 'error':
+            callbacks.onError?.(event.message);
+            break;
+        }
+      };
+
+      try {
+        const response = await fetch(
+          `${apiEndpoint}/api/v1/config/assistant/chat`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(request),
+            signal: controller.signal,
+          },
+        );
+        if (!response.ok || !response.body) {
+          callbacks.onError?.(await readAssistantError(response));
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+          const parsed = parseAssistantSseEvents(buffer);
+          buffer = parsed.rest;
+          for (const event of parsed.events) {
+            dispatch(event);
+          }
+        }
+        buffer += decoder.decode();
+        for (const event of parseAssistantSseEvents(buffer).events) {
+          dispatch(event);
+        }
+      } catch (error) {
+        if (controller.signal.aborted) {
+          return;
+        }
+        callbacks.onError?.(
+          error instanceof Error ? error.message : 'Assistant request failed',
+        );
+      } finally {
+        if (abortRef.current === controller) {
+          abortRef.current = null;
+          setIsStreaming(false);
+        }
+      }
+    },
+    [apiEndpoint],
+  );
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setIsStreaming(false);
+  }, []);
+
+  return { send, cancel, isStreaming };
 }
 
 export interface ApplyAssistantPlanVariables {
@@ -270,6 +363,56 @@ export function useApplyAssistantPlan() {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['config'] });
+    },
+  });
+}
+
+/**
+ * Applies a stored light-state action through the normal device command path.
+ * Actions are single-use and only written when the user applies them.
+ */
+export function useApplyAssistantActionPlan() {
+  const { apiEndpoint } = useAppConfig();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (actionId: string) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/actions/${encodeURIComponent(actionId)}/apply`,
+        { method: 'POST' },
+      );
+      const result = await readAssistantResponse<ApplyAssistantActionResponse>(
+        response,
+        'Failed to apply assistant action',
+      );
+      if (!result.data) {
+        throw new Error('Failed to apply assistant action');
+      }
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['config'] });
+    },
+  });
+}
+
+/**
+ * Discards a stored light-state action. The UI removes the card regardless of
+ * the response, so an expired or already-consumed action is fine.
+ */
+export function useDiscardAssistantAction() {
+  const { apiEndpoint } = useAppConfig();
+
+  return useMutation({
+    mutationFn: async (actionId: string) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/actions/${encodeURIComponent(actionId)}`,
+        { method: 'DELETE' },
+      );
+      await readAssistantResponse<boolean>(
+        response,
+        'Failed to discard assistant action',
+      );
     },
   });
 }
