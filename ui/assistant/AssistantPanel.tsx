@@ -253,6 +253,16 @@ export function AssistantPanel() {
           setStreamText('');
           setStatus(null);
         },
+        onAnswer: (text) => {
+          appendMessage({
+            id: createAssistantMessageId(),
+            role: 'assistant',
+            kind: 'text',
+            text,
+          });
+          setStreamText('');
+          setStatus(null);
+        },
         onThread: (next) => {
           setThreadId(next.id);
           setThreadName(next.name);

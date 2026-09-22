@@ -155,6 +155,7 @@ export interface AssistantChatCallbacks {
   onUsage?: (usage: AssistantUsage) => void;
   onPlan?: (plan: AssistantPlan) => void;
   onAction?: (action: AssistantAction) => void;
+  onAnswer?: (text: string) => void;
   onThread?: (thread: { id: string; name: string }) => void;
   onError?: (message: string) => void;
 }
@@ -207,6 +208,9 @@ export function useAssistantChat() {
             break;
           case 'action':
             callbacks.onAction?.(event.action);
+            break;
+          case 'answer':
+            callbacks.onAnswer?.(event.text);
             break;
           case 'thread':
             callbacks.onThread?.(event.thread);

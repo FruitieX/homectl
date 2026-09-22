@@ -196,10 +196,14 @@ it is enabled and which model it uses.
 - `POST /api/v1/config/assistant/chat` – the unified assistant turn used by the
   UI. Responds with `text/event-stream`: `status` (progress), `delta` (provider
   text deltas when the provider streams), `usage` (token counts, approximate
-  when the provider reports none), then exactly one of `plan` or `action`, or
-  `error`. Accepts `history` (capped/truncated server-side) and an optional
-  `deviceKeys` light-state scope; aborts upstream work when the client
-  disconnects.
+  when the provider reports none), then exactly one of `plan`, `action`, or
+  `answer` (plain markdown prose for questions and troubleshooting, which
+  writes nothing), or `error`. The prompt context includes a read-only
+  `live_state` block: current device values, configured integrations, and a
+  bounded tail of recent server logs, so the assistant can explain what the
+  system is doing and why. Accepts `history` (capped/truncated server-side) and
+  an optional `deviceKeys` light-state scope; aborts upstream work when the
+  client disconnects.
 - `POST /api/v1/config/assistant/actions/{action_id}/apply` – apply a stored
   light-state action through the normal device command path (single-use,
   re-validated against the live catalog)

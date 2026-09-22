@@ -15,6 +15,7 @@ export type AssistantSseEvent =
   | { type: 'usage'; usage: AssistantUsage }
   | { type: 'plan'; plan: AssistantPlan }
   | { type: 'action'; action: AssistantAction }
+  | { type: 'answer'; text: string }
   | { type: 'thread'; thread: { id: string; name: string } }
   | { type: 'error'; message: string };
 
@@ -58,6 +59,11 @@ function parseFrame(frame: string): AssistantSseEvent | null {
       return { type: 'plan', plan: payload as unknown as AssistantPlan };
     case 'action':
       return { type: 'action', action: payload as unknown as AssistantAction };
+    case 'answer':
+      return {
+        type: 'answer',
+        text: typeof payload.text === 'string' ? payload.text : '',
+      };
     case 'thread':
       return {
         type: 'thread',

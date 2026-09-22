@@ -57,9 +57,10 @@ use crate::types::assistant::{
 };
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
-use crate::types::device::{DeviceData, DeviceKey, DeviceRef};
+use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRef};
 use crate::types::device_command::DeviceCommand;
 use crate::types::integration::IntegrationConfigFieldKind;
+use crate::types::logs::{LogLevel, UiLogEntry};
 use crate::types::scene::SceneDeviceConfig;
 use ordered_float::OrderedFloat;
 
@@ -94,10 +95,18 @@ const MAX_STORED_PLANS: usize = 50;
 /// Hard bound on operations in one plan; the provider envelope is rejected
 /// beyond this without validating further.
 const MAX_PLAN_OPERATIONS: usize = 40;
+/// Plain explanation replies are prose, bounded like any other provider text.
+const MAX_ANSWER_CHARS: usize = 4_000;
 /// Deterministic search caps.
 const MAX_SEARCH_RESULTS: usize = 30;
 const MAX_CONTEXT_DEVICES: usize = 250;
 const MAX_ENTITY_ID_CHARS: usize = 64;
+
+/// Live-state context caps: attached and prompt-matched devices come first, and
+/// the log tail is bounded so diagnostic questions stay affordable.
+const MAX_LIVE_DEVICE_STATES: usize = 60;
+const MAX_LIVE_LOGS: usize = 40;
+const MAX_LIVE_LOG_CHARS: usize = 240;
 
 /// Reserved `widget_settings` key holding assistant provider configuration.
 ///
@@ -2114,6 +2123,7 @@ const CHAT_EVENT_DELTA: &str = "delta";
 const CHAT_EVENT_USAGE: &str = "usage";
 const CHAT_EVENT_PLAN: &str = "plan";
 const CHAT_EVENT_ACTION: &str = "action";
+const CHAT_EVENT_ANSWER: &str = "answer";
 const CHAT_EVENT_THREAD: &str = "thread";
 const CHAT_EVENT_ERROR: &str = "error";
 
@@ -2424,8 +2434,9 @@ async fn chat_streaming(
     Ok(Completion { content, usage })
 }
 
-/// Validated unified response: either a configuration plan or a light-state
-/// action, both stored for review before anything is written.
+/// Validated unified response: a configuration plan, a light-state action, or
+/// a plain explanation. Plans and actions are stored for review before
+/// anything is written; answers write nothing.
 enum ChatOutcome {
     Plan {
         summary: String,
@@ -2435,6 +2446,9 @@ enum ChatOutcome {
         summary: String,
         changes: Vec<AssistantActionChange>,
     },
+    Answer {
+        text: String,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -2442,11 +2456,12 @@ enum ChatOutcome {
 enum ChatEnvelopeKind {
     Action,
     Plan,
+    Answer,
 }
 
-/// Unified provider envelope. `kind` routes to either the plan contract
-/// (`operations`) or the light-state action contract (`changes`); when it is
-/// absent, the populated field decides.
+/// Unified provider envelope. `kind` routes to the plan contract
+/// (`operations`), the light-state action contract (`changes`), or a plain
+/// `answer`; when it is absent, the populated field decides.
 #[derive(Debug, Deserialize)]
 struct ChatEnvelope {
     #[serde(default)]
@@ -2459,6 +2474,8 @@ struct ChatEnvelope {
     changes: Vec<ApplyChange>,
     #[serde(default)]
     operations: Vec<ProviderOperation>,
+    #[serde(default, alias = "text")]
+    answer: Option<String>,
 }
 
 fn parse_chat_envelope(content: &str) -> Result<ChatEnvelope, String> {
@@ -2506,13 +2523,15 @@ fn build_chat_outcome(
     control: &ControlCatalog,
     envelope: ChatEnvelope,
 ) -> Result<ChatOutcome, String> {
-    let kind = envelope.kind.unwrap_or(
-        if !envelope.changes.is_empty() && envelope.operations.is_empty() {
-            ChatEnvelopeKind::Action
-        } else {
-            ChatEnvelopeKind::Plan
-        },
-    );
+    let kind = envelope.kind.unwrap_or(if !envelope.operations.is_empty() {
+        ChatEnvelopeKind::Plan
+    } else if !envelope.changes.is_empty() {
+        ChatEnvelopeKind::Action
+    } else if envelope.answer.is_some() {
+        ChatEnvelopeKind::Answer
+    } else {
+        ChatEnvelopeKind::Plan
+    });
     let summary = envelope
         .summary
         .map(|summary| summary.trim().to_string())
@@ -2545,6 +2564,16 @@ fn build_chat_outcome(
             let summary =
                 summary.unwrap_or_else(|| format!("{} proposed light change(s)", changes.len()));
             Ok(ChatOutcome::Action { summary, changes })
+        }
+        ChatEnvelopeKind::Answer => {
+            let text = envelope
+                .answer
+                .map(|answer| answer.trim().to_string())
+                .filter(|answer| !answer.is_empty())
+                .ok_or_else(|| "Assistant answer was empty".to_string())?;
+            Ok(ChatOutcome::Answer {
+                text: truncate(&text, MAX_ANSWER_CHARS),
+            })
         }
     }
 }
@@ -2827,6 +2856,21 @@ async fn run_assistant_chat(
                         &serde_json::to_value(action).unwrap_or(Value::Null),
                     )
                     .await;
+                return;
+            }
+            Ok(ChatOutcome::Answer { text }) => {
+                persist_thread_turn(
+                    &mut sink,
+                    &thread_id,
+                    thread_created_at_ms,
+                    &mut thread_messages,
+                    &prompt,
+                    &text,
+                    suggested_name,
+                    stored_thread_name.clone(),
+                )
+                .await;
+                let _ = sink.send(CHAT_EVENT_ANSWER, &json!({ "text": text })).await;
                 return;
             }
             Err(errors) => {
@@ -3663,11 +3707,141 @@ fn build_plan_context(
         "attachments": attached,
         "matches": search_prompt(snapshot, prompt),
         "devices": build_context_devices(snapshot),
+        "live_state": build_live_state(
+            snapshot,
+            attachments,
+            prompt,
+            crate::core::logs::recent_logs(),
+        ),
         "supported_kinds": AssistantEntityKind::searchable()
             .iter()
             .map(|kind| kind.code())
             .collect::<Vec<_>>(),
     }))
+}
+
+/// Current device values, configured integrations, and a bounded tail of
+/// recent server logs. Read-only context that lets the assistant answer "what
+/// is it doing now" and "why did that happen" instead of only seeing stored
+/// configuration.
+fn build_live_state(
+    snapshot: &RuntimeSnapshot,
+    attachments: &[AssistantAttachment],
+    prompt: &str,
+    logs: Vec<UiLogEntry>,
+) -> Value {
+    let mut priority: Vec<String> = Vec::new();
+    let mut prioritize = |key: &str| {
+        let key = key.trim();
+        if !key.is_empty() && !priority.iter().any(|existing| existing == key) {
+            priority.push(key.to_string());
+        }
+    };
+    for attachment in attachments {
+        if attachment.kind == AssistantEntityKind::Device {
+            if let Some(id) = attachment.id.as_deref() {
+                prioritize(id);
+            }
+        }
+    }
+    for result in search_prompt(snapshot, prompt) {
+        if result.kind == AssistantEntityKind::Device {
+            prioritize(&result.id);
+        }
+    }
+
+    let mut devices = Vec::new();
+    for key in &priority {
+        if devices.len() == MAX_LIVE_DEVICE_STATES {
+            break;
+        }
+        if let Some((key, device)) = snapshot
+            .devices
+            .0
+            .iter()
+            .find(|(candidate, _)| candidate.to_string() == *key)
+        {
+            devices.push(live_device_entry(key, device));
+        }
+    }
+    for (key, device) in snapshot.devices.0.iter() {
+        if devices.len() == MAX_LIVE_DEVICE_STATES {
+            break;
+        }
+        if priority
+            .iter()
+            .any(|candidate| candidate == &key.to_string())
+        {
+            continue;
+        }
+        devices.push(live_device_entry(key, device));
+    }
+
+    let integrations: Vec<Value> = snapshot
+        .runtime_config
+        .integrations
+        .iter()
+        .map(|integration| {
+            json!({
+                "id": integration.id,
+                "plugin": integration.plugin,
+                "enabled": integration.enabled,
+            })
+        })
+        .collect();
+
+    let recent_logs: Vec<Value> = logs
+        .iter()
+        .filter(|entry| {
+            matches!(
+                entry.level,
+                LogLevel::Error | LogLevel::Warn | LogLevel::Info
+            )
+        })
+        .rev()
+        .take(MAX_LIVE_LOGS)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .map(|entry| {
+            json!({
+                "timestamp": entry.timestamp,
+                "level": entry.level,
+                "target": entry.target,
+                "message": truncate(&entry.message, MAX_LIVE_LOG_CHARS),
+            })
+        })
+        .collect();
+
+    json!({
+        "devices": devices,
+        "integrations": integrations,
+        "recent_logs": recent_logs,
+    })
+}
+
+fn live_device_entry(key: &DeviceKey, device: &Device) -> Value {
+    match &device.data {
+        DeviceData::Sensor(sensor) => json!({
+            "device_key": key.to_string(),
+            "name": device.name,
+            "kind": "sensor",
+            "state": sensor,
+        }),
+        DeviceData::Controllable(controllable) => json!({
+            "device_key": key.to_string(),
+            "name": device.name,
+            "kind": "controllable",
+            "state": controllable.state,
+            "capabilities": {
+                "brightness": controllable.capabilities.brightness,
+                "color": controllable.capabilities.hs
+                    || controllable.capabilities.rgb
+                    || controllable.capabilities.xy
+                    || controllable.capabilities.ct.is_some(),
+            },
+        }),
+    }
 }
 
 fn build_context_devices(snapshot: &RuntimeSnapshot) -> Vec<Value> {
@@ -3859,6 +4033,7 @@ Respond with a single JSON object and nothing else:
 
 Rules:
 - Only reference entities that appear in CONTEXT. Never invent ids. Unknown target ids are rejected.
+- CONTEXT.live_state holds current device values, configured integrations, and a bounded tail of recent server logs (oldest first). Consult it for questions about the current state or why something did or did not happen. It is read-only background and never a plan target.
 - create requires "after" with a new unique "id"; it must not include target_id.
 - update requires target_id plus an "after" patch; "after" is merged over the current entity, so include only the fields that change.
 - delete requires target_id and must not include "after".
@@ -3915,10 +4090,13 @@ fn chat_system_prompt(context_json: &str) -> String {
         r#"You are the homectl assistant. Decide which single JSON response fits the request and include a top-level "kind" field:
 - {{"kind": "action", "summary": "<one short sentence>", "changes": [{{"device_key": "integration/device", "power": true, "brightness": 0.4, "color": {{"h": 320, "s": 0.8}}}}]}} for one-off light-state changes to devices listed under "controllable_devices". Omit fields you do not want to change; brightness is 0..1; color h is degrees and s is 0..1 and only allowed when the device's capabilities allow color; resolve room or group names to their member device keys. Never invent device keys.
 - {{"kind": "plan", ...}} for configuration changes, following the plan contract below.
+- {{"kind": "answer", "answer": "<concise markdown prose>"}} when the user asks a question, wants an explanation, or needs troubleshooting that does not require changing configuration. Ground every claim in CONTEXT: use live_state.devices for current values, live_state.integrations for connected systems, and live_state.recent_logs for what the server just did. If the logs do not show the answer, say what you can and cannot tell from the recent sample. Never claim to have changed anything; answers write nothing.
 
 Always include "threadName": a short (2-5 word) title for this conversation, for example "Entryway motion lights".
 
-When a request could be either, prefer "plan" unless it is clearly a one-off light-state change. Nothing is written until the user applies.
+Prefer "answer" for questions and explanations. Use "action" or "plan" only when the user asks for a change to happen; nothing is written until the user applies.
+
+Use CONTEXT.live_state (current device values, integrations, recent server logs) to answer troubleshooting questions about the current state or recent behavior.
 
 {PLAN_PROMPT}"#,
         PLAN_PROMPT = plan_system_prompt(context_json),
@@ -5683,10 +5861,12 @@ mod tests {
     }
 
     #[test]
-    fn chat_system_prompt_routes_actions_and_plans() {
+    fn chat_system_prompt_routes_actions_plans_and_answers() {
         let prompt = chat_system_prompt("{\"config\":{}}");
         assert!(prompt.contains("\"kind\": \"action\""));
+        assert!(prompt.contains("\"kind\": \"answer\""));
         assert!(prompt.contains("controllable_devices"));
+        assert!(prompt.contains("live_state"));
         assert!(prompt.contains("target_id"));
     }
 
@@ -5798,6 +5978,96 @@ mod tests {
         )
         .unwrap();
         assert_eq!(plan.kind, Some(ChatEnvelopeKind::Plan));
+
+        // `text` is accepted as an alias for the answer body.
+        let answer: ChatEnvelope =
+            parse_chat_envelope("{\"kind\":\"answer\",\"text\":\"Because the timer expired.\"}")
+                .unwrap();
+        assert_eq!(answer.kind, Some(ChatEnvelopeKind::Answer));
+        assert_eq!(answer.answer.as_deref(), Some("Because the timer expired."));
+    }
+
+    #[test]
+    fn chat_outcome_accepts_answers_and_truncates_them() {
+        let snapshot = snapshot_with_config_and_devices(empty_export(), vec![sensor_device()]);
+        let catalog = catalog_from_snapshot_export(&snapshot);
+        let control = build_control_catalog(&snapshot, None);
+
+        // Kind inference routes a body-only answer to the answer contract.
+        let envelope =
+            parse_chat_envelope("{\"answer\":\"The office light is on at 40%.\"}").unwrap();
+        match build_chat_outcome(&snapshot, catalog.clone(), &control, envelope).unwrap() {
+            ChatOutcome::Answer { text } => assert_eq!(text, "The office light is on at 40%."),
+            _ => panic!("expected an answer outcome"),
+        }
+
+        let envelope = parse_chat_envelope(&format!(
+            "{{\"kind\":\"answer\",\"answer\":\"{}\"}}",
+            "x".repeat(MAX_ANSWER_CHARS + 100)
+        ))
+        .unwrap();
+        match build_chat_outcome(&snapshot, catalog.clone(), &control, envelope).unwrap() {
+            ChatOutcome::Answer { text } => {
+                assert_eq!(text.chars().count(), MAX_ANSWER_CHARS + 1);
+            }
+            _ => panic!("expected an answer outcome"),
+        }
+
+        let envelope = parse_chat_envelope("{\"kind\":\"answer\",\"answer\":\"   \"}").unwrap();
+        assert!(build_chat_outcome(&snapshot, catalog, &control, envelope).is_err());
+    }
+
+    #[test]
+    fn live_state_lists_devices_and_bounds_recent_logs() {
+        let motion = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("motion"),
+            "Patio motion".to_string(),
+            DeviceData::Sensor(SensorDevice::Boolean { value: false }),
+            None,
+        );
+        let snapshot =
+            snapshot_with_config_and_devices(empty_export(), vec![sensor_device(), motion]);
+        let logs: Vec<UiLogEntry> = (0..MAX_LIVE_LOGS + 5)
+            .map(|index| UiLogEntry {
+                timestamp: format!("2026-01-01T00:00:{index:02}Z"),
+                level: LogLevel::Error,
+                target: "homectl_server::tests".to_string(),
+                message: "x".repeat(MAX_LIVE_LOG_CHARS + 50),
+            })
+            .chain((0..3).map(|index| UiLogEntry {
+                timestamp: format!("2026-01-01T00:01:{index:02}Z"),
+                level: LogLevel::Debug,
+                target: "homectl_server::tests".to_string(),
+                message: "debug detail".to_string(),
+            }))
+            .collect();
+
+        let state = build_live_state(&snapshot, &[], "test prompt", logs);
+        assert_eq!(state["devices"][0]["device_key"], "dummy/sensor");
+        assert_eq!(state["devices"][0]["kind"], "sensor");
+        assert!(state["devices"][0]["state"].is_object());
+        assert!(state["integrations"].is_array());
+
+        let recent = state["recent_logs"].as_array().unwrap();
+        assert_eq!(recent.len(), MAX_LIVE_LOGS);
+        assert_eq!(recent[0]["timestamp"], "2026-01-01T00:00:05Z");
+        assert_eq!(recent[recent.len() - 1]["level"], "ERROR");
+        assert!(recent[0]["message"].as_str().unwrap().chars().count() <= MAX_LIVE_LOG_CHARS + 1);
+
+        // Attached devices are listed first regardless of catalog order.
+        let state = build_live_state(
+            &snapshot,
+            &[AssistantAttachment {
+                kind: AssistantEntityKind::Device,
+                id: Some("dummy/motion".to_string()),
+                label: Some("Patio motion".to_string()),
+            }],
+            "test prompt",
+            Vec::new(),
+        );
+        assert_eq!(state["devices"][0]["device_key"], "dummy/motion");
+        assert_eq!(state["devices"][1]["device_key"], "dummy/sensor");
     }
 
     // ========================================================================
