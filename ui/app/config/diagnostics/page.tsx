@@ -5,7 +5,9 @@ import { AlertTriangle, CheckCircle2, Info, RefreshCw } from 'lucide-react';
 import type { ConfigDiagnostics } from '@/bindings/ConfigDiagnostics';
 import type { ConfigDiagnostic } from '@/bindings/ConfigDiagnostic';
 import { useAppConfig } from '@/hooks/appConfig';
+import { useSearchParamState } from '@/hooks/useDeepLink';
 import { Button } from '@/ui/primitives/button';
+import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ConfigPageHeader } from '../page-header';
 
@@ -43,9 +45,9 @@ function Issue({ issue }: { issue: ConfigDiagnostic }) {
 
 export default function DiagnosticsPage() {
   const { apiEndpoint } = useAppConfig();
-  const [search, setSearch] = useState('');
-  const [severity, setSeverity] = useState<'all' | 'warning' | 'info'>(
-    'warning',
+  const [search, setSearch] = useSearchParamState();
+  const [severity, setSeverity] = useState<'all' | 'warning' | 'info'>(() =>
+    search ? 'all' : 'warning',
   );
   const query = useQuery({
     queryKey: ['config-diagnostics', apiEndpoint],
@@ -126,12 +128,20 @@ export default function DiagnosticsPage() {
             ))}
           </div>
           {issues.length > 0 && (
-            <Input
-              aria-label="Search configuration checks"
-              placeholder="Search names or references…"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                aria-label="Search configuration checks"
+                placeholder="Search names or references…"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                className="max-w-sm"
+              />
+              {search ? (
+                <Button variant="ghost" size="sm" onClick={() => setSearch('')}>
+                  Clear
+                </Button>
+              ) : null}
+            </div>
           )}
           {issues.length === 0 ? (
             <div className="flex items-start gap-3 rounded-xl border border-border bg-card p-5">
@@ -147,11 +157,28 @@ export default function DiagnosticsPage() {
               </div>
             </div>
           ) : visible.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              {severity === 'warning' && !search
-                ? 'No warnings found. Informational items are available under For review.'
-                : 'No checks match this filter.'}
-            </p>
+            <EmptyState
+              title="No checks match this filter"
+              description={
+                severity === 'warning' && !search
+                  ? 'No warnings found. Informational items are available under For review.'
+                  : 'Adjust the search or severity filter to see more checks.'
+              }
+              action={
+                search || severity !== 'all' ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearch('');
+                      setSeverity('all');
+                    }}
+                  >
+                    Show all checks
+                  </Button>
+                ) : undefined
+              }
+            />
           ) : (
             <div className="space-y-3">
               {visible.map((issue) => (

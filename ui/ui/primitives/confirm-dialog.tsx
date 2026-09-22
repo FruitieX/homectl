@@ -1,5 +1,4 @@
-import { atom, getDefaultStore, useAtom } from 'jotai';
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { buttonVariants } from '@/ui/primitives/button';
 import {
@@ -25,24 +24,43 @@ type ConfirmRequest = ConfirmDialogOptions & {
   resolve: (confirmed: boolean) => void;
 };
 
-const confirmRequestAtom = atom<ConfirmRequest | null>(null);
+let currentRequest: ConfirmRequest | null = null;
+let publish: ((request: ConfirmRequest | null) => void) | null = null;
+
+function setRequest(request: ConfirmRequest | null) {
+  currentRequest = request;
+  publish?.(request);
+}
 
 /**
  * Imperative replacement for window.confirm() that renders a themed,
  * accessible AlertDialog. Resolves true when the user confirms.
+ *
+ * Uses a module-level subscription rather than a jotai atom: the app is
+ * wrapped in a Jotai `Provider`, so writing through `getDefaultStore()`
+ * would never reach the host component.
  */
 export function confirmDialog(options: ConfirmDialogOptions): Promise<boolean> {
-  const store = getDefaultStore();
   return new Promise<boolean>((resolve) => {
-    store.set(confirmRequestAtom, { ...options, resolve });
+    setRequest({ ...options, resolve });
   });
 }
 
 export function ConfirmDialogHost() {
-  const [request, setRequest] = useAtom(confirmRequestAtom);
+  const [request, setRequestState] = useState<ConfirmRequest | null>(null);
+
+  useEffect(() => {
+    publish = setRequestState;
+    if (currentRequest) {
+      setRequestState(currentRequest);
+    }
+    return () => {
+      publish = null;
+    };
+  }, []);
 
   const settle = (confirmed: boolean) => {
-    request?.resolve(confirmed);
+    currentRequest?.resolve(confirmed);
     setRequest(null);
   };
 

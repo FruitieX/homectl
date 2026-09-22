@@ -199,10 +199,10 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    if (query.data) {
+    if (query.data && !form.formState.isDirty) {
       form.reset(query.data);
     }
-  }, [form, query.data]);
+  }, [form, query.data, form.formState.isDirty]);
 
   const onSubmit = (values: CoreConfigFormValues) => {
     mutation.mutate(values);
@@ -223,22 +223,22 @@ export default function SettingsPage() {
 
   return (
     <Form {...form}>
-      <form
-        className="max-w-3xl space-y-5"
-        onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
-      >
+      <div className="max-w-3xl space-y-5">
         <ConfigPageHeader
           title="System"
           description="Personalize the app shell, tune startup behavior, and inspect server endpoints."
           actions={
-            <Button
-              type="submit"
-              disabled={!form.formState.isDirty || mutation.isPending}
-              className="w-full sm:w-auto"
-            >
-              <Save />
-              {mutation.isPending ? 'Saving…' : 'Save changes'}
-            </Button>
+            settingsTab === 'core' ? (
+              <Button
+                type="submit"
+                form="core-settings-form"
+                disabled={!form.formState.isDirty || mutation.isPending}
+                className="w-full sm:w-auto"
+              >
+                <Save />
+                {mutation.isPending ? 'Saving…' : 'Save changes'}
+              </Button>
+            ) : null
           }
         />
 
@@ -290,128 +290,133 @@ export default function SettingsPage() {
                 </AlertDescription>
               </Alert>
             ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Core Settings</CardTitle>
-                  <CardDescription>
-                    Controls how long homectl waits before automation routines
-                    begin.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <FormField
-                    control={form.control}
-                    name="warmupTimeSeconds"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Warmup Time (seconds)</FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={60}
-                            inputMode="numeric"
-                            value={field.value}
-                            onBlur={field.onBlur}
-                            onChange={(event) =>
-                              field.onChange(
-                                Number.isNaN(event.target.valueAsNumber)
-                                  ? 0
-                                  : event.target.valueAsNumber,
-                              )
-                            }
-                            name={field.name}
-                            ref={field.ref}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Increase this if devices are not ready when routines
-                          first run.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="defaultTransitionMs"
-                    render={({ field }) => (
-                      <FormItem className="mt-6">
-                        <FormLabel>
-                          Interactive controls transition (milliseconds)
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={65535000}
-                            step={1}
-                            inputMode="numeric"
-                            placeholder="Disabled"
-                            value={field.value ?? ''}
-                            onBlur={field.onBlur}
-                            onChange={(event) =>
-                              field.onChange(
-                                event.target.value === ''
-                                  ? null
-                                  : Number(event.target.value),
-                              )
-                            }
-                            name={field.name}
-                            ref={field.ref}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Used for sliders, color wheels, and direct device
-                          controls when no explicit transition is requested. Set
-                          this to 1000 for one second; leave empty to use
-                          integration defaults.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                  <FormField
-                    control={form.control}
-                    name="sceneTransitionMs"
-                    render={({ field }) => (
-                      <FormItem className="mt-6">
-                        <FormLabel>
-                          Scene activation transition (milliseconds)
-                        </FormLabel>
-                        <FormControl>
-                          <Input
-                            type="number"
-                            min={0}
-                            max={65535000}
-                            step={1}
-                            inputMode="numeric"
-                            placeholder="Use scene/default behavior"
-                            value={field.value ?? ''}
-                            onBlur={field.onBlur}
-                            onChange={(event) =>
-                              field.onChange(
-                                event.target.value === ''
-                                  ? null
-                                  : Number(event.target.value),
-                              )
-                            }
-                            name={field.name}
-                            ref={field.ref}
-                          />
-                        </FormControl>
-                        <FormDescription>
-                          Default transition for scene activations without an
-                          explicit or scene-stored transition, including
-                          routines and their rollouts. Set this to 1000 for one
-                          second; leave empty to use integration defaults.
-                        </FormDescription>
-                        <FormMessage />
-                      </FormItem>
-                    )}
-                  />
-                </CardContent>
-              </Card>
+              <form
+                id="core-settings-form"
+                onSubmit={(event) => void form.handleSubmit(onSubmit)(event)}
+              >
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Core settings</CardTitle>
+                    <CardDescription>
+                      Controls how long homectl waits before automation routines
+                      begin.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <FormField
+                      control={form.control}
+                      name="warmupTimeSeconds"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Warmup Time (seconds)</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={60}
+                              inputMode="numeric"
+                              value={field.value}
+                              onBlur={field.onBlur}
+                              onChange={(event) =>
+                                field.onChange(
+                                  Number.isNaN(event.target.valueAsNumber)
+                                    ? 0
+                                    : event.target.valueAsNumber,
+                                )
+                              }
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Increase this if devices are not ready when routines
+                            first run.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="defaultTransitionMs"
+                      render={({ field }) => (
+                        <FormItem className="mt-6">
+                          <FormLabel>
+                            Interactive controls transition (milliseconds)
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={65535000}
+                              step={1}
+                              inputMode="numeric"
+                              placeholder="Disabled"
+                              value={field.value ?? ''}
+                              onBlur={field.onBlur}
+                              onChange={(event) =>
+                                field.onChange(
+                                  event.target.value === ''
+                                    ? null
+                                    : Number(event.target.value),
+                                )
+                              }
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Used for sliders, color wheels, and direct device
+                            controls when no explicit transition is requested.
+                            Set this to 1000 for one second; leave empty to use
+                            integration defaults.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="sceneTransitionMs"
+                      render={({ field }) => (
+                        <FormItem className="mt-6">
+                          <FormLabel>
+                            Scene activation transition (milliseconds)
+                          </FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min={0}
+                              max={65535000}
+                              step={1}
+                              inputMode="numeric"
+                              placeholder="Use scene/default behavior"
+                              value={field.value ?? ''}
+                              onBlur={field.onBlur}
+                              onChange={(event) =>
+                                field.onChange(
+                                  event.target.value === ''
+                                    ? null
+                                    : Number(event.target.value),
+                                )
+                              }
+                              name={field.name}
+                              ref={field.ref}
+                            />
+                          </FormControl>
+                          <FormDescription>
+                            Default transition for scene activations without an
+                            explicit or scene-stored transition, including
+                            routines and their rollouts. Set this to 1000 for
+                            one second; leave empty to use integration defaults.
+                          </FormDescription>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </CardContent>
+                </Card>
+              </form>
             )}
           </TabsContent>
 
@@ -480,7 +485,7 @@ export default function SettingsPage() {
             </Card>
           </TabsContent>
         </Tabs>
-      </form>
+      </div>
     </Form>
   );
 }
@@ -734,10 +739,14 @@ async function updateAssistantSettings(
     baseUrl: form.baseUrl,
     model: form.model,
     reasoningEffort: form.reasoningEffort,
-    maxTokens: form.maxTokens === '' ? 0 : Number(form.maxTokens),
-    timeoutMs: form.timeoutMs === '' ? 0 : Number(form.timeoutMs),
     timezone: form.timezone,
   };
+  if (form.maxTokens !== '') {
+    body.maxTokens = Number(form.maxTokens);
+  }
+  if (form.timeoutMs !== '') {
+    body.timeoutMs = Number(form.timeoutMs);
+  }
   if (includeApiKey) {
     body.apiKey = form.apiKey;
   }
@@ -803,7 +812,10 @@ function AssistantSettingsCard() {
     onSuccess: ({ settings, write }) => {
       setForm(assistantFormFromSettings(settings));
       recordWrite('Assistant API key', write);
-      toast.success('Stored API key cleared');
+      if (write?.persistence === 'persisted')
+        toast.success('Stored API key cleared');
+      else if (write) toast.warning(write.warning ?? 'Applied in memory only.');
+      else toast.success('Stored API key cleared');
     },
     onError: (error) => {
       toast.error(
@@ -819,6 +831,26 @@ function AssistantSettingsCard() {
   });
 
   const enabled = form.baseUrl.length > 0 && form.model.length > 0;
+
+  const validationError = (() => {
+    if (form.baseUrl.trim().length > 0 !== form.model.trim().length > 0) {
+      return 'Set both a base URL and a model, or leave both empty to disable the assistant.';
+    }
+    if (
+      form.maxTokens !== '' &&
+      (!Number.isFinite(Number(form.maxTokens)) || Number(form.maxTokens) < 1)
+    ) {
+      return 'Max tokens must be a number of at least 1.';
+    }
+    if (
+      form.timeoutMs !== '' &&
+      (!Number.isFinite(Number(form.timeoutMs)) ||
+        Number(form.timeoutMs) < 1000)
+    ) {
+      return 'Timeout must be at least 1000 ms.';
+    }
+    return null;
+  })();
 
   return (
     <Card>
@@ -856,7 +888,15 @@ function AssistantSettingsCard() {
             </AlertDescription>
           </Alert>
         ) : (
-          <>
+          <form
+            className="space-y-6"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!validationError) {
+                mutation.mutate();
+              }
+            }}
+          >
             <p className="flex items-center gap-2 text-sm text-muted-foreground">
               <span
                 className={cn(
@@ -966,15 +1006,22 @@ function AssistantSettingsCard() {
               </div>
             </div>
 
+            {validationError ? (
+              <p className="text-xs text-destructive">{validationError}</p>
+            ) : null}
+
             <Button
-              type="button"
-              disabled={mutation.isPending || clearKey.isPending}
-              onClick={() => mutation.mutate()}
+              type="submit"
+              disabled={
+                mutation.isPending ||
+                clearKey.isPending ||
+                validationError !== null
+              }
             >
               <Save />
               {mutation.isPending ? 'Saving…' : 'Save assistant settings'}
             </Button>
-          </>
+          </form>
         )}
       </CardContent>
     </Card>

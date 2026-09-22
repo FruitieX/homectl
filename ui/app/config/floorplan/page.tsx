@@ -97,7 +97,14 @@ export default function FloorplanPage() {
     null,
   );
   const [selectedFloorplanName, setSelectedFloorplanName] = useState('');
+  const [floorplanLoadError, setFloorplanLoadError] = useState<string | null>(
+    null,
+  );
+  const [floorplanReloadKey, setFloorplanReloadKey] = useState(0);
   const [showCreateFloorplan, setShowCreateFloorplan] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const nameSyncedForIdRef = useRef<string | null>(null);
+  const importInputRef = useRef<HTMLInputElement | null>(null);
   const [newFloorplanId, setNewFloorplanId] = useState('');
   const [newFloorplanName, setNewFloorplanName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -151,6 +158,7 @@ export default function FloorplanPage() {
     setSelectedFloorplanId(floorplanId);
     setLoadedFloorplanId(null);
     setFloorplanLoading(floorplanId !== null);
+    setFloorplanLoadError(null);
   }, []);
 
   useEffect(() => {
@@ -161,6 +169,7 @@ export default function FloorplanPage() {
       if (selectedFloorplanName !== '') {
         setSelectedFloorplanName('');
       }
+      nameSyncedForIdRef.current = null;
       return;
     }
 
@@ -175,7 +184,11 @@ export default function FloorplanPage() {
     const selectedFloorplan = floorplans.find(
       (floorplan) => floorplan.id === selectedFloorplanId,
     );
-    if (selectedFloorplan) {
+    if (
+      selectedFloorplan &&
+      nameSyncedForIdRef.current !== selectedFloorplan.id
+    ) {
+      nameSyncedForIdRef.current = selectedFloorplan.id;
       setSelectedFloorplanName(selectedFloorplan.name);
     }
   }, [floorplans, selectFloorplan, selectedFloorplanId, selectedFloorplanName]);
@@ -198,6 +211,7 @@ export default function FloorplanPage() {
       const imageUrl = `${apiEndpoint}/api/v1/config/floorplan/image${floorplanQuery}`;
 
       setFloorplanLoading(true);
+      setFloorplanLoadError(null);
 
       let nextGrid = createEmptyGrid();
       let nextBackgroundImageUrl: string | undefined;
@@ -206,15 +220,29 @@ export default function FloorplanPage() {
         const gridResponse = await fetch(
           `${apiEndpoint}/api/v1/config/floorplan/grid${floorplanQuery}`,
         );
+        if (!gridResponse.ok) {
+          throw new Error(
+            `Failed to load floorplan grid (${gridResponse.status})`,
+          );
+        }
         const gridResult = await gridResponse.json();
-        if (gridResult.success && gridResult.data) {
+        if (!gridResult.success) {
+          throw new Error(gridResult.error || 'Failed to load floorplan grid');
+        }
+        if (gridResult.data) {
           const loadedGrid = deserializeGrid(gridResult.data);
           if (loadedGrid) {
             nextGrid = loadedGrid;
           }
         }
-      } catch {
-        nextGrid = createEmptyGrid();
+      } catch (e) {
+        if (!cancelled) {
+          setFloorplanLoadError(
+            e instanceof Error ? e.message : 'Failed to load floorplan grid',
+          );
+          setFloorplanLoading(false);
+        }
+        return;
       }
 
       try {
@@ -240,7 +268,7 @@ export default function FloorplanPage() {
     return () => {
       cancelled = true;
     };
-  }, [apiEndpoint, selectedFloorplanId]);
+  }, [apiEndpoint, selectedFloorplanId, floorplanReloadKey]);
 
   const handleGridChange = useCallback((newGrid: FloorplanGrid) => {
     setGrid(newGrid);
@@ -250,7 +278,8 @@ export default function FloorplanPage() {
   const isSelectedFloorplanReady =
     selectedFloorplanId !== null &&
     loadedFloorplanId === selectedFloorplanId &&
-    !floorplanLoading;
+    !floorplanLoading &&
+    floorplanLoadError === null;
 
   useAssistantPageContext(
     selectedFloorplanId
@@ -397,13 +426,13 @@ export default function FloorplanPage() {
 
   const handleCreateFloorplan = async () => {
     if (!newFloorplanId.trim() || !newFloorplanName.trim()) {
-      setError('Floorplan id and name are required');
+      setCreateError('Floorplan id and name are required');
       return;
     }
 
     try {
       setLoading(true);
-      setError(null);
+      setCreateError(null);
       await createFloorplan({
         id: newFloorplanId.trim(),
         name: newFloorplanName.trim(),
@@ -414,7 +443,9 @@ export default function FloorplanPage() {
       setNewFloorplanName('');
       setSuccess('Floorplan created successfully');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to create floorplan');
+      setCreateError(
+        e instanceof Error ? e.message : 'Failed to create floorplan',
+      );
     } finally {
       setLoading(false);
     }
@@ -493,7 +524,12 @@ export default function FloorplanPage() {
             <Button
               variant={hasChanges ? 'secondary' : 'default'}
               onClick={handleSave}
-              disabled={loading || floorplanLoading || !selectedFloorplanId}
+              disabled={
+                loading ||
+                floorplanLoading ||
+                !selectedFloorplanId ||
+                floorplanLoadError !== null
+              }
             >
               {loading ? (
                 <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -508,38 +544,64 @@ export default function FloorplanPage() {
               Export JSON
             </Button>
             <Button
-              asChild
               variant="outline"
-              className={
-                loading || floorplanLoading || !selectedFloorplanId
-                  ? 'pointer-events-none opacity-50'
-                  : undefined
-              }
+              disabled={loading || floorplanLoading || !selectedFloorplanId}
+              onClick={() => importInputRef.current?.click()}
             >
-              <label>
-                Import JSON
-                <input
-                  type="file"
-                  accept=".json"
-                  className="hidden"
-                  disabled={loading || floorplanLoading || !selectedFloorplanId}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleImport(file);
-                  }}
-                />
-              </label>
+              Import JSON
             </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleImport(file);
+                e.target.value = '';
+              }}
+            />
             <Button
               variant="ghost"
               disabled={loading || floorplanLoading || !selectedFloorplanId}
-              onClick={() => setGrid(createEmptyGrid())}
+              onClick={async () => {
+                if (
+                  await confirmDestructive(
+                    'Reset this floorplan grid?',
+                    'All device placements and group masks are cleared in the editor. The saved floorplan is unchanged until you save.',
+                  )
+                ) {
+                  handleGridChange(createEmptyGrid());
+                }
+              }}
             >
               Reset
             </Button>
           </>
         }
       />
+
+      {floorplanLoadError && (
+        <Alert variant="destructive">
+          <AlertTitle>Could not load floorplan</AlertTitle>
+          <AlertDescription className="mt-2 flex flex-col gap-3">
+            <span>{floorplanLoadError}</span>
+            <span className="text-xs">
+              Saving is disabled until the floorplan loads, so the stored layout
+              cannot be overwritten by an empty grid.
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => setFloorplanReloadKey((key) => key + 1)}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {error && (
         <Alert variant="destructive">
@@ -601,7 +663,10 @@ export default function FloorplanPage() {
 
             <Button
               variant="secondary"
-              onClick={() => setShowCreateFloorplan(true)}
+              onClick={() => {
+                setCreateError(null);
+                setShowCreateFloorplan(true);
+              }}
             >
               New Floorplan
             </Button>
@@ -683,7 +748,16 @@ export default function FloorplanPage() {
               <Button
                 variant="destructive"
                 disabled={loading || floorplanLoading || !selectedFloorplanId}
-                onClick={handleImageDelete}
+                onClick={async () => {
+                  if (
+                    await confirmDestructive(
+                      'Remove the background image?',
+                      'The image is deleted immediately; device placements are not affected.',
+                    )
+                  ) {
+                    void handleImageDelete();
+                  }
+                }}
               >
                 Remove Image
               </Button>
@@ -763,6 +837,10 @@ export default function FloorplanPage() {
                 />
               </ConfigField>
             </ConfigFormSection>
+
+            {createError ? (
+              <p className="mb-3 text-sm text-destructive">{createError}</p>
+            ) : null}
 
             <ConfigFormActions>
               <Button

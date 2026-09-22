@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 
 import { Button } from '@/ui/primitives/button';
 import { cn } from '@/lib/cn';
-import { configSections } from './sections';
+import { configSectionAliases, configSections } from './sections';
 
 type ConfigPageHeaderProps = {
   actions?: ReactNode;
@@ -22,7 +22,8 @@ export function ConfigPageHeader({
   title,
 }: ConfigPageHeaderProps) {
   const { pathname } = useLocation();
-  const section = configSections.find((entry) => entry.href === pathname);
+  const resolvedPath = configSectionAliases[pathname] ?? pathname;
+  const section = configSections.find((entry) => entry.href === resolvedPath);
 
   return (
     <div

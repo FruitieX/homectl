@@ -105,6 +105,54 @@ const quickActions = [
   },
 ] as const;
 
+function buildSetupSteps({
+  integrationCount,
+  deviceCount,
+  unassignedCount,
+  sceneCount,
+  routineCount,
+}: {
+  integrationCount: number;
+  deviceCount: number;
+  unassignedCount: number;
+  sceneCount: number;
+  routineCount: number;
+}) {
+  return [
+    {
+      key: 'setup:integration',
+      label: 'Connect an integration',
+      detail: 'Bring devices in from MQTT, circadian, timers, or a plugin.',
+      href: '/config/integrations',
+      done: integrationCount > 0,
+    },
+    {
+      key: 'setup:rooms',
+      label: 'Assign devices to rooms',
+      detail:
+        deviceCount === 0
+          ? 'Waiting for devices to appear.'
+          : 'Rooms let scenes and routines target groups of lights.',
+      href: '/config/groups',
+      done: deviceCount > 0 && unassignedCount === 0,
+    },
+    {
+      key: 'setup:scene',
+      label: 'Create your first scene',
+      detail: 'Capture the current light state or compose one by hand.',
+      href: '/config/scenes?new=1',
+      done: sceneCount > 0,
+    },
+    {
+      key: 'setup:routine',
+      label: 'Create your first routine',
+      detail: 'React to motion, buttons, time, or helpers.',
+      href: '/config/routines?new=1',
+      done: routineCount > 0,
+    },
+  ];
+}
+
 const buildInfo = normalizeBuildInfo({
   version: import.meta.env.VITE_APP_VERSION,
   gitCommit: import.meta.env.VITE_GIT_COMMIT,
@@ -147,10 +195,40 @@ export default function ConfigPage() {
     navigate(href);
   };
 
+  const unassignedDeviceCount = useMemo(() => {
+    const assignedKeys = new Set<string>();
+    for (const group of Object.values(groupsState ?? {})) {
+      for (const key of group?.device_keys ?? []) {
+        assignedKeys.add(key);
+      }
+    }
+    return Object.keys(devicesState ?? {}).filter(
+      (key) => !assignedKeys.has(key),
+    ).length;
+  }, [devicesState, groupsState]);
+
+  const setupSteps = useMemo(
+    () =>
+      buildSetupSteps({
+        integrationCount: integrations?.length ?? 0,
+        deviceCount: Object.keys(devicesState ?? {}).length,
+        unassignedCount: unassignedDeviceCount,
+        sceneCount: Object.keys(scenesState ?? {}).length,
+        routineCount: routines?.length ?? 0,
+      }),
+    [devicesState, integrations, routines, scenesState, unassignedDeviceCount],
+  );
+
   const linkIndex = useMemo(() => {
     const index = new Map<string, { label: string; href: string }>();
     for (const item of staticNavItems) {
       index.set(item.key, { label: item.label, href: item.href });
+    }
+    for (const item of quickActions) {
+      index.set(item.key, { label: item.label, href: item.href });
+    }
+    for (const step of setupSteps) {
+      index.set(step.key, { label: step.label, href: step.href });
     }
     for (const section of configSections) {
       index.set(`nav:${section.href}`, {
@@ -198,7 +276,15 @@ export default function ConfigPage() {
       });
     }
     return index;
-  }, [devicesState, groupsState, helpers, integrations, routines, scenesState]);
+  }, [
+    devicesState,
+    groupsState,
+    helpers,
+    integrations,
+    routines,
+    scenesState,
+    setupSteps,
+  ]);
 
   const recentEntries = useMemo(
     () =>
@@ -241,24 +327,15 @@ export default function ConfigPage() {
       });
     }
 
-    const assignedKeys = new Set<string>();
-    for (const group of Object.values(groupsState ?? {})) {
-      for (const key of group?.device_keys ?? []) {
-        assignedKeys.add(key);
-      }
-    }
-    const unassigned = Object.keys(devicesState ?? {}).filter(
-      (key) => !assignedKeys.has(key),
-    );
-    if (unassigned.length > 0) {
+    if (unassignedDeviceCount > 0) {
       items.push({
         key: 'unassigned-devices',
         title:
-          unassigned.length === 1
+          unassignedDeviceCount === 1
             ? '1 device is not in a room'
-            : `${unassigned.length} devices are not in a room`,
+            : `${unassignedDeviceCount} devices are not in a room`,
         detail: 'Assign them to rooms so scenes and routines can target them.',
-        href: '/config/devices',
+        href: '/config/groups',
         severity: 'info',
       });
     }
@@ -280,7 +357,7 @@ export default function ConfigPage() {
     }
 
     return items;
-  }, [devicesState, diagnostics.data, groupsState, routines]);
+  }, [diagnostics.data, routines, unassignedDeviceCount]);
 
   const visibleSections = configSections.filter((section) =>
     matchesConfigSectionSearch(section, search),
@@ -333,18 +410,7 @@ export default function ConfigPage() {
         </div>
       </section>
 
-      <SetupChecklist
-        integrationCount={integrations?.length ?? 0}
-        deviceCount={Object.keys(devicesState ?? {}).length}
-        unassignedCount={
-          attentionItems.some((item) => item.key === 'unassigned-devices')
-            ? 1
-            : 0
-        }
-        sceneCount={Object.keys(scenesState ?? {}).length}
-        routineCount={routines?.length ?? 0}
-        onNavigate={open}
-      />
+      <SetupChecklist steps={setupSteps} onNavigate={open} />
 
       {attentionItems.length > 0 ? (
         <section className="space-y-3">
@@ -356,7 +422,7 @@ export default function ConfigPage() {
               <Link
                 key={item.key}
                 to={item.href}
-                onClick={() => recordRecent(`nav:${item.href}`)}
+                onClick={() => recordRecent(`nav:${item.href.split('?')[0]}`)}
                 className="flex items-start gap-3 rounded-2xl border border-border bg-card p-3 transition hover:bg-accent"
               >
                 <AlertTriangle
@@ -404,7 +470,7 @@ export default function ConfigPage() {
       {visibleSections.length === 0 ? (
         <EmptyState
           title="No settings found"
-          description="Try searching for a plugin, automation, dashboard, backup, or runtime term."
+          description="Try searching for a routine, scene, room, backup, log, or plugin term."
         />
       ) : (
         <div className="space-y-3">
@@ -435,55 +501,13 @@ export default function ConfigPage() {
 }
 
 function SetupChecklist({
-  integrationCount,
-  deviceCount,
-  unassignedCount,
-  sceneCount,
-  routineCount,
+  steps,
   onNavigate,
 }: {
-  integrationCount: number;
-  deviceCount: number;
-  unassignedCount: number;
-  sceneCount: number;
-  routineCount: number;
+  steps: ReturnType<typeof buildSetupSteps>;
   onNavigate: (key: string, href: string) => void;
 }) {
   const [dismissed, setDismissed] = useState(false);
-
-  const steps = [
-    {
-      key: 'setup:integration',
-      label: 'Connect an integration',
-      detail: 'Bring devices in from MQTT, circadian, timers, or a plugin.',
-      href: '/config/integrations',
-      done: integrationCount > 0,
-    },
-    {
-      key: 'setup:rooms',
-      label: 'Assign devices to rooms',
-      detail:
-        deviceCount === 0
-          ? 'Waiting for devices to appear.'
-          : 'Rooms let scenes and routines target groups of lights.',
-      href: '/config/devices',
-      done: deviceCount > 0 && unassignedCount === 0,
-    },
-    {
-      key: 'setup:scene',
-      label: 'Create your first scene',
-      detail: 'Capture the current light state or compose one by hand.',
-      href: '/config/scenes?new=1',
-      done: sceneCount > 0,
-    },
-    {
-      key: 'setup:routine',
-      label: 'Create your first routine',
-      detail: 'React to motion, buttons, time, or helpers.',
-      href: '/config/routines?new=1',
-      done: routineCount > 0,
-    },
-  ];
 
   const completed = steps.filter((step) => step.done).length;
   if (dismissed || completed === steps.length) return null;

@@ -16,8 +16,11 @@ import {
   CardTitle,
 } from '@/ui/primitives/card';
 import { Checkbox } from '@/ui/primitives/checkbox';
-import { Download, Info, Upload, X } from 'lucide-react';
+import { Label } from '@/ui/primitives/label';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
+import { Download, Info, Upload } from 'lucide-react';
 import { useState, useRef } from 'react';
+import { toast } from 'sonner';
 
 export default function ImportExportPage() {
   const { exportConfig, importConfig } = useConfigExport();
@@ -25,15 +28,13 @@ export default function ImportExportPage() {
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [includeSecrets, setIncludeSecrets] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [pendingImport, setPendingImport] = useState<ConfigExport | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const isMemoryOnly = runtimeStatus?.memory_only_mode ?? false;
 
   const handleExport = async () => {
     try {
       setExporting(true);
-      setError(null);
       const config = await exportConfig(includeSecrets);
 
       // Download as JSON file
@@ -49,28 +50,44 @@ export default function ImportExportPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
 
-      setSuccess('Configuration exported successfully');
+      toast.success('Configuration exported successfully');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Export failed');
+      toast.error(e instanceof Error ? e.message : 'Export failed');
     } finally {
       setExporting(false);
     }
   };
 
-  const handleImport = async (file: File) => {
+  const stageImport = async (file: File) => {
     try {
-      setImporting(true);
-      setError(null);
-
       const text = await file.text();
       const config: ConfigExport = JSON.parse(text);
-
-      await importConfig(config);
-      setSuccess(
-        `Imported: ${config.integrations?.length || 0} integrations, ${config.groups?.length || 0} groups, ${config.scenes?.length || 0} scenes, ${config.routines?.length || 0} routines`,
-      );
+      setPendingImport(config);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Import failed');
+      toast.error(
+        e instanceof Error
+          ? `Could not read the backup file: ${e.message}`
+          : 'Could not read the backup file',
+      );
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleImport = async () => {
+    if (!pendingImport) {
+      return;
+    }
+    try {
+      setImporting(true);
+      await importConfig(pendingImport);
+      toast.success(
+        `Imported: ${pendingImport.integrations?.length || 0} integrations, ${pendingImport.groups?.length || 0} groups, ${pendingImport.scenes?.length || 0} scenes, ${pendingImport.routines?.length || 0} routines`,
+      );
+      setPendingImport(null);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Import failed');
     } finally {
       setImporting(false);
       if (fileInputRef.current) {
@@ -78,6 +95,20 @@ export default function ImportExportPage() {
       }
     }
   };
+
+  const pendingImportCounts = pendingImport
+    ? [
+        {
+          label: 'Integrations',
+          count: pendingImport.integrations?.length ?? 0,
+        },
+        { label: 'Groups', count: pendingImport.groups?.length ?? 0 },
+        { label: 'Scenes', count: pendingImport.scenes?.length ?? 0 },
+        { label: 'Routines', count: pendingImport.routines?.length ?? 0 },
+        { label: 'Sources', count: pendingImport.sources?.length ?? 0 },
+        { label: 'Floorplans', count: pendingImport.floorplans?.length ?? 0 },
+      ]
+    : [];
 
   return (
     <div className="max-w-5xl space-y-5">
@@ -102,34 +133,6 @@ export default function ImportExportPage() {
         </AlertDescription>
       </Alert>
 
-      {error && (
-        <Alert variant="destructive">
-          <AlertTitle>Operation failed</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>{error}</span>
-            <Button variant="ghost" size="icon" onClick={() => setError(null)}>
-              <X />
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert>
-          <AlertTitle>Done</AlertTitle>
-          <AlertDescription className="flex items-center justify-between gap-3">
-            <span>{success}</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSuccess(null)}
-            >
-              <X />
-            </Button>
-          </AlertDescription>
-        </Alert>
-      )}
-
       <div className="grid gap-5 md:grid-cols-2">
         {/* Export */}
         <Card>
@@ -144,27 +147,30 @@ export default function ImportExportPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <label className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-3">
+            <div className="flex items-start gap-3 rounded-xl border border-border bg-muted/30 p-3">
               <Checkbox
+                id="include-secrets"
                 checked={includeSecrets}
                 onCheckedChange={(checked) =>
                   setIncludeSecrets(checked === true)
                 }
-                aria-label="Include secrets in export"
                 className="mt-0.5"
               />
-              <span className="space-y-1">
-                <span className="block text-sm font-medium text-foreground">
+              <div className="space-y-1">
+                <Label
+                  htmlFor="include-secrets"
+                  className="text-sm font-medium"
+                >
                   Include secrets
-                </span>
-                <span className="block text-xs leading-5 text-muted-foreground">
+                </Label>
+                <p className="text-xs leading-5 text-muted-foreground">
                   Off by default: widget tokens and calendar URLs are left out
                   of the file. Turn this on for a backup that can fully restore
                   a fresh instance. Imports keep stored secrets unless the file
                   sets them explicitly.
-                </span>
-              </span>
-            </label>
+                </p>
+              </div>
+            </div>
           </CardContent>
           <CardFooter>
             <Button
@@ -198,7 +204,7 @@ export default function ImportExportPage() {
               className="flex w-full rounded-xl border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm file:mr-3 file:rounded-lg file:border-0 file:bg-primary file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               onChange={(e) => {
                 const file = e.target.files?.[0];
-                if (file) handleImport(file);
+                if (file) void stageImport(file);
               }}
               disabled={importing}
             />
@@ -211,14 +217,55 @@ export default function ImportExportPage() {
         </Card>
       </div>
 
-      <Alert>
-        <Info className="size-4" />
-        <AlertTitle>Configuration Hot-Reload</AlertTitle>
-        <AlertDescription>
-          Changes made through these editors are applied immediately without
-          restarting the server.
-        </AlertDescription>
-      </Alert>
+      <ResponsiveOverlay
+        open={pendingImport !== null}
+        onOpenChange={(open) => {
+          if (!open && !importing) {
+            setPendingImport(null);
+            if (fileInputRef.current) {
+              fileInputRef.current.value = '';
+            }
+          }
+        }}
+        title="Import configuration?"
+        description="The file is applied immediately. Existing integrations, groups, scenes, and routines with matching IDs are overwritten."
+        className="max-w-lg"
+      >
+        <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+          <dl className="grid grid-cols-2 gap-2 text-sm">
+            {pendingImportCounts.map((entry) => (
+              <div
+                key={entry.label}
+                className="flex items-center justify-between gap-2 rounded-xl border border-border bg-muted/30 px-3 py-2"
+              >
+                <dt className="text-muted-foreground">{entry.label}</dt>
+                <dd className="font-medium">{entry.count}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="mt-4 text-xs text-muted-foreground">
+            Export a backup first if you are not sure you want to keep the
+            current configuration.
+          </p>
+          <div className="mt-auto flex justify-end gap-2 pt-4">
+            <Button
+              variant="ghost"
+              disabled={importing}
+              onClick={() => {
+                setPendingImport(null);
+                if (fileInputRef.current) {
+                  fileInputRef.current.value = '';
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button disabled={importing} onClick={() => void handleImport()}>
+              {importing ? 'Importing…' : 'Import now'}
+            </Button>
+          </div>
+        </div>
+      </ResponsiveOverlay>
     </div>
   );
 }

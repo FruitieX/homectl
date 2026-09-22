@@ -131,6 +131,14 @@ export const configSections = [
       'core',
       'warmup',
       'runtime',
+      'assistant',
+      'ai',
+      'api key',
+      'model',
+      'timezone',
+      'transitions',
+      'build',
+      'info',
     ],
   },
   {
@@ -158,6 +166,13 @@ export const configSections = [
     ],
   },
 ] satisfies ConfigSection[];
+
+// Routes that are tabs of a section but live at their own pathname; the page
+// header uses these to resolve the breadcrumb without listing a duplicate entry
+// on the settings home page.
+export const configSectionAliases: Record<string, string> = {
+  '/config/migration': '/config/import-export',
+};
 
 export function matchesConfigSectionSearch(
   section: ConfigSection,
