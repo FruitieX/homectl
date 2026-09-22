@@ -23,9 +23,11 @@
 //!   inferred from existing routines when unset)
 //!
 //! The configuration assistant plan flow (`assistant/search`, `assistant/plan`,
-//! `assistant/plans/{id}`) shares the same provider settings. Plans live in an
-//! in-memory TTL store; `HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides the default
-//! 15 minute TTL.
+//! `assistant/plans/{id}`, `assistant/plans/{id}/apply`) shares the same
+//! provider settings. Plans live in an in-memory TTL store; applying a plan
+//! re-validates the accepted operations against the live snapshot and writes
+//! them through the config API's state mutations. `HOMECTL_ASSISTANT_PLAN_TTL_MS`
+//! overrides the default 15 minute TTL.
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
@@ -37,13 +39,18 @@ use serde_json::{json, Value};
 
 use super::*;
 use crate::core::automation::{self, ConfigCatalog};
+use crate::core::integrations::integration_config_schemas;
 use crate::core::snapshot::RuntimeSnapshot;
 use crate::types::assistant::{
-    AssistantAttachment, AssistantEntityKind, AssistantOpKind, AssistantOperation, AssistantPlan,
-    AssistantPlanRequest, AssistantSearchResult,
+    ApplyAssistantPlanRequest, ApplyAssistantPlanResponse, AssistantAttachment,
+    AssistantEntityKind, AssistantOpKind, AssistantOperation, AssistantOperationResult,
+    AssistantPlan, AssistantPlanRequest, AssistantSearchResult,
 };
+use crate::types::automation_source::SourceDefinition;
+use crate::types::automation_value::HelperDefinition;
 use crate::types::device::{DeviceData, DeviceKey, DeviceRef};
 use crate::types::device_command::DeviceCommand;
+use crate::types::integration::IntegrationConfigFieldKind;
 use crate::types::scene::SceneDeviceConfig;
 use ordered_float::OrderedFloat;
 
@@ -392,6 +399,15 @@ pub(super) fn assistant_routes(
         .and(with_plan_store(&plans))
         .and_then(get_assistant_plan);
 
+    let apply_plan = warp::path!("assistant" / "plans" / String / "apply")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and(with_handle(handle))
+        .and(with_plan_store(&plans))
+        .and_then(apply_assistant_plan);
+
     status
         .or(settings_get)
         .or(settings_put)
@@ -400,6 +416,7 @@ pub(super) fn assistant_routes(
         .or(search)
         .or(plan)
         .or(get_plan)
+        .or(apply_plan)
 }
 
 fn with_plan_store(
@@ -1332,6 +1349,15 @@ impl PlanStore {
         plans.get(plan_id).cloned()
     }
 
+    /// Remove a plan once it has been applied (or abandoned). Expired plans
+    /// are swept first so a stale id cannot be applied.
+    fn remove(&self, plan_id: &str) -> Option<AssistantPlan> {
+        let now = now_ms();
+        let mut plans = self.plans.lock().expect("plan store lock");
+        plans.retain(|_, stored| stored.expires_at_ms > now);
+        plans.remove(plan_id)
+    }
+
     #[cfg(test)]
     fn len(&self) -> usize {
         self.plans.lock().expect("plan store lock").len()
@@ -1367,13 +1393,7 @@ async fn search_assistant_entities(
         .filter(|kind| !kind.is_empty())
     {
         Some(raw) => match parse_entity_kind(raw) {
-            Some(kind) if kind.is_supported() => Some(kind),
-            Some(kind) => {
-                return Ok(error_response(
-                    &format!("kind '{}' is not supported yet", kind.code()),
-                    StatusCode::BAD_REQUEST,
-                ))
-            }
+            Some(kind) => Some(kind),
             None => {
                 return Ok(error_response(
                     &format!("unknown kind '{raw}'"),
@@ -1450,7 +1470,72 @@ fn kind_entities(
                 )
             })
             .collect(),
-        _ => Vec::new(),
+        AssistantEntityKind::Device => snapshot
+            .devices
+            .0
+            .iter()
+            .map(|(key, device)| {
+                let kind = match &device.data {
+                    DeviceData::Sensor(_) => "sensor",
+                    DeviceData::Controllable(_) => "controllable",
+                };
+                (
+                    key.to_string(),
+                    device.name.clone(),
+                    format!("device · {kind}"),
+                )
+            })
+            .collect(),
+        AssistantEntityKind::Floorplan => list_runtime_floorplans(&snapshot.runtime_config)
+            .into_iter()
+            .map(|floorplan| (floorplan.id, floorplan.name, "floorplan".to_string()))
+            .collect(),
+        AssistantEntityKind::Integration => snapshot
+            .runtime_config
+            .integrations
+            .iter()
+            .map(|integration| {
+                let state = if integration.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                };
+                (
+                    integration.id.clone(),
+                    integration.id.clone(),
+                    format!("{} integration · {state}", integration.plugin),
+                )
+            })
+            .collect(),
+        AssistantEntityKind::Helper => snapshot
+            .runtime_config
+            .helpers
+            .iter()
+            .map(|helper| {
+                (
+                    helper.id.0.clone(),
+                    helper.name.clone(),
+                    format!("{} helper", helper.kind.code()),
+                )
+            })
+            .collect(),
+        AssistantEntityKind::ComputedSource => snapshot
+            .runtime_config
+            .sources
+            .iter()
+            .map(|source| {
+                let state = if source.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                };
+                (
+                    source.id.0.clone(),
+                    source.name.clone(),
+                    format!("computed source · {state}"),
+                )
+            })
+            .collect(),
     }
 }
 
@@ -1653,7 +1738,7 @@ async fn plan_assistant_operations(
     let context_json = serde_json::to_string(&context).unwrap_or_else(|_| "{}".to_string());
     let catalog = catalog_from_snapshot_export(&snapshot);
 
-    let messages = vec![
+    let mut messages = vec![
         json!({ "role": "system", "content": plan_system_prompt(&context_json) }),
         json!({ "role": "user", "content": prompt }),
     ];
@@ -1662,37 +1747,55 @@ async fn plan_assistant_operations(
         reasoning_effort: config.reasoning_effort.is_some(),
     };
     let session_id = new_session_id();
+    let mut last_errors = String::new();
 
-    let content = match chat(&config, &messages, &mut options, &session_id).await {
-        Ok(content) => content,
-        Err(error) => return Ok(provider_error_response(error)),
-    };
-    let provider = match parse_plan_envelope(&content) {
-        Ok(provider) => provider,
-        Err(error) => return Ok(error_response(&error, StatusCode::UNPROCESSABLE_ENTITY)),
-    };
-    if provider.operations.len() > MAX_PLAN_OPERATIONS {
-        return Ok(error_response(
-            &format!("Assistant returned more than {MAX_PLAN_OPERATIONS} operations"),
-            StatusCode::UNPROCESSABLE_ENTITY,
-        ));
+    for attempt in 1..=MAX_ATTEMPTS {
+        let content = match chat(&config, &messages, &mut options, &session_id).await {
+            Ok(content) => content,
+            Err(error) => return Ok(provider_error_response(error)),
+        };
+
+        let validated = parse_plan_envelope(&content).and_then(|provider| {
+            if provider.operations.len() > MAX_PLAN_OPERATIONS {
+                return Err(format!(
+                    "Assistant returned more than {MAX_PLAN_OPERATIONS} operations"
+                ));
+            }
+            validate_plan_operations(&snapshot, catalog.clone(), provider)
+        });
+
+        match validated {
+            Ok((summary, operations)) => {
+                let now = now_ms();
+                let plan = AssistantPlan {
+                    plan_id: format!("plan-{}", new_session_id()),
+                    summary,
+                    operations,
+                    created_at_ms: now,
+                    expires_at_ms: now + plans.ttl_ms(),
+                };
+                plans.insert(plan.clone());
+                return Ok(ApiResponse::success(plan));
+            }
+            Err(errors) => {
+                last_errors = errors;
+                if attempt < MAX_ATTEMPTS {
+                    messages.push(json!({ "role": "assistant", "content": content }));
+                    messages.push(json!({
+                        "role": "user",
+                        "content": format!(
+                            "That plan failed validation:\n{last_errors}\nReturn a corrected JSON object with the same contract."
+                        ),
+                    }));
+                }
+            }
+        }
     }
 
-    let (summary, operations) = match validate_plan_operations(&snapshot, catalog, provider) {
-        Ok(validated) => validated,
-        Err(error) => return Ok(error_response(&error, StatusCode::UNPROCESSABLE_ENTITY)),
-    };
-
-    let now = now_ms();
-    let plan = AssistantPlan {
-        plan_id: format!("plan-{}", new_session_id()),
-        summary,
-        operations,
-        created_at_ms: now,
-        expires_at_ms: now + plans.ttl_ms(),
-    };
-    plans.insert(plan.clone());
-    Ok(ApiResponse::success(plan))
+    Ok(error_response(
+        &format!("Assistant could not produce a valid plan: {last_errors}"),
+        StatusCode::UNPROCESSABLE_ENTITY,
+    ))
 }
 
 async fn get_assistant_plan(
@@ -1702,6 +1805,675 @@ async fn get_assistant_plan(
     match plans.get(&plan_id) {
         Some(plan) => Ok(ApiResponse::success(plan)),
         None => Ok(not_found("Assistant plan")),
+    }
+}
+
+// ============================================================================
+// Plan apply
+// ============================================================================
+
+/// Order accepted operations: creates first (dependencies before dependents),
+/// then updates, then deletes in reverse dependency order. The index keeps the
+/// order deterministic for equal phases and ranks.
+fn operation_sort_key(operation: &AssistantOperation, index: usize) -> (u8, u8, usize) {
+    let rank = match operation.kind {
+        AssistantEntityKind::Integration => 0,
+        AssistantEntityKind::Floorplan => 1,
+        AssistantEntityKind::Device => 2,
+        AssistantEntityKind::Helper => 3,
+        AssistantEntityKind::ComputedSource => 4,
+        AssistantEntityKind::Group => 5,
+        AssistantEntityKind::Scene => 6,
+        AssistantEntityKind::Routine => 7,
+    };
+    let phase = match operation.op {
+        AssistantOpKind::Create => 0,
+        AssistantOpKind::Update => 1,
+        AssistantOpKind::Delete => 2,
+    };
+    let rank = if operation.op == AssistantOpKind::Delete {
+        7 - rank
+    } else {
+        rank
+    };
+    (phase, rank, index)
+}
+
+async fn apply_assistant_plan(
+    plan_id: String,
+    request: ApplyAssistantPlanRequest,
+    snapshot: SnapshotHandle,
+    handle: StateHandle,
+    plans: Arc<PlanStore>,
+) -> Result<impl Reply, warp::Rejection> {
+    if request.accepted_operation_ids.is_empty() {
+        return Ok(error_response(
+            "acceptedOperationIds must not be empty",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let Some(plan) = plans.get(&plan_id) else {
+        return Ok(not_found("Assistant plan"));
+    };
+
+    let accepted: HashSet<&str> = request
+        .accepted_operation_ids
+        .iter()
+        .map(String::as_str)
+        .collect();
+    let mut selected: Vec<(usize, AssistantOperation)> = plan
+        .operations
+        .into_iter()
+        .enumerate()
+        .filter(|(_, operation)| accepted.contains(operation.op_id.as_str()))
+        .collect();
+    if selected.is_empty() {
+        return Ok(error_response(
+            "no accepted operations match this plan",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    selected.sort_by_key(|(index, operation)| operation_sort_key(operation, *index));
+
+    // The plan is single-use: consume it before executing so it cannot be
+    // applied twice.
+    plans.remove(&plan_id);
+
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    // Re-validate against the live snapshot: entities may have changed since
+    // the plan was produced. Per-op failures are reported in the response
+    // instead of aborting the whole apply.
+    let live = snapshot.load();
+    let validation = PlanValidation::new(&live, catalog_from_snapshot_export(&live));
+
+    let mut results = Vec::with_capacity(selected.len());
+    for (_, operation) in selected {
+        let outcome =
+            apply_plan_operation(&handle, &live, &_write_guard, &validation, &operation).await;
+        results.push(AssistantOperationResult {
+            op_id: operation.op_id,
+            ok: outcome.is_ok(),
+            error: outcome.err(),
+        });
+    }
+
+    Ok(ApiResponse::success(ApplyAssistantPlanResponse { results }))
+}
+
+/// Re-validate one accepted operation against the live snapshot, then execute
+/// it through the same state mutations and persistence calls the config API
+/// handlers use.
+async fn apply_plan_operation(
+    handle: &StateHandle,
+    live: &RuntimeSnapshot,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    validation: &PlanValidation<'_>,
+    operation: &AssistantOperation,
+) -> Result<(), String> {
+    let provider = ProviderOperation {
+        op: operation.op,
+        kind: operation.kind,
+        target_id: operation.target_id.clone(),
+        label: Some(operation.label.clone()),
+        after: operation.after.clone(),
+        warnings: Vec::new(),
+    };
+    let validated = validation.build_operation(operation.op_id.clone(), provider)?;
+
+    match validated.op {
+        AssistantOpKind::Create => apply_create(handle, guard, &validated).await,
+        AssistantOpKind::Update => apply_update(handle, live, guard, &validated).await,
+        AssistantOpKind::Delete => apply_delete(handle, guard, &validated).await,
+    }
+}
+
+fn parse_validated_body<T>(operation: &AssistantOperation) -> Result<T, String>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let body = operation.after.clone().ok_or_else(|| {
+        format!(
+            "{}: validated operation is missing its final body",
+            operation.op_id
+        )
+    })?;
+    serde_json::from_value(body)
+        .map_err(|error| format!("{}: invalid body: {error}", operation.op_id))
+}
+
+fn operation_target(operation: &AssistantOperation) -> Result<String, String> {
+    operation.target_id.clone().ok_or_else(|| {
+        format!(
+            "{}: validated operation is missing its target id",
+            operation.op_id
+        )
+    })
+}
+
+fn persisted(error: color_eyre::Report) -> String {
+    format!("applied in memory but persistence failed: {error}")
+}
+
+async fn apply_create(
+    handle: &StateHandle,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    operation: &AssistantOperation,
+) -> Result<(), String> {
+    match operation.kind {
+        AssistantEntityKind::Group => {
+            let group: GroupRow = parse_validated_body(operation)?;
+            write_group(handle, group.clone()).await?;
+            config_queries::db_upsert_group(&group)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Scene => {
+            let scene: SceneRow = parse_validated_body(operation)?;
+            write_scene(handle, scene.clone()).await?;
+            config_queries::db_upsert_config_scene(&scene)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Routine => {
+            let mut routine: RoutineRow = parse_validated_body(operation)?;
+            routine.revision = automation::next_revision(None);
+            write_routine(handle, routine.clone()).await?;
+            config_queries::db_upsert_routine(&routine)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Helper => {
+            let definition: HelperDefinition = parse_validated_body(operation)?;
+            write_helper(handle, definition.clone()).await?;
+            config_queries::db_upsert_helper(&definition)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::ComputedSource => {
+            let mut source: SourceDefinition = parse_validated_body(operation)?;
+            source.revision = 1;
+            write_source(handle, source.clone()).await?;
+            config_queries::db_upsert_source(&source)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Integration => {
+            let integration: IntegrationRow = parse_validated_body(operation)?;
+            write_integration(handle, guard, integration.clone()).await?;
+            config_queries::db_upsert_integration(&integration)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Floorplan => {
+            let floorplan: FloorplanMetadataRow = parse_validated_body(operation)?;
+            let to_create = floorplan.clone();
+            let created = handle
+                .mutate(move |state| {
+                    Box::pin(async move { state.create_floorplan_metadata(to_create) })
+                })
+                .await
+                .map_err(|error| error.to_string())?;
+            if !created {
+                return Err(format!("floorplan '{}' already exists", floorplan.id));
+            }
+            config_queries::db_create_floorplan(&floorplan)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Device => {
+            Err("devices are discovered from integrations and cannot be created".to_string())
+        }
+    }
+}
+
+async fn apply_update(
+    handle: &StateHandle,
+    live: &RuntimeSnapshot,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    operation: &AssistantOperation,
+) -> Result<(), String> {
+    match operation.kind {
+        AssistantEntityKind::Group => {
+            let group: GroupRow = parse_validated_body(operation)?;
+            write_group(handle, group.clone()).await?;
+            config_queries::db_upsert_group(&group)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Scene => {
+            let scene: SceneRow = parse_validated_body(operation)?;
+            write_scene(handle, scene.clone()).await?;
+            config_queries::db_upsert_config_scene(&scene)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Routine => {
+            let mut routine: RoutineRow = parse_validated_body(operation)?;
+            let existing = live
+                .runtime_config
+                .routines
+                .iter()
+                .find(|row| row.id == routine.id);
+            routine.revision = automation::next_revision(existing);
+            write_routine(handle, routine.clone()).await?;
+            config_queries::db_upsert_routine(&routine)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Helper => {
+            let definition: HelperDefinition = parse_validated_body(operation)?;
+            write_helper(handle, definition.clone()).await?;
+            config_queries::db_upsert_helper(&definition)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::ComputedSource => {
+            let mut source: SourceDefinition = parse_validated_body(operation)?;
+            let existing = live
+                .runtime_config
+                .sources
+                .iter()
+                .find(|row| row.id == source.id);
+            source.revision = existing.map(|row| row.revision + 1).unwrap_or(1);
+            write_source(handle, source.clone()).await?;
+            config_queries::db_upsert_source(&source)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Integration => {
+            let mut integration: IntegrationRow = parse_validated_body(operation)?;
+            // The plan snapshot masked secret fields. Keep the stored value
+            // for any secret the reviewed body does not explicitly set.
+            if let Some(stored) = live
+                .runtime_config
+                .integrations
+                .iter()
+                .find(|row| row.id == integration.id)
+            {
+                restore_omitted_integration_secrets(
+                    &mut integration.config,
+                    &stored.config,
+                    &integration.plugin,
+                );
+            }
+            write_integration(handle, guard, integration.clone()).await?;
+            config_queries::db_upsert_integration(&integration)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Floorplan => {
+            let floorplan: FloorplanMetadataRow = parse_validated_body(operation)?;
+            let to_update = floorplan.clone();
+            let updated = handle
+                .mutate(move |state| {
+                    Box::pin(async move { state.update_floorplan_metadata(to_update) })
+                })
+                .await
+                .map_err(|error| error.to_string())?;
+            if !updated {
+                return Err(format!("floorplan '{}' no longer exists", floorplan.id));
+            }
+            config_queries::db_update_floorplan_metadata(&floorplan)
+                .await
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Device => {
+            let state: DevicePlanState = parse_validated_body(operation)?;
+            let device_key = state
+                .device_key
+                .ok_or_else(|| "device body requires device_key".to_string())?;
+            match state.display_name {
+                Some(display_name) => {
+                    let row = DeviceDisplayNameRow {
+                        device_key: device_key.clone(),
+                        display_name,
+                    };
+                    let row_for_state = row.clone();
+                    handle
+                        .mutate(move |state| {
+                            Box::pin(async move {
+                                state.upsert_device_display_override(row_for_state);
+                            })
+                        })
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    config_queries::db_upsert_device_display_override(&row)
+                        .await
+                        .map_err(persisted)
+                }
+                None => {
+                    let key_for_state = device_key.clone();
+                    handle
+                        .mutate(move |state| {
+                            Box::pin(async move {
+                                state.delete_device_display_override(&key_for_state);
+                            })
+                        })
+                        .await
+                        .map_err(|error| error.to_string())?;
+                    config_queries::db_delete_device_display_override(&device_key)
+                        .await
+                        .map(|_| ())
+                        .map_err(persisted)
+                }
+            }
+        }
+    }
+}
+
+async fn apply_delete(
+    handle: &StateHandle,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    operation: &AssistantOperation,
+) -> Result<(), String> {
+    let target_id = operation_target(operation)?;
+    match operation.kind {
+        AssistantEntityKind::Group => {
+            if !delete_group_state(handle, target_id.clone()).await? {
+                return Err(format!("group '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_group(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Scene => {
+            if !delete_scene_state(handle, target_id.clone()).await? {
+                return Err(format!("scene '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_config_scene(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Routine => {
+            if !delete_routine_state(handle, target_id.clone()).await? {
+                return Err(format!("routine '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_routine(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Helper => {
+            if !delete_helper_state(handle, target_id.clone()).await? {
+                return Err(format!("helper '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_helper(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::ComputedSource => {
+            if !delete_source_state(handle, target_id.clone()).await? {
+                return Err(format!("computed source '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_source(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Integration => {
+            let id = target_id.clone();
+            let deleted = apply_runtime_integrations_change(handle, guard, move |config| {
+                let len_before = config.integrations.len();
+                config.integrations.retain(|row| row.id != id);
+                config.integrations.len() != len_before
+            })
+            .await
+            .map_err(|error| format!("integration change failed: {error}"))?;
+            if !deleted {
+                return Err(format!("integration '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_integration(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Floorplan => {
+            let id = target_id.clone();
+            let deleted = handle
+                .mutate(move |state| Box::pin(async move { state.delete_floorplan(&id) }))
+                .await
+                .map_err(|error| error.to_string())?;
+            if !deleted {
+                return Err(format!("floorplan '{target_id}' no longer exists"));
+            }
+            config_queries::db_delete_floorplan(&target_id)
+                .await
+                .map(|_| ())
+                .map_err(persisted)
+        }
+        AssistantEntityKind::Device => {
+            match delete_config_device_impl(target_id.clone(), handle).await {
+                DeviceConfigDeleteOutcome::Deleted {
+                    rewrite, source, ..
+                } => persist_device_config_rewrite(&rewrite, &source, None)
+                    .await
+                    .map_err(persisted),
+                DeviceConfigDeleteOutcome::InvalidKey => {
+                    Err(format!("invalid device key '{target_id}'"))
+                }
+                DeviceConfigDeleteOutcome::NotFound => {
+                    Err(format!("device '{target_id}' no longer exists"))
+                }
+                DeviceConfigDeleteOutcome::ActorUnavailable => {
+                    Err("state actor unavailable".to_string())
+                }
+            }
+        }
+    }
+}
+
+async fn write_group(handle: &StateHandle, group: GroupRow) -> Result<(), String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_group(group);
+                state.apply_runtime_groups();
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn write_scene(handle: &StateHandle, scene: SceneRow) -> Result<(), String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_scene(scene);
+                state.apply_runtime_scenes();
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn write_routine(handle: &StateHandle, routine: RoutineRow) -> Result<(), String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_routine(routine);
+                state.apply_runtime_routines();
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn write_helper(handle: &StateHandle, definition: HelperDefinition) -> Result<(), String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.helpers.upsert_definition(definition.clone())?;
+                let id = definition.id.clone();
+                if let Some(existing) = state
+                    .runtime_config
+                    .helpers
+                    .iter_mut()
+                    .find(|existing| existing.id == id)
+                {
+                    *existing = definition;
+                } else {
+                    state.runtime_config.helpers.push(definition);
+                    state
+                        .runtime_config
+                        .helpers
+                        .sort_by(|left, right| left.id.0.cmp(&right.id.0));
+                }
+                state.refresh_routine_statuses();
+                state.schedule_ws_broadcast(SnapshotChanges {
+                    helper_statuses: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                });
+                Ok::<(), String>(())
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+async fn write_source(handle: &StateHandle, source: SourceDefinition) -> Result<(), String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                state.upsert_source(source);
+                state.schedule_ws_broadcast(SnapshotChanges {
+                    runtime_config: true,
+                    ..SnapshotChanges::none()
+                });
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn write_integration(
+    handle: &StateHandle,
+    guard: &tokio::sync::OwnedMutexGuard<()>,
+    integration: IntegrationRow,
+) -> Result<(), String> {
+    apply_runtime_integrations_change(handle, guard, move |config| {
+        if let Some(existing) = config
+            .integrations
+            .iter_mut()
+            .find(|existing| existing.id == integration.id)
+        {
+            *existing = integration.clone();
+        } else {
+            config.integrations.push(integration.clone());
+            config
+                .integrations
+                .sort_by(|left, right| left.id.cmp(&right.id));
+        }
+        true
+    })
+    .await
+    .map(|_| ())
+    .map_err(|error| format!("integration change failed: {error}"))
+}
+
+async fn delete_group_state(handle: &StateHandle, id: String) -> Result<bool, String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_group(&id);
+                if deleted {
+                    state.apply_runtime_groups();
+                }
+                deleted
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn delete_scene_state(handle: &StateHandle, id: String) -> Result<bool, String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_scene(&id);
+                if deleted {
+                    state.apply_runtime_scenes();
+                }
+                deleted
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn delete_routine_state(handle: &StateHandle, id: String) -> Result<bool, String> {
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_routine(&id);
+                if deleted {
+                    state.apply_runtime_routines();
+                }
+                deleted
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn delete_helper_state(handle: &StateHandle, id: String) -> Result<bool, String> {
+    let helper_id = HelperId(id);
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let removed = state.helpers.remove_definition(&helper_id);
+                state
+                    .runtime_config
+                    .helpers
+                    .retain(|definition| definition.id != helper_id);
+                state
+                    .runtime_config
+                    .helper_values
+                    .retain(|row| row.id != helper_id.0);
+                state.refresh_routine_statuses();
+                state.schedule_ws_broadcast(SnapshotChanges {
+                    helper_statuses: true,
+                    routine_statuses: true,
+                    ..SnapshotChanges::none()
+                });
+                removed
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+async fn delete_source_state(handle: &StateHandle, id: String) -> Result<bool, String> {
+    let source_id = crate::types::automation_definition::SourceId(id);
+    handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_source(&source_id);
+                if deleted {
+                    state.schedule_ws_broadcast(SnapshotChanges {
+                        runtime_config: true,
+                        ..SnapshotChanges::none()
+                    });
+                }
+                deleted
+            })
+        })
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// Keep stored integration secrets for paths the reviewed body omitted.
+fn restore_omitted_integration_secrets(config: &mut Value, stored: &Value, plugin: &str) {
+    for key in integration_secret_keys(plugin) {
+        insert_missing_json_path(config, stored, &key);
     }
 }
 
@@ -1715,12 +2487,6 @@ fn build_plan_context(
 ) -> Result<Value, String> {
     let mut attached = Vec::new();
     for attachment in attachments {
-        if !attachment.kind.is_supported() {
-            return Err(format!(
-                "attachments for kind '{}' are not supported yet",
-                attachment.kind.code()
-            ));
-        }
         match attachment
             .id
             .as_deref()
@@ -1784,48 +2550,164 @@ fn build_context_devices(snapshot: &RuntimeSnapshot) -> Vec<Value> {
         .collect()
 }
 
-/// Full, browser-safe snapshot of one entity. Phase 1 kinds carry no secrets,
-/// so masking is a pass-through; secret-bearing kinds (integrations) plug
-/// their redaction in here.
+/// Full, browser-safe snapshot of one entity. Secret-bearing kinds mask their
+/// secret fields here before the value is shown in a plan or sent to a
+/// provider.
 fn entity_snapshot(
     snapshot: &RuntimeSnapshot,
     kind: AssistantEntityKind,
     id: &str,
 ) -> Option<Value> {
-    let value = match kind {
+    match kind {
         AssistantEntityKind::Routine => snapshot
             .runtime_config
             .routines
             .iter()
             .find(|routine| routine.id == id)
-            .and_then(|routine| serde_json::to_value(routine).ok())?,
+            .and_then(|routine| serde_json::to_value(routine).ok()),
         AssistantEntityKind::Scene => snapshot
             .runtime_config
             .scenes
             .iter()
             .find(|scene| scene.id == id)
-            .and_then(|scene| serde_json::to_value(scene).ok())?,
+            .and_then(|scene| serde_json::to_value(scene).ok()),
         AssistantEntityKind::Group => snapshot
             .runtime_config
             .groups
             .iter()
             .find(|group| group.id == id)
-            .and_then(|group| serde_json::to_value(group).ok())?,
-        _ => return None,
-    };
-    Some(mask_entity_snapshot(kind, value))
+            .and_then(|group| serde_json::to_value(group).ok()),
+        AssistantEntityKind::Device => {
+            let (key, device) = snapshot
+                .devices
+                .0
+                .iter()
+                .find(|(key, _)| key.to_string() == id)?;
+            let display_name = snapshot
+                .runtime_config
+                .device_display_overrides
+                .iter()
+                .find(|row| row.device_key == id)
+                .map(|row| row.display_name.clone());
+            let data_kind = match &device.data {
+                DeviceData::Sensor(_) => "sensor",
+                DeviceData::Controllable(_) => "controllable",
+            };
+            Some(json!({
+                "device_key": key.to_string(),
+                "name": device.name,
+                "display_name": display_name,
+                "kind": data_kind,
+            }))
+        }
+        AssistantEntityKind::Floorplan => list_runtime_floorplans(&snapshot.runtime_config)
+            .into_iter()
+            .find(|floorplan| floorplan.id == id)
+            .and_then(|floorplan| serde_json::to_value(floorplan).ok()),
+        AssistantEntityKind::Integration => {
+            let row = snapshot
+                .runtime_config
+                .integrations
+                .iter()
+                .find(|integration| integration.id == id)?;
+            let mut value = serde_json::to_value(row).ok()?;
+            redact_integration_secrets(&mut value, &row.plugin);
+            Some(value)
+        }
+        AssistantEntityKind::Helper => snapshot
+            .runtime_config
+            .helpers
+            .iter()
+            .find(|helper| helper.id.0 == id)
+            .and_then(|helper| serde_json::to_value(helper).ok()),
+        AssistantEntityKind::ComputedSource => snapshot
+            .runtime_config
+            .sources
+            .iter()
+            .find(|source| source.id.0 == id)
+            .and_then(|source| serde_json::to_value(source).ok()),
+    }
 }
 
-fn mask_entity_snapshot(_kind: AssistantEntityKind, value: Value) -> Value {
-    value
+/// Password-kind config fields for an integration plugin, as dot-separated
+/// schema keys. Integrations are schema-driven, so the schema is the source of
+/// truth for which fields are secrets (the widget-settings equivalent lives in
+/// `secret_widget_field`).
+fn integration_secret_keys(plugin: &str) -> Vec<String> {
+    integration_config_schemas()
+        .into_iter()
+        .find(|schema| schema.plugin == plugin)
+        .map(|schema| {
+            schema
+                .fields
+                .into_iter()
+                .filter(|field| field.kind == IntegrationConfigFieldKind::Password)
+                .map(|field| field.key)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn json_path_pointer(key: &str) -> String {
+    let mut pointer = String::with_capacity(key.len() + 1);
+    for segment in key.split('.') {
+        pointer.push('/');
+        pointer.push_str(segment);
+    }
+    pointer
+}
+
+fn remove_json_path(value: &mut Value, key: &str) {
+    let pointer = json_path_pointer(key);
+    let Some((parent_pointer, last)) = pointer.rsplit_once('/') else {
+        return;
+    };
+    let Some(parent) = value.pointer_mut(parent_pointer) else {
+        return;
+    };
+    if let Some(object) = parent.as_object_mut() {
+        object.remove(last);
+    }
+}
+
+/// Restore a stored value for a path that is absent from `target` (the plan
+/// body). Presence, including an explicit null, is respected so a user can
+/// still clear a secret deliberately.
+fn insert_missing_json_path(target: &mut Value, source: &Value, key: &str) {
+    let pointer = json_path_pointer(key);
+    if target.pointer(&pointer).is_some() {
+        return;
+    }
+    let Some(stored) = source.pointer(&pointer).cloned() else {
+        return;
+    };
+    let Some((parent_pointer, last)) = pointer.rsplit_once('/') else {
+        return;
+    };
+    let Some(parent) = target.pointer_mut(parent_pointer) else {
+        return;
+    };
+    if let Some(object) = parent.as_object_mut() {
+        object.insert(last.to_string(), stored);
+    }
+}
+
+/// Drop every secret field from an integration row snapshot.
+fn redact_integration_secrets(value: &mut Value, plugin: &str) {
+    let Some(config) = value.get_mut("config") else {
+        return;
+    };
+    for key in integration_secret_keys(plugin) {
+        remove_json_path(config, &key);
+    }
 }
 
 fn plan_system_prompt(context_json: &str) -> String {
     format!(
-        r#"You are the homectl configuration assistant. You translate a plain-language request into a reviewed plan of configuration operations across routines, scenes, and groups. Nothing is written until the user accepts the plan.
+        r#"You are the homectl configuration assistant. You translate a plain-language request into a reviewed plan of configuration operations across routines, scenes, groups, devices, floorplans, integrations, helpers, and computed sources. Nothing is written until the user accepts the plan.
 
 Respond with a single JSON object and nothing else:
-{{"summary": "<one or two sentences for review>", "operations": [{{"op": "create|update|delete", "kind": "routine|scene|group", "target_id": "<existing id; update/delete only>", "label": "<short review label>", "after": <final entity state>, "warnings": ["<optional warning>"]}}]}}
+{{"summary": "<one or two sentences for review>", "operations": [{{"op": "create|update|delete", "kind": "routine|scene|group|device|floorplan|integration|helper|computed_source", "target_id": "<existing id; update/delete only>", "label": "<short review label>", "after": <final entity state>, "warnings": ["<optional warning>"]}}]}}
 
 Rules:
 - Only reference entities that appear in CONTEXT. Never invent ids. Unknown target ids are rejected.
@@ -1834,7 +2716,7 @@ Rules:
 - delete requires target_id and must not include "after".
 - Ids match [A-Za-z0-9_.-]{{1,64}}.
 - At most 40 operations. Prefer the smallest plan that fulfills the request.
-- Never include secrets or credentials.
+- Never include secrets or credentials. Integration secret fields are omitted from snapshots; leave them out and they keep their stored values on update.
 - Return only the JSON object, without markdown or code fences.
 
 Per-kind shapes:
@@ -1850,6 +2732,26 @@ Scene:
 Routine (v2 only):
 {{"id": "<id>", "name": "<name>", "enabled": false, "semantics_version": 2, "definition_v2": <RoutineDefinitionV2>}}
 - "enabled" defaults to false; set true when the user asked for an active automation.
+
+Device (update/delete only; devices are discovered from integrations and can never be created here):
+{{"device_key": "<integration_id>/<device_id>", "display_name": "<new label>"}}
+- display_name null or "" clears the custom label and restores the device name.
+
+Floorplan:
+{{"id": "<id>", "name": "<name>"}}
+
+Integration:
+{{"id": "<id>", "plugin": "<mqtt|circadian|cron|timer|dummy|random>", "enabled": true, "config": {{ ... }}}}
+- Secret fields (for example mqtt "password") are never shown; omit them and the stored value is kept on update.
+
+Helper:
+{{"id": "<id>", "name": "<name>", "kind": {{"kind": "boolean"}}, "initial_value": false, "persistence": "durable"}}
+- kind is one of {{"kind":"boolean"}}, {{"kind":"string"}}, {{"kind":"enum","options":["a","b"]}}, {{"kind":"number","min":0,"max":100}}.
+- persistence is "durable" (default) or "session"; initial_value must match the declared kind.
+
+Computed source:
+{{"id": "<id>", "name": "<name>", "enabled": true, "timezone": "Europe/Helsinki", "refresh_interval_ms": 60000, "compute": <SourceCompute>}}
+- Prefer the circadian_compat compute shape shown in the catalog or an existing source snapshot; scripts are a last resort.
 
 {ROUTINE_DEFINITION_REFERENCE}
 
@@ -1914,6 +2816,34 @@ struct GroupPlanState {
     linked_groups: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct DevicePlanState {
+    #[serde(default)]
+    device_key: Option<String>,
+    #[serde(default)]
+    display_name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct FloorplanPlanState {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct IntegrationPlanState {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    plugin: Option<String>,
+    #[serde(default)]
+    config: Value,
+    #[serde(default)]
+    enabled: Option<bool>,
+}
+
 /// Validates provider operations against the live snapshot and normalizes
 /// their state into reviewable `before`/`after` bodies.
 struct PlanValidation<'a> {
@@ -1956,10 +2886,9 @@ impl<'a> PlanValidation<'a> {
 
     fn build_operation(
         &self,
-        index: usize,
+        op_id: String,
         operation: ProviderOperation,
     ) -> Result<AssistantOperation, String> {
-        let op_id = format!("op-{}", index + 1);
         let mut warnings: Vec<String> = operation
             .warnings
             .into_iter()
@@ -2003,7 +2932,7 @@ impl<'a> PlanValidation<'a> {
                 let patch = operation
                     .after
                     .ok_or_else(|| format!("{op_id}: update requires an 'after' body"))?;
-                let merged = merge_object(&before, &patch);
+                let merged = merge_operation_body(operation.kind, &before, &patch);
                 let after = self.validate_entity(
                     operation.kind,
                     Some(&target_id),
@@ -2074,10 +3003,11 @@ impl<'a> PlanValidation<'a> {
             AssistantEntityKind::Routine => self.validate_routine(target_id, body, op_id, warnings),
             AssistantEntityKind::Scene => self.validate_scene(target_id, body, op_id),
             AssistantEntityKind::Group => self.validate_group(target_id, body, op_id),
-            other => Err(format!(
-                "{op_id}: kind '{}' is not supported yet",
-                other.code()
-            )),
+            AssistantEntityKind::Device => self.validate_device(target_id, body, op_id),
+            AssistantEntityKind::Floorplan => self.validate_floorplan(target_id, body, op_id),
+            AssistantEntityKind::Integration => self.validate_integration(target_id, body, op_id),
+            AssistantEntityKind::Helper => self.validate_helper(target_id, body, op_id),
+            AssistantEntityKind::ComputedSource => self.validate_source(target_id, body, op_id),
         }
     }
 
@@ -2110,7 +3040,9 @@ impl<'a> PlanValidation<'a> {
             .map(str::trim)
             .filter(|name| !name.is_empty())
             .ok_or_else(|| format!("{op_id}: routine body requires a name"))?;
-        if state.rules.is_some() || state.actions.is_some() {
+        if state.rules.as_ref().is_some_and(has_plan_content)
+            || state.actions.as_ref().is_some_and(has_plan_content)
+        {
             return Err(format!(
                 "{op_id}: only v2 routines are supported; provide definition_v2"
             ));
@@ -2272,6 +3204,181 @@ impl<'a> PlanValidation<'a> {
             .map_err(|error| format!("{op_id}: group body could not be normalized: {error}"))
     }
 
+    /// Devices are discovered from integrations, so a plan can only update or
+    /// delete one. `after` carries the user-visible label override.
+    fn validate_device(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let Some(target_id) = target_id else {
+            return Err(format!(
+                "{op_id}: devices are discovered from integrations and cannot be created here"
+            ));
+        };
+        let state: DevicePlanState = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid device body: {error}"))?;
+        let device_key = state
+            .device_key
+            .as_deref()
+            .map(str::trim)
+            .filter(|key| !key.is_empty())
+            .ok_or_else(|| format!("{op_id}: device body requires device_key"))?;
+        if device_key != target_id {
+            return Err(format!(
+                "{op_id}: device key '{device_key}' does not match targetId '{target_id}'"
+            ));
+        }
+        if !self.device_keys.contains(device_key) {
+            return Err(format!("{op_id}: unknown device '{device_key}'"));
+        }
+        let display_name = state
+            .display_name
+            .map(|name| name.trim().to_string())
+            .filter(|name| !name.is_empty());
+        Ok(json!({ "device_key": device_key, "display_name": display_name }))
+    }
+
+    fn validate_floorplan(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let state: FloorplanPlanState = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid floorplan body: {error}"))?;
+        let id = state
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| format!("{op_id}: floorplan body requires an id"))?;
+        validate_entity_id(id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: floorplan id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        let name = state
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| format!("{op_id}: floorplan body requires a name"))?;
+        let floorplan = FloorplanMetadataRow {
+            id: id.to_string(),
+            name: name.to_string(),
+        };
+        serde_json::to_value(&floorplan)
+            .map_err(|error| format!("{op_id}: floorplan body could not be normalized: {error}"))
+    }
+
+    fn validate_integration(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let state: IntegrationPlanState = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid integration body: {error}"))?;
+        let id = state
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| format!("{op_id}: integration body requires an id"))?;
+        validate_entity_id(id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: integration id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        let plugin = state
+            .plugin
+            .as_deref()
+            .map(str::trim)
+            .filter(|plugin| !plugin.is_empty())
+            .ok_or_else(|| format!("{op_id}: integration body requires a plugin"))?;
+        if !integration_config_schemas()
+            .iter()
+            .any(|schema| schema.plugin == plugin)
+        {
+            return Err(format!("{op_id}: unknown integration plugin '{plugin}'"));
+        }
+        if !state.config.is_null() && !state.config.is_object() {
+            return Err(format!("{op_id}: integration config must be a JSON object"));
+        }
+        let integration = IntegrationRow {
+            id: id.to_string(),
+            plugin: plugin.to_string(),
+            config: state.config,
+            enabled: state.enabled.unwrap_or(true),
+        };
+        serde_json::to_value(&integration)
+            .map_err(|error| format!("{op_id}: integration body could not be normalized: {error}"))
+    }
+
+    fn validate_helper(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let definition: HelperDefinition = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid helper body: {error}"))?;
+        let id = definition.id.0.trim();
+        if id.is_empty() {
+            return Err(format!("{op_id}: helper body requires an id"));
+        }
+        validate_entity_id(id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: helper id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        definition
+            .validate()
+            .map_err(|error| format!("{op_id}: invalid helper: {error}"))?;
+        serde_json::to_value(&definition)
+            .map_err(|error| format!("{op_id}: helper body could not be normalized: {error}"))
+    }
+
+    fn validate_source(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let mut source: SourceDefinition = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid computed source body: {error}"))?;
+        let id = source.id.0.trim().to_string();
+        if id.is_empty() {
+            return Err(format!("{op_id}: computed source body requires an id"));
+        }
+        validate_entity_id(&id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: computed source id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        super::sources::validate_source(&source)
+            .map_err(|error| format!("{op_id}: invalid computed source: {error}"))?;
+        // Revisions are server-owned.
+        source.revision = 1;
+        serde_json::to_value(&source).map_err(|error| {
+            format!("{op_id}: computed source body could not be normalized: {error}")
+        })
+    }
+
     /// Approximate, deterministic in-use warnings for deletes. References are
     /// counted from scene/group rows and v2 routine definitions.
     fn reference_warnings(&self, kind: AssistantEntityKind, id: &str) -> Vec<String> {
@@ -2312,6 +3419,30 @@ impl<'a> PlanValidation<'a> {
                 scenes + self.routine_mentions(id)
             }
             AssistantEntityKind::Routine => self.routine_mentions(id),
+            AssistantEntityKind::Device => {
+                let groups = self
+                    .snapshot
+                    .runtime_config
+                    .groups
+                    .iter()
+                    .filter(|group| {
+                        group.devices.iter().any(|device| {
+                            format!("{}/{}", device.integration_id, device.device_id) == id
+                        })
+                    })
+                    .count();
+                let scenes = self
+                    .snapshot
+                    .runtime_config
+                    .scenes
+                    .iter()
+                    .filter(|scene| scene.device_states.contains_key(id))
+                    .count();
+                groups + scenes
+            }
+            AssistantEntityKind::Helper | AssistantEntityKind::ComputedSource => {
+                self.routine_mentions(id)
+            }
             _ => 0,
         };
         if count == 0 {
@@ -2353,7 +3484,7 @@ fn validate_plan_operations(
 
     let mut operations = Vec::with_capacity(provider.operations.len());
     for (index, operation) in provider.operations.into_iter().enumerate() {
-        operations.push(validation.build_operation(index, operation)?);
+        operations.push(validation.build_operation(format!("op-{}", index + 1), operation)?);
     }
 
     let summary = summary
@@ -2407,6 +3538,19 @@ fn operation_entity_id(value: &Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Whether a legacy v1 routine field actually carries content. Normalized v2
+/// rows serialize empty `rules`/`actions` arrays, so those must not be treated
+/// as a legacy body.
+fn has_plan_content(value: &Value) -> bool {
+    match value {
+        Value::Null => false,
+        Value::Array(items) => !items.is_empty(),
+        Value::Object(map) => !map.is_empty(),
+        Value::String(text) => !text.trim().is_empty(),
+        _ => true,
+    }
+}
+
 fn merge_object(base: &Value, patch: &Value) -> Value {
     match (base, patch) {
         (Value::Object(base), Value::Object(patch)) => {
@@ -2418,6 +3562,25 @@ fn merge_object(base: &Value, patch: &Value) -> Value {
         }
         _ => patch.clone(),
     }
+}
+
+/// Merge an update patch over the current body. Integration `config` objects
+/// are merged field by field so a patch that changes one setting keeps the
+/// rest (secret fields are already absent from the snapshot and are restored
+/// at apply time).
+fn merge_operation_body(kind: AssistantEntityKind, before: &Value, patch: &Value) -> Value {
+    let mut merged = merge_object(before, patch);
+    if kind != AssistantEntityKind::Integration {
+        return merged;
+    }
+    let (Some(base_config), Some(patch_config)) = (before.get("config"), patch.get("config"))
+    else {
+        return merged;
+    };
+    if base_config.is_object() && patch_config.is_object() {
+        merged["config"] = merge_object(base_config, patch_config);
+    }
+    merged
 }
 
 fn default_operation_label(
@@ -2465,7 +3628,10 @@ fn json_mentions(value: &Value, needle: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::automation::sources::CIRCADIAN_COMPAT_PRESET_VERSION;
     use crate::db::config_queries::ConfigExport;
+    use crate::types::automation_source::{CircadianCompatParams, SourceCompute};
+    use crate::types::color::DeviceColor;
     use crate::types::device::{Device, DeviceId, DeviceKey, DevicesState, SensorDevice};
     use crate::types::integration::IntegrationId;
 
@@ -3219,7 +4385,7 @@ mod tests {
     }
 
     #[test]
-    fn plan_validation_rejects_unsupported_kinds_and_shapes() {
+    fn plan_validation_rejects_device_creates_and_malformed_shapes() {
         let snapshot = snapshot_with_config(empty_export());
         let error = validate_provider(
             &snapshot,
@@ -3232,7 +4398,7 @@ mod tests {
             }),
         )
         .unwrap_err();
-        assert!(error.contains("not supported yet"), "{error}");
+        assert!(error.contains("cannot be created here"), "{error}");
 
         let error = validate_provider(
             &snapshot,
@@ -3345,5 +4511,279 @@ mod tests {
         assert!(prompt.contains("target_id"));
         assert!(prompt.contains("RoutineDefinitionV2"));
         assert!(prompt.contains("\"devices\":[]"));
+    }
+
+    // ========================================================================
+    // Phase 2 adapters, masking, and apply ordering
+    // ========================================================================
+
+    #[test]
+    fn plan_validation_accepts_device_and_helper_writes() {
+        let snapshot = snapshot_with_config_and_devices(empty_export(), vec![sensor_device()]);
+
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [
+                    {
+                        "op": "update",
+                        "kind": "device",
+                        "targetId": "dummy/sensor",
+                        "after": {"display_name": "Hall sensor"}
+                    },
+                    {
+                        "op": "create",
+                        "kind": "helper",
+                        "after": {
+                            "id": "night_mode",
+                            "name": "Night mode",
+                            "kind": {"kind": "boolean"},
+                            "initial_value": false
+                        }
+                    }
+                ]
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(operations[0].kind, AssistantEntityKind::Device);
+        assert_eq!(
+            operations[0].after.as_ref().unwrap()["device_key"],
+            "dummy/sensor"
+        );
+        assert_eq!(
+            operations[0].after.as_ref().unwrap()["display_name"],
+            "Hall sensor"
+        );
+        assert_eq!(operations[1].kind, AssistantEntityKind::Helper);
+        assert_eq!(
+            operations[1].after.as_ref().unwrap()["persistence"],
+            "durable"
+        );
+
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "update",
+                    "kind": "device",
+                    "targetId": "dummy/ghost",
+                    "after": {"display_name": "Ghost"}
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown device"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_accepts_floorplan_and_computed_source_writes() {
+        let snapshot = snapshot_with_config(empty_export());
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [
+                    {"op": "create", "kind": "floorplan", "after": {"id": "attic", "name": "Attic"}},
+                    {"op": "create", "kind": "computed_source", "after": circadian_source()}
+                ]
+            }),
+        )
+        .unwrap();
+        assert_eq!(operations[0].after.as_ref().unwrap()["name"], "Attic");
+        assert_eq!(operations[1].kind, AssistantEntityKind::ComputedSource);
+        assert_eq!(operations[1].after.as_ref().unwrap()["revision"], 1);
+
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "computed_source",
+                    "after": {
+                        "id": "broken",
+                        "name": "Broken",
+                        "timezone": "Mars/Olympus",
+                        "compute": {"kind": "script", "source_body": "return []"}
+                    }
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("timezone"), "{error}");
+    }
+
+    fn mqtt_export() -> ConfigExport {
+        let mut export = empty_export();
+        export.integrations = vec![IntegrationRow {
+            id: "mqtt_main".to_string(),
+            plugin: "mqtt".to_string(),
+            enabled: false,
+            config: json!({"host": "mqtt.local", "port": 1883, "password": "hunter2"}),
+        }];
+        export
+    }
+
+    #[test]
+    fn plan_validation_masks_integration_secrets() {
+        let snapshot = snapshot_with_config(mqtt_export());
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "update",
+                    "kind": "integration",
+                    "targetId": "mqtt_main",
+                    "after": {"enabled": true, "config": {"host": "mqtt.other"}}
+                }]
+            }),
+        )
+        .unwrap();
+
+        let operation = &operations[0];
+        let before = operation.before.as_ref().unwrap();
+        let after = operation.after.as_ref().unwrap();
+        assert!(before["config"].get("password").is_none(), "{before}");
+        assert!(after["config"].get("password").is_none(), "{after}");
+        assert_eq!(before["config"]["host"], "mqtt.local");
+        // The config patch is merged field by field and keeps the port.
+        assert_eq!(after["config"]["host"], "mqtt.other");
+        assert_eq!(after["config"]["port"], 1883);
+        assert_eq!(after["enabled"], true);
+        assert!(!serde_json::to_string(operation)
+            .unwrap()
+            .contains("hunter2"));
+
+        let view =
+            entity_snapshot(&snapshot, AssistantEntityKind::Integration, "mqtt_main").unwrap();
+        assert!(view["config"].get("password").is_none());
+        assert_eq!(view["config"]["host"], "mqtt.local");
+    }
+
+    #[test]
+    fn plan_validation_rejects_unknown_integration_plugins() {
+        let snapshot = snapshot_with_config(empty_export());
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "integration",
+                    "after": {"id": "custom", "plugin": "not-a-plugin", "config": {}}
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown integration plugin"), "{error}");
+    }
+
+    #[test]
+    fn integration_updates_keep_omitted_secrets() {
+        let stored = json!({"host": "mqtt.local", "port": 1883, "password": "hunter2"});
+
+        let mut config = json!({"host": "mqtt.other"});
+        restore_omitted_integration_secrets(&mut config, &stored, "mqtt");
+        assert_eq!(config["password"], "hunter2");
+        assert_eq!(config["host"], "mqtt.other");
+
+        // An explicit replacement wins over the stored secret.
+        let mut config = json!({"password": "new-secret"});
+        restore_omitted_integration_secrets(&mut config, &stored, "mqtt");
+        assert_eq!(config["password"], "new-secret");
+
+        // An explicit null clears it.
+        let mut config = json!({"password": null});
+        restore_omitted_integration_secrets(&mut config, &stored, "mqtt");
+        assert!(config["password"].is_null());
+
+        // Kinds without secret fields are untouched.
+        let mut config = json!({"anything": true});
+        restore_omitted_integration_secrets(&mut config, &stored, "dummy");
+        assert!(!config.to_string().contains("hunter2"));
+    }
+
+    #[test]
+    fn apply_order_runs_creates_then_updates_then_reversed_deletes() {
+        let operations = [
+            operation(
+                "op-1",
+                AssistantOpKind::Delete,
+                AssistantEntityKind::Routine,
+            ),
+            operation("op-2", AssistantOpKind::Create, AssistantEntityKind::Scene),
+            operation("op-3", AssistantOpKind::Create, AssistantEntityKind::Group),
+            operation("op-4", AssistantOpKind::Update, AssistantEntityKind::Group),
+            operation("op-5", AssistantOpKind::Create, AssistantEntityKind::Scene),
+            operation("op-6", AssistantOpKind::Delete, AssistantEntityKind::Group),
+            operation("op-7", AssistantOpKind::Create, AssistantEntityKind::Helper),
+            operation(
+                "op-8",
+                AssistantOpKind::Create,
+                AssistantEntityKind::Integration,
+            ),
+        ];
+        let mut indexed: Vec<(usize, AssistantOperation)> =
+            operations.into_iter().enumerate().collect();
+        indexed.sort_by_key(|(index, operation)| operation_sort_key(operation, *index));
+
+        let order: Vec<&str> = indexed
+            .iter()
+            .map(|(_, operation)| operation.op_id.as_str())
+            .collect();
+        assert_eq!(
+            order,
+            vec![
+                "op-8", // integration, first create
+                "op-7", // helper
+                "op-3", // group
+                "op-2", // scene (earlier index first)
+                "op-5", // scene
+                "op-4", // updates
+                "op-1", // deletions in reverse dependency order:
+                "op-6", // routine before group
+            ]
+        );
+    }
+
+    fn operation(
+        op_id: &str,
+        op: AssistantOpKind,
+        kind: AssistantEntityKind,
+    ) -> AssistantOperation {
+        AssistantOperation {
+            op_id: op_id.to_string(),
+            op,
+            kind,
+            target_id: None,
+            label: op_id.to_string(),
+            before: None,
+            after: None,
+            warnings: Vec::new(),
+        }
+    }
+
+    fn circadian_source() -> Value {
+        serde_json::to_value(SourceDefinition {
+            id: crate::types::automation_definition::SourceId("circ".to_string()),
+            name: "Circadian".to_string(),
+            enabled: true,
+            revision: 1,
+            timezone: "Europe/Helsinki".to_string(),
+            refresh_interval_ms: 60_000,
+            aliases: Vec::new(),
+            compute: SourceCompute::CircadianCompat {
+                preset_version: CIRCADIAN_COMPAT_PRESET_VERSION,
+                params: CircadianCompatParams {
+                    day_fade_start: "06:00".to_string(),
+                    day_fade_duration_hours: 2,
+                    day_color: DeviceColor::new_from_kelvin(3000),
+                    day_brightness: Some(0.8),
+                    night_fade_start: "20:00".to_string(),
+                    night_fade_duration_hours: 2,
+                    night_color: DeviceColor::new_from_kelvin(2000),
+                    night_brightness: Some(0.2),
+                },
+            },
+        })
+        .unwrap()
     }
 }

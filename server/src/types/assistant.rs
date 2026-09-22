@@ -9,9 +9,6 @@ use serde_json::Value;
 use ts_rs::TS;
 
 /// Entity kinds the assistant can plan operations for.
-///
-/// Phase 1 supports `routine`, `scene`, and `group`; the remaining kinds are
-/// part of the approved surface and are added kind by kind.
 #[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[ts(export)]
@@ -40,14 +37,18 @@ impl AssistantEntityKind {
         }
     }
 
-    /// Kinds whose plan adapters exist in Phase 1.
-    pub fn is_supported(self) -> bool {
-        matches!(self, Self::Routine | Self::Scene | Self::Group)
-    }
-
-    /// Kinds the deterministic search endpoint can query in Phase 1.
-    pub fn searchable() -> [Self; 3] {
-        [Self::Routine, Self::Scene, Self::Group]
+    /// Kinds the deterministic search endpoint can query.
+    pub fn searchable() -> [Self; 8] {
+        [
+            Self::Routine,
+            Self::Scene,
+            Self::Group,
+            Self::Device,
+            Self::Floorplan,
+            Self::Integration,
+            Self::Helper,
+            Self::ComputedSource,
+        ]
     }
 }
 

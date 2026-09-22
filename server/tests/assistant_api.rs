@@ -47,6 +47,7 @@ struct MockProvider {
     base_url: String,
     requests: Arc<AtomicUsize>,
     request_headers: Arc<Mutex<Vec<String>>>,
+    request_bodies: Arc<Mutex<Vec<String>>>,
 }
 
 impl MockProvider {
@@ -58,6 +59,8 @@ impl MockProvider {
         let counter = requests.clone();
         let request_headers = Arc::new(Mutex::new(Vec::new()));
         let headers_sink = request_headers.clone();
+        let request_bodies = Arc::new(Mutex::new(Vec::new()));
+        let bodies_sink = request_bodies.clone();
 
         thread::spawn(move || {
             for stream in listener.incoming() {
@@ -100,6 +103,16 @@ impl MockProvider {
                     }
                 }
 
+                if let Some(position) = header_end {
+                    let body = buffer
+                        .get(position + 4..position + 4 + content_length)
+                        .unwrap_or_default();
+                    bodies_sink
+                        .lock()
+                        .unwrap()
+                        .push(String::from_utf8_lossy(body).to_string());
+                }
+
                 let reply = format!(
                     "HTTP/1.1 {} OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                     response.status,
@@ -114,11 +127,16 @@ impl MockProvider {
             base_url: format!("http://127.0.0.1:{port}/v1"),
             requests,
             request_headers,
+            request_bodies,
         }
     }
 
     fn request_headers(&self) -> Vec<String> {
         self.request_headers.lock().unwrap().clone()
+    }
+
+    fn request_bodies(&self) -> Vec<String> {
+        self.request_bodies.lock().unwrap().clone()
     }
 
     fn header_value(&self, name: &str) -> Option<String> {
@@ -146,15 +164,23 @@ fn assistant_config() -> Value {
         "state": {"power": false, "brightness": 0.5, "color": null, "transition": null},
         "managed": "Full"
     }});
-    config["integrations"] = json!([{
-        "id": "dummy",
-        "plugin": "dummy",
-        "enabled": true,
-        "config": {"devices": {
-            "lamp": {"name": "Hallway lamp", "init_state": lamp},
-            "motion": {"name": "Hallway motion", "init_state": {"Sensor": {"value": false}}}
-        }}
-    }]);
+    config["integrations"] = json!([
+        {
+            "id": "dummy",
+            "plugin": "dummy",
+            "enabled": true,
+            "config": {"devices": {
+                "lamp": {"name": "Hallway lamp", "init_state": lamp},
+                "motion": {"name": "Hallway motion", "init_state": {"Sensor": {"value": false}}}
+            }}
+        },
+        {
+            "id": "mqtt_main",
+            "plugin": "mqtt",
+            "enabled": false,
+            "config": {"host": "mqtt.local", "port": 1883, "password": "hunter2"}
+        }
+    ]);
     config["groups"] = json!([{
         "id": "hallway",
         "name": "Hallway",
@@ -967,6 +993,426 @@ fn assistant_search_ranks_configured_entities() {
     let none: Value = search(base, &client, "kind=routine&q=zzz").json().unwrap();
     assert_eq!(none["data"], json!([]));
 
+    let integrations: Value = search(base, &client, "kind=integration&q=mqtt")
+        .json()
+        .unwrap();
+    assert_eq!(integrations["data"][0]["id"], "mqtt_main");
+    assert!(integrations["data"][0]["summary"]
+        .as_str()
+        .unwrap()
+        .contains("mqtt"));
+
+    let devices: Value = search(base, &client, "kind=device&q=lamp").json().unwrap();
+    assert_eq!(devices["data"][0]["id"], "dummy/lamp");
+
+    let floorplans: Value = search(base, &client, "kind=floorplan&q=default")
+        .json()
+        .unwrap();
+    assert_eq!(floorplans["data"][0]["id"], "default");
+
     let response = search(base, &client, "kind=bogus&q=hall");
     assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+}
+
+// ============================================================================
+// Configuration assistant plan apply
+// ============================================================================
+
+fn apply_plan(
+    base_url: &str,
+    client: &Client,
+    plan_id: &str,
+    accepted: &[&str],
+) -> reqwest::blocking::Response {
+    client
+        .post(format!(
+            "{base_url}/api/v1/config/assistant/plans/{plan_id}/apply"
+        ))
+        .json(&json!({ "acceptedOperationIds": accepted }))
+        .send()
+        .unwrap()
+}
+
+fn create_plan(base_url: &str, client: &Client, body: Value) -> (String, Value) {
+    let response = plan(base_url, client, body);
+    assert_eq!(response.status(), StatusCode::OK);
+    let data = response.json::<Value>().unwrap()["data"].clone();
+    let plan_id = data["planId"].as_str().unwrap().to_string();
+    (plan_id, data)
+}
+
+fn stored_config(base_url: &str, client: &Client) -> Value {
+    client
+        .get(format!("{base_url}/api/v1/config/export"))
+        .send()
+        .unwrap()
+        .json::<Value>()
+        .unwrap()["data"]
+        .clone()
+}
+
+fn v2_routine_definition() -> Value {
+    json!({
+        "triggers": [{
+            "kind": "state_change",
+            "id": "t1",
+            "device": {"integration_id": "dummy", "device_id": "motion"},
+            "mode": "transition"
+        }],
+        "program": {
+            "kind": "native",
+            "steps": [{
+                "action": "set_power",
+                "id": "a1",
+                "device": {"integration_id": "dummy", "device_id": "lamp"},
+                "power": true
+            }]
+        }
+    })
+}
+
+#[test]
+fn assistant_plan_apply_executes_operations_in_dependency_order() {
+    let content = json!({
+        "summary": "Apply a mixed plan",
+        "operations": [
+            {
+                "op": "create",
+                "kind": "routine",
+                "label": "Create morning routine",
+                "after": {
+                    "id": "morning",
+                    "name": "Morning",
+                    "enabled": true,
+                    "semantics_version": 2,
+                    "definition_v2": v2_routine_definition()
+                }
+            },
+            {
+                "op": "delete",
+                "kind": "group",
+                "target_id": "hallway",
+                "label": "Delete hallway"
+            },
+            {
+                "op": "update",
+                "kind": "scene",
+                "target_id": "evening",
+                "label": "Rename evening",
+                "after": {"name": "Evening Lights"}
+            },
+            {
+                "op": "update",
+                "kind": "device",
+                "target_id": "dummy/lamp",
+                "label": "Rename lamp",
+                "after": {"display_name": "Hallway Lamp"}
+            },
+            {
+                "op": "create",
+                "kind": "helper",
+                "label": "Create night mode helper",
+                "after": {
+                    "id": "night_mode",
+                    "name": "Night mode",
+                    "kind": {"kind": "boolean"},
+                    "initial_value": false
+                }
+            }
+        ]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let (plan_id, data) = create_plan(
+        base,
+        &client,
+        json!({"prompt": "set up a morning routine and tidy the hallway"}),
+    );
+    let op_ids: Vec<&str> = data["operations"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|operation| operation["opId"].as_str().unwrap())
+        .collect();
+    assert_eq!(op_ids, ["op-1", "op-2", "op-3", "op-4", "op-5"]);
+
+    let response = apply_plan(base, &client, &plan_id, &op_ids);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    let results = body["data"]["results"].as_array().unwrap();
+    assert_eq!(results.len(), 5);
+    assert!(
+        results.iter().all(|result| result["ok"] == true),
+        "{results:?}"
+    );
+    // Creates run first (helper before routine), then updates, then deletes.
+    let result_order: Vec<&str> = results
+        .iter()
+        .map(|result| result["opId"].as_str().unwrap())
+        .collect();
+    assert_eq!(result_order, ["op-5", "op-1", "op-4", "op-3", "op-2"]);
+
+    let config = stored_config(base, &client);
+    assert!(config["routines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|routine| routine["id"] == "morning" && routine["enabled"] == true));
+    assert!(config["helpers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|helper| helper["id"] == "night_mode"));
+    assert!(config["scenes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|scene| scene["id"] == "evening" && scene["name"] == "Evening Lights"));
+    assert!(!config["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|group| group["id"] == "hallway"));
+    assert!(config["device_display_overrides"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|row| row["device_key"] == "dummy/lamp" && row["display_name"] == "Hallway Lamp"));
+
+    // The plan is consumed by apply.
+    assert_eq!(
+        get_plan(base, &client, &plan_id).status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[test]
+fn assistant_plan_apply_skips_unaccepted_operations() {
+    let content = json!({
+        "summary": "Delete a group and rename a scene",
+        "operations": [
+            {
+                "op": "delete",
+                "kind": "group",
+                "target_id": "hallway",
+                "label": "Delete hallway"
+            },
+            {
+                "op": "update",
+                "kind": "scene",
+                "target_id": "evening",
+                "label": "Rename evening",
+                "after": {"name": "Dusk"}
+            }
+        ]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let (plan_id, _) = create_plan(
+        base,
+        &client,
+        json!({"prompt": "delete the hallway group and rename the evening scene"}),
+    );
+
+    // Only the scene update is accepted; the group delete is rejected by
+    // omission and must leave state untouched.
+    let response = apply_plan(base, &client, &plan_id, &["op-2"]);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    let results = body["data"]["results"].as_array().unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["opId"], "op-2");
+    assert_eq!(results[0]["ok"], true);
+
+    let config = stored_config(base, &client);
+    assert!(config["groups"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|group| group["id"] == "hallway"));
+    assert!(config["scenes"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|scene| scene["id"] == "evening" && scene["name"] == "Dusk"));
+
+    // Apply consumes the plan even when only some operations were accepted.
+    assert_eq!(
+        get_plan(base, &client, &plan_id).status(),
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[test]
+fn assistant_plan_apply_reports_revalidation_failures_per_operation() {
+    let content = json!({
+        "summary": "Delete the hallway group",
+        "operations": [{
+            "op": "delete",
+            "kind": "group",
+            "target_id": "hallway",
+            "label": "Delete hallway"
+        }]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let (plan_id, _) = create_plan(base, &client, json!({"prompt": "delete the hallway group"}));
+
+    // The target disappears between review and apply.
+    let deleted = client
+        .delete(format!("{base}/api/v1/config/groups/hallway"))
+        .send()
+        .unwrap();
+    assert_eq!(deleted.status(), StatusCode::OK);
+
+    let response = apply_plan(base, &client, &plan_id, &["op-1"]);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    let results = body["data"]["results"].as_array().unwrap();
+    assert_eq!(results.len(), 1);
+    assert_eq!(results[0]["ok"], false);
+    assert!(results[0]["error"]
+        .as_str()
+        .unwrap()
+        .contains("unknown group target"));
+}
+
+#[test]
+fn assistant_plan_apply_rejects_empty_acceptance() {
+    let provider = MockProvider::start(vec![MockResponse::completion(&valid_plan())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let (plan_id, _) = create_plan(base, &client, json!({"prompt": "rename the group"}));
+
+    let response = apply_plan(base, &client, &plan_id, &[]);
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+    // The request was rejected before execution, so the plan is still there.
+    assert_eq!(get_plan(base, &client, &plan_id).status(), StatusCode::OK);
+}
+
+#[test]
+fn assistant_plan_apply_is_not_found_for_unknown_plans() {
+    let server = start_server(None);
+    let client = Client::new();
+
+    let response = apply_plan(&server.base_url, &client, "plan-ghost", &["op-1"]);
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn assistant_plan_masks_integration_secrets_and_keeps_them_on_apply() {
+    let content = json!({
+        "summary": "Point the broker elsewhere",
+        "operations": [{
+            "op": "update",
+            "kind": "integration",
+            "target_id": "mqtt_main",
+            "label": "Update MQTT",
+            "after": {"config": {"host": "mqtt.example.org"}}
+        }]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let (plan_id, data) = create_plan(
+        base,
+        &client,
+        json!({
+            "prompt": "point the mqtt broker at mqtt.example.org",
+            "attachments": [{"kind": "integration", "id": "mqtt_main"}]
+        }),
+    );
+
+    let operation = &data["operations"][0];
+    assert!(operation["before"]["config"].get("password").is_none());
+    assert!(operation["after"]["config"].get("password").is_none());
+    assert_eq!(operation["after"]["config"]["host"], "mqtt.example.org");
+    assert_eq!(operation["after"]["config"]["port"], 1883);
+    assert!(!data.to_string().contains("hunter2"));
+
+    // The provider prompt context must not carry the secret either.
+    let provider_bodies = provider.request_bodies().join("\n");
+    assert!(provider_bodies.contains("mqtt_main"));
+    assert!(provider_bodies.contains("mqtt.local"));
+    assert!(!provider_bodies.contains("hunter2"));
+
+    // Applying the reviewed body keeps the stored secret it omitted.
+    let response = apply_plan(base, &client, &plan_id, &["op-1"]);
+    assert_eq!(response.status(), StatusCode::OK);
+    let text = response.text().unwrap();
+    assert!(!text.contains("hunter2"), "{text}");
+
+    let integration: Value = client
+        .get(format!("{base}/api/v1/config/integrations/mqtt_main"))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(integration["data"]["config"]["password"], "hunter2");
+    assert_eq!(integration["data"]["config"]["host"], "mqtt.example.org");
+    assert_eq!(integration["data"]["config"]["port"], 1883);
+}
+
+#[test]
+fn assistant_plan_repairs_invalid_output() {
+    let invalid = json!({
+        "summary": "Delete a routine",
+        "operations": [{
+            "op": "delete",
+            "kind": "routine",
+            "target_id": "ghost",
+            "label": "Ghost"
+        }]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![
+        MockResponse::completion(&invalid),
+        MockResponse::completion(&valid_plan()),
+    ]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({"prompt": "rename the hallway group"}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    assert_eq!(body["success"], true);
+    assert_eq!(body["data"]["operations"][0]["op"], "update");
+    assert_eq!(provider.requests.load(Ordering::SeqCst), 2);
+
+    let sessions: Vec<String> = provider
+        .request_headers()
+        .iter()
+        .filter_map(|headers| {
+            headers.lines().find_map(|line| {
+                let (header, value) = line.split_once(':')?;
+                header
+                    .eq_ignore_ascii_case("x-opencode-session")
+                    .then(|| value.trim().to_string())
+            })
+        })
+        .collect();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0], sessions[1]);
 }

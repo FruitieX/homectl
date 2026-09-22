@@ -2606,21 +2606,26 @@ async fn replace_device_config_keys(
     ))
 }
 
-async fn delete_config_device(
-    device_key: String,
-    handle: StateHandle,
-) -> Result<impl Reply, warp::Rejection> {
-    let _write_guard = match config_write_lock(&handle).await {
-        Ok(guard) => guard,
-        Err(_) => return Ok(actor_unavailable()),
-    };
+/// Outcome of the shared config-device delete used by the HTTP handler and the
+/// configuration assistant.
+enum DeviceConfigDeleteOutcome {
+    Deleted {
+        rewrite: Box<DeviceConfigRewriteResult>,
+        source: DeviceConfigTarget,
+        response: DeviceConfigMutationResponse,
+    },
+    InvalidKey,
+    NotFound,
+    ActorUnavailable,
+}
 
+async fn delete_config_device_impl(
+    device_key: String,
+    handle: &StateHandle,
+) -> DeviceConfigDeleteOutcome {
     let source_key = decode_path_key(device_key);
     let Some(source) = DeviceConfigTarget::parse(&source_key) else {
-        return Ok(error_response(
-            "Invalid device key.",
-            StatusCode::BAD_REQUEST,
-        ));
+        return DeviceConfigDeleteOutcome::InvalidKey;
     };
 
     enum DeleteOutcome {
@@ -2688,26 +2693,51 @@ async fn delete_config_device(
         })
         .await;
 
-    let (rewrite, response) = match outcome {
-        Ok(DeleteOutcome::Ok(r, resp)) => (r, resp),
-        Ok(DeleteOutcome::NotFound) => return Ok(not_found("Device")),
-        Err(_) => {
-            return Ok(error_response(
-                "State actor unavailable",
-                StatusCode::INTERNAL_SERVER_ERROR,
-            ));
-        }
+    match outcome {
+        Ok(DeleteOutcome::Ok(rewrite, response)) => DeviceConfigDeleteOutcome::Deleted {
+            rewrite,
+            source,
+            response,
+        },
+        Ok(DeleteOutcome::NotFound) => DeviceConfigDeleteOutcome::NotFound,
+        Err(_) => DeviceConfigDeleteOutcome::ActorUnavailable,
+    }
+}
+
+async fn delete_config_device(
+    device_key: String,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
     };
 
-    let database_available = db::is_db_connected();
-    let persistence = persist_device_config_rewrite(&rewrite, &source, None).await;
-
-    Ok(config_write_response(
-        response,
-        persistence,
-        database_available,
-        StatusCode::OK,
-    ))
+    match delete_config_device_impl(device_key, &handle).await {
+        DeviceConfigDeleteOutcome::Deleted {
+            rewrite,
+            source,
+            response,
+        } => {
+            let database_available = db::is_db_connected();
+            let persistence = persist_device_config_rewrite(&rewrite, &source, None).await;
+            Ok(config_write_response(
+                response,
+                persistence,
+                database_available,
+                StatusCode::OK,
+            ))
+        }
+        DeviceConfigDeleteOutcome::InvalidKey => Ok(error_response(
+            "Invalid device key.",
+            StatusCode::BAD_REQUEST,
+        )),
+        DeviceConfigDeleteOutcome::NotFound => Ok(not_found("Device")),
+        DeviceConfigDeleteOutcome::ActorUnavailable => Ok(error_response(
+            "State actor unavailable",
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )),
+    }
 }
 
 async fn list_device_sensor_configs(
