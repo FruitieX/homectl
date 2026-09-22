@@ -1862,6 +1862,15 @@ mod tests {
         (Devices::new(event_tx, &test_cli()), _event_rx)
     }
 
+    /// History entries for one routine. The ring is process-global and tests
+    /// run in parallel, so per-routine counts are the only stable comparison.
+    fn history_entry_count_for(routine_id: &str) -> usize {
+        routine_history::recent_routine_history()
+            .iter()
+            .filter(|entry| entry.routine_id.0 == routine_id)
+            .count()
+    }
+
     fn test_routines(rule: Rule) -> (Routines, RoutineId, RxEventChannel) {
         let (event_tx, event_rx) = mk_event_channel();
         let routine_id = RoutineId::from("raw-rule".to_string());
@@ -2266,12 +2275,14 @@ mod tests {
             .expect("status");
         assert!(status.will_trigger);
 
-        let history_before = routine_history::recent_routine_history().len();
+        // The history ring is process-global and other tests run in parallel,
+        // so compare entries for this routine instead of the total length.
+        let history_before = history_entry_count_for("level");
         for _ in 0..3 {
             routines.refresh_runtime_statuses(&devices, &groups, None, None);
         }
         assert_eq!(
-            routine_history::recent_routine_history().len(),
+            history_entry_count_for("level"),
             history_before,
             "status refresh must not write routine history"
         );
@@ -2330,7 +2341,7 @@ mod tests {
 
         let (devices, _rx) = test_devices();
         let groups = Groups::new(GroupsConfig::default());
-        let history_before = routine_history::recent_routine_history().len();
+        let history_before = ["v2_valid", "v2_invalid", "v2_disabled"].map(history_entry_count_for);
         routines.refresh_runtime_statuses(&devices, &groups, None, None);
 
         let status = routines
@@ -2359,7 +2370,7 @@ mod tests {
         assert!(invalid.rules.iter().all(|rule| rule.error.is_some()));
 
         assert_eq!(
-            routine_history::recent_routine_history().len(),
+            ["v2_valid", "v2_invalid", "v2_disabled"].map(history_entry_count_for),
             history_before,
             "status refresh must not write routine history for v2 rows"
         );
@@ -2818,7 +2829,7 @@ mod tests {
         let (devices, _mutation) = lamp_mutation(false, true);
         let groups = Groups::new(GroupsConfig::default());
 
-        let history_before = routine_history::recent_routine_history().len();
+        let history_before = history_entry_count_for(&routine_id.0);
         routines.refresh_runtime_statuses(&devices, &groups, None, None);
         routines.seed_transitions(&devices, &groups, None);
 
@@ -2832,7 +2843,7 @@ mod tests {
         assert!(!status.will_trigger);
         assert!(status.rules[0].error.is_none());
         assert_eq!(
-            routine_history::recent_routine_history().len(),
+            history_entry_count_for(&routine_id.0),
             history_before,
             "refresh/seed must not write history"
         );

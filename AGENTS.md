@@ -95,6 +95,13 @@ Event-driven automation rules with:
 - **Rules** – Conditions that must match (sensor values, device states, group states)
 - **Actions** – Operations to perform (ActivateScene, CycleScenes, DimAction, IntegrationAction)
 
+Routine history (`server/src/core/routine_history.rs`) records completed v1
+rule matches, force triggers, and v2 runs in a bounded 500-entry in-memory
+ring exposed at `GET /api/v1/config/routine-history`. The same newest 500
+entries are persisted to the `routine_history` table (full entry JSON) and
+restored into the ring at startup, so the history view survives a server
+restart; the table is pruned on startup and every 100 written entries.
+
 ### State actor & runtime snapshot
 The server uses an actor-model architecture for `AppState`:
 

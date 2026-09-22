@@ -12,14 +12,15 @@ use super::schema::{
     AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
     AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
     DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
-    GroupPositions, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
-    SceneOverrides, Scenes, WidgetSettings,
+    GroupPositions, Groups, Integrations, RoutineHistory, Routines, SceneDeviceStates,
+    SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, AssistantThreadSummary};
 use crate::types::automation_definition::HelperId;
 use crate::types::automation_source::{SourceCompute, SourceDefinition};
 use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
+use crate::types::routine_history::RoutineHistoryEntry;
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
 use sea_orm::{ConnectionTrait, QueryResult, Statement, StatementBuilder, TransactionTrait};
@@ -3623,6 +3624,118 @@ fn assistant_thread_from_row(row: QueryResult) -> Result<AssistantThread> {
     })
 }
 
+// ============================================================================
+// Routine history
+// ============================================================================
+
+/// Persisted routine history rows kept in the database. The in-memory ring
+/// uses the same bound, so a restart restores exactly the buffered window.
+pub const ROUTINE_HISTORY_PERSIST_LIMIT: u64 = 500;
+
+/// Newest history entries, newest first.
+pub async fn db_list_routine_history(limit: u64) -> Result<Vec<RoutineHistoryEntry>> {
+    list_routine_history_on(get_db_connection()?, limit).await
+}
+
+async fn list_routine_history_on<C: ConnectionTrait>(
+    db: &C,
+    limit: u64,
+) -> Result<Vec<RoutineHistoryEntry>> {
+    let rows = all(
+        db,
+        Query::select()
+            .columns([
+                RoutineHistory::Id,
+                RoutineHistory::Timestamp,
+                RoutineHistory::Entry,
+            ])
+            .from(RoutineHistory::Table)
+            .order_by(RoutineHistory::Timestamp, Order::Desc)
+            .limit(limit)
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            // A malformed row must not poison startup: skip it and keep the rest.
+            let entry: String = row.try_get("", "entry").ok()?;
+            serde_json::from_str(&entry).ok()
+        })
+        .collect())
+}
+
+pub async fn db_save_routine_history_entry(entry: &RoutineHistoryEntry) -> Result<()> {
+    save_routine_history_entry_on(get_db_connection()?, entry).await
+}
+
+async fn save_routine_history_entry_on<C: ConnectionTrait>(
+    db: &C,
+    entry: &RoutineHistoryEntry,
+) -> Result<()> {
+    let payload = serde_json::to_string(entry)?;
+    execute(
+        db,
+        Query::insert()
+            .into_table(RoutineHistory::Table)
+            .columns([
+                RoutineHistory::Id,
+                RoutineHistory::Timestamp,
+                RoutineHistory::Entry,
+            ])
+            .values_panic([
+                Expr::value(entry.id.clone()),
+                Expr::value(entry.timestamp.clone()),
+                Expr::value(payload),
+            ])
+            .on_conflict(
+                OnConflict::column(RoutineHistory::Id)
+                    .update_columns([RoutineHistory::Timestamp, RoutineHistory::Entry])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+/// Drop all but the newest `keep` entries. Returns whether anything was
+/// removed.
+pub async fn db_prune_routine_history(keep: u64) -> Result<bool> {
+    prune_routine_history_on(get_db_connection()?, keep).await
+}
+
+async fn prune_routine_history_on<C: ConnectionTrait>(db: &C, keep: u64) -> Result<bool> {
+    let row = one(
+        db,
+        Query::select()
+            .column(RoutineHistory::Timestamp)
+            .from(RoutineHistory::Table)
+            .order_by(RoutineHistory::Timestamp, Order::Desc)
+            .limit(1)
+            .offset(keep)
+            .to_owned(),
+    )
+    .await?;
+    let Some(row) = row else {
+        return Ok(false);
+    };
+    let cutoff: String = row.try_get("", "timestamp")?;
+
+    let deleted = execute(
+        db,
+        Query::delete()
+            .from_table(RoutineHistory::Table)
+            .and_where(Expr::col(RoutineHistory::Timestamp).lte(cutoff))
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(deleted > 0)
+}
+
 #[cfg(test)]
 mod consistency_tests {
     use super::*;
@@ -3636,6 +3749,39 @@ mod consistency_tests {
             .await
             .unwrap();
         db
+    }
+
+    #[tokio::test]
+    async fn routine_history_round_trips_and_prunes_to_newest_entries() {
+        use crate::types::routine_history::{RoutineHistoryEntry, RoutineHistoryTriggerKind};
+        use crate::types::rule::RoutineId;
+
+        let db = database().await;
+        for index in 0..5 {
+            let entry = RoutineHistoryEntry {
+                id: index.to_string(),
+                timestamp: format!("2026-01-01T00:00:0{index}Z"),
+                routine_id: RoutineId(format!("routine-{index}")),
+                routine_name: format!("Routine {index}"),
+                trigger_kind: RoutineHistoryTriggerKind::V2Run,
+                event_source_device_key: None,
+                action_count: index as usize,
+                status: None,
+                v2: None,
+            };
+            save_routine_history_entry_on(&db, &entry).await.unwrap();
+        }
+
+        let listed = list_routine_history_on(&db, 3).await.unwrap();
+        let ids: Vec<&str> = listed.iter().map(|entry| entry.id.as_str()).collect();
+        assert_eq!(ids, vec!["4", "3", "2"]);
+        assert_eq!(listed[0].routine_name, "Routine 4");
+
+        assert!(prune_routine_history_on(&db, 3).await.unwrap());
+        let listed = list_routine_history_on(&db, 10).await.unwrap();
+        let ids: Vec<&str> = listed.iter().map(|entry| entry.id.as_str()).collect();
+        assert_eq!(ids, vec!["4", "3", "2"]);
+        assert!(!prune_routine_history_on(&db, 3).await.unwrap());
     }
 
     #[tokio::test]

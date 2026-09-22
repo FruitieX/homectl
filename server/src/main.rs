@@ -273,6 +273,18 @@ async fn run_server(cli: &Cli) -> Result<(), Box<dyn Error>> {
         Ok(true) => {
             seed_from_config_if_empty(cli).await?;
 
+            match homectl_server::core::routine_history::hydrate_from_db().await {
+                Ok(loaded) => {
+                    if loaded > 0 {
+                        info!("Restored {loaded} routine history entries from the database");
+                    }
+                    homectl_server::core::routine_history::spawn_persistence_worker();
+                }
+                Err(error) => {
+                    warn!("Failed to restore persisted routine history: {error}");
+                }
+            }
+
             match load_runtime_config_snapshot().await {
                 Ok(snapshot) => snapshot,
                 Err(error) => {

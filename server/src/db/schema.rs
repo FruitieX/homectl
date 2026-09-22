@@ -269,3 +269,14 @@ pub enum AssistantThreads {
     UpdatedAtMs,
     Messages,
 }
+
+/// Bounded routine history snapshots. `entry` stores the full history entry
+/// JSON so the history page keeps its traces across restarts; the table is
+/// pruned to the newest rows on startup and while writing.
+#[derive(Clone, Copy, Iden)]
+pub enum RoutineHistory {
+    Table,
+    Id,
+    Timestamp,
+    Entry,
+}

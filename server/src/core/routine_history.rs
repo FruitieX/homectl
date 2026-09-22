@@ -1,9 +1,10 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{OnceLock, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use chrono::Utc;
 use once_cell::sync::Lazy;
+use tokio::sync::mpsc;
 
 use crate::types::{
     automation_trace::{RoutineV2RuntimeStatus, StepDisposition},
@@ -15,12 +16,90 @@ use crate::types::{
 
 const MAX_ROUTINE_HISTORY_ENTRIES: usize = 500;
 
+/// How often the persistence worker re-prunes the table while writing.
+const PRUNE_EVERY_ENTRIES: u64 = 100;
+
 static ROUTINE_HISTORY_BUFFER: Lazy<RwLock<VecDeque<RoutineHistoryEntry>>> =
     Lazy::new(|| RwLock::new(VecDeque::with_capacity(MAX_ROUTINE_HISTORY_ENTRIES)));
 static NEXT_ROUTINE_HISTORY_ID: AtomicU64 = AtomicU64::new(1);
+static HISTORY_PERSISTENCE: OnceLock<mpsc::UnboundedSender<RoutineHistoryEntry>> = OnceLock::new();
 
 pub fn recent_routine_history() -> Vec<RoutineHistoryEntry> {
     read_history_buffer().iter().cloned().collect()
+}
+
+/// Restore the newest persisted entries into the in-memory ring and continue
+/// the entry id counter past them, so history survives a server restart. The
+/// table is pruned back to the ring bound. Errors are returned for the caller
+/// to log; the server keeps running with an empty history.
+pub async fn hydrate_from_db() -> Result<usize, String> {
+    let entries = crate::db::config_queries::db_list_routine_history(
+        crate::db::config_queries::ROUTINE_HISTORY_PERSIST_LIMIT,
+    )
+    .await
+    .map_err(|error| error.to_string())?;
+    let loaded = entries.len();
+    hydrate_entries(entries);
+
+    if let Err(error) = crate::db::config_queries::db_prune_routine_history(
+        crate::db::config_queries::ROUTINE_HISTORY_PERSIST_LIMIT,
+    )
+    .await
+    {
+        log::warn!("Failed to prune persisted routine history: {error}");
+    }
+
+    Ok(loaded)
+}
+
+/// Fill the ring from newest-first entries and advance the id counter. Split
+/// from the database access so the ordering and id logic is unit-testable.
+fn hydrate_entries(entries: Vec<RoutineHistoryEntry>) {
+    let mut buffer = write_history_buffer();
+    hydrate_into(&mut buffer, entries);
+}
+
+fn hydrate_into(buffer: &mut VecDeque<RoutineHistoryEntry>, entries: Vec<RoutineHistoryEntry>) {
+    for entry in entries.into_iter().rev() {
+        if let Ok(id) = entry.id.parse::<u64>() {
+            NEXT_ROUTINE_HISTORY_ID.fetch_max(id.saturating_add(1), Ordering::Relaxed);
+        }
+        push_bounded(buffer, entry);
+    }
+}
+
+/// Spawn the background writer that mirrors recorded entries into the
+/// database. Called once at startup, after `hydrate_from_db`.
+pub fn spawn_persistence_worker() {
+    let (sender, mut receiver) = mpsc::unbounded_channel::<RoutineHistoryEntry>();
+    if HISTORY_PERSISTENCE.set(sender).is_err() {
+        return;
+    }
+
+    tokio::spawn(async move {
+        let mut written: u64 = 0;
+        while let Some(entry) = receiver.recv().await {
+            if let Err(error) =
+                crate::db::config_queries::db_save_routine_history_entry(&entry).await
+            {
+                log::warn!(
+                    "Failed to persist routine history entry {}: {error}",
+                    entry.id
+                );
+                continue;
+            }
+            written += 1;
+            if written.is_multiple_of(PRUNE_EVERY_ENTRIES) {
+                if let Err(error) = crate::db::config_queries::db_prune_routine_history(
+                    crate::db::config_queries::ROUTINE_HISTORY_PERSIST_LIMIT,
+                )
+                .await
+                {
+                    log::warn!("Failed to prune persisted routine history: {error}");
+                }
+            }
+        }
+    });
 }
 
 pub fn record_rule_match(
@@ -96,6 +175,10 @@ fn next_history_id() -> String {
 }
 
 fn push_history_entry(entry: RoutineHistoryEntry) {
+    if let Some(sender) = HISTORY_PERSISTENCE.get() {
+        let _ = sender.send(entry.clone());
+    }
+
     let mut buffer = write_history_buffer();
     push_bounded(&mut buffer, entry);
 }
@@ -129,8 +212,8 @@ mod tests {
     use once_cell::sync::Lazy;
 
     use super::{
-        push_bounded, recent_routine_history, record_force_trigger, record_v2_run,
-        write_history_buffer, MAX_ROUTINE_HISTORY_ENTRIES,
+        hydrate_into, next_history_id, push_bounded, recent_routine_history, record_force_trigger,
+        record_v2_run, write_history_buffer, MAX_ROUTINE_HISTORY_ENTRIES,
     };
     use crate::types::{
         automation_definition::NodeId,
@@ -160,6 +243,53 @@ mod tests {
 
     fn clear_history() {
         write_history_buffer().clear();
+    }
+
+    fn test_entry_with_id(id: &str) -> RoutineHistoryEntry {
+        let mut entry = test_entry("routine");
+        entry.id = id.to_string();
+        entry
+    }
+
+    #[test]
+    fn hydrate_into_restores_order_and_continues_the_id_counter() {
+        // The id counter is process-global and monotonic, so probe it instead
+        // of asserting absolute values.
+        let before = next_history_id().parse::<u64>().unwrap();
+        let newest = (before + 100).to_string();
+        let older = (before + 99).to_string();
+
+        let mut buffer = VecDeque::new();
+        // Newest first, as returned by the database query.
+        hydrate_into(
+            &mut buffer,
+            vec![test_entry_with_id(&newest), test_entry_with_id(&older)],
+        );
+
+        let ids: Vec<String> = buffer.iter().map(|entry| entry.id.clone()).collect();
+        assert_eq!(ids, vec![older, newest]);
+        // Other tests record history concurrently, so the counter only has to
+        // be at least past the hydrated ids.
+        assert!(next_history_id().parse::<u64>().unwrap() >= before + 101);
+    }
+
+    #[test]
+    fn hydrate_into_keeps_only_the_ring_bound() {
+        let entries: Vec<RoutineHistoryEntry> = (0..MAX_ROUTINE_HISTORY_ENTRIES + 5)
+            .rev()
+            .map(|index| test_entry_with_id(&index.to_string()))
+            .collect();
+
+        let mut buffer = VecDeque::new();
+        hydrate_into(&mut buffer, entries);
+
+        assert_eq!(buffer.len(), MAX_ROUTINE_HISTORY_ENTRIES);
+        assert_eq!(buffer.front().map(|entry| entry.id.as_str()), Some("5"));
+        let expected_last = format!("{}", MAX_ROUTINE_HISTORY_ENTRIES + 4);
+        assert_eq!(
+            buffer.back().map(|entry| entry.id.as_str()),
+            Some(expected_last.as_str())
+        );
     }
 
     #[test]

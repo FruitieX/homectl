@@ -2,8 +2,8 @@ use crate::db::schema::{
     AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
     AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
     DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
-    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines, SceneDeviceStates,
-    SceneGroupStates, SceneOverrides, Scenes, UiState, WidgetSettings,
+    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
+    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -28,7 +28,56 @@ impl MigratorTrait for Migrator {
             Box::new(M20260921000000AutomationTimerJobs),
             Box::new(M20260922000000AutomationSources),
             Box::new(M20260922000001AssistantThreads),
+            Box::new(M20260922000002RoutineHistory),
         ]
+    }
+}
+
+/// Bounded routine history snapshots, restored into the in-memory ring on
+/// startup so the history view survives restarts.
+struct M20260922000002RoutineHistory;
+
+impl MigrationName for M20260922000002RoutineHistory {
+    fn name(&self) -> &str {
+        "m20260922000002_routine_history"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260922000002RoutineHistory {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(RoutineHistory::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(RoutineHistory::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(RoutineHistory::Timestamp).text().not_null())
+                    .col(ColumnDef::new(RoutineHistory::Entry).text().not_null())
+                    .to_owned(),
+            )
+            .await?;
+
+        manager
+            .create_index(
+                Index::create()
+                    .table(RoutineHistory::Table)
+                    .name("idx_routine_history_timestamp")
+                    .col(RoutineHistory::Timestamp)
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(RoutineHistory::Table).to_owned())
+            .await
     }
 }
 
