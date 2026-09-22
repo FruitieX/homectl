@@ -50,6 +50,7 @@ import { toast } from 'sonner';
 
 import { Advanced, ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import type { AssistantDraft } from '@/hooks/useAssistant';
 import { AssistantDraftPanel } from './assistant-draft-panel';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -194,6 +195,10 @@ export default function RoutinesPage() {
         title="Routines"
         actions={
           <>
+            <AssistantButton
+              variant="outline"
+              attachment={{ kind: 'routine' }}
+            />
             <UiButton
               variant="outline"
               onClick={() => {
@@ -225,7 +230,9 @@ export default function RoutinesPage() {
 
       {visibleRoutines.length === 0 ? (
         <EmptyState
-          title={routines.length === 0 ? 'No routines yet' : 'No matching routines'}
+          title={
+            routines.length === 0 ? 'No routines yet' : 'No matching routines'
+          }
           description={
             routines.length === 0
               ? 'Routines react to device reports, helpers, and schedules. Start from a template or a blank trigger.'
@@ -233,7 +240,9 @@ export default function RoutinesPage() {
           }
           action={
             routines.length === 0 ? (
-              <Button onClick={() => setShowCreate(true)}>Add your first routine</Button>
+              <Button onClick={() => setShowCreate(true)}>
+                Add your first routine
+              </Button>
             ) : (
               <UiButton variant="outline" onClick={() => setSearch('')}>
                 Clear search
@@ -254,47 +263,47 @@ export default function RoutinesPage() {
                 />
               ) : null}
               <div className="min-w-0 flex-1">
-            <RoutineCard
-              routine={routine}
-              isEditing={editingId === routine.id}
-              isOpen={openId === routine.id}
-              devices={devices}
-              groups={groups}
-              scenes={sceneList}
-              routines={routineList}
-              helpers={helpers}
-              runtimeStatus={routineStatuses?.[routine.id]}
-              timers={timers}
-              deviceDisplayNameMap={deviceDisplayNameMap}
-              onOpen={() => setOpenId(routine.id)}
-              onClose={() => {
-                setOpenId((current) =>
-                  current === routine.id ? null : current,
-                );
-                setEditingId((current) =>
-                  current === routine.id ? null : current,
-                );
-              }}
-              onEdit={() => setEditingId(routine.id)}
-              onSave={async (updated) => {
-                await update(routine.id, updated);
-                setEditingId(null);
-              }}
-              onCancel={() => setEditingId(null)}
-              onDelete={async () => {
-                if (
-                  await confirmDestructive(
-                    `Delete routine "${routine.name}"?`,
-                    'Its triggers, conditions, and program are removed. The v1 fallback rules are deleted with it.',
-                  )
-                ) {
-                  await remove(routine.id);
-                  setOpenId((current) =>
-                    current === routine.id ? null : current,
-                  );
-                }
-              }}
-            />
+                <RoutineCard
+                  routine={routine}
+                  isEditing={editingId === routine.id}
+                  isOpen={openId === routine.id}
+                  devices={devices}
+                  groups={groups}
+                  scenes={sceneList}
+                  routines={routineList}
+                  helpers={helpers}
+                  runtimeStatus={routineStatuses?.[routine.id]}
+                  timers={timers}
+                  deviceDisplayNameMap={deviceDisplayNameMap}
+                  onOpen={() => setOpenId(routine.id)}
+                  onClose={() => {
+                    setOpenId((current) =>
+                      current === routine.id ? null : current,
+                    );
+                    setEditingId((current) =>
+                      current === routine.id ? null : current,
+                    );
+                  }}
+                  onEdit={() => setEditingId(routine.id)}
+                  onSave={async (updated) => {
+                    await update(routine.id, updated);
+                    setEditingId(null);
+                  }}
+                  onCancel={() => setEditingId(null)}
+                  onDelete={async () => {
+                    if (
+                      await confirmDestructive(
+                        `Delete routine "${routine.name}"?`,
+                        'Its triggers, conditions, and program are removed. The v1 fallback rules are deleted with it.',
+                      )
+                    ) {
+                      await remove(routine.id);
+                      setOpenId((current) =>
+                        current === routine.id ? null : current,
+                      );
+                    }
+                  }}
+                />
               </div>
             </div>
           ))}
@@ -306,10 +315,18 @@ export default function RoutinesPage() {
           <span className="px-2 text-sm font-medium">
             {selectedIds.size} selected
           </span>
-          <UiButton size="sm" variant="outline" onClick={() => void bulkSetEnabled(true)}>
+          <UiButton
+            size="sm"
+            variant="outline"
+            onClick={() => void bulkSetEnabled(true)}
+          >
             Enable
           </UiButton>
-          <UiButton size="sm" variant="outline" onClick={() => void bulkSetEnabled(false)}>
+          <UiButton
+            size="sm"
+            variant="outline"
+            onClick={() => void bulkSetEnabled(false)}
+          >
             Disable
           </UiButton>
           <UiButton
@@ -384,7 +401,8 @@ function RoutineCard({
   onCancel: () => void;
   onDelete: () => void;
 }) {
-  const isV2 = routine.semantics_version === 2 || Boolean(routine.definition_v2);
+  const isV2 =
+    routine.semantics_version === 2 || Boolean(routine.definition_v2);
   const [id, setId] = useState(routine.id);
   const [name, setName] = useState(routine.name);
   const [enabled, setEnabled] = useState(routine.enabled);
@@ -533,7 +551,8 @@ function RoutineCard({
         ) : (
           <>
             <span className="font-medium">{routine.rules.length}</span> rules ·{' '}
-            <span className="font-medium">{routine.actions.length}</span> actions
+            <span className="font-medium">{routine.actions.length}</span>{' '}
+            actions
             {routine.enabled && matchingRuleCount !== undefined ? (
               <>
                 {' '}
@@ -556,12 +575,8 @@ function RoutineCard({
           }`}
         >
           <TabsTrigger value="basics">Basics</TabsTrigger>
-          <TabsTrigger value="rules">
-            {isV2 ? 'Triggers' : 'Rules'}
-          </TabsTrigger>
-          {isV2 ? (
-            <TabsTrigger value="condition">Condition</TabsTrigger>
-          ) : null}
+          <TabsTrigger value="rules">{isV2 ? 'Triggers' : 'Rules'}</TabsTrigger>
+          {isV2 ? <TabsTrigger value="condition">Condition</TabsTrigger> : null}
           {isV2 ? <TabsTrigger value="program">Program</TabsTrigger> : null}
           {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
           <ExperienceOnly minimum="expert">
@@ -609,7 +624,9 @@ function RoutineCard({
         </TabsContent>
 
         <TabsContent value="rules" className="mt-4">
-          <ConfigFormSection aria-label={isV2 ? 'Routine triggers' : 'Routine rules'}>
+          <ConfigFormSection
+            aria-label={isV2 ? 'Routine triggers' : 'Routine rules'}
+          >
             {isV2 ? (
               <TriggerBuilder
                 triggers={definition.triggers ?? []}
@@ -702,50 +719,60 @@ function RoutineCard({
 
         <ExperienceOnly minimum="expert">
           <TabsContent value="json" className="mt-4">
-          <ConfigFormSection
-            title="Advanced JSON"
-            description={
-              isV2
-                ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, script programs, choose branches, advanced predicates).'
-                : 'Edit the raw routine payload when a visual editor does not expose an edge case.'
-            }
-          >
-            {isV2 ? (
-              <ConfigField label="Definition (JSON)">
-                <Textarea
-                  className="h-96 font-mono text-xs"
-                  value={definitionJson}
-                  onChange={(e) => setDefinitionJson(e.target.value)}
-                  placeholder='{"triggers": [...], "program": {...}}'
-                />
-              </ConfigField>
-            ) : (
-              <div className="grid gap-4 lg:grid-cols-2">
-                <ConfigField label="Rules (JSON)">
+            <ConfigFormSection
+              title="Advanced JSON"
+              description={
+                isV2
+                  ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, script programs, choose branches, advanced predicates).'
+                  : 'Edit the raw routine payload when a visual editor does not expose an edge case.'
+              }
+            >
+              {isV2 ? (
+                <ConfigField label="Definition (JSON)">
                   <Textarea
-                    className="h-64 font-mono text-xs"
-                    value={rulesJson}
-                    onChange={(e) => setRulesJson(e.target.value)}
-                    placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+                    className="h-96 font-mono text-xs"
+                    value={definitionJson}
+                    onChange={(e) => setDefinitionJson(e.target.value)}
+                    placeholder='{"triggers": [...], "program": {...}}'
                   />
                 </ConfigField>
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <ConfigField label="Rules (JSON)">
+                    <Textarea
+                      className="h-64 font-mono text-xs"
+                      value={rulesJson}
+                      onChange={(e) => setRulesJson(e.target.value)}
+                      placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
+                    />
+                  </ConfigField>
 
-                <ConfigField label="Actions (JSON)">
-                  <Textarea
-                    className="h-64 font-mono text-xs"
-                    value={actionsJson}
-                    onChange={(e) => setActionsJson(e.target.value)}
-                    placeholder='[{"ActivateScene": {"scene_id": "..."}]'
-                  />
-                </ConfigField>
-              </div>
-            )}
-          </ConfigFormSection>
+                  <ConfigField label="Actions (JSON)">
+                    <Textarea
+                      className="h-64 font-mono text-xs"
+                      value={actionsJson}
+                      onChange={(e) => setActionsJson(e.target.value)}
+                      placeholder='[{"ActivateScene": {"scene_id": "..."}]'
+                    />
+                  </ConfigField>
+                </div>
+              )}
+            </ConfigFormSection>
           </TabsContent>
         </ExperienceOnly>
       </Tabs>
 
       <ConfigFormActions>
+        <AssistantButton
+          size="sm"
+          variant="outline"
+          className="sm:mr-auto"
+          attachment={{
+            kind: 'routine',
+            id: routine.id,
+            label: name || routine.name,
+          }}
+        />
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>
@@ -915,12 +942,7 @@ function RoutineCard({
   );
 }
 
-type V2DraftKind =
-  | 'blank'
-  | 'sensor'
-  | 'motion'
-  | 'occupancy'
-  | 'schedule';
+type V2DraftKind = 'blank' | 'sensor' | 'motion' | 'occupancy' | 'schedule';
 
 function slugify(value: string): string {
   return value
@@ -1227,7 +1249,9 @@ function CreateRoutineModal({
               {semantics === 2 ? (
                 <>
                   <option value="blank">Blank routine (manual trigger)</option>
-                  <option value="sensor">Device change activates a scene</option>
+                  <option value="sensor">
+                    Device change activates a scene
+                  </option>
                   <option value="motion">
                     Motion report activates a scene
                   </option>

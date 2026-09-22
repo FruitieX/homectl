@@ -1,4 +1,8 @@
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+
+import type { ApplyAssistantPlanResponse } from '@/bindings/ApplyAssistantPlanResponse';
+import type { AssistantPlan } from '@/bindings/AssistantPlan';
+import type { AssistantPlanRequest } from '@/bindings/AssistantPlanRequest';
 
 import { useAppConfig } from './appConfig';
 import type { RoutineDefinitionV2Body } from './useConfig';
@@ -139,6 +143,76 @@ export function useDraftRoutine() {
         throw new Error('Failed to draft routine');
       }
       return result.data;
+    },
+  });
+}
+
+/**
+ * Produces a reviewed plan of configuration operations. The plan is
+ * ephemeral and nothing is written until it is applied.
+ */
+export function useAssistantPlan() {
+  const { apiEndpoint } = useAppConfig();
+
+  return useMutation({
+    mutationFn: async (request: AssistantPlanRequest) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/plan`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request),
+        },
+      );
+      const result = await readAssistantResponse<AssistantPlan>(
+        response,
+        'Failed to create assistant plan',
+      );
+      if (!result.data) {
+        throw new Error('Failed to create assistant plan');
+      }
+      return result.data;
+    },
+  });
+}
+
+export interface ApplyAssistantPlanVariables {
+  planId: string;
+  acceptedOperationIds: string[];
+}
+
+/**
+ * Applies accepted operations from a plan. Plans are single-use: the server
+ * consumes the plan on the first successful call.
+ */
+export function useApplyAssistantPlan() {
+  const { apiEndpoint } = useAppConfig();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      planId,
+      acceptedOperationIds,
+    }: ApplyAssistantPlanVariables) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/plans/${encodeURIComponent(planId)}/apply`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ acceptedOperationIds }),
+        },
+      );
+      const result = await readAssistantResponse<ApplyAssistantPlanResponse>(
+        response,
+        'Failed to apply assistant plan',
+      );
+      if (!result.data) {
+        throw new Error('Failed to apply assistant plan');
+      }
+      return result.data;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['config'] });
     },
   });
 }

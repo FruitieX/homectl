@@ -45,6 +45,9 @@
       "@/bindings/*": [
         "./bindings/*"
       ],
+      "@/assistant/*": [
+        "./assistant/*"
+      ],
       "@/assets/*": [
         "./assets/*"
       ],

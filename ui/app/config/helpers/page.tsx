@@ -26,6 +26,7 @@ import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { useCallback, useMemo, useState } from 'react';
 
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 
 const selectClassName =
@@ -405,9 +406,7 @@ function HelperEditor({
           <ValueControl
             kind={draft.kind}
             value={draft.initial_value}
-            onChange={(initial_value) =>
-              setDraft({ ...draft, initial_value })
-            }
+            onChange={(initial_value) => setDraft({ ...draft, initial_value })}
           />
         </ConfigField>
         {!isNew ? (
@@ -488,6 +487,16 @@ function HelperEditor({
       ) : null}
 
       <ConfigFormActions>
+        <AssistantButton
+          size="sm"
+          variant="outline"
+          className="sm:mr-auto"
+          attachment={{
+            kind: 'helper',
+            id: draft.id.trim() ? draft.id : undefined,
+            label: draft.name || draft.id || 'New helper',
+          }}
+        />
         {onDelete ? (
           <Button
             className="sm:mr-auto"
@@ -629,9 +638,15 @@ export default function HelpersConfigPage() {
         title="Helpers"
         description="Typed values routines, scripts, and widgets read and write. The server validates every write against the declared kind."
         actions={
-          <Button type="button" onClick={openCreate}>
-            New helper
-          </Button>
+          <>
+            <AssistantButton
+              variant="outline"
+              attachment={{ kind: 'helper' }}
+            />
+            <Button type="button" onClick={openCreate}>
+              New helper
+            </Button>
+          </>
         }
       />
 
@@ -696,7 +711,9 @@ export default function HelpersConfigPage() {
               key={status.id}
               draft={editing?.draft ?? newHelperDraft()}
               setDraft={(draft) =>
-                setEditing((current) => (current ? { ...current, draft } : null))
+                setEditing((current) =>
+                  current ? { ...current, draft } : null,
+                )
               }
               isNew={false}
               status={status}

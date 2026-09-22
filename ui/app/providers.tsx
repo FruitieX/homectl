@@ -44,6 +44,11 @@ const CarHeaterModal = lazy(() =>
     default: CarHeaterModal,
   })),
 );
+const AssistantPanel = lazy(() =>
+  import('@/assistant/AssistantPanel').then(({ AssistantPanel }) => ({
+    default: AssistantPanel,
+  })),
+);
 
 export const Providers = ({ children }: { children: ReactNode }) => {
   const [queryClient] = useState(() => createHomectlQueryClient());
@@ -178,6 +183,7 @@ export const Layout = ({ children }: { children: ReactNode }) => {
         <SaveSceneModal />
         <SceneModal />
         <CarHeaterModal />
+        <AssistantPanel />
       </Suspense>
     </div>
   );

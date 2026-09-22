@@ -7,6 +7,7 @@ import {
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useCallback, useState, useRef, useEffect } from 'react';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
@@ -465,8 +466,8 @@ export default function FloorplanPage() {
         <Alert>
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <span>
-              The grid editor is built for larger screens. You can keep
-              editing, or open the read-only map view.
+              The grid editor is built for larger screens. You can keep editing,
+              or open the read-only map view.
             </span>
             <Button asChild size="sm" variant="outline">
               <Link to="/map">Open map view</Link>
@@ -479,6 +480,21 @@ export default function FloorplanPage() {
         description="Manage floorplan canvases, background images, device placements, and group masks."
         actions={
           <>
+            <AssistantButton
+              variant="outline"
+              attachment={
+                selectedFloorplanId
+                  ? {
+                      kind: 'floorplan',
+                      id: selectedFloorplanId,
+                      label:
+                        floorplans.find(
+                          (floorplan) => floorplan.id === selectedFloorplanId,
+                        )?.name ?? selectedFloorplanId,
+                    }
+                  : { kind: 'floorplan' }
+              }
+            />
             <Button
               variant={hasChanges ? 'secondary' : 'default'}
               onClick={handleSave}

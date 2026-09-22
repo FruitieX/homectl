@@ -10,6 +10,7 @@ import {
 import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 import {
   ConfigField,
@@ -612,14 +613,20 @@ export default function IntegrationsPage() {
         title="Integrations"
         description="Connect plugins, schedules, and virtual devices to the runtime."
         actions={
-          <Button
-            onClick={() => {
-              setCreatePlugin(null);
-              setShowCreate(true);
-            }}
-          >
-            Add Integration
-          </Button>
+          <>
+            <AssistantButton
+              variant="outline"
+              attachment={{ kind: 'integration' }}
+            />
+            <Button
+              onClick={() => {
+                setCreatePlugin(null);
+                setShowCreate(true);
+              }}
+            >
+              Add Integration
+            </Button>
+          </>
         }
       />
 
@@ -1870,22 +1877,32 @@ function IntegrationOverlay({
 
           <ExperienceOnly minimum="expert">
             <TabsContent value="json" className="mt-4">
-            <ConfigFormSection
-              title="Advanced JSON"
-              description="Use this for unknown or advanced plugin settings. Values edited here are preserved when returning to Settings."
-            >
-              <Textarea
-                className="min-h-40 max-h-72 resize-y font-mono text-sm"
-                rows={8}
-                value={jsonText}
-                onChange={(event) => setJsonText(event.target.value)}
-              />
-            </ConfigFormSection>
+              <ConfigFormSection
+                title="Advanced JSON"
+                description="Use this for unknown or advanced plugin settings. Values edited here are preserved when returning to Settings."
+              >
+                <Textarea
+                  className="min-h-40 max-h-72 resize-y font-mono text-sm"
+                  rows={8}
+                  value={jsonText}
+                  onChange={(event) => setJsonText(event.target.value)}
+                />
+              </ConfigFormSection>
             </TabsContent>
           </ExperienceOnly>
         </Tabs>
 
         <ConfigFormActions>
+          <AssistantButton
+            size="sm"
+            variant="outline"
+            className="sm:mr-auto"
+            attachment={{
+              kind: 'integration',
+              id: id.trim() ? id.trim() : undefined,
+              label: id || 'New integration',
+            }}
+          />
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>

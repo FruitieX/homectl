@@ -15,6 +15,7 @@ import { useGroupsState } from '@/hooks/websocket';
 import { useIsFullscreen } from '@/hooks/isFullscreen';
 import useIdle from '@/hooks/useIdle';
 import { commandPaletteOpenAtom } from '@/ui/CommandPalette';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { Button } from '@/ui/primitives/button';
 
 export const Navbar = () => {
@@ -108,6 +109,13 @@ export const Navbar = () => {
           {title}
         </h1>
       </div>
+      <AssistantButton
+        variant="ghost"
+        size="icon"
+        iconOnly
+        label="Ask AI"
+        title="Ask AI"
+      />
       <CommandPaletteTrigger />
       {pathname === '/map' && (
         <div

@@ -17,6 +17,7 @@ tasks:
     command: 'pnpm build'
     inputs:
       - 'app/**/*'
+      - 'assistant/**/*'
       - 'hooks/**/*'
       - 'lib/**/*'
       - 'ui/**/*'
@@ -35,6 +36,7 @@ tasks:
     command: 'pnpm lint'
     inputs:
       - 'app/**/*'
+      - 'assistant/**/*'
       - 'hooks/**/*'
       - 'lib/**/*'
       - 'ui/**/*'
@@ -48,6 +50,7 @@ tasks:
     command: 'pnpm tsc'
     inputs:
       - 'app/**/*'
+      - 'assistant/**/*'
       - 'hooks/**/*'
       - 'lib/**/*'
       - 'ui/**/*'

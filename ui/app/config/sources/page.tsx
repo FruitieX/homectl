@@ -40,6 +40,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Textarea } from '@/ui/primitives/textarea';
 import { useMemo, useState } from 'react';
 
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 
 const selectClassName =
@@ -79,7 +80,9 @@ function isCircadianShaped(compute: SourceComputeConfig) {
   return compute.preset?.id === 'circadian';
 }
 
-function circadianParamsOf(compute: SourceComputeConfig): SourceCircadianParams {
+function circadianParamsOf(
+  compute: SourceComputeConfig,
+): SourceCircadianParams {
   return circadianParamsFromJson(compute.params);
 }
 
@@ -329,9 +332,7 @@ function SourceEditor({
                   setCompute({
                     kind: 'circadian_compat',
                     preset_version: 1,
-                    params: circadianParamsToJson(
-                      circadianParamsOf(compute),
-                    ),
+                    params: circadianParamsToJson(circadianParamsOf(compute)),
                   });
                 } else {
                   const first = presets[0];
@@ -346,7 +347,9 @@ function SourceEditor({
                 }
               }}
             >
-              <option value="circadian_compat">Built-in circadian preset</option>
+              <option value="circadian_compat">
+                Built-in circadian preset
+              </option>
               <option value="script">JavaScript script</option>
             </select>
           </ConfigField>
@@ -426,7 +429,10 @@ function SourceEditor({
             <SourceParamsForm
               params={circadianParamsOf(compute)}
               onChange={(params) =>
-                setCompute({ ...compute, params: circadianParamsToJson(params) })
+                setCompute({
+                  ...compute,
+                  params: circadianParamsToJson(params),
+                })
               }
             />
           </ConfigFormSection>
@@ -463,8 +469,8 @@ function SourceEditor({
       <TabsContent value="script" className="space-y-4 pt-4">
         {compute.kind !== 'script' ? (
           <ConfigHelpPanel>
-            Switch the computation kind to JavaScript to author or fork a
-            script body.
+            Switch the computation kind to JavaScript to author or fork a script
+            body.
           </ConfigHelpPanel>
         ) : compute.preset ? (
           <ConfigFormSection
@@ -572,6 +578,16 @@ function SourceEditor({
       ) : null}
 
       <ConfigFormActions>
+        <AssistantButton
+          size="sm"
+          variant="outline"
+          className="sm:mr-auto"
+          attachment={{
+            kind: 'computed_source',
+            id: draft.id.trim() ? draft.id : undefined,
+            label: draft.name || draft.id || 'New source',
+          }}
+        />
         {onDelete ? (
           <Button
             className="sm:mr-auto"
@@ -697,9 +713,15 @@ export default function SourcesConfigPage() {
         title="Computed sources"
         description="Server-owned values computed from pure inputs and published as read-only sensors under computed/<id>."
         actions={
-          <Button type="button" onClick={openCreate}>
-            New source
-          </Button>
+          <>
+            <AssistantButton
+              variant="outline"
+              attachment={{ kind: 'computed_source' }}
+            />
+            <Button type="button" onClick={openCreate}>
+              New source
+            </Button>
+          </>
         }
       />
 
@@ -742,12 +764,12 @@ export default function SourcesConfigPage() {
                       <span className="text-base font-semibold">
                         {source.name}
                       </span>
-                      <Badge
-                        variant={source.enabled ? 'default' : 'muted'}
-                      >
+                      <Badge variant={source.enabled ? 'default' : 'muted'}>
                         {source.enabled ? 'Enabled' : 'Disabled'}
                       </Badge>
-                      <Badge variant="outline">{kindLabel(source.compute)}</Badge>
+                      <Badge variant="outline">
+                        {kindLabel(source.compute)}
+                      </Badge>
                     </div>
                     <p className="text-sm text-muted-foreground">
                       computed/{source.id} · {source.timezone} · every{' '}

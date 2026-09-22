@@ -1,0 +1,303 @@
+import { CheckCircle2, Loader2, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
+
+import type { AssistantOperation } from '@/bindings/AssistantOperation';
+import type { AssistantOperationResult } from '@/bindings/AssistantOperationResult';
+import type { AssistantPlan } from '@/bindings/AssistantPlan';
+import { useApplyAssistantPlan } from '@/hooks/useAssistant';
+import {
+  acceptedByDefault,
+  isDestructiveOperation,
+  planOperationCounts,
+  planTouchesFloorplanEntities,
+} from '@/lib/assistant-diff';
+import { cn } from '@/lib/cn';
+import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
+import { Checkbox } from '@/ui/primitives/checkbox';
+
+import { OperationDiff } from './OperationDiff';
+import { FloorplanPreview } from './preview/FloorplanPreview';
+
+function expiryLabel(plan: AssistantPlan, now: number): string {
+  const remainingMs = Number(plan.expiresAtMs) - now;
+  if (remainingMs <= 0) {
+    return 'Expired';
+  }
+  const minutes = Math.ceil(remainingMs / 60000);
+  return `Expires in ${minutes} min`;
+}
+
+function OperationRow({
+  operation,
+  accepted,
+  disabled,
+  result,
+  onToggle,
+}: {
+  operation: AssistantOperation;
+  accepted: boolean;
+  disabled: boolean;
+  result?: AssistantOperationResult;
+  onToggle: (opId: string) => void;
+}) {
+  return (
+    <div
+      className={cn(
+        'space-y-2 rounded-2xl border border-border/60 p-2',
+        isDestructiveOperation(operation) &&
+          'border-destructive/30 bg-destructive/5',
+        result && !result.ok && 'border-destructive/40',
+      )}
+    >
+      <div className="flex items-start gap-2">
+        <Checkbox
+          aria-label={`Accept ${operation.label}`}
+          checked={accepted}
+          disabled={disabled}
+          className="mt-1.5"
+          onCheckedChange={() => onToggle(operation.opId)}
+        />
+        <div className="min-w-0 flex-1">
+          <OperationDiff operation={operation} />
+        </div>
+      </div>
+      {operation.warnings && operation.warnings.length > 0 ? (
+        <ul className="space-y-1 pl-7 text-xs text-amber-700 dark:text-amber-300">
+          {operation.warnings.map((warning) => (
+            <li key={warning} className="flex items-start gap-1.5">
+              <span aria-hidden>!</span>
+              <span>{warning}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {result ? (
+        <div
+          className={cn(
+            'flex items-start gap-1.5 pl-7 text-xs',
+            result.ok
+              ? 'text-emerald-700 dark:text-emerald-300'
+              : 'text-destructive',
+          )}
+        >
+          {result.ok ? (
+            <CheckCircle2 className="mt-0.5 size-3.5 shrink-0" />
+          ) : (
+            <XCircle className="mt-0.5 size-3.5 shrink-0" />
+          )}
+          <span>{result.ok ? 'Applied' : (result.error ?? 'Failed')}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+export function PlanCard({
+  plan,
+  onDiscard,
+}: {
+  plan: AssistantPlan;
+  onDiscard: () => void;
+}) {
+  const applyPlan = useApplyAssistantPlan();
+  const [accepted, setAccepted] = useState<Set<string>>(
+    () =>
+      new Set(
+        plan.operations
+          .filter((operation) => acceptedByDefault(operation))
+          .map((operation) => operation.opId),
+      ),
+  );
+  const [results, setResults] = useState<AssistantOperationResult[] | null>(
+    null,
+  );
+  const [now, setNow] = useState(() => Date.now());
+
+  const applied = results !== null;
+  const expired = Number(plan.expiresAtMs) <= now;
+  const counts = useMemo(() => planOperationCounts(plan), [plan]);
+  const resultsByOp = useMemo(
+    () => new Map((results ?? []).map((result) => [result.opId, result])),
+    [results],
+  );
+  const showPreview = useMemo(() => planTouchesFloorplanEntities(plan), [plan]);
+
+  useEffect(() => {
+    if (applied) {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(timer);
+  }, [applied]);
+
+  const toggle = (opId: string) => {
+    setAccepted((current) => {
+      const next = new Set(current);
+      if (next.has(opId)) {
+        next.delete(opId);
+      } else {
+        next.add(opId);
+      }
+      return next;
+    });
+  };
+
+  const apply = () => {
+    if (accepted.size === 0 || applyPlan.isPending || expired || applied) {
+      return;
+    }
+    applyPlan.mutate(
+      {
+        planId: plan.planId,
+        acceptedOperationIds: [...accepted],
+      },
+      {
+        onSuccess: (response) => {
+          setResults(response.results);
+          const failed = response.results.filter((result) => !result.ok);
+          if (failed.length === 0) {
+            toast.success(
+              `Applied ${response.results.length} change${response.results.length === 1 ? '' : 's'}`,
+            );
+          } else {
+            toast.warning(
+              `Applied ${response.results.length - failed.length} of ${response.results.length} changes`,
+            );
+          }
+        },
+        onError: (error) => {
+          toast.error(
+            error instanceof Error ? error.message : 'Failed to apply plan',
+          );
+        },
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-3 rounded-3xl border border-border bg-card p-3 shadow-sm">
+      <div className="space-y-2">
+        <div className="flex items-start gap-2">
+          <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+            <Sparkles className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1 space-y-1">
+            <p className="text-sm leading-relaxed">{plan.summary}</p>
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+              {counts.create > 0 ? (
+                <Badge className="border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300">
+                  {counts.create} create
+                </Badge>
+              ) : null}
+              {counts.update > 0 ? (
+                <Badge className="border-transparent bg-sky-500/15 text-sky-700 dark:text-sky-300">
+                  {counts.update} update
+                </Badge>
+              ) : null}
+              {counts.delete > 0 ? (
+                <Badge className="border-transparent bg-destructive/15 text-destructive dark:text-red-300">
+                  {counts.delete} delete
+                </Badge>
+              ) : null}
+              <span
+                className={cn(
+                  expired && !applied && 'font-medium text-destructive',
+                )}
+              >
+                {applied ? 'Plan applied' : expiryLabel(plan, now)}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {showPreview ? <FloorplanPreview plan={plan} /> : null}
+      </div>
+
+      {!applied && !expired ? (
+        <div className="flex items-center justify-between gap-2 text-xs">
+          <span className="text-muted-foreground">
+            {accepted.size} of {plan.operations.length} selected
+          </span>
+          <div className="flex items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() =>
+                setAccepted(
+                  new Set(plan.operations.map((operation) => operation.opId)),
+                )
+              }
+            >
+              Accept all
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs"
+              onClick={() => setAccepted(new Set())}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      <div className="space-y-2">
+        {plan.operations.map((operation) => (
+          <OperationRow
+            key={operation.opId}
+            operation={operation}
+            accepted={accepted.has(operation.opId)}
+            disabled={applied || expired}
+            result={resultsByOp.get(operation.opId)}
+            onToggle={toggle}
+          />
+        ))}
+      </div>
+
+      {expired && !applied ? (
+        <p className="text-xs text-muted-foreground">
+          This plan expired and can no longer be applied. Ask again to produce a
+          fresh plan.
+        </p>
+      ) : null}
+
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onDiscard}
+          className="sm:mr-auto"
+        >
+          <Trash2 />
+          {applied ? 'Dismiss' : 'Discard'}
+        </Button>
+        {!applied ? (
+          <Button
+            type="button"
+            disabled={accepted.size === 0 || applyPlan.isPending || expired}
+            onClick={apply}
+          >
+            {applyPlan.isPending ? <Loader2 className="animate-spin" /> : null}
+            {applyPlan.isPending
+              ? 'Applying…'
+              : `Apply ${accepted.size} change${accepted.size === 1 ? '' : 's'}`}
+          </Button>
+        ) : null}
+      </div>
+
+      {!applied ? (
+        <p className="text-[0.7rem] text-muted-foreground">
+          {plan.operations.length} operation
+          {plan.operations.length === 1 ? '' : 's'} · changes are written only
+          when you apply. Deletes are never selected by default.
+        </p>
+      ) : null}
+    </div>
+  );
+}

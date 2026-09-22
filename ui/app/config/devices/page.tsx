@@ -15,6 +15,7 @@ import {
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useDevicesState } from '@/hooks/websocket';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import { canCalibrateDevice, toggleSelection } from '@/lib/colorCalibration';
@@ -1052,15 +1053,17 @@ export default function DevicesPage() {
         ...previous,
         [deviceKey]: '',
       }));
-      const updatedReferences = ([
-        [result?.updated_integrations ?? 0, 'integration'],
-        [result?.updated_groups ?? 0, 'group'],
-        [result?.updated_scenes ?? 0, 'scene'],
-        [result?.updated_routines ?? 0, 'routine'],
-        [result?.updated_scene_overrides ?? 0, 'scene override'],
-        [result?.updated_dashboard_widgets ?? 0, 'dashboard widget'],
-        [result?.updated_calibration_profiles ?? 0, 'calibration profile'],
-      ] as Array<[number, string]>)
+      const updatedReferences = (
+        [
+          [result?.updated_integrations ?? 0, 'integration'],
+          [result?.updated_groups ?? 0, 'group'],
+          [result?.updated_scenes ?? 0, 'scene'],
+          [result?.updated_routines ?? 0, 'routine'],
+          [result?.updated_scene_overrides ?? 0, 'scene override'],
+          [result?.updated_dashboard_widgets ?? 0, 'dashboard widget'],
+          [result?.updated_calibration_profiles ?? 0, 'calibration profile'],
+        ] as Array<[number, string]>
+      )
         .filter(([count]) => count > 0)
         .map(([count, label]) => `${count} ${label}${count === 1 ? '' : 's'}`)
         .join(', ');
@@ -1098,15 +1101,17 @@ export default function DevicesPage() {
       const result = await removeConfigDevice(deviceKey);
       await refreshConfigData();
       setOpenDeviceKey(null);
-      const updatedReferences = ([
-        [result?.updated_integrations ?? 0, 'integration'],
-        [result?.updated_groups ?? 0, 'group'],
-        [result?.updated_scenes ?? 0, 'scene'],
-        [result?.updated_routines ?? 0, 'routine'],
-        [result?.updated_scene_overrides ?? 0, 'scene override'],
-        [result?.updated_dashboard_widgets ?? 0, 'dashboard widget'],
-        [result?.updated_calibration_profiles ?? 0, 'calibration profile'],
-      ] as Array<[number, string]>)
+      const updatedReferences = (
+        [
+          [result?.updated_integrations ?? 0, 'integration'],
+          [result?.updated_groups ?? 0, 'group'],
+          [result?.updated_scenes ?? 0, 'scene'],
+          [result?.updated_routines ?? 0, 'routine'],
+          [result?.updated_scene_overrides ?? 0, 'scene override'],
+          [result?.updated_dashboard_widgets ?? 0, 'dashboard widget'],
+          [result?.updated_calibration_profiles ?? 0, 'calibration profile'],
+        ] as Array<[number, string]>
+      )
         .filter(([count]) => count > 0)
         .map(([count, label]) => `${count} ${label}${count === 1 ? '' : 's'}`)
         .join(', ');
@@ -1143,6 +1148,9 @@ export default function DevicesPage() {
             scenes and scene-derived state sources are shown for controllable
             devices whenever the runtime exposes them.
           </>
+        }
+        actions={
+          <AssistantButton variant="outline" attachment={{ kind: 'device' }} />
         }
       />
 
@@ -1579,6 +1587,17 @@ export default function DevicesPage() {
                     <ConfigFormSection
                       title="Identity"
                       description="Static ids, display names, capabilities, and config group membership."
+                      actions={
+                        <AssistantButton
+                          size="sm"
+                          variant="outline"
+                          attachment={{
+                            kind: 'device',
+                            id: deviceKey,
+                            label,
+                          }}
+                        />
+                      }
                     >
                       <div className="space-y-3">
                         <DeviceFactRow
@@ -1652,12 +1671,12 @@ export default function DevicesPage() {
 
                   <TabsContent value="config" className="mt-4 space-y-4">
                     {canCalibrateDevice(device) && (
-                        <ColorCalibrationWizard
-                          key={deviceKey}
-                          device={device}
-                          devices={liveDevices}
-                        />
-                      )}
+                      <ColorCalibrationWizard
+                        key={deviceKey}
+                        device={device}
+                        devices={liveDevices}
+                      />
+                    )}
                     <ConfigFormSection
                       title="Configuration"
                       description="Customize how this device is displayed and how sensor payloads appear in control surfaces."
@@ -1857,25 +1876,25 @@ export default function DevicesPage() {
 
                   <ExperienceOnly minimum="expert">
                     <TabsContent value="raw" className="mt-4">
-                    <ConfigFormSection
-                      title="Raw JSON payload"
-                      description="Latest raw payload published by the integration."
-                    >
-                      {device.raw ? (
-                        <details>
-                          <summary className="cursor-pointer select-none text-sm text-foreground/80">
-                            Show live payload from the integration
-                          </summary>
-                          <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
-                            {JSON.stringify(device.raw, null, 2)}
-                          </pre>
-                        </details>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          This device has not published a raw payload.
-                        </p>
-                      )}
-                    </ConfigFormSection>
+                      <ConfigFormSection
+                        title="Raw JSON payload"
+                        description="Latest raw payload published by the integration."
+                      >
+                        {device.raw ? (
+                          <details>
+                            <summary className="cursor-pointer select-none text-sm text-foreground/80">
+                              Show live payload from the integration
+                            </summary>
+                            <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                              {JSON.stringify(device.raw, null, 2)}
+                            </pre>
+                          </details>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            This device has not published a raw payload.
+                          </p>
+                        )}
+                      </ConfigFormSection>
                     </TabsContent>
                   </ExperienceOnly>
                 </Tabs>

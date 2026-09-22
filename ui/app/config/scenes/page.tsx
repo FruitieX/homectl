@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { useCreateDeepLink } from '@/hooks/useDeepLink';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -171,9 +172,7 @@ export default function ScenesPage() {
     if (loading || error || !requestedSceneId) {
       return;
     }
-    const scene = scenes.find(
-      (candidate) => candidate.id === requestedSceneId,
-    );
+    const scene = scenes.find((candidate) => candidate.id === requestedSceneId);
     if (!scene) {
       return;
     }
@@ -246,7 +245,12 @@ export default function ScenesPage() {
       <ConfigPageHeader
         title="Scenes"
         description="Compose scripted and linked scene presets for devices and groups."
-        actions={<Button onClick={() => setShowCreate(true)}>Add Scene</Button>}
+        actions={
+          <>
+            <AssistantButton variant="outline" attachment={{ kind: 'scene' }} />
+            <Button onClick={() => setShowCreate(true)}>Add Scene</Button>
+          </>
+        }
       />
 
       {activationError && openId === null && (
@@ -720,27 +724,27 @@ function SceneEditorForm({
 
         <ExperienceOnly minimum="standard">
           <TabsContent value="script" className="mt-4 space-y-4">
-          <ConfigFormSection
-            title="Script"
-            description="Optional JavaScript expression for advanced scene state generation."
-          >
-            <ConfigHelpPanel>
-              Scene scripts evaluate a JavaScript expression. Use{' '}
-              defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed
-              autocomplete, plus bindings like
-              devices[&quot;integration/device&quot;] and{' '}
-              groups[&quot;group-id&quot;].
-            </ConfigHelpPanel>
-            <ConfigField label="Script (JavaScript)">
-              <NoSSRSceneScriptEditor
-                deviceOptions={deviceOptions}
-                groupOptions={groupOptions}
-                sceneIds={otherScenes.map((candidate) => candidate.id)}
-                value={script}
-                onChange={setScript}
-              />
-            </ConfigField>
-          </ConfigFormSection>
+            <ConfigFormSection
+              title="Script"
+              description="Optional JavaScript expression for advanced scene state generation."
+            >
+              <ConfigHelpPanel>
+                Scene scripts evaluate a JavaScript expression. Use{' '}
+                defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed
+                autocomplete, plus bindings like
+                devices[&quot;integration/device&quot;] and{' '}
+                groups[&quot;group-id&quot;].
+              </ConfigHelpPanel>
+              <ConfigField label="Script (JavaScript)">
+                <NoSSRSceneScriptEditor
+                  deviceOptions={deviceOptions}
+                  groupOptions={groupOptions}
+                  sceneIds={otherScenes.map((candidate) => candidate.id)}
+                  value={script}
+                  onChange={setScript}
+                />
+              </ConfigField>
+            </ConfigFormSection>
           </TabsContent>
         </ExperienceOnly>
 
@@ -803,6 +807,16 @@ function SceneEditorForm({
       )}
 
       <ConfigFormActions>
+        <AssistantButton
+          size="sm"
+          variant="outline"
+          className="sm:mr-auto"
+          attachment={{
+            kind: 'scene',
+            id: scene.id,
+            label: name || scene.name,
+          }}
+        />
         <Button variant="ghost" size="sm" onClick={onCancel}>
           Cancel
         </Button>

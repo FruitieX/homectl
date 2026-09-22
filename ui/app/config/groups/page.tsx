@@ -16,6 +16,7 @@ import {
 } from '@/lib/deviceLabel';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { AssistantButton } from '@/assistant/AssistantButton';
 import { ConfigPageHeader } from '../page-header';
 import {
   ConfigField,
@@ -123,7 +124,12 @@ export default function GroupsPage() {
       <ConfigPageHeader
         title="Groups"
         description="Organize devices and nested groups into controllable targets."
-        actions={<Button onClick={() => setShowCreate(true)}>Add Group</Button>}
+        actions={
+          <>
+            <AssistantButton variant="outline" attachment={{ kind: 'group' }} />
+            <Button onClick={() => setShowCreate(true)}>Add Group</Button>
+          </>
+        }
       />
 
       <ConfigListSearchBar
@@ -606,6 +612,16 @@ function GroupOverlay({
         </Tabs>
 
         <ConfigFormActions>
+          <AssistantButton
+            size="sm"
+            variant="outline"
+            className="sm:mr-auto"
+            attachment={{
+              kind: 'group',
+              id: id.trim() ? id.trim() : undefined,
+              label: name || group?.name || 'New group',
+            }}
+          />
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
