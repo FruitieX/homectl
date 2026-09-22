@@ -29,7 +29,7 @@ const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
 const ConfigScenesPage = lazy(() => import('../app/config/scenes/page'));
 const ConfigSettingsPage = lazy(() => import('../app/config/settings/page'));
 const ConfigSourcesPage = lazy(() => import('../app/config/sources/page'));
-const RoomPage = lazy(() => import('../app/groups/RoomPage'));
+const GroupViewport = lazy(() => import('../app/groups/GroupViewport'));
 const GroupsPage = lazy(() => import('../app/groups/page'));
 const MapPage = lazy(() => import('../app/map/page'));
 const SettingsPage = lazy(() => import('../app/settings/page'));
@@ -81,7 +81,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'groups/:id',
-        element: withSuspense(<RoomPage />),
+        element: withSuspense(<GroupViewport />),
       },
       {
         path: 'map',

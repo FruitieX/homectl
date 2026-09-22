@@ -109,7 +109,7 @@ export const Navbar = () => {
           {title}
         </h1>
       </div>
-      {pathname === '/map' && (
+      {(pathname === '/map' || pathname?.startsWith('/groups/')) && (
         <div id="floorplan-tabs" className="flex min-w-0 items-center gap-1" />
       )}
       <AssistantButton
@@ -124,7 +124,7 @@ export const Navbar = () => {
         }
         attachment={assistantContext ?? undefined}
       />
-      {pathname === '/map' && (
+      {(pathname === '/map' || pathname?.startsWith('/groups/')) && (
         <div
           id="floorplan-toolbar"
           className="flex min-w-0 items-center gap-1"

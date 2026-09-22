@@ -17,10 +17,18 @@ import {
   useSelectedDevices,
   useToggleSelectedDevice,
 } from '@/hooks/selectedDevices';
-import { useStoredFloorplan } from '@/hooks/useStoredFloorplan';
+import {
+  useAllFloorplans,
+  useStoredFloorplan,
+} from '@/hooks/useStoredFloorplan';
 import { useDeviceModalState } from '@/hooks/deviceModalState';
 import { useSaveSceneModalState } from '@/hooks/saveSceneModalState';
+import { getDeviceKey } from '@/lib/device';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
+import {
+  resolveGroupDeviceKeys,
+  selectGroupFloorplan,
+} from '@/lib/group-floorplan-preview';
 import { getSensorConfigRef } from '@/lib/sensorInteraction';
 import { excludeUndefined } from 'utils/excludeUndefined';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
@@ -33,10 +41,12 @@ import {
   PopoverTrigger,
 } from '@/ui/primitives/popover';
 import { Tabs, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { Slider } from '@/ui/primitives/slider';
+import { GroupPanel } from '../groups/GroupPanel';
 
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
-export const Viewport = () => {
+export const Viewport = ({ groupId }: { groupId?: string }) => {
   const [, refreshHealth] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => refreshHealth((value) => value + 1), 30000);
@@ -87,14 +97,48 @@ export const Viewport = () => {
   );
   const liveDevices = useDevicesByKeysState(placedDeviceKeys);
   const allDevices = Object.values(excludeUndefined(liveDevices ?? undefined));
-  const visibleDevices = allDevices.filter((device) =>
-    floorplanMode === 'lights'
-      ? 'Controllable' in device.data
-      : floorplanMode === 'sensors'
-        ? 'Sensor' in device.data
-        : true,
-  );
   const groups = excludeUndefined(liveGroups ?? undefined);
+  const [groupFilterId, setGroupFilterId] = useState<string | null>(
+    groupId ?? null,
+  );
+  const [groupPanelOpen, setGroupPanelOpen] = useState(true);
+  useEffect(() => {
+    setGroupFilterId(groupId ?? null);
+    setGroupPanelOpen(true);
+    setSelectedFloorplanId(null);
+    setActiveSensorKey(null);
+    setSelecting(false);
+    setSelectedDevices([]);
+  }, [groupId, setSelectedDevices]);
+  const groupDeviceKeys = useMemo(
+    () =>
+      groupFilterId
+        ? resolveGroupDeviceKeys(groupFilterId, liveGroups ?? {})
+        : [],
+    [groupFilterId, liveGroups],
+  );
+  const groupFilterKeys = groupFilterId ? new Set(groupDeviceKeys) : null;
+  const { floorplans: allFloorplans } = useAllFloorplans();
+  const defaultFloorplanId = useMemo(() => {
+    if (!groupFilterId) return null;
+    return (
+      selectGroupFloorplan(groupFilterId, groupDeviceKeys, allFloorplans)
+        ?.floorplan.id ?? null
+    );
+  }, [groupFilterId, groupDeviceKeys, allFloorplans]);
+  useEffect(() => {
+    if (selectedFloorplanId === null && defaultFloorplanId)
+      setSelectedFloorplanId(defaultFloorplanId);
+  }, [defaultFloorplanId, selectedFloorplanId]);
+  const visibleDevices = allDevices.filter(
+    (device) =>
+      (!groupFilterKeys || groupFilterKeys.has(getDeviceKey(device))) &&
+      (floorplanMode === 'lights'
+        ? 'Controllable' in device.data
+        : floorplanMode === 'sensors'
+          ? 'Sensor' in device.data
+          : true),
+  );
   const deviceDisplayNameMap = useMemo(
     () =>
       Object.fromEntries(
@@ -122,6 +166,9 @@ export const Viewport = () => {
     : null;
   const inspectorOpen =
     (deviceOpen && presentation === 'floorplan') || activeSensor !== null;
+  const groupPanelVisible = Boolean(
+    groupId && groupPanelOpen && !inspectorOpen,
+  );
 
   useEffect(() => {
     setToolbar(document.getElementById('floorplan-toolbar'));
@@ -235,6 +282,32 @@ export const Viewport = () => {
                     <option value="all">All devices</option>
                   </select>
                 </label>
+                {Object.keys(groups).length > 0 ? (
+                  <label className="block space-y-2 text-sm">
+                    <span>Group filter</span>
+                    <select
+                      className="h-10 w-full rounded-md border border-input bg-background px-2"
+                      value={groupFilterId ?? ''}
+                      onChange={(event) => {
+                        setGroupFilterId(event.target.value || null);
+                        setSelectedFloorplanId(null);
+                        clearSelection();
+                        setActiveSensorKey(null);
+                      }}
+                    >
+                      <option value="">All devices</option>
+                      {Object.entries(groups)
+                        .sort(([, a], [, b]) =>
+                          (a.name ?? '').localeCompare(b.name ?? ''),
+                        )
+                        .map(([id, group]) => (
+                          <option key={id} value={id}>
+                            {group.name ?? id}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                ) : null}
                 <label className="block space-y-2 text-sm">
                   <span>Open device or group</span>
                   <select
@@ -325,6 +398,18 @@ export const Viewport = () => {
                 >
                   {selecting ? 'Finish selecting' : 'Select devices'}
                 </Button>
+                {groupId && !groupPanelOpen ? (
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => {
+                      setGroupPanelOpen(true);
+                      setViewOpen(false);
+                    }}
+                  >
+                    Show room controls
+                  </Button>
+                ) : null}
                 <Button variant="outline" className="w-full" asChild>
                   <Link to="/config/floorplan">Edit floorplan</Link>
                 </Button>
@@ -395,7 +480,7 @@ export const Viewport = () => {
 
       <div
         className={
-          inspectorOpen || selecting
+          inspectorOpen || selecting || groupPanelVisible
             ? 'flex shrink-0 flex-col md:w-80 lg:w-96'
             : 'contents'
         }
@@ -427,10 +512,19 @@ export const Viewport = () => {
         <div
           id="floorplan-inspector"
           className={
-            inspectorOpen ? 'min-h-0 md:flex-1 [&>section]:md:h-full' : 'hidden'
+            inspectorOpen || groupPanelVisible
+              ? 'min-h-0 md:flex-1 [&>section]:md:h-full'
+              : 'hidden'
           }
         />
       </div>
+      {groupPanelVisible && groupId ? (
+        <GroupPanel
+          key={groupId}
+          groupId={groupId}
+          onClose={() => setGroupPanelOpen(false)}
+        />
+      ) : null}
       <SensorActionModal
         device={activeSensor}
         sensorConfig={
