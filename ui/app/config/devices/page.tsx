@@ -15,7 +15,7 @@ import {
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { useDevicesState } from '@/hooks/websocket';
-import { AssistantButton } from '@/assistant/AssistantButton';
+import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
 import { canCalibrateDevice, toggleSelection } from '@/lib/colorCalibration';
@@ -63,6 +63,12 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/ui/primitives/popover';
+import { CheckSquare, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 type DeviceTypeFilter = 'all' | 'controllable' | 'sensor' | 'other';
@@ -566,6 +572,8 @@ export default function DevicesPage() {
   const [deviceTypeFilter, setDeviceTypeFilter] =
     useState<DeviceTypeFilter>('all');
   const [deviceGroupFilter, setDeviceGroupFilter] = useState('all');
+  const [deviceIntegrationFilter, setDeviceIntegrationFilter] = useState('all');
+  const [selectMode, setSelectMode] = useState(false);
   const [displayNameDrafts, setDisplayNameDrafts] = useState<
     Record<string, string>
   >({});
@@ -637,6 +645,23 @@ export default function DevicesPage() {
         deviceSensorConfigs.map((row) => [row.device_ref, row]),
       ),
     [deviceSensorConfigs],
+  );
+  const openDevice = useMemo(
+    () =>
+      openDeviceKey
+        ? (devices.find((device) => getDeviceKey(device) === openDeviceKey) ??
+          null)
+        : null,
+    [devices, openDeviceKey],
+  );
+  useAssistantPageContext(
+    openDevice && openDeviceKey
+      ? {
+          kind: 'device',
+          id: openDeviceKey,
+          label: getDeviceDisplayLabel(openDevice, deviceDisplayNameMap),
+        }
+      : { kind: 'device' },
   );
   const groups = useMemo(() => {
     const nextGroups: FlattenedGroupsConfig = {};
@@ -841,6 +866,13 @@ export default function DevicesPage() {
             return false;
           }
 
+          if (
+            deviceIntegrationFilter !== 'all' &&
+            entry.device.integration_id !== deviceIntegrationFilter
+          ) {
+            return false;
+          }
+
           if (!normalizedSearch) {
             return true;
           }
@@ -866,6 +898,7 @@ export default function DevicesPage() {
     [
       deviceDisplayNameMap,
       deviceGroupFilter,
+      deviceIntegrationFilter,
       deviceSensorConfigMap,
       deviceTypeFilter,
       groupIdsByDeviceKey,
@@ -873,6 +906,24 @@ export default function DevicesPage() {
       liveDevices,
       normalizedSearch,
     ],
+  );
+  const integrationIds = useMemo(
+    () =>
+      Array.from(
+        new Set(devices.map((device) => device.integration_id)),
+      ).sort(),
+    [devices],
+  );
+  const activeFilterCount =
+    (deviceTypeFilter !== 'all' ? 1 : 0) +
+    (deviceGroupFilter !== 'all' ? 1 : 0) +
+    (deviceIntegrationFilter !== 'all' ? 1 : 0);
+  const calibratableVisibleKeys = useMemo(
+    () =>
+      visibleDevices
+        .filter((entry) => canCalibrateDevice(entry.device))
+        .map((entry) => entry.deviceKey),
+    [visibleDevices],
   );
 
   useEffect(() => {
@@ -1149,9 +1200,7 @@ export default function DevicesPage() {
             devices whenever the runtime exposes them.
           </>
         }
-        actions={
-          <AssistantButton variant="outline" attachment={{ kind: 'device' }} />
-        }
+        actions={undefined}
       />
 
       {error && (
@@ -1171,162 +1220,123 @@ export default function DevicesPage() {
         </Alert>
       )}
 
-      <Card>
-        <CardContent className="space-y-4 p-5">
-          <div className="flex flex-wrap items-end gap-3">
-            <label className={fieldClassName + ' w-full max-w-xs'}>
-              <span className={fieldLabelClassName}>Search</span>
+      <Card className="sticky top-0 z-20 border-border/60 bg-background/95 backdrop-blur">
+        <CardContent className="space-y-2 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                className="h-9"
-                placeholder="Search by label, id, or group"
+                className="h-9 pl-9"
+                placeholder="Search devices by label, id, or room"
+                aria-label="Search devices"
                 value={deviceSearch}
                 onChange={(e) => setDeviceSearch(e.target.value)}
               />
-            </label>
+            </div>
 
-            <label className={fieldClassName + ' w-full max-w-48'}>
-              <span className={fieldLabelClassName}>Type</span>
-              <select
-                className={selectClassName + ' h-9'}
-                value={deviceTypeFilter}
-                onChange={(e) =>
-                  setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
-                }
-              >
-                <option value="all">All devices</option>
-                <option value="controllable">Lights / devices</option>
-                <option value="sensor">Sensors</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                  <SlidersHorizontal className="size-4" />
+                  Filters
+                  {activeFilterCount > 0 ? (
+                    <Badge
+                      variant="secondary"
+                      className="h-5 min-w-5 justify-center rounded-full px-1 text-[0.65rem]"
+                    >
+                      {activeFilterCount}
+                    </Badge>
+                  ) : null}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 space-y-4">
+                <label className="block space-y-1.5 text-sm">
+                  <span className="font-medium">Type</span>
+                  <select
+                    className={selectClassName + ' h-9 w-full'}
+                    value={deviceTypeFilter}
+                    onChange={(e) =>
+                      setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
+                    }
+                  >
+                    <option value="all">All devices</option>
+                    <option value="controllable">Lights / devices</option>
+                    <option value="sensor">Sensors</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label className="block space-y-1.5 text-sm">
+                  <span className="font-medium">Room</span>
+                  <select
+                    className={selectClassName + ' h-9 w-full'}
+                    value={deviceGroupFilter}
+                    onChange={(e) => setDeviceGroupFilter(e.target.value)}
+                  >
+                    <option value="all">All rooms</option>
+                    {availableGroups.map((group) => (
+                      <option key={group.id} value={group.id}>
+                        {group.name}
+                        {group.hidden ? ' (hidden)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block space-y-1.5 text-sm">
+                  <span className="font-medium">Integration</span>
+                  <select
+                    className={selectClassName + ' h-9 w-full'}
+                    value={deviceIntegrationFilter}
+                    onChange={(e) => setDeviceIntegrationFilter(e.target.value)}
+                  >
+                    <option value="all">All integrations</option>
+                    {integrationIds.map((integrationId) => (
+                      <option key={integrationId} value={integrationId}>
+                        {integrationId}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  disabled={activeFilterCount === 0}
+                  onClick={() => {
+                    setDeviceTypeFilter('all');
+                    setDeviceGroupFilter('all');
+                    setDeviceIntegrationFilter('all');
+                  }}
+                >
+                  Clear filters
+                </Button>
+              </PopoverContent>
+            </Popover>
 
-            <label className={fieldClassName + ' w-full max-w-xs'}>
-              <span className={fieldLabelClassName}>Group</span>
-              <select
-                className={selectClassName + ' h-9'}
-                value={deviceGroupFilter}
-                onChange={(e) => setDeviceGroupFilter(e.target.value)}
-              >
-                <option value="all">All groups</option>
-                {availableGroups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                    {group.hidden ? ' (hidden)' : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Button
+              variant={selectMode ? 'secondary' : 'outline'}
+              size="sm"
+              className="h-9"
+              aria-pressed={selectMode}
+              onClick={() =>
+                setSelectMode((current) => {
+                  if (current) {
+                    setSelectedKeys([]);
+                  }
+                  return !current;
+                })
+              }
+            >
+              <CheckSquare className="size-4" />
+              {selectMode ? 'Done' : 'Select'}
+            </Button>
 
-            {(deviceSearch ||
-              deviceTypeFilter !== 'all' ||
-              deviceGroupFilter !== 'all') && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setDeviceSearch('');
-                  setDeviceTypeFilter('all');
-                  setDeviceGroupFilter('all');
-                }}
-              >
-                Clear Filters
-              </Button>
-            )}
+            <span className="ml-auto text-sm text-muted-foreground">
+              {visibleDevices.length === devices.length
+                ? `${devices.length} devices`
+                : `${visibleDevices.length} of ${devices.length} devices`}
+            </span>
           </div>
-
-          <div className="text-sm text-muted-foreground">
-            Matching devices: {visibleDevices.length} total ·{' '}
-            {visibleDevices.filter((entry) => entry.type === 'sensor').length}{' '}
-            sensors ·{' '}
-            {
-              visibleDevices.filter((entry) => entry.type === 'controllable')
-                .length
-            }{' '}
-            controllables
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="flex flex-wrap items-center gap-3 p-4">
-          <Button
-            variant="outline"
-            disabled={assignCalibration.isPending}
-            onClick={() =>
-              setSelectedKeys((selected) =>
-                toggleSelection(
-                  selected,
-                  visibleDevices
-                    .filter((entry) => canCalibrateDevice(entry.device))
-                    .map((entry) => entry.deviceKey),
-                ),
-              )
-            }
-          >
-            Select / deselect visible lights
-          </Button>
-          <span className="text-sm">
-            {selectedKeys.length} selected
-            {selectedKeys.some(
-              (key) => !visibleDevices.some((entry) => entry.deviceKey === key),
-            )
-              ? ' (including hidden by filters)'
-              : ''}
-          </span>
-          {selectedKeys.length > 0 && (
-            <>
-              <select
-                aria-label="Calibration profile for selected lights"
-                className={selectClassName}
-                value={batchProfileId}
-                onChange={(event) => setBatchProfileId(event.target.value)}
-                disabled={assignCalibration.isPending || profilesLoading}
-              >
-                <option value="">Choose calibration profile</option>
-                {calibrationProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                disabled={
-                  assignCalibration.isPending ||
-                  !batchProfileId ||
-                  profilesLoading ||
-                  !!profilesError
-                }
-                onClick={() => void applyCalibration(batchProfileId)}
-              >
-                Apply profile to {selectedKeys.length} lights
-              </Button>
-              <Button
-                variant="outline"
-                disabled={assignCalibration.isPending}
-                onClick={() => void applyCalibration(null)}
-              >
-                Remove calibration
-              </Button>
-              <Button
-                variant="ghost"
-                disabled={assignCalibration.isPending}
-                onClick={() => setSelectedKeys([])}
-              >
-                Clear selection
-              </Button>
-            </>
-          )}
-          <p className="w-full text-sm text-muted-foreground">
-            Create a profile in a light’s Config tab. Select lights here to
-            reuse it—ideally lamps of the same model. Applying a profile also
-            reapplies their current color.
-          </p>
-          {profilesError && (
-            <p role="alert" className="text-sm">
-              {profilesError}
-            </p>
-          )}
         </CardContent>
       </Card>
 
@@ -1394,7 +1404,7 @@ export default function DevicesPage() {
               summary={
                 <div className="space-y-2">
                   <div className="flex items-start justify-between gap-3">
-                    {canCalibrateDevice(device) && (
+                    {selectMode && canCalibrateDevice(device) && (
                       <label
                         className="flex items-center gap-2 pt-1"
                         onClick={(event) => event.stopPropagation()}
@@ -1587,17 +1597,6 @@ export default function DevicesPage() {
                     <ConfigFormSection
                       title="Identity"
                       description="Static ids, display names, capabilities, and config group membership."
-                      actions={
-                        <AssistantButton
-                          size="sm"
-                          variant="outline"
-                          attachment={{
-                            kind: 'device',
-                            id: deviceKey,
-                            label,
-                          }}
-                        />
-                      }
                     >
                       <div className="space-y-3">
                         <DeviceFactRow
@@ -1910,6 +1909,88 @@ export default function DevicesPage() {
           description="Clear filters or search for another label, id, or group."
         />
       )}
+      {selectMode ? (
+        <div className="sticky bottom-0 z-20 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur">
+          <span className="text-sm font-medium">
+            {selectedKeys.length} selected
+            {selectedKeys.some(
+              (key) => !visibleDevices.some((entry) => entry.deviceKey === key),
+            )
+              ? ' (including hidden by filters)'
+              : ''}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={calibratableVisibleKeys.length === 0}
+            onClick={() =>
+              setSelectedKeys((selected) =>
+                toggleSelection(selected, calibratableVisibleKeys),
+              )
+            }
+          >
+            {calibratableVisibleKeys.length > 0 &&
+            calibratableVisibleKeys.every((key) => selectedKeys.includes(key))
+              ? 'Deselect visible lights'
+              : `Select ${calibratableVisibleKeys.length} visible lights`}
+          </Button>
+          {selectedKeys.length > 0 ? (
+            <>
+              <select
+                aria-label="Calibration profile for selected lights"
+                className={selectClassName + ' h-9'}
+                value={batchProfileId}
+                onChange={(event) => setBatchProfileId(event.target.value)}
+                disabled={assignCalibration.isPending || profilesLoading}
+              >
+                <option value="">Choose calibration profile</option>
+                {calibrationProfiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                size="sm"
+                disabled={
+                  assignCalibration.isPending ||
+                  !batchProfileId ||
+                  profilesLoading ||
+                  !!profilesError
+                }
+                onClick={() => void applyCalibration(batchProfileId)}
+              >
+                Apply to {selectedKeys.length} lights
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={assignCalibration.isPending}
+                onClick={() => void applyCalibration(null)}
+              >
+                Remove calibration
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={assignCalibration.isPending}
+                onClick={() => setSelectedKeys([])}
+              >
+                Clear
+              </Button>
+            </>
+          ) : (
+            <span className="text-sm text-muted-foreground">
+              Select lights to apply a calibration profile in bulk.
+            </span>
+          )}
+          {profilesError && (
+            <p role="alert" className="w-full text-sm">
+              {profilesError}
+            </p>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }
