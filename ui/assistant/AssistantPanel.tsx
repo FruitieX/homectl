@@ -53,6 +53,7 @@ import {
 } from './state';
 
 const suggestionPrompts = [
+  'Which lights are on right now?',
   'Turn off all lights when nobody is home',
   'Add a scene for movie night',
   'Dim the living room lights to 20%',
@@ -469,7 +470,7 @@ export function AssistantPanel() {
               <div className="space-y-3 rounded-3xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
                 <p className="text-sm text-muted-foreground">
                   {enabled
-                    ? 'Ask for a new automation, a change to an existing entity, or a quick light change. Attach entities from the page you came from.'
+                    ? 'Ask a question about the current state or recent logs, request a new automation, or ask for a quick light change. Attach entities from the page you came from.'
                     : 'The assistant is not configured on this server. Set the provider base URL and model under Settings → Assistant.'}
                 </p>
                 {enabled ? (
