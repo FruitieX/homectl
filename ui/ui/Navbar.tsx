@@ -106,6 +106,9 @@ export const Navbar = () => {
           {title}
         </h1>
       </div>
+      {pathname === '/map' && (
+        <div id="floorplan-tabs" className="flex min-w-0 items-center gap-1" />
+      )}
       <AssistantButton
         variant="ghost"
         size="icon"

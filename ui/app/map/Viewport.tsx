@@ -61,6 +61,7 @@ export const Viewport = () => {
   >('default');
   const [activeSensorKey, setActiveSensorKey] = useState<string | null>(null);
   const [toolbar, setToolbar] = useState<HTMLElement | null>(null);
+  const [tabs, setTabs] = useState<HTMLElement | null>(null);
   const [selectedDevices, setSelectedDevices] = useSelectedDevices();
   const toggleSelectedDevice = useToggleSelectedDevice();
   const { setOpen: setSaveSceneOpen } = useSaveSceneModalState();
@@ -124,6 +125,7 @@ export const Viewport = () => {
 
   useEffect(() => {
     setToolbar(document.getElementById('floorplan-toolbar'));
+    setTabs(document.getElementById('floorplan-tabs'));
     return () => {
       setDeviceModalOpen(false);
       setSelectedDevices([]);
@@ -168,47 +170,51 @@ export const Viewport = () => {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      {tabs &&
+        floorplans.length > 1 &&
+        createPortal(
+          <Tabs
+            value={effectiveSelectedFloorplanId ?? ''}
+            onValueChange={(id) => {
+              clearSelection();
+              setActiveSensorKey(null);
+              setSelectedFloorplanId(id);
+              setPixiFallbackReason(null);
+            }}
+            className="min-w-0"
+          >
+            <div className="min-w-0 overflow-x-auto">
+              <TabsList className="h-9 w-max justify-start bg-transparent p-0">
+                {floorplans.map((floorplan) => (
+                  <TabsTrigger
+                    key={floorplan.id}
+                    value={floorplan.id}
+                    className="h-8 shrink-0 px-3 text-xs"
+                  >
+                    {floorplan.name}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+          </Tabs>,
+          tabs,
+        )}
       {toolbar &&
         floorplans.length > 0 &&
         createPortal(
           <>
-            {floorplans.length > 1 && (
-              <Tabs
-                value={effectiveSelectedFloorplanId ?? ''}
-                onValueChange={(id) => {
-                  clearSelection();
-                  setActiveSensorKey(null);
-                  setSelectedFloorplanId(id);
-                  setPixiFallbackReason(null);
-                }}
-                className="min-w-0 flex-1"
-              >
-                <div className="min-w-0 overflow-x-auto">
-                  <TabsList className="h-9 w-max min-w-full justify-start bg-transparent p-0">
-                    {floorplans.map((floorplan) => (
-                      <TabsTrigger
-                        key={floorplan.id}
-                        value={floorplan.id}
-                        className="h-8 shrink-0 px-3 text-xs"
-                      >
-                        {floorplan.name}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </div>
-              </Tabs>
-            )}
             <Popover open={viewOpen} onOpenChange={setViewOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="sm"
+                  size="icon"
                   aria-label="Floorplan view options"
+                  title="View options"
+                  className="relative"
                 >
                   <SlidersHorizontal />
-                  View
                   {floorplanMode !== 'all' ? (
-                    <span className="size-1.5 rounded-full bg-primary" />
+                    <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
                   ) : null}
                 </Button>
               </PopoverTrigger>

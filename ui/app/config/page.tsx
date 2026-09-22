@@ -198,21 +198,16 @@ export default function ConfigPage() {
       });
     }
     return index;
-  }, [
-    devicesState,
-    groupsState,
-    helpers,
-    integrations,
-    routines,
-    scenesState,
-  ]);
+  }, [devicesState, groupsState, helpers, integrations, routines, scenesState]);
 
   const recentEntries = useMemo(
     () =>
       recents
         .map((key) => ({ key, entry: linkIndex.get(key) }))
         .filter(
-          (item): item is { key: string; entry: { label: string; href: string } } =>
+          (
+            item,
+          ): item is { key: string; entry: { label: string; href: string } } =>
             item.entry !== undefined,
         )
         .slice(0, 6),
@@ -229,8 +224,9 @@ export default function ConfigPage() {
     }[] = [];
 
     const warnings =
-      diagnostics.data?.issues.filter((issue) => issue.severity === 'warning') ??
-      [];
+      diagnostics.data?.issues.filter(
+        (issue) => issue.severity === 'warning',
+      ) ?? [];
     if (warnings.length > 0) {
       const first = warnings[0];
       items.push({
@@ -314,7 +310,7 @@ export default function ConfigPage() {
         <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
           Quick actions
         </h2>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
           {quickActions.map((action) => {
             const Icon = action.icon;
             return (
@@ -322,13 +318,15 @@ export default function ConfigPage() {
                 key={action.key}
                 type="button"
                 onClick={() => open(action.key, action.href)}
-                className="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-3 text-left text-sm font-medium transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="flex items-start gap-2 rounded-2xl border border-border bg-card px-2.5 py-2.5 text-left text-xs font-medium transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:py-3 sm:text-sm"
               >
-                <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
-                  <Icon className="size-4" />
+                <span className="grid size-7 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary sm:size-8">
+                  <Icon className="size-3.5 sm:size-4" />
                 </span>
-                <span className="min-w-0 flex-1 truncate">{action.label}</span>
-                <Plus className="size-3.5 text-muted-foreground" />
+                <span className="min-w-0 flex-1 whitespace-normal leading-snug">
+                  {action.label}
+                </span>
+                <Plus className="size-3.5 shrink-0 text-muted-foreground" />
               </button>
             );
           })}
