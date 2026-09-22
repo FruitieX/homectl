@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SlidersHorizontal } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   useDevicesByKeysState,
   useDevicesState,
@@ -47,6 +47,7 @@ import { GroupPanel } from '../groups/GroupPanel';
 type FloorplanMode = 'all' | 'lights' | 'sensors';
 
 export const Viewport = ({ groupId }: { groupId?: string }) => {
+  const navigate = useNavigate();
   const [, refreshHealth] = useState(0);
   useEffect(() => {
     const timer = setInterval(() => refreshHealth((value) => value + 1), 30000);
@@ -193,6 +194,11 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
     setDeviceModalOpen,
   ]);
 
+  const openGroup = (groupId: string) => {
+    if (!groupId) return;
+    // Groups open the same room view as the rooms list does.
+    navigate(`/groups/${encodeURIComponent(groupId)}`);
+  };
   const openDevice = (keys: string[]) => {
     if (keys.length === 0) return;
     setActiveSensorKey(null);
@@ -317,8 +323,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
                       const value = event.target.value;
                       setViewOpen(false);
                       clearSelection();
-                      if (value.startsWith('group:'))
-                        openDevice(groups[value.slice(6)]?.device_keys ?? []);
+                      if (value.startsWith('group:')) openGroup(value.slice(6));
                       else {
                         const key = value.slice(7);
                         if (
@@ -455,11 +460,7 @@ export const Viewport = ({ groupId }: { groupId?: string }) => {
               setDeviceModalOpen(false);
               setActiveSensorKey(key);
             }}
-            onGroupPress={(id) =>
-              selecting
-                ? toggleGroup(id)
-                : openDevice(groups[id]?.device_keys ?? [])
-            }
+            onGroupPress={(id) => (selecting ? toggleGroup(id) : openGroup(id))}
             onGroupLongPress={(id) => {
               setSelecting(true);
               setActiveSensorKey(null);
