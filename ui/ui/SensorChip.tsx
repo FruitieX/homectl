@@ -8,6 +8,7 @@ import {
 } from '@/lib/sensorStats';
 import { isOffline } from '@/lib/sensorStats';
 import { cn } from '@/lib/cn';
+import { Sparkline } from '@/ui/charts/Sparkline';
 
 const trendLabel = (trend: SensorTrend) =>
   ({
@@ -81,6 +82,18 @@ export function SensorChip({
           {humidity ? getTrendIcon(humidity.trend) : null}
         </span>
       </div>
+      {compact && !onCheckedChange && (
+        <div className="mt-2 min-h-0 flex-1">
+          <Sparkline
+            points={
+              sensor.temp_data.length >= 2
+                ? sensor.temp_data
+                : sensor.humidity_data
+            }
+            className="h-full w-full text-muted-foreground/70"
+          />
+        </div>
+      )}
     </>
   );
   const selectable = Boolean(onCheckedChange);
@@ -88,7 +101,7 @@ export function SensorChip({
   return (
     <div
       className={cn(
-        'dashboard-sensor-chip relative rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
+        'dashboard-sensor-chip relative flex h-full flex-col rounded-xl border border-border/50 p-[var(--widget-tile-padding,0.75rem)]',
         compact ? 'min-w-[5.6rem]' : 'min-w-28',
         (selectable || onOpen) &&
           'cursor-pointer transition hover:border-primary/60 hover:bg-muted/20',
@@ -123,12 +136,17 @@ export function SensorChip({
         <button
           type="button"
           onClick={onOpen}
-          className={cn('w-full text-left', onCheckedChange && 'pl-5')}
+          className={cn(
+            'flex w-full flex-1 flex-col text-left',
+            onCheckedChange && 'pl-5',
+          )}
         >
           {content}
         </button>
       ) : (
-        <div className={onCheckedChange ? 'pl-5' : undefined}>{content}</div>
+        <div className={cn('flex flex-1 flex-col', onCheckedChange && 'pl-5')}>
+          {content}
+        </div>
       )}
     </div>
   );

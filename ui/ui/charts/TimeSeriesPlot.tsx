@@ -458,7 +458,31 @@ export function TimeSeriesPlot({
               opacity={0.55}
             />
           )}
-          {selectedX !== undefined && (
+          {selectedBar !== undefined ? (
+            (() => {
+              const pad = 3;
+              const barLeft = x(selectedBar.time) + 1;
+              const barRight = x(selectedBar.end ?? selectedBar.time + 3600000);
+              const high = selectedBar.high ?? selectedBar.value;
+              const boxTop =
+                Math.min(y(selectedBar.value), y(high), y(0)) - pad;
+              const boxBottom =
+                Math.max(y(selectedBar.value), y(high), y(0)) + pad;
+              return (
+                <rect
+                  x={barLeft - pad}
+                  y={boxTop}
+                  width={Math.max(1, barRight - barLeft) + pad * 2}
+                  height={Math.max(1, boxBottom - boxTop)}
+                  rx={3}
+                  className="fill-background stroke-foreground"
+                  fillOpacity={0.45}
+                  strokeOpacity={0.8}
+                  strokeWidth={1.5}
+                />
+              );
+            })()
+          ) : selectedX !== undefined ? (
             <line
               x1={selectedX}
               x2={selectedX}
@@ -467,7 +491,7 @@ export function TimeSeriesPlot({
               className="stroke-foreground"
               opacity={0.5}
             />
-          )}
+          ) : null}
         </g>
         {points.length === 0 && (
           <text
