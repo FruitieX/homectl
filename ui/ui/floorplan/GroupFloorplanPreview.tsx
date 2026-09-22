@@ -1,4 +1,3 @@
-import { MapPin } from 'lucide-react';
 import {
   useEffect,
   useId,
@@ -34,8 +33,6 @@ type GroupFloorplanPreviewProps = {
   group?: FlattenedGroupConfig | null;
   /** Sizing/rounding for the map container; include an explicit height. */
   className?: string;
-  /** Render an explanatory caption above the map. */
-  showCaption?: boolean;
   /** Allow pan/zoom gestures inside the preview. */
   interactive?: boolean;
 };
@@ -81,7 +78,6 @@ export function GroupFloorplanPreview({
   groupId,
   group,
   className,
-  showCaption = false,
   interactive = false,
 }: GroupFloorplanPreviewProps) {
   const { floorplans } = useAllFloorplans();
@@ -176,14 +172,6 @@ export function GroupFloorplanPreview({
 
   return (
     <div className="space-y-2">
-      {showCaption ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <MapPin className="size-3.5" />
-          <span>
-            Zoomed to this room&rsquo;s devices · {selectedFloorplan.name}
-          </span>
-        </div>
-      ) : null}
       <div
         ref={containerRef}
         className={cn(
