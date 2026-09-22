@@ -66,6 +66,33 @@ pub struct AssistantAttachment {
     pub label: Option<String>,
 }
 
+/// One persisted assistant conversation as listed in the panel. Message
+/// contents are only included when a single thread is fetched.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantThreadSummary {
+    pub id: String,
+    pub name: String,
+    #[ts(type = "number")]
+    pub updated_at_ms: i64,
+    pub message_count: usize,
+}
+
+/// A persisted assistant conversation thread.
+#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantThread {
+    pub id: String,
+    pub name: String,
+    #[ts(type = "number")]
+    pub created_at_ms: i64,
+    #[ts(type = "number")]
+    pub updated_at_ms: i64,
+    pub messages: Vec<AssistantHistoryMessage>,
+}
+
 /// Who authored one turn of the conversation history.
 #[derive(TS, Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -124,6 +151,11 @@ pub struct AssistantChatRequest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub history: Option<Vec<AssistantHistoryMessage>>,
+    /// Persisted thread to continue. When set, the stored messages are used as
+    /// history and the new turn is appended to the thread.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub thread_id: Option<String>,
 }
 
 /// Color component of a proposed light-state change.

@@ -52,8 +52,8 @@ use crate::types::assistant::{
     ApplyAssistantActionResponse, ApplyAssistantPlanRequest, ApplyAssistantPlanResponse,
     AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
     AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
-    AssistantOpKind, AssistantOperation, AssistantOperationResult, AssistantPlan,
-    AssistantPlanRequest, AssistantSearchResult, AssistantUsage,
+    AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
+    AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread, AssistantUsage,
 };
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
@@ -466,6 +466,21 @@ pub(super) fn assistant_routes(
         .and(with_plan_store(&plans))
         .and_then(chat_assistant);
 
+    let threads_list = warp::path!("assistant" / "threads")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(list_assistant_threads);
+
+    let thread_get = warp::path!("assistant" / "threads" / String)
+        .and(warp::path::end())
+        .and(warp::get())
+        .and_then(get_assistant_thread);
+
+    let thread_delete = warp::path!("assistant" / "threads" / String)
+        .and(warp::path::end())
+        .and(warp::delete())
+        .and_then(delete_assistant_thread);
+
     let apply_action = warp::path!("assistant" / "actions" / String / "apply")
         .and(warp::path::end())
         .and(warp::post())
@@ -491,6 +506,9 @@ pub(super) fn assistant_routes(
         .or(discard_plan)
         .or(apply_plan)
         .or(chat)
+        .or(threads_list)
+        .or(thread_get)
+        .or(thread_delete)
         .or(apply_action)
         .or(discard_action)
 }
@@ -2046,6 +2064,47 @@ async fn discard_assistant_plan(
 }
 
 // ============================================================================
+// Persisted conversation threads
+// ============================================================================
+
+async fn list_assistant_threads() -> Result<warp::reply::Response, warp::Rejection> {
+    match config_queries::db_list_assistant_threads().await {
+        Ok(threads) => Ok(ApiResponse::success(threads).into_response()),
+        Err(error) => Ok(error_response(
+            &format!("Failed to list assistant threads: {error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+        .into_response()),
+    }
+}
+
+async fn get_assistant_thread(thread_id: String) -> Result<warp::reply::Response, warp::Rejection> {
+    match config_queries::db_load_assistant_thread(&thread_id).await {
+        Ok(Some(thread)) => Ok(ApiResponse::success(thread).into_response()),
+        Ok(None) => Ok(not_found("Assistant thread").into_response()),
+        Err(error) => Ok(error_response(
+            &format!("Failed to load assistant thread: {error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+        .into_response()),
+    }
+}
+
+async fn delete_assistant_thread(
+    thread_id: String,
+) -> Result<warp::reply::Response, warp::Rejection> {
+    match config_queries::db_delete_assistant_thread(&thread_id).await {
+        Ok(true) => Ok(ApiResponse::success(true).into_response()),
+        Ok(false) => Ok(not_found("Assistant thread").into_response()),
+        Err(error) => Ok(error_response(
+            &format!("Failed to delete assistant thread: {error}"),
+            StatusCode::INTERNAL_SERVER_ERROR,
+        )
+        .into_response()),
+    }
+}
+
+// ============================================================================
 // Unified streaming chat
 // ============================================================================
 
@@ -2055,6 +2114,7 @@ const CHAT_EVENT_DELTA: &str = "delta";
 const CHAT_EVENT_USAGE: &str = "usage";
 const CHAT_EVENT_PLAN: &str = "plan";
 const CHAT_EVENT_ACTION: &str = "action";
+const CHAT_EVENT_THREAD: &str = "thread";
 const CHAT_EVENT_ERROR: &str = "error";
 
 /// Cap and normalize client-held conversation history. The newest turns are
@@ -2391,6 +2451,8 @@ enum ChatEnvelopeKind {
 struct ChatEnvelope {
     #[serde(default)]
     kind: Option<ChatEnvelopeKind>,
+    #[serde(default, alias = "threadName")]
+    thread_name: Option<String>,
     #[serde(default)]
     summary: Option<String>,
     #[serde(default)]
@@ -2567,6 +2629,39 @@ async fn run_assistant_chat(
     let mut sink = EventSink { tx, cancel };
     let prompt = request.prompt.trim().to_string();
 
+    // Continue a persisted thread when asked; otherwise start a fresh one that
+    // is persisted on the first successful turn.
+    let thread_id = request
+        .thread_id
+        .clone()
+        .filter(|id| !id.trim().is_empty())
+        .unwrap_or_else(|| format!("thread-{}", new_session_id()));
+    let stored_thread = match config_queries::db_load_assistant_thread(&thread_id).await {
+        Ok(thread) => thread,
+        Err(error) => {
+            log::warn!("Failed to load assistant thread {thread_id}: {error}");
+            None
+        }
+    };
+    let mut thread_messages: Vec<AssistantHistoryMessage> = stored_thread
+        .as_ref()
+        .map(|thread| thread.messages.clone())
+        .unwrap_or_default();
+    let thread_created_at_ms = stored_thread.as_ref().map(|thread| thread.created_at_ms);
+    let stored_thread_name = stored_thread
+        .as_ref()
+        .map(|thread| thread.name.trim().to_string())
+        .filter(|name| !name.is_empty());
+    let provisional_name = stored_thread_name
+        .clone()
+        .unwrap_or_else(|| default_thread_name(&prompt));
+    let _ = sink
+        .send(
+            CHAT_EVENT_THREAD,
+            &json!({ "id": thread_id, "name": provisional_name }),
+        )
+        .await;
+
     let live = snapshot.load();
     let Some(config) = AssistantConfig::from_settings(&live.runtime_config.widget_settings) else {
         return;
@@ -2609,9 +2704,11 @@ async fn run_assistant_chat(
         "role": "system",
         "content": chat_system_prompt(&context_json),
     })];
-    messages.extend(history_messages(
-        request.history.as_deref().unwrap_or_default(),
-    ));
+    messages.extend(history_messages(if thread_messages.is_empty() {
+        request.history.as_deref().unwrap_or_default()
+    } else {
+        thread_messages.as_slice()
+    }));
     messages.push(json!({ "role": "user", "content": prompt }));
 
     let mut options = ChatOptions {
@@ -2662,7 +2759,12 @@ async fn run_assistant_chat(
             return;
         }
 
-        let outcome = parse_chat_envelope(&completion.content)
+        let envelope = parse_chat_envelope(&completion.content);
+        let suggested_name = envelope
+            .as_ref()
+            .ok()
+            .and_then(|envelope| envelope.thread_name.clone());
+        let outcome = envelope
             .and_then(|envelope| build_chat_outcome(&live, catalog.clone(), &control, envelope));
         match outcome {
             Ok(ChatOutcome::Plan {
@@ -2672,12 +2774,23 @@ async fn run_assistant_chat(
                 let now = now_ms();
                 let plan = AssistantPlan {
                     plan_id: format!("plan-{}", new_session_id()),
-                    summary,
+                    summary: summary.clone(),
                     operations,
                     created_at_ms: now,
                     expires_at_ms: now + plans.ttl_ms(),
                 };
                 plans.insert_plan(plan.clone());
+                persist_thread_turn(
+                    &mut sink,
+                    &thread_id,
+                    thread_created_at_ms,
+                    &mut thread_messages,
+                    &prompt,
+                    &summary,
+                    suggested_name,
+                    stored_thread_name.clone(),
+                )
+                .await;
                 let _ = sink
                     .send(
                         CHAT_EVENT_PLAN,
@@ -2690,13 +2803,24 @@ async fn run_assistant_chat(
                 let now = now_ms();
                 let action = AssistantAction {
                     action_id: format!("action-{}", new_session_id()),
-                    summary,
+                    summary: summary.clone(),
                     changes,
                     created_at_ms: now,
                     expires_at_ms: now + plans.ttl_ms(),
                     model: config.model.clone(),
                 };
                 plans.insert_action(action.clone());
+                persist_thread_turn(
+                    &mut sink,
+                    &thread_id,
+                    thread_created_at_ms,
+                    &mut thread_messages,
+                    &prompt,
+                    &summary,
+                    suggested_name,
+                    stored_thread_name.clone(),
+                )
+                .await;
                 let _ = sink
                     .send(
                         CHAT_EVENT_ACTION,
@@ -2727,6 +2851,73 @@ async fn run_assistant_chat(
                 "message": format!("Assistant could not produce a valid response: {last_errors}"),
             }),
         )
+        .await;
+}
+
+/// Stored threads keep the newest turns only, bounding row size.
+const MAX_STORED_THREAD_MESSAGES: usize = 40;
+
+/// Derive a thread title from the first prompt line when the model did not
+/// suggest one.
+fn default_thread_name(prompt: &str) -> String {
+    let line = prompt.lines().next().unwrap_or(prompt).trim();
+    let mut name: String = line.chars().take(48).collect();
+    if line.chars().count() > 48 {
+        name.push('…');
+    }
+    if name.is_empty() {
+        "New conversation".to_string()
+    } else {
+        name
+    }
+}
+
+/// Append the user prompt and the assistant reply to the thread, persist it,
+/// and tell the client the (possibly model-suggested) thread name.
+#[allow(clippy::too_many_arguments)]
+async fn persist_thread_turn(
+    sink: &mut EventSink,
+    thread_id: &str,
+    created_at_ms: Option<i64>,
+    messages: &mut Vec<AssistantHistoryMessage>,
+    prompt: &str,
+    reply: &str,
+    suggested_name: Option<String>,
+    stored_name: Option<String>,
+) {
+    let now = now_ms();
+    messages.push(AssistantHistoryMessage {
+        role: AssistantMessageRole::User,
+        content: prompt.to_string(),
+    });
+    messages.push(AssistantHistoryMessage {
+        role: AssistantMessageRole::Assistant,
+        content: reply.to_string(),
+    });
+    if messages.len() > MAX_STORED_THREAD_MESSAGES {
+        let excess = messages.len() - MAX_STORED_THREAD_MESSAGES;
+        messages.drain(0..excess);
+    }
+
+    let name = stored_name
+        .or_else(|| {
+            suggested_name
+                .map(|name| name.trim().to_string())
+                .filter(|name| !name.is_empty())
+        })
+        .unwrap_or_else(|| default_thread_name(prompt));
+    let thread = AssistantThread {
+        id: thread_id.to_string(),
+        name: name.clone(),
+        created_at_ms: created_at_ms.unwrap_or(now),
+        updated_at_ms: now,
+        messages: messages.clone(),
+    };
+    if let Err(error) = config_queries::db_save_assistant_thread(&thread).await {
+        log::warn!("Failed to persist assistant thread {thread_id}: {error}");
+    }
+    let _ = sink
+        .send(CHAT_EVENT_THREAD, &json!({ "id": thread_id, "name": name }))
         .await;
 }
 
@@ -3724,6 +3915,8 @@ fn chat_system_prompt(context_json: &str) -> String {
         r#"You are the homectl assistant. Decide which single JSON response fits the request and include a top-level "kind" field:
 - {{"kind": "action", "summary": "<one short sentence>", "changes": [{{"device_key": "integration/device", "power": true, "brightness": 0.4, "color": {{"h": 320, "s": 0.8}}}}]}} for one-off light-state changes to devices listed under "controllable_devices". Omit fields you do not want to change; brightness is 0..1; color h is degrees and s is 0..1 and only allowed when the device's capabilities allow color; resolve room or group names to their member device keys. Never invent device keys.
 - {{"kind": "plan", ...}} for configuration changes, following the plan contract below.
+
+Always include "threadName": a short (2-5 word) title for this conversation, for example "Entryway motion lights".
 
 When a request could be either, prefer "plan" unless it is clearly a one-off light-state change. Nothing is written until the user applies.
 

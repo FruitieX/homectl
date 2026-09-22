@@ -11,4 +11,9 @@ export type AssistantChatRequest = { prompt: string, attachments: Array<Assistan
  * Optional device scope for light-state actions (for example the current
  * floorplan selection). Empty means every controllable device.
  */
-deviceKeys?: Array<string>, history?: Array<AssistantHistoryMessage>, };
+deviceKeys?: Array<string>, history?: Array<AssistantHistoryMessage>, 
+/**
+ * Persisted thread to continue. When set, the stored messages are used as
+ * history and the new turn is appended to the thread.
+ */
+threadId?: string, };

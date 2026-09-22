@@ -38,6 +38,9 @@ test('parseAssistantSseEvents handles CRLF, usage, results, and errors', () => {
       'event: action',
       'data: {"actionId":"action-1","summary":"Dim","changes":[],"createdAtMs":1,"expiresAtMs":2,"model":"m"}',
       '',
+      'event: thread',
+      'data: {"id":"thread-1","name":"Hallway lights"}',
+      '',
       'event: error',
       'data: {"message":"boom"}',
       '',
@@ -46,11 +49,16 @@ test('parseAssistantSseEvents handles CRLF, usage, results, and errors', () => {
       '',
     ].join('\r\n'),
   );
-  assert.equal(parsed.events.length, 3);
+  assert.equal(parsed.events.length, 4);
   assert.equal(parsed.events[0]?.type, 'usage');
   assert.equal(parsed.events[1]?.type, 'action');
-  assert.equal(parsed.events[2]?.type, 'error');
-  const error = parsed.events[2];
+  const thread = parsed.events[2];
+  assert.deepEqual(thread?.type === 'thread' ? thread.thread : null, {
+    id: 'thread-1',
+    name: 'Hallway lights',
+  });
+  assert.equal(parsed.events[3]?.type, 'error');
+  const error = parsed.events[3];
   assert.equal(error?.type === 'error' ? error.message : '', 'boom');
 });
 

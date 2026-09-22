@@ -1,4 +1,13 @@
-import { Loader2, Plus, Search, Send, Sparkles, Square } from 'lucide-react';
+import {
+  Loader2,
+  MessageSquare,
+  Plus,
+  Search,
+  Send,
+  Sparkles,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
 
@@ -9,6 +18,9 @@ import {
   useAssistantChat,
   useAssistantEntitySearch,
   useAssistantStatus,
+  useAssistantThread,
+  useAssistantThreads,
+  useDeleteAssistantThread,
   type AssistantChatStatus,
 } from '@/hooks/useAssistant';
 import {
@@ -30,6 +42,8 @@ import { PlanCard } from './PlanCard';
 import {
   assistantPanelAtom,
   assistantThreadAtom,
+  assistantThreadIdAtom,
+  assistantThreadNameAtom,
   assistantUsageAtom,
   closeAssistantPanelAtom,
   createAssistantMessageId,
@@ -43,6 +57,29 @@ const suggestionPrompts = [
   'Add a scene for movie night',
   'Dim the living room lights to 20%',
 ];
+
+const relativeTime = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+
+/** Compact age label for persisted conversation timestamps (epoch millis). */
+function formatThreadAge(updatedAtMs: number): string {
+  const seconds = Math.round((updatedAtMs - Date.now()) / 1000);
+  const minutes = Math.round(seconds / 60);
+  if (Math.abs(seconds) < 60) {
+    return relativeTime.format(seconds, 'second');
+  }
+  if (Math.abs(minutes) < 60) {
+    return relativeTime.format(minutes, 'minute');
+  }
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) {
+    return relativeTime.format(hours, 'hour');
+  }
+  const days = Math.round(hours / 24);
+  if (Math.abs(days) < 30) {
+    return relativeTime.format(days, 'day');
+  }
+  return relativeTime.format(Math.round(days / 30), 'month');
+}
 
 /** Compact text form of a thread turn for the provider history payload. */
 function threadHistory(
@@ -68,8 +105,10 @@ function threadHistory(
         role: 'assistant',
         content: `Action: ${message.action.summary}`,
       });
-    } else {
+    } else if (message.kind === 'error') {
       entries.push({ role: 'assistant', content: `Error: ${message.error}` });
+    } else {
+      entries.push({ role: 'assistant', content: message.text });
     }
   }
   return entries;
@@ -81,6 +120,10 @@ export function AssistantPanel() {
   const setAttachments = useSetAtom(setAssistantAttachmentsAtom);
   const thread = useAtomValue(assistantThreadAtom);
   const setThread = useSetAtom(assistantThreadAtom);
+  const threadId = useAtomValue(assistantThreadIdAtom);
+  const setThreadId = useSetAtom(assistantThreadIdAtom);
+  const threadName = useAtomValue(assistantThreadNameAtom);
+  const setThreadName = useSetAtom(assistantThreadNameAtom);
   const usage = useAtomValue(assistantUsageAtom);
   const setUsage = useSetAtom(assistantUsageAtom);
   const startNewThread = useSetAtom(newAssistantThreadAtom);
@@ -90,10 +133,58 @@ export function AssistantPanel() {
   const [attachQuery, setAttachQuery] = useState('');
   const [streamText, setStreamText] = useState('');
   const [status, setStatus] = useState<AssistantChatStatus | null>(null);
+  const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const searchQuery = attachQuery.trim();
   const searchResults = useAssistantEntitySearch(searchQuery);
   const searchHits: AssistantSearchResult[] = searchResults.data ?? [];
+  const showPastThreads = thread.length === 0 && !threadId && !isStreaming;
+  const threadsQuery = useAssistantThreads(state.open && showPastThreads);
+  const pastThreads = threadsQuery.data ?? [];
+  const deleteThread = useDeleteAssistantThread();
+  const loadedThread = useAssistantThread(loadingThreadId);
+
+  useEffect(() => {
+    const loaded = loadedThread.data;
+    if (!loadingThreadId || !loaded) {
+      return;
+    }
+    setThread(
+      loaded.messages.map(
+        (message): AssistantThreadMessage =>
+          message.role === 'user'
+            ? {
+                id: createAssistantMessageId(),
+                role: 'user',
+                text: message.content,
+                attachments: [],
+              }
+            : {
+                id: createAssistantMessageId(),
+                role: 'assistant',
+                kind: 'text',
+                text: message.content,
+              },
+      ),
+    );
+    setThreadId(loaded.id);
+    setThreadName(loaded.name);
+    setUsage(null);
+    setLoadingThreadId(null);
+  }, [
+    loadedThread.data,
+    loadingThreadId,
+    setThread,
+    setThreadId,
+    setThreadName,
+    setUsage,
+  ]);
+
+  useEffect(() => {
+    if (loadedThread.isError && loadingThreadId) {
+      setLoadingThreadId(null);
+    }
+  }, [loadedThread.isError, loadingThreadId]);
 
   useEffect(() => {
     const container = scrollRef.current;
@@ -122,10 +213,17 @@ export function AssistantPanel() {
     setAttachments([]);
     setStreamText('');
     setStatus({ phase: 'sending', message: 'Sending…' });
-    const history = buildAssistantHistory(threadHistory(thread));
+    const history = threadId
+      ? undefined
+      : buildAssistantHistory(threadHistory(thread));
 
     void send(
-      { prompt: trimmed, attachments, history },
+      {
+        prompt: trimmed,
+        attachments,
+        history,
+        threadId: threadId ?? undefined,
+      },
       {
         onStatus: (next) => {
           setStatus(next);
@@ -155,6 +253,10 @@ export function AssistantPanel() {
           setStreamText('');
           setStatus(null);
         },
+        onThread: (next) => {
+          setThreadId(next.id);
+          setThreadName(next.name);
+        },
         onError: (message) => {
           appendMessage({
             id: createAssistantMessageId(),
@@ -167,6 +269,22 @@ export function AssistantPanel() {
         },
       },
     );
+  };
+
+  const openThread = (id: string) => {
+    if (isStreaming) {
+      cancel();
+    }
+    setStreamText('');
+    setStatus(null);
+    setLoadingThreadId(id);
+  };
+
+  const removeThread = (id: string) => {
+    if (id === threadId) {
+      startNewThread();
+    }
+    deleteThread.mutate(id);
   };
 
   const stop = () => {
@@ -244,10 +362,12 @@ export function AssistantPanel() {
     >
       <div className="flex h-full min-h-0 flex-col gap-3 px-5 pb-5 md:px-0 md:pb-0">
         <div className="flex shrink-0 items-center justify-between gap-2">
-          <p className="text-xs text-muted-foreground">
-            {thread.length > 0
-              ? `${thread.length} message${thread.length === 1 ? '' : 's'} in this thread`
-              : 'New conversation'}
+          <p className="truncate text-xs text-muted-foreground">
+            {threadName
+              ? threadName
+              : thread.length > 0
+                ? `${thread.length} message${thread.length === 1 ? '' : 's'} in this thread`
+                : 'New conversation'}
           </p>
           <Button
             type="button"
@@ -271,29 +391,95 @@ export function AssistantPanel() {
           className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1"
         >
           {thread.length === 0 ? (
-            <div className="space-y-3 rounded-3xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
-              <p className="text-sm text-muted-foreground">
-                {enabled
-                  ? 'Ask for a new automation, a change to an existing entity, or a quick light change. Attach entities from the page you came from.'
-                  : 'The assistant is not configured on this server. Set the provider base URL and model under Settings → Assistant.'}
-              </p>
-              {enabled ? (
-                <div className="flex flex-wrap justify-center gap-2">
-                  {suggestionPrompts.map((suggestion) => (
-                    <Button
-                      key={suggestion}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-auto whitespace-normal py-1.5 text-xs"
-                      onClick={() => setPrompt(suggestion)}
+            loadingThreadId ? (
+              <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
+                <Loader2 className="size-3.5 animate-spin" />
+                Loading conversation…
+              </div>
+            ) : pastThreads.length > 0 ? (
+              <div className="space-y-1.5">
+                <p className="px-1 text-xs text-muted-foreground">
+                  Continue a conversation
+                </p>
+                <div className="max-h-72 space-y-0.5 overflow-y-auto overscroll-contain rounded-3xl border border-border bg-card p-1">
+                  {pastThreads.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="flex items-center gap-1 rounded-2xl px-2 py-1.5 hover:bg-muted/60"
                     >
-                      {suggestion}
-                    </Button>
+                      <button
+                        type="button"
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        onClick={() => openThread(entry.id)}
+                      >
+                        <MessageSquare className="size-3.5 shrink-0 text-muted-foreground" />
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm">
+                            {entry.name}
+                          </span>
+                          <span className="block text-[0.65rem] text-muted-foreground">
+                            {entry.messageCount} message
+                            {entry.messageCount === 1 ? '' : 's'} ·{' '}
+                            {formatThreadAge(entry.updatedAtMs)}
+                          </span>
+                        </span>
+                      </button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 shrink-0 text-muted-foreground opacity-60 hover:opacity-100"
+                        aria-label={`Delete conversation ${entry.name}`}
+                        disabled={deleteThread.isPending}
+                        onClick={() => removeThread(entry.id)}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
-              ) : null}
-            </div>
+                {enabled ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {suggestionPrompts.map((suggestion) => (
+                      <Button
+                        key={suggestion}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-auto whitespace-normal py-1.5 text-xs"
+                        onClick={() => setPrompt(suggestion)}
+                      >
+                        {suggestion}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-3 rounded-3xl border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {enabled
+                    ? 'Ask for a new automation, a change to an existing entity, or a quick light change. Attach entities from the page you came from.'
+                    : 'The assistant is not configured on this server. Set the provider base URL and model under Settings → Assistant.'}
+                </p>
+                {enabled ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {suggestionPrompts.map((suggestion) => (
+                      <Button
+                        key={suggestion}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-auto whitespace-normal py-1.5 text-xs"
+                        onClick={() => setPrompt(suggestion)}
+                      >
+                        {suggestion}
+                      </Button>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            )
           ) : null}
 
           {thread.map((message) => {
@@ -337,6 +523,16 @@ export function AssistantPanel() {
                   }
                   onDiscard={() => discardMessage(message.id)}
                 />
+              );
+            }
+            if (message.kind === 'text') {
+              return (
+                <p
+                  key={message.id}
+                  className="whitespace-pre-wrap rounded-2xl bg-muted px-3 py-2 text-sm text-foreground/90"
+                >
+                  {message.text}
+                </p>
               );
             }
             return (

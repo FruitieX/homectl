@@ -14,6 +14,7 @@ use std::net::TcpListener;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 struct MockResponse {
     status: u16,
@@ -1776,4 +1777,149 @@ fn assistant_chat_falls_back_when_the_provider_rejects_streaming() {
     let usage = sse_event_data(&body, "usage").unwrap();
     assert_eq!(usage["approximate"], false);
     assert_eq!(provider.requests.load(Ordering::SeqCst), 2);
+}
+
+// ============================================================================
+// Persisted conversation threads
+// ============================================================================
+
+#[test]
+fn assistant_chat_persists_threads_for_continue_and_delete() {
+    let provider = MockProvider::start(vec![
+        MockResponse::completion_stream(&valid_plan()),
+        MockResponse::completion_stream(&valid_plan()),
+    ]);
+    let unique_id = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after Unix epoch")
+        .as_nanos();
+    let temp_dir = std::env::temp_dir().join(format!(
+        "homectl_assistant_threads_{}_{}",
+        std::process::id(),
+        unique_id
+    ));
+    std::fs::create_dir_all(&temp_dir).expect("thread test dir");
+    let mut server = TestServer::with_config(TestServerConfig {
+        config_content: Some(assistant_config().to_string()),
+        config_file_name: Some("config-backup.json".to_string()),
+        database_url: Some(format!(
+            "sqlite://{}",
+            temp_dir.join("threads.db").display()
+        )),
+        extra_env: vec![
+            (
+                "HOMECTL_ASSISTANT_BASE_URL".to_string(),
+                provider.base_url.clone(),
+            ),
+            (
+                "HOMECTL_ASSISTANT_MODEL".to_string(),
+                "mock-model".to_string(),
+            ),
+            (
+                "HOMECTL_ASSISTANT_API_KEY".to_string(),
+                "test-key".to_string(),
+            ),
+        ],
+        ..Default::default()
+    })
+    .expect("start test server");
+    let client = Client::new();
+
+    let body = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "rename the hallway group to hallway lights"}),
+    )
+    .text()
+    .unwrap();
+    let announced = sse_event_data(&body, "thread").expect("thread event");
+    let thread_id = announced["id"].as_str().expect("thread id").to_string();
+    assert_eq!(
+        announced["name"],
+        "rename the hallway group to hallway lights"
+    );
+
+    let listed: Value = client
+        .get(format!(
+            "{}/api/v1/config/assistant/threads",
+            server.base_url
+        ))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(listed["success"], true);
+    let threads = listed["data"].as_array().expect("thread list");
+    assert_eq!(threads.len(), 1);
+    assert_eq!(threads[0]["id"], thread_id.as_str());
+    assert_eq!(threads[0]["messageCount"], 2);
+
+    // Continuing the thread replays the stored history to the provider.
+    let body = chat(
+        &server.base_url,
+        &client,
+        json!({"prompt": "also turn it off at night", "threadId": thread_id}),
+    )
+    .text()
+    .unwrap();
+    assert_eq!(
+        sse_event_data(&body, "thread").unwrap()["id"],
+        thread_id.as_str()
+    );
+    let bodies = provider.request_bodies();
+    let messages = messages_from_request(&bodies[1]);
+    assert!(messages.iter().any(|message| {
+        message["content"].as_str() == Some("rename the hallway group to hallway lights")
+    }));
+
+    let fetched: Value = client
+        .get(format!(
+            "{}/api/v1/config/assistant/threads/{}",
+            server.base_url, thread_id
+        ))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    let stored = fetched["data"]["messages"]
+        .as_array()
+        .expect("stored messages");
+    assert_eq!(stored.len(), 4);
+    assert_eq!(stored[0]["role"], "user");
+    assert_eq!(
+        stored[0]["content"],
+        "rename the hallway group to hallway lights"
+    );
+
+    let deleted: Value = client
+        .delete(format!(
+            "{}/api/v1/config/assistant/threads/{}",
+            server.base_url, thread_id
+        ))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(deleted["success"], true);
+    let listed: Value = client
+        .get(format!(
+            "{}/api/v1/config/assistant/threads",
+            server.base_url
+        ))
+        .send()
+        .unwrap()
+        .json()
+        .unwrap();
+    assert!(listed["data"].as_array().expect("thread list").is_empty());
+    let missing = client
+        .get(format!(
+            "{}/api/v1/config/assistant/threads/{}",
+            server.base_url, thread_id
+        ))
+        .send()
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    server.stop();
+    let _ = std::fs::remove_dir_all(&temp_dir);
 }

@@ -9,12 +9,14 @@ use super::get_db_connection;
 pub mod calibration;
 use super::schema::DeviceColorCalibrations;
 use super::schema::{
-    AutomationSources, AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions,
-    CoreConfig, DashboardLayouts, DashboardWidgets, DeviceDisplayOverrides, DeviceSensorConfigs,
-    Devices, Floorplans, GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines,
-    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
+    AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
+    AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
+    DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
+    GroupPositions, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
+    SceneOverrides, Scenes, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
+use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, AssistantThreadSummary};
 use crate::types::automation_definition::HelperId;
 use crate::types::automation_source::{SourceCompute, SourceDefinition};
 use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
@@ -3502,6 +3504,123 @@ fn is_empty_default_floorplan_stub(floorplan: &FloorplanExportRow) -> bool {
         && floorplan.width.is_none()
         && floorplan.height.is_none()
         && floorplan.grid_data.is_none()
+}
+
+// ============================================================================
+// Assistant conversation threads
+// ============================================================================
+
+/// Newest-first list cap for the assistant panel.
+pub const ASSISTANT_THREAD_LIST_LIMIT: u64 = 20;
+
+pub async fn db_list_assistant_threads() -> Result<Vec<AssistantThreadSummary>> {
+    let db = get_db_connection()?;
+    let rows = all(
+        db,
+        Query::select()
+            .columns([
+                AssistantThreads::Id,
+                AssistantThreads::Name,
+                AssistantThreads::UpdatedAtMs,
+                AssistantThreads::Messages,
+            ])
+            .from(AssistantThreads::Table)
+            .order_by(AssistantThreads::UpdatedAtMs, Order::Desc)
+            .limit(ASSISTANT_THREAD_LIST_LIMIT)
+            .to_owned(),
+    )
+    .await?;
+
+    rows.into_iter()
+        .map(assistant_thread_summary_from_row)
+        .collect()
+}
+
+pub async fn db_load_assistant_thread(id: &str) -> Result<Option<AssistantThread>> {
+    let db = get_db_connection()?;
+    let row = one(
+        db,
+        Query::select()
+            .columns([
+                AssistantThreads::Id,
+                AssistantThreads::Name,
+                AssistantThreads::CreatedAtMs,
+                AssistantThreads::UpdatedAtMs,
+                AssistantThreads::Messages,
+            ])
+            .from(AssistantThreads::Table)
+            .and_where(Expr::col(AssistantThreads::Id).eq(id))
+            .to_owned(),
+    )
+    .await?;
+
+    row.map(assistant_thread_from_row).transpose()
+}
+
+pub async fn db_save_assistant_thread(thread: &AssistantThread) -> Result<()> {
+    let db = get_db_connection()?;
+    let messages = serde_json::to_string(&thread.messages)?;
+
+    execute(
+        db,
+        Query::insert()
+            .into_table(AssistantThreads::Table)
+            .columns([
+                AssistantThreads::Id,
+                AssistantThreads::Name,
+                AssistantThreads::CreatedAtMs,
+                AssistantThreads::UpdatedAtMs,
+                AssistantThreads::Messages,
+            ])
+            .values_panic([
+                Expr::value(thread.id.clone()),
+                Expr::value(thread.name.clone()),
+                Expr::value(thread.created_at_ms),
+                Expr::value(thread.updated_at_ms),
+                Expr::value(messages),
+            ])
+            .on_conflict(
+                OnConflict::column(AssistantThreads::Id)
+                    .update_columns([
+                        AssistantThreads::Name,
+                        AssistantThreads::UpdatedAtMs,
+                        AssistantThreads::Messages,
+                    ])
+                    .to_owned(),
+            )
+            .to_owned(),
+    )
+    .await?;
+
+    Ok(())
+}
+
+pub async fn db_delete_assistant_thread(id: &str) -> Result<bool> {
+    let db = get_db_connection()?;
+    delete_by_string_key(db, AssistantThreads::Table, AssistantThreads::Id, id).await
+}
+
+fn assistant_thread_summary_from_row(row: QueryResult) -> Result<AssistantThreadSummary> {
+    let messages: String = row.try_get("", "messages")?;
+    let messages: Vec<AssistantHistoryMessage> =
+        serde_json::from_str(&messages).unwrap_or_default();
+    Ok(AssistantThreadSummary {
+        id: row.try_get("", "id")?,
+        name: row.try_get("", "name")?,
+        updated_at_ms: row.try_get("", "updated_at_ms")?,
+        message_count: messages.len(),
+    })
+}
+
+fn assistant_thread_from_row(row: QueryResult) -> Result<AssistantThread> {
+    let messages: String = row.try_get("", "messages")?;
+    Ok(AssistantThread {
+        id: row.try_get("", "id")?,
+        name: row.try_get("", "name")?,
+        created_at_ms: row.try_get("", "created_at_ms")?,
+        updated_at_ms: row.try_get("", "updated_at_ms")?,
+        messages: serde_json::from_str(&messages).unwrap_or_default(),
+    })
 }
 
 #[cfg(test)]

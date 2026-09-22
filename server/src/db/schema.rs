@@ -257,3 +257,15 @@ pub enum DeviceColorCalibrations {
     Points,
     UpdatedAt,
 }
+
+/// Persisted assistant conversation threads. Messages are a JSON array of
+/// `{role, content}` entries; the list query keeps only the newest threads.
+#[derive(Clone, Copy, Iden)]
+pub enum AssistantThreads {
+    Table,
+    Id,
+    Name,
+    CreatedAtMs,
+    UpdatedAtMs,
+    Messages,
+}

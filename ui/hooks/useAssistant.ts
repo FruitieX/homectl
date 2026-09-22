@@ -9,6 +9,8 @@ import type { AssistantEntityKind } from '@/bindings/AssistantEntityKind';
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import type { AssistantPlanRequest } from '@/bindings/AssistantPlanRequest';
 import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
+import type { AssistantThread } from '@/bindings/AssistantThread';
+import type { AssistantThreadSummary } from '@/bindings/AssistantThreadSummary';
 import type { AssistantUsage } from '@/bindings/AssistantUsage';
 import {
   parseAssistantSseEvents,
@@ -153,6 +155,7 @@ export interface AssistantChatCallbacks {
   onUsage?: (usage: AssistantUsage) => void;
   onPlan?: (plan: AssistantPlan) => void;
   onAction?: (action: AssistantAction) => void;
+  onThread?: (thread: { id: string; name: string }) => void;
   onError?: (message: string) => void;
 }
 
@@ -204,6 +207,9 @@ export function useAssistantChat() {
             break;
           case 'action':
             callbacks.onAction?.(event.action);
+            break;
+          case 'thread':
+            callbacks.onThread?.(event.thread);
             break;
           case 'error':
             callbacks.onError?.(event.message);
@@ -307,6 +313,75 @@ export function useAssistantEntitySearch(
     enabled: trimmed.length >= 2,
     staleTime: 30 * 1000,
     retry: false,
+  });
+}
+
+/**
+ * Persisted assistant conversations, newest first (server caps the list).
+ */
+export function useAssistantThreads(enabled = true) {
+  const { apiEndpoint } = useAppConfig();
+
+  return useQuery({
+    queryKey: ['assistant', 'threads', apiEndpoint],
+    queryFn: async () => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/threads`,
+      );
+      const result = await readAssistantResponse<AssistantThreadSummary[]>(
+        response,
+        'Failed to load assistant conversations',
+      );
+      return result.data ?? [];
+    },
+    enabled,
+    staleTime: 15 * 1000,
+    retry: false,
+  });
+}
+
+/** One persisted conversation with its stored messages. */
+export function useAssistantThread(threadId: string | null) {
+  const { apiEndpoint } = useAppConfig();
+
+  return useQuery({
+    queryKey: ['assistant', 'thread', apiEndpoint, threadId],
+    queryFn: async () => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/threads/${encodeURIComponent(threadId ?? '')}`,
+      );
+      const result = await readAssistantResponse<AssistantThread>(
+        response,
+        'Failed to load assistant conversation',
+      );
+      return result.data ?? null;
+    },
+    enabled: Boolean(threadId),
+    retry: false,
+  });
+}
+
+/** Deletes a persisted conversation. */
+export function useDeleteAssistantThread() {
+  const { apiEndpoint } = useAppConfig();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (threadId: string) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/threads/${encodeURIComponent(threadId)}`,
+        { method: 'DELETE' },
+      );
+      await readAssistantResponse<boolean>(
+        response,
+        'Failed to delete assistant conversation',
+      );
+    },
+    onSettled: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ['assistant', 'threads', apiEndpoint],
+      });
+    },
   });
 }
 

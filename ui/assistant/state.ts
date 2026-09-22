@@ -24,6 +24,7 @@ export type AssistantThreadMessage =
       text: string;
       attachments: AssistantAttachment[];
     }
+  | { id: string; role: 'assistant'; kind: 'text'; text: string }
   | { id: string; role: 'assistant'; kind: 'plan'; plan: AssistantPlan }
   | {
       id: string;
@@ -48,6 +49,12 @@ export const assistantPanelAtom = atom<AssistantPanelState>({
 });
 
 export const assistantThreadAtom = atom<AssistantThreadMessage[]>([]);
+
+/** Persisted thread id of the active conversation, when one exists. */
+export const assistantThreadIdAtom = atom<string | null>(null);
+
+/** Display name of the active conversation. */
+export const assistantThreadNameAtom = atom<string | null>(null);
 
 /** Usage reported by the last completed turn, for the context meter. */
 export const assistantUsageAtom = atom<AssistantUsage | null>(null);
@@ -84,6 +91,8 @@ export const setAssistantAttachmentsAtom = atom(
 /** Clear the conversation, context meter, and attachments. */
 export const newAssistantThreadAtom = atom(null, (get, set) => {
   set(assistantThreadAtom, []);
+  set(assistantThreadIdAtom, null);
+  set(assistantThreadNameAtom, null);
   set(assistantUsageAtom, null);
   set(assistantPanelAtom, { ...get(assistantPanelAtom), attachments: [] });
 });

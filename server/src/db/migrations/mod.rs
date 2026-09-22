@@ -1,9 +1,9 @@
 use crate::db::schema::{
-    AutomationSources, AutomationTimerJobs, AutomationValueState, AutomationValues, ConfigVersions,
-    CoreConfig, DashboardLayouts, DashboardWidgets, DeviceColorCalibrations,
-    DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
-    GroupPositions, Groups, Integrations, Routines, SceneDeviceStates, SceneGroupStates,
-    SceneOverrides, Scenes, UiState, WidgetSettings,
+    AssistantThreads, AutomationSources, AutomationTimerJobs, AutomationValueState,
+    AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
+    DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
+    GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, Routines, SceneDeviceStates,
+    SceneGroupStates, SceneOverrides, Scenes, UiState, WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -27,7 +27,55 @@ impl MigratorTrait for Migrator {
             Box::new(M20260920000000AutomationHelpers),
             Box::new(M20260921000000AutomationTimerJobs),
             Box::new(M20260922000000AutomationSources),
+            Box::new(M20260922000001AssistantThreads),
         ]
+    }
+}
+
+/// Persisted assistant conversation threads (name + message JSON).
+struct M20260922000001AssistantThreads;
+
+impl MigrationName for M20260922000001AssistantThreads {
+    fn name(&self) -> &str {
+        "m20260922000001_assistant_threads"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260922000001AssistantThreads {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(AssistantThreads::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(AssistantThreads::Id)
+                            .text()
+                            .not_null()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(AssistantThreads::Name).text().not_null())
+                    .col(
+                        ColumnDef::new(AssistantThreads::CreatedAtMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(
+                        ColumnDef::new(AssistantThreads::UpdatedAtMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(AssistantThreads::Messages).text().not_null())
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(AssistantThreads::Table).to_owned())
+            .await
     }
 }
 
