@@ -116,7 +116,6 @@ export default function ScenesPage() {
   const [activatingSceneId, setActivatingSceneId] = useState<string | null>(
     null,
   );
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
@@ -185,7 +184,6 @@ export default function ScenesPage() {
       setSearch('');
     }
     setOpenId(scene.id);
-    setEditingId(scene.id);
     if (requestedDeviceKey) {
       setDeviceFocus((current) => ({
         sceneId: scene.id,
@@ -203,10 +201,10 @@ export default function ScenesPage() {
     search,
   ]);
 
-  const editingScene = scenes?.find((scene) => scene.id === editingId) ?? null;
+  const openScene = scenes?.find((scene) => scene.id === openId) ?? null;
   useAssistantPageContext(
-    editingScene
-      ? { kind: 'scene', id: editingScene.id, label: editingScene.name }
+    openScene
+      ? { kind: 'scene', id: openScene.id, label: openScene.name }
       : { kind: 'scene' },
   );
 
@@ -312,7 +310,6 @@ export default function ScenesPage() {
                 isActivating={activatingSceneId === scene.id}
                 activationError={openId === scene.id ? activationError : null}
                 activationNotice={openId === scene.id ? activationNotice : null}
-                isEditing={editingId === scene.id}
                 isOpen={openId === scene.id}
                 focusDeviceKey={
                   deviceFocus?.sceneId === scene.id
@@ -331,19 +328,21 @@ export default function ScenesPage() {
                   setOpenId((current) =>
                     current === scene.id ? null : current,
                   );
-                  setEditingId((current) =>
-                    current === scene.id ? null : current,
-                  );
                 }}
                 onActivate={() => {
                   void activateScene(scene);
                 }}
-                onEdit={() => setEditingId(scene.id)}
                 onSave={async (updated) => {
                   await update(scene.id, updated);
-                  setEditingId(null);
+                  setOpenId((current) =>
+                    current === scene.id ? null : current,
+                  );
                 }}
-                onCancel={() => setEditingId(null)}
+                onCancel={() =>
+                  setOpenId((current) =>
+                    current === scene.id ? null : current,
+                  )
+                }
                 onDelete={async () => {
                   if (
                     await confirmDestructive(
@@ -835,14 +834,12 @@ function SceneCard({
   isActivating,
   activationError,
   activationNotice,
-  isEditing,
   isOpen,
   focusDeviceKey,
   focusNonce,
   onActivate,
   onOpen,
   onClose,
-  onEdit,
   onSave,
   onCancel,
   onDelete,
@@ -855,14 +852,12 @@ function SceneCard({
   isActivating: boolean;
   activationError: string | null;
   activationNotice: string | null;
-  isEditing: boolean;
   isOpen: boolean;
   focusDeviceKey: string | null;
   focusNonce: number;
   onActivate: () => void;
   onOpen: () => void;
   onClose: () => void;
-  onEdit: () => void;
   onSave: (scene: Partial<Scene>) => Promise<void>;
   onCancel: () => void;
   onDelete: () => void;
@@ -910,89 +905,6 @@ function SceneCard({
     </div>
   );
 
-  const viewContent = (
-    <div className="space-y-6">
-      {activationError && (
-        <Alert variant="destructive">
-          <AlertDescription>{activationError}</AlertDescription>
-        </Alert>
-      )}
-      {activationNotice && (
-        <Alert>
-          <AlertDescription>{activationNotice}</AlertDescription>
-        </Alert>
-      )}
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">Script</h3>
-          <span className="text-sm text-muted-foreground">
-            {scene.script ? 'Enabled' : 'Not configured'}
-          </span>
-        </div>
-        {scene.script ? (
-          <pre className="overflow-x-auto rounded-2xl border border-border bg-background/70 p-4 text-sm leading-6">
-            <code>{scene.script}</code>
-          </pre>
-        ) : (
-          <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-            No scene script configured.
-          </div>
-        )}
-      </section>
-
-      <SceneTargetsSummary
-        emptyMessage="No device targets configured."
-        items={scene.device_states || {}}
-        scenes={scenes}
-        devices={devices}
-        options={deviceOptions}
-        targetKind="device"
-        title="Device Targets"
-      />
-
-      <SceneTargetsSummary
-        emptyMessage="No group targets configured."
-        items={scene.group_states || {}}
-        scenes={scenes}
-        devices={devices}
-        options={groupOptions}
-        targetKind="group"
-        title="Group Targets"
-        order={scene.group_state_order}
-      />
-
-      <div className="mt-2 flex justify-end gap-2">
-        <Button
-          variant="secondary"
-          size="sm"
-          disabled={isActivating}
-          onClick={onActivate}
-          type="button"
-        >
-          {isActivating ? (
-            <>
-              <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              Activating
-            </>
-          ) : (
-            'Activate'
-          )}
-        </Button>
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          Delete
-        </Button>
-      </div>
-    </div>
-  );
-
   return (
     <ExpandableConfigCard
       open={isOpen}
@@ -1003,7 +915,43 @@ function SceneCard({
       dialogSubtitle={scene.id}
       dialogBoxClassName="max-w-6xl"
     >
-      {isEditing ? (
+      <div className="space-y-6">
+        {activationError && (
+          <Alert variant="destructive">
+            <AlertDescription>{activationError}</AlertDescription>
+          </Alert>
+        )}
+        {activationNotice && (
+          <Alert>
+            <AlertDescription>{activationNotice}</AlertDescription>
+          </Alert>
+        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={isActivating}
+            onClick={onActivate}
+            type="button"
+          >
+            {isActivating ? (
+              <>
+                <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                Activating
+              </>
+            ) : (
+              'Activate'
+            )}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-destructive hover:text-destructive"
+            onClick={onDelete}
+          >
+            Delete
+          </Button>
+        </div>
         <SceneEditorForm
           key={`${scene.id}:${focusDeviceKey ?? ''}:${focusNonce}`}
           scene={scene}
@@ -1016,9 +964,7 @@ function SceneCard({
           focusDeviceKey={focusDeviceKey}
           focusNonce={focusNonce}
         />
-      ) : (
-        viewContent
-      )}
+      </div>
     </ExpandableConfigCard>
   );
 }

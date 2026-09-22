@@ -664,7 +664,7 @@ export default function IntegrationsPage() {
             <IntegrationCard
               key={integration.id}
               integration={integration}
-              onEdit={() => setEditingId(integration.id)}
+              onOpen={() => setEditingId(integration.id)}
               onDelete={async () => {
                 if (
                   await confirmDestructive(
@@ -717,17 +717,30 @@ export default function IntegrationsPage() {
 
 function IntegrationCard({
   integration,
-  onEdit,
+  onOpen,
   onDelete,
 }: {
   integration: Integration;
-  onEdit: () => void;
+  onOpen: () => void;
   onDelete: () => void;
 }) {
   const outboundMinIntervalMs = getOutboundMinIntervalMs(integration.config);
 
   return (
-    <Card>
+    <Card
+      role="button"
+      tabIndex={0}
+      aria-label={`Edit integration ${integration.id}`}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      className="cursor-pointer transition hover:border-primary/40 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -751,14 +764,14 @@ function IntegrationCard({
             </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="ghost" size="sm" onClick={onEdit}>
-              Edit
-            </Button>
             <Button
               variant="ghost"
               size="sm"
               className="text-destructive hover:text-destructive"
-              onClick={onDelete}
+              onClick={(event) => {
+                event.stopPropagation();
+                onDelete();
+              }}
             >
               Delete
             </Button>
@@ -766,7 +779,10 @@ function IntegrationCard({
         </div>
       </CardHeader>
       <CardContent>
-        <details className="rounded-2xl border border-border bg-muted/30">
+        <details
+          className="rounded-2xl border border-border bg-muted/30"
+          onClick={(event) => event.stopPropagation()}
+        >
           <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
             Configuration
           </summary>

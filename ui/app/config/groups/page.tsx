@@ -154,7 +154,7 @@ export default function GroupsPage() {
               allGroups={groups}
               deviceDisplayNameMap={deviceDisplayNameMap}
               devicesByKey={devicesByKey}
-              onEdit={() => setEditingId(group.id)}
+              onOpen={() => setEditingId(group.id)}
               onDelete={async () => {
                 if (
                   await confirmDestructive(
@@ -406,18 +406,31 @@ function GroupCard({
   allGroups,
   deviceDisplayNameMap,
   devicesByKey,
-  onEdit,
+  onOpen,
   onDelete,
 }: {
   group: Group;
   allGroups: Group[];
   deviceDisplayNameMap: Record<string, string>;
   devicesByKey: Record<string, Device>;
-  onEdit: () => void;
+  onOpen: () => void;
   onDelete: () => void;
 }) {
   return (
-    <Card>
+    <Card
+      role="button"
+      tabIndex={0}
+      aria-label={`Edit group ${group.name}`}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      className="cursor-pointer transition hover:border-primary/40 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -470,14 +483,14 @@ function GroupCard({
         )}
 
         <div className="flex justify-end gap-2 pt-2">
-          <Button variant="ghost" size="sm" onClick={onEdit}>
-            Edit
-          </Button>
           <Button
             variant="ghost"
             size="sm"
             className="text-destructive hover:text-destructive"
-            onClick={onDelete}
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete();
+            }}
           >
             Delete
           </Button>
