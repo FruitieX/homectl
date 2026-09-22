@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChevronRight, Search } from 'lucide-react';
+import { ChevronRight, Search, SlidersHorizontal } from 'lucide-react';
 import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceKey } from '@/lib/device';
@@ -8,8 +8,14 @@ import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
 import { getPower } from '@/lib/colors';
 import { DeviceRow, DevicePowerToggle } from '@/ui/DeviceControls';
 import { Button } from '@/ui/primitives/button';
+import { Checkbox } from '@/ui/primitives/checkbox';
 import { Input } from '@/ui/primitives/input';
 import { EmptyState } from '@/ui/primitives/empty-state';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/ui/primitives/popover';
 import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { Device } from '@/bindings/Device';
@@ -28,6 +34,8 @@ export default function Page() {
   const [search, setSearch] = useState('');
   const [view, setView] = useState<'rooms' | 'devices'>('rooms');
   const [onOnly, setOnOnly] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   useAssistantPageContext({ kind: 'group' });
   const devices = Object.values(state ?? {}).filter(
     (device): device is Device => Boolean(device),
@@ -35,8 +43,11 @@ export default function Page() {
   const query = search.trim().toLocaleLowerCase();
   const visibleGroups = Object.entries(groups ?? {}).filter(
     ([, group]) =>
-      group && !group.hidden && group.name.toLocaleLowerCase().includes(query),
+      group &&
+      (showHidden || !group.hidden) &&
+      group.name.toLocaleLowerCase().includes(query),
   );
+  const activeFilterCount = Number(onOnly) + Number(showHidden);
   const matchingDevices = devices.filter(
     (device) =>
       getDeviceDisplayLabel(device, names)
@@ -76,13 +87,53 @@ export default function Page() {
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
-          <Button
-            variant={onOnly ? 'secondary' : 'outline'}
-            aria-pressed={onOnly}
-            onClick={() => setOnOnly(!onOnly)}
-          >
-            On only
-          </Button>
+          <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                variant={activeFilterCount > 0 ? 'secondary' : 'outline'}
+                size="icon"
+                aria-label="Filters"
+                title="Filters"
+                className="relative"
+              >
+                <SlidersHorizontal />
+                {activeFilterCount > 0 ? (
+                  <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
+                ) : null}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-64 space-y-1">
+              <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
+                On only
+                <Checkbox
+                  checked={onOnly}
+                  onCheckedChange={(value) => setOnOnly(value === true)}
+                />
+              </label>
+              {view === 'rooms' ? (
+                <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm">
+                  Show hidden rooms
+                  <Checkbox
+                    checked={showHidden}
+                    onCheckedChange={(value) => setShowHidden(value === true)}
+                  />
+                </label>
+              ) : null}
+              {activeFilterCount > 0 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setOnOnly(false);
+                    setShowHidden(false);
+                  }}
+                >
+                  Clear filters
+                </Button>
+              ) : null}
+            </PopoverContent>
+          </Popover>
         </div>
         {!state || !groups ? (
           <p role="status" className="text-sm text-muted-foreground">
