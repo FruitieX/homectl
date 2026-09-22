@@ -83,7 +83,7 @@ export function SensorChip({
         </span>
       </div>
       {compact && !onCheckedChange && (
-        <div className="relative mt-1.5 max-h-20 min-h-0 flex-1 overflow-hidden">
+        <div className="dashboard-sensor-sparkline-band relative mt-1.5 max-h-20 min-h-0 flex-1 overflow-hidden">
           <Sparkline
             points={
               sensor.temp_data.length >= 2

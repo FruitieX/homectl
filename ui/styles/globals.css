@@ -607,10 +607,66 @@
   }
 
   /*
+   * Drop the humidity reading before the sparkline has to give up its band:
+   * both readings plus the chip padding leave nothing for the trend line, so
+   * the humidity only returns once the card can show it *and* a full band.
+   */
+  @container dashboard-widget (max-height: 13rem) {
+    .dashboard-sensor-chip .dashboard-sensor-humidity {
+      display: none;
+    }
+  }
+
+  /*
+   * A narrow viewport wraps the preview into two columns, which halves each
+   * chip: the humidity has to go much sooner and the readings have to compact
+   * sooner, otherwise the chip clips its own content and the sparkline band is
+   * squeezed away entirely.
+   */
+  @media (max-width: 599.98px) {
+    @container dashboard-widget (min-width: 24.1rem) and (max-height: 18.25rem) {
+      .dashboard-sensor-chip .dashboard-sensor-humidity {
+        display: none;
+      }
+    }
+
+    @container dashboard-widget (min-width: 24.1rem) and (max-height: 14rem) {
+      .dashboard-sensor-chip {
+        padding: 0.4rem 0.5rem;
+      }
+
+      .dashboard-sensor-chip .mb-2 {
+        margin-bottom: 0.125rem;
+      }
+
+      .dashboard-sensor-chip .text-sm {
+        font-size: 0.75rem;
+        line-height: 1rem;
+        gap: 0.25rem;
+      }
+    }
+  }
+
+  /*
+   * The sparkline band is whatever the chip has left after its readings, so it
+   * is its own query container: when it can no longer hold a readable line the
+   * sparkline is dropped instead of being squeezed into a one-pixel sliver.
+   */
+  .dashboard-sensor-sparkline-band {
+    container: sensor-sparkline / size;
+  }
+
+  @container sensor-sparkline (max-height: 1rem) {
+    .dashboard-sensor-sparkline {
+      display: none;
+    }
+  }
+
+  /*
    * Short-but-not-tiny sensor cards: drop the humidity row and compact the
    * name/value rows so the sparkline still has a readable band at the bottom.
    */
-  @container dashboard-widget (max-height: 9.5rem) {
+  @container dashboard-widget (max-height: 11.5rem) {
     .dashboard-sensor-chip {
       padding: 0.4rem 0.5rem;
     }

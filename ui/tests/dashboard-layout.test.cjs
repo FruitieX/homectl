@@ -46,6 +46,10 @@ const sensorsCardSource = fs.readFileSync(
   path.join(__dirname, '../app/dashboard/SensorsCard.tsx'),
   'utf8',
 );
+const sensorChipSource = fs.readFileSync(
+  path.join(__dirname, '../ui/SensorChip.tsx'),
+  'utf8',
+);
 const homeCardSource = fs.readFileSync(
   path.join(__dirname, '../app/dashboard/HomeOverview.tsx'),
   'utf8',
@@ -246,5 +250,46 @@ test('stacks the medium-height strip instead of truncating it on narrow cards', 
   assert.match(
     weatherStylesSource,
     /dashboard-widget \(max-width: 12rem\) and \(min-height: 10rem\) \{[\s\S]*?font-size: 0\.6rem;/,
+  );
+});
+
+test('drops the humidity reading before the sensor sparkline is squeezed', () => {
+  // The sparkline band is the chip's leftover space, so both readings plus the
+  // chip padding leave nothing for the trend line. The humidity has to go
+  // first, and the chip has to compact before the band is squeezed away.
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(max-height: 13rem\) \{\s*\.dashboard-sensor-chip \.dashboard-sensor-humidity \{\s*display: none;/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /@container dashboard-widget \(max-height: 11\.5rem\) \{[\s\S]*?\.dashboard-sensor-chip \{\s*padding: 0\.4rem 0\.5rem;/,
+  );
+});
+
+test('drops the sensor sparkline instead of squeezing it into a sliver', () => {
+  // The band is its own query container, so the sparkline disappears whenever
+  // the band cannot hold a readable line, whatever the card size is.
+  assert.match(sensorChipSource, /dashboard-sensor-sparkline-band/);
+  assert.match(
+    weatherStylesSource,
+    /\.dashboard-sensor-sparkline-band \{\s*container: sensor-sparkline \/ size;/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /@container sensor-sparkline \(max-height: 1rem\) \{\s*\.dashboard-sensor-sparkline \{\s*display: none;/,
+  );
+});
+
+test('gives the two-column sensor preview its own thresholds', () => {
+  // A narrow viewport wraps the preview into two columns and halves each chip,
+  // so the humidity and the compact rows have to kick in much sooner there.
+  assert.match(
+    weatherStylesSource,
+    /@media \(max-width: 599\.98px\) \{[\s\S]*?@container dashboard-widget \(min-width: 24\.1rem\) and \(max-height: 18\.25rem\)/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /@media \(max-width: 599\.98px\) \{[\s\S]*?@container dashboard-widget \(min-width: 24\.1rem\) and \(max-height: 14rem\)/,
   );
 });
