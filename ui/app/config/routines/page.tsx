@@ -17,7 +17,7 @@ import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import {
@@ -95,7 +95,6 @@ export default function RoutinesPage() {
   const { data: scenes, loading: scenesLoading } = useScenes();
   const { data: helpers } = useHelpers();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useSearchParamState();
   const [showCreate, setShowCreate] = useState(false);
@@ -173,11 +172,10 @@ export default function RoutinesPage() {
   const visibleRoutines = routines.filter((routine) =>
     matchesConfigSearch(search, ...getRoutineSearchValues(routine)),
   );
-  const editingRoutine =
-    routines.find((routine) => routine.id === editingId) ?? null;
+  const openRoutine = routines.find((routine) => routine.id === openId) ?? null;
   useAssistantPageContext(
-    editingRoutine
-      ? { kind: 'routine', id: editingRoutine.id, label: editingRoutine.name }
+    openRoutine
+      ? { kind: 'routine', id: openRoutine.id, label: openRoutine.name }
       : { kind: 'routine' },
   );
 
@@ -269,7 +267,6 @@ export default function RoutinesPage() {
               <div className="min-w-0 flex-1">
                 <RoutineCard
                   routine={routine}
-                  isEditing={editingId === routine.id}
                   isOpen={openId === routine.id}
                   devices={devices}
                   groups={groups}
@@ -284,16 +281,11 @@ export default function RoutinesPage() {
                     setOpenId((current) =>
                       current === routine.id ? null : current,
                     );
-                    setEditingId((current) =>
-                      current === routine.id ? null : current,
-                    );
                   }}
-                  onEdit={() => setEditingId(routine.id)}
                   onSave={async (updated) => {
                     await update(routine.id, updated);
-                    setEditingId(null);
+                    setOpenId(null);
                   }}
-                  onCancel={() => setEditingId(null)}
                   onDelete={async () => {
                     if (
                       await confirmDestructive(
@@ -370,7 +362,6 @@ export default function RoutinesPage() {
 
 function RoutineCard({
   routine,
-  isEditing,
   isOpen,
   devices,
   groups,
@@ -382,13 +373,10 @@ function RoutineCard({
   deviceDisplayNameMap,
   onOpen,
   onClose,
-  onEdit,
   onSave,
-  onCancel,
   onDelete,
 }: {
   routine: Routine;
-  isEditing: boolean;
   isOpen: boolean;
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
@@ -400,9 +388,7 @@ function RoutineCard({
   deviceDisplayNameMap: Record<string, string>;
   onOpen: () => void;
   onClose: () => void;
-  onEdit: () => void;
   onSave: (routine: Partial<Routine>) => Promise<void>;
-  onCancel: () => void;
   onDelete: () => void;
 }) {
   const isV2 =
@@ -413,8 +399,14 @@ function RoutineCard({
   const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
   const [actions, setActions] = useState<Action[]>(routine.actions as Action[]);
   const [editTab, setEditTab] = useState<
-    'basics' | 'rules' | 'condition' | 'program' | 'actions' | 'json'
-  >('basics');
+    | 'overview'
+    | 'basics'
+    | 'rules'
+    | 'condition'
+    | 'program'
+    | 'actions'
+    | 'json'
+  >('overview');
   const [rulesJson, setRulesJson] = useState(
     JSON.stringify(routine.rules, null, 2),
   );
@@ -427,6 +419,26 @@ function RoutineCard({
   const [definitionJson, setDefinitionJson] = useState(
     JSON.stringify(routine.definition_v2 ?? {}, null, 2),
   );
+  const wasOpenRef = useRef(false);
+
+  useEffect(() => {
+    const justOpened = isOpen && !wasOpenRef.current;
+    wasOpenRef.current = isOpen;
+    if (!justOpened) {
+      return;
+    }
+
+    setId(routine.id);
+    setName(routine.name);
+    setEnabled(routine.enabled);
+    setRules(routine.rules as Rule[]);
+    setActions(routine.actions as Action[]);
+    setRulesJson(JSON.stringify(routine.rules, null, 2));
+    setActionsJson(JSON.stringify(routine.actions, null, 2));
+    setDefinition(routine.definition_v2 ?? {});
+    setDefinitionJson(JSON.stringify(routine.definition_v2 ?? {}, null, 2));
+    setEditTab('overview');
+  }, [isOpen, routine]);
 
   const routineStatusBadge = (() => {
     if (!routine.enabled) {
@@ -486,6 +498,7 @@ function RoutineCard({
     }
 
     if (
+      value === 'overview' ||
       value === 'basics' ||
       value === 'rules' ||
       value === 'condition' ||
@@ -574,10 +587,11 @@ function RoutineCard({
     <div className="flex min-h-full flex-col">
       <Tabs value={editTab} onValueChange={changeTab}>
         <TabsList
-          className={`grid h-auto w-full grid-cols-2 ${
-            isV2 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
+          className={`grid h-auto w-full grid-cols-3 ${
+            isV2 ? 'sm:grid-cols-6' : 'sm:grid-cols-5'
           }`}
         >
+          <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="basics">Basics</TabsTrigger>
           <TabsTrigger value="rules">{isV2 ? 'Triggers' : 'Rules'}</TabsTrigger>
           {isV2 ? <TabsTrigger value="condition">Condition</TabsTrigger> : null}
@@ -589,6 +603,83 @@ function RoutineCard({
             </TabsTrigger>
           </ExperienceOnly>
         </TabsList>
+
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            {!routine.enabled
+              ? 'Disabled: this routine does not evaluate or trigger.'
+              : isV2
+                ? !v2Status
+                  ? 'Waiting for runtime status.'
+                  : v2Status.condition.error
+                    ? 'The condition could not be evaluated. See the trigger details below.'
+                    : v2Status.will_trigger
+                      ? 'The condition and a triggering event matched. This status does not confirm physical device delivery.'
+                      : v2Status.condition.truth === 'true'
+                        ? 'The condition is met; waiting for a matching trigger event.'
+                        : v2Status.condition.truth === 'false'
+                          ? 'The condition is not met; the routine will not trigger yet.'
+                          : 'The condition is unknown right now. See the trigger details below.'
+                : !runtimeStatus
+                  ? 'Waiting for runtime status.'
+                  : runtimeStatus.rules.some((rule) => rule.error)
+                    ? 'A rule could not be evaluated. See its error below.'
+                    : runtimeStatus.will_trigger
+                      ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
+                      : runtimeStatus.all_conditions_match
+                        ? 'The conditions match; waiting for a matching trigger event.'
+                        : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
+          </p>
+          {isV2 ? (
+            <V2RoutineSummary
+              routine={routine}
+              status={runtimeStatus}
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              routines={routines}
+              deviceDisplayNameMap={deviceDisplayNameMap}
+            />
+          ) : null}
+          <RoutineRuntimePanel
+            routine={routine}
+            status={runtimeStatus}
+            timers={timers}
+            devices={devices}
+            deviceDisplayNameMap={deviceDisplayNameMap}
+          />
+          {!isV2 ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              <RoutineRuleList
+                rules={routine.rules as Rule[]}
+                status={runtimeStatus}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                deviceDisplayNameMap={deviceDisplayNameMap}
+              />
+              <RoutineActionList
+                actions={routine.actions as Action[]}
+                devices={devices}
+                groups={groups}
+                scenes={scenes}
+                routines={routines}
+                deviceDisplayNameMap={deviceDisplayNameMap}
+              />
+            </div>
+          ) : null}
+
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-destructive hover:text-destructive"
+              onClick={onDelete}
+            >
+              Delete
+            </Button>
+          </div>
+        </TabsContent>
 
         <TabsContent value="basics" className="mt-4">
           <ConfigFormSection
@@ -767,7 +858,7 @@ function RoutineCard({
       </Tabs>
 
       <ConfigFormActions>
-        <Button variant="ghost" size="sm" onClick={onCancel}>
+        <Button variant="ghost" size="sm" onClick={onClose}>
           Cancel
         </Button>
         <Button
@@ -851,88 +942,6 @@ function RoutineCard({
     </div>
   );
 
-  const viewContent = (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        {!routine.enabled
-          ? 'Disabled: this routine does not evaluate or trigger.'
-          : isV2
-            ? !v2Status
-              ? 'Waiting for runtime status.'
-              : v2Status.condition.error
-                ? 'The condition could not be evaluated. See the trigger details below.'
-                : v2Status.will_trigger
-                  ? 'The condition and a triggering event matched. This status does not confirm physical device delivery.'
-                  : v2Status.condition.truth === 'true'
-                    ? 'The condition is met; waiting for a matching trigger event.'
-                    : v2Status.condition.truth === 'false'
-                      ? 'The condition is not met; the routine will not trigger yet.'
-                      : 'The condition is unknown right now. See the trigger details below.'
-            : !runtimeStatus
-              ? 'Waiting for runtime status.'
-              : runtimeStatus.rules.some((rule) => rule.error)
-                ? 'A rule could not be evaluated. See its error below.'
-                : runtimeStatus.will_trigger
-                  ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
-                  : runtimeStatus.all_conditions_match
-                    ? 'The conditions match; waiting for a matching trigger event.'
-                    : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
-      </p>
-      {isV2 ? (
-        <V2RoutineSummary
-          routine={routine}
-          status={runtimeStatus}
-          devices={devices}
-          groups={groups}
-          scenes={scenes}
-          routines={routines}
-          deviceDisplayNameMap={deviceDisplayNameMap}
-        />
-      ) : null}
-      <RoutineRuntimePanel
-        routine={routine}
-        status={runtimeStatus}
-        timers={timers}
-        devices={devices}
-        deviceDisplayNameMap={deviceDisplayNameMap}
-      />
-      {!isV2 ? (
-        <div className="grid gap-4 xl:grid-cols-2">
-          <RoutineRuleList
-            rules={routine.rules as Rule[]}
-            status={runtimeStatus}
-            devices={devices}
-            groups={groups}
-            scenes={scenes}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-          />
-          <RoutineActionList
-            actions={routine.actions as Action[]}
-            devices={devices}
-            groups={groups}
-            scenes={scenes}
-            routines={routines}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-          />
-        </div>
-      ) : null}
-
-      <div className="flex justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={onEdit}>
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-destructive hover:text-destructive"
-          onClick={onDelete}
-        >
-          Delete
-        </Button>
-      </div>
-    </div>
-  );
-
   return (
     <ExpandableConfigCard
       open={isOpen}
@@ -942,7 +951,7 @@ function RoutineCard({
       dialogTitle={routine.name}
       dialogSubtitle={routine.id}
     >
-      {isEditing ? editContent : viewContent}
+      {editContent}
     </ExpandableConfigCard>
   );
 }
