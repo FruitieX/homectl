@@ -45,9 +45,7 @@ import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
-
-const checkboxClassName =
-  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+import { checkboxClassName } from '@/ui/form-styles';
 
 const LazySceneScriptEditor = lazy(() => import('@/ui/SceneScriptEditor'));
 

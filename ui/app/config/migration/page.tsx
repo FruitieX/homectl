@@ -194,6 +194,9 @@ export default function MigrationPage() {
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorContext, setErrorContext] = useState<
+    'preview' | 'apply' | 'selection'
+  >('apply');
   const [success, setSuccess] = useState<string | null>(null);
   const [preview, setPreview] = useState<MigrationPreview | null>(null);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -233,12 +236,14 @@ export default function MigrationPage() {
 
   const handleTomlUpload = async (file: File) => {
     if (!hasSelectedSections(selection)) {
+      setErrorContext('selection');
       setError('Select at least one section to import.');
       resetUploadState();
       return;
     }
 
     setLoading(true);
+    setErrorContext('preview');
     setError(null);
     setSuccess(null);
     setConfirmOpen(false);
@@ -249,6 +254,7 @@ export default function MigrationPage() {
     try {
       text = await file.text();
     } catch (nextError) {
+      setErrorContext('preview');
       setError(
         nextError instanceof Error ? nextError.message : 'Upload failed',
       );
@@ -268,6 +274,7 @@ export default function MigrationPage() {
         },
       );
     } catch (nextError) {
+      setErrorContext('preview');
       setError(
         nextError instanceof Error ? nextError.message : 'Upload failed',
       );
@@ -301,6 +308,7 @@ export default function MigrationPage() {
     if (!preview) return;
 
     setLoading(true);
+    setErrorContext('apply');
     setError(null);
     setSuccess(null);
 
@@ -343,6 +351,7 @@ export default function MigrationPage() {
 
   const handleMigrate = async () => {
     if (!hasSelectedSections(selection)) {
+      setErrorContext('selection');
       setError('Select at least one section to import.');
       return;
     }
@@ -469,7 +478,13 @@ export default function MigrationPage() {
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Migration failed</AlertTitle>
+          <AlertTitle>
+            {errorContext === 'preview'
+              ? 'Could not preview this file'
+              : errorContext === 'selection'
+                ? 'Nothing selected'
+                : 'Migration failed'}
+          </AlertTitle>
           <AlertDescription className="flex items-start justify-between gap-3">
             <span className="whitespace-pre-wrap">{error}</span>
             <Button variant="ghost" size="icon" onClick={() => setError(null)}>
@@ -613,7 +628,7 @@ export default function MigrationPage() {
             </Button>
             <Button
               type="button"
-              className="bg-amber-500 text-amber-950 hover:bg-amber-400"
+              variant="secondary"
               onClick={() => void handleConfirmMigrate()}
               disabled={loading}
             >

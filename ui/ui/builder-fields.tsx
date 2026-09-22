@@ -1,8 +1,8 @@
 import { Input } from '@/ui/primitives/input';
+import { selectClassName } from '@/ui/form-styles';
 import { useState } from 'react';
 
-export const selectClassName =
-  'h-9 min-w-0 max-w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
+export { selectClassName };
 
 export const durationUnits = [
   { value: 'seconds', factor: 1_000 },

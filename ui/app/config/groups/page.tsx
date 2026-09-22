@@ -42,9 +42,8 @@ import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { checkboxClassName } from '@/ui/form-styles';
 
-const checkboxClassName =
-  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const fieldLabelClassName = 'text-sm font-medium';
 
 type GroupDevice = Group['devices'][number];
@@ -142,8 +141,27 @@ export default function GroupsPage() {
 
       {visibleGroups.length === 0 ? (
         <EmptyState
-          title="No groups match the current search"
-          description="Try another name, id, linked group, or device label."
+          title={
+            groups.length === 0
+              ? 'No rooms yet'
+              : 'No rooms match the current search'
+          }
+          description={
+            groups.length === 0
+              ? 'Create a room to group devices and target them from scenes and routines.'
+              : 'Try another name, id, linked group, or device label.'
+          }
+          action={
+            groups.length === 0 ? (
+              <Button size="sm" onClick={() => setShowCreate(true)}>
+                New room
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => setSearch('')}>
+                Clear search
+              </Button>
+            )
+          }
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -443,7 +461,7 @@ function GroupCard({
       <CardContent className="space-y-3">
         {group.devices.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {group.devices.map((device) => {
+            {group.devices.slice(0, 8).map((device) => {
               const deviceKey = getGroupDeviceKey(device);
               const matchingDevice = devicesByKey[deviceKey];
               const label = matchingDevice
@@ -460,12 +478,15 @@ function GroupCard({
                 </Badge>
               );
             })}
+            {group.devices.length > 8 ? (
+              <Badge variant="outline">+{group.devices.length - 8} more</Badge>
+            ) : null}
           </div>
         )}
 
         {group.linked_groups.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {group.linked_groups.map((id) => {
+            {group.linked_groups.slice(0, 4).map((id) => {
               const linked = allGroups.find((item) => item.id === id);
               return (
                 <Badge key={id} variant="outline">
@@ -473,6 +494,11 @@ function GroupCard({
                 </Badge>
               );
             })}
+            {group.linked_groups.length > 4 ? (
+              <Badge variant="outline">
+                +{group.linked_groups.length - 4} more
+              </Badge>
+            ) : null}
           </div>
         )}
 

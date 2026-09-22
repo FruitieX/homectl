@@ -41,9 +41,8 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
+import { selectClassNameLarge as selectClassName } from '@/ui/form-styles';
 
-const selectClassName =
-  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 const fieldClassName = 'space-y-2';
 const fieldLabelClassName = 'text-sm font-medium';
 

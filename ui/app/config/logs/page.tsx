@@ -45,7 +45,7 @@ const levelOptions: Array<LogLevel | 'ALL'> = [
 ];
 
 function formatTimestamp(timestamp: string) {
-  return new Date(timestamp).toLocaleString('en-FI', {
+  return new Date(timestamp).toLocaleString(undefined, {
     dateStyle: 'short',
     timeStyle: 'medium',
   });
@@ -71,7 +71,7 @@ function matchesSearchFilter(entry: UiLogEntry, search: string) {
 
 export default function LogsPage() {
   const { data, loading, error, refetch, lastUpdated } = useLogs();
-  const [levelFilter, setLevelFilter] = useState<LogLevel | 'ALL'>('ERROR');
+  const [levelFilter, setLevelFilter] = useState<LogLevel | 'ALL'>('ALL');
   const [search, setSearch] = useState('');
 
   const normalizedSearch = search.trim().toLowerCase();
@@ -79,16 +79,8 @@ export default function LogsPage() {
     .reverse()
     .filter((entry) => matchesLevelFilter(entry, levelFilter))
     .filter((entry) => matchesSearchFilter(entry, normalizedSearch));
-
-  if (loading && data.length === 0) {
-    return (
-      <div className="grid max-w-6xl gap-4">
-        <Skeleton className="h-24" />
-        <Skeleton className="h-36" />
-        <Skeleton className="h-32" />
-      </div>
-    );
-  }
+  const filtersActive = levelFilter !== 'ALL' || normalizedSearch.length > 0;
+  const initialLoading = loading && data.length === 0;
 
   return (
     <div className="max-w-6xl space-y-5">
@@ -102,8 +94,13 @@ export default function LogsPage() {
                 ? `Last updated ${formatTimestamp(lastUpdated)}`
                 : 'Waiting for first update'}
             </div>
-            <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              <RefreshCw />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void refetch()}
+            >
+              <RefreshCw className={loading ? 'animate-spin' : ''} />
               Refresh Now
             </Button>
           </div>
@@ -111,8 +108,19 @@ export default function LogsPage() {
       />
 
       {error && (
-        <Alert variant="warning">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-col gap-3">
+            <span>{error}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => void refetch()}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
@@ -120,14 +128,14 @@ export default function LogsPage() {
         <CardContent className="gap-4 pt-5">
           <div className="flex flex-col gap-3 lg:flex-row">
             <div className="grid w-full gap-2 lg:max-w-xs">
-              <Label>Level</Label>
+              <Label htmlFor="log-level">Level</Label>
               <Select
                 value={levelFilter}
                 onValueChange={(value) =>
                   setLevelFilter(value as LogLevel | 'ALL')
                 }
               >
-                <SelectTrigger>
+                <SelectTrigger id="log-level">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -152,16 +160,56 @@ export default function LogsPage() {
             </div>
           </div>
 
-          <div className="mt-4 text-sm text-muted-foreground">
-            Showing {visibleLogs.length} of {data.length} buffered log entries.
+          <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
+            <span>
+              Showing {visibleLogs.length} of {data.length} buffered log
+              entries.
+            </span>
+            {filtersActive ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                type="button"
+                onClick={() => {
+                  setLevelFilter('ALL');
+                  setSearch('');
+                }}
+              >
+                Clear
+              </Button>
+            ) : null}
           </div>
         </CardContent>
       </Card>
 
-      {visibleLogs.length === 0 ? (
+      {initialLoading ? (
+        <div className="grid gap-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-36" />
+          <Skeleton className="h-32" />
+        </div>
+      ) : visibleLogs.length === 0 ? (
         <EmptyState
-          title="No matching log entries"
-          description="Errors such as failed routine checks will appear here once the server emits them."
+          title={filtersActive ? 'No matching log entries' : 'No log entries'}
+          description={
+            filtersActive
+              ? 'Nothing matches the current level and search filters.'
+              : 'Logs appear here as soon as the server emits them.'
+          }
+          action={
+            filtersActive ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setLevelFilter('ALL');
+                  setSearch('');
+                }}
+              >
+                Show all levels
+              </Button>
+            ) : undefined
+          }
         />
       ) : (
         <div className="space-y-3">

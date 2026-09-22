@@ -73,7 +73,7 @@ function describeUnknownReason(reason: UnknownReason) {
 }
 
 function formatTimestamp(timestamp: string) {
-  return new Date(timestamp).toLocaleString('en-FI', {
+  return new Date(timestamp).toLocaleString(undefined, {
     dateStyle: 'short',
     timeStyle: 'medium',
   });
@@ -370,6 +370,7 @@ export default function RoutineHistoryPage() {
     .reverse()
     .filter((entry) => matchesTriggerFilter(entry, triggerFilter))
     .filter((entry) => matchesSearchFilter(entry, normalizedSearch));
+  const filtersActive = triggerFilter !== 'all' || normalizedSearch.length > 0;
   const ruleMatches = data.filter(
     (entry) => entry.trigger_kind === 'rule_match',
   ).length;
@@ -381,15 +382,7 @@ export default function RoutineHistoryPage() {
     (entry) => countEntryErrors(entry) > 0,
   ).length;
 
-  if (loading && data.length === 0) {
-    return (
-      <div className="grid max-w-6xl gap-4">
-        <Skeleton className="h-24" />
-        <Skeleton className="h-32" />
-        <Skeleton className="h-40" />
-      </div>
-    );
-  }
+  const initialLoading = loading && data.length === 0;
 
   return (
     <div className="max-w-6xl space-y-5">
@@ -401,7 +394,7 @@ export default function RoutineHistoryPage() {
       />
       <ConfigPageHeader
         title="Routine History"
-        description="Recent routine activations, trigger sources, action counts, and rule traces from the in-memory runtime buffer."
+        description="Recent routine activations, trigger sources, action counts, and rule traces. The newest 500 entries are persisted across server restarts."
         actions={
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="text-xs text-muted-foreground">
@@ -409,8 +402,13 @@ export default function RoutineHistoryPage() {
                 ? `Last updated ${formatTimestamp(lastUpdated)}`
                 : 'Waiting for first update'}
             </div>
-            <Button variant="outline" size="sm" onClick={() => void refetch()}>
-              <RefreshCw />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              onClick={() => void refetch()}
+            >
+              <RefreshCw className={loading ? 'animate-spin' : ''} />
               Refresh Now
             </Button>
           </div>
@@ -418,278 +416,344 @@ export default function RoutineHistoryPage() {
       />
 
       {error && (
-        <Alert variant="warning">
-          <AlertDescription>{error}</AlertDescription>
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-col gap-3">
+            <span>{error}</span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="self-start"
+              onClick={() => void refetch()}
+            >
+              Retry
+            </Button>
+          </AlertDescription>
         </Alert>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-        <HistoryStatCard
-          icon={<Activity className="size-5" />}
-          label="Buffered entries"
-          value={data.length}
-          description="Newest entries are kept in memory."
-        />
-        <HistoryStatCard
-          icon={<Zap className="size-5" />}
-          label="Rule matches"
-          value={ruleMatches}
-          description="v1 routines triggered by evaluated rules."
-        />
-        <HistoryStatCard
-          icon={<CheckCircle2 className="size-5" />}
-          label="Manual triggers"
-          value={forceTriggers}
-          description="Forced from UI, CLI, or API."
-        />
-        <HistoryStatCard
-          icon={<Activity className="size-5" />}
-          label="v2 runs"
-          value={v2Runs}
-          description="Dispatched v2 plans with traces."
-        />
-        <HistoryStatCard
-          icon={<AlertTriangle className="size-5" />}
-          label="Entries with errors"
-          value={entriesWithErrors}
-          description="At least one rule or v2 node errored."
-        />
-      </div>
-
-      <Card>
-        <CardContent className="gap-4 pt-5">
-          <div className="flex flex-col gap-3 lg:flex-row">
-            <div className="grid w-full gap-2 lg:max-w-xs">
-              <Label>Trigger type</Label>
-              <Select
-                value={triggerFilter}
-                onValueChange={(value) =>
-                  setTriggerFilter(value as TriggerFilter)
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All triggers</SelectItem>
-                  <SelectItem value="rule_match">Rule matches</SelectItem>
-                  <SelectItem value="force_trigger">Manual triggers</SelectItem>
-                  <SelectItem value="v2_run">v2 runs</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="grid w-full gap-2">
-              <Label htmlFor="routine-history-search">Search</Label>
-              <Input
-                id="routine-history-search"
-                type="search"
-                placeholder="Filter by routine id, name, or source device"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 text-sm text-muted-foreground">
-            Showing {visibleHistory.length} of {data.length} buffered routine
-            history entries.
-          </div>
-        </CardContent>
-      </Card>
-
-      {visibleHistory.length === 0 ? (
-        <EmptyState
-          title="No routine history yet"
-          description="Routine rule matches and manual routine triggers will appear here after the server records them."
-        />
+      {initialLoading ? (
+        <div className="grid gap-4">
+          <Skeleton className="h-24" />
+          <Skeleton className="h-32" />
+          <Skeleton className="h-40" />
+        </div>
       ) : (
-        <div className="space-y-3">
-          {visibleHistory.map((entry) => {
-            const errorCount = countEntryErrors(entry);
-            const v2 = entry.v2;
-            return (
-              <Card key={entry.id}>
-                <CardHeader className="gap-3">
-                  <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="min-w-0 space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge
-                          variant={
-                            entry.trigger_kind === 'force_trigger'
-                              ? 'secondary'
-                              : 'default'
-                          }
-                        >
-                          {triggerLabels[entry.trigger_kind]}
-                        </Badge>
-                        {entry.status?.will_trigger ? (
-                          <Badge variant="default">will trigger</Badge>
-                        ) : null}
-                        {v2 ? (
-                          <>
-                            <Badge variant="secondary">
-                              {v2.matched_trigger_ids.length} trigger
-                              {v2.matched_trigger_ids.length === 1 ? '' : 's'}
-                            </Badge>
+        <>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <HistoryStatCard
+              icon={<Activity className="size-5" />}
+              label="Buffered entries"
+              value={data.length}
+              description="Newest entries are kept in memory."
+            />
+            <HistoryStatCard
+              icon={<Zap className="size-5" />}
+              label="Rule matches"
+              value={ruleMatches}
+              description="v1 routines triggered by evaluated rules."
+            />
+            <HistoryStatCard
+              icon={<CheckCircle2 className="size-5" />}
+              label="Manual triggers"
+              value={forceTriggers}
+              description="Forced from UI, CLI, or API."
+            />
+            <HistoryStatCard
+              icon={<Activity className="size-5" />}
+              label="v2 runs"
+              value={v2Runs}
+              description="Dispatched v2 plans with traces."
+            />
+            <HistoryStatCard
+              icon={<AlertTriangle className="size-5" />}
+              label="Entries with errors"
+              value={entriesWithErrors}
+              description="At least one rule or v2 node errored."
+            />
+          </div>
+
+          <Card>
+            <CardContent className="gap-4 pt-5">
+              <div className="flex flex-col gap-3 lg:flex-row">
+                <div className="grid w-full gap-2 lg:max-w-xs">
+                  <Label htmlFor="routine-history-trigger">Trigger type</Label>
+                  <Select
+                    value={triggerFilter}
+                    onValueChange={(value) =>
+                      setTriggerFilter(value as TriggerFilter)
+                    }
+                  >
+                    <SelectTrigger id="routine-history-trigger">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All triggers</SelectItem>
+                      <SelectItem value="rule_match">Rule matches</SelectItem>
+                      <SelectItem value="force_trigger">
+                        Manual triggers
+                      </SelectItem>
+                      <SelectItem value="v2_run">v2 runs</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid w-full gap-2">
+                  <Label htmlFor="routine-history-search">Search</Label>
+                  <Input
+                    id="routine-history-search"
+                    type="search"
+                    placeholder="Filter by routine id, name, or source device"
+                    value={search}
+                    onChange={(event) => setSearch(event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="mt-4 flex items-center gap-3 text-sm text-muted-foreground">
+                <span>
+                  Showing {visibleHistory.length} of {data.length} buffered
+                  routine history entries.
+                </span>
+                {filtersActive ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    type="button"
+                    onClick={() => {
+                      setTriggerFilter('all');
+                      setSearch('');
+                    }}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          {visibleHistory.length === 0 ? (
+            <EmptyState
+              title={
+                filtersActive
+                  ? 'No matching history entries'
+                  : 'No routine history yet'
+              }
+              description={
+                filtersActive
+                  ? 'Nothing matches the current trigger type and search filters.'
+                  : 'Routine rule matches and manual routine triggers will appear here after the server records them.'
+              }
+              action={
+                filtersActive ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setTriggerFilter('all');
+                      setSearch('');
+                    }}
+                  >
+                    Show all entries
+                  </Button>
+                ) : undefined
+              }
+            />
+          ) : (
+            <div className="space-y-3">
+              {visibleHistory.map((entry) => {
+                const errorCount = countEntryErrors(entry);
+                const v2 = entry.v2;
+                return (
+                  <Card key={entry.id}>
+                    <CardHeader className="gap-3">
+                      <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <Badge
                               variant={
-                                v2.condition.truth === 'true'
-                                  ? 'default'
-                                  : 'outline'
+                                entry.trigger_kind === 'force_trigger'
+                                  ? 'secondary'
+                                  : 'default'
                               }
                             >
-                              condition {truthLabel(v2.condition.truth)}
+                              {triggerLabels[entry.trigger_kind]}
                             </Badge>
-                            {v2.last_run ? (
-                              <Badge
-                                variant={
-                                  v2.last_run.accepted
-                                    ? 'default'
-                                    : 'destructive'
-                                }
-                              >
-                                {v2.last_run.accepted
-                                  ? 'run accepted'
-                                  : 'run rejected'}
-                              </Badge>
+                            {entry.status?.will_trigger ? (
+                              <Badge variant="default">will trigger</Badge>
                             ) : null}
-                            {v2.last_run && v2.last_run.dropped > 0n ? (
-                              <Badge variant="muted">
-                                {v2.last_run.dropped.toString()} dropped
-                              </Badge>
-                            ) : null}
-                          </>
-                        ) : null}
-                        {errorCount > 0 ? (
-                          <Badge variant="destructive">
-                            {errorCount} {entry.v2 ? 'node' : 'rule'}{' '}
-                            {errorCount === 1 ? 'error' : 'errors'}
-                          </Badge>
-                        ) : null}
-                      </div>
-                      <CardTitle className="wrap-break-word text-base">
-                        {entry.routine_name || entry.routine_id}
-                      </CardTitle>
-                      <CardDescription className="wrap-break-word">
-                        {entry.routine_id}
-                        {entry.event_source_device_key
-                          ? ` · source ${entry.event_source_device_key}`
-                          : ''}
-                      </CardDescription>
-                    </div>
-                    <CardDescription>
-                      {formatTimestamp(entry.timestamp)}
-                    </CardDescription>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <p className="flex items-start gap-2 rounded-2xl border border-border/70 bg-muted/25 p-3 text-sm">
-                    <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-                    <span>{explainEntry(entry)}</span>
-                  </p>
-                  <div className="grid gap-2 rounded-2xl bg-muted/40 p-3 text-sm sm:grid-cols-3">
-                    <div>
-                      <span className="text-muted-foreground">Actions</span>
-                      <div className="font-medium text-foreground">
-                        {entry.action_count}
-                        {v2 ? ' dispatched' : ''}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Conditions</span>
-                      <div className="font-medium text-foreground">
-                        {v2
-                          ? `condition ${truthLabel(v2.condition.truth)}`
-                          : entry.status?.all_conditions_match
-                            ? 'matched'
-                            : 'not recorded'}
-                      </div>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        {v2 ? 'Matched triggers' : 'Event source'}
-                      </span>
-                      <div className="wrap-break-word font-medium text-foreground">
-                        {v2
-                          ? v2.matched_trigger_ids.length > 0
-                            ? v2.matched_trigger_ids.join(', ')
-                            : 'none'
-                          : (entry.event_source_device_key ?? 'manual')}
-                      </div>
-                    </div>
-                  </div>
-
-                  {v2 ? (
-                    <details className="rounded-2xl border border-border bg-muted/20">
-                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-                        Run trace
-                      </summary>
-                      <div className="space-y-4 border-t border-border p-4">
-                        {v2.last_run ? (
-                          <div className="space-y-2">
-                            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                              <span className="font-medium text-foreground">
-                                Planned steps
-                              </span>
-                              <span>run {v2.last_run.run_id.toString()}</span>
-                              <span>
-                                definition revision{' '}
-                                {v2.last_run.definition_revision.toString()}
-                              </span>
-                            </div>
-                            <PlannedStepList run={v2.last_run} />
-                          </div>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            No run outcome was recorded for this entry.
-                          </p>
-                        )}
-                        <div className="space-y-2">
-                          <div className="text-xs font-medium text-foreground">
-                            Condition trace
-                          </div>
-                          <ol className="space-y-2">
-                            <ConditionTraceTree node={v2.condition.trace} />
-                          </ol>
-                        </div>
-                        {v2.triggers.length > 0 ? (
-                          <div className="space-y-2">
-                            <div className="text-xs font-medium text-foreground">
-                              Triggers
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {v2.triggers.map((trigger) => (
+                            {v2 ? (
+                              <>
+                                <Badge variant="secondary">
+                                  {v2.matched_trigger_ids.length} trigger
+                                  {v2.matched_trigger_ids.length === 1
+                                    ? ''
+                                    : 's'}
+                                </Badge>
                                 <Badge
-                                  key={trigger.trigger_id}
                                   variant={
-                                    trigger.fired ? 'default' : 'outline'
+                                    v2.condition.truth === 'true'
+                                      ? 'default'
+                                      : 'outline'
                                   }
                                 >
-                                  {trigger.trigger_id} · {trigger.kind} ·{' '}
-                                  {trigger.fired ? 'fired' : 'idle'}
+                                  condition {truthLabel(v2.condition.truth)}
                                 </Badge>
-                              ))}
-                            </div>
+                                {v2.last_run ? (
+                                  <Badge
+                                    variant={
+                                      v2.last_run.accepted
+                                        ? 'default'
+                                        : 'destructive'
+                                    }
+                                  >
+                                    {v2.last_run.accepted
+                                      ? 'run accepted'
+                                      : 'run rejected'}
+                                  </Badge>
+                                ) : null}
+                                {v2.last_run && v2.last_run.dropped > 0n ? (
+                                  <Badge variant="muted">
+                                    {v2.last_run.dropped.toString()} dropped
+                                  </Badge>
+                                ) : null}
+                              </>
+                            ) : null}
+                            {errorCount > 0 ? (
+                              <Badge variant="destructive">
+                                {errorCount} {entry.v2 ? 'node' : 'rule'}{' '}
+                                {errorCount === 1 ? 'error' : 'errors'}
+                              </Badge>
+                            ) : null}
                           </div>
-                        ) : null}
+                          <CardTitle className="wrap-break-word text-base">
+                            {entry.routine_name || entry.routine_id}
+                          </CardTitle>
+                          <CardDescription className="wrap-break-word">
+                            {entry.routine_id}
+                            {entry.event_source_device_key
+                              ? ` · source ${entry.event_source_device_key}`
+                              : ''}
+                          </CardDescription>
+                        </div>
+                        <CardDescription>
+                          {formatTimestamp(entry.timestamp)}
+                        </CardDescription>
                       </div>
-                    </details>
-                  ) : (
-                    <details className="rounded-2xl border border-border bg-muted/20">
-                      <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-                        Rule trace
-                      </summary>
-                      <div className="border-t border-border p-4">
-                        <RuleStatusTree rules={entry.status?.rules ?? []} />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <p className="flex items-start gap-2 rounded-2xl border border-border/70 bg-muted/25 p-3 text-sm">
+                        <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                        <span>{explainEntry(entry)}</span>
+                      </p>
+                      <div className="grid gap-2 rounded-2xl bg-muted/40 p-3 text-sm sm:grid-cols-3">
+                        <div>
+                          <span className="text-muted-foreground">Actions</span>
+                          <div className="font-medium text-foreground">
+                            {entry.action_count}
+                            {v2 ? ' dispatched' : ''}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">
+                            Conditions
+                          </span>
+                          <div className="font-medium text-foreground">
+                            {v2
+                              ? `condition ${truthLabel(v2.condition.truth)}`
+                              : entry.status?.all_conditions_match
+                                ? 'matched'
+                                : 'not recorded'}
+                          </div>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">
+                            {v2 ? 'Matched triggers' : 'Event source'}
+                          </span>
+                          <div className="wrap-break-word font-medium text-foreground">
+                            {v2
+                              ? v2.matched_trigger_ids.length > 0
+                                ? v2.matched_trigger_ids.join(', ')
+                                : 'none'
+                              : (entry.event_source_device_key ?? 'manual')}
+                          </div>
+                        </div>
                       </div>
-                    </details>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+
+                      {v2 ? (
+                        <details className="rounded-2xl border border-border bg-muted/20">
+                          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                            Run trace
+                          </summary>
+                          <div className="space-y-4 border-t border-border p-4">
+                            {v2.last_run ? (
+                              <div className="space-y-2">
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="font-medium text-foreground">
+                                    Planned steps
+                                  </span>
+                                  <span>
+                                    run {v2.last_run.run_id.toString()}
+                                  </span>
+                                  <span>
+                                    definition revision{' '}
+                                    {v2.last_run.definition_revision.toString()}
+                                  </span>
+                                </div>
+                                <PlannedStepList run={v2.last_run} />
+                              </div>
+                            ) : (
+                              <p className="text-sm text-muted-foreground">
+                                No run outcome was recorded for this entry.
+                              </p>
+                            )}
+                            <div className="space-y-2">
+                              <div className="text-xs font-medium text-foreground">
+                                Condition trace
+                              </div>
+                              <ol className="space-y-2">
+                                <ConditionTraceTree node={v2.condition.trace} />
+                              </ol>
+                            </div>
+                            {v2.triggers.length > 0 ? (
+                              <div className="space-y-2">
+                                <div className="text-xs font-medium text-foreground">
+                                  Triggers
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                  {v2.triggers.map((trigger) => (
+                                    <Badge
+                                      key={trigger.trigger_id}
+                                      variant={
+                                        trigger.fired ? 'default' : 'outline'
+                                      }
+                                    >
+                                      {trigger.trigger_id} · {trigger.kind} ·{' '}
+                                      {trigger.fired ? 'fired' : 'idle'}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+                        </details>
+                      ) : (
+                        <details className="rounded-2xl border border-border bg-muted/20">
+                          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
+                            Rule trace
+                          </summary>
+                          <div className="border-t border-border p-4">
+                            <RuleStatusTree rules={entry.status?.rules ?? []} />
+                          </div>
+                        </details>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );

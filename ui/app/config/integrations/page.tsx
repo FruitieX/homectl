@@ -36,6 +36,8 @@ import { Skeleton } from '@/ui/primitives/skeleton';
 import { Slider } from '@/ui/primitives/slider';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Textarea } from '@/ui/primitives/textarea';
+import { selectClassNameLarge as selectClassName } from '@/ui/form-styles';
+import { checkboxClassName } from '@/ui/form-styles';
 
 const fallbackPluginOptions = [
   'mqtt',
@@ -45,10 +47,6 @@ const fallbackPluginOptions = [
   'dummy',
   'random',
 ];
-const selectClassName =
-  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
-const checkboxClassName =
-  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 const enabledBadgeClassName =
   'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300';
 const disabledBadgeClassName =
@@ -657,6 +655,11 @@ export default function IntegrationsPage() {
         <EmptyState
           title="No integrations match the current search"
           description="Try a different plugin name, id, or configuration value."
+          action={
+            <Button variant="outline" size="sm" onClick={() => setSearch('')}>
+              Clear search
+            </Button>
+          }
         />
       ) : (
         <div className="grid gap-4">
@@ -715,6 +718,21 @@ export default function IntegrationsPage() {
   );
 }
 
+const SENSITIVE_CONFIG_KEY = /pass|secret|token|key|auth|credential|url|uri/i;
+
+/** Short, secret-free glance summary of scalar config values. */
+function integrationConfigSummary(config: Record<string, unknown>) {
+  return Object.entries(config)
+    .filter(
+      ([key, value]) =>
+        !SENSITIVE_CONFIG_KEY.test(key) &&
+        (value === null ||
+          ['string', 'number', 'boolean'].includes(typeof value)),
+    )
+    .slice(0, 4)
+    .map(([key, value]) => `${key}: ${String(value)}`);
+}
+
 function IntegrationCard({
   integration,
   onOpen,
@@ -725,6 +743,7 @@ function IntegrationCard({
   onDelete: () => void;
 }) {
   const outboundMinIntervalMs = getOutboundMinIntervalMs(integration.config);
+  const configSummary = integrationConfigSummary(integration.config);
 
   return (
     <Card
@@ -779,17 +798,23 @@ function IntegrationCard({
         </div>
       </CardHeader>
       <CardContent>
-        <details
-          className="rounded-2xl border border-border bg-muted/30"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <summary className="cursor-pointer px-4 py-3 text-sm font-medium">
-            Configuration
-          </summary>
-          <pre className="max-h-72 overflow-auto border-t border-border px-4 py-3 text-xs">
-            {JSON.stringify(integration.config, null, 2)}
-          </pre>
-        </details>
+        {configSummary.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {configSummary.map((entry) => (
+              <Badge
+                key={entry}
+                variant="outline"
+                className="max-w-full truncate font-mono text-xs font-normal"
+              >
+                {entry}
+              </Badge>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Open to edit plugin settings.
+          </p>
+        )}
       </CardContent>
     </Card>
   );

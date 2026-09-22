@@ -1,4 +1,4 @@
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Device } from '@/bindings/Device';
 import { DeviceColor } from '@/bindings/DeviceColor';
 import { DeviceStateSource } from '@/bindings/DeviceStateSource';
@@ -70,11 +70,10 @@ import {
 } from '@/ui/primitives/popover';
 import { CheckSquare, Search, SlidersHorizontal } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { selectClassNameLarge as selectClassName } from '@/ui/form-styles';
 
 type DeviceTypeFilter = 'all' | 'controllable' | 'sensor' | 'other';
 
-const selectClassName =
-  'h-11 rounded-xl border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 const fieldClassName = 'space-y-2';
 const fieldLabelClassName = 'text-sm font-medium';
 const dashedPanelClassName =
@@ -591,6 +590,7 @@ export default function DevicesPage() {
   const [replacementDrafts, setReplacementDrafts] = useState<
     Record<string, string>
   >({});
+  const [feedbackKey, setFeedbackKey] = useState<string | null>(null);
 
   const changeDeviceDetailTab = (value: string) => {
     if (
@@ -639,6 +639,34 @@ export default function DevicesPage() {
       ),
     [deviceDisplayNames],
   );
+
+  // Opening an editor always starts from saved state, so abandoned drafts
+  // cannot resurface later.
+  const resetDeviceDrafts = (deviceKey: string) => {
+    setDisplayNameDrafts((current) => ({
+      ...current,
+      [deviceKey]: deviceDisplayNameMap[deviceKey] ?? '',
+    }));
+    setSensorConfigDrafts((current) => {
+      const row = deviceSensorConfigs.find(
+        (entry) => entry.device_ref === deviceKey,
+      );
+      const next = { ...current };
+      if (row) {
+        const kind = normalizeSensorInteractionKind(row.interaction_kind);
+        next[deviceKey] = {
+          ...row,
+          interaction_kind: kind,
+          config: normalizeSensorInteractionConfig(kind, row.config),
+        };
+      } else {
+        delete next[deviceKey];
+      }
+      return next;
+    });
+    setReplacementDrafts((current) => ({ ...current, [deviceKey]: '' }));
+    setFeedbackKey(null);
+  };
   const deviceSensorConfigMap = useMemo(
     () =>
       Object.fromEntries(
@@ -1010,6 +1038,7 @@ export default function DevicesPage() {
     }
 
     setSavingKey(deviceKey);
+    setFeedbackKey(deviceKey);
     setError(null);
     setNotice(null);
 
@@ -1204,7 +1233,7 @@ export default function DevicesPage() {
       />
 
       {error && (
-        <Alert variant="warning">
+        <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       )}
@@ -1392,12 +1421,18 @@ export default function DevicesPage() {
             <ExpandableConfigCard
               key={deviceKey}
               open={isOpen}
-              onOpen={() => setOpenDeviceKey(deviceKey)}
-              onClose={() =>
+              onOpen={() => {
+                setOpenDeviceKey(deviceKey);
+                resetDeviceDrafts(deviceKey);
+              }}
+              onClose={() => {
                 setOpenDeviceKey((current) =>
                   current === deviceKey ? null : current,
-                )
-              }
+                );
+                setFeedbackKey((current) =>
+                  current === deviceKey ? null : current,
+                );
+              }}
               cardClassName="h-fit"
               dialogTitle={label}
               dialogSubtitle={deviceKey}
@@ -1757,6 +1792,12 @@ export default function DevicesPage() {
                         </div>
                       )}
 
+                      {feedbackKey === deviceKey && (error || notice) ? (
+                        <Alert variant={error ? 'destructive' : 'default'}>
+                          <AlertDescription>{error ?? notice}</AlertDescription>
+                        </Alert>
+                      ) : null}
+
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button
                           variant="ghost"
@@ -1905,8 +1946,36 @@ export default function DevicesPage() {
 
       {visibleDevices.length === 0 && (
         <EmptyState
-          title="No devices match the current filters"
-          description="Clear filters or search for another label, id, or group."
+          title={
+            devices.length === 0
+              ? 'No devices yet'
+              : 'No devices match the current filters'
+          }
+          description={
+            devices.length === 0
+              ? 'Devices appear here once an integration reports them.'
+              : 'Clear filters or search for another label, id, or group.'
+          }
+          action={
+            devices.length === 0 ? (
+              <Button asChild variant="outline" size="sm">
+                <Link to="/config/integrations">Set up an integration</Link>
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDeviceSearch('');
+                  setDeviceTypeFilter('all');
+                  setDeviceGroupFilter('all');
+                  setDeviceIntegrationFilter('all');
+                }}
+              >
+                Clear filters
+              </Button>
+            )
+          }
         />
       )}
       {selectMode ? (

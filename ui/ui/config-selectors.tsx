@@ -3,11 +3,7 @@ import { type DevicesState } from '@/bindings/DevicesState';
 import { type FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
-
-const selectClassName =
-  'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
-const checkboxClassName =
-  'size-4 shrink-0 rounded border border-input bg-background accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+import { checkboxClassName, selectClassName } from '@/ui/form-styles';
 
 type IdNameOption = { id: string; name: string };
 
