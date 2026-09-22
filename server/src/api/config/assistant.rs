@@ -1563,7 +1563,6 @@ impl PlanStore {
     fn plan_len(&self) -> usize {
         self.plans.lock().expect("plan store lock").len()
     }
-
 }
 
 /// Both stored artifacts expose `expires_at_ms`; used by the generic store
