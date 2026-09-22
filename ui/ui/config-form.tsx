@@ -66,7 +66,7 @@ export function ConfigField({
   description?: ReactNode;
 }) {
   return (
-    <label className={cn('grid gap-2', className)} {...props}>
+    <label className={cn('grid min-w-0 gap-2', className)} {...props}>
       <span className="text-sm font-medium leading-none text-foreground">
         {label}
       </span>

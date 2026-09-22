@@ -217,6 +217,20 @@ export function triggerBadge(trigger: TriggerRuntimeStatus): {
   if (trigger.armed) {
     return { label: 'Armed', tone: 'info' };
   }
+  // Event triggers (reports, schedules, timers, startup, manual) have no
+  // meaningful truth value, so they must not read as "Unknown".
+  switch (trigger.kind) {
+    case 'report':
+      return { label: 'Listening', tone: 'neutral' };
+    case 'schedule':
+      return { label: 'Scheduled', tone: 'info' };
+    case 'timer_fired':
+      return { label: 'Timer', tone: 'neutral' };
+    case 'startup':
+      return { label: 'On start', tone: 'neutral' };
+    case 'manual':
+      return { label: 'Manual', tone: 'neutral' };
+  }
   if (trigger.truth === 'unknown') {
     return { label: 'Unknown', tone: 'warning' };
   }

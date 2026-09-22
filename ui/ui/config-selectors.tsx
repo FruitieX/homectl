@@ -66,7 +66,7 @@ export function DeviceSelect({
 
   return (
     <select
-      className={className ?? selectClassName}
+      className={className ?? `${selectClassName} w-full`}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >
@@ -158,7 +158,7 @@ export function GroupSelect({
 
   return (
     <select
-      className={className ?? selectClassName}
+      className={className ?? `${selectClassName} w-full`}
       value={value}
       onChange={(event) => onChange(event.target.value)}
     >

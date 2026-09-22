@@ -14,12 +14,14 @@ import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
+import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import {
   StatusBadge,
   formatDue,
   formatUnknownReason,
   triggerBadge,
 } from '@/ui/routine-runtime';
+import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { useInterval } from 'usehooks-ts';
 
@@ -215,7 +217,7 @@ function TriggerFields({
         <div className="space-y-4">
           <ConfigField label="Schedule type">
             <select
-              className={selectClassName}
+              className={`${selectClassName} w-full`}
               value={mode}
               onChange={(event) => {
                 if (event.target.value === 'cron') {
@@ -302,7 +304,7 @@ function TriggerFields({
 
             <ConfigField label="Missed occurrences">
               <select
-                className={selectClassName}
+                className={`${selectClassName} w-full`}
                 value={schedule.backlog}
                 onChange={(event) =>
                   onChange({
@@ -375,7 +377,7 @@ function TriggerFields({
           </ConfigField>
           <ConfigField label="Mode">
             <select
-              className={selectClassName}
+              className={`${selectClassName} w-full`}
               value={trigger.mode}
               onChange={(event) =>
                 onChange({
@@ -491,6 +493,17 @@ function TriggerFields({
   }
 }
 
+/** Unique default id for a new trigger of the given kind. */
+function nextTriggerId(kind: TriggerKind, triggers: TriggerSpec[]): string {
+  let index = triggers.length + 1;
+  let id = `${kind}_${index}`;
+  while (triggers.some((trigger) => trigger.id === id)) {
+    index += 1;
+    id = `${kind}_${index}`;
+  }
+  return id;
+}
+
 export function TriggerBuilder({
   triggers,
   onChange,
@@ -508,7 +521,7 @@ export function TriggerBuilder({
   helpers: HelperRuntimeStatus[];
   runtimeStatus?: RoutineRuntimeStatus;
 }) {
-  const [newKind, setNewKind] = useState<TriggerKind>('schedule');
+  const [draft, setDraft] = useState<TriggerSpec | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const liveTriggers = runtimeStatus?.v2?.triggers ?? [];
   const hasArmed = liveTriggers.some(
@@ -516,14 +529,23 @@ export function TriggerBuilder({
   );
   useInterval(() => setNow(Date.now()), hasArmed ? 15000 : null);
 
-  const addTrigger = () => {
-    let index = triggers.length + 1;
-    let id = `${newKind}_${index}`;
-    while (triggers.some((trigger) => trigger.id === id)) {
-      index += 1;
-      id = `${newKind}_${index}`;
+  const startAdd = () => {
+    setDraft(defaultTrigger('schedule', nextTriggerId('schedule', triggers)));
+  };
+
+  const changeDraftKind = (kind: TriggerKind) => {
+    setDraft(defaultTrigger(kind, nextTriggerId(kind, triggers)));
+  };
+
+  const draftIdTaken =
+    draft !== null && triggers.some((trigger) => trigger.id === draft.id);
+
+  const confirmAdd = () => {
+    if (!draft || !draft.id.trim() || draftIdTaken) {
+      return;
     }
-    onChange([...triggers, defaultTrigger(newKind, id)]);
+    onChange([...triggers, draft]);
+    setDraft(null);
   };
 
   return (
@@ -535,24 +557,95 @@ export function TriggerBuilder({
         ))}
       </datalist>
 
-      <div className="flex flex-wrap items-end gap-3">
-        <ConfigField label="Add trigger" className="min-w-64">
-          <select
-            className={selectClassName}
-            value={newKind}
-            onChange={(event) => setNewKind(event.target.value as TriggerKind)}
-          >
-            {triggerKindOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </ConfigField>
-        <Button type="button" variant="outline" size="sm" onClick={addTrigger}>
-          Add trigger
-        </Button>
-      </div>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full sm:w-auto"
+        onClick={startAdd}
+      >
+        <Plus />
+        Add trigger
+      </Button>
+
+      <ResponsiveOverlay
+        open={draft !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDraft(null);
+          }
+        }}
+        title="Add trigger"
+        description="Pick the event that starts this routine, configure it, then add it to the routine."
+        presentation="fullscreen"
+        className="max-w-2xl"
+      >
+        {draft ? (
+          <div className="flex min-h-full flex-col gap-4 px-5 pb-5 md:px-0 md:pb-0">
+            <ConfigField
+              label="Trigger type"
+              description="What kind of event should start this routine?"
+            >
+              <select
+                className={`${selectClassName} w-full`}
+                value={draft.kind}
+                onChange={(event) =>
+                  changeDraftKind(event.target.value as TriggerKind)
+                }
+              >
+                {triggerKindOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </ConfigField>
+
+            <ConfigField
+              label="Trigger ID"
+              description="Used by logs and runtime status; keep it short and unique."
+            >
+              <Input
+                className="font-mono"
+                value={draft.id}
+                onChange={(event) =>
+                  setDraft({ ...draft, id: event.target.value } as TriggerSpec)
+                }
+              />
+            </ConfigField>
+            {draftIdTaken ? (
+              <p className="text-xs text-destructive">
+                Trigger IDs must be unique within the routine.
+              </p>
+            ) : null}
+
+            <TriggerFields
+              trigger={draft}
+              onChange={setDraft}
+              devices={devices}
+              groups={groups}
+              scenes={scenes}
+              helpers={helpers}
+            />
+
+            <div className="mt-auto flex justify-end gap-2 pt-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setDraft(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                disabled={!draft.id.trim() || draftIdTaken}
+                onClick={confirmAdd}
+              >
+                Add trigger
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </ResponsiveOverlay>
 
       {triggers.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
