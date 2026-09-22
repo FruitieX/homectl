@@ -2265,6 +2265,11 @@ impl AppState {
     /// restore/initial discovery) as startup-seeded frames, then seed routine
     /// transition memory so restored state does not fire edges (E06).
     pub async fn seed_startup_state(&mut self) {
+        // Register typed helpers before seeding transitions: without this the
+        // registry stays empty after a restart, helper-referencing conditions
+        // evaluate as unknown, and routines such as the entryway motion
+        // lights can never fire.
+        self.apply_runtime_helpers();
         if self.devices.pending_mutation_count() > 0 {
             self.devices.begin_command(EventCausation::default());
             self.flush_pending_frames().await;
@@ -3282,6 +3287,36 @@ pub(crate) mod tests {
                 .filter(|(disposition, _)| *disposition == FrameDisposition::CausationLimited)
                 .count(),
             1
+        );
+    }
+
+    // Regression: startup seeding must register configured helpers. A restart
+    // used to leave the registry empty, so helper-referencing conditions
+    // evaluated as unknown and routines like the entryway motion lights could
+    // never fire.
+    #[tokio::test]
+    async fn startup_seeding_registers_configured_helpers() {
+        use crate::types::automation_definition::HelperId;
+        use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
+
+        let (mut state, _event_rx) = test_state();
+        state.runtime_config.helpers = vec![HelperDefinition {
+            id: HelperId("entryway_cooldown".to_string()),
+            name: "Entryway cooldown".to_string(),
+            kind: HelperKind::Boolean,
+            initial_value: serde_json::json!(false),
+            persistence: HelperPersistence::Session,
+            hidden: None,
+        }];
+
+        state.seed_startup_state().await;
+
+        let statuses = state.helpers.statuses();
+        assert!(
+            statuses
+                .iter()
+                .any(|status| status.id.0 == "entryway_cooldown"),
+            "configured helper must be registered during startup seeding: {statuses:?}"
         );
     }
 
