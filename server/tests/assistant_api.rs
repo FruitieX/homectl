@@ -155,6 +155,22 @@ fn assistant_config() -> Value {
             "motion": {"name": "Hallway motion", "init_state": {"Sensor": {"value": false}}}
         }}
     }]);
+    config["groups"] = json!([{
+        "id": "hallway",
+        "name": "Hallway",
+        "hidden": false,
+        "devices": [{"integration_id": "dummy", "device_id": "lamp"}],
+        "linked_groups": []
+    }]);
+    config["scenes"] = json!([{
+        "id": "evening",
+        "name": "Evening",
+        "hidden": false,
+        "script": null,
+        "device_states": {"dummy/lamp": {"power": true, "brightness": 0.4}},
+        "group_states": {"hallway": {"power": true}},
+        "group_state_order": ["hallway"]
+    }]);
     config
 }
 
@@ -732,4 +748,225 @@ fn assistant_apply_is_disabled_without_configuration() {
 
     let response = apply(&server.base_url, &client, "turn on the lamp", None);
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+// ============================================================================
+// Configuration assistant plans
+// ============================================================================
+
+fn plan(base_url: &str, client: &Client, body: Value) -> reqwest::blocking::Response {
+    client
+        .post(format!("{base_url}/api/v1/config/assistant/plan"))
+        .json(&body)
+        .send()
+        .unwrap()
+}
+
+fn get_plan(base_url: &str, client: &Client, plan_id: &str) -> reqwest::blocking::Response {
+    client
+        .get(format!(
+            "{base_url}/api/v1/config/assistant/plans/{plan_id}"
+        ))
+        .send()
+        .unwrap()
+}
+
+fn search(base_url: &str, client: &Client, query: &str) -> reqwest::blocking::Response {
+    client
+        .get(format!("{base_url}/api/v1/config/assistant/search?{query}"))
+        .send()
+        .unwrap()
+}
+
+fn valid_plan() -> String {
+    json!({
+        "summary": "Rename the hallway group",
+        "operations": [{
+            "op": "update",
+            "kind": "group",
+            "target_id": "hallway",
+            "label": "Rename Hallway",
+            "after": {"name": "Hallway Lights"}
+        }]
+    })
+    .to_string()
+}
+
+#[test]
+fn assistant_plan_produces_a_validated_plan() {
+    let provider = MockProvider::start(vec![MockResponse::completion(&valid_plan())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({
+            "prompt": "rename the hallway group to hallway lights",
+            "attachments": [{"kind": "group", "id": "hallway", "label": "Hallway"}]
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    assert_eq!(body["success"], true);
+    let data = &body["data"];
+    assert!(data["planId"].as_str().unwrap().starts_with("plan-"));
+    assert_eq!(data["summary"], "Rename the hallway group");
+    assert_eq!(data["operations"][0]["opId"], "op-1");
+    assert_eq!(data["operations"][0]["op"], "update");
+    assert_eq!(data["operations"][0]["kind"], "group");
+    assert_eq!(data["operations"][0]["targetId"], "hallway");
+    assert_eq!(data["operations"][0]["after"]["name"], "Hallway Lights");
+    // Updates carry the masked snapshot and the merged final state.
+    assert_eq!(data["operations"][0]["before"]["name"], "Hallway");
+    assert_eq!(
+        data["operations"][0]["after"]["devices"][0]["device_id"],
+        "lamp"
+    );
+    assert!(data["expiresAtMs"].as_i64().unwrap() > data["createdAtMs"].as_i64().unwrap());
+    assert_eq!(provider.requests.load(Ordering::SeqCst), 1);
+
+    // The plan is retrievable until it expires.
+    let plan_id = data["planId"].as_str().unwrap();
+    let stored = get_plan(&server.base_url, &client, plan_id);
+    assert_eq!(stored.status(), StatusCode::OK);
+    let stored: Value = stored.json().unwrap();
+    assert_eq!(stored["data"]["planId"], plan_id);
+}
+
+#[test]
+fn assistant_plan_rejects_unknown_targets() {
+    let content = json!({
+        "summary": "Delete a routine",
+        "operations": [{
+            "op": "delete",
+            "kind": "routine",
+            "target_id": "ghost",
+            "label": "Ghost"
+        }]
+    })
+    .to_string();
+    let provider = MockProvider::start(vec![MockResponse::completion(&content)]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({"prompt": "delete the ghost routine"}),
+    );
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = response.json().unwrap();
+    assert_eq!(body["success"], false);
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("unknown routine target 'ghost'"));
+}
+
+#[test]
+fn assistant_plan_rejects_unknown_attachments_without_calling_the_provider() {
+    let provider = MockProvider::start(vec![MockResponse::completion(&valid_plan())]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({
+            "prompt": "rename it",
+            "attachments": [{"kind": "group", "id": "ghost"}]
+        }),
+    );
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = response.json().unwrap();
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("attached group 'ghost' was not found"));
+    assert_eq!(provider.requests.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn assistant_plan_rejects_malformed_provider_output() {
+    let provider = MockProvider::start(vec![MockResponse::completion("not json at all")]);
+    let server = start_server(Some(&provider));
+    let client = Client::new();
+
+    let response = plan(&server.base_url, &client, json!({"prompt": "do something"}));
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    let body: Value = response.json().unwrap();
+    assert!(body["error"]
+        .as_str()
+        .unwrap()
+        .contains("did not contain a JSON object"));
+}
+
+#[test]
+fn assistant_plan_expires_from_the_store() {
+    let provider = MockProvider::start(vec![MockResponse::completion(&valid_plan())]);
+    let server = start_server_with_env(
+        Some(&provider),
+        vec![("HOMECTL_ASSISTANT_PLAN_TTL_MS".to_string(), "1".to_string())],
+    );
+    let client = Client::new();
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({"prompt": "rename the hallway group to hallway lights"}),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    let plan_id = body["data"]["planId"].as_str().unwrap().to_string();
+
+    thread::sleep(std::time::Duration::from_millis(50));
+    let expired = get_plan(&server.base_url, &client, &plan_id);
+    assert_eq!(expired.status(), StatusCode::NOT_FOUND);
+}
+
+#[test]
+fn assistant_plan_is_disabled_without_configuration() {
+    let server = start_server(None);
+    let client = Client::new();
+
+    let response = plan(
+        &server.base_url,
+        &client,
+        json!({"prompt": "create a morning routine"}),
+    );
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[test]
+fn assistant_search_ranks_configured_entities() {
+    let server = start_server(None);
+    let client = Client::new();
+    let base = &server.base_url;
+
+    let groups: Value = search(base, &client, "kind=group&q=hall").json().unwrap();
+    assert_eq!(groups["success"], true);
+    assert_eq!(groups["data"][0]["kind"], "group");
+    assert_eq!(groups["data"][0]["id"], "hallway");
+    assert_eq!(groups["data"][0]["label"], "Hallway");
+    assert!(groups["data"][0]["summary"]
+        .as_str()
+        .unwrap()
+        .contains("group"));
+
+    let scenes: Value = search(base, &client, "kind=scene&q=eve").json().unwrap();
+    assert_eq!(scenes["data"][0]["id"], "evening");
+
+    let all: Value = search(base, &client, "q=hall").json().unwrap();
+    assert!(all["data"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|result| result["id"] == "hallway"));
+
+    let none: Value = search(base, &client, "kind=routine&q=zzz").json().unwrap();
+    assert_eq!(none["data"], json!([]));
+
+    let response = search(base, &client, "kind=bogus&q=hall");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }

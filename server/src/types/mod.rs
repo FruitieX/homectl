@@ -1,4 +1,5 @@
 pub mod action;
+pub mod assistant;
 pub mod automation_definition;
 pub mod automation_event;
 pub mod automation_source;

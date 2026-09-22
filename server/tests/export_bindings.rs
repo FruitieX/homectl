@@ -2,6 +2,11 @@ use std::path::PathBuf;
 
 use homectl_server::types::{
     action::Action,
+    assistant::{
+        ApplyAssistantPlanRequest, ApplyAssistantPlanResponse, AssistantAttachment,
+        AssistantEntityKind, AssistantOpKind, AssistantOperation, AssistantOperationResult,
+        AssistantPlan, AssistantPlanRequest, AssistantSearchResult,
+    },
     automation_definition::{
         ChooseBranch, ConditionExpr, ExecutionPolicy, HelperId, NativeAction, NativeProgram,
         NodeId, Program, Quantifier, RoutineDefinitionV2, ScheduleSpec, ScriptDeclaration,
@@ -45,6 +50,16 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         manifest_dir.join("../ui/bindings"),
     ] {
         Action::export_all_to(&output_dir)?;
+        ApplyAssistantPlanRequest::export_all_to(&output_dir)?;
+        ApplyAssistantPlanResponse::export_all_to(&output_dir)?;
+        AssistantAttachment::export_all_to(&output_dir)?;
+        AssistantEntityKind::export_all_to(&output_dir)?;
+        AssistantOpKind::export_all_to(&output_dir)?;
+        AssistantOperation::export_all_to(&output_dir)?;
+        AssistantOperationResult::export_all_to(&output_dir)?;
+        AssistantPlan::export_all_to(&output_dir)?;
+        AssistantPlanRequest::export_all_to(&output_dir)?;
+        AssistantSearchResult::export_all_to(&output_dir)?;
         homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all_to(&output_dir)?;
         homectl_server::types::config_write::ConfigWriteStatus::export_all_to(&output_dir)?;
         ChooseBranch::export_all_to(&output_dir)?;

@@ -21,8 +21,15 @@
 //!   for thinking models, e.g. `high`)
 //! - `HOMECTL_ASSISTANT_TIMEZONE` (optional IANA zone for drafted schedules;
 //!   inferred from existing routines when unset)
+//!
+//! The configuration assistant plan flow (`assistant/search`, `assistant/plan`,
+//! `assistant/plans/{id}`) shares the same provider settings. Plans live in an
+//! in-memory TTL store; `HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides the default
+//! 15 minute TTL.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::convert::Infallible;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -31,8 +38,13 @@ use serde_json::{json, Value};
 use super::*;
 use crate::core::automation::{self, ConfigCatalog};
 use crate::core::snapshot::RuntimeSnapshot;
+use crate::types::assistant::{
+    AssistantAttachment, AssistantEntityKind, AssistantOpKind, AssistantOperation, AssistantPlan,
+    AssistantPlanRequest, AssistantSearchResult,
+};
 use crate::types::device::{DeviceData, DeviceKey, DeviceRef};
 use crate::types::device_command::DeviceCommand;
+use crate::types::scene::SceneDeviceConfig;
 use ordered_float::OrderedFloat;
 
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
@@ -44,6 +56,18 @@ const MIN_TIMEOUT_MS: u64 = 1_000;
 const MAX_TIMEOUT_MS: u64 = 600_000;
 const MAX_MAX_TOKENS: u64 = 1_000_000;
 const REASONING_EFFORTS: [&str; 3] = ["low", "medium", "high"];
+
+/// Plan store TTL and cap. Both are deliberately small: a plan is an
+/// ephemeral review artifact, never a persisted record.
+const DEFAULT_PLAN_TTL_MS: u64 = 15 * 60 * 1000;
+const MAX_STORED_PLANS: usize = 50;
+/// Hard bound on operations in one plan; the provider envelope is rejected
+/// beyond this without validating further.
+const MAX_PLAN_OPERATIONS: usize = 40;
+/// Deterministic search caps.
+const MAX_SEARCH_RESULTS: usize = 30;
+const MAX_CONTEXT_DEVICES: usize = 250;
+const MAX_ENTITY_ID_CHARS: usize = 64;
 
 /// Reserved `widget_settings` key holding assistant provider configuration.
 ///
@@ -310,6 +334,8 @@ pub(super) fn assistant_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    let plans = Arc::new(PlanStore::from_env());
+
     let status = warp::path!("assistant" / "status")
         .and(warp::path::end())
         .and(warp::get())
@@ -345,7 +371,42 @@ pub(super) fn assistant_routes(
         .and(with_handle(handle))
         .and_then(apply_assistant_action);
 
-    status.or(settings_get).or(settings_put).or(draft).or(apply)
+    let search = warp::path!("assistant" / "search")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(warp::query::<AssistantSearchQuery>())
+        .and(with_snapshot(snapshot))
+        .and_then(search_assistant_entities);
+
+    let plan = warp::path!("assistant" / "plan")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_snapshot(snapshot))
+        .and(with_plan_store(&plans))
+        .and_then(plan_assistant_operations);
+
+    let get_plan = warp::path!("assistant" / "plans" / String)
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(with_plan_store(&plans))
+        .and_then(get_assistant_plan);
+
+    status
+        .or(settings_get)
+        .or(settings_put)
+        .or(draft)
+        .or(apply)
+        .or(search)
+        .or(plan)
+        .or(get_plan)
+}
+
+fn with_plan_store(
+    plans: &Arc<PlanStore>,
+) -> impl Filter<Extract = (Arc<PlanStore>,), Error = Infallible> + Clone {
+    let plans = plans.clone();
+    warp::any().map(move || plans.clone())
 }
 
 async fn assistant_status(snapshot: SnapshotHandle) -> Result<impl Reply, warp::Rejection> {
@@ -867,6 +928,59 @@ fn truncate(value: &str, max_chars: usize) -> String {
     truncated
 }
 
+/// Shared v2 schema reference for the routine draft and plan prompts.
+const ROUTINE_DEFINITION_REFERENCE: &str = r#"RoutineDefinitionV2 shape:
+{
+  "triggers": [ ... ],              // required, 1..16
+  "condition": { ... },             // optional, defaults to {"kind":"literal","value":true}
+  "program": { ... },               // required
+  "execution": { ... }              // optional, defaults to {"mode":"queued","max_actions":16}
+}
+
+Trigger kinds (each has "id"):
+- {"kind":"report","id":"t1","device":DEVICE_REF}                            // fires on every device report pulse
+- {"kind":"state_change","id":"t1","device":DEVICE_REF,"mode":"transition"}  // "transition" (default) or "level"
+- {"kind":"predicate_transition","id":"t1","predicate":CONDITION}            // fires when CONDITION turns true
+- {"kind":"predicate_for","id":"t1","predicate":CONDITION,"duration_ms":300000}
+- {"kind":"schedule","id":"t1","schedule":{"cron":"0 0 7 * * *","timezone":"Europe/Helsinki"}}
+- {"kind":"timer_fired","id":"t1","timer":"TIMER_ID"}
+- {"kind":"startup","id":"t1"}                                               // server start seeding
+- {"kind":"manual","id":"t1"}                                                // only explicit invocation
+
+Condition kinds:
+- {"kind":"literal","value":true}
+- {"kind":"all","conditions":[CONDITION, ...]}
+- {"kind":"any","conditions":[CONDITION, ...]}
+- {"kind":"not","condition":CONDITION}
+- {"kind":"comparison","source":SOURCE,"operator":"eq","value":true}
+  operators: eq, ne, gt, gte, lt, lte, contains, starts_with, exists, truthy, regex
+- {"kind":"group","group_id":"GROUP_ID","quantifier":"any","power":true}
+  quantifiers: all, any, none, partial; optionally add "scene":"SCENE_ID"
+
+Value sources:
+- {"kind":"device","device":DEVICE_REF,"path":"/value"}   // sensor value
+- {"kind":"device","device":DEVICE_REF,"path":"/power"}   // controllable intent
+- {"kind":"helper","helper":"HELPER_ID"}
+- {"kind":"computed_source","source":"SOURCE_ID","path":"/value"}
+
+Native steps (each has "id"; program is {"kind":"native","steps":[...]}):
+- {"action":"activate_scene","id":"a1","scene_id":"SCENE_ID","targets":TARGETS,"transition_ms":500}
+- {"action":"cycle_scenes","id":"a1","scenes":[{"scene_id":"SCENE_ID"}],"nowrap":false}
+- {"action":"set_power","id":"a1","device":DEVICE_REF,"power":true}
+- {"action":"dim","id":"a1","targets":TARGETS,"step":-1.0}                    // step in -1.0..1.0
+- {"action":"randomize_color","id":"a1","targets":TARGETS,"transition_ms":250}
+- {"action":"choose","id":"a1","branches":[{"id":"b1","condition":CONDITION,"steps":[ ... ]}]}
+- {"action":"schedule_timer","id":"a1","timer":"TIMER_ID","delay_ms":300000}
+- {"action":"replace_timer","id":"a1","timer":"TIMER_ID","delay_ms":300000}
+- {"action":"cancel_timer","id":"a1","timer":"TIMER_ID"}
+- {"action":"set_helper","id":"a1","helper":"HELPER_ID","value":true}
+- {"action":"invoke_routine","id":"a1","routine_id":"ROUTINE_ID","mode":"fire_and_forget"}
+
+TARGETS: {"devices":[DEVICE_REF, ...],"groups":["GROUP_ID", ...]}
+DEVICE_REF: {"integration_id":"...","device_id":"..."}  // copy verbatim from the catalog
+
+Script programs (last resort): {"kind":"script","spec":{"api_version":1,"source_body":"return [ ... ]","declarations":[{"kind":"device","device":DEVICE_REF}]}}"#;
+
 fn system_prompt(catalog_json: &str) -> String {
     format!(
         r#"You are the homectl routine drafting assistant. You translate a plain-language request into one homectl v2 routine definition.
@@ -881,57 +995,7 @@ Rules:
 - Schedules use six-field cron: "second minute hour day-of-month month day-of-week" and should include the timezone from the catalog.
 - Conditions are three-valued; prefer explicit comparisons over implicit truthiness.
 
-RoutineDefinitionV2 shape:
-{{
-  "triggers": [ ... ],              // required, 1..16
-  "condition": {{ ... }},             // optional, defaults to {{"kind":"literal","value":true}}
-  "program": {{ ... }},               // required
-  "execution": {{ ... }}              // optional, defaults to {{"mode":"queued","max_actions":16}}
-}}
-
-Trigger kinds (each has "id"):
-- {{"kind":"report","id":"t1","device":DEVICE_REF}}                            // fires on every device report pulse
-- {{"kind":"state_change","id":"t1","device":DEVICE_REF,"mode":"transition"}}  // "transition" (default) or "level"
-- {{"kind":"predicate_transition","id":"t1","predicate":CONDITION}}            // fires when CONDITION turns true
-- {{"kind":"predicate_for","id":"t1","predicate":CONDITION,"duration_ms":300000}}
-- {{"kind":"schedule","id":"t1","schedule":{{"cron":"0 0 7 * * *","timezone":"Europe/Helsinki"}}}}
-- {{"kind":"timer_fired","id":"t1","timer":"TIMER_ID"}}
-- {{"kind":"startup","id":"t1"}}                                               // server start seeding
-- {{"kind":"manual","id":"t1"}}                                                // only explicit invocation
-
-Condition kinds:
-- {{"kind":"literal","value":true}}
-- {{"kind":"all","conditions":[CONDITION, ...]}}
-- {{"kind":"any","conditions":[CONDITION, ...]}}
-- {{"kind":"not","condition":CONDITION}}
-- {{"kind":"comparison","source":SOURCE,"operator":"eq","value":true}}
-  operators: eq, ne, gt, gte, lt, lte, contains, starts_with, exists, truthy, regex
-- {{"kind":"group","group_id":"GROUP_ID","quantifier":"any","power":true}}
-  quantifiers: all, any, none, partial; optionally add "scene":"SCENE_ID"
-
-Value sources:
-- {{"kind":"device","device":DEVICE_REF,"path":"/value"}}   // sensor value
-- {{"kind":"device","device":DEVICE_REF,"path":"/power"}}   // controllable intent
-- {{"kind":"helper","helper":"HELPER_ID"}}
-- {{"kind":"computed_source","source":"SOURCE_ID","path":"/value"}}
-
-Native steps (each has "id"; program is {{"kind":"native","steps":[...]}}):
-- {{"action":"activate_scene","id":"a1","scene_id":"SCENE_ID","targets":TARGETS,"transition_ms":500}}
-- {{"action":"cycle_scenes","id":"a1","scenes":[{{"scene_id":"SCENE_ID"}}],"nowrap":false}}
-- {{"action":"set_power","id":"a1","device":DEVICE_REF,"power":true}}
-- {{"action":"dim","id":"a1","targets":TARGETS,"step":-1.0}}                    // step in -1.0..1.0
-- {{"action":"randomize_color","id":"a1","targets":TARGETS,"transition_ms":250}}
-- {{"action":"choose","id":"a1","branches":[{{"id":"b1","condition":CONDITION,"steps":[ ... ]}}]}}
-- {{"action":"schedule_timer","id":"a1","timer":"TIMER_ID","delay_ms":300000}}
-- {{"action":"replace_timer","id":"a1","timer":"TIMER_ID","delay_ms":300000}}
-- {{"action":"cancel_timer","id":"a1","timer":"TIMER_ID"}}
-- {{"action":"set_helper","id":"a1","helper":"HELPER_ID","value":true}}
-- {{"action":"invoke_routine","id":"a1","routine_id":"ROUTINE_ID","mode":"fire_and_forget"}}
-
-TARGETS: {{"devices":[DEVICE_REF, ...],"groups":["GROUP_ID", ...]}}
-DEVICE_REF: {{"integration_id":"...","device_id":"..."}}  // copy verbatim from the catalog
-
-Script programs (last resort): {{"kind":"script","spec":{{"api_version":1,"source_body":"return [ ... ]","declarations":[{{"kind":"device","device":DEVICE_REF}}]}}}}
+{ROUTINE_DEFINITION_REFERENCE}
 
 CATALOG:
 {catalog_json}"#
@@ -1205,6 +1269,1197 @@ async fn apply_assistant_action(
         "applied_count": applied_count,
         "model": config.model,
     })))
+}
+
+// ============================================================================
+// Plan store
+// ============================================================================
+
+/// In-memory TTL store for assistant plans. Plans are ephemeral review
+/// artifacts: they are never persisted, and expired entries are swept whenever
+/// the store is touched. When the cap is exceeded the plan closest to expiry
+/// is dropped so an active review survives.
+struct PlanStore {
+    ttl: Duration,
+    capacity: usize,
+    plans: StdMutex<HashMap<String, AssistantPlan>>,
+}
+
+impl PlanStore {
+    fn new(ttl: Duration, capacity: usize) -> Self {
+        Self {
+            ttl,
+            capacity,
+            plans: StdMutex::new(HashMap::new()),
+        }
+    }
+
+    /// `HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides the sweep TTL. It exists for
+    /// operational tuning and for integration tests that must observe expiry.
+    fn from_env() -> Self {
+        let ttl_ms = env_string("HOMECTL_ASSISTANT_PLAN_TTL_MS")
+            .and_then(|value| value.parse::<u64>().ok())
+            .filter(|value| *value > 0)
+            .unwrap_or(DEFAULT_PLAN_TTL_MS);
+        Self::new(Duration::from_millis(ttl_ms), MAX_STORED_PLANS)
+    }
+
+    fn ttl_ms(&self) -> i64 {
+        self.ttl.as_millis() as i64
+    }
+
+    fn insert(&self, plan: AssistantPlan) {
+        let now = now_ms();
+        let mut plans = self.plans.lock().expect("plan store lock");
+        plans.retain(|_, stored| stored.expires_at_ms > now);
+        plans.insert(plan.plan_id.clone(), plan);
+        while plans.len() > self.capacity {
+            let Some(oldest) = plans
+                .values()
+                .min_by_key(|stored| stored.expires_at_ms)
+                .map(|stored| stored.plan_id.clone())
+            else {
+                break;
+            };
+            plans.remove(&oldest);
+        }
+    }
+
+    fn get(&self, plan_id: &str) -> Option<AssistantPlan> {
+        let now = now_ms();
+        let mut plans = self.plans.lock().expect("plan store lock");
+        plans.retain(|_, stored| stored.expires_at_ms > now);
+        plans.get(plan_id).cloned()
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.plans.lock().expect("plan store lock").len()
+    }
+}
+
+fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+// ============================================================================
+// Deterministic entity search
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AssistantSearchQuery {
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    q: Option<String>,
+}
+
+async fn search_assistant_entities(
+    query: AssistantSearchQuery,
+    snapshot: SnapshotHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    let snapshot = snapshot.load();
+    let kind = match query
+        .kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|kind| !kind.is_empty())
+    {
+        Some(raw) => match parse_entity_kind(raw) {
+            Some(kind) if kind.is_supported() => Some(kind),
+            Some(kind) => {
+                return Ok(error_response(
+                    &format!("kind '{}' is not supported yet", kind.code()),
+                    StatusCode::BAD_REQUEST,
+                ))
+            }
+            None => {
+                return Ok(error_response(
+                    &format!("unknown kind '{raw}'"),
+                    StatusCode::BAD_REQUEST,
+                ))
+            }
+        },
+        None => None,
+    };
+
+    let query_text = query.q.unwrap_or_default();
+    let results = match kind {
+        Some(kind) => search_snapshot(&snapshot, kind, query_text.trim(), MAX_SEARCH_RESULTS),
+        None => search_all_kinds(&snapshot, query_text.trim(), MAX_SEARCH_RESULTS),
+    };
+    Ok(ApiResponse::success(results))
+}
+
+fn parse_entity_kind(raw: &str) -> Option<AssistantEntityKind> {
+    serde_json::from_value::<AssistantEntityKind>(Value::String(raw.to_lowercase())).ok()
+}
+
+fn kind_entities(
+    snapshot: &RuntimeSnapshot,
+    kind: AssistantEntityKind,
+) -> Vec<(String, String, String)> {
+    match kind {
+        AssistantEntityKind::Routine => snapshot
+            .runtime_config
+            .routines
+            .iter()
+            .map(|routine| {
+                let version = if routine.definition_v2.is_some() {
+                    "v2"
+                } else {
+                    "v1"
+                };
+                let state = if routine.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                };
+                (
+                    routine.id.clone(),
+                    routine.name.clone(),
+                    format!("{version} routine · {state}"),
+                )
+            })
+            .collect(),
+        AssistantEntityKind::Scene => snapshot
+            .runtime_config
+            .scenes
+            .iter()
+            .map(|scene| {
+                (
+                    scene.id.clone(),
+                    scene.name.clone(),
+                    format!(
+                        "scene · {} target(s)",
+                        scene.device_states.len() + scene.group_states.len()
+                    ),
+                )
+            })
+            .collect(),
+        AssistantEntityKind::Group => snapshot
+            .runtime_config
+            .groups
+            .iter()
+            .map(|group| {
+                (
+                    group.id.clone(),
+                    group.name.clone(),
+                    format!("group · {} device(s)", group.devices.len()),
+                )
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Exact match ranks above prefix, which ranks above substring.
+fn match_rank(haystack: &str, needle: &str) -> Option<u8> {
+    let haystack = haystack.to_lowercase();
+    let needle = needle.to_lowercase();
+    if needle.is_empty() {
+        return Some(2);
+    }
+    if haystack == needle {
+        Some(0)
+    } else if haystack.starts_with(&needle) {
+        Some(1)
+    } else if haystack.contains(&needle) {
+        Some(2)
+    } else {
+        None
+    }
+}
+
+fn entity_rank(id: &str, label: &str, needle: &str) -> Option<u8> {
+    [id, label]
+        .iter()
+        .filter_map(|value| match_rank(value, needle))
+        .min()
+}
+
+fn sort_ranked(ranked: &mut [(u8, AssistantSearchResult)]) {
+    ranked.sort_by(|left, right| {
+        left.0
+            .cmp(&right.0)
+            .then(left.1.kind.code().cmp(right.1.kind.code()))
+            .then(left.1.id.cmp(&right.1.id))
+    });
+}
+
+fn rank_entities(
+    snapshot: &RuntimeSnapshot,
+    kinds: &[AssistantEntityKind],
+    needle: &str,
+) -> Vec<(u8, AssistantSearchResult)> {
+    let mut ranked = Vec::new();
+    for kind in kinds {
+        for (id, label, summary) in kind_entities(snapshot, *kind) {
+            let Some(rank) = entity_rank(&id, &label, needle) else {
+                continue;
+            };
+            ranked.push((
+                rank,
+                AssistantSearchResult {
+                    kind: *kind,
+                    id,
+                    label,
+                    summary,
+                },
+            ));
+        }
+    }
+    sort_ranked(&mut ranked);
+    ranked
+}
+
+fn search_snapshot(
+    snapshot: &RuntimeSnapshot,
+    kind: AssistantEntityKind,
+    query: &str,
+    cap: usize,
+) -> Vec<AssistantSearchResult> {
+    rank_entities(snapshot, &[kind], query)
+        .into_iter()
+        .take(cap)
+        .map(|(_, result)| result)
+        .collect()
+}
+
+fn search_all_kinds(
+    snapshot: &RuntimeSnapshot,
+    query: &str,
+    cap: usize,
+) -> Vec<AssistantSearchResult> {
+    rank_entities(snapshot, &AssistantEntityKind::searchable(), query)
+        .into_iter()
+        .take(cap)
+        .map(|(_, result)| result)
+        .collect()
+}
+
+fn prompt_tokens(prompt: &str) -> Vec<String> {
+    let mut tokens: Vec<String> = prompt
+        .split(|character: char| {
+            !character.is_alphanumeric() && character != '_' && character != '-'
+        })
+        .map(|token| token.trim().to_lowercase())
+        .filter(|token| token.chars().count() >= 2)
+        .collect();
+    tokens.sort();
+    tokens.dedup();
+    tokens
+}
+
+/// Deterministic prompt search used to build unattached context: tokenize the
+/// prompt, rank every entity by its best token match, keep the top matches.
+fn search_prompt(snapshot: &RuntimeSnapshot, prompt: &str) -> Vec<AssistantSearchResult> {
+    use std::collections::hash_map::Entry;
+
+    let tokens = prompt_tokens(prompt);
+    if tokens.is_empty() {
+        return Vec::new();
+    }
+
+    let mut best: HashMap<(String, String), (u8, AssistantSearchResult)> = HashMap::new();
+    for token in &tokens {
+        for (rank, result) in rank_entities(snapshot, &AssistantEntityKind::searchable(), token) {
+            let key = (result.kind.code().to_string(), result.id.clone());
+            match best.entry(key) {
+                Entry::Occupied(mut entry) => {
+                    if rank < entry.get().0 {
+                        entry.insert((rank, result));
+                    }
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert((rank, result));
+                }
+            }
+        }
+    }
+
+    let mut ranked: Vec<(u8, AssistantSearchResult)> = best.into_values().collect();
+    sort_ranked(&mut ranked);
+    ranked.truncate(MAX_SEARCH_RESULTS);
+    ranked.into_iter().map(|(_, result)| result).collect()
+}
+
+// ============================================================================
+// Plan endpoint
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct ProviderPlan {
+    #[serde(default)]
+    summary: Option<String>,
+    #[serde(default)]
+    operations: Vec<ProviderOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ProviderOperation {
+    op: AssistantOpKind,
+    kind: AssistantEntityKind,
+    #[serde(default, alias = "targetId")]
+    target_id: Option<String>,
+    #[serde(default)]
+    label: Option<String>,
+    #[serde(default)]
+    after: Option<Value>,
+    #[serde(default)]
+    warnings: Vec<String>,
+}
+
+fn parse_plan_envelope(content: &str) -> Result<ProviderPlan, String> {
+    let value = extract_json_object(content)
+        .ok_or_else(|| "Assistant response did not contain a JSON object".to_string())?;
+    serde_json::from_value(value)
+        .map_err(|error| format!("Assistant plan did not match the contract: {error}"))
+}
+
+async fn plan_assistant_operations(
+    request: AssistantPlanRequest,
+    snapshot: SnapshotHandle,
+    plans: Arc<PlanStore>,
+) -> Result<impl Reply, warp::Rejection> {
+    let prompt = request.prompt.trim();
+    if prompt.is_empty() {
+        return Ok(error_response(
+            "prompt is required",
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+    if prompt.chars().count() > MAX_PROMPT_CHARS {
+        return Ok(error_response(
+            &format!("prompt must be at most {MAX_PROMPT_CHARS} characters"),
+            StatusCode::BAD_REQUEST,
+        ));
+    }
+
+    let snapshot = snapshot.load();
+    let Some(config) = AssistantConfig::from_settings(&snapshot.runtime_config.widget_settings)
+    else {
+        return Ok(error_response(
+            "Assistant is not configured. Set the provider base URL and model in Settings.",
+            StatusCode::SERVICE_UNAVAILABLE,
+        ));
+    };
+
+    let context = match build_plan_context(&snapshot, &request.attachments, prompt) {
+        Ok(context) => context,
+        Err(error) => return Ok(error_response(&error, StatusCode::UNPROCESSABLE_ENTITY)),
+    };
+    let context_json = serde_json::to_string(&context).unwrap_or_else(|_| "{}".to_string());
+    let catalog = catalog_from_snapshot_export(&snapshot);
+
+    let messages = vec![
+        json!({ "role": "system", "content": plan_system_prompt(&context_json) }),
+        json!({ "role": "user", "content": prompt }),
+    ];
+    let mut options = ChatOptions {
+        json_mode: true,
+        reasoning_effort: config.reasoning_effort.is_some(),
+    };
+    let session_id = new_session_id();
+
+    let content = match chat(&config, &messages, &mut options, &session_id).await {
+        Ok(content) => content,
+        Err(error) => return Ok(provider_error_response(error)),
+    };
+    let provider = match parse_plan_envelope(&content) {
+        Ok(provider) => provider,
+        Err(error) => return Ok(error_response(&error, StatusCode::UNPROCESSABLE_ENTITY)),
+    };
+    if provider.operations.len() > MAX_PLAN_OPERATIONS {
+        return Ok(error_response(
+            &format!("Assistant returned more than {MAX_PLAN_OPERATIONS} operations"),
+            StatusCode::UNPROCESSABLE_ENTITY,
+        ));
+    }
+
+    let (summary, operations) = match validate_plan_operations(&snapshot, catalog, provider) {
+        Ok(validated) => validated,
+        Err(error) => return Ok(error_response(&error, StatusCode::UNPROCESSABLE_ENTITY)),
+    };
+
+    let now = now_ms();
+    let plan = AssistantPlan {
+        plan_id: format!("plan-{}", new_session_id()),
+        summary,
+        operations,
+        created_at_ms: now,
+        expires_at_ms: now + plans.ttl_ms(),
+    };
+    plans.insert(plan.clone());
+    Ok(ApiResponse::success(plan))
+}
+
+async fn get_assistant_plan(
+    plan_id: String,
+    plans: Arc<PlanStore>,
+) -> Result<impl Reply, warp::Rejection> {
+    match plans.get(&plan_id) {
+        Some(plan) => Ok(ApiResponse::success(plan)),
+        None => Ok(not_found("Assistant plan")),
+    }
+}
+
+/// Context for the plan prompt: attachment snapshots, deterministic prompt
+/// matches, and the device catalog that scene/group/routine bodies may
+/// reference.
+fn build_plan_context(
+    snapshot: &RuntimeSnapshot,
+    attachments: &[AssistantAttachment],
+    prompt: &str,
+) -> Result<Value, String> {
+    let mut attached = Vec::new();
+    for attachment in attachments {
+        if !attachment.kind.is_supported() {
+            return Err(format!(
+                "attachments for kind '{}' are not supported yet",
+                attachment.kind.code()
+            ));
+        }
+        match attachment
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+        {
+            Some(id) => {
+                let entity = entity_snapshot(snapshot, attachment.kind, id).ok_or_else(|| {
+                    format!("attached {} '{id}' was not found", attachment.kind.code())
+                })?;
+                attached.push(json!({
+                    "kind": attachment.kind.code(),
+                    "id": id,
+                    "label": attachment.label,
+                    "snapshot": entity,
+                }));
+            }
+            None => attached.push(json!({
+                "kind": attachment.kind.code(),
+                "label": attachment.label,
+            })),
+        }
+    }
+
+    Ok(json!({
+        "attachments": attached,
+        "matches": search_prompt(snapshot, prompt),
+        "devices": build_context_devices(snapshot),
+        "supported_kinds": AssistantEntityKind::searchable()
+            .iter()
+            .map(|kind| kind.code())
+            .collect::<Vec<_>>(),
+    }))
+}
+
+fn build_context_devices(snapshot: &RuntimeSnapshot) -> Vec<Value> {
+    snapshot
+        .devices
+        .0
+        .iter()
+        .take(MAX_CONTEXT_DEVICES)
+        .map(|(key, device)| match &device.data {
+            DeviceData::Sensor(_) => json!({
+                "device_key": key.to_string(),
+                "name": device.name,
+                "kind": "sensor",
+            }),
+            DeviceData::Controllable(data) => json!({
+                "device_key": key.to_string(),
+                "name": device.name,
+                "kind": "controllable",
+                "capabilities": {
+                    "brightness": data.capabilities.brightness,
+                    "color": data.capabilities.hs
+                        || data.capabilities.rgb
+                        || data.capabilities.xy
+                        || data.capabilities.ct.is_some(),
+                },
+            }),
+        })
+        .collect()
+}
+
+/// Full, browser-safe snapshot of one entity. Phase 1 kinds carry no secrets,
+/// so masking is a pass-through; secret-bearing kinds (integrations) plug
+/// their redaction in here.
+fn entity_snapshot(
+    snapshot: &RuntimeSnapshot,
+    kind: AssistantEntityKind,
+    id: &str,
+) -> Option<Value> {
+    let value = match kind {
+        AssistantEntityKind::Routine => snapshot
+            .runtime_config
+            .routines
+            .iter()
+            .find(|routine| routine.id == id)
+            .and_then(|routine| serde_json::to_value(routine).ok())?,
+        AssistantEntityKind::Scene => snapshot
+            .runtime_config
+            .scenes
+            .iter()
+            .find(|scene| scene.id == id)
+            .and_then(|scene| serde_json::to_value(scene).ok())?,
+        AssistantEntityKind::Group => snapshot
+            .runtime_config
+            .groups
+            .iter()
+            .find(|group| group.id == id)
+            .and_then(|group| serde_json::to_value(group).ok())?,
+        _ => return None,
+    };
+    Some(mask_entity_snapshot(kind, value))
+}
+
+fn mask_entity_snapshot(_kind: AssistantEntityKind, value: Value) -> Value {
+    value
+}
+
+fn plan_system_prompt(context_json: &str) -> String {
+    format!(
+        r#"You are the homectl configuration assistant. You translate a plain-language request into a reviewed plan of configuration operations across routines, scenes, and groups. Nothing is written until the user accepts the plan.
+
+Respond with a single JSON object and nothing else:
+{{"summary": "<one or two sentences for review>", "operations": [{{"op": "create|update|delete", "kind": "routine|scene|group", "target_id": "<existing id; update/delete only>", "label": "<short review label>", "after": <final entity state>, "warnings": ["<optional warning>"]}}]}}
+
+Rules:
+- Only reference entities that appear in CONTEXT. Never invent ids. Unknown target ids are rejected.
+- create requires "after" with a new unique "id"; it must not include target_id.
+- update requires target_id plus an "after" patch; "after" is merged over the current entity, so include only the fields that change.
+- delete requires target_id and must not include "after".
+- Ids match [A-Za-z0-9_.-]{{1,64}}.
+- At most 40 operations. Prefer the smallest plan that fulfills the request.
+- Never include secrets or credentials.
+- Return only the JSON object, without markdown or code fences.
+
+Per-kind shapes:
+Group:
+{{"id": "<id>", "name": "<name>", "hidden": false, "devices": [{{"integration_id": "<id>", "device_id": "<id>"}}], "linked_groups": ["<group id>"]}}
+
+Scene:
+{{"id": "<id>", "name": "<name>", "hidden": false, "script": null, "device_states": {{"<integration_id>/<device_id>": {{"power": true, "brightness": 0.7, "color": {{"h": 320, "s": 0.8}}}}}}, "group_states": {{"<group id>": {{"power": true}}}}, "group_state_order": []}}
+- Device state fields are optional; set only what the scene should change.
+- A device_states value may instead be a scene link {{"scene_id": "<scene id>"}} or a device link.
+- Only set color when devices[].capabilities.color is true.
+
+Routine (v2 only):
+{{"id": "<id>", "name": "<name>", "enabled": false, "semantics_version": 2, "definition_v2": <RoutineDefinitionV2>}}
+- "enabled" defaults to false; set true when the user asked for an active automation.
+
+{ROUTINE_DEFINITION_REFERENCE}
+
+CONTEXT:
+{context_json}"#
+    )
+}
+
+// ============================================================================
+// Plan validation
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+struct RoutinePlanState {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    enabled: Option<bool>,
+    #[serde(default)]
+    semantics_version: Option<i32>,
+    #[serde(default)]
+    definition_v2: Option<Value>,
+    #[serde(default)]
+    rules: Option<Value>,
+    #[serde(default)]
+    actions: Option<Value>,
+}
+
+/// Tolerant scene body: omitted optional fields default, so a model can send
+/// only the fields the scene needs.
+#[derive(Debug, Deserialize)]
+struct ScenePlanState {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    hidden: Option<bool>,
+    #[serde(default)]
+    script: Option<String>,
+    #[serde(default)]
+    device_states: HashMap<String, Value>,
+    #[serde(default)]
+    group_states: HashMap<String, Value>,
+    #[serde(default)]
+    group_state_order: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GroupPlanState {
+    #[serde(default)]
+    id: Option<String>,
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    hidden: Option<bool>,
+    #[serde(default)]
+    devices: Vec<config_queries::GroupDeviceRow>,
+    #[serde(default)]
+    linked_groups: Vec<String>,
+}
+
+/// Validates provider operations against the live snapshot and normalizes
+/// their state into reviewable `before`/`after` bodies.
+struct PlanValidation<'a> {
+    snapshot: &'a RuntimeSnapshot,
+    catalog: ConfigCatalog,
+    device_keys: HashSet<String>,
+    group_ids: HashSet<String>,
+    scene_ids: HashSet<String>,
+}
+
+impl<'a> PlanValidation<'a> {
+    fn new(snapshot: &'a RuntimeSnapshot, catalog: ConfigCatalog) -> Self {
+        Self {
+            device_keys: snapshot
+                .devices
+                .0
+                .keys()
+                .map(DeviceKey::to_string)
+                .collect(),
+            group_ids: snapshot
+                .runtime_config
+                .groups
+                .iter()
+                .map(|group| group.id.clone())
+                .collect(),
+            scene_ids: snapshot
+                .runtime_config
+                .scenes
+                .iter()
+                .map(|scene| scene.id.clone())
+                .collect(),
+            snapshot,
+            catalog,
+        }
+    }
+
+    fn entity_snapshot(&self, kind: AssistantEntityKind, id: &str) -> Option<Value> {
+        entity_snapshot(self.snapshot, kind, id)
+    }
+
+    fn build_operation(
+        &self,
+        index: usize,
+        operation: ProviderOperation,
+    ) -> Result<AssistantOperation, String> {
+        let op_id = format!("op-{}", index + 1);
+        let mut warnings: Vec<String> = operation
+            .warnings
+            .into_iter()
+            .map(|warning| warning.trim().to_string())
+            .filter(|warning| !warning.is_empty())
+            .collect();
+
+        let (target_id, before, after) = match operation.op {
+            AssistantOpKind::Create => {
+                if operation.target_id.is_some() {
+                    return Err(format!(
+                        "{op_id}: create operations must not include targetId"
+                    ));
+                }
+                let body = operation
+                    .after
+                    .ok_or_else(|| format!("{op_id}: create requires an 'after' body"))?;
+                let after =
+                    self.validate_entity(operation.kind, None, body, &op_id, &mut warnings)?;
+                let id = operation_entity_id(&after)
+                    .ok_or_else(|| format!("{op_id}: 'after' must include an id"))?;
+                if self.entity_snapshot(operation.kind, &id).is_some() {
+                    return Err(format!(
+                        "{op_id}: {} '{id}' already exists",
+                        operation.kind.code()
+                    ));
+                }
+                (None, None, Some(after))
+            }
+            AssistantOpKind::Update => {
+                let target_id =
+                    required_target(operation.target_id, operation.op, operation.kind, &op_id)?;
+                let before = self
+                    .entity_snapshot(operation.kind, &target_id)
+                    .ok_or_else(|| {
+                        format!(
+                            "{op_id}: unknown {} target '{target_id}'",
+                            operation.kind.code()
+                        )
+                    })?;
+                let patch = operation
+                    .after
+                    .ok_or_else(|| format!("{op_id}: update requires an 'after' body"))?;
+                let merged = merge_object(&before, &patch);
+                let after = self.validate_entity(
+                    operation.kind,
+                    Some(&target_id),
+                    merged,
+                    &op_id,
+                    &mut warnings,
+                )?;
+                (Some(target_id), Some(before), Some(after))
+            }
+            AssistantOpKind::Delete => {
+                let target_id =
+                    required_target(operation.target_id, operation.op, operation.kind, &op_id)?;
+                if operation.after.is_some() {
+                    return Err(format!("{op_id}: delete must not include an 'after' body"));
+                }
+                let before = self
+                    .entity_snapshot(operation.kind, &target_id)
+                    .ok_or_else(|| {
+                        format!(
+                            "{op_id}: unknown {} target '{target_id}'",
+                            operation.kind.code()
+                        )
+                    })?;
+                warnings.push(format!(
+                    "Deleting {} '{target_id}' is permanent.",
+                    operation.kind.code()
+                ));
+                warnings.extend(self.reference_warnings(operation.kind, &target_id));
+                (Some(target_id), Some(before), None)
+            }
+        };
+
+        let label = operation
+            .label
+            .map(|label| label.trim().to_string())
+            .filter(|label| !label.is_empty())
+            .unwrap_or_else(|| {
+                default_operation_label(
+                    operation.op,
+                    operation.kind,
+                    target_id.as_deref(),
+                    after.as_ref(),
+                    before.as_ref(),
+                )
+            });
+
+        Ok(AssistantOperation {
+            op_id,
+            op: operation.op,
+            kind: operation.kind,
+            target_id,
+            label,
+            before,
+            after,
+            warnings,
+        })
+    }
+
+    fn validate_entity(
+        &self,
+        kind: AssistantEntityKind,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+        warnings: &mut Vec<String>,
+    ) -> Result<Value, String> {
+        match kind {
+            AssistantEntityKind::Routine => self.validate_routine(target_id, body, op_id, warnings),
+            AssistantEntityKind::Scene => self.validate_scene(target_id, body, op_id),
+            AssistantEntityKind::Group => self.validate_group(target_id, body, op_id),
+            other => Err(format!(
+                "{op_id}: kind '{}' is not supported yet",
+                other.code()
+            )),
+        }
+    }
+
+    fn validate_routine(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+        warnings: &mut Vec<String>,
+    ) -> Result<Value, String> {
+        let state: RoutinePlanState = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid routine body: {error}"))?;
+        let id = state
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| format!("{op_id}: routine body requires an id"))?;
+        validate_entity_id(id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: routine id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        let name = state
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| format!("{op_id}: routine body requires a name"))?;
+        if state.rules.is_some() || state.actions.is_some() {
+            return Err(format!(
+                "{op_id}: only v2 routines are supported; provide definition_v2"
+            ));
+        }
+        if state.semantics_version.is_some_and(|version| version != 2) {
+            return Err(format!("{op_id}: only v2 routines are supported"));
+        }
+        let definition = state
+            .definition_v2
+            .ok_or_else(|| format!("{op_id}: routine body requires definition_v2"))?;
+        automation::compile_definition_value(&definition, &self.catalog).map_err(|report| {
+            format!("{op_id}: invalid routine definition: {}", report.summary())
+        })?;
+        if let Some(warning) = program_warning(&definition) {
+            warnings.push(warning);
+        }
+
+        let row = RoutineRow {
+            id: id.to_string(),
+            name: name.to_string(),
+            enabled: state.enabled.unwrap_or(false),
+            semantics_version: 2,
+            revision: 1,
+            definition_v2: Some(definition),
+            rules: json!([]),
+            actions: json!([]),
+        };
+        serde_json::to_value(&row)
+            .map_err(|error| format!("{op_id}: routine body could not be normalized: {error}"))
+    }
+
+    fn validate_scene(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let state: ScenePlanState = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid scene body: {error}"))?;
+        let id = state
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| format!("{op_id}: scene body requires an id"))?;
+        validate_entity_id(id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: scene id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        let name = state
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| format!("{op_id}: scene body requires a name"))?;
+        for device_key in state.device_states.keys() {
+            if !self.device_keys.contains(device_key) {
+                return Err(format!(
+                    "{op_id}: scene references unknown device '{device_key}'"
+                ));
+            }
+        }
+        for group_id in state
+            .group_states
+            .keys()
+            .chain(state.group_state_order.iter())
+        {
+            if !self.group_ids.contains(group_id) {
+                return Err(format!(
+                    "{op_id}: scene references unknown group '{group_id}'"
+                ));
+            }
+        }
+        for (device_key, config_value) in &state.device_states {
+            let config: SceneDeviceConfig =
+                serde_json::from_value(config_value.clone()).map_err(|error| {
+                    format!("{op_id}: invalid state for device '{device_key}': {error}")
+                })?;
+            if let SceneDeviceConfig::SceneLink(link) = config {
+                if !self.scene_ids.contains(&link.scene_id.to_string()) {
+                    return Err(format!(
+                        "{op_id}: scene '{device_key}' links to unknown scene '{}'",
+                        link.scene_id
+                    ));
+                }
+            }
+        }
+
+        let scene = SceneRow {
+            id: id.to_string(),
+            name: name.to_string(),
+            hidden: state.hidden.unwrap_or(false),
+            script: state.script,
+            device_states: state.device_states,
+            group_states: state.group_states,
+            group_state_order: state.group_state_order,
+        };
+        serde_json::to_value(&scene)
+            .map_err(|error| format!("{op_id}: scene body could not be normalized: {error}"))
+    }
+
+    fn validate_group(
+        &self,
+        target_id: Option<&str>,
+        body: Value,
+        op_id: &str,
+    ) -> Result<Value, String> {
+        let state: GroupPlanState = serde_json::from_value(body)
+            .map_err(|error| format!("{op_id}: invalid group body: {error}"))?;
+        let id = state
+            .id
+            .as_deref()
+            .map(str::trim)
+            .filter(|id| !id.is_empty())
+            .ok_or_else(|| format!("{op_id}: group body requires an id"))?;
+        validate_entity_id(id).map_err(|error| format!("{op_id}: {error}"))?;
+        if let Some(target_id) = target_id {
+            if id != target_id {
+                return Err(format!(
+                    "{op_id}: group id '{id}' does not match targetId '{target_id}'"
+                ));
+            }
+        }
+        let name = state
+            .name
+            .as_deref()
+            .map(str::trim)
+            .filter(|name| !name.is_empty())
+            .ok_or_else(|| format!("{op_id}: group body requires a name"))?;
+        for device in &state.devices {
+            let device_key = format!("{}/{}", device.integration_id, device.device_id);
+            if !self.device_keys.contains(&device_key) {
+                return Err(format!(
+                    "{op_id}: group references unknown device '{device_key}'"
+                ));
+            }
+        }
+        for linked in &state.linked_groups {
+            if linked == id {
+                return Err(format!("{op_id}: group cannot link to itself"));
+            }
+            if !self.group_ids.contains(linked) {
+                return Err(format!("{op_id}: group links to unknown group '{linked}'"));
+            }
+        }
+
+        let group = GroupRow {
+            id: id.to_string(),
+            name: name.to_string(),
+            hidden: state.hidden.unwrap_or(false),
+            devices: state.devices,
+            linked_groups: state.linked_groups,
+        };
+        serde_json::to_value(&group)
+            .map_err(|error| format!("{op_id}: group body could not be normalized: {error}"))
+    }
+
+    /// Approximate, deterministic in-use warnings for deletes. References are
+    /// counted from scene/group rows and v2 routine definitions.
+    fn reference_warnings(&self, kind: AssistantEntityKind, id: &str) -> Vec<String> {
+        let count = match kind {
+            AssistantEntityKind::Group => {
+                let scenes = self
+                    .snapshot
+                    .runtime_config
+                    .scenes
+                    .iter()
+                    .filter(|scene| {
+                        scene.group_states.contains_key(id)
+                            || scene.group_state_order.iter().any(|group| group == id)
+                    })
+                    .count();
+                let groups = self
+                    .snapshot
+                    .runtime_config
+                    .groups
+                    .iter()
+                    .filter(|group| group.linked_groups.iter().any(|linked| linked == id))
+                    .count();
+                scenes + groups + self.routine_mentions(id)
+            }
+            AssistantEntityKind::Scene => {
+                let scenes = self
+                    .snapshot
+                    .runtime_config
+                    .scenes
+                    .iter()
+                    .filter(|scene| {
+                        scene
+                            .device_states
+                            .values()
+                            .any(|value| scene_link_id(value).as_deref() == Some(id))
+                    })
+                    .count();
+                scenes + self.routine_mentions(id)
+            }
+            AssistantEntityKind::Routine => self.routine_mentions(id),
+            _ => 0,
+        };
+        if count == 0 {
+            Vec::new()
+        } else {
+            vec![format!(
+                "{count} other configuration(s) still reference this {}; they will treat it as missing.",
+                kind.code()
+            )]
+        }
+    }
+
+    fn routine_mentions(&self, id: &str) -> usize {
+        self.snapshot
+            .runtime_config
+            .routines
+            .iter()
+            .filter(|routine| routine.id != id)
+            .filter(|routine| {
+                routine
+                    .definition_v2
+                    .as_ref()
+                    .is_some_and(|definition| json_mentions(definition, id))
+            })
+            .count()
+    }
+}
+
+fn validate_plan_operations(
+    snapshot: &RuntimeSnapshot,
+    catalog: ConfigCatalog,
+    provider: ProviderPlan,
+) -> Result<(String, Vec<AssistantOperation>), String> {
+    let summary = provider
+        .summary
+        .map(|summary| summary.trim().to_string())
+        .filter(|summary| !summary.is_empty());
+    let validation = PlanValidation::new(snapshot, catalog);
+
+    let mut operations = Vec::with_capacity(provider.operations.len());
+    for (index, operation) in provider.operations.into_iter().enumerate() {
+        operations.push(validation.build_operation(index, operation)?);
+    }
+
+    let summary = summary
+        .unwrap_or_else(|| format!("{} proposed configuration operation(s)", operations.len()));
+    Ok((summary, operations))
+}
+
+fn required_target(
+    target_id: Option<String>,
+    op: AssistantOpKind,
+    kind: AssistantEntityKind,
+    op_id: &str,
+) -> Result<String, String> {
+    target_id
+        .map(|target_id| target_id.trim().to_string())
+        .filter(|target_id| !target_id.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "{op_id}: {} operations on {} require targetId",
+                match op {
+                    AssistantOpKind::Create => "create",
+                    AssistantOpKind::Update => "update",
+                    AssistantOpKind::Delete => "delete",
+                },
+                kind.code()
+            )
+        })
+}
+
+fn validate_entity_id(id: &str) -> Result<(), String> {
+    let valid = !id.is_empty()
+        && id.chars().count() <= MAX_ENTITY_ID_CHARS
+        && id.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '_' | '-' | '.')
+        });
+    if valid {
+        Ok(())
+    } else {
+        Err(format!(
+            "id '{id}' must be 1..{MAX_ENTITY_ID_CHARS} characters of [A-Za-z0-9_.-]"
+        ))
+    }
+}
+
+fn operation_entity_id(value: &Value) -> Option<String> {
+    value
+        .get("id")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+}
+
+fn merge_object(base: &Value, patch: &Value) -> Value {
+    match (base, patch) {
+        (Value::Object(base), Value::Object(patch)) => {
+            let mut merged = base.clone();
+            for (key, value) in patch {
+                merged.insert(key.clone(), value.clone());
+            }
+            Value::Object(merged)
+        }
+        _ => patch.clone(),
+    }
+}
+
+fn default_operation_label(
+    op: AssistantOpKind,
+    kind: AssistantEntityKind,
+    target_id: Option<&str>,
+    after: Option<&Value>,
+    before: Option<&Value>,
+) -> String {
+    let name = after
+        .and_then(|value| value.get("name"))
+        .and_then(Value::as_str)
+        .or_else(|| {
+            before
+                .and_then(|value| value.get("name"))
+                .and_then(Value::as_str)
+        })
+        .or(target_id)
+        .unwrap_or_else(|| kind.code());
+    let verb = match op {
+        AssistantOpKind::Create => "Create",
+        AssistantOpKind::Update => "Update",
+        AssistantOpKind::Delete => "Delete",
+    };
+    format!("{verb} {} '{name}'", kind.code())
+}
+
+fn scene_link_id(value: &Value) -> Option<String> {
+    let config: SceneDeviceConfig = serde_json::from_value(value.clone()).ok()?;
+    match config {
+        SceneDeviceConfig::SceneLink(link) => Some(link.scene_id.to_string()),
+        _ => None,
+    }
+}
+
+fn json_mentions(value: &Value, needle: &str) -> bool {
+    match value {
+        Value::String(text) => text == needle,
+        Value::Array(items) => items.iter().any(|item| json_mentions(item, needle)),
+        Value::Object(map) => map.values().any(|item| json_mentions(item, needle)),
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -1631,5 +2886,464 @@ mod tests {
         )
         .unwrap_err();
         assert!(error.contains("timeoutMs"));
+    }
+
+    // ========================================================================
+    // Assistant plan tests
+    // ========================================================================
+
+    fn snapshot_with_config(export: ConfigExport) -> RuntimeSnapshot {
+        snapshot_with_config_and_devices(export, Vec::new())
+    }
+
+    fn snapshot_with_config_and_devices(
+        export: ConfigExport,
+        devices: Vec<Device>,
+    ) -> RuntimeSnapshot {
+        RuntimeSnapshot {
+            runtime_config: Arc::new(export),
+            devices: Arc::new(DevicesState(
+                devices
+                    .into_iter()
+                    .map(|device| (device.get_device_key(), device))
+                    .collect(),
+            )),
+            flattened_groups: Default::default(),
+            flattened_scenes: Default::default(),
+            routine_statuses: Default::default(),
+            helper_statuses: Default::default(),
+            timers: Default::default(),
+            ui_state: Default::default(),
+            warming_up: false,
+        }
+    }
+
+    fn group_row(id: &str, name: &str) -> GroupRow {
+        GroupRow {
+            id: id.to_string(),
+            name: name.to_string(),
+            hidden: false,
+            devices: Vec::new(),
+            linked_groups: Vec::new(),
+        }
+    }
+
+    fn search_export() -> ConfigExport {
+        let mut export = empty_export();
+        export.groups = vec![
+            group_row("kitchen", "Kitchen"),
+            group_row("kitchen_lights", "Kitchen Lights"),
+            group_row("living_room", "Living Room"),
+            group_row("living_room_spots", "Living Room Spots"),
+        ];
+        export
+    }
+
+    #[test]
+    fn search_ranks_exact_above_prefix_and_substring() {
+        let snapshot = snapshot_with_config(search_export());
+        let results = search_snapshot(&snapshot, AssistantEntityKind::Group, "kitchen", 30);
+        let ids: Vec<&str> = results.iter().map(|result| result.id.as_str()).collect();
+        assert_eq!(ids, vec!["kitchen", "kitchen_lights"]);
+        assert_eq!(results[0].label, "Kitchen");
+        assert_eq!(results[0].kind, AssistantEntityKind::Group);
+
+        // Case-insensitive substring: "room" only hits rank 2, sorted by id.
+        let results = search_snapshot(&snapshot, AssistantEntityKind::Group, "ROOM", 30);
+        let ids: Vec<&str> = results.iter().map(|result| result.id.as_str()).collect();
+        assert_eq!(ids, vec!["living_room", "living_room_spots"]);
+    }
+
+    #[test]
+    fn search_ignores_entities_without_a_match() {
+        let snapshot = snapshot_with_config(search_export());
+        let results = search_snapshot(&snapshot, AssistantEntityKind::Group, "zzz", 30);
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn search_caps_results() {
+        let mut export = empty_export();
+        export.groups = (0..35)
+            .map(|index| group_row(&format!("group_{index:02}"), &format!("Group {index}")))
+            .collect();
+        let snapshot = snapshot_with_config(export);
+        let results = search_all_kinds(&snapshot, "group", MAX_SEARCH_RESULTS);
+        assert_eq!(results.len(), MAX_SEARCH_RESULTS);
+    }
+
+    #[test]
+    fn prompt_search_merges_tokens_across_kinds() {
+        let mut export = search_export();
+        export.scenes = vec![SceneRow {
+            id: "evening".to_string(),
+            name: "Evening Living Room".to_string(),
+            hidden: false,
+            script: None,
+            device_states: HashMap::new(),
+            group_states: HashMap::new(),
+            group_state_order: Vec::new(),
+        }];
+        let snapshot = snapshot_with_config(export);
+        let results = search_prompt(&snapshot, "make the living room cozy in the evening");
+
+        let ids: Vec<&str> = results.iter().map(|result| result.id.as_str()).collect();
+        assert!(ids.contains(&"living_room"));
+        assert!(ids.contains(&"evening"));
+        assert!(!ids.contains(&"kitchen"));
+    }
+
+    fn validate_provider(
+        snapshot: &RuntimeSnapshot,
+        plan: Value,
+    ) -> Result<(String, Vec<AssistantOperation>), String> {
+        let provider: ProviderPlan = serde_json::from_value(plan).unwrap();
+        validate_plan_operations(snapshot, catalog_from_snapshot_export(snapshot), provider)
+    }
+
+    fn sensor_device() -> Device {
+        Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("sensor"),
+            "Test sensor".to_string(),
+            DeviceData::Sensor(SensorDevice::Boolean { value: true }),
+            None,
+        )
+    }
+
+    #[test]
+    fn plan_validation_rejects_unknown_targets() {
+        let snapshot = snapshot_with_config(empty_export());
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "summary": "Update a group",
+                "operations": [{
+                    "op": "update",
+                    "kind": "group",
+                    "targetId": "ghost",
+                    "after": {"name": "Ghost"}
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown group target 'ghost'"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_accepts_group_and_scene_creates() {
+        let snapshot = control_snapshot();
+        let (summary, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "summary": "Set up a movie scene",
+                "operations": [
+                    {
+                        "op": "create",
+                        "kind": "group",
+                        "label": "Game room",
+                        "after": {
+                            "id": "game_room",
+                            "name": "Game room",
+                            "hidden": false,
+                            "devices": [{"integration_id": "dummy", "device_id": "lamp"}],
+                            "linked_groups": []
+                        }
+                    },
+                    {
+                        "op": "create",
+                        "kind": "scene",
+                        "after": {
+                            "id": "movie",
+                            "name": "Movie",
+                            "hidden": false,
+                            "device_states": {"dummy/lamp": {"power": true, "brightness": 0.4}},
+                            "group_states": {"living_room": {"power": true}}
+                        }
+                    }
+                ]
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(summary, "Set up a movie scene");
+        assert_eq!(operations.len(), 2);
+        assert_eq!(operations[0].op_id, "op-1");
+        assert_eq!(operations[0].op, AssistantOpKind::Create);
+        assert_eq!(operations[0].kind, AssistantEntityKind::Group);
+        assert_eq!(
+            operations[0].after.as_ref().unwrap()["id"],
+            Value::String("game_room".to_string())
+        );
+        assert!(operations[0].before.is_none());
+        assert_eq!(operations[1].kind, AssistantEntityKind::Scene);
+        assert!(operations[1].after.is_some());
+    }
+
+    #[test]
+    fn plan_validation_builds_operations_and_merges_updates() {
+        let snapshot = control_snapshot();
+        let (summary, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "summary": "Rename the living room group",
+                "operations": [{
+                    "op": "update",
+                    "kind": "group",
+                    "targetId": "living_room",
+                    "after": {"name": "Lounge"}
+                }]
+            }),
+        )
+        .unwrap();
+
+        assert_eq!(summary, "Rename the living room group");
+        assert_eq!(operations.len(), 1);
+        let operation = &operations[0];
+        assert_eq!(operation.op_id, "op-1");
+        assert_eq!(operation.op, AssistantOpKind::Update);
+        assert_eq!(operation.kind, AssistantEntityKind::Group);
+        assert_eq!(operation.target_id.as_deref(), Some("living_room"));
+        assert!(operation.before.is_some());
+        let after = operation.after.as_ref().unwrap();
+        assert_eq!(after["name"], "Lounge");
+        // The patch was merged over the existing entity.
+        assert_eq!(
+            after["devices"][0]["device_id"],
+            Value::String("lamp".to_string())
+        );
+    }
+
+    #[test]
+    fn plan_validation_rejects_group_with_unknown_device() {
+        let snapshot = control_snapshot();
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "group",
+                    "after": {
+                        "id": "game_room",
+                        "name": "Game room",
+                        "hidden": false,
+                        "devices": [{"integration_id": "dummy", "device_id": "ghost"}],
+                        "linked_groups": []
+                    }
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown device 'dummy/ghost'"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_validates_scene_references() {
+        let snapshot = control_snapshot();
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "scene",
+                    "after": {
+                        "id": "movie",
+                        "name": "Movie",
+                        "device_states": {"dummy/ghost": {"power": true}}
+                    }
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown device 'dummy/ghost'"), "{error}");
+
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "delete",
+                    "kind": "scene",
+                    "targetId": "evening"
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown scene target 'evening'"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_compiles_routine_definitions() {
+        let snapshot = snapshot_with_config_and_devices(empty_export(), vec![sensor_device()]);
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "routine",
+                    "after": {
+                        "id": "morning",
+                        "name": "Morning",
+                        "enabled": true,
+                        "semantics_version": 2,
+                        "definition_v2": valid_definition()
+                    }
+                }]
+            }),
+        )
+        .unwrap();
+        assert_eq!(operations[0].after.as_ref().unwrap()["enabled"], true);
+        assert_eq!(
+            operations[0].after.as_ref().unwrap()["semantics_version"],
+            2
+        );
+
+        let mut invalid = valid_definition();
+        invalid["program"]["steps"][0]["device"]["device_id"] =
+            Value::String("missing".to_string());
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "routine",
+                    "after": {
+                        "id": "broken",
+                        "name": "Broken",
+                        "definition_v2": invalid
+                    }
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("missing"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_rejects_unsupported_kinds_and_shapes() {
+        let snapshot = snapshot_with_config(empty_export());
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "device",
+                    "after": {"id": "x", "name": "X"}
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("not supported yet"), "{error}");
+
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "delete",
+                    "kind": "group",
+                    "targetId": "living_room",
+                    "after": {"id": "living_room"}
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("delete must not include"), "{error}");
+
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "update",
+                    "kind": "group",
+                    "targetId": "living_room"
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown group target"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_warns_about_referenced_deletes() {
+        let mut export = empty_export();
+        export.groups = vec![
+            GroupRow {
+                devices: Vec::new(),
+                ..group_row("living_room", "Living Room")
+            },
+            GroupRow {
+                linked_groups: vec!["living_room".to_string()],
+                ..group_row("downstairs", "Downstairs")
+            },
+        ];
+        export.scenes = vec![SceneRow {
+            id: "evening".to_string(),
+            name: "Evening".to_string(),
+            hidden: false,
+            script: None,
+            device_states: HashMap::new(),
+            group_states: HashMap::from([("living_room".to_string(), json!({"power": true}))]),
+            group_state_order: vec!["living_room".to_string()],
+        }];
+        let snapshot = snapshot_with_config(export);
+
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "delete",
+                    "kind": "group",
+                    "targetId": "living_room"
+                }]
+            }),
+        )
+        .unwrap();
+        let warnings = &operations[0].warnings;
+        assert!(warnings
+            .iter()
+            .any(|warning| warning.contains("2 other configuration(s)")));
+        assert!(operations[0].after.is_none());
+        assert!(operations[0].before.is_some());
+    }
+
+    fn test_plan(id: &str, created_at_ms: i64, expires_at_ms: i64) -> AssistantPlan {
+        AssistantPlan {
+            plan_id: id.to_string(),
+            summary: "test".to_string(),
+            operations: Vec::new(),
+            created_at_ms,
+            expires_at_ms,
+        }
+    }
+
+    #[test]
+    fn plan_store_sweeps_expired_entries() {
+        let store = PlanStore::new(Duration::from_millis(1), 10);
+        let now = now_ms();
+        store.insert(test_plan("plan-1", now, now + 1));
+        std::thread::sleep(Duration::from_millis(5));
+        assert!(store.get("plan-1").is_none());
+        assert_eq!(store.len(), 0);
+    }
+
+    #[test]
+    fn plan_store_evicts_the_plan_closest_to_expiry() {
+        let store = PlanStore::new(Duration::from_secs(60), 2);
+        let now = now_ms();
+        store.insert(test_plan("plan-1", now, now + 1_000));
+        store.insert(test_plan("plan-2", now, now + 2_000));
+        store.insert(test_plan("plan-3", now, now + 3_000));
+
+        assert_eq!(store.len(), 2);
+        assert!(store.get("plan-1").is_none());
+        assert!(store.get("plan-2").is_some());
+        assert!(store.get("plan-3").is_some());
+    }
+
+    #[test]
+    fn plan_system_prompt_documents_contract_and_context() {
+        let prompt = plan_system_prompt("{\"devices\":[]}");
+        assert!(prompt.contains("target_id"));
+        assert!(prompt.contains("RoutineDefinitionV2"));
+        assert!(prompt.contains("\"devices\":[]"));
     }
 }
