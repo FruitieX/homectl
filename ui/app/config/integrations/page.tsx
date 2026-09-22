@@ -23,7 +23,6 @@ import {
 } from '@/ui/config-form';
 import { toast } from 'sonner';
 
-import { ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -179,14 +178,6 @@ function setPathValue(
   }
 
   target[segment] = nextChild;
-}
-
-function getOutboundMinIntervalMs(config: Record<string, unknown>) {
-  const minIntervalMs = getConfigPathValue(config, outboundMinIntervalPath);
-
-  return typeof minIntervalMs === 'number' && Number.isFinite(minIntervalMs)
-    ? Math.max(0, Math.round(minIntervalMs))
-    : undefined;
 }
 
 function parseNumberInput(value: string, field: IntegrationConfigFieldSchema) {
@@ -485,7 +476,28 @@ const getIntegrationSearchValues = (integration: Integration) => [
   integration.config,
 ];
 
-const starterPlugins = ['mqtt', 'dummy', 'circadian', 'cron'];
+const starterPlugins = [
+  {
+    id: 'mqtt',
+    label: 'Connect smart devices',
+    fallback: 'Use MQTT to bring devices into your home.',
+  },
+  {
+    id: 'dummy',
+    label: 'Try sample devices',
+    fallback: 'Explore the app without physical hardware.',
+  },
+  {
+    id: 'circadian',
+    label: 'Follow daylight',
+    fallback: 'Adjust light color through the day.',
+  },
+  {
+    id: 'cron',
+    label: 'Add a schedule',
+    fallback: 'Run actions at a chosen time.',
+  },
+] as const;
 
 function getFieldFormatHint(field: IntegrationConfigFieldSchema) {
   if (field.key === 'day_fade_start' || field.key === 'night_fade_start') {
@@ -530,29 +542,27 @@ function IntegrationGettingStarted({
   return (
     <Card className="border-primary/20 bg-primary/5">
       <CardHeader>
-        <CardTitle>Getting started</CardTitle>
+        <CardTitle>Choose how to begin</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3 text-sm text-muted-foreground">
         <p>
-          Start with one integration, confirm devices appear, then build groups,
-          scenes, and routines on top. Examples can be copied directly into JSON
-          fields while you experiment.
+          Start with a connection or a built-in service. You can add more later.
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {starterPlugins.map((plugin) => {
-            const schema = schemaByPlugin[plugin];
+            const schema = schemaByPlugin[plugin.id];
             return (
               <button
-                key={plugin}
+                key={plugin.id}
                 type="button"
                 className="rounded-2xl border border-border bg-background/80 p-3 text-left transition hover:border-primary/50 hover:bg-background"
-                onClick={() => onSelectPlugin?.(plugin)}
+                onClick={() => onSelectPlugin?.(plugin.id)}
               >
                 <div className="font-medium text-foreground">
-                  {schema?.name ?? plugin}
+                  {plugin.label}
                 </div>
                 <div className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {schema?.description ?? 'Plugin configuration'}
+                  {schema?.description ?? plugin.fallback}
                 </div>
               </button>
             );
@@ -568,6 +578,7 @@ export default function IntegrationsPage() {
     data: integrations,
     loading,
     error,
+    refetch,
     create,
     update,
     remove,
@@ -609,7 +620,12 @@ export default function IntegrationsPage() {
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>Error loading integrations: {error}</AlertDescription>
+        <AlertDescription className="space-y-3">
+          <p>Could not load connections: {error}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </AlertDescription>
       </Alert>
     );
   }
@@ -617,8 +633,8 @@ export default function IntegrationsPage() {
   return (
     <div className="space-y-4">
       <ConfigPageHeader
-        title="Integrations"
-        description="Connect plugins, schedules, and virtual devices to the runtime."
+        title="Connections & services"
+        description="Bring devices into your home and set up schedules or virtual services."
         actions={
           <Button
             onClick={() => {
@@ -626,7 +642,7 @@ export default function IntegrationsPage() {
               setShowCreate(true);
             }}
           >
-            Add Integration
+            Add connection
           </Button>
         }
       />
@@ -645,7 +661,7 @@ export default function IntegrationsPage() {
         <ConfigListSearchBar
           filteredCount={visibleIntegrations.length}
           onChange={setSearch}
-          placeholder="Search by id, plugin, or config"
+          placeholder="Search connections and services"
           totalCount={integrations.length}
           value={search}
         />
@@ -718,21 +734,6 @@ export default function IntegrationsPage() {
   );
 }
 
-const SENSITIVE_CONFIG_KEY = /pass|secret|token|key|auth|credential|url|uri/i;
-
-/** Short, secret-free glance summary of scalar config values. */
-function integrationConfigSummary(config: Record<string, unknown>) {
-  return Object.entries(config)
-    .filter(
-      ([key, value]) =>
-        !SENSITIVE_CONFIG_KEY.test(key) &&
-        (value === null ||
-          ['string', 'number', 'boolean'].includes(typeof value)),
-    )
-    .slice(0, 4)
-    .map(([key, value]) => `${key}: ${String(value)}`);
-}
-
 function IntegrationCard({
   integration,
   onOpen,
@@ -742,14 +743,11 @@ function IntegrationCard({
   onOpen: () => void;
   onDelete: () => void;
 }) {
-  const outboundMinIntervalMs = getOutboundMinIntervalMs(integration.config);
-  const configSummary = integrationConfigSummary(integration.config);
-
   return (
     <Card
       role="button"
       tabIndex={0}
-      aria-label={`Edit integration ${integration.id}`}
+      aria-label={`Edit connection ${integration.id}`}
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -758,7 +756,7 @@ function IntegrationCard({
           onOpen();
         }
       }}
-      className="cursor-pointer transition hover:border-primary/40 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="cursor-pointer rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <CardHeader>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -775,11 +773,6 @@ function IntegrationCard({
               >
                 {integration.enabled ? 'Enabled' : 'Disabled'}
               </Badge>
-              {outboundMinIntervalMs ? (
-                <Badge variant="outline">
-                  Pacing {outboundMinIntervalMs} ms
-                </Badge>
-              ) : null}
             </div>
           </div>
           <div className="flex gap-2">
@@ -797,25 +790,6 @@ function IntegrationCard({
           </div>
         </div>
       </CardHeader>
-      <CardContent>
-        {configSummary.length > 0 ? (
-          <div className="flex flex-wrap gap-2">
-            {configSummary.map((entry) => (
-              <Badge
-                key={entry}
-                variant="outline"
-                className="max-w-full truncate font-mono text-xs font-normal"
-              >
-                {entry}
-              </Badge>
-            ))}
-          </div>
-        ) : (
-          <p className="text-sm text-muted-foreground">
-            Open to edit plugin settings.
-          </p>
-        )}
-      </CardContent>
     </Card>
   );
 }
@@ -1813,11 +1787,13 @@ function IntegrationOverlay({
           onClose();
         }
       }}
-      title={isCreate ? 'Add Integration' : `Edit ${integration?.id ?? id}`}
+      title={
+        isCreate ? 'Add connection or service' : `Edit ${integration?.id ?? id}`
+      }
       description={
         isCreate
-          ? 'Create a new integration instance and initial plugin config.'
-          : 'Adjust whether the integration is enabled and update plugin configuration.'
+          ? 'Choose a type, then enter the details needed to connect it.'
+          : 'Review its configuration and change how this connection works.'
       }
       presentation="fullscreen"
       className="max-w-2xl"
@@ -1826,20 +1802,19 @@ function IntegrationOverlay({
         <Tabs value={editTab} onValueChange={changeTab}>
           <TabsList className="grid h-auto w-full grid-cols-2">
             <TabsTrigger value="settings">Settings</TabsTrigger>
-            <ExperienceOnly minimum="expert">
-              <TabsTrigger value="json">JSON</TabsTrigger>
-            </ExperienceOnly>
+
+            <TabsTrigger value="json">Advanced JSON</TabsTrigger>
           </TabsList>
 
           <TabsContent value="settings" className="mt-4 space-y-4">
             <ConfigFormSection
-              title="Integration identity"
-              description="Pick a stable id and plugin type. Existing integration ids and plugins are read-only to avoid breaking references."
+              title="Connection details"
+              description="Choose a type and give this connection a unique id. The id stays fixed after creation so linked devices and automations keep working."
             >
               {isCreate ? (
                 <>
                   <div className="grid gap-4 md:grid-cols-2">
-                    <ConfigField label="Integration ID">
+                    <ConfigField label="Connection ID">
                       <Input
                         value={id}
                         onChange={(event) => setId(event.target.value)}
@@ -1847,7 +1822,7 @@ function IntegrationOverlay({
                       />
                     </ConfigField>
 
-                    <ConfigField label="Plugin">
+                    <ConfigField label="Type">
                       <select
                         className={selectClassName}
                         value={plugin}
@@ -1875,7 +1850,7 @@ function IntegrationOverlay({
               ) : (
                 <ConfigReadOnlyGrid>
                   <ConfigReadOnlyItem
-                    label="Integration ID"
+                    label="Connection ID"
                     value={integration?.id}
                   />
                   <ConfigReadOnlyItem
@@ -1919,21 +1894,19 @@ function IntegrationOverlay({
             ) : null}
           </TabsContent>
 
-          <ExperienceOnly minimum="expert">
-            <TabsContent value="json" className="mt-4">
-              <ConfigFormSection
-                title="Advanced JSON"
-                description="Use this for unknown or advanced plugin settings. Values edited here are preserved when returning to Settings."
-              >
-                <Textarea
-                  className="min-h-40 max-h-72 resize-y font-mono text-sm"
-                  rows={8}
-                  value={jsonText}
-                  onChange={(event) => setJsonText(event.target.value)}
-                />
-              </ConfigFormSection>
-            </TabsContent>
-          </ExperienceOnly>
+          <TabsContent value="json" className="mt-4">
+            <ConfigFormSection
+              title="Advanced JSON"
+              description="Use this for unknown or advanced plugin settings. Values edited here are preserved when returning to Settings."
+            >
+              <Textarea
+                className="min-h-40 max-h-72 resize-y font-mono text-sm"
+                rows={8}
+                value={jsonText}
+                onChange={(event) => setJsonText(event.target.value)}
+              />
+            </ConfigFormSection>
+          </TabsContent>
         </Tabs>
 
         <ConfigFormActions>

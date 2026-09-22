@@ -19,7 +19,7 @@ export function ConfigFormSection({
   return (
     <section
       className={cn(
-        'rounded-3xl border border-border bg-background/70 p-4 shadow-sm sm:p-5',
+        'rounded-2xl border border-border/70 bg-card p-4 sm:p-5',
         className,
       )}
       {...props}
@@ -28,7 +28,7 @@ export function ConfigFormSection({
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1">
             {title ? (
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground">
+              <h3 className="text-base font-semibold tracking-tight text-foreground">
                 {title}
               </h3>
             ) : null}
@@ -93,7 +93,7 @@ export function ConfigToggleRow({
   return (
     <label
       className={cn(
-        'flex cursor-pointer items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4 transition hover:bg-muted/50',
+        'flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-border/70 bg-muted/20 p-4 transition hover:bg-muted/40',
         className,
       )}
       {...props}

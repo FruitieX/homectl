@@ -85,8 +85,8 @@ export default function LogsPage() {
   return (
     <div className="max-w-6xl space-y-5">
       <ConfigPageHeader
-        title="Server Logs"
-        description="Recent runtime logs from the server process. This view auto-refreshes every 5 seconds."
+        title="Logs"
+        description="Technical events from the server. Use these when a device or automation needs troubleshooting."
         actions={
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="text-xs text-muted-foreground">

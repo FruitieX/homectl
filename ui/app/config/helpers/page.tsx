@@ -21,6 +21,7 @@ import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
+import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
@@ -507,7 +508,7 @@ function HelperEditor({
 }
 
 export default function HelpersConfigPage() {
-  const { data, loading, error, update, remove } = useHelpers();
+  const { data, loading, error, refetch, update, remove } = useHelpers();
   const liveStatuses = useHelperStatuses();
 
   const [search, setSearch] = useSearchParamState();
@@ -634,7 +635,7 @@ export default function HelpersConfigPage() {
     <div className="space-y-6">
       <ConfigPageHeader
         title="Helpers"
-        description="Typed values routines, scripts, and widgets read and write. The server validates every write against the declared kind."
+        description="Keep a value, such as a mode or target temperature, for automations to use."
         actions={
           <Button type="button" onClick={openCreate}>
             New helper
@@ -644,33 +645,43 @@ export default function HelpersConfigPage() {
 
       {error ? (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="space-y-3">
+            <p>Could not load helpers: {error}</p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       ) : null}
 
-      <ConfigListSearchBar
-        filteredCount={visible.length}
-        placeholder="Search helpers by id, name, kind, or value"
-        totalCount={statuses.length}
-        value={search}
-        onChange={setSearch}
-      />
+      {!error && (
+        <ConfigListSearchBar
+          filteredCount={visible.length}
+          placeholder="Search helpers"
+          totalCount={statuses.length}
+          value={search}
+          onChange={setSearch}
+        />
+      )}
 
-      {statuses.length === 0 ? (
-        <ConfigHelpPanel>
-          <p>
-            No helpers yet. Helpers are the native state primitives for v2
-            routines: a staircase mode enum, a cooldown boolean, a brightness
-            number, or a free-form string. Create one and reference it from a
-            trigger, condition, or program step.
-          </p>
-        </ConfigHelpPanel>
+      {!error && statuses.length === 0 ? (
+        <EmptyState
+          title="No helpers yet"
+          description="Create a value that automations can read or change, such as Home/Away mode."
+          action={<Button onClick={openCreate}>Create a helper</Button>}
+        />
       ) : null}
 
-      {statuses.length > 0 && visible.length === 0 ? (
-        <ConfigHelpPanel>
-          <p>No helpers match the current search.</p>
-        </ConfigHelpPanel>
+      {!error && statuses.length > 0 && visible.length === 0 ? (
+        <EmptyState
+          title="No matching helpers"
+          description="Try another name or value."
+          action={
+            <Button variant="outline" onClick={() => setSearch('')}>
+              Clear search
+            </Button>
+          }
+        />
       ) : null}
 
       <div className="grid gap-4">

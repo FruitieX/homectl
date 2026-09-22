@@ -10,6 +10,8 @@ import { type TruthValue } from '@/bindings/TruthValue';
 import { type UnknownReason } from '@/bindings/UnknownReason';
 import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
+import { Advanced } from '@/ui/primitives/advanced';
+import { useSearchParamState } from '@/hooks/useDeepLink';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -363,7 +365,7 @@ function HistoryStatCard({
 export default function RoutineHistoryPage() {
   const { data, loading, error, refetch, lastUpdated } = useRoutineHistory();
   const [triggerFilter, setTriggerFilter] = useState<TriggerFilter>('all');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useSearchParamState();
 
   const normalizedSearch = search.trim().toLowerCase();
   const visibleHistory = [...data]
@@ -389,12 +391,12 @@ export default function RoutineHistoryPage() {
       <ConfigTabs
         tabs={[
           { label: 'Routines', to: '/config/routines' },
-          { label: 'History', to: '/config/routine-history', active: true },
+          { label: 'Activity', to: '/config/routine-history', active: true },
         ]}
       />
       <ConfigPageHeader
-        title="Routine History"
-        description="Recent routine activations, trigger sources, action counts, and rule traces. The newest 500 entries are persisted across server restarts."
+        title="Automation history"
+        description="See what triggered a routine, what ran, and which steps were skipped. Commands here do not confirm physical device delivery."
         actions={
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="text-xs text-muted-foreground">
@@ -440,38 +442,53 @@ export default function RoutineHistoryPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <HistoryStatCard
-              icon={<Activity className="size-5" />}
-              label="Buffered entries"
-              value={data.length}
-              description="Newest entries are kept in memory."
-            />
-            <HistoryStatCard
-              icon={<Zap className="size-5" />}
-              label="Rule matches"
-              value={ruleMatches}
-              description="v1 routines triggered by evaluated rules."
-            />
-            <HistoryStatCard
-              icon={<CheckCircle2 className="size-5" />}
-              label="Manual triggers"
-              value={forceTriggers}
-              description="Forced from UI, CLI, or API."
-            />
-            <HistoryStatCard
-              icon={<Activity className="size-5" />}
-              label="v2 runs"
-              value={v2Runs}
-              description="Dispatched v2 plans with traces."
-            />
-            <HistoryStatCard
-              icon={<AlertTriangle className="size-5" />}
-              label="Entries with errors"
-              value={entriesWithErrors}
-              description="At least one rule or v2 node errored."
-            />
+          <div className="rounded-2xl border border-border/70 bg-card px-4 py-3 text-sm">
+            <span className="font-medium">
+              {data.length} recent {data.length === 1 ? 'event' : 'events'}
+            </span>
+            {entriesWithErrors > 0 ? (
+              <span className="ml-2 text-amber-600 dark:text-amber-400">
+                · {entriesWithErrors} with errors
+              </span>
+            ) : null}
+            <span className="ml-2 text-muted-foreground">
+              Newest 500 are kept across restarts.
+            </span>
           </div>
+          <Advanced label="Activity breakdown">
+            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+              <HistoryStatCard
+                icon={<Activity className="size-5" />}
+                label="Buffered entries"
+                value={data.length}
+                description="Newest entries are kept in memory."
+              />
+              <HistoryStatCard
+                icon={<Zap className="size-5" />}
+                label="Rule matches"
+                value={ruleMatches}
+                description="v1 routines triggered by evaluated rules."
+              />
+              <HistoryStatCard
+                icon={<CheckCircle2 className="size-5" />}
+                label="Manual triggers"
+                value={forceTriggers}
+                description="Forced from UI, CLI, or API."
+              />
+              <HistoryStatCard
+                icon={<Activity className="size-5" />}
+                label="v2 runs"
+                value={v2Runs}
+                description="Dispatched v2 plans with traces."
+              />
+              <HistoryStatCard
+                icon={<AlertTriangle className="size-5" />}
+                label="Entries with errors"
+                value={entriesWithErrors}
+                description="At least one rule or v2 node errored."
+              />
+            </div>
+          </Advanced>
 
           <Card>
             <CardContent className="gap-4 pt-5">

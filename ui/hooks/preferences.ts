@@ -5,16 +5,10 @@ import { useCallback, useEffect } from 'react';
 import {
   type Accent,
   type Density,
-  type ExperienceLevel,
   isFavoriteKey,
   pushRecent,
   toggleFavoriteKey,
 } from '@/lib/preferences';
-
-export const experienceAtom = atomWithStorage<ExperienceLevel>(
-  'homectl-experience',
-  'simple',
-);
 
 export const densityAtom = atomWithStorage<Density>(
   'homectl-density',
@@ -28,17 +22,6 @@ export const favoritesAtom = atomWithStorage<string[]>('homectl-favorites', []);
 export const recentsAtom = atomWithStorage<string[]>('homectl-recents', []);
 
 export const favoriteKeysAtom = atom((get) => new Set(get(favoritesAtom)));
-
-export const useExperience = () => {
-  const [level, setLevel] = useAtom(experienceAtom);
-  return {
-    level,
-    setLevel,
-    isSimple: level === 'simple',
-    isStandard: level === 'standard',
-    isExpert: level === 'expert',
-  };
-};
 
 export const useFavorites = () => {
   const [favorites, setFavorites] = useAtom(favoritesAtom);

@@ -1,11 +1,6 @@
-import {
-  useConfigExport,
-  ConfigExport,
-  useRuntimeStatus,
-} from '@/hooks/useConfig';
+import { useConfigExport, ConfigExport } from '@/hooks/useConfig';
 import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
-import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { Button } from '@/ui/primitives/button';
 import {
   Card,
@@ -18,19 +13,17 @@ import {
 import { Checkbox } from '@/ui/primitives/checkbox';
 import { Label } from '@/ui/primitives/label';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
-import { Download, Info, Upload } from 'lucide-react';
+import { Download, Upload } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { toast } from 'sonner';
 
 export default function ImportExportPage() {
   const { exportConfig, importConfig } = useConfigExport();
-  const { data: runtimeStatus } = useRuntimeStatus(5000);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
   const [includeSecrets, setIncludeSecrets] = useState(false);
   const [pendingImport, setPendingImport] = useState<ConfigExport | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isMemoryOnly = runtimeStatus?.memory_only_mode ?? false;
 
   const handleExport = async () => {
     try {
@@ -113,8 +106,8 @@ export default function ImportExportPage() {
   return (
     <div className="max-w-5xl space-y-5">
       <ConfigPageHeader
-        title="Backups & Migration"
-        description="Create durable JSON backups, restore runtime configuration, and import legacy TOML."
+        title="Backups & migration"
+        description="Save a copy of your setup or restore one you saved earlier."
       />
       <ConfigTabs
         tabs={[
@@ -123,27 +116,14 @@ export default function ImportExportPage() {
         ]}
       />
 
-      <Alert variant={isMemoryOnly ? 'warning' : 'default'}>
-        <Info className="size-4" />
-        <AlertTitle>Durability</AlertTitle>
-        <AlertDescription>
-          {isMemoryOnly
-            ? 'The server is currently running without active database persistence. Export a JSON backup after important changes, because imports and editor updates only live in memory until you persist them again.'
-            : 'JSON exports are still the fastest rollback point before large imports or risky edits, even while PostgreSQL persistence is available.'}
-        </AlertDescription>
-      </Alert>
-
       <div className="grid gap-5 md:grid-cols-2">
         {/* Export */}
         <Card>
           <CardHeader>
-            <CardTitle>Export Configuration</CardTitle>
+            <CardTitle>Download a backup</CardTitle>
             <CardDescription>
-              Download a JSON backup of all integrations, groups, scenes, and
-              routines.
-              {isMemoryOnly
-                ? ' This file is the durable copy of your current runtime state while the server stays memory-only.'
-                : ' Keep one before major changes so you can roll the config back quickly.'}
+              Save your connections, rooms, scenes, routines, and other settings
+              in a JSON file.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -164,10 +144,8 @@ export default function ImportExportPage() {
                   Include secrets
                 </Label>
                 <p className="text-xs leading-5 text-muted-foreground">
-                  Off by default: widget tokens and calendar URLs are left out
-                  of the file. Turn this on for a backup that can fully restore
-                  a fresh instance. Imports keep stored secrets unless the file
-                  sets them explicitly.
+                  Turn this on if the backup must restore API keys and other
+                  credentials on a new server. Keep that file private.
                 </p>
               </div>
             </div>
@@ -179,7 +157,7 @@ export default function ImportExportPage() {
               className="w-full sm:w-auto"
             >
               <Download />
-              {exporting ? 'Exporting…' : 'Download Backup'}
+              {exporting ? 'Preparing…' : 'Download backup'}
             </Button>
           </CardFooter>
         </Card>
@@ -187,13 +165,10 @@ export default function ImportExportPage() {
         {/* Import */}
         <Card>
           <CardHeader>
-            <CardTitle>Import Configuration</CardTitle>
+            <CardTitle>Restore from a backup</CardTitle>
             <CardDescription>
-              Upload a JSON configuration file. Existing items with matching IDs
-              will be updated.
-              {isMemoryOnly
-                ? ' Importing updates the live runtime immediately, so export again afterward if you need the result to survive a restart before persistence is back.'
-                : ' Imports still apply immediately and then persist to PostgreSQL.'}
+              Choose a JSON backup to review. Items with matching IDs will be
+              updated when you confirm.
             </CardDescription>
           </CardHeader>
           <CardContent>

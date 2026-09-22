@@ -13,23 +13,19 @@ import {
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useForm } from 'react-hook-form';
+import { useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { z } from 'zod';
 
 import { useAtom } from 'jotai';
 
 import { useAppConfig } from '@/hooks/appConfig';
-import { accentAtom, densityAtom, useExperience } from '@/hooks/preferences';
+import { accentAtom, densityAtom } from '@/hooks/preferences';
 import { useTheme, type ThemeMode } from '@/hooks/theme';
 import { useBackdropBlurEffects } from '@/hooks/visualEffects';
 import { useDeveloperMode } from '@/hooks/developerMode';
 import { cn } from '@/lib/cn';
-import {
-  accents,
-  densities,
-  experienceDescriptions,
-  experienceLevels,
-} from '@/lib/preferences';
+import { accents, densities } from '@/lib/preferences';
 import { normalizeBuildInfo } from '@/lib/buildInfo';
 import { ConfigPageHeader } from '../page-header';
 import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
@@ -62,6 +58,7 @@ import {
 import { Skeleton } from '@/ui/primitives/skeleton';
 import { Switch } from '@/ui/primitives/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
+import { Advanced } from '@/ui/primitives/advanced';
 
 const coreConfigFormSchema = z.object({
   warmupTimeSeconds: z.number().int().min(0).max(60),
@@ -167,9 +164,23 @@ async function updateCoreConfig(
 export default function SettingsPage() {
   const recordWrite = useRecordConfigWrite();
   const { apiEndpoint, wsEndpoint } = useAppConfig();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [settingsTab, setSettingsTab] = useState<
     'appearance' | 'core' | 'assistant' | 'info'
-  >('appearance');
+  >(() => {
+    const tab = searchParams.get('tab');
+    return tab === 'core' || tab === 'assistant' || tab === 'info'
+      ? tab
+      : 'appearance';
+  });
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    setSettingsTab(
+      tab === 'core' || tab === 'assistant' || tab === 'info'
+        ? tab
+        : 'appearance',
+    );
+  }, [searchParams]);
   const form = useForm<CoreConfigFormValues>({
     resolver: zodResolver(coreConfigFormSchema),
     defaultValues,
@@ -216,6 +227,10 @@ export default function SettingsPage() {
       value === 'info'
     ) {
       setSettingsTab(value);
+      const next = new URLSearchParams(searchParams);
+      if (value === 'appearance') next.delete('tab');
+      else next.set('tab', value);
+      setSearchParams(next, { replace: true });
     }
   };
 
@@ -225,21 +240,8 @@ export default function SettingsPage() {
     <Form {...form}>
       <div className="max-w-3xl space-y-5">
         <ConfigPageHeader
-          title="System"
-          description="Personalize the app shell, tune startup behavior, and inspect server endpoints."
-          actions={
-            settingsTab === 'core' ? (
-              <Button
-                type="submit"
-                form="core-settings-form"
-                disabled={!form.formState.isDirty || mutation.isPending}
-                className="w-full sm:w-auto"
-              >
-                <Save />
-                {mutation.isPending ? 'Saving…' : 'Save changes'}
-              </Button>
-            ) : null
-          }
+          title="App & system"
+          description="Make the app feel right for you and adjust how your home starts."
         />
 
         {query.error && query.data && (
@@ -256,9 +258,11 @@ export default function SettingsPage() {
         <Tabs value={settingsTab} onValueChange={changeSettingsTab}>
           <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
-            <TabsTrigger value="core">Core</TabsTrigger>
+            <TabsTrigger value="core">
+              Behavior{form.formState.isDirty ? ' •' : ''}
+            </TabsTrigger>
             <TabsTrigger value="assistant">Assistant</TabsTrigger>
-            <TabsTrigger value="info">Info</TabsTrigger>
+            <TabsTrigger value="info">About</TabsTrigger>
           </TabsList>
 
           <TabsContent value="appearance" className="mt-4">
@@ -296,10 +300,10 @@ export default function SettingsPage() {
               >
                 <Card>
                   <CardHeader>
-                    <CardTitle>Core settings</CardTitle>
+                    <CardTitle>Startup & transitions</CardTitle>
                     <CardDescription>
-                      Controls how long homectl waits before automation routines
-                      begin.
+                      Choose when automations begin after startup. Optional
+                      transition defaults are below.
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
@@ -308,7 +312,9 @@ export default function SettingsPage() {
                       name="warmupTimeSeconds"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Warmup Time (seconds)</FormLabel>
+                          <FormLabel>
+                            Wait before automations start (seconds)
+                          </FormLabel>
                           <FormControl>
                             <Input
                               type="number"
@@ -329,91 +335,109 @@ export default function SettingsPage() {
                             />
                           </FormControl>
                           <FormDescription>
-                            Increase this if devices are not ready when routines
-                            first run.
+                            The default is 1 second. Increase it if devices are
+                            still starting when routines first run.
                           </FormDescription>
                           <FormMessage />
                         </FormItem>
                       )}
                     />
-                    <FormField
-                      control={form.control}
-                      name="defaultTransitionMs"
-                      render={({ field }) => (
-                        <FormItem className="mt-6">
-                          <FormLabel>
-                            Interactive controls transition (milliseconds)
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={65535000}
-                              step={1}
-                              inputMode="numeric"
-                              placeholder="Disabled"
-                              value={field.value ?? ''}
-                              onBlur={field.onBlur}
-                              onChange={(event) =>
-                                field.onChange(
-                                  event.target.value === ''
-                                    ? null
-                                    : Number(event.target.value),
-                                )
-                              }
-                              name={field.name}
-                              ref={field.ref}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Used for sliders, color wheels, and direct device
-                            controls when no explicit transition is requested.
-                            Set this to 1000 for one second; leave empty to use
-                            integration defaults.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
+                    <Advanced
+                      label={`Transition defaults${form.watch('defaultTransitionMs') !== null || form.watch('sceneTransitionMs') !== null ? ' · customized' : ''}`}
+                      description="Leave a value empty to use the integration's own behavior. 1000 milliseconds is one second."
+                      className="mt-6"
+                      openWhen={Boolean(
+                        form.formState.errors.defaultTransitionMs ||
+                          form.formState.errors.sceneTransitionMs,
                       )}
-                    />
-                    <FormField
-                      control={form.control}
-                      name="sceneTransitionMs"
-                      render={({ field }) => (
-                        <FormItem className="mt-6">
-                          <FormLabel>
-                            Scene activation transition (milliseconds)
-                          </FormLabel>
-                          <FormControl>
-                            <Input
-                              type="number"
-                              min={0}
-                              max={65535000}
-                              step={1}
-                              inputMode="numeric"
-                              placeholder="Use scene/default behavior"
-                              value={field.value ?? ''}
-                              onBlur={field.onBlur}
-                              onChange={(event) =>
-                                field.onChange(
-                                  event.target.value === ''
-                                    ? null
-                                    : Number(event.target.value),
-                                )
-                              }
-                              name={field.name}
-                              ref={field.ref}
-                            />
-                          </FormControl>
-                          <FormDescription>
-                            Default transition for scene activations without an
-                            explicit or scene-stored transition, including
-                            routines and their rollouts. Set this to 1000 for
-                            one second; leave empty to use integration defaults.
-                          </FormDescription>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
+                    >
+                      <FormField
+                        control={form.control}
+                        name="defaultTransitionMs"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>
+                              Manual controls (milliseconds)
+                            </FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={65535000}
+                                step={1}
+                                inputMode="numeric"
+                                placeholder="Disabled"
+                                value={field.value ?? ''}
+                                onBlur={field.onBlur}
+                                onChange={(event) =>
+                                  field.onChange(
+                                    event.target.value === ''
+                                      ? null
+                                      : Number(event.target.value),
+                                  )
+                                }
+                                name={field.name}
+                                ref={field.ref}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Used for sliders, color wheels, and direct device
+                              controls when no explicit transition is requested.
+                              Set this to 1000 for one second; leave empty to
+                              use integration defaults.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <FormField
+                        control={form.control}
+                        name="sceneTransitionMs"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Scenes (milliseconds)</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min={0}
+                                max={65535000}
+                                step={1}
+                                inputMode="numeric"
+                                placeholder="Use scene/default behavior"
+                                value={field.value ?? ''}
+                                onBlur={field.onBlur}
+                                onChange={(event) =>
+                                  field.onChange(
+                                    event.target.value === ''
+                                      ? null
+                                      : Number(event.target.value),
+                                  )
+                                }
+                                name={field.name}
+                                ref={field.ref}
+                              />
+                            </FormControl>
+                            <FormDescription>
+                              Default transition for scene activations without
+                              an explicit or scene-stored transition, including
+                              routines and their rollouts. Set this to 1000 for
+                              one second; leave empty to use integration
+                              defaults.
+                            </FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    </Advanced>
+                    <div className="mt-6 flex justify-end border-t border-border/70 pt-4">
+                      <Button
+                        type="submit"
+                        disabled={!form.formState.isDirty || mutation.isPending}
+                      >
+                        <Save />
+                        {mutation.isPending ? 'Saving…' : 'Save changes'}
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               </form>
@@ -495,7 +519,6 @@ function AppearanceSettingsCard() {
   const [blurEffectsEnabled, setBlurEffectsEnabled] = useBackdropBlurEffects();
   const [accent, setAccent] = useAtom(accentAtom);
   const [density, setDensity] = useAtom(densityAtom);
-  const { level, setLevel } = useExperience();
 
   return (
     <Card>
@@ -587,56 +610,27 @@ function AppearanceSettingsCard() {
             </div>
           </div>
 
-          <div className="space-y-2 rounded-2xl border border-border bg-muted/30 p-4">
-            <div className="space-y-1">
-              <span className="block text-sm font-medium text-foreground">
-                Experience level
+          <Advanced label="Display performance and troubleshooting">
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
+              <span className="space-y-1">
+                <span className="block text-sm font-medium text-foreground">
+                  Blur effects
+                </span>
+                <span className="block text-xs leading-5 text-muted-foreground">
+                  Store this setting in this browser only. Disable it on slower
+                  dashboard clients to make overlay and sticky-element scrolling
+                  cheaper.
+                </span>
               </span>
-              <span className="block text-xs leading-5 text-muted-foreground">
-                Controls how much of the configuration UI is shown. Advanced
-                fields stay reachable behind expanders at every level.
-              </span>
+              <Switch
+                type="button"
+                checked={blurEffectsEnabled}
+                onCheckedChange={setBlurEffectsEnabled}
+                aria-label="Enable blur effects"
+              />
             </div>
-            <div className="grid grid-cols-3 gap-2 rounded-2xl bg-muted p-1">
-              {experienceLevels.map((option) => (
-                <Button
-                  key={option}
-                  type="button"
-                  variant={level === option ? 'default' : 'ghost'}
-                  className={cn(
-                    'h-11 rounded-xl',
-                    level === option && 'shadow-sm',
-                  )}
-                  onClick={() => setLevel(option)}
-                >
-                  {experienceDescriptions[option].label}
-                </Button>
-              ))}
-            </div>
-            <p className="text-xs leading-5 text-muted-foreground">
-              {experienceDescriptions[level].description}
-            </p>
-          </div>
-
-          <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
-            <span className="space-y-1">
-              <span className="block text-sm font-medium text-foreground">
-                Blur effects
-              </span>
-              <span className="block text-xs leading-5 text-muted-foreground">
-                Store this setting in this browser only. Disable it on slower
-                dashboard clients to make overlay and sticky-element scrolling
-                cheaper.
-              </span>
-            </span>
-            <Switch
-              type="button"
-              checked={blurEffectsEnabled}
-              onCheckedChange={setBlurEffectsEnabled}
-              aria-label="Enable blur effects"
-            />
-          </div>
-          <DeveloperModeSetting />
+            <DeveloperModeSetting />
+          </Advanced>
         </div>
       </CardContent>
     </Card>
@@ -857,12 +851,11 @@ function AssistantSettingsCard() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Bot className="size-4" />
-          Routine Assistant
+          Configuration assistant
         </CardTitle>
         <CardDescription>
-          OpenAI-compatible provider used by the routine editor&apos;s
-          &quot;Draft with AI&quot; action. The API key is stored server-side
-          and never sent back to the browser.
+          Optional help with configuration and device actions. Your provider
+          settings are stored on the server; the API key is never sent back.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -905,8 +898,8 @@ function AssistantSettingsCard() {
                 )}
               />
               {enabled
-                ? `Active — drafting with ${form.model}`
-                : 'Inactive — set a base URL and model to enable drafting.'}
+                ? `Ready to use ${form.model}`
+                : 'Off — add a provider URL and model to turn it on.'}
             </p>
 
             <div className="grid gap-4 sm:grid-cols-2">
@@ -953,58 +946,76 @@ function AssistantSettingsCard() {
                   </Button>
                 )}
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="assistant-effort">Reasoning effort</Label>
-                <Select
-                  value={form.reasoningEffort || 'default'}
-                  onValueChange={(value) =>
-                    setForm((previous) => ({
-                      ...previous,
-                      reasoningEffort: value === 'default' ? '' : value,
-                    }))
-                  }
-                >
-                  <SelectTrigger id="assistant-effort">
-                    <SelectValue placeholder="Provider default" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">Provider default</SelectItem>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="assistant-timezone">Timezone</Label>
-                <Input
-                  id="assistant-timezone"
-                  placeholder="Europe/Helsinki"
-                  {...fieldProps('timezone')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="assistant-max-tokens">Max tokens</Label>
-                <Input
-                  id="assistant-max-tokens"
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  {...fieldProps('maxTokens')}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="assistant-timeout">Timeout (ms)</Label>
-                <Input
-                  id="assistant-timeout"
-                  type="number"
-                  min={1000}
-                  step={1000}
-                  inputMode="numeric"
-                  {...fieldProps('timeoutMs')}
-                />
-              </div>
             </div>
+            <Advanced
+              label={
+                form.reasoningEffort ||
+                form.timezone ||
+                form.maxTokens !== '2048' ||
+                form.timeoutMs !== '60000'
+                  ? 'Provider options · customized'
+                  : 'Provider options'
+              }
+              description="Use these only if your provider needs different limits, reasoning, or timezone settings."
+              openWhen={
+                validationError !== null &&
+                !validationError.startsWith('Set both')
+              }
+            >
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-effort">Reasoning effort</Label>
+                  <Select
+                    value={form.reasoningEffort || 'default'}
+                    onValueChange={(value) =>
+                      setForm((previous) => ({
+                        ...previous,
+                        reasoningEffort: value === 'default' ? '' : value,
+                      }))
+                    }
+                  >
+                    <SelectTrigger id="assistant-effort">
+                      <SelectValue placeholder="Provider default" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="default">Provider default</SelectItem>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-timezone">Timezone</Label>
+                  <Input
+                    id="assistant-timezone"
+                    placeholder="Europe/Helsinki"
+                    {...fieldProps('timezone')}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-max-tokens">Max tokens</Label>
+                  <Input
+                    id="assistant-max-tokens"
+                    type="number"
+                    min={1}
+                    inputMode="numeric"
+                    {...fieldProps('maxTokens')}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="assistant-timeout">Timeout (ms)</Label>
+                  <Input
+                    id="assistant-timeout"
+                    type="number"
+                    min={1000}
+                    step={1000}
+                    inputMode="numeric"
+                    {...fieldProps('timeoutMs')}
+                  />
+                </div>
+              </div>
+            </Advanced>
 
             {validationError ? (
               <p className="text-xs text-destructive">{validationError}</p>

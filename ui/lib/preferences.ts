@@ -1,14 +1,6 @@
-export type ExperienceLevel = 'simple' | 'standard' | 'expert';
-
 export type Density = 'comfortable' | 'compact';
 
 export type Accent = 'emerald' | 'indigo' | 'sky' | 'amber' | 'rose';
-
-export const experienceLevels: ExperienceLevel[] = [
-  'simple',
-  'standard',
-  'expert',
-];
 
 export const densities: Density[] = ['comfortable', 'compact'];
 
@@ -19,27 +11,6 @@ export const accents: { id: Accent; label: string; swatch: string }[] = [
   { id: 'amber', label: 'Amber', swatch: 'hsl(32 85% 40%)' },
   { id: 'rose', label: 'Rose', swatch: 'hsl(343 65% 45%)' },
 ];
-
-export const experienceDescriptions: Record<
-  ExperienceLevel,
-  { label: string; description: string }
-> = {
-  simple: {
-    label: 'Simple',
-    description:
-      'The essentials for everyday setup. Advanced fields stay available behind an expander.',
-  },
-  standard: {
-    label: 'Standard',
-    description:
-      'Adds secondary fields like sensor mappings, links, and conditions.',
-  },
-  expert: {
-    label: 'Expert',
-    description:
-      'Everything, including raw JSON, runtime internals, and legacy fields.',
-  },
-};
 
 export function pushRecent(list: string[], key: string, max = 8): string[] {
   const next = [key, ...list.filter((entry) => entry !== key)];
@@ -95,28 +66,4 @@ export function rankByPreference<T>(
       return a.index - b.index;
     })
     .map((entry) => entry.item);
-}
-
-/**
- * Whether an "Advanced" section should start expanded for the given level.
- * A user toggle always wins over the level default.
- */
-export function advancedDefaultOpen(
-  level: ExperienceLevel,
-  userToggled?: boolean,
-): boolean {
-  if (userToggled !== undefined) return userToggled;
-  return level === 'expert';
-}
-
-/**
- * Whether a field should be visible at all at the given level. Simple hides
- * expert-only fields entirely rather than collapsing them.
- */
-export function isFieldVisible(
-  level: ExperienceLevel,
-  minimum: ExperienceLevel,
-): boolean {
-  const order: ExperienceLevel[] = ['simple', 'standard', 'expert'];
-  return order.indexOf(level) >= order.indexOf(minimum);
 }

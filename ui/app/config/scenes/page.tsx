@@ -16,6 +16,7 @@ import { matchesConfigSearch } from '@/lib/configSearch';
 import { useCreateDeepLink } from '@/hooks/useDeepLink';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
+import { Advanced } from '@/ui/primitives/advanced';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
@@ -36,7 +37,6 @@ import {
   resolveSceneColor,
   type SceneTargetKind,
 } from '@/ui/SceneResolvedColorPreview';
-import { ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -107,7 +107,15 @@ async function triggerScene(apiEndpoint: string, sceneId: string) {
 
 export default function ScenesPage() {
   const { apiEndpoint } = useAppConfig();
-  const { data: scenes, loading, error, create, update, remove } = useScenes();
+  const {
+    data: scenes,
+    loading,
+    error,
+    refetch,
+    create,
+    update,
+    remove,
+  } = useScenes();
   const { data: groups } = useGroups();
   const [activationError, setActivationError] = useState<string | null>(null);
   const [activationNotice, setActivationNotice] = useState<string | null>(null);
@@ -238,7 +246,12 @@ export default function ScenesPage() {
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>Error loading scenes: {error}</AlertDescription>
+        <AlertDescription className="space-y-3">
+          <p>Could not load scenes: {error}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </AlertDescription>
       </Alert>
     );
   }
@@ -247,8 +260,8 @@ export default function ScenesPage() {
     <div className="space-y-4">
       <ConfigPageHeader
         title="Scenes"
-        description="Compose scripted and linked scene presets for devices and groups."
-        actions={<Button onClick={() => setShowCreate(true)}>Add Scene</Button>}
+        description="Save a device state you can recall manually or from an automation."
+        actions={<Button onClick={() => setShowCreate(true)}>Add scene</Button>}
       />
 
       {activationError && openId === null && (
@@ -285,15 +298,30 @@ export default function ScenesPage() {
         <ConfigListSearchBar
           filteredCount={visibleScenes.length}
           onChange={setSearch}
-          placeholder="Search by name, id, script, or targets"
+          placeholder="Search scenes"
           totalCount={scenes.length}
           value={search}
         />
 
         {visibleScenes.length === 0 ? (
           <EmptyState
-            title="No scenes match the current search"
-            description="Try another id, name, script, or target key."
+            title={scenes.length === 0 ? 'No scenes yet' : 'No matching scenes'}
+            description={
+              scenes.length === 0
+                ? 'Save a useful light or device state to recall it later.'
+                : 'Try another name or clear your search.'
+            }
+            action={
+              scenes.length === 0 ? (
+                <Button onClick={() => setShowCreate(true)}>
+                  Create your first scene
+                </Button>
+              ) : (
+                <Button variant="outline" onClick={() => setSearch('')}>
+                  Clear search
+                </Button>
+              )
+            }
           />
         ) : (
           <div className="grid gap-4">
@@ -686,17 +714,17 @@ function SceneEditorForm({
       <Tabs value={editTab} onValueChange={changeTab}>
         <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
           <TabsTrigger value="basics">Basics</TabsTrigger>
-          <ExperienceOnly minimum="standard">
-            <TabsTrigger value="script">Script</TabsTrigger>
-          </ExperienceOnly>
+
+          <TabsTrigger value="script">Advanced script</TabsTrigger>
+
           <TabsTrigger value="devices">Devices</TabsTrigger>
-          <TabsTrigger value="groups">Groups</TabsTrigger>
+          <TabsTrigger value="groups">Rooms</TabsTrigger>
         </TabsList>
 
         <TabsContent value="basics" className="mt-4">
           <ConfigFormSection
             title="Scene identity"
-            description="Name the preset and decide whether it should be hidden from normal scene lists."
+            description="Give this scene a name that makes sense when you need it."
           >
             <ConfigField label="Scene name">
               <Input
@@ -707,45 +735,47 @@ function SceneEditorForm({
               />
             </ConfigField>
 
-            <ConfigToggleRow
-              label="Hidden"
-              description="Hidden scenes remain available for automations and linked scene targets."
+            <Advanced
+              label={hidden ? 'Visibility: Hidden' : 'Visibility: Visible'}
             >
-              <input
-                type="checkbox"
-                className={checkboxClassName}
-                checked={hidden}
-                onChange={(event) => setHidden(event.target.checked)}
-              />
-            </ConfigToggleRow>
+              <ConfigToggleRow
+                label="Hidden"
+                description="Hidden scenes remain available for automations and linked scene targets."
+              >
+                <input
+                  type="checkbox"
+                  className={checkboxClassName}
+                  checked={hidden}
+                  onChange={(event) => setHidden(event.target.checked)}
+                />
+              </ConfigToggleRow>
+            </Advanced>
           </ConfigFormSection>
         </TabsContent>
 
-        <ExperienceOnly minimum="standard">
-          <TabsContent value="script" className="mt-4 space-y-4">
-            <ConfigFormSection
-              title="Script"
-              description="Optional JavaScript expression for advanced scene state generation."
-            >
-              <ConfigHelpPanel>
-                Scene scripts evaluate a JavaScript expression. Use{' '}
-                defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed
-                autocomplete, plus bindings like
-                devices[&quot;integration/device&quot;] and{' '}
-                groups[&quot;group-id&quot;].
-              </ConfigHelpPanel>
-              <ConfigField label="Script (JavaScript)">
-                <NoSSRSceneScriptEditor
-                  deviceOptions={deviceOptions}
-                  groupOptions={groupOptions}
-                  sceneIds={otherScenes.map((candidate) => candidate.id)}
-                  value={script}
-                  onChange={setScript}
-                />
-              </ConfigField>
-            </ConfigFormSection>
-          </TabsContent>
-        </ExperienceOnly>
+        <TabsContent value="script" className="mt-4 space-y-4">
+          <ConfigFormSection
+            title="Script"
+            description="Optional JavaScript expression for advanced scene state generation."
+          >
+            <ConfigHelpPanel>
+              Scene scripts evaluate a JavaScript expression. Use{' '}
+              defineSceneScript(() =&gt; {'{'} ... {'}'}) for typed
+              autocomplete, plus bindings like
+              devices[&quot;integration/device&quot;] and{' '}
+              groups[&quot;group-id&quot;].
+            </ConfigHelpPanel>
+            <ConfigField label="Script (JavaScript)">
+              <NoSSRSceneScriptEditor
+                deviceOptions={deviceOptions}
+                groupOptions={groupOptions}
+                sceneIds={otherScenes.map((candidate) => candidate.id)}
+                value={script}
+                onChange={setScript}
+              />
+            </ConfigField>
+          </ConfigFormSection>
+        </TabsContent>
 
         <TabsContent value="devices" className="mt-4">
           <ConfigFormSection
@@ -777,7 +807,7 @@ function SceneEditorForm({
 
         <TabsContent value="groups" className="mt-4">
           <ConfigFormSection
-            title="Group targets"
+            title="Room targets"
             description="Apply shared state to groups in order; later targets override earlier ones."
           >
             <SceneTargetSectionEditor

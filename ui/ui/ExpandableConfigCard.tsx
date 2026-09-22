@@ -45,11 +45,11 @@ export function ExpandableConfigCard({
         onClick={onOpen}
         onKeyDown={handleCardKeyDown}
         className={cn(
-          'cursor-pointer transition hover:border-primary/40 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'cursor-pointer rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           cardClassName,
         )}
       >
-        <CardContent className="p-6">{summary}</CardContent>
+        <CardContent className="p-4 sm:p-5">{summary}</CardContent>
       </Card>
 
       <ResponsiveOverlay

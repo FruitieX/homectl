@@ -50,7 +50,6 @@ import {
 } from '@/ui/config-form';
 import { toast } from 'sonner';
 
-import { ExperienceOnly } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import {
   confirmDestructive,
@@ -1221,14 +1220,7 @@ export default function DevicesPage() {
     <div className="space-y-6">
       <ConfigPageHeader
         title="Devices"
-        description={
-          <>
-            Configure user-facing device labels, inspect live runtime state, and
-            trigger fake sensor updates without opening the floorplan. Active
-            scenes and scene-derived state sources are shown for controllable
-            devices whenever the runtime exposes them.
-          </>
-        }
+        description="Find a device, see its current state, and change how it appears or behaves."
         actions={undefined}
       />
 
@@ -1538,9 +1530,8 @@ export default function DevicesPage() {
                     <TabsTrigger value="runtime">Runtime</TabsTrigger>
                     <TabsTrigger value="config">Config</TabsTrigger>
                     <TabsTrigger value="actions">Actions</TabsTrigger>
-                    <ExperienceOnly minimum="expert">
-                      <TabsTrigger value="raw">Raw</TabsTrigger>
-                    </ExperienceOnly>
+
+                    <TabsTrigger value="raw">Technical</TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="state" className="mt-4 space-y-4">
@@ -1565,8 +1556,8 @@ export default function DevicesPage() {
                     className="mt-4 grid gap-4 xl:grid-cols-2"
                   >
                     <ConfigFormSection
-                      title="Runtime"
-                      description="Live state currently reported by the integration and runtime state resolver."
+                      title="What this device reports"
+                      description="Current information from its connection. Values may lag behind a physical change."
                     >
                       {'Controllable' in device.data ? (
                         <div className="space-y-3">
@@ -1627,6 +1618,18 @@ export default function DevicesPage() {
                           />
                         </div>
                       )}
+                      <Button
+                        asChild
+                        variant="outline"
+                        size="sm"
+                        className="mt-2"
+                      >
+                        <Link
+                          to={`/config/routine-history?q=${encodeURIComponent(deviceKey)}`}
+                        >
+                          See automations started by this device
+                        </Link>
+                      </Button>
                     </ConfigFormSection>
 
                     <ConfigFormSection
@@ -1914,29 +1917,27 @@ export default function DevicesPage() {
                     </ConfigFormSection>
                   </TabsContent>
 
-                  <ExperienceOnly minimum="expert">
-                    <TabsContent value="raw" className="mt-4">
-                      <ConfigFormSection
-                        title="Raw JSON payload"
-                        description="Latest raw payload published by the integration."
-                      >
-                        {device.raw ? (
-                          <details>
-                            <summary className="cursor-pointer select-none text-sm text-foreground/80">
-                              Show live payload from the integration
-                            </summary>
-                            <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
-                              {JSON.stringify(device.raw, null, 2)}
-                            </pre>
-                          </details>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            This device has not published a raw payload.
-                          </p>
-                        )}
-                      </ConfigFormSection>
-                    </TabsContent>
-                  </ExperienceOnly>
+                  <TabsContent value="raw" className="mt-4">
+                    <ConfigFormSection
+                      title="Raw JSON payload"
+                      description="Latest raw payload published by the integration."
+                    >
+                      {device.raw ? (
+                        <details>
+                          <summary className="cursor-pointer select-none text-sm text-foreground/80">
+                            Show live payload from the integration
+                          </summary>
+                          <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                            {JSON.stringify(device.raw, null, 2)}
+                          </pre>
+                        </details>
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          This device has not published a raw payload.
+                        </p>
+                      )}
+                    </ConfigFormSection>
+                  </TabsContent>
                 </Tabs>
               ) : null}
             </ExpandableConfigCard>

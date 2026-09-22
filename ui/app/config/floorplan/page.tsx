@@ -31,6 +31,12 @@ import { Alert, AlertDescription, AlertTitle } from '@/ui/primitives/alert';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/ui/primitives/dropdown-menu';
+import {
   Card,
   CardContent,
   CardDescription,
@@ -516,16 +522,16 @@ export default function FloorplanPage() {
         </Alert>
       ) : null}
       <ConfigPageHeader
-        title="Floorplan Editor"
-        description="Manage floorplan canvases, background images, device placements, and group masks."
+        title="Floorplan"
+        description="Add a map of your home, then place rooms and devices where they belong."
         actions={
           <>
             <Button
-              variant={hasChanges ? 'secondary' : 'default'}
               onClick={handleSave}
               disabled={
                 loading ||
                 floorplanLoading ||
+                !hasChanges ||
                 !selectedFloorplanId ||
                 floorplanLoadError !== null
               }
@@ -533,22 +539,43 @@ export default function FloorplanPage() {
               {loading ? (
                 <span className="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
               ) : null}
-              Save Floorplan
+              Save changes
             </Button>
-            <Button
-              variant="outline"
-              disabled={loading || floorplanLoading || !selectedFloorplanId}
-              onClick={handleExport}
-            >
-              Export JSON
-            </Button>
-            <Button
-              variant="outline"
-              disabled={loading || floorplanLoading || !selectedFloorplanId}
-              onClick={() => importInputRef.current?.click()}
-            >
-              Import JSON
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline">More options</Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  disabled={loading || floorplanLoading || !selectedFloorplanId}
+                  onSelect={handleExport}
+                >
+                  Export JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={loading || floorplanLoading || !selectedFloorplanId}
+                  onSelect={() => importInputRef.current?.click()}
+                >
+                  Import JSON
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  disabled={loading || floorplanLoading || !selectedFloorplanId}
+                  onSelect={async () => {
+                    if (
+                      await confirmDestructive(
+                        'Reset this floorplan grid?',
+                        'All device placements and room masks are cleared in the editor. The saved floorplan is unchanged until you save.',
+                      )
+                    ) {
+                      handleGridChange(createEmptyGrid());
+                    }
+                  }}
+                >
+                  Reset layout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <input
               ref={importInputRef}
               type="file"
@@ -560,22 +587,6 @@ export default function FloorplanPage() {
                 e.target.value = '';
               }}
             />
-            <Button
-              variant="ghost"
-              disabled={loading || floorplanLoading || !selectedFloorplanId}
-              onClick={async () => {
-                if (
-                  await confirmDestructive(
-                    'Reset this floorplan grid?',
-                    'All device placements and group masks are cleared in the editor. The saved floorplan is unchanged until you save.',
-                  )
-                ) {
-                  handleGridChange(createEmptyGrid());
-                }
-              }}
-            >
-              Reset
-            </Button>
           </>
         }
       />

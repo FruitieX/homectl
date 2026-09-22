@@ -28,7 +28,7 @@ export function ConfigPageHeader({
   return (
     <div
       className={cn(
-        'flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between',
+        'flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between',
         className,
       )}
     >
@@ -49,7 +49,7 @@ export function ConfigPageHeader({
           {backTo && section ? (
             <nav
               aria-label="Breadcrumb"
-              className="mb-1 hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
+              className="mb-2 hidden items-center gap-1 text-xs text-muted-foreground sm:flex"
             >
               <Link to="/config" className="transition hover:text-foreground">
                 Settings
@@ -62,9 +62,11 @@ export function ConfigPageHeader({
               </span>
             </nav>
           ) : null}
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
           {description && (
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+              {description}
+            </p>
           )}
         </div>
       </div>

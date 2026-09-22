@@ -12,7 +12,7 @@ import { Input } from '@/ui/primitives/input';
 import { ConfigPageHeader } from '../page-header';
 
 const sections = { group: 'groups', scene: 'scenes', device: 'devices' };
-const labels = { group: 'group', scene: 'scene', device: 'device' };
+const labels = { group: 'room', scene: 'scene', device: 'device' };
 
 function Issue({ issue }: { issue: ConfigDiagnostic }) {
   const Icon = issue.severity === 'warning' ? AlertTriangle : Info;
@@ -29,13 +29,25 @@ function Issue({ issue }: { issue: ConfigDiagnostic }) {
             {issue.entity}
           </span>
         </div>
-        <p className="break-words text-sm">{issue.message}</p>
-        <p className="text-sm text-muted-foreground">{issue.suggestion}</p>
+        <div className="grid gap-2 text-sm sm:grid-cols-2">
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              What we found
+            </span>
+            <p className="mt-1 break-words">{issue.message}</p>
+          </div>
+          <div>
+            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              What to do
+            </span>
+            <p className="mt-1 break-words">{issue.suggestion}</p>
+          </div>
+        </div>
         <Button asChild size="sm" variant="outline">
           <Link
             to={`/config/${sections[issue.entity]}?q=${encodeURIComponent(issue.entity_id)}`}
           >
-            Review {labels[issue.entity]}
+            Open {labels[issue.entity]}
           </Link>
         </Button>
       </div>
@@ -81,8 +93,8 @@ export default function DiagnosticsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <ConfigPageHeader
-        title="Configuration check"
-        description="Review references, scene targets, and device assignments. These checks do not change your home."
+        title="Check for problems"
+        description="See what is affected, why it needs attention, and where to fix it. Checks do not change your home."
         actions={
           <Button
             variant="outline"

@@ -1,6 +1,6 @@
 export type ConfigSection = {
   description: string;
-  group: 'Core' | 'Automation' | 'Interface' | 'Operations';
+  group: 'Your home' | 'Automations' | 'Appearance' | 'Maintenance';
   href: string;
   label: string;
   keywords: string[];
@@ -9,10 +9,9 @@ export type ConfigSection = {
 export const configSections = [
   {
     href: '/config/diagnostics',
-    label: 'Configuration check',
-    description:
-      'Find missing references, group loops, and unresolved scene assignments.',
-    group: 'Operations',
+    label: 'Check for problems',
+    description: 'Find broken links and get a next step for each issue.',
+    group: 'Maintenance',
     keywords: [
       'diagnostics',
       'issues',
@@ -24,41 +23,45 @@ export const configSections = [
   },
   {
     href: '/config/integrations',
-    label: 'Integrations',
-    description:
-      'Plugin instances, schedules, MQTT bridges, and virtual devices.',
-    group: 'Core',
-    keywords: ['plugins', 'mqtt', 'cron', 'timer', 'dummy', 'circadian'],
+    label: 'Connections & services',
+    description: 'Connect devices, schedules, and virtual services.',
+    group: 'Your home',
+    keywords: [
+      'integrations',
+      'plugins',
+      'mqtt',
+      'cron',
+      'timer',
+      'dummy',
+      'circadian',
+    ],
   },
   {
     href: '/config/groups',
-    label: 'Groups',
-    description:
-      'Device collections, nested groups, hidden rooms, and memberships.',
-    group: 'Core',
+    label: 'Rooms',
+    description: 'Organize devices and control them together.',
+    group: 'Your home',
     keywords: ['rooms', 'memberships', 'devices', 'linked groups'],
   },
   {
     href: '/config/devices',
     label: 'Devices',
-    description:
-      'Display names, sensor interaction mappings, replacement, and cleanup.',
-    group: 'Core',
+    description: 'Name, inspect, and organize your devices and sensors.',
+    group: 'Your home',
     keywords: ['labels', 'sensors', 'replace', 'delete', 'device config'],
   },
   {
     href: '/config/scenes',
     label: 'Scenes',
-    description:
-      'Device/group target states, scene links, scripts, and activation presets.',
-    group: 'Automation',
+    description: 'Save the lighting or device state you want to recall.',
+    group: 'Automations',
     keywords: ['targets', 'scripts', 'colors', 'activation', 'presets'],
   },
   {
     href: '/config/routines',
     label: 'Routines',
-    description: 'Triggers, conditions, programs, and automation status.',
-    group: 'Automation',
+    description: 'Choose what starts an automation and what it does.',
+    group: 'Automations',
     keywords: [
       'rules',
       'actions',
@@ -71,9 +74,8 @@ export const configSections = [
   {
     href: '/config/helpers',
     label: 'Helpers',
-    description:
-      'Typed values routines, scripts, and widgets read and write, with live values and persistence.',
-    group: 'Automation',
+    description: 'Store values that automations can read and change.',
+    group: 'Automations',
     keywords: [
       'helper',
       'state',
@@ -87,18 +89,16 @@ export const configSections = [
   },
   {
     href: '/config/routine-history',
-    label: 'Routine History',
-    description:
-      'Recent routine activations, manual triggers, source devices, and rule traces.',
-    group: 'Automation',
+    label: 'Automation history',
+    description: 'See when routines ran and what triggered them.',
+    group: 'Automations',
     keywords: ['history', 'audit', 'why', 'trace', 'trigger', 'diagnostics'],
   },
   {
     href: '/config/sources',
     label: 'Computed sources',
-    description:
-      'Server-computed circadian profiles published as read-only sensors, with forkable script presets.',
-    group: 'Automation',
+    description: 'Use calculated values such as time-based light color.',
+    group: 'Automations',
     keywords: [
       'computed',
       'source',
@@ -112,17 +112,15 @@ export const configSections = [
   {
     href: '/config/floorplan',
     label: 'Floorplan',
-    description:
-      'Floorplan grids, background images, device positions, and group masks.',
-    group: 'Interface',
+    description: 'Place devices and rooms on a map of your home.',
+    group: 'Appearance',
     keywords: ['map', 'grid', 'walls', 'image', 'positions'],
   },
   {
     href: '/config/settings',
-    label: 'System',
-    description:
-      'Appearance, core server settings, warmup, and runtime behavior.',
-    group: 'Operations',
+    label: 'App & system',
+    description: 'Adjust appearance, startup behavior, and assistant settings.',
+    group: 'Appearance',
     keywords: [
       'appearance',
       'theme',
@@ -144,16 +142,15 @@ export const configSections = [
   {
     href: '/config/logs',
     label: 'Logs',
-    description: 'Runtime log stream, levels, and operational diagnostics.',
-    group: 'Operations',
+    description: 'Inspect technical events when troubleshooting.',
+    group: 'Maintenance',
     keywords: ['events', 'diagnostics', 'debug', 'errors'],
   },
   {
     href: '/config/import-export',
-    label: 'Backups & Migration',
-    description:
-      'JSON backups, restores, runtime snapshots, and legacy TOML import.',
-    group: 'Operations',
+    label: 'Backups & migration',
+    description: 'Save, restore, or import your configuration.',
+    group: 'Maintenance',
     keywords: [
       'backup',
       'restore',

@@ -25,6 +25,7 @@ import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Button } from '@/ui/primitives/button';
+import { EmptyState } from '@/ui/primitives/empty-state';
 import {
   ConfigField,
   ConfigFormActions,
@@ -598,7 +599,14 @@ function SourceEditor({
 }
 
 export default function SourcesConfigPage() {
-  const { data: sources, loading, error, update, remove } = useSources();
+  const {
+    data: sources,
+    loading,
+    error,
+    refetch,
+    update,
+    remove,
+  } = useSources();
   const { data: presets } = useSourcePresets();
   const liveDevices = useDevicesState();
 
@@ -709,7 +717,7 @@ export default function SourcesConfigPage() {
     <div className="space-y-6">
       <ConfigPageHeader
         title="Computed sources"
-        description="Server-owned values computed from pure inputs and published as read-only sensors under computed/<id>."
+        description="Create calculated values, such as light color that follows the time of day."
         actions={
           <Button type="button" onClick={openCreate}>
             New source
@@ -719,23 +727,47 @@ export default function SourcesConfigPage() {
 
       {error ? (
         <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
+          <AlertDescription className="space-y-3">
+            <p>Could not load computed sources: {error}</p>
+            <Button size="sm" variant="outline" onClick={() => void refetch()}>
+              Try again
+            </Button>
+          </AlertDescription>
         </Alert>
       ) : null}
 
-      <ConfigListSearchBar
-        filteredCount={visibleSources.length}
-        onChange={setSearch}
-        placeholder="Search sources"
-        totalCount={sources.length}
-        value={search}
-      />
+      {!error && (
+        <ConfigListSearchBar
+          filteredCount={visibleSources.length}
+          onChange={setSearch}
+          placeholder="Search sources"
+          totalCount={sources.length}
+          value={search}
+        />
+      )}
 
-      {visibleSources.length === 0 ? (
-        <ConfigHelpPanel>
-          No computed sources yet. Create one to publish a circadian profile
-          without an integration wrapper.
-        </ConfigHelpPanel>
+      {!error && visibleSources.length === 0 ? (
+        <EmptyState
+          title={
+            sources.length === 0
+              ? 'No computed sources yet'
+              : 'No matching sources'
+          }
+          description={
+            sources.length === 0
+              ? 'Create a time-based value, such as a circadian light color.'
+              : 'Try another name or clear your search.'
+          }
+          action={
+            sources.length === 0 ? (
+              <Button onClick={openCreate}>Create a source</Button>
+            ) : (
+              <Button variant="outline" onClick={() => setSearch('')}>
+                Clear search
+              </Button>
+            )
+          }
+        />
       ) : null}
 
       <div className="grid gap-4">

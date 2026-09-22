@@ -9,9 +9,8 @@ export type ConfigTab = {
 };
 
 /**
- * Segmented link tabs for closely related config pages (Routines/History,
- * Backups/Migration). Uses links so each tab keeps its own URL and deep links
- * continue to work.
+ * Segmented links for closely related config pages. Each view has its own URL,
+ * so browser navigation and deep links continue to work.
  */
 export function ConfigTabs({
   tabs,
@@ -21,8 +20,8 @@ export function ConfigTabs({
   className?: string;
 }) {
   return (
-    <div
-      role="tablist"
+    <nav
+      aria-label="Related settings"
       className={cn(
         'inline-flex w-full max-w-md gap-1 rounded-2xl bg-muted p-1',
         className,
@@ -32,8 +31,7 @@ export function ConfigTabs({
         <Link
           key={tab.to}
           to={tab.to}
-          role="tab"
-          aria-selected={tab.active ?? false}
+          aria-current={tab.active ? 'page' : undefined}
           className={cn(
             'flex-1 rounded-xl px-3 py-2 text-center text-sm font-medium transition',
             tab.active
@@ -44,6 +42,6 @@ export function ConfigTabs({
           {tab.label}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }

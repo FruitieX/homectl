@@ -3,19 +3,19 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
-  Check,
+  CheckCircle2,
   ChevronRight,
+  CircleHelp,
   Download,
   Layers3,
-  LayoutGrid,
   Lightbulb,
-  MonitorCog,
-  Plus,
+  PlugZap,
   Search,
   Wand2,
+  X,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
 import type { ConfigDiagnostics } from '@/bindings/ConfigDiagnostics';
 import { useAppConfig } from '@/hooks/appConfig';
@@ -26,609 +26,571 @@ import {
   useScenesState,
 } from '@/hooks/websocket';
 import { useHelpers, useIntegrations, useRoutines } from '@/hooks/useConfig';
-import { formatBuildInfoSummary, normalizeBuildInfo } from '@/lib/buildInfo';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
-import { EmptyState } from '@/ui/primitives/empty-state';
+import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
-import {
-  configSections,
-  matchesConfigSectionSearch,
-  type ConfigSection,
-} from './sections';
+import { configSections } from './sections';
 import { ConfigPageHeader } from './page-header';
 
+type Destination = {
+  key: string;
+  label: string;
+  description: string;
+  href: string;
+  group: string;
+  keywords?: string;
+};
+
 const sectionGroups = [
-  'Core',
-  'Automation',
-  'Interface',
-  'Operations',
+  'Your home',
+  'Automations',
+  'Appearance',
+  'Maintenance',
 ] as const;
-
-const groupIcons = {
-  Core: LayoutGrid,
-  Automation: Wand2,
-  Interface: MonitorCog,
-  Operations: Activity,
-} as const;
-
-const staticNavItems = [
+const tasks = [
   {
-    key: 'nav:/',
-    label: 'Dashboard',
-    description: 'Live home controls and widgets',
-    href: '/',
-  },
-  {
-    key: 'nav:/map',
-    label: 'Floorplan',
-    description: 'Spatial device map',
-    href: '/map',
-  },
-  {
-    key: 'nav:/groups',
-    label: 'Rooms',
-    description: 'Room pages and scene lists',
-    href: '/groups',
-  },
-];
-
-const quickActions = [
-  {
-    key: 'action:new-routine',
-    label: 'New routine',
-    href: '/config/routines?new=1',
-    icon: Wand2,
-  },
-  {
-    key: 'action:new-scene',
-    label: 'New scene',
-    href: '/config/scenes?new=1',
-    icon: Lightbulb,
-  },
-  {
-    key: 'action:new-group',
-    label: 'New room',
+    key: 'new-group',
+    label: 'Add a room',
     href: '/config/groups?new=1',
     icon: Layers3,
+    keywords: 'group organize devices',
   },
   {
-    key: 'action:connect-integration',
-    label: 'Add integration',
-    href: '/config/integrations',
-    icon: LayoutGrid,
+    key: 'new-scene',
+    label: 'Create a scene',
+    href: '/config/scenes?new=1',
+    icon: Lightbulb,
+    keywords: 'preset lighting',
   },
   {
-    key: 'action:export-backup',
-    label: 'Export backup',
+    key: 'new-routine',
+    label: 'Create a routine',
+    href: '/config/routines?new=1',
+    icon: Wand2,
+    keywords: 'automation trigger action',
+  },
+  {
+    key: 'connect-integration',
+    label: 'Add a connection',
+    href: '/config/integrations?new=1',
+    icon: PlugZap,
+    keywords: 'integration plugin mqtt',
+  },
+  {
+    key: 'export-backup',
+    label: 'Export a backup',
     href: '/config/import-export',
     icon: Download,
+    keywords: 'save restore configuration',
   },
 ] as const;
 
-function buildSetupSteps({
-  integrationCount,
-  deviceCount,
-  unassignedCount,
-  sceneCount,
-  routineCount,
-}: {
-  integrationCount: number;
-  deviceCount: number;
-  unassignedCount: number;
-  sceneCount: number;
-  routineCount: number;
-}) {
-  return [
-    {
-      key: 'setup:integration',
-      label: 'Connect an integration',
-      detail: 'Bring devices in from MQTT, circadian, timers, or a plugin.',
-      href: '/config/integrations',
-      done: integrationCount > 0,
-    },
-    {
-      key: 'setup:rooms',
-      label: 'Assign devices to rooms',
-      detail:
-        deviceCount === 0
-          ? 'Waiting for devices to appear.'
-          : 'Rooms let scenes and routines target groups of lights.',
-      href: '/config/groups',
-      done: deviceCount > 0 && unassignedCount === 0,
-    },
-    {
-      key: 'setup:scene',
-      label: 'Create your first scene',
-      detail: 'Capture the current light state or compose one by hand.',
-      href: '/config/scenes?new=1',
-      done: sceneCount > 0,
-    },
-    {
-      key: 'setup:routine',
-      label: 'Create your first routine',
-      detail: 'React to motion, buttons, time, or helpers.',
-      href: '/config/routines?new=1',
-      done: routineCount > 0,
-    },
-  ];
-}
-
-const buildInfo = normalizeBuildInfo({
-  version: import.meta.env.VITE_APP_VERSION,
-  gitCommit: import.meta.env.VITE_GIT_COMMIT,
-  buildDate: import.meta.env.VITE_BUILD_DATE,
-});
+const setupDismissalKey = 'homectl-settings-setup-dismissed';
 
 export default function ConfigPage() {
   const [search, setSearch] = useState('');
+  const [setupDismissed, setSetupDismissed] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem(setupDismissalKey) === '1',
+  );
   const { apiEndpoint } = useAppConfig();
-  const navigate = useNavigate();
   const recordRecent = useRecordRecent();
   const { recents } = useRecents();
-
-  const devicesState = useDevicesState();
-  const groupsState = useGroupsState();
-  const scenesState = useScenesState();
+  const devices = useDevicesState();
+  const groups = useGroupsState();
+  const scenes = useScenesState();
   const { data: routines } = useRoutines();
   const { data: helpers } = useHelpers();
-  const { data: integrations } = useIntegrations();
+  const { data: integrations, loading: integrationsLoading } =
+    useIntegrations();
 
   const diagnostics = useQuery({
     queryKey: ['config-diagnostics', apiEndpoint],
     queryFn: async (): Promise<ConfigDiagnostics> => {
       const response = await fetch(`${apiEndpoint}/api/v1/config/diagnostics`);
-      if (!response.ok) {
-        throw new Error('Could not load configuration checks.');
-      }
+      if (!response.ok) throw new Error('Could not check configuration.');
       const result = await response.json();
       if (!result.success || !result.data) {
-        throw new Error(result.error || 'Could not load configuration checks.');
+        throw new Error(result.error || 'Could not check configuration.');
       }
       return result.data;
     },
-    staleTime: 30_000,
+    staleTime: 0,
+    refetchInterval: 30_000,
     retry: false,
   });
 
-  const open = (key: string, href: string) => {
-    recordRecent(key);
-    navigate(href);
-  };
-
-  const unassignedDeviceCount = useMemo(() => {
-    const assignedKeys = new Set<string>();
-    for (const group of Object.values(groupsState ?? {})) {
-      for (const key of group?.device_keys ?? []) {
-        assignedKeys.add(key);
-      }
-    }
-    return Object.keys(devicesState ?? {}).filter(
-      (key) => !assignedKeys.has(key),
-    ).length;
-  }, [devicesState, groupsState]);
-
-  const setupSteps = useMemo(
-    () =>
-      buildSetupSteps({
-        integrationCount: integrations?.length ?? 0,
-        deviceCount: Object.keys(devicesState ?? {}).length,
-        unassignedCount: unassignedDeviceCount,
-        sceneCount: Object.keys(scenesState ?? {}).length,
-        routineCount: routines?.length ?? 0,
-      }),
-    [devicesState, integrations, routines, scenesState, unassignedDeviceCount],
-  );
-
-  const linkIndex = useMemo(() => {
-    const index = new Map<string, { label: string; href: string }>();
-    for (const item of staticNavItems) {
-      index.set(item.key, { label: item.label, href: item.href });
-    }
-    for (const item of quickActions) {
-      index.set(item.key, { label: item.label, href: item.href });
-    }
-    for (const step of setupSteps) {
-      index.set(step.key, { label: step.label, href: step.href });
-    }
-    for (const section of configSections) {
-      index.set(`nav:${section.href}`, {
+  const destinations = useMemo(() => {
+    const entries: Destination[] = [
+      ...configSections.map((section) => ({
+        key: `nav:${section.href}`,
         label: section.label,
+        description: section.description,
         href: section.href,
-      });
-    }
-    for (const [key, device] of Object.entries(devicesState ?? {})) {
+        group: 'Settings',
+        keywords: `${section.group} ${section.keywords.join(' ')}`,
+      })),
+      ...tasks.map((task) => ({
+        key: `action:${task.key}`,
+        label: task.label,
+        description: 'Start this task',
+        href: task.href,
+        group: 'Tasks',
+        keywords: task.keywords,
+      })),
+      {
+        key: 'system:appearance',
+        label: 'Appearance',
+        description: 'Theme, accent color, and display density',
+        href: '/config/settings',
+        group: 'Settings',
+        keywords: 'light dark theme display',
+      },
+      {
+        key: 'system:behavior',
+        label: 'Startup & transitions',
+        description: 'When automations begin and how lights change',
+        href: '/config/settings?tab=core',
+        group: 'Settings',
+        keywords: 'warmup duration fade core',
+      },
+      {
+        key: 'system:assistant',
+        label: 'Configuration assistant',
+        description: 'Provider, model, and API key',
+        href: '/config/settings?tab=assistant',
+        group: 'Settings',
+        keywords: 'ai assistant base url token',
+      },
+      {
+        key: 'system:about',
+        label: 'App information',
+        description: 'Server address and build information',
+        href: '/config/settings?tab=info',
+        group: 'Settings',
+        keywords: 'endpoint version websocket build',
+      },
+    ];
+    for (const [key, device] of Object.entries(devices ?? {})) {
       if (!device) continue;
-      index.set(`device:${key}`, {
+      entries.push({
+        key: `device:${key}`,
         label: getDeviceDisplayLabel(device),
+        description: 'Device',
         href: `/config/devices?device=${encodeURIComponent(key)}`,
+        group: 'Devices',
+        keywords: key,
       });
     }
-    for (const [key, scene] of Object.entries(scenesState ?? {})) {
-      if (!scene) continue;
-      index.set(`scene:${key}`, {
-        label: scene.name,
-        href: `/config/scenes?scene=${encodeURIComponent(key)}`,
-      });
-    }
-    for (const [key, group] of Object.entries(groupsState ?? {})) {
+    for (const [key, group] of Object.entries(groups ?? {})) {
       if (!group) continue;
-      index.set(`group:${key}`, {
+      entries.push({
+        key: `group:${key}`,
         label: group.name,
-        href: `/groups/${encodeURIComponent(key)}`,
+        description: 'Room',
+        href: `/config/groups?q=${encodeURIComponent(group.name)}`,
+        group: 'Rooms',
+        keywords: key,
+      });
+    }
+    for (const [key, scene] of Object.entries(scenes ?? {})) {
+      if (!scene) continue;
+      entries.push({
+        key: `scene:${key}`,
+        label: scene.name,
+        description: 'Scene',
+        href: `/config/scenes?scene=${encodeURIComponent(key)}`,
+        group: 'Scenes',
+        keywords: key,
       });
     }
     for (const routine of routines ?? []) {
-      index.set(`routine:${routine.id}`, {
+      entries.push({
+        key: `routine:${routine.id}`,
         label: routine.name,
+        description: 'Routine',
         href: `/config/routines?q=${encodeURIComponent(routine.name)}`,
+        group: 'Routines',
+        keywords: routine.id,
       });
     }
     for (const helper of helpers ?? []) {
-      index.set(`helper:${helper.id}`, {
+      entries.push({
+        key: `helper:${helper.id}`,
         label: helper.name || helper.id,
+        description: 'Helper',
         href: `/config/helpers?q=${encodeURIComponent(helper.name || helper.id)}`,
+        group: 'Helpers',
+        keywords: helper.id,
       });
     }
     for (const integration of integrations ?? []) {
-      index.set(`integration:${integration.id}`, {
+      entries.push({
+        key: `integration:${integration.id}`,
         label: integration.id,
+        description: 'Connection or service',
         href: `/config/integrations?q=${encodeURIComponent(integration.id)}`,
+        group: 'Connections',
+        keywords: integration.id,
       });
     }
-    return index;
-  }, [
-    devicesState,
-    groupsState,
-    helpers,
-    integrations,
-    routines,
-    scenesState,
-    setupSteps,
-  ]);
+    return entries;
+  }, [devices, groups, scenes, routines, helpers, integrations]);
 
-  const recentEntries = useMemo(
-    () =>
-      recents
-        .map((key) => ({ key, entry: linkIndex.get(key) }))
-        .filter(
-          (
-            item,
-          ): item is { key: string; entry: { label: string; href: string } } =>
-            item.entry !== undefined,
+  const normalizedSearch = search.trim().toLocaleLowerCase();
+  const searchResults = normalizedSearch
+    ? destinations
+        .filter((entry) =>
+          `${entry.label} ${entry.description} ${entry.keywords ?? ''}`
+            .toLocaleLowerCase()
+            .includes(normalizedSearch),
         )
-        .slice(0, 6),
-    [linkIndex, recents],
-  );
+        .slice(0, 40)
+    : [];
+  const searchGroups = [...new Set(searchResults.map((entry) => entry.group))];
+  const recentEntries = recents
+    .map((key) => destinations.find((entry) => entry.key === key))
+    .filter((entry): entry is Destination => entry !== undefined)
+    .slice(0, 5);
+  const warnings =
+    diagnostics.data?.issues.filter((issue) => issue.severity === 'warning') ??
+    [];
+  const reviewCount = (diagnostics.data?.issues.length ?? 0) - warnings.length;
+  const setupStep = integrationsLoading
+    ? null
+    : !integrations?.length
+      ? {
+          label: 'Connect your first device or service',
+          detail: 'Choose an integration to bring your home into view.',
+          href: '/config/integrations?new=1',
+        }
+      : Object.keys(devices ?? {}).length === 0
+        ? {
+            label: 'Waiting for devices',
+            detail:
+              'Your connection is set up. Check its settings if devices do not appear.',
+            href: '/config/integrations',
+          }
+        : Object.keys(groups ?? {}).length === 0
+          ? {
+              label: 'Create a room',
+              detail:
+                'Group the devices you want to control together. Sensors can stay unassigned.',
+              href: '/config/groups?new=1',
+            }
+          : Object.keys(scenes ?? {}).length === 0
+            ? {
+                label: 'Save a scene',
+                detail:
+                  'Capture a useful device state so you can recall it later.',
+                href: '/config/scenes?new=1',
+              }
+            : (routines?.length ?? 0) === 0
+              ? {
+                  label: 'Create an automation',
+                  detail:
+                    'Use a sensor, schedule, or button to activate a scene automatically.',
+                  href: '/config/routines?new=1',
+                }
+              : null;
 
-  const attentionItems = useMemo(() => {
-    const items: {
-      key: string;
-      title: string;
-      detail: string;
-      href: string;
-      severity: 'warning' | 'info';
-    }[] = [];
-
-    const warnings =
-      diagnostics.data?.issues.filter(
-        (issue) => issue.severity === 'warning',
-      ) ?? [];
-    if (warnings.length > 0) {
-      const first = warnings[0];
-      items.push({
-        key: 'diagnostics',
-        title:
-          warnings.length === 1
-            ? '1 configuration warning'
-            : `${warnings.length} configuration warnings`,
-        detail: `${first.name}: ${first.message}`,
-        href: `/config/diagnostics?q=${encodeURIComponent(first.entity_id)}`,
-        severity: 'warning',
-      });
-    }
-
-    if (unassignedDeviceCount > 0) {
-      items.push({
-        key: 'unassigned-devices',
-        title:
-          unassignedDeviceCount === 1
-            ? '1 device is not in a room'
-            : `${unassignedDeviceCount} devices are not in a room`,
-        detail: 'Assign them to rooms so scenes and routines can target them.',
-        href: '/config/groups',
-        severity: 'info',
-      });
-    }
-
-    const legacyRoutines = (routines ?? []).filter(
-      (routine) => routine.semantics_version !== 2,
-    );
-    if (legacyRoutines.length > 0) {
-      items.push({
-        key: 'legacy-routines',
-        title:
-          legacyRoutines.length === 1
-            ? '1 routine still uses the legacy engine'
-            : `${legacyRoutines.length} routines still use the legacy engine`,
-        detail: 'Convert them to unlock conditions, programs, and dry runs.',
-        href: '/config/routines',
-        severity: 'info',
-      });
-    }
-
-    return items;
-  }, [diagnostics.data, routines, unassignedDeviceCount]);
-
-  const visibleSections = configSections.filter((section) =>
-    matchesConfigSectionSearch(section, search),
+  const trackedLink = (entry: Destination, className: string) => (
+    <Link
+      key={entry.key}
+      to={entry.href}
+      onClick={() => recordRecent(entry.key)}
+      className={className}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-medium text-foreground">
+          {entry.label}
+        </span>
+        <span className="block truncate text-xs text-muted-foreground">
+          {entry.description}
+        </span>
+      </span>
+      <ChevronRight
+        className="size-4 shrink-0 text-muted-foreground/60"
+        aria-hidden
+      />
+    </Link>
   );
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
-      <div className="space-y-3">
+    <div className="mx-auto max-w-5xl space-y-8 pb-8">
+      <div className="space-y-5">
         <ConfigPageHeader
           backTo={null}
           title="Settings"
-          description="Set up your home, tune automations, and keep an eye on health."
+          description="Everything you need to set up and understand your home."
         />
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Search
+            className="pointer-events-none absolute left-4 top-1/2 size-5 -translate-y-1/2 text-muted-foreground"
+            aria-hidden
+          />
           <Input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search settings…"
-            aria-label="Search configuration sections"
-            className="pl-9"
+            placeholder="Search settings, devices, rooms, or tasks"
+            aria-label="Search settings, devices, rooms, or tasks"
+            className="h-12 rounded-2xl bg-card pl-12 pr-10 text-base shadow-sm"
           />
-        </div>
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Quick actions
-        </h2>
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
-          {quickActions.map((action) => {
-            const Icon = action.icon;
-            return (
-              <button
-                key={action.key}
-                type="button"
-                onClick={() => open(action.key, action.href)}
-                className="flex items-start gap-2 rounded-2xl border border-border bg-card px-2.5 py-2.5 text-left text-xs font-medium transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:px-3 sm:py-3 sm:text-sm"
-              >
-                <span className="grid size-7 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary sm:size-8">
-                  <Icon className="size-3.5 sm:size-4" />
-                </span>
-                <span className="min-w-0 flex-1 whitespace-normal leading-snug">
-                  {action.label}
-                </span>
-                <Plus className="size-3.5 shrink-0 text-muted-foreground" />
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      <SetupChecklist steps={setupSteps} onNavigate={open} />
-
-      {attentionItems.length > 0 ? (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Needs attention
-          </h2>
-          <div className="space-y-2">
-            {attentionItems.map((item) => (
-              <Link
-                key={item.key}
-                to={item.href}
-                onClick={() => recordRecent(`nav:${item.href.split('?')[0]}`)}
-                className="flex items-start gap-3 rounded-2xl border border-border bg-card p-3 transition hover:bg-accent"
-              >
-                <AlertTriangle
-                  className={
-                    item.severity === 'warning'
-                      ? 'mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400'
-                      : 'mt-0.5 size-4 shrink-0 text-muted-foreground'
-                  }
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-medium">
-                    {item.title}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {item.detail}
-                  </span>
-                </span>
-                <ArrowRight className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {recentEntries.length > 0 ? (
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Recent
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {recentEntries.map(({ key, entry }) => (
-              <Link
-                key={key}
-                to={entry.href}
-                onClick={() => recordRecent(key)}
-                className="rounded-full border border-border bg-card px-3 py-1.5 text-sm transition hover:bg-accent"
-              >
-                {entry.label}
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {visibleSections.length === 0 ? (
-        <EmptyState
-          title="No settings found"
-          description="Try searching for a routine, scene, room, backup, log, or plugin term."
-        />
-      ) : (
-        <div className="space-y-3">
-          {sectionGroups.map((group) => {
-            const groupSections = visibleSections.filter(
-              (section) => section.group === group,
-            );
-            if (groupSections.length === 0) return null;
-            return (
-              <CollapsibleSection
-                key={group}
-                group={group}
-                sections={groupSections}
-                forceOpen={search.trim().length > 0}
-              />
-            );
-          })}
-        </div>
-      )}
-
-      <footer className="border-t border-border/50 pt-4 text-center text-xs text-muted-foreground/70">
-        <p className="break-words leading-relaxed">
-          {formatBuildInfoSummary(buildInfo)}
-        </p>
-      </footer>
-    </div>
-  );
-}
-
-function SetupChecklist({
-  steps,
-  onNavigate,
-}: {
-  steps: ReturnType<typeof buildSetupSteps>;
-  onNavigate: (key: string, href: string) => void;
-}) {
-  const [dismissed, setDismissed] = useState(false);
-
-  const completed = steps.filter((step) => step.done).length;
-  if (dismissed || completed === steps.length) return null;
-
-  return (
-    <section className="space-y-3 rounded-3xl border border-border bg-card/70 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold">Set up your home</h2>
-          <p className="text-xs text-muted-foreground">
-            {completed} of {steps.length} done. Each step links straight to the
-            right page.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="text-xs text-muted-foreground transition hover:text-foreground"
-        >
-          Hide
-        </button>
-      </div>
-      <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-        <div
-          className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${(completed / steps.length) * 100}%` }}
-        />
-      </div>
-      <ol className="grid gap-2 sm:grid-cols-2">
-        {steps.map((step) => (
-          <li key={step.key}>
+          {search && (
             <button
               type="button"
-              onClick={() => onNavigate(step.key, step.href)}
-              className="flex w-full items-start gap-3 rounded-2xl border border-border/70 bg-background/70 p-3 text-left transition hover:bg-accent"
+              onClick={() => setSearch('')}
+              aria-label="Clear search"
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-muted-foreground hover:bg-muted"
             >
-              <span
-                className={
-                  step.done
-                    ? 'mt-0.5 grid size-4 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground'
-                    : 'mt-0.5 size-4 shrink-0 rounded-full border border-border'
-                }
-              >
-                {step.done ? <Check className="size-3" /> : null}
-              </span>
-              <span className="min-w-0">
-                <span
-                  className={
-                    step.done
-                      ? 'block text-sm font-medium text-muted-foreground line-through'
-                      : 'block text-sm font-medium'
-                  }
-                >
-                  {step.label}
-                </span>
-                <span className="block text-xs text-muted-foreground">
-                  {step.detail}
-                </span>
-              </span>
+              <X className="size-4" />
             </button>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
-}
-
-function CollapsibleSection({
-  group,
-  sections,
-  forceOpen,
-}: {
-  group: (typeof sectionGroups)[number];
-  sections: ConfigSection[];
-  forceOpen: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const Icon = groupIcons[group];
-  const expanded = open || forceOpen;
-
-  return (
-    <section className="overflow-hidden rounded-3xl border border-border bg-card/60">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-accent/60"
-      >
-        <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground">
-          <Icon className="size-4" />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold">{group}</span>
-          <span className="block text-xs text-muted-foreground">
-            {sections.length} {sections.length === 1 ? 'page' : 'pages'}
-          </span>
-        </span>
-        <ChevronRight
-          className={
-            expanded
-              ? 'size-4 shrink-0 rotate-90 text-muted-foreground transition-transform'
-              : 'size-4 shrink-0 text-muted-foreground transition-transform'
-          }
-        />
-      </button>
-      {expanded ? (
-        <div className="grid gap-2 border-t border-border/60 p-3 md:grid-cols-2 xl:grid-cols-3">
-          {sections.map((section) => (
-            <Link
-              key={section.href}
-              to={section.href}
-              className="rounded-2xl border border-border/70 bg-background/70 p-3 transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <div className="text-sm font-semibold">{section.label}</div>
-              <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                {section.description}
-              </p>
-            </Link>
-          ))}
+          )}
         </div>
-      ) : null}
-    </section>
+      </div>
+
+      {normalizedSearch ? (
+        <div className="space-y-5">
+          <p aria-live="polite" className="text-sm text-muted-foreground">
+            {searchResults.length === 40
+              ? 'First 40 matches'
+              : `${searchResults.length} ${searchResults.length === 1 ? 'match' : 'matches'}`}{' '}
+            for “{search.trim()}”
+          </p>
+          {searchResults.length === 0 ? (
+            <div className="rounded-3xl border border-dashed p-8 text-center">
+              <CircleHelp className="mx-auto mb-3 size-6 text-muted-foreground" />
+              <p className="font-medium">Nothing found</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Try a device name, room, task, or technical term.
+              </p>
+            </div>
+          ) : (
+            searchGroups.map((group) => (
+              <section key={group} className="space-y-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  {group}
+                </h2>
+                <div className="overflow-hidden rounded-2xl border bg-card divide-y divide-border/60">
+                  {searchResults
+                    .filter((entry) => entry.group === group)
+                    .map((entry) =>
+                      trackedLink(
+                        entry,
+                        'flex min-h-15 items-center gap-3 px-4 py-3 transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                      ),
+                    )}
+                </div>
+              </section>
+            ))
+          )}
+        </div>
+      ) : (
+        <>
+          <section
+            aria-labelledby="home-status"
+            className="rounded-3xl border border-border/70 bg-card p-5 shadow-sm sm:p-6"
+          >
+            <div className="flex items-start gap-4">
+              <span
+                className={`grid size-11 shrink-0 place-items-center rounded-2xl ${diagnostics.isPending || diagnostics.isError ? 'bg-muted text-muted-foreground' : warnings.length ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400' : 'bg-primary/10 text-primary'}`}
+              >
+                {diagnostics.isPending ? (
+                  <Activity className="size-5" />
+                ) : diagnostics.isError ? (
+                  <CircleHelp className="size-5" />
+                ) : warnings.length ? (
+                  <AlertTriangle className="size-5" />
+                ) : (
+                  <CheckCircle2 className="size-5" />
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <h2 id="home-status" className="text-lg font-semibold">
+                  {diagnostics.isPending
+                    ? 'Checking your setup…'
+                    : diagnostics.isError
+                      ? 'Could not check your setup'
+                      : warnings.length
+                        ? `${warnings.length} ${warnings.length === 1 ? 'issue needs' : 'issues need'} a look`
+                        : diagnostics.data?.warming_up
+                          ? 'Your home is starting up'
+                          : reviewCount > 0
+                            ? 'No warnings need attention'
+                            : 'Your setup looks good'}
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {diagnostics.isPending
+                    ? 'Looking for broken links and other configuration issues.'
+                    : diagnostics.isError
+                      ? 'The server did not return configuration checks. Try again to see current issues.'
+                      : diagnostics.data?.warming_up
+                        ? 'Some checks will be available after devices finish starting.'
+                        : warnings.length
+                          ? `${warnings[0].name}: ${warnings[0].message}`
+                          : reviewCount > 0
+                            ? `${reviewCount} ${reviewCount === 1 ? 'item is' : 'items are'} available for review. Automation behavior and physical device delivery are checked separately.`
+                            : 'No problems found by these checks. Automation behavior and physical device delivery are checked separately.'}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button
+                    asChild
+                    variant={warnings.length ? 'default' : 'outline'}
+                    size="sm"
+                  >
+                    <Link
+                      to={
+                        warnings.length
+                          ? `/config/diagnostics?q=${encodeURIComponent(warnings[0].entity_id)}`
+                          : '/config/diagnostics'
+                      }
+                    >
+                      {warnings.length ? 'Review issue' : 'View checks'}
+                      <ArrowRight className="size-4" />
+                    </Link>
+                  </Button>
+                  {diagnostics.isError && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void diagnostics.refetch()}
+                    >
+                      Try again
+                    </Button>
+                  )}
+                  <Button asChild size="sm" variant="ghost">
+                    <Link to="/config/routine-history">Automation history</Link>
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {setupStep && !setupDismissed && (
+            <section className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 px-4 py-3">
+              <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary">
+                <Wand2 className="size-4" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                  Next step
+                </p>
+                <Link
+                  to={setupStep.href}
+                  className="mt-0.5 inline-flex items-center gap-1 font-medium hover:underline"
+                >
+                  {setupStep.label}
+                  <ArrowRight className="size-4" />
+                </Link>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  {setupStep.detail}
+                </p>
+              </div>
+              <button
+                type="button"
+                aria-label="Dismiss setup suggestion"
+                className="rounded-full p-1 text-muted-foreground hover:bg-muted"
+                onClick={() => {
+                  window.localStorage.setItem(setupDismissalKey, '1');
+                  setSetupDismissed(true);
+                }}
+              >
+                <X className="size-4" />
+              </button>
+            </section>
+          )}
+
+          <section className="space-y-3">
+            <div className="flex items-end justify-between">
+              <h2 className="text-lg font-semibold">
+                What would you like to do?
+              </h2>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {tasks.map((task) => {
+                const Icon = task.icon;
+                return (
+                  <Link
+                    key={task.key}
+                    to={task.href}
+                    onClick={() => recordRecent(`action:${task.key}`)}
+                    className="group flex min-h-16 items-center gap-3 rounded-2xl border border-border/70 bg-card px-4 py-3 shadow-sm transition hover:border-primary/40 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary">
+                      <Icon className="size-4" />
+                    </span>
+                    <span className="flex-1 text-sm font-medium">
+                      {task.label}
+                    </span>
+                    <ArrowRight className="size-4 text-muted-foreground/60" />
+                  </Link>
+                );
+              })}
+            </div>
+          </section>
+
+          {recentEntries.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold">Recently visited</h2>
+              <div className="flex flex-wrap gap-2">
+                {recentEntries.map((entry) => (
+                  <Link
+                    key={entry.key}
+                    to={entry.href}
+                    onClick={() => recordRecent(entry.key)}
+                    className="rounded-full border bg-card px-3 py-1.5 text-sm hover:bg-accent"
+                  >
+                    {entry.label}
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-lg font-semibold">Browse settings</h2>
+              <p className="text-sm text-muted-foreground">
+                Choose an area to see its details.
+              </p>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              {sectionGroups.map((group) => (
+                <details
+                  key={group}
+                  open={group === 'Your home' || group === 'Automations'}
+                  className="group overflow-hidden rounded-2xl border border-border/70 bg-card shadow-sm"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between px-4 py-3 text-sm font-semibold transition hover:bg-accent [&::-webkit-details-marker]:hidden">
+                    {group}
+                    <ChevronRight
+                      className="size-4 text-muted-foreground transition-transform group-open:rotate-90"
+                      aria-hidden
+                    />
+                  </summary>
+                  <div className="divide-y divide-border/50">
+                    {configSections
+                      .filter((section) => section.group === group)
+                      .map((section) =>
+                        trackedLink(
+                          {
+                            key: `nav:${section.href}`,
+                            label: section.label,
+                            description: section.description,
+                            href: section.href,
+                            group,
+                          },
+                          'flex items-center gap-3 px-4 py-2.5 transition hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                        ),
+                      )}
+                  </div>
+                </details>
+              ))}
+            </div>
+          </section>
+        </>
+      )}
+    </div>
   );
 }

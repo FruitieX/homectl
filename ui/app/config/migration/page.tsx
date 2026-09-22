@@ -375,8 +375,8 @@ export default function MigrationPage() {
   return (
     <div className="max-w-6xl space-y-5">
       <ConfigPageHeader
-        title="Backups & Migration"
-        description="Import legacy Settings.toml sections in controlled passes."
+        title="Import an older setup"
+        description="Move settings from a legacy Settings.toml file into the current database."
       />
       <ConfigTabs
         tabs={[
@@ -387,7 +387,7 @@ export default function MigrationPage() {
 
       <Alert variant="warning">
         <AlertTriangle className="size-4" />
-        <AlertTitle>One-time Migration</AlertTitle>
+        <AlertTitle>Import in two steps</AlertTitle>
         <AlertDescription>
           This tool imports your existing Settings.toml configuration into the
           database. Use it in two passes: import integrations first, wait for

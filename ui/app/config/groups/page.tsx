@@ -80,7 +80,15 @@ const getGroupSearchValues = (
 };
 
 export default function GroupsPage() {
-  const { data: groups, loading, error, create, update, remove } = useGroups();
+  const {
+    data: groups,
+    loading,
+    error,
+    refetch,
+    create,
+    update,
+    remove,
+  } = useGroups();
   const { devices: allDevices } = useDevicesApi();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -118,7 +126,12 @@ export default function GroupsPage() {
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>Error loading groups: {error}</AlertDescription>
+        <AlertDescription className="space-y-3">
+          <p>Could not load rooms: {error}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </AlertDescription>
       </Alert>
     );
   }
@@ -126,15 +139,15 @@ export default function GroupsPage() {
   return (
     <div className="space-y-4">
       <ConfigPageHeader
-        title="Groups"
-        description="Organize devices and nested groups into controllable targets."
-        actions={<Button onClick={() => setShowCreate(true)}>Add Group</Button>}
+        title="Rooms"
+        description="Organize the devices you want to control together. Sensors can stay outside a room."
+        actions={<Button onClick={() => setShowCreate(true)}>Add room</Button>}
       />
 
       <ConfigListSearchBar
         filteredCount={visibleGroups.length}
         onChange={setSearch}
-        placeholder="Search by name, id, or devices"
+        placeholder="Search rooms or devices"
         totalCount={groups.length}
         value={search}
       />
@@ -169,9 +182,6 @@ export default function GroupsPage() {
             <GroupCard
               key={group.id}
               group={group}
-              allGroups={groups}
-              deviceDisplayNameMap={deviceDisplayNameMap}
-              devicesByKey={devicesByKey}
               onOpen={() => setEditingId(group.id)}
               onDelete={async () => {
                 if (
@@ -373,7 +383,7 @@ function GroupLinker({
   return (
     <div className="space-y-2">
       <div className={fieldLabelClassName}>
-        Linked Groups ({selected.length} selected)
+        Linked rooms ({selected.length} selected)
       </div>
 
       {selected.length > 0 && (
@@ -421,16 +431,10 @@ function GroupLinker({
 
 function GroupCard({
   group,
-  allGroups,
-  deviceDisplayNameMap,
-  devicesByKey,
   onOpen,
   onDelete,
 }: {
   group: Group;
-  allGroups: Group[];
-  deviceDisplayNameMap: Record<string, string>;
-  devicesByKey: Record<string, Device>;
   onOpen: () => void;
   onDelete: () => void;
 }) {
@@ -438,7 +442,7 @@ function GroupCard({
     <Card
       role="button"
       tabIndex={0}
-      aria-label={`Edit group ${group.name}`}
+      aria-label={`Edit room ${group.name}`}
       onClick={onOpen}
       onKeyDown={(event) => {
         if (event.target !== event.currentTarget) return;
@@ -447,68 +451,25 @@ function GroupCard({
           onOpen();
         }
       }}
-      className="cursor-pointer transition hover:border-primary/40 hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      className="cursor-pointer rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <CardHeader>
         <div className="flex items-start justify-between gap-3">
           <div>
             <CardTitle>{group.name}</CardTitle>
-            <CardDescription>{group.id}</CardDescription>
+            <CardDescription>
+              {group.devices.length}{' '}
+              {group.devices.length === 1 ? 'device' : 'devices'}
+              {group.linked_groups.length > 0
+                ? ` · ${group.linked_groups.length} linked ${group.linked_groups.length === 1 ? 'room' : 'rooms'}`
+                : ''}
+            </CardDescription>
           </div>
           {group.hidden && <Badge variant="muted">Hidden</Badge>}
         </div>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {group.devices.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {group.devices.slice(0, 8).map((device) => {
-              const deviceKey = getGroupDeviceKey(device);
-              const matchingDevice = devicesByKey[deviceKey];
-              const label = matchingDevice
-                ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
-                : getDeviceDisplayLabelFromKey(
-                    deviceKey,
-                    device.device_id,
-                    deviceDisplayNameMap,
-                  );
-
-              return (
-                <Badge key={deviceKey} variant="secondary">
-                  {label}
-                </Badge>
-              );
-            })}
-            {group.devices.length > 8 ? (
-              <Badge variant="outline">+{group.devices.length - 8} more</Badge>
-            ) : null}
-          </div>
-        )}
-
-        {group.linked_groups.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {group.linked_groups.slice(0, 4).map((id) => {
-              const linked = allGroups.find((item) => item.id === id);
-              return (
-                <Badge key={id} variant="outline">
-                  {linked?.name ?? id}
-                </Badge>
-              );
-            })}
-            {group.linked_groups.length > 4 ? (
-              <Badge variant="outline">
-                +{group.linked_groups.length - 4} more
-              </Badge>
-            ) : null}
-          </div>
-        )}
-
-        {group.devices.length === 0 && group.linked_groups.length === 0 && (
-          <div className="text-sm text-muted-foreground">
-            No devices or links
-          </div>
-        )}
-
-        <div className="flex justify-end gap-2 pt-2">
+      <CardContent>
+        <div className="flex justify-end">
           <Button
             variant="ghost"
             size="sm"

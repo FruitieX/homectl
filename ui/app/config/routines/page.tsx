@@ -18,6 +18,7 @@ import { matchesConfigSearch } from '@/lib/configSearch';
 import type { DevicesState } from '@/bindings/DevicesState';
 import type { FlattenedGroupsConfig } from '@/bindings/FlattenedGroupsConfig';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { useDevicesApi, useGroupsState } from '@/hooks/useDevicesApi';
 import {
@@ -49,7 +50,7 @@ import {
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
 import { toast } from 'sonner';
 
-import { Advanced, ExperienceOnly } from '@/ui/primitives/advanced';
+import { Advanced } from '@/ui/primitives/advanced';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { AssistantDraft } from '@/hooks/useAssistant';
@@ -87,6 +88,7 @@ export default function RoutinesPage() {
     data: routines,
     loading,
     error,
+    refetch,
     create,
     update,
     remove,
@@ -189,7 +191,12 @@ export default function RoutinesPage() {
   if (error) {
     return (
       <Alert variant="destructive">
-        <AlertDescription>Error loading routines: {error}</AlertDescription>
+        <AlertDescription className="space-y-3">
+          <p>Could not load routines: {error}</p>
+          <Button variant="outline" size="sm" onClick={() => void refetch()}>
+            Try again
+          </Button>
+        </AlertDescription>
       </Alert>
     );
   }
@@ -198,6 +205,7 @@ export default function RoutinesPage() {
     <div className="space-y-4">
       <ConfigPageHeader
         title="Routines"
+        description="Automate what happens when a sensor, schedule, or other trigger changes."
         actions={
           <>
             <UiButton
@@ -217,14 +225,14 @@ export default function RoutinesPage() {
       <ConfigTabs
         tabs={[
           { label: 'Routines', to: '/config/routines', active: true },
-          { label: 'History', to: '/config/routine-history' },
+          { label: 'Activity', to: '/config/routine-history' },
         ]}
       />
 
       <ConfigListSearchBar
         filteredCount={visibleRoutines.length}
         onChange={setSearch}
-        placeholder="Search by name, id, rules, or actions"
+        placeholder="Search routines"
         totalCount={routines.length}
         value={search}
       />
@@ -587,7 +595,7 @@ function RoutineCard({
       <Tabs value={editTab} onValueChange={changeTab}>
         <TabsList
           className={`grid h-auto w-full grid-cols-3 ${
-            isV2 ? 'sm:grid-cols-6' : 'sm:grid-cols-5'
+            isV2 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
           }`}
         >
           <TabsTrigger value="overview">Overview</TabsTrigger>
@@ -596,11 +604,6 @@ function RoutineCard({
           {isV2 ? <TabsTrigger value="condition">Condition</TabsTrigger> : null}
           {isV2 ? <TabsTrigger value="program">Program</TabsTrigger> : null}
           {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
-          <ExperienceOnly minimum="expert">
-            <TabsTrigger value="json">
-              {isV2 ? 'Definition' : 'JSON'}
-            </TabsTrigger>
-          </ExperienceOnly>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -647,6 +650,28 @@ function RoutineCard({
             devices={devices}
             deviceDisplayNameMap={deviceDisplayNameMap}
           />
+          <Advanced
+            label="Advanced editor"
+            description="Edit the raw definition when the visual editor does not cover a specific case."
+          >
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => changeTab('json')}
+            >
+              Open JSON editor
+            </Button>
+          </Advanced>
+          <div className="flex justify-end">
+            <Button asChild size="sm" variant="outline">
+              <Link
+                to={`/config/routine-history?q=${encodeURIComponent(routine.id)}`}
+              >
+                See recent activity for this routine
+              </Link>
+            </Button>
+          </div>
           {!isV2 ? (
             <div className="grid gap-4 xl:grid-cols-2">
               <RoutineRuleList
@@ -811,49 +836,56 @@ function RoutineCard({
           </TabsContent>
         ) : null}
 
-        <ExperienceOnly minimum="expert">
-          <TabsContent value="json" className="mt-4">
-            <ConfigFormSection
-              title="Advanced JSON"
-              description={
-                isV2
-                  ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, script programs, choose branches, advanced predicates).'
-                  : 'Edit the raw routine payload when a visual editor does not expose an edge case.'
-              }
-            >
-              {isV2 ? (
-                <ConfigField label="Definition (JSON)">
+        <TabsContent value="json" className="mt-4">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="mb-3"
+            onClick={() => changeTab('overview')}
+          >
+            Back to overview
+          </Button>
+          <ConfigFormSection
+            title="Advanced JSON"
+            description={
+              isV2
+                ? 'Edit the raw native definition when the visual editor does not expose an edge case (conditions, script programs, choose branches, advanced predicates).'
+                : 'Edit the raw routine payload when a visual editor does not expose an edge case.'
+            }
+          >
+            {isV2 ? (
+              <ConfigField label="Definition (JSON)">
+                <Textarea
+                  className="h-96 font-mono text-xs"
+                  value={definitionJson}
+                  onChange={(e) => setDefinitionJson(e.target.value)}
+                  placeholder='{"triggers": [...], "program": {...}}'
+                />
+              </ConfigField>
+            ) : (
+              <div className="grid gap-4 lg:grid-cols-2">
+                <ConfigField label="Rules (JSON)">
                   <Textarea
-                    className="h-96 font-mono text-xs"
-                    value={definitionJson}
-                    onChange={(e) => setDefinitionJson(e.target.value)}
-                    placeholder='{"triggers": [...], "program": {...}}'
+                    className="h-64 font-mono text-xs"
+                    value={rulesJson}
+                    onChange={(e) => setRulesJson(e.target.value)}
+                    placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
                   />
                 </ConfigField>
-              ) : (
-                <div className="grid gap-4 lg:grid-cols-2">
-                  <ConfigField label="Rules (JSON)">
-                    <Textarea
-                      className="h-64 font-mono text-xs"
-                      value={rulesJson}
-                      onChange={(e) => setRulesJson(e.target.value)}
-                      placeholder='[{"Sensor": {"device_ref": {...}, "state": {...}}}]'
-                    />
-                  </ConfigField>
 
-                  <ConfigField label="Actions (JSON)">
-                    <Textarea
-                      className="h-64 font-mono text-xs"
-                      value={actionsJson}
-                      onChange={(e) => setActionsJson(e.target.value)}
-                      placeholder='[{"ActivateScene": {"scene_id": "..."}]'
-                    />
-                  </ConfigField>
-                </div>
-              )}
-            </ConfigFormSection>
-          </TabsContent>
-        </ExperienceOnly>
+                <ConfigField label="Actions (JSON)">
+                  <Textarea
+                    className="h-64 font-mono text-xs"
+                    value={actionsJson}
+                    onChange={(e) => setActionsJson(e.target.value)}
+                    placeholder='[{"ActivateScene": {"scene_id": "..."}]'
+                  />
+                </ConfigField>
+              </div>
+            )}
+          </ConfigFormSection>
+        </TabsContent>
       </Tabs>
 
       <ConfigFormActions>

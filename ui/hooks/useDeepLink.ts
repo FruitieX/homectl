@@ -29,6 +29,10 @@ export function useSearchParamState(): [string, (value: string) => void] {
   const [searchParams, setSearchParams] = useSearchParams();
   const [value, setValue] = useState(() => searchParams.get('q') ?? '');
 
+  useEffect(() => {
+    setValue(searchParams.get('q') ?? '');
+  }, [searchParams]);
+
   const setSearch = useCallback(
     (next: string) => {
       setValue(next);

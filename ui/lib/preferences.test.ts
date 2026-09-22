@@ -2,8 +2,6 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  advancedDefaultOpen,
-  isFieldVisible,
   pushRecent,
   rankByPreference,
   toggleFavoriteKey,
@@ -35,20 +33,4 @@ test('rankByPreference keeps original order without preferences', () => {
     rankByPreference(items, (item) => item.id, [], []),
     items,
   );
-});
-
-test('advancedDefaultOpen follows the level unless toggled', () => {
-  assert.equal(advancedDefaultOpen('simple'), false);
-  assert.equal(advancedDefaultOpen('standard'), false);
-  assert.equal(advancedDefaultOpen('expert'), true);
-  assert.equal(advancedDefaultOpen('expert', false), false);
-  assert.equal(advancedDefaultOpen('simple', true), true);
-});
-
-test('isFieldVisible respects the level order', () => {
-  assert.equal(isFieldVisible('simple', 'simple'), true);
-  assert.equal(isFieldVisible('simple', 'standard'), false);
-  assert.equal(isFieldVisible('standard', 'standard'), true);
-  assert.equal(isFieldVisible('standard', 'expert'), false);
-  assert.equal(isFieldVisible('expert', 'expert'), true);
 });

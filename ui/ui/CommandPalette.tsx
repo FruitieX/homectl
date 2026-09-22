@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Cog,
   Compass,
-  Contrast,
   Download,
   LayoutGrid,
   Layers3,
@@ -24,7 +23,6 @@ import { openAssistantPanelAtom } from '@/assistant/state';
 import { configSections } from '../app/config/sections';
 import {
   densityAtom,
-  useExperience,
   useFavoriteKeys,
   useRecents,
   useRecordRecent,
@@ -37,11 +35,7 @@ import {
 } from '@/hooks/websocket';
 import { useHelpers, useIntegrations, useRoutines } from '@/hooks/useConfig';
 import { getDeviceDisplayLabel } from '@/lib/deviceLabel';
-import {
-  experienceLevels,
-  rankByPreference,
-  type ExperienceLevel,
-} from '@/lib/preferences';
+import { rankByPreference } from '@/lib/preferences';
 import { cn } from '@/lib/cn';
 import {
   CommandDialog,
@@ -96,6 +90,27 @@ const staticNavItems = [
     keywords: `${section.group} ${section.keywords.join(' ')}`,
     href: section.href,
   })),
+  {
+    key: 'nav:/config/settings?tab=core',
+    label: 'Startup & transitions',
+    description: 'When automations begin and how lights change',
+    keywords: 'warmup behavior fade core',
+    href: '/config/settings?tab=core',
+  },
+  {
+    key: 'nav:/config/settings?tab=assistant',
+    label: 'Configuration assistant',
+    description: 'Provider, model, and API key',
+    keywords: 'assistant ai provider model token',
+    href: '/config/settings?tab=assistant',
+  },
+  {
+    key: 'nav:/config/settings?tab=info',
+    label: 'App information',
+    description: 'Server address and build information',
+    keywords: 'endpoint version websocket build',
+    href: '/config/settings?tab=info',
+  },
 ];
 
 export function CommandPalette() {
@@ -105,7 +120,6 @@ export function CommandPalette() {
   const recordRecent = useRecordRecent();
   const favorites = useFavoriteKeys();
   const { recents } = useRecents();
-  const { level, setLevel } = useExperience();
   const [themeMode, setThemeMode] = useTheme();
   const [density, setDensity] = useAtom(densityAtom);
   const openAssistant = useSetAtom(openAssistantPanelAtom);
@@ -232,23 +246,6 @@ export function CommandPalette() {
         icon: option.icon,
         run: () => {
           setThemeMode(option.mode);
-          setOpen(false);
-        },
-      });
-    }
-
-    for (const option of experienceLevels) {
-      result.push({
-        key: `experience:${option}`,
-        label: `Experience: ${option[0].toUpperCase()}${option.slice(1)}`,
-        description:
-          level === option
-            ? 'Current experience level'
-            : 'Change how much configuration is shown',
-        group: 'Appearance',
-        icon: <Contrast />,
-        run: () => {
-          setLevel(option as ExperienceLevel);
           setOpen(false);
         },
       });
@@ -389,12 +386,10 @@ export function CommandPalette() {
     groupsState,
     helpers,
     integrations,
-    level,
     openAssistant,
     routines,
     scenesState,
     setDensity,
-    setLevel,
     setOpen,
     setThemeMode,
     themeMode,
