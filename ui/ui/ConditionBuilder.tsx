@@ -119,10 +119,16 @@ function defaultValueSource(kind: ValueSource['kind']): ValueSource {
   }
 }
 
-function describeSource(source: ValueSource): string {
+function describeSource(
+  source: ValueSource,
+  resolveDevice?: (ref: {
+    integration_id: string;
+    device_id: string;
+  }) => string,
+): string {
   switch (source.kind) {
     case 'device':
-      return `${source.device.device_id || 'device'} ${source.path}`;
+      return `${(resolveDevice ? resolveDevice(source.device) : source.device.device_id) || 'device'} ${source.path}`;
     case 'helper':
       return `helper ${source.helper || '?'}`;
     case 'computed_source':
@@ -130,7 +136,13 @@ function describeSource(source: ValueSource): string {
   }
 }
 
-export function describeCondition(condition: unknown): string {
+export function describeCondition(
+  condition: unknown,
+  resolveDevice?: (ref: {
+    integration_id: string;
+    device_id: string;
+  }) => string,
+): string {
   if (!condition || typeof condition !== 'object') {
     return 'condition';
   }
@@ -143,12 +155,12 @@ export function describeCondition(condition: unknown): string {
     case 'any':
       return `any of ${expr.conditions.length} condition(s)`;
     case 'not':
-      return `not (${describeCondition(expr.condition)})`;
+      return `not (${describeCondition(expr.condition, resolveDevice)})`;
     case 'comparison': {
       const value = operatorsWithoutValue.has(expr.operator)
         ? ''
         : ` ${JSON.stringify(expr.value ?? null)}`;
-      return `${describeSource(expr.source)} ${expr.operator}${value}`;
+      return `${describeSource(expr.source, resolveDevice)} ${expr.operator}${value}`;
     }
     case 'group':
       return `group ${expr.group_id || '?'} (${quantifierLabels[expr.quantifier] ?? expr.quantifier})`;

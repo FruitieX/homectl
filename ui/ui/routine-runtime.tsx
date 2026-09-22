@@ -104,7 +104,7 @@ function deviceRefLabel(
     : getDeviceDisplayLabelFromKey(key, key, deviceDisplayNameMap);
 }
 
-function triggerLabel(
+export function triggerLabel(
   spec: TriggerSpec | undefined,
   devices: DevicesState,
   deviceDisplayNameMap: Record<string, string>,

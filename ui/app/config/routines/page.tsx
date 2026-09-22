@@ -37,6 +37,7 @@ import { ConditionEditor } from '@/ui/ConditionBuilder';
 import { ProgramBuilder } from '@/ui/ProgramBuilder';
 import { RoutineExecutionPolicyEditor } from '@/ui/RoutineExecutionPolicyEditor';
 import { RoutineRuntimePanel } from '@/ui/routine-runtime';
+import { V2RoutineSummary } from '@/ui/v2-routine-summary';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -877,6 +878,17 @@ function RoutineCard({
                     ? 'The conditions match; waiting for a matching trigger event.'
                     : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
       </p>
+      {isV2 ? (
+        <V2RoutineSummary
+          routine={routine}
+          status={runtimeStatus}
+          devices={devices}
+          groups={groups}
+          scenes={scenes}
+          routines={routines}
+          deviceDisplayNameMap={deviceDisplayNameMap}
+        />
+      ) : null}
       <RoutineRuntimePanel
         routine={routine}
         status={runtimeStatus}
