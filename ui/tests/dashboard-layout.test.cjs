@@ -82,7 +82,7 @@ test('keeps the weather container query free of display conflicts', () => {
   );
   assert.match(
     weatherStylesSource,
-    /@container dashboard-widget \(min-height: 10\.1rem\) and\s+\(max-height: 13rem\)/,
+    /@container dashboard-widget \(min-height: 10rem\) and\s+\(max-height: 13rem\)/,
   );
   assert.match(weatherStylesSource, /overflow-x: auto/);
   assert.match(
@@ -175,4 +175,76 @@ test('preserves quarter-unit widget dimensions in the rendered grid', () => {
     gridColumn: 'span 6 / span 6',
     gridRow: 'span 5 / span 5',
   });
+});
+
+function containerQueryBlocks(source, needle) {
+  const blocks = [];
+  let cursor = source.indexOf(needle);
+  while (cursor !== -1) {
+    const open = source.indexOf('{', cursor);
+    if (open === -1) break;
+    let depth = 1;
+    let index = open + 1;
+    while (index < source.length && depth > 0) {
+      if (source[index] === '{') depth += 1;
+      else if (source[index] === '}') depth -= 1;
+      index += 1;
+    }
+    blocks.push(source.slice(open + 1, index - 1));
+    cursor = source.indexOf(needle, index);
+  }
+  return blocks.join('\n');
+}
+
+const weatherHeightBands = containerQueryBlocks(
+  weatherStylesSource,
+  'dashboard-widget (min-height: 10rem) and',
+);
+
+test('keeps the medium-height weather strip on the tiles at every card width', () => {
+  // Both card sizes in the report were nearly identical, yet the wider one
+  // switched the strip to chips with the icon beside the text, which truncated
+  // the day and the range. The strip must use the tiles for every width.
+  assert.doesNotMatch(
+    weatherStylesSource,
+    /dashboard-widget \(max-width: 24rem\) and \(min-height: 10\.1rem\)/,
+  );
+  assert.match(
+    weatherHeightBands,
+    /dashboard-weather-forecast > \* \{\s*flex-direction: column;/,
+  );
+});
+
+test('scales the medium-height current conditions so the meta line stays inside', () => {
+  // The card keeps the strip in this height range, so the icon and the
+  // temperature have to shrink with the card height; otherwise the wind/UV line
+  // is clipped by the bottom edge. Both ramps meet the proportional sizes below
+  // the range and the full sizes above it, so nothing jumps at either edge.
+  assert.match(
+    weatherHeightBands,
+    /dashboard-weather-current \.dashboard-weather-icon \{\s*width: clamp\(2rem, calc\(51cqh - 2\.64rem\), 4rem\);/,
+  );
+  assert.match(
+    weatherHeightBands,
+    /dashboard-weather-current \.dashboard-weather-temperature \{\s*font-size: clamp\(1\.05rem, calc\(3\.92cqh \+ 0\.99rem\), 1\.5rem\);/,
+  );
+});
+
+test('stacks the medium-height strip instead of truncating it on narrow cards', () => {
+  const narrowBand = containerQueryBlocks(
+    weatherStylesSource,
+    'dashboard-widget (min-width: 14.1rem) and (max-width: 18rem) and',
+  );
+  assert.match(
+    narrowBand,
+    /dashboard-weather-forecast \{\s*grid-template-columns: minmax\(0, 1fr\);/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /dashboard-widget \(max-width: 21rem\) and\s+\(min-height: 10rem\) and \(max-height: 13rem\)/,
+  );
+  assert.match(
+    weatherStylesSource,
+    /dashboard-widget \(max-width: 12rem\) and \(min-height: 10rem\) \{[\s\S]*?font-size: 0\.6rem;/,
+  );
 });

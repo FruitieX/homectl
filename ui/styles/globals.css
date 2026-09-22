@@ -289,8 +289,13 @@
    * Medium-height weather cards need a compact three-day strip. Keep the
    * current conditions and strip in separate columns when the card is wide;
    * narrow cards use the same strip below the current conditions.
+   *
+   * The strip always uses the vertical tiles. Three chips share the forecast
+   * column, so a side-by-side icon and text truncates the day and the range
+   * once the card is a little wider than 24rem; the tiles stay legible for
+   * every card wide enough to hold three chips.
    */
-  @container dashboard-widget (min-height: 10.1rem) and
+  @container dashboard-widget (min-height: 10rem) and
     (max-height: 13rem) {
     .dashboard-weather-layout {
       min-height: 0;
@@ -299,13 +304,8 @@
 
     .dashboard-weather-forecast {
       grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @container dashboard-widget (max-width: 24rem) and (min-height: 10.1rem) and
-    (max-height: 13rem) {
-    .dashboard-weather-forecast {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      align-content: center;
+      gap: 0.35rem;
     }
 
     .dashboard-weather-forecast > * {
@@ -323,6 +323,84 @@
 
     .dashboard-weather-forecast > * > div {
       width: 100%;
+    }
+
+    .dashboard-weather-forecast > * .text-xs {
+      font-size: 0.7rem;
+      line-height: 0.95rem;
+    }
+  }
+
+  /* Three chips in a narrow card need a tighter strip and smaller type. */
+  @container dashboard-widget (max-width: 21rem) and
+    (min-height: 10rem) and (max-height: 13rem) {
+    .dashboard-weather-forecast {
+      gap: 0.2rem;
+    }
+
+    .dashboard-weather-forecast > * {
+      padding: 0.25rem 0.05rem;
+    }
+
+    .dashboard-weather-forecast > * .text-xs {
+      font-size: 0.65rem;
+      line-height: 0.9rem;
+    }
+  }
+
+  /*
+   * Between 14rem and 18rem three chips are narrower than the day and range
+   * text, so the strip falls back to the stacked rows this card uses above and
+   * below this height range. Narrower cards use the single-column layout and
+   * keep the three tiles.
+   */
+  @container dashboard-widget (min-width: 14.1rem) and (max-width: 18rem) and
+    (min-height: 10rem) and (max-height: 13rem) {
+    .dashboard-weather-forecast {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 0.2rem;
+    }
+
+    .dashboard-weather-forecast > * {
+      flex-direction: row;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 0.3rem;
+      padding: 0.1rem 0.35rem;
+      text-align: left;
+    }
+
+    .dashboard-weather-forecast > * img {
+      width: 1.25rem;
+      height: 1.25rem;
+    }
+
+    .dashboard-weather-forecast > * > div {
+      width: 100%;
+    }
+
+    .dashboard-weather-forecast > * .text-xs {
+      font-size: 0.65rem;
+      line-height: 0.85rem;
+    }
+  }
+
+  /*
+   * This card keeps the strip, so the current conditions have to shrink with
+   * the card height. The ramps meet the proportional sizes this card uses
+   * below this height range and the full sizes it uses above, so nothing jumps
+   * at either edge and the wind/UV line stays inside the card.
+   */
+  @container dashboard-widget (min-height: 10rem) and
+    (max-height: 13rem) {
+    .dashboard-weather-current .dashboard-weather-icon {
+      width: clamp(2rem, calc(51cqh - 2.64rem), 4rem);
+      height: clamp(2rem, calc(51cqh - 2.64rem), 4rem);
+    }
+
+    .dashboard-weather-current .dashboard-weather-temperature {
+      font-size: clamp(1.05rem, calc(3.92cqh + 0.99rem), 1.5rem);
+      line-height: 1.333;
     }
   }
 
@@ -823,6 +901,14 @@
     .dashboard-weather-forecast > * .text-xs {
       font-size: 0.65rem;
       line-height: 0.85rem;
+    }
+  }
+
+  /* The narrowest cards fit three chips only with the smallest type. */
+  @container dashboard-widget (max-width: 12rem) and (min-height: 10rem) {
+    .dashboard-weather-forecast > * .text-xs {
+      font-size: 0.6rem;
+      line-height: 0.8rem;
     }
   }
 
