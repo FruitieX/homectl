@@ -3,6 +3,22 @@
 Ideas and requested changes that are not implemented yet. Add new items at the
 top with enough context to act on them later, and remove an item once it lands.
 
+## Migrate the HTTP layer from warp to axum (2026-09-23)
+
+warp is effectively unmaintained next to axum, and it is why the server cannot
+just follow the ecosystem: 0.3 to 0.4 was another filter-API churn cycle rather
+than progress. The HTTP surface is 638 `warp::` references across 23 files with
+41 `warp::path(` segments, plus the websocket endpoint (`server/src/api/ws.rs`),
+CORS and the JSON/rejection plumbing (`warp::body`, `warp::reject`).
+
+Do this after the dependency migration, and until then keep warp pinned as-is —
+a warp 0.4 bump would be work thrown away. Likely shape: one axum `Router` per
+api module composed in `server/src/api/mod.rs`, `tower-http` for CORS/tracing,
+`axum::extract::ws` for the websocket, and rejection-based error bodies
+translated to axum responses. Keep the `/api/v1/...` paths, JSON shapes and
+handler logic as they are (the UI, the CLI and any saved assistant plans depend
+on them); change extractors and return types, not semantics.
+
 ## Paused/drifted state for scenes after manual tweaks (2026-09-23)
 
 When a group is following a scene and its state is changed outside that scene —
