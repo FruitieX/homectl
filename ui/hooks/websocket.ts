@@ -19,6 +19,12 @@ import { atom, useAtomValue, useSetAtom } from 'jotai';
 import { useAppConfig } from './appConfig';
 import { selectAtom } from 'jotai/utils';
 import { decidePatchAction } from '@/lib/websocketRevision';
+import {
+  RESUME_PROBE_TIMEOUT_MS,
+  decideResumeAction,
+  reconnectDelayMs,
+  socketReadiness,
+} from '@/lib/websocketReconnect';
 
 type UiState = { [key in string]?: JsonValue };
 
@@ -109,10 +115,18 @@ export const useProvideWebsocketState = () => {
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttempts = useRef(0);
   const revisionRef = useRef<number | null>(null);
+  // Foregrounding the app must be able to reach the live socket, which only
+  // exists inside the effect below.
+  const resumeRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let ws: WebSocket | null = null;
     let disposed = false;
+    let probeTimeout: NodeJS.Timeout | null = null;
+    // Set when we close a socket ourselves because the app came back to the
+    // foreground, so its close handler reconnects at once instead of waiting
+    // out a backoff.
+    let reconnectOnClose = false;
 
     const clearReconnectTimeout = () => {
       if (reconnectTimeout.current !== null) {
@@ -121,17 +135,19 @@ export const useProvideWebsocketState = () => {
       }
     };
 
+    const clearProbeTimeout = () => {
+      if (probeTimeout !== null) {
+        clearTimeout(probeTimeout);
+        probeTimeout = null;
+      }
+    };
+
     const scheduleReconnect = () => {
       if (disposed) {
         return;
       }
 
-      const baseDelayMs = 1_000;
-      const maxDelayMs = 30_000;
-      const delayMs = Math.min(
-        baseDelayMs * 2 ** reconnectAttempts.current,
-        maxDelayMs,
-      );
+      const delayMs = reconnectDelayMs(reconnectAttempts.current);
       reconnectAttempts.current += 1;
       setConnectionStatus('reconnecting');
 
@@ -139,25 +155,88 @@ export const useProvideWebsocketState = () => {
       reconnectTimeout.current = setTimeout(connect, delayMs);
     };
 
+    /** Reconnect without waiting out the remaining backoff. */
+    const connectNow = () => {
+      if (disposed) {
+        return;
+      }
+
+      reconnectAttempts.current = 0;
+      clearReconnectTimeout();
+      connect();
+    };
+
+    /**
+     * Runs when the app is foregrounded or the network comes back. Phones
+     * suspend the page and hand back a socket that the browser still reports
+     * as open even though it no longer carries traffic, while a pending
+     * reconnect timer may still be waiting out a long backoff.
+     */
+    const resume = () => {
+      if (disposed) {
+        return;
+      }
+
+      const readiness = ws === null ? 'none' : socketReadiness(ws.readyState);
+      switch (decideResumeAction(readiness)) {
+        case 'reconnect':
+          console.log('Reconnecting ws after the app was foregrounded');
+          connectNow();
+          return;
+        case 'wait':
+          return;
+        case 'probe': {
+          const probed = ws;
+          clearProbeTimeout();
+          probeTimeout = setTimeout(() => {
+            probeTimeout = null;
+            if (disposed || ws === null || ws !== probed) {
+              return;
+            }
+            if (ws.readyState !== WebSocket.OPEN) {
+              return;
+            }
+            console.log('ws did not answer after resume, reconnecting');
+            reconnectOnClose = true;
+            ws.close();
+          }, RESUME_PROBE_TIMEOUT_MS);
+          // Doubles as a state refresh for whatever changed while suspended.
+          probed?.send(JSON.stringify({ Resync: {} }));
+          return;
+        }
+      }
+    };
+
+    resumeRef.current = resume;
+
     function connect() {
       if (disposed) {
         return;
       }
 
+      clearProbeTimeout();
       setConnectionStatus(
         reconnectAttempts.current > 0 ? 'reconnecting' : 'connecting',
       );
       console.log('Opening ws connection...');
 
       ws = new WebSocket(wsEndpoint);
+      const socket = ws;
 
-      ws.onopen = () => {
+      socket.onopen = () => {
+        if (ws !== socket) {
+          return;
+        }
         reconnectAttempts.current = 0;
         revisionRef.current = null;
         setConnectionStatus('connected');
       };
 
-      ws.onmessage = function incoming(data) {
+      socket.onmessage = function incoming(data) {
+        if (ws !== socket) {
+          return;
+        }
+        clearProbeTimeout();
         let msg: WebSocketResponse;
         try {
           msg = JSON.parse(data.data as string) as WebSocketResponse;
@@ -167,9 +246,9 @@ export const useProvideWebsocketState = () => {
         }
 
         if ('DeviceCommandResult' in msg) {
-          receiveDeviceCommandResult(ws!, msg.DeviceCommandResult);
+          receiveDeviceCommandResult(socket, msg.DeviceCommandResult);
         } else if ('SceneCommandResult' in msg) {
-          receiveSceneCommandResult(ws!, msg.SceneCommandResult);
+          receiveSceneCommandResult(socket, msg.SceneCommandResult);
         } else if ('Command' in msg && msg.Command === 'reload') {
           window.location.reload();
         } else if ('State' in msg) {
@@ -192,8 +271,8 @@ export const useProvideWebsocketState = () => {
             return;
           }
           if (decision === 'resync') {
-            if (ws && ws.readyState === WebSocket.OPEN) {
-              ws.send(JSON.stringify({ Resync: {} }));
+            if (socket.readyState === WebSocket.OPEN) {
+              socket.send(JSON.stringify({ Resync: {} }));
             }
             return;
           }
@@ -231,17 +310,29 @@ export const useProvideWebsocketState = () => {
         }
       };
 
-      ws.onclose = () => {
-        if (ws) disconnectDeviceCommands(ws);
+      socket.onclose = () => {
+        if (ws !== socket) {
+          return;
+        }
+        disconnectDeviceCommands(socket);
         setWebsocket(null);
+        clearProbeTimeout();
+        if (reconnectOnClose) {
+          reconnectOnClose = false;
+          connectNow();
+          return;
+        }
         scheduleReconnect();
       };
 
-      ws.onerror = () => {
+      socket.onerror = () => {
+        if (ws !== socket) {
+          return;
+        }
         setConnectionStatus('reconnecting');
       };
 
-      setWebsocket(ws);
+      setWebsocket(socket);
     }
 
     connect();
@@ -249,6 +340,8 @@ export const useProvideWebsocketState = () => {
     return () => {
       disposed = true;
       clearReconnectTimeout();
+      clearProbeTimeout();
+      resumeRef.current = () => {};
       setWebsocket(null);
       setConnectionStatus('disconnected');
 
@@ -272,6 +365,29 @@ export const useProvideWebsocketState = () => {
     setConnectionStatus,
     wsEndpoint,
   ]);
+
+  // Foregrounding a suspended phone hands back a dead socket while a pending
+  // reconnect timer may still be waiting out a long backoff, so react to the
+  // app becoming visible (or the network returning) instead of only to
+  // onclose.
+  useEffect(() => {
+    const onResume = () => {
+      if (document.visibilityState === 'hidden') {
+        return;
+      }
+      resumeRef.current();
+    };
+
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('online', onResume);
+    window.addEventListener('pageshow', onResume);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('online', onResume);
+      window.removeEventListener('pageshow', onResume);
+    };
+  }, []);
 };
 
 export const useWebsocketState = (): StateUpdate | null => {
