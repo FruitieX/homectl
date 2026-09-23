@@ -3946,7 +3946,7 @@ fn durable_named_timers_survive_restart_and_cancelled_ones_do_not() {
             .await
             .expect("should open the test SQLite database");
             let row = db
-                .query_one(sea_orm::Statement::from_string(
+                .query_one_raw(sea_orm::Statement::from_string(
                     sea_orm::DbBackend::Sqlite,
                     "SELECT COUNT(*) AS count FROM automation_timer_jobs",
                 ))

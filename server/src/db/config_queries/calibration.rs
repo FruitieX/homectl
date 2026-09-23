@@ -2,6 +2,7 @@ use super::*;
 use crate::core::color_calibration::{ColorCalibrationAssignment, ColorCalibrationProfile};
 use sea_orm::sea_query;
 use sea_orm::sea_query::{Expr, Iden, OnConflict, Order, Query};
+use sea_orm::TransactionSession;
 
 #[derive(Clone, Copy, Iden)]
 pub enum CalibrationProfiles {

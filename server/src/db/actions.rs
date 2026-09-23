@@ -13,13 +13,13 @@ use crate::types::scene::{
 };
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
-use sea_orm::{ConnectionTrait, QueryResult, Statement, StatementBuilder};
+use sea_orm::{ConnectionTrait, ExprTrait, QueryResult, StatementBuilder};
 
 pub async fn db_update_device(device: &Device) -> Result<Device> {
     let db = get_db_connection()?;
     let state = serde_json::to_string(&device.data)?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::insert()
             .into_table(Devices::Table)
@@ -52,7 +52,7 @@ pub async fn db_find_device(key: &DeviceKey) -> Result<Option<Device>> {
     let db = get_db_connection()?;
 
     let row = db
-        .query_one(statement(
+        .query_one(&statement(
             db,
             Query::select()
                 .columns([
@@ -75,7 +75,7 @@ pub async fn db_get_devices() -> Result<HashMap<DeviceKey, Device>> {
     let db = get_db_connection()?;
 
     let rows = db
-        .query_all(statement(
+        .query_all(&statement(
             db,
             Query::select()
                 .columns([
@@ -103,7 +103,7 @@ pub async fn db_delete_device(device_key: &DeviceKey) -> Result<bool> {
     let db = get_db_connection()?;
 
     let result = db
-        .execute(statement(
+        .execute(&statement(
             db,
             Query::delete()
                 .from_table(Devices::Table)
@@ -122,7 +122,7 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
     let db = get_db_connection()?;
 
     let scene_rows = db
-        .query_all(statement(
+        .query_all(&statement(
             db,
             Query::select()
                 .columns([Scenes::Id, Scenes::Name, Scenes::Hidden, Scenes::Script])
@@ -163,7 +163,7 @@ pub async fn db_get_scenes() -> Result<ScenesConfig> {
 pub async fn db_store_scene(scene_id: &SceneId, config: &SceneConfig) -> Result<()> {
     let db = get_db_connection()?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::insert()
             .into_table(Scenes::Table)
@@ -195,7 +195,7 @@ pub async fn db_upsert_scene_device_state(
     let db = get_db_connection()?;
     let config = serde_json::to_string(config)?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::insert()
             .into_table(SceneDeviceStates::Table)
@@ -229,7 +229,7 @@ pub async fn db_upsert_scene_group_state(
     let db = get_db_connection()?;
     let config = serde_json::to_string(config)?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::insert()
             .into_table(SceneGroupStates::Table)
@@ -270,7 +270,7 @@ pub(crate) async fn db_upsert_scene_overrides_on<C: ConnectionTrait>(
 ) -> Result<()> {
     let overrides = serde_json::to_string(overrides)?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::insert()
             .into_table(SceneOverrides::Table)
@@ -292,7 +292,7 @@ pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
     let db = get_db_connection()?;
 
     let rows = db
-        .query_all(statement(
+        .query_all(&statement(
             db,
             Query::select()
                 .columns([SceneOverrides::SceneId, SceneOverrides::Overrides])
@@ -315,7 +315,7 @@ pub async fn db_get_scene_overrides() -> Result<SceneOverridesConfig> {
 pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
     let db = get_db_connection()?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::delete()
             .from_table(Scenes::Table)
@@ -330,7 +330,7 @@ pub async fn db_delete_scene(scene_id: &SceneId) -> Result<()> {
 pub async fn db_edit_scene(scene_id: &SceneId, name: &str) -> Result<()> {
     let db = get_db_connection()?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::update()
             .table(Scenes::Table)
@@ -348,7 +348,7 @@ pub async fn db_store_ui_state(key: &str, value: &serde_json::Value) -> Result<(
     let db = get_db_connection()?;
     let value = serde_json::to_string(value)?;
 
-    db.execute(statement(
+    db.execute(&statement(
         db,
         Query::insert()
             .into_table(UiState::Table)
@@ -370,7 +370,7 @@ pub async fn db_get_ui_state() -> Result<HashMap<String, serde_json::Value>> {
     let db = get_db_connection()?;
 
     let rows = db
-        .query_all(statement(
+        .query_all(&statement(
             db,
             Query::select()
                 .columns([UiState::Key, UiState::Value])
@@ -390,12 +390,14 @@ pub async fn db_get_ui_state() -> Result<HashMap<String, serde_json::Value>> {
         .collect())
 }
 
-fn statement<C, S>(db: &C, builder: S) -> Statement
+/// sea-orm 2.0 renders statements inside the connection, so this hands the
+/// builder through unchanged instead of pre-rendering a [`Statement`].
+fn statement<C, S>(_db: &C, builder: S) -> S
 where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    db.get_database_backend().build(&builder)
+    builder
 }
 
 fn device_from_row(row: QueryResult) -> Option<Device> {
@@ -425,7 +427,7 @@ async fn scene_device_state_rows<C: ConnectionTrait>(
     scene_id: &str,
 ) -> Result<Vec<(String, String)>> {
     let rows = db
-        .query_all(statement(
+        .query_all(&statement(
             db,
             Query::select()
                 .columns([SceneDeviceStates::DeviceKey, SceneDeviceStates::Config])
@@ -446,7 +448,7 @@ async fn scene_group_state_rows<C: ConnectionTrait>(
     scene_id: &str,
 ) -> Result<Vec<(String, String)>> {
     let rows = db
-        .query_all(statement(
+        .query_all(&statement(
             db,
             Query::select()
                 .columns([SceneGroupStates::GroupId, SceneGroupStates::Config])

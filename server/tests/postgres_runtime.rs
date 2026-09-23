@@ -6,7 +6,7 @@ use homectl_server::db::schema::{CoreConfig, Floorplans};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use sea_orm::sea_query::{Expr, Query};
-use sea_orm::{ConnectionTrait, Database, Statement, StatementBuilder};
+use sea_orm::{ConnectionTrait, Database, ExprTrait, Statement, StatementBuilder};
 use serde_json::Value;
 use sqlx::migrate::MigrateDatabase;
 use std::net::TcpListener;
@@ -66,7 +66,7 @@ fn floorplan_exists_in_postgres(database_url: &str, floorplan_id: &str) -> bool 
             .await
             .expect("should connect to postgres");
 
-        db.query_one(statement(
+        db.query_one(&statement(
             &db,
             Query::select()
                 .expr(Expr::value(1))
@@ -81,12 +81,14 @@ fn floorplan_exists_in_postgres(database_url: &str, floorplan_id: &str) -> bool 
     })
 }
 
-fn statement<C, S>(db: &C, builder: S) -> Statement
+/// sea-orm 2.0 renders statements inside the connection, so this hands the
+/// builder through unchanged instead of pre-rendering a [`Statement`].
+fn statement<C, S>(_db: &C, builder: S) -> S
 where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    db.get_database_backend().build(&builder)
+    builder
 }
 
 fn database_exists(database_url: &str) -> bool {
@@ -276,7 +278,7 @@ fn postgres_runtime_ignores_external_config_changes_while_running() {
             .await
             .expect("should connect to postgres");
 
-        db.execute(statement(
+        db.execute(&statement(
             &db,
             Query::update()
                 .table(CoreConfig::Table)

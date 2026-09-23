@@ -1574,7 +1574,7 @@ mod tests {
             "INSERT INTO calibration_assignments (device_key, profile_id) VALUES ('mqtt/lamp', 'legacy')",
             "INSERT INTO device_color_calibrations (device_key, points) VALUES ('mqtt/lamp', '[]')",
         ] {
-            db.execute(Statement::from_string(DbBackend::Sqlite, sql))
+            db.execute_raw(Statement::from_string(DbBackend::Sqlite, sql))
                 .await
                 .unwrap();
         }
@@ -1587,7 +1587,7 @@ mod tests {
             "device_color_calibrations",
         ] {
             let row = db
-                .query_one(Statement::from_string(
+                .query_one_raw(Statement::from_string(
                     DbBackend::Sqlite,
                     format!("SELECT COUNT(*) AS count FROM {table}"),
                 ))
@@ -1605,7 +1605,7 @@ mod tests {
         let db = Database::connect("sqlite::memory:").await.unwrap();
         // Run every migration except the additive routine-v2 one.
         Migrator::up(&db, Some(9)).await.unwrap();
-        db.execute(Statement::from_string(
+        db.execute_raw(Statement::from_string(
             DbBackend::Sqlite,
             "INSERT INTO routines (id, name, enabled, rules, actions) \
              VALUES ('legacy', 'Legacy', 1, '[{\"rule\":true}]', '[{\"action\":\"noop\"}]')",
@@ -1616,7 +1616,7 @@ mod tests {
         Migrator::up(&db, None).await.unwrap();
 
         let row = db
-            .query_one(Statement::from_string(
+            .query_one_raw(Statement::from_string(
                 DbBackend::Sqlite,
                 "SELECT semantics_version, revision, definition_v2, rules, actions \
                  FROM routines WHERE id = 'legacy'",

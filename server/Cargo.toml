@@ -39,12 +39,13 @@ tokio = { version = "=1.53.1", features = ["full"] }
 futures-util = "=0.3.34"
 tokio-stream = "=0.1.19"
 itertools = "=0.15.0"
-sqlx = { version = "=0.8.6", features = [
-  "runtime-tokio-rustls",
+sqlx = { version = "=0.9.0", features = [
+  "runtime-tokio",
+  "tls-rustls",
   "postgres",
   "migrate",
 ] }
-sea-orm = { version = "1.1", features = [
+sea-orm = { version = "2.0", features = [
   "runtime-tokio-rustls",
   "sqlx-postgres",
   "sqlx-sqlite",
@@ -52,7 +53,7 @@ sea-orm = { version = "1.1", features = [
   "with-chrono",
   "with-json",
 ] }
-sea-orm-migration = { version = "1.1", features = [
+sea-orm-migration = { version = "2.0", features = [
   "runtime-tokio-rustls",
   "sqlx-postgres",
   "sqlx-sqlite",
@@ -101,8 +102,8 @@ tokio-console = ["dep:console-subscriber"]
 datatest-stable = "0.3"
 tokio = { version = "=1.53.1", features = ["test-util"] }
 reqwest = { version = "0.13", features = ["blocking", "json"] }
-testcontainers = { version = "0.23", features = ["blocking"] }
-testcontainers-modules = { version = "0.11", features = ["postgres"] }
+testcontainers = { version = "0.27", features = ["blocking"] }
+testcontainers-modules = { version = "0.15", features = ["postgres"] }
 which = "8.0"
 
 [[test]]

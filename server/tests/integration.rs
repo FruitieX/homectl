@@ -191,4 +191,6 @@ fn run_hurl_test(path: &Path, content: String) -> datatest_stable::Result<()> {
 
 // Register the test harness with datatest-stable
 // This discovers all .hurl files in tests/hurl/ and runs them as individual tests
-datatest_stable::harness!(run_hurl_test, "tests/hurl", r".*\.hurl$");
+datatest_stable::harness! {
+    { test = run_hurl_test, root = "tests/hurl", pattern = r".*\.hurl$" },
+}

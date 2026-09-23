@@ -24,7 +24,7 @@ use crate::types::config_authoring::ValueHistoryEntry;
 use crate::types::routine_history::RoutineHistoryEntry;
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
-use sea_orm::{ConnectionTrait, QueryResult, Statement, StatementBuilder, TransactionTrait};
+use sea_orm::{ConnectionTrait, ExprTrait, QueryResult, StatementBuilder, TransactionSession, TransactionTrait};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
@@ -483,7 +483,7 @@ pub async fn db_get_core_config() -> Result<Option<CoreConfigRow>> {
     let db = get_db_connection()?;
 
     let row = db
-        .query_one(statement(
+        .query_one(&statement(
             db,
             Query::select()
                 .column(CoreConfig::WarmupTimeSeconds)
@@ -1391,7 +1391,7 @@ async fn upsert_source_on<C: ConnectionTrait>(db: &C, source: &SourceDefinition)
                 Expr::value(source.enabled),
                 Expr::value(source.revision),
                 Expr::value(source.timezone.clone()),
-                Expr::value(source.refresh_interval_ms.min(i64::MAX as u64) as i64),
+                Expr::value(std::cmp::min(source.refresh_interval_ms, i64::MAX as u64) as i64),
                 Expr::value(serde_json::to_string(&source.aliases)?),
                 Expr::value(serde_json::to_string(&source.compute)?),
             ])
@@ -2577,12 +2577,14 @@ pub async fn db_has_config() -> Result<bool> {
     .await
 }
 
-fn statement<C, S>(db: &C, builder: S) -> Statement
+/// sea-orm 2.0 renders statements inside the connection, so this hands the
+/// builder through unchanged instead of pre-rendering a [`Statement`].
+fn statement<C, S>(_db: &C, builder: S) -> S
 where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    db.get_database_backend().build(&builder)
+    builder
 }
 
 async fn all<C, S>(db: &C, builder: S) -> Result<Vec<QueryResult>>
@@ -2590,7 +2592,7 @@ where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    Ok(db.query_all(statement(db, builder)).await?)
+    Ok(db.query_all(&statement(db, builder)).await?)
 }
 
 async fn one<C, S>(db: &C, builder: S) -> Result<Option<QueryResult>>
@@ -2598,7 +2600,7 @@ where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    Ok(db.query_one(statement(db, builder)).await?)
+    Ok(db.query_one(&statement(db, builder)).await?)
 }
 
 async fn execute<C, S>(db: &C, builder: S) -> Result<u64>
@@ -2606,7 +2608,7 @@ where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    Ok(db.execute(statement(db, builder)).await?.rows_affected())
+    Ok(db.execute(&statement(db, builder)).await?.rows_affected())
 }
 
 async fn exists<C, S>(db: &C, builder: S) -> Result<bool>
@@ -3750,12 +3752,12 @@ async fn record_value_change_on<C: ConnectionTrait>(
 #[cfg(test)]
 mod value_history_tests {
     use super::*;
-    use sea_orm::{Database, DbBackend};
+    use sea_orm::{Database, DbBackend, Statement};
 
     #[tokio::test]
     async fn stores_only_changes_and_keeps_the_latest_hundred_per_field() {
         let db = Database::connect("sqlite::memory:").await.unwrap();
-        db.execute(Statement::from_string(DbBackend::Sqlite,
+        db.execute_raw(Statement::from_string(DbBackend::Sqlite,
             "CREATE TABLE value_history (id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT NOT NULL, path TEXT NOT NULL, changed_at_ms BIGINT NOT NULL, value TEXT NOT NULL)".to_string())).await.unwrap();
         for index in 0..103 {
             let value = serde_json::json!(index);
@@ -3902,7 +3904,7 @@ async fn prune_routine_history_on<C: ConnectionTrait>(db: &C, keep: u64) -> Resu
 #[cfg(test)]
 mod consistency_tests {
     use super::*;
-    use sea_orm::{Database, DatabaseConnection, DbBackend};
+    use sea_orm::{Database, DatabaseConnection, DbBackend, Statement};
     use sea_orm_migration::MigratorTrait;
     use serde_json::json;
 
@@ -4073,7 +4075,7 @@ mod consistency_tests {
         }
     }
     async fn sql(db: &DatabaseConnection, statement: &str) {
-        db.execute(Statement::from_string(DbBackend::Sqlite, statement))
+        db.execute_raw(Statement::from_string(DbBackend::Sqlite, statement))
             .await
             .unwrap();
     }

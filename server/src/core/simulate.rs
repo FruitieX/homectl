@@ -13,7 +13,7 @@ use crate::db::schema::{
 use color_eyre::Result;
 use eyre::eyre;
 use sea_orm::sea_query::{Alias, Expr, Order, Query};
-use sea_orm::{ConnectionTrait, Database, QueryResult, Statement, StatementBuilder};
+use sea_orm::{ConnectionTrait, Database, ExprTrait, QueryResult, StatementBuilder};
 use serde::de::DeserializeOwned;
 use serde_json::json;
 use std::collections::{HashMap, HashSet};
@@ -638,12 +638,14 @@ fn sqlite_readonly_url(path: &Path) -> String {
     format!("sqlite://{}?mode=ro", path.display())
 }
 
-fn statement<C, S>(db: &C, builder: S) -> Statement
+/// sea-orm 2.0 renders statements inside the connection, so this hands the
+/// builder through unchanged instead of pre-rendering a [`Statement`].
+fn statement<C, S>(_db: &C, builder: S) -> S
 where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    db.get_database_backend().build(&builder)
+    builder
 }
 
 async fn all<C, S>(db: &C, builder: S) -> Result<Vec<QueryResult>>
@@ -651,7 +653,7 @@ where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    Ok(db.query_all(statement(db, builder)).await?)
+    Ok(db.query_all(&statement(db, builder)).await?)
 }
 
 async fn optional_all<C, S>(db: &C, builder: S, description: &str) -> Result<Vec<QueryResult>>
@@ -673,7 +675,7 @@ where
     C: ConnectionTrait,
     S: StatementBuilder,
 {
-    Ok(db.query_one(statement(db, builder)).await?)
+    Ok(db.query_one(&statement(db, builder)).await?)
 }
 
 fn integration_from_row(row: QueryResult) -> Result<IntegrationRow> {
