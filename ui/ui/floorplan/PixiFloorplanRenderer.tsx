@@ -1161,7 +1161,9 @@ function applyCanvasTouchAction(
 function destroyApplication(app: Application) {
   const gl = readGlContext(app);
   try {
-    app.stop();
+    // Pixi v8 has no Application.stop(): destroying the application stops its
+    // ticker. Pausing is done through the ticker below.
+    app.ticker?.stop();
     app.destroy(true, { children: true, texture: false, textureSource: false });
   } catch {
     // Pixi can throw when a WebGL context is lost before initialization has
@@ -1278,10 +1280,11 @@ export function PixiFloorplanRenderer({
       return;
     }
 
+    // Application has no start/stop in Pixi v8 — the ticker is the render loop.
     if (paused) {
-      app.stop();
+      app.ticker?.stop();
     } else {
-      app.start();
+      app.ticker?.start();
     }
   }, [paused]);
 
@@ -1557,7 +1560,7 @@ export function PixiFloorplanRenderer({
         );
 
         if (pausedRef.current) {
-          app.stop();
+          app.ticker?.stop();
         }
 
         let lastContainerSize = {
