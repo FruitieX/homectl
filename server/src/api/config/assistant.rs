@@ -4333,10 +4333,17 @@ struct IntegrationPlanState {
 /// their state into reviewable `before`/`after` bodies.
 struct PlanValidation<'a> {
     snapshot: &'a RuntimeSnapshot,
-    catalog: ConfigCatalog,
+    catalog: StdMutex<ConfigCatalog>,
     device_keys: HashSet<String>,
     group_ids: HashSet<String>,
     scene_ids: HashSet<String>,
+    /// Ids created by earlier operations of this same plan: a plan may reference
+    /// what it creates, so they are staged as each operation is validated.
+    /// Interior mutability keeps validation `&self` for the apply path, which
+    /// revalidates each operation against the same instance as it runs.
+    created_ids: StdMutex<HashSet<String>>,
+    staged_groups: StdMutex<HashSet<String>>,
+    staged_scenes: StdMutex<HashSet<String>>,
 }
 
 impl<'a> PlanValidation<'a> {
@@ -4361,8 +4368,31 @@ impl<'a> PlanValidation<'a> {
                 .map(|scene| scene.id.clone())
                 .collect(),
             snapshot,
-            catalog,
+            catalog: StdMutex::new(catalog),
+            created_ids: StdMutex::new(HashSet::new()),
+            staged_groups: StdMutex::new(HashSet::new()),
+            staged_scenes: StdMutex::new(HashSet::new()),
         }
+    }
+
+    /// Live group ids plus anything earlier operations of this plan create.
+    fn group_exists(&self, id: &str) -> bool {
+        self.group_ids.contains(id)
+            || self
+                .staged_groups
+                .lock()
+                .map(|ids| ids.contains(id))
+                .unwrap_or(false)
+    }
+
+    /// Live scene ids plus anything earlier operations of this plan create.
+    fn scene_exists(&self, id: &str) -> bool {
+        self.scene_ids.contains(id)
+            || self
+                .staged_scenes
+                .lock()
+                .map(|ids| ids.contains(id))
+                .unwrap_or(false)
     }
 
     fn entity_snapshot(&self, kind: AssistantEntityKind, id: &str) -> Option<Value> {
@@ -4400,6 +4430,35 @@ impl<'a> PlanValidation<'a> {
                         "{op_id}: {} '{id}' already exists",
                         operation.kind.code()
                     ));
+                }
+                if !self
+                    .created_ids
+                    .lock()
+                    .map(|mut ids| ids.insert(id.clone()))
+                    .unwrap_or(true)
+                {
+                    return Err(format!(
+                        "{op_id}: {} '{id}' is created twice in this plan",
+                        operation.kind.code()
+                    ));
+                }
+                // Later operations of this plan may reference what this one
+                // creates, so stage it for the remainder of the validation.
+                match operation.kind {
+                    AssistantEntityKind::Group => {
+                        if let Ok(mut ids) = self.staged_groups.lock() {
+                            ids.insert(id.clone());
+                        }
+                    }
+                    AssistantEntityKind::Scene => {
+                        if let Ok(mut ids) = self.staged_scenes.lock() {
+                            ids.insert(id.clone());
+                        }
+                    }
+                    _ => {}
+                }
+                if let Ok(mut catalog) = self.catalog.lock() {
+                    catalog.stage_created(operation.kind.code(), &id, &after);
                 }
                 (None, None, Some(after))
             }
@@ -4538,9 +4597,15 @@ impl<'a> PlanValidation<'a> {
         let definition = state
             .definition_v2
             .ok_or_else(|| format!("{op_id}: routine body requires definition_v2"))?;
-        automation::compile_definition_value(&definition, &self.catalog).map_err(|report| {
-            format!("{op_id}: invalid routine definition: {}", report.summary())
-        })?;
+        {
+            let catalog = self
+                .catalog
+                .lock()
+                .map_err(|_| format!("{op_id}: routine catalog unavailable"))?;
+            automation::compile_definition_value(&definition, &catalog).map_err(|report| {
+                format!("{op_id}: invalid routine definition: {}", report.summary())
+            })?;
+        }
         if let Some(warning) = program_warning(&definition) {
             warnings.push(warning);
         }
@@ -4599,7 +4664,7 @@ impl<'a> PlanValidation<'a> {
             .keys()
             .chain(state.group_state_order.iter())
         {
-            if !self.group_ids.contains(group_id) {
+            if !self.group_exists(group_id) {
                 return Err(format!(
                     "{op_id}: scene references unknown group '{group_id}'"
                 ));
@@ -4611,7 +4676,7 @@ impl<'a> PlanValidation<'a> {
                     format!("{op_id}: invalid state for device '{device_key}': {error}")
                 })?;
             if let SceneDeviceConfig::SceneLink(link) = config {
-                if !self.scene_ids.contains(&link.scene_id.to_string()) {
+                if !self.scene_exists(&link.scene_id.to_string()) {
                     return Err(format!(
                         "{op_id}: scene '{device_key}' links to unknown scene '{}'",
                         link.scene_id
@@ -4673,7 +4738,7 @@ impl<'a> PlanValidation<'a> {
             if linked == id {
                 return Err(format!("{op_id}: group cannot link to itself"));
             }
-            if !self.group_ids.contains(linked) {
+            if !self.group_exists(linked) {
                 return Err(format!("{op_id}: group links to unknown group '{linked}'"));
             }
         }
@@ -5733,6 +5798,165 @@ mod tests {
         assert!(operations[0].before.is_none());
         assert_eq!(operations[1].kind, AssistantEntityKind::Scene);
         assert!(operations[1].after.is_some());
+    }
+
+    #[test]
+    fn plan_validation_stages_created_entities_for_later_operations() {
+        let snapshot = snapshot_with_config_and_devices(empty_export(), vec![sensor_device()]);
+        let mut definition = valid_definition();
+        definition["program"]["steps"] = json!([{
+            "action": "set_helper",
+            "id": "a1",
+            "helper": "night_mode",
+            "value": true
+        }]);
+
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [
+                    {
+                        "op": "create",
+                        "kind": "helper",
+                        "after": {
+                            "id": "night_mode",
+                            "name": "Night mode",
+                            "kind": {"kind": "boolean"},
+                            "initial_value": false
+                        }
+                    },
+                    {
+                        "op": "create",
+                        "kind": "routine",
+                        "after": {
+                            "id": "night",
+                            "name": "Night",
+                            "definition_v2": definition
+                        }
+                    }
+                ]
+            }),
+        )
+        .unwrap();
+        assert_eq!(operations.len(), 2);
+
+        // The same reference is still rejected when nothing creates it.
+        let mut orphan = valid_definition();
+        orphan["program"]["steps"] = json!([{
+            "action": "set_helper",
+            "id": "a1",
+            "helper": "ghost_mode",
+            "value": true
+        }]);
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [{
+                    "op": "create",
+                    "kind": "routine",
+                    "after": {"id": "broken", "name": "Broken", "definition_v2": orphan}
+                }]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("ghost_mode"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_stages_created_groups_for_later_references() {
+        let snapshot = control_snapshot();
+        let (_, operations) = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [
+                    {
+                        "op": "create",
+                        "kind": "group",
+                        "after": {
+                            "id": "patio",
+                            "name": "Patio",
+                            "devices": [{"integration_id": "dummy", "device_id": "lamp"}],
+                            "linked_groups": []
+                        }
+                    },
+                    {
+                        "op": "create",
+                        "kind": "scene",
+                        "after": {
+                            "id": "patio_evening",
+                            "name": "Patio evening",
+                            "group_states": {"patio": {"power": true}}
+                        }
+                    }
+                ]
+            }),
+        )
+        .unwrap();
+        assert_eq!(operations.len(), 2);
+
+        // A group name no operation creates is still an unknown id.
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [
+                    {
+                        "op": "create",
+                        "kind": "group",
+                        "after": {
+                            "id": "patio",
+                            "name": "Patio",
+                            "devices": [{"integration_id": "dummy", "device_id": "lamp"}],
+                            "linked_groups": []
+                        }
+                    },
+                    {
+                        "op": "create",
+                        "kind": "scene",
+                        "after": {
+                            "id": "garden_evening",
+                            "name": "Garden evening",
+                            "group_states": {"garden": {"power": true}}
+                        }
+                    }
+                ]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("unknown group 'garden'"), "{error}");
+    }
+
+    #[test]
+    fn plan_validation_rejects_recreating_an_id_in_one_plan() {
+        let snapshot = snapshot_with_config(empty_export());
+        let error = validate_provider(
+            &snapshot,
+            json!({
+                "operations": [
+                    {
+                        "op": "create",
+                        "kind": "helper",
+                        "after": {
+                            "id": "night_mode",
+                            "name": "Night mode",
+                            "kind": {"kind": "boolean"},
+                            "initial_value": false
+                        }
+                    },
+                    {
+                        "op": "create",
+                        "kind": "helper",
+                        "after": {
+                            "id": "night_mode",
+                            "name": "Night mode again",
+                            "kind": {"kind": "boolean"},
+                            "initial_value": false
+                        }
+                    }
+                ]
+            }),
+        )
+        .unwrap_err();
+        assert!(error.contains("created twice"), "{error}");
     }
 
     #[test]
