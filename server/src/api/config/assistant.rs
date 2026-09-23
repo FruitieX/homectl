@@ -30,6 +30,7 @@
 //! against the live snapshot and writes them through the config API's state
 //! mutations.
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
 use std::pin::Pin;
@@ -4337,6 +4338,13 @@ struct PlanValidation<'a> {
     device_keys: HashSet<String>,
     group_ids: HashSet<String>,
     scene_ids: HashSet<String>,
+    /// Ids created by earlier operations of this same plan: a plan may reference
+    /// what it creates, so they are staged as each operation is validated.
+    /// Interior mutability keeps validation `&self` for the apply path, which
+    /// revalidates each operation against the same instance as it runs.
+    created_ids: RefCell<HashSet<String>>,
+    staged_groups: RefCell<HashSet<String>>,
+    staged_scenes: RefCell<HashSet<String>>,
 }
 
 impl<'a> PlanValidation<'a> {
@@ -4362,6 +4370,9 @@ impl<'a> PlanValidation<'a> {
                 .collect(),
             snapshot,
             catalog,
+            created_ids: RefCell::new(HashSet::new()),
+            staged_groups: RefCell::new(HashSet::new()),
+            staged_scenes: RefCell::new(HashSet::new()),
         }
     }
 
@@ -4401,6 +4412,24 @@ impl<'a> PlanValidation<'a> {
                         operation.kind.code()
                     ));
                 }
+                if !self.created_ids.borrow_mut().insert(id.clone()) {
+                    return Err(format!(
+                        "{op_id}: {} '{id}' is created twice in this plan",
+                        operation.kind.code()
+                    ));
+                }
+                // Later operations may reference what this one creates.
+                match operation.kind {
+                    AssistantEntityKind::Group => {
+                        self.staged_groups.borrow_mut().insert(id.clone());
+                    }
+                    AssistantEntityKind::Scene => {
+                        self.staged_scenes.borrow_mut().insert(id.clone());
+                    }
+                    _ => {}
+                }
+                self.catalog
+                    .stage_created(operation.kind.code(), &id, &after);
                 (None, None, Some(after))
             }
             AssistantOpKind::Update => {
@@ -4599,7 +4628,8 @@ impl<'a> PlanValidation<'a> {
             .keys()
             .chain(state.group_state_order.iter())
         {
-            if !self.group_ids.contains(group_id) {
+            if !self.group_ids.contains(group_id) && !self.staged_groups.borrow().contains(group_id)
+            {
                 return Err(format!(
                     "{op_id}: scene references unknown group '{group_id}'"
                 ));
@@ -4611,7 +4641,12 @@ impl<'a> PlanValidation<'a> {
                     format!("{op_id}: invalid state for device '{device_key}': {error}")
                 })?;
             if let SceneDeviceConfig::SceneLink(link) = config {
-                if !self.scene_ids.contains(&link.scene_id.to_string()) {
+                if !self.scene_ids.contains(&link.scene_id.to_string())
+                    && !self
+                        .staged_scenes
+                        .borrow()
+                        .contains(&link.scene_id.to_string())
+                {
                     return Err(format!(
                         "{op_id}: scene '{device_key}' links to unknown scene '{}'",
                         link.scene_id
@@ -4673,7 +4708,7 @@ impl<'a> PlanValidation<'a> {
             if linked == id {
                 return Err(format!("{op_id}: group cannot link to itself"));
             }
-            if !self.group_ids.contains(linked) {
+            if !self.group_ids.contains(linked) && !self.staged_groups.borrow().contains(linked) {
                 return Err(format!("{op_id}: group links to unknown group '{linked}'"));
             }
         }
