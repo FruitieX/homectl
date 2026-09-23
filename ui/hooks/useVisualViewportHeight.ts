@@ -128,6 +128,13 @@ export function useVisualViewportHeight(): number | null {
 export const visualViewportHeightVar = '--app-visual-viewport-height';
 
 /**
+ * How much of the layout viewport the software keyboard covers. A `fixed`
+ * element anchors to the layout viewport, so a sheet has to be lifted by this
+ * to sit above the keyboard instead of behind it.
+ */
+export const visualViewportOffsetVar = '--app-visual-viewport-offset';
+
+/**
  * Binds the visual viewport height to a CSS custom property on the document
  * element so stylesheets can use it without re-rendering on every keyboard
  * frame. The property is removed when there is no keyboard, which leaves
@@ -140,8 +147,20 @@ export function useVisualViewportCssVariable(): void {
     const root = document.documentElement;
     if (height === null) {
       root.style.removeProperty(visualViewportHeightVar);
+      root.style.removeProperty(visualViewportOffsetVar);
       return;
     }
     root.style.setProperty(visualViewportHeightVar, `${Math.round(height)}px`);
+    // The visual viewport can also be scrolled (iOS does this to reveal a
+    // focused field), so measure its bottom, not just its height.
+    root.style.setProperty(
+      visualViewportOffsetVar,
+      `${Math.max(
+        0,
+        window.innerHeight -
+          (window.visualViewport?.offsetTop ?? 0) -
+          Math.round(height),
+      )}px`,
+    );
   }, [height]);
 }
