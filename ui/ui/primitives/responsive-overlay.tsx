@@ -1,8 +1,10 @@
+import { ArrowLeft } from 'lucide-react';
 import { useMediaQuery } from 'usehooks-ts';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { FloorplanInspector } from '@/ui/FloorplanInspector';
 
 import { cn } from '@/lib/cn';
+import { Button } from '@/ui/primitives/button';
 import { useUnsavedChanges } from '@/hooks/unsavedChanges';
 import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import {
@@ -27,7 +29,7 @@ interface ResponsiveOverlayProps {
   description?: ReactNode;
   children: ReactNode;
   className?: string;
-  presentation?: 'default' | 'fullscreen';
+  presentation?: 'default' | 'fullscreen' | 'page';
   desktopPresentation?: 'dialog' | 'sidepanel' | 'floorplan';
   /**
    * Size the sheet from the visual viewport instead of letting the drawer
@@ -156,6 +158,34 @@ export function ResponsiveOverlay({
     isFullscreen && 'flex flex-col',
   );
   const isSidePanel = isDesktop && desktopPresentation === 'sidepanel';
+
+  // A phone sheet is a fixed element fighting the software keyboard; for a
+  // full editor surface a page in the normal flow behaves far better.
+  if (!isDesktop && presentation === 'page') {
+    if (!open) return null;
+    return (
+      <section className="flex min-h-0 flex-1 flex-col pb-4">
+        <div className="flex items-center gap-2 pb-4">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => handleOpenChange(false)}
+          >
+            <ArrowLeft className="size-4" />
+            Back
+          </Button>
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold">
+            {title}
+          </h2>
+        </div>
+        {!hideDescriptionOnMobile && description ? (
+          <p className="pb-4 text-sm text-muted-foreground">{description}</p>
+        ) : null}
+        <div className={cn(bodyClassName, 'min-h-0 flex-1')}>{children}</div>
+      </section>
+    );
+  }
 
   if (desktopPresentation === 'floorplan') {
     return open ? (

@@ -264,7 +264,14 @@ export default function RoutinesPage() {
       ) : (
         <div className="grid gap-4">
           {visibleRoutines.map((routine) => (
-            <div key={routine.id} className="flex items-start gap-2">
+            <div
+              key={routine.id}
+              className={
+                openId && openId !== routine.id
+                  ? 'hidden items-start gap-2 md:flex'
+                  : 'flex items-start gap-2'
+              }
+            >
               {selectMode ? (
                 <Checkbox
                   checked={selectedIds.has(routine.id)}
@@ -640,7 +647,10 @@ function RoutineCard({
                       : thenRef.current;
                 if (target) {
                   target.open = true;
-                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  // `start` scrolls the page as well, which drags the visual
+                  // viewport out from under a phone keyboard; `nearest` only
+                  // moves the container when the card is actually out of view.
+                  target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 }
               }}
             />
@@ -1265,6 +1275,7 @@ function CreateRoutineModal({
       }}
       title="Add Routine"
       description="Create a new automation routine."
+      presentation="page"
       className="max-w-4xl"
     >
       <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
