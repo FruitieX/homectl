@@ -1,5 +1,6 @@
 import { KeyboardEvent as ReactKeyboardEvent, ReactNode } from 'react';
 
+import { useLongPress } from '@/hooks/useLongPress';
 import { cn } from '@/lib/cn';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
@@ -13,6 +14,11 @@ type Props = {
   dialogSubtitle?: ReactNode;
   dialogBoxClassName?: string;
   cardClassName?: string;
+  /**
+   * Select-on-hold gesture for touch devices. While a press is held the card
+   * fires this instead of opening; a normal tap still opens the card.
+   */
+  onLongPress?: () => void;
   children: ReactNode;
 };
 
@@ -25,8 +31,15 @@ export function ExpandableConfigCard({
   dialogSubtitle,
   dialogBoxClassName,
   cardClassName,
+  onLongPress,
   children,
 }: Props) {
+  const longPressEnabled = Boolean(onLongPress);
+  const { longPressProps, consumeLongPress } = useLongPress({
+    onLongPress,
+    enabled: longPressEnabled,
+  });
+
   const handleCardKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) {
       return;
@@ -37,15 +50,25 @@ export function ExpandableConfigCard({
     }
   };
 
+  const handleCardClick = () => {
+    // The click that follows a long press must not also open the card.
+    if (longPressEnabled && consumeLongPress()) {
+      return;
+    }
+    onOpen();
+  };
+
   return (
     <>
       <Card
         role="button"
         tabIndex={0}
-        onClick={onOpen}
+        {...(longPressEnabled ? longPressProps : {})}
+        onClick={handleCardClick}
         onKeyDown={handleCardKeyDown}
         className={cn(
           'cursor-pointer rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          longPressEnabled && 'select-none [-webkit-touch-callout:none]',
           cardClassName,
         )}
       >

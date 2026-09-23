@@ -18,7 +18,11 @@ import { useDevicesState } from '@/hooks/websocket';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import { getDeviceKey } from '@/lib/device';
-import { canCalibrateDevice, toggleSelection } from '@/lib/colorCalibration';
+import {
+  canCalibrateDevice,
+  toggleSelectedKey,
+  toggleSelection,
+} from '@/lib/colorCalibration';
 import {
   getDefaultDeviceLabel,
   getDeviceDisplayLabel,
@@ -756,6 +760,14 @@ export default function DevicesPage() {
       (device) => getDeviceKey(device) === key && canCalibrateDevice(device),
     ),
   );
+
+  // Long-pressing a device card (touch) enters selection mode with that
+  // device selected, so one light can be picked without the Select button.
+  const selectDeviceByLongPress = (deviceKey: string) => {
+    setSelectMode(true);
+    setSelectedKeys((selected) => toggleSelectedKey(selected, deviceKey));
+  };
+
   const applyCalibration = async (profileId: string | null) => {
     setError(null);
     setNotice(null);
@@ -1426,6 +1438,11 @@ export default function DevicesPage() {
                 );
               }}
               cardClassName="h-fit"
+              onLongPress={
+                canCalibrateDevice(device)
+                  ? () => selectDeviceByLongPress(deviceKey)
+                  : undefined
+              }
               dialogTitle={label}
               dialogSubtitle={deviceKey}
               summary={
@@ -1444,9 +1461,7 @@ export default function DevicesPage() {
                           disabled={assignCalibration.isPending}
                           onChange={() =>
                             setSelectedKeys((selected) =>
-                              selected.includes(deviceKey)
-                                ? selected.filter((key) => key !== deviceKey)
-                                : [...selected, deviceKey],
+                              toggleSelectedKey(selected, deviceKey),
                             )
                           }
                         />

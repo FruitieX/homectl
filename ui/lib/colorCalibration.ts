@@ -327,3 +327,9 @@ export function toggleSelection(
     ? selected.filter((key) => !visibleKeys.includes(key))
     : [...new Set([...selected, ...visibleKeys])];
 }
+
+export function toggleSelectedKey(selected: string[], key: string): string[] {
+  return selected.includes(key)
+    ? selected.filter((selectedKey) => selectedKey !== key)
+    : [...selected, key];
+}
