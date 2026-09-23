@@ -69,7 +69,7 @@ use ordered_float::OrderedFloat;
 const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 const DEFAULT_MAX_TOKENS: u32 = 2_048;
 const MAX_PROMPT_CHARS: usize = 2_000;
-const MAX_ATTEMPTS: usize = 2;
+const MAX_ATTEMPTS: usize = 3;
 const MAX_CATALOG_DEVICES: usize = 250;
 const MIN_TIMEOUT_MS: u64 = 1_000;
 const MAX_TIMEOUT_MS: u64 = 600_000;
@@ -684,9 +684,7 @@ async fn draft_routine(
                     messages.push(json!({ "role": "assistant", "content": content }));
                     messages.push(json!({
                         "role": "user",
-                        "content": format!(
-                            "That draft failed validation:\n{last_errors}\nReturn a corrected JSON object with the same contract."
-                        ),
+                        "content": repair_feedback(&snapshot, &last_errors),
                     }));
                 }
             }
@@ -924,6 +922,89 @@ fn program_warning(definition: &Value) -> Option<String> {
 struct Catalog {
     value: Value,
     warnings: Vec<String>,
+}
+
+/// What to tell the model when a definition or plan fails validation: the
+/// errors, the ids it may actually reference, and label→id hints. Without these
+/// a repair turn can only guess again — the common failure is copying a display
+/// name into an id field (`Patio lights` instead of `patio_lights`).
+fn repair_feedback(snapshot: &RuntimeSnapshot, errors: &str) -> String {
+    let config = &snapshot.runtime_config;
+    let mut items: Vec<(String, String, String)> = Vec::new();
+    for group in &config.groups {
+        items.push((
+            "group".to_string(),
+            group.id.to_string(),
+            group.name.clone(),
+        ));
+    }
+    for scene in &config.scenes {
+        items.push((
+            "scene".to_string(),
+            scene.id.to_string(),
+            scene.name.clone(),
+        ));
+    }
+    for helper in &config.helpers {
+        items.push((
+            "helper".to_string(),
+            helper.id.to_string(),
+            helper.name.clone(),
+        ));
+    }
+    for source in &config.sources {
+        items.push((
+            "source".to_string(),
+            source.id.to_string(),
+            source.name.clone(),
+        ));
+    }
+    for routine in &config.routines {
+        items.push((
+            "routine".to_string(),
+            routine.id.to_string(),
+            routine.name.clone(),
+        ));
+    }
+
+    let lowered = errors.to_lowercase();
+    let mut hints: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
+    for (kind, id, name) in items {
+        ids.push(format!("{kind} '{id}'"));
+        let name_lower = name.trim().to_lowercase();
+        if !name_lower.is_empty()
+            && name_lower != id.to_lowercase()
+            && lowered.contains(&format!("'{name_lower}'"))
+        {
+            hints.push(format!("  '{name}' is a name, its id is '{id}'"));
+        }
+    }
+
+    let mut device_keys = Vec::new();
+    for (key, device) in snapshot.devices.0.iter().take(MAX_CATALOG_DEVICES) {
+        let key = key.to_string();
+        let name = device_label(snapshot, &key, &device.name)
+            .trim()
+            .to_lowercase();
+        if !name.is_empty() && name != key.to_lowercase() && lowered.contains(&format!("'{name}'"))
+        {
+            hints.push(format!("  '{name}' is a name, its device key is '{key}'"));
+        }
+        device_keys.push(key);
+    }
+
+    let mut message = format!("That response failed validation:\n{errors}");
+    if !hints.is_empty() {
+        message.push_str("\n\nIdentifier corrections for the values above:\n");
+        message.push_str(&hints.join("\n"));
+    }
+    message.push_str(&format!(
+        "\n\nValid ids — reference these ids, never their display names:\n  {}\n  devices: {}\n\nReturn a corrected JSON object with the same contract.",
+        ids.join("\n  "),
+        device_keys.join(", ")
+    ));
+    message
 }
 
 fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) -> Catalog {
@@ -1999,9 +2080,7 @@ async fn plan_assistant_operations(
                     messages.push(json!({ "role": "assistant", "content": content }));
                     messages.push(json!({
                         "role": "user",
-                        "content": format!(
-                            "That plan failed validation:\n{last_errors}\nReturn a corrected JSON object with the same contract."
-                        ),
+                        "content": repair_feedback(&snapshot, &last_errors),
                     }));
                 }
             }
