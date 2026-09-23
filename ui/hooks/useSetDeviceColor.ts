@@ -8,7 +8,10 @@ type Color = ColorInstance;
 import { useCallback } from 'react';
 import { getDeviceKey } from '@/lib/device';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
-import { sendDeviceCommand } from '@/lib/deviceCommands';
+import {
+  MANUAL_TRANSITION_SECONDS,
+  sendDeviceCommand,
+} from '@/lib/deviceCommands';
 import type { DeviceColor } from '@/bindings/DeviceColor';
 import { atom, useSetAtom } from 'jotai';
 
@@ -54,7 +57,7 @@ export const useSetDeviceState = () => {
         power,
         preserve_scene: preserveScene,
         brightness: brightness ?? null,
-        transition: transition ?? null,
+        transition: transition ?? MANUAL_TRANSITION_SECONDS,
         color:
           nativeColor ??
           (hsv

@@ -45,6 +45,13 @@ function sendCommand(
   });
 }
 
+/**
+ * Manual changes — a toggle, a slider drag, or an accepted assistant proposal —
+ * always carry a short transition. Leaving it unset keeps whatever transition
+ * the device's current scene installed, which can be tens of seconds.
+ */
+export const MANUAL_TRANSITION_SECONDS = 0.4;
+
 export function sendDeviceCommand(
   socket: WebSocket,
   command: DeviceCommand,

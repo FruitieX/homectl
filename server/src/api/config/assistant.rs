@@ -935,14 +935,14 @@ fn build_catalog(snapshot: &RuntimeSnapshot, configured_timezone: Option<&str>) 
             DeviceData::Sensor(sensor) => json!({
                 "deviceRef": device_ref,
                 "key": key.to_string(),
-                "name": device.name,
+                "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "sensor",
                 "state": sensor,
             }),
             DeviceData::Controllable(controllable) => json!({
                 "deviceRef": device_ref,
                 "key": key.to_string(),
-                "name": device.name,
+                "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "controllable",
                 "state": controllable.state,
                 "capabilities": controllable.capabilities,
@@ -1247,7 +1247,7 @@ fn build_control_catalog(
             .collect();
         entries.push(json!({
             "device_key": key_string,
-            "name": device.name,
+            "name": device_label(snapshot, &key_string, &device.name),
             "power": data.state.power,
             "brightness": data.state.brightness.map(|value| value.0),
             "color": data.state.color,
@@ -1354,7 +1354,7 @@ async fn apply_device_changes(
             .devices
             .0
             .get(&device_key)
-            .map(|device| device.name.clone())
+            .map(|device| device_label(snapshot, &device_key.to_string(), &device.name))
             .or_else(|| change.name.clone());
         if change.power.is_none() && change.brightness.is_none() && change.color.is_none() {
             results.push(AssistantActionChangeResult {
@@ -1377,7 +1377,7 @@ async fn apply_device_changes(
                     s: OrderedFloat(color.s.clamp(0.0, 1.0) as f32),
                 })
             }),
-            transition: None,
+            transition: Some(MANUAL_TRANSITION_SECONDS),
             preserve_scene: false,
         };
         let result = handle.control_device(command).await;
@@ -1523,7 +1523,7 @@ impl PlanStore {
             .cloned()
     }
 
-    /// Remove a plan once it has been applied (or abandoned).
+    /// Remove a plan once the user dismisses it. Applying keeps it.
     fn remove_plan(&self, plan_id: &str) -> Option<AssistantPlan> {
         self.plans.lock().expect("plan store lock").remove(plan_id)
     }
@@ -1532,6 +1532,14 @@ impl PlanStore {
         self.insert_capped(&self.actions, action.action_id.clone(), action, |stored| {
             stored.created_at_ms
         });
+    }
+
+    fn get_action(&self, action_id: &str) -> Option<AssistantAction> {
+        self.actions
+            .lock()
+            .expect("plan store lock")
+            .get(action_id)
+            .cloned()
     }
 
     fn remove_action(&self, action_id: &str) -> Option<AssistantAction> {
@@ -2966,16 +2974,16 @@ async fn persist_thread_turn(
         .await;
 }
 
-/// Apply a stored light-state action. Like plans, actions are single-use: the
-/// store entry is consumed before the device commands are sent, and every
-/// change is re-validated against the live catalog.
+/// Apply a stored light-state action. The store entry stays available so the
+/// same proposal can be applied again later, and every change is re-validated
+/// against the live catalog on each apply.
 async fn apply_stored_action(
     action_id: String,
     snapshot: SnapshotHandle,
     handle: StateHandle,
     plans: Arc<PlanStore>,
 ) -> Result<impl Reply, warp::Rejection> {
-    let Some(action) = plans.remove_action(&action_id) else {
+    let Some(action) = plans.get_action(&action_id) else {
         return Ok(not_found("Assistant action"));
     };
     let live = snapshot.load();
@@ -3069,9 +3077,9 @@ async fn apply_assistant_plan(
     }
     selected.sort_by_key(|(index, operation)| operation_sort_key(operation, *index));
 
-    // The plan is single-use: consume it before executing so it cannot be
-    // applied twice.
-    plans.remove_plan(&plan_id);
+    // The plan stays in the store: applying the same proposal again is a
+    // supported action, and every operation is re-validated against the live
+    // snapshot below before it runs.
 
     let _write_guard = match config_write_lock(&handle).await {
         Ok(guard) => guard,
@@ -3762,7 +3770,7 @@ fn build_live_state(
             .iter()
             .find(|(candidate, _)| candidate.to_string() == *key)
         {
-            devices.push(live_device_entry(key, device));
+            devices.push(live_device_entry(snapshot, key, device));
         }
     }
     for (key, device) in snapshot.devices.0.iter() {
@@ -3775,7 +3783,7 @@ fn build_live_state(
         {
             continue;
         }
-        devices.push(live_device_entry(key, device));
+        devices.push(live_device_entry(snapshot, key, device));
     }
 
     let integrations: Vec<Value> = snapshot
@@ -3821,17 +3829,17 @@ fn build_live_state(
     })
 }
 
-fn live_device_entry(key: &DeviceKey, device: &Device) -> Value {
+fn live_device_entry(snapshot: &RuntimeSnapshot, key: &DeviceKey, device: &Device) -> Value {
     match &device.data {
         DeviceData::Sensor(sensor) => json!({
             "device_key": key.to_string(),
-            "name": device.name,
+            "name": device_label(snapshot, &key.to_string(), &device.name),
             "kind": "sensor",
             "state": sensor,
         }),
         DeviceData::Controllable(controllable) => json!({
             "device_key": key.to_string(),
-            "name": device.name,
+            "name": device_label(snapshot, &key.to_string(), &device.name),
             "kind": "controllable",
             "state": controllable.state,
             "capabilities": {
@@ -3845,6 +3853,31 @@ fn live_device_entry(key: &DeviceKey, device: &Device) -> Value {
     }
 }
 
+/// Manual light changes — including an assistant proposal the user accepted —
+/// always carry a short transition. Without one the device keeps whatever
+/// transition its current scene left in place (tens of seconds for a slow
+/// morning scene), which is not what "apply this change now" should mean.
+const MANUAL_TRANSITION_SECONDS: f32 = 0.4;
+
+/// The user's custom label for a device, when one is set and non-empty.
+fn device_display_override(snapshot: &RuntimeSnapshot, device_key: &str) -> Option<String> {
+    snapshot
+        .runtime_config
+        .device_display_overrides
+        .iter()
+        .find(|row| row.device_key == device_key)
+        .map(|row| row.display_name.trim().to_string())
+        .filter(|label| !label.is_empty())
+}
+
+/// What a device should be called in assistant payloads: the label from
+/// settings wins over the name the integration reported, which is a generic
+/// default for entities the integration could not name (an ESPHome light with
+/// no `name:` arrives as "Light").
+fn device_label(snapshot: &RuntimeSnapshot, device_key: &str, fallback: &str) -> String {
+    device_display_override(snapshot, device_key).unwrap_or_else(|| fallback.to_string())
+}
+
 fn build_context_devices(snapshot: &RuntimeSnapshot) -> Vec<Value> {
     snapshot
         .devices
@@ -3854,12 +3887,12 @@ fn build_context_devices(snapshot: &RuntimeSnapshot) -> Vec<Value> {
         .map(|(key, device)| match &device.data {
             DeviceData::Sensor(_) => json!({
                 "device_key": key.to_string(),
-                "name": device.name,
+                "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "sensor",
             }),
             DeviceData::Controllable(data) => json!({
                 "device_key": key.to_string(),
-                "name": device.name,
+                "name": device_label(snapshot, &key.to_string(), &device.name),
                 "kind": "controllable",
                 "capabilities": {
                     "brightness": data.capabilities.brightness,
@@ -3918,7 +3951,9 @@ fn entity_snapshot(
             };
             Some(json!({
                 "device_key": key.to_string(),
-                "name": device.name,
+                "name": display_name
+                    .clone()
+                    .unwrap_or_else(|| device.name.clone()),
                 "display_name": display_name,
                 "kind": data_kind,
             }))

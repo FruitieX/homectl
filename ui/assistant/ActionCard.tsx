@@ -16,10 +16,15 @@ import {
   useApplyAssistantActionPlan,
   useDiscardAssistantAction,
 } from '@/hooks/useAssistant';
+import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import {
   affectedDevicesSummary,
   describeAssistantActionChange,
+  scenesToRemember,
 } from '@/lib/assistant-stream';
+import { useDevicesState } from '@/hooks/websocket';
+import { useSetAtom } from 'jotai';
+import { previousDeviceScenesAtom } from '@/hooks/useSetDeviceColor';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -47,6 +52,8 @@ export function ActionCard({
   const [devicesOpen, setDevicesOpen] = useState(false);
 
   const applied = results !== null;
+  const devices = useDevicesState();
+  const rememberScenes = useSetAtom(previousDeviceScenesAtom);
   const resultsByDevice = useMemo(
     () => new Map((results ?? []).map((result) => [result.deviceKey, result])),
     [results],
@@ -55,10 +62,31 @@ export function ActionCard({
     () => (results ?? []).filter((result) => !result.ok).length,
     [results],
   );
+  // The integration's own name is a generic default for entities it could not
+  // name, so the label from settings wins when the user set one.
+  const { data: displayNames } = useDeviceDisplayNames();
+  const displayNameByKey = useMemo(
+    () =>
+      new Map(
+        (displayNames ?? [])
+          .filter((row) => Boolean(row.display_name))
+          .map((row) => [row.device_key, row.display_name]),
+      ),
+    [displayNames],
+  );
 
   const apply = () => {
     if (action.changes.length === 0 || applyAction.isPending) {
       return;
+    }
+    // Applying clears each light's scene link server-side, so remember the
+    // scene here to keep the device list able to restore it.
+    const remembered = scenesToRemember(
+      action.changes.map((change) => change.deviceKey),
+      devices,
+    );
+    if (Object.keys(remembered).length > 0) {
+      rememberScenes((previous) => ({ ...previous, ...remembered }));
     }
     applyAction.mutate(action.actionId, {
       onSuccess: (response) => {
@@ -167,7 +195,9 @@ export function ActionCard({
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="truncate font-medium">
-                        {change.name || change.deviceKey}
+                        {displayNameByKey.get(change.deviceKey) ||
+                          change.name ||
+                          change.deviceKey}
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {result && !result.ok
@@ -200,18 +230,20 @@ export function ActionCard({
           <Trash2 />
           {applied ? 'Dismiss' : 'Discard'}
         </Button>
-        {!applied ? (
-          <Button
-            type="button"
-            disabled={action.changes.length === 0 || applyAction.isPending}
-            onClick={apply}
-          >
-            {applyAction.isPending ? (
-              <Loader2 className="animate-spin" />
-            ) : null}
-            {applyAction.isPending ? 'Applying…' : 'Apply now'}
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          disabled={action.changes.length === 0 || applyAction.isPending}
+          onClick={apply}
+        >
+          {applyAction.isPending ? (
+            <Loader2 className="animate-spin" />
+          ) : null}
+          {applyAction.isPending
+            ? 'Applying…'
+            : applied
+              ? 'Apply again'
+              : 'Apply now'}
+        </Button>
       </div>
 
       {!applied ? (

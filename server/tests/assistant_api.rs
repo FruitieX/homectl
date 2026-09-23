@@ -1219,11 +1219,10 @@ fn assistant_plan_apply_executes_operations_in_dependency_order() {
         .iter()
         .any(|row| row["device_key"] == "dummy/lamp" && row["display_name"] == "Hallway Lamp"));
 
-    // The plan is consumed by apply.
-    assert_eq!(
-        get_plan(base, &client, &plan_id).status(),
-        StatusCode::NOT_FOUND
-    );
+    // The plan stays in the store, so the same proposal can be applied again.
+    let replayed = get_plan(base, &client, &plan_id);
+    assert_eq!(replayed.status(), StatusCode::OK);
+    assert_eq!(replayed.json::<Value>().unwrap()["data"]["planId"], plan_id);
 }
 
 #[test]
@@ -1280,11 +1279,9 @@ fn assistant_plan_apply_skips_unaccepted_operations() {
         .iter()
         .any(|scene| scene["id"] == "evening" && scene["name"] == "Dusk"));
 
-    // Apply consumes the plan even when only some operations were accepted.
-    assert_eq!(
-        get_plan(base, &client, &plan_id).status(),
-        StatusCode::NOT_FOUND
-    );
+    // Applying does not consume the plan, even when only some operations were
+    // accepted: the same proposal can be applied again.
+    assert_eq!(get_plan(base, &client, &plan_id).status(), StatusCode::OK);
 }
 
 #[test]
@@ -1614,16 +1611,22 @@ fn assistant_chat_routes_light_state_requests_to_a_stored_action() {
     let state = &lamp["data"]["Controllable"]["state"];
     assert_eq!(state["power"], true);
     assert!((state["brightness"].as_f64().unwrap() - 0.2).abs() < 0.01);
+    // Manual changes carry a short transition instead of inheriting the
+    // transition of whatever scene the device was in.
+    assert!((state["transition"].as_f64().unwrap() - 0.4).abs() < 0.001);
 
-    // Actions are single-use: a second apply is a clean 404.
-    let again = client
+    // Applying the same proposal again is supported.
+    let again: Value = client
         .post(format!(
             "{}/api/v1/config/assistant/actions/{action_id}/apply",
             server.base_url
         ))
         .send()
+        .unwrap()
+        .json()
         .unwrap();
-    assert_eq!(again.status(), StatusCode::NOT_FOUND);
+    assert_eq!(again["success"], true);
+    assert_eq!(again["data"]["appliedCount"], 1);
 
     let unknown = client
         .post(format!(

@@ -145,7 +145,7 @@ export function PlanCard({
   };
 
   const apply = () => {
-    if (accepted.size === 0 || applyPlan.isPending || applied) {
+    if (accepted.size === 0 || applyPlan.isPending) {
       return;
     }
     applyPlan.mutate(
@@ -258,7 +258,7 @@ export function PlanCard({
             key={operation.opId}
             operation={operation}
             accepted={accepted.has(operation.opId)}
-            disabled={applied}
+            disabled={readOnly}
             result={resultsByOp.get(operation.opId)}
             onToggle={toggle}
           />
@@ -276,18 +276,16 @@ export function PlanCard({
           <Trash2 />
           {applied ? 'Dismiss' : 'Discard'}
         </Button>
-        {!applied ? (
-          <Button
-            type="button"
-            disabled={accepted.size === 0 || applyPlan.isPending}
-            onClick={apply}
-          >
-            {applyPlan.isPending ? <Loader2 className="animate-spin" /> : null}
-            {applyPlan.isPending
-              ? 'Applying…'
-              : `Apply ${accepted.size} change${accepted.size === 1 ? '' : 's'}`}
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          disabled={accepted.size === 0 || applyPlan.isPending}
+          onClick={apply}
+        >
+          {applyPlan.isPending ? <Loader2 className="animate-spin" /> : null}
+          {applyPlan.isPending
+            ? 'Applying…'
+            : `Apply${applied ? ' again' : ''} ${accepted.size} change${accepted.size === 1 ? '' : 's'}`}
+        </Button>
       </div>
 
       {!applied ? (

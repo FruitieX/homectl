@@ -1,6 +1,7 @@
 import type { AssistantAction } from '../bindings/AssistantAction';
 import type { AssistantActionChange } from '../bindings/AssistantActionChange';
 import type { AssistantActionChangeResult } from '../bindings/AssistantActionChangeResult';
+import type { DevicesState } from '../bindings/DevicesState';
 import type { AssistantHistoryMessage } from '../bindings/AssistantHistoryMessage';
 import type { AssistantPlan } from '../bindings/AssistantPlan';
 import type { AssistantUsage } from '../bindings/AssistantUsage';
@@ -188,6 +189,30 @@ export function describeAssistantActionChange(
     );
   }
   return parts.length > 0 ? parts.join(' · ') : 'No changes';
+}
+
+/**
+ * Scene links to remember before an apply clears them. Applying a proposal
+ * detaches each light from its scene; remembering the scene lets the device
+ * list offer to restore it, the same way a manual change does.
+ */
+export function scenesToRemember(
+  deviceKeys: string[],
+  devices: DevicesState | null,
+): Record<string, string> {
+  const remembered: Record<string, string> = {};
+  for (const key of deviceKeys) {
+    const device = devices?.[key];
+    if (!device) {
+      continue;
+    }
+    const sceneId =
+      'Controllable' in device.data ? device.data.Controllable.scene_id : null;
+    if (sceneId) {
+      remembered[key] = sceneId;
+    }
+  }
+  return remembered;
 }
 
 /**
