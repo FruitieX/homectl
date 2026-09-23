@@ -31,9 +31,11 @@ interface ResponsiveOverlayProps {
   desktopPresentation?: 'dialog' | 'sidepanel' | 'floorplan';
   /**
    * Size the sheet from the visual viewport instead of letting the drawer
-   * reposition itself for the software keyboard. The drawer's built-in
-   * repositioning writes an inline height measured while the keyboard was open,
-   * which then sticks after it closes and leaves the sheet too short.
+   * reposition itself for the software keyboard. Opting out lets the drawer
+   * write an inline height measured while the keyboard was open, which then
+   * sticks after it closes and leaves the sheet too short — so this is on by
+   * default and only turned off for a sheet that genuinely needs the drawer's
+   * own keyboard handling.
    */
   sizeToVisualViewport?: boolean;
   /**
@@ -62,7 +64,7 @@ export function ResponsiveOverlay({
   className,
   presentation = 'default',
   desktopPresentation = 'dialog',
-  sizeToVisualViewport = false,
+  sizeToVisualViewport = true,
   hideDescriptionOnMobile = false,
   guard,
 }: ResponsiveOverlayProps) {
