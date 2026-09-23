@@ -25,6 +25,12 @@ const buildInfo = {
   buildDate: process.env.VITE_BUILD_DATE || new Date().toISOString(),
 };
 
+// Where the dev server forwards /api, /health and /ws to. Point it at a
+// deployed backend to preview UI changes against real data; the browser then
+// makes same-origin requests and no CORS allowance is needed there.
+const apiTarget = process.env.HOMECTL_DEV_PROXY_TARGET || 'http://localhost:45289';
+const wsTarget = apiTarget.replace(/^http/, 'ws');
+
 export default defineConfig({
   plugins: [react()],
   envPrefix: ['VITE_', 'API_ENDPOINT'],
@@ -41,15 +47,15 @@ export default defineConfig({
     port: 3000,
     proxy: {
       '/api': {
-        target: 'http://localhost:45289',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://localhost:45289',
+        target: apiTarget,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://localhost:45289',
+        target: wsTarget,
         ws: true,
         changeOrigin: true,
       },
