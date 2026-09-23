@@ -886,10 +886,10 @@ fn assistant_plan_produces_a_validated_plan() {
         data["operations"][0]["after"]["devices"][0]["device_id"],
         "lamp"
     );
-    assert!(data["expiresAtMs"].as_i64().unwrap() > data["createdAtMs"].as_i64().unwrap());
+    assert!(data["createdAtMs"].as_i64().unwrap() > 0);
     assert_eq!(provider.requests.load(Ordering::SeqCst), 1);
 
-    // The plan is retrievable until it expires.
+    // The plan is retrievable for as long as the server runs.
     let plan_id = data["planId"].as_str().unwrap();
     let stored = get_plan(&server.base_url, &client, plan_id);
     assert_eq!(stored.status(), StatusCode::OK);
@@ -966,12 +966,9 @@ fn assistant_plan_rejects_malformed_provider_output() {
 }
 
 #[test]
-fn assistant_plan_expires_from_the_store() {
+fn assistant_plan_stays_reviewable_without_a_timer() {
     let provider = MockProvider::start(vec![MockResponse::completion(&valid_plan())]);
-    let server = start_server_with_env(
-        Some(&provider),
-        vec![("HOMECTL_ASSISTANT_PLAN_TTL_MS".to_string(), "1".to_string())],
-    );
+    let server = start_server_with_env(Some(&provider), vec![]);
     let client = Client::new();
 
     let response = plan(
@@ -983,9 +980,11 @@ fn assistant_plan_expires_from_the_store() {
     let body: Value = response.json().unwrap();
     let plan_id = body["data"]["planId"].as_str().unwrap().to_string();
 
+    // Proposals do not expire: the plan stays applicable until it is applied,
+    // discarded, or the server process restarts.
     thread::sleep(std::time::Duration::from_millis(50));
-    let expired = get_plan(&server.base_url, &client, &plan_id);
-    assert_eq!(expired.status(), StatusCode::NOT_FOUND);
+    let stored = get_plan(&server.base_url, &client, &plan_id);
+    assert_eq!(stored.status(), StatusCode::OK);
 }
 
 #[test]
@@ -1592,7 +1591,7 @@ fn assistant_chat_routes_light_state_requests_to_a_stored_action() {
     let action_id = action["actionId"].as_str().unwrap().to_string();
     assert_eq!(action["changes"][0]["deviceKey"], "dummy/lamp");
     assert_eq!(action["changes"][0]["name"], "Hallway lamp");
-    assert!(action["expiresAtMs"].as_i64().unwrap() > action["createdAtMs"].as_i64().unwrap());
+    assert!(action["createdAtMs"].as_i64().unwrap() > 0);
 
     // Nothing is written before the user applies the stored action.
     let lamp = device_state(&server.base_url, &client, "dummy", "lamp");

@@ -320,7 +320,6 @@ test('planOperationCounts counts each operation kind', () => {
     planId: 'plan-1',
     summary: 'Test',
     createdAtMs: 0n,
-    expiresAtMs: 0n,
     operations: [
       { opId: 'op-1', op: 'create', kind: 'group', label: 'a' },
       { opId: 'op-2', op: 'update', kind: 'scene', label: 'b' },

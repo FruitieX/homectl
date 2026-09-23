@@ -31,7 +31,7 @@ export type AssistantThreadMessage =
       role: 'assistant';
       kind: 'plan';
       plan: AssistantPlan;
-      /** Restored from a saved thread: the plan itself has expired. */
+      /** Restored from a saved thread: shown as a record, not applicable. */
       historical?: boolean;
       /** Results of applying the plan, restored with the thread. */
       results?: AssistantOperationResult[];
@@ -44,7 +44,7 @@ export type AssistantThreadMessage =
       kind: 'action';
       action: AssistantAction;
       results?: AssistantActionChangeResult[];
-      /** Restored from a saved thread: the action itself has expired. */
+      /** Restored from a saved thread: shown as a record, not applicable. */
       historical?: boolean;
     }
   | { id: string; role: 'assistant'; kind: 'error'; error: string };

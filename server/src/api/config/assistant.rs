@@ -25,10 +25,10 @@
 //! The configuration assistant plan flow (`assistant/search`, `assistant/plan`,
 //! `assistant/plans/{id}`, `DELETE assistant/plans/{id}` to discard, and
 //! `assistant/plans/{id}/apply`) shares the same
-//! provider settings. Plans live in an in-memory TTL store; applying a plan
-//! re-validates the accepted operations against the live snapshot and writes
-//! them through the config API's state mutations. `HOMECTL_ASSISTANT_PLAN_TTL_MS`
-//! overrides the default 15 minute TTL.
+//! provider settings. Plans live in an in-memory store for as long as the
+//! server process runs; applying a plan re-validates the accepted operations
+//! against the live snapshot and writes them through the config API's state
+//! mutations.
 
 use std::collections::{BTreeMap, HashMap};
 use std::convert::Infallible;
@@ -90,10 +90,10 @@ const MAX_HISTORY_MESSAGE_CHARS: usize = 2_000;
 /// Rough token estimate used when the provider reports no usage.
 const CHARS_PER_TOKEN: u64 = 4;
 
-/// Plan store TTL and cap. Both are deliberately small: a plan is an
-/// ephemeral review artifact, never a persisted record.
-const DEFAULT_PLAN_TTL_MS: u64 = 15 * 60 * 1000;
-const MAX_STORED_PLANS: usize = 50;
+/// Cap on stored review artifacts (plans and light-state actions). Both are
+/// ephemeral: never persisted, and reviewed in the session that produced them,
+/// so the store only needs to hold what a user could still act on.
+const MAX_STORED_REVIEWS: usize = 50;
 /// Hard bound on operations in one plan; the provider envelope is rejected
 /// beyond this without validating further.
 const MAX_PLAN_OPERATIONS: usize = 40;
@@ -396,7 +396,7 @@ pub(super) fn assistant_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
 ) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
-    let plans = Arc::new(PlanStore::from_env());
+    let plans = Arc::new(PlanStore::new(MAX_STORED_REVIEWS));
 
     let status = warp::path!("assistant" / "status")
         .and(warp::path::end())
@@ -1489,83 +1489,74 @@ async fn apply_assistant_action(
 // Plan store
 // ============================================================================
 
-/// In-memory TTL store for assistant plans and light-state actions. Both are
-/// ephemeral review artifacts: they are never persisted, and expired entries
-/// are swept whenever the store is touched. When a cap is exceeded the entry
-/// closest to expiry is dropped so an active review survives.
+/// In-memory store for assistant plans and light-state actions. Both are
+/// ephemeral review artifacts: never persisted, and dropped oldest-first once
+/// the cap is exceeded. They deliberately do not expire on a timer — a proposal
+/// the user is still looking at stays applicable for as long as the process
+/// that produced it is running.
 struct PlanStore {
-    ttl: Duration,
     capacity: usize,
     plans: StdMutex<HashMap<String, AssistantPlan>>,
     actions: StdMutex<HashMap<String, AssistantAction>>,
 }
 
 impl PlanStore {
-    fn new(ttl: Duration, capacity: usize) -> Self {
+    fn new(capacity: usize) -> Self {
         Self {
-            ttl,
             capacity,
             plans: StdMutex::new(HashMap::new()),
             actions: StdMutex::new(HashMap::new()),
         }
     }
 
-    /// `HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides the sweep TTL. It exists for
-    /// operational tuning and for integration tests that must observe expiry.
-    fn from_env() -> Self {
-        let ttl_ms = env_string("HOMECTL_ASSISTANT_PLAN_TTL_MS")
-            .and_then(|value| value.parse::<u64>().ok())
-            .filter(|value| *value > 0)
-            .unwrap_or(DEFAULT_PLAN_TTL_MS);
-        Self::new(Duration::from_millis(ttl_ms), MAX_STORED_PLANS)
-    }
-
-    fn ttl_ms(&self) -> i64 {
-        self.ttl.as_millis() as i64
-    }
-
     fn insert_plan(&self, plan: AssistantPlan) {
         self.insert_capped(&self.plans, plan.plan_id.clone(), plan, |stored| {
-            (stored.plan_id.clone(), stored.expires_at_ms)
+            stored.created_at_ms
         });
     }
 
     fn get_plan(&self, plan_id: &str) -> Option<AssistantPlan> {
-        self.get_fresh(&self.plans, plan_id)
+        self.plans
+            .lock()
+            .expect("plan store lock")
+            .get(plan_id)
+            .cloned()
     }
 
-    /// Remove a plan once it has been applied (or abandoned). Expired plans
-    /// are swept first so a stale id cannot be applied.
+    /// Remove a plan once it has been applied (or abandoned).
     fn remove_plan(&self, plan_id: &str) -> Option<AssistantPlan> {
-        self.remove_fresh(&self.plans, plan_id)
+        self.plans.lock().expect("plan store lock").remove(plan_id)
     }
 
     fn insert_action(&self, action: AssistantAction) {
         self.insert_capped(&self.actions, action.action_id.clone(), action, |stored| {
-            (stored.action_id.clone(), stored.expires_at_ms)
+            stored.created_at_ms
         });
     }
 
     fn remove_action(&self, action_id: &str) -> Option<AssistantAction> {
-        self.remove_fresh(&self.actions, action_id)
+        self.actions
+            .lock()
+            .expect("plan store lock")
+            .remove(action_id)
     }
 
-    fn insert_capped<T: Clone>(
+    fn insert_capped<T>(
         &self,
         entries: &StdMutex<HashMap<String, T>>,
         key: String,
         value: T,
-        describe: impl Fn(&T) -> (String, i64),
+        created_at_ms: impl Fn(&T) -> i64,
     ) {
-        let now = now_ms();
         let mut entries = entries.lock().expect("plan store lock");
-        entries.retain(|_, stored| describe(stored).1 > now);
         entries.insert(key, value);
         while entries.len() > self.capacity {
+            // Evict the oldest artifact: the most recent proposal is the one a
+            // user could still be reviewing.
             let Some(oldest) = entries
-                .values()
-                .min_by_key(|stored| describe(stored).1)
-                .map(|stored| describe(stored).0)
+                .iter()
+                .min_by_key(|(_, stored)| created_at_ms(stored))
+                .map(|(key, _)| key.clone())
             else {
                 break;
             };
@@ -1573,54 +1564,10 @@ impl PlanStore {
         }
     }
 
-    fn get_fresh<T: Clone + Expiring>(
-        &self,
-        entries: &StdMutex<HashMap<String, T>>,
-        key: &str,
-    ) -> Option<T> {
-        let now = now_ms();
-        let mut entries = entries.lock().expect("plan store lock");
-        entries.retain(|_, stored| expires_at_ms(stored) > now);
-        entries.get(key).cloned()
-    }
-
-    fn remove_fresh<T: Clone + Expiring>(
-        &self,
-        entries: &StdMutex<HashMap<String, T>>,
-        key: &str,
-    ) -> Option<T> {
-        let now = now_ms();
-        let mut entries = entries.lock().expect("plan store lock");
-        entries.retain(|_, stored| expires_at_ms(stored) > now);
-        entries.remove(key)
-    }
-
     #[cfg(test)]
     fn plan_len(&self) -> usize {
         self.plans.lock().expect("plan store lock").len()
     }
-}
-
-/// Both stored artifacts expose `expires_at_ms`; used by the generic store
-/// helpers to sweep expired entries.
-trait Expiring {
-    fn expires_at_ms(&self) -> i64;
-}
-
-impl Expiring for AssistantPlan {
-    fn expires_at_ms(&self) -> i64 {
-        self.expires_at_ms
-    }
-}
-
-impl Expiring for AssistantAction {
-    fn expires_at_ms(&self) -> i64 {
-        self.expires_at_ms
-    }
-}
-
-fn expires_at_ms<T: Expiring>(value: &T) -> i64 {
-    value.expires_at_ms()
 }
 
 fn now_ms() -> i64 {
@@ -2033,7 +1980,6 @@ async fn plan_assistant_operations(
                     summary,
                     operations,
                     created_at_ms: now,
-                    expires_at_ms: now + plans.ttl_ms(),
                 };
                 plans.insert_plan(plan.clone());
                 return Ok(ApiResponse::success(plan));
@@ -2070,7 +2016,7 @@ async fn get_assistant_plan(
 }
 
 /// Discard a stored plan without applying it. The UI calls this when the user
-/// dismisses a review card; unknown or expired ids are a clean 404.
+/// dismisses a review card; unknown ids are a clean 404.
 async fn discard_assistant_plan(
     plan_id: String,
     plans: Arc<PlanStore>,
@@ -2853,7 +2799,6 @@ async fn run_assistant_chat(
                     summary: summary.clone(),
                     operations,
                     created_at_ms: now,
-                    expires_at_ms: now + plans.ttl_ms(),
                 };
                 plans.insert_plan(plan.clone());
                 persist_thread_turn(
@@ -2883,7 +2828,6 @@ async fn run_assistant_chat(
                     summary: summary.clone(),
                     changes,
                     created_at_ms: now,
-                    expires_at_ms: now + plans.ttl_ms(),
                     model: config.model.clone(),
                 };
                 plans.insert_action(action.clone());
@@ -5875,33 +5819,31 @@ mod tests {
         assert!(operations[0].before.is_some());
     }
 
-    fn test_plan(id: &str, created_at_ms: i64, expires_at_ms: i64) -> AssistantPlan {
+    fn test_plan(id: &str, created_at_ms: i64) -> AssistantPlan {
         AssistantPlan {
             plan_id: id.to_string(),
             summary: "test".to_string(),
             operations: Vec::new(),
             created_at_ms,
-            expires_at_ms,
         }
     }
 
     #[test]
-    fn plan_store_sweeps_expired_entries() {
-        let store = PlanStore::new(Duration::from_millis(1), 10);
-        let now = now_ms();
-        store.insert_plan(test_plan("plan-1", now, now + 1));
+    fn plan_store_keeps_plans_without_a_timer() {
+        let store = PlanStore::new(10);
+        store.insert_plan(test_plan("plan-1", now_ms()));
         std::thread::sleep(Duration::from_millis(5));
-        assert!(store.get_plan("plan-1").is_none());
-        assert_eq!(store.plan_len(), 0);
+        assert!(store.get_plan("plan-1").is_some());
+        assert_eq!(store.plan_len(), 1);
     }
 
     #[test]
-    fn plan_store_evicts_the_plan_closest_to_expiry() {
-        let store = PlanStore::new(Duration::from_secs(60), 2);
+    fn plan_store_evicts_the_oldest_plan() {
+        let store = PlanStore::new(2);
         let now = now_ms();
-        store.insert_plan(test_plan("plan-1", now, now + 1_000));
-        store.insert_plan(test_plan("plan-2", now, now + 2_000));
-        store.insert_plan(test_plan("plan-3", now, now + 3_000));
+        store.insert_plan(test_plan("plan-1", now));
+        store.insert_plan(test_plan("plan-2", now + 1_000));
+        store.insert_plan(test_plan("plan-3", now + 2_000));
 
         assert_eq!(store.plan_len(), 2);
         assert!(store.get_plan("plan-1").is_none());

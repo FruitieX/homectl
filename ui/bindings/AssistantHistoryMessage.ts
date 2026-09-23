@@ -10,8 +10,8 @@ import type { AssistantThreadProposal } from "./AssistantThreadProposal";
 export type AssistantHistoryMessage = { role: AssistantMessageRole, content: string, 
 /**
  * The plan or action this turn proposed, stored so a reopened thread can
- * show what the assistant suggested. The proposal itself has expired by
- * then and is only a record — it cannot be applied from history.
+ * show what the assistant suggested. It is a record only — a proposal is
+ * applied from the live session that produced it, not from history.
  */
 proposal?: AssistantThreadProposal, 
 /**

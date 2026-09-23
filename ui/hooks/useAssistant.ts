@@ -392,7 +392,7 @@ export function useDeleteAssistantThread() {
 
 /**
  * Discards a stored plan without applying it. The UI hides the review card
- * regardless of the response, so an expired or already-consumed plan is fine.
+ * regardless of the response, so an already-consumed plan is fine.
  */
 export function useDiscardAssistantPlan() {
   const { apiEndpoint } = useAppConfig();
@@ -515,7 +515,7 @@ export function useRecordAssistantThreadOutcome() {
 
 /**
  * Discards a stored light-state action. The UI removes the card regardless of
- * the response, so an expired or already-consumed action is fine.
+ * the response, so an already-consumed action is fine.
  */
 export function useDiscardAssistantAction() {
   const { apiEndpoint } = useAppConfig();

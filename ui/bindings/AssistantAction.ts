@@ -3,6 +3,6 @@ import type { AssistantActionChange } from "./AssistantActionChange";
 
 /**
  * A stored, reviewable light-state action produced by the unified assistant.
- * Like plans, actions are in-memory only, single-use, and expire.
+ * Like plans, actions are in-memory only and single-use.
  */
-export type AssistantAction = { actionId: string, summary: string, changes: Array<AssistantActionChange>, createdAtMs: bigint, expiresAtMs: bigint, model: string, };
+export type AssistantAction = { actionId: string, summary: string, changes: Array<AssistantActionChange>, createdAtMs: bigint, model: string, };

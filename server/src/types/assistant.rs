@@ -120,8 +120,8 @@ pub struct AssistantHistoryMessage {
     pub role: AssistantMessageRole,
     pub content: String,
     /// The plan or action this turn proposed, stored so a reopened thread can
-    /// show what the assistant suggested. The proposal itself has expired by
-    /// then and is only a record — it cannot be applied from history.
+    /// show what the assistant suggested. It is a record only — a proposal is
+    /// applied from the live session that produced it, not from history.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub proposal: Option<AssistantThreadProposal>,
@@ -244,7 +244,7 @@ pub struct AssistantActionChange {
 }
 
 /// A stored, reviewable light-state action produced by the unified assistant.
-/// Like plans, actions are in-memory only, single-use, and expire.
+/// Like plans, actions are in-memory only and single-use.
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
@@ -253,7 +253,6 @@ pub struct AssistantAction {
     pub summary: String,
     pub changes: Vec<AssistantActionChange>,
     pub created_at_ms: i64,
-    pub expires_at_ms: i64,
     pub model: String,
 }
 
@@ -342,7 +341,6 @@ pub struct AssistantPlan {
     pub summary: String,
     pub operations: Vec<AssistantOperation>,
     pub created_at_ms: i64,
-    pub expires_at_ms: i64,
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

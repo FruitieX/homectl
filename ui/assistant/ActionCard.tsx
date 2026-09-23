@@ -6,7 +6,7 @@ import {
   Trash2,
   XCircle,
 } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { toast } from 'sonner';
 
@@ -26,14 +26,6 @@ import { Button } from '@/ui/primitives/button';
 
 import { ActionFloorplanPreview } from './ActionFloorplanPreview';
 
-function expiryLabel(action: AssistantAction, now: number): string {
-  const remainingMs = Number(action.expiresAtMs) - now;
-  if (remainingMs <= 0) {
-    return 'Expired';
-  }
-  return `Expires in ${Math.ceil(remainingMs / 60000)} min`;
-}
-
 export function ActionCard({
   action,
   results,
@@ -50,13 +42,11 @@ export function ActionCard({
 }) {
   const applyAction = useApplyAssistantActionPlan();
   const discardAction = useDiscardAssistantAction();
-  const [now, setNow] = useState(() => Date.now());
   // The device list can be long; the floorplan preview is the part worth
   // showing at a glance, so the list starts collapsed.
   const [devicesOpen, setDevicesOpen] = useState(false);
 
   const applied = results !== null;
-  const expired = Number(action.expiresAtMs) <= now;
   const resultsByDevice = useMemo(
     () => new Map((results ?? []).map((result) => [result.deviceKey, result])),
     [results],
@@ -66,16 +56,8 @@ export function ActionCard({
     [results],
   );
 
-  useEffect(() => {
-    if (applied) {
-      return;
-    }
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
-  }, [applied]);
-
   const apply = () => {
-    if (action.changes.length === 0 || applyAction.isPending || expired) {
+    if (action.changes.length === 0 || applyAction.isPending) {
       return;
     }
     applyAction.mutate(action.actionId, {
@@ -103,7 +85,7 @@ export function ActionCard({
   };
 
   const discard = () => {
-    if (applied || expired) {
+    if (applied) {
       onDiscard();
       return;
     }
@@ -125,13 +107,7 @@ export function ActionCard({
               {action.changes.length} light
               {action.changes.length === 1 ? '' : 's'}
             </Badge>
-            <span
-              className={cn(
-                expired && !applied && 'font-medium text-destructive',
-              )}
-            >
-              {applied ? 'Applied' : expiryLabel(action, now)}
-            </span>
+            {applied ? <span>Applied</span> : null}
           </div>
         </div>
       </div>
@@ -213,13 +189,6 @@ export function ActionCard({
         </p>
       ) : null}
 
-      {expired && !applied ? (
-        <p className="text-xs text-muted-foreground">
-          This proposal expired and can no longer be applied. Ask again to
-          produce a fresh one.
-        </p>
-      ) : null}
-
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button
           type="button"
@@ -234,9 +203,7 @@ export function ActionCard({
         {!applied ? (
           <Button
             type="button"
-            disabled={
-              action.changes.length === 0 || applyAction.isPending || expired
-            }
+            disabled={action.changes.length === 0 || applyAction.isPending}
             onClick={apply}
           >
             {applyAction.isPending ? (

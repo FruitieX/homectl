@@ -37,7 +37,7 @@ test('parseAssistantSseEvents handles CRLF, usage, results, and errors', () => {
       'data: {"promptTokens":10,"completionTokens":5,"totalTokens":15,"contextWindow":1000,"approximate":false}',
       '',
       'event: action',
-      'data: {"actionId":"action-1","summary":"Dim","changes":[],"createdAtMs":1,"expiresAtMs":2,"model":"m"}',
+      'data: {"actionId":"action-1","summary":"Dim","changes":[],"createdAtMs":1,"model":"m"}',
       '',
       'event: thread',
       'data: {"id":"thread-1","name":"Hallway lights"}',

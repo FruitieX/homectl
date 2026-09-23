@@ -1,5 +1,5 @@
 import { CheckCircle2, Loader2, Sparkles, Trash2, XCircle } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { toast } from 'sonner';
 
 import type { AssistantOperation } from '@/bindings/AssistantOperation';
@@ -22,15 +22,6 @@ import { Checkbox } from '@/ui/primitives/checkbox';
 
 import { OperationDiff } from './OperationDiff';
 import { FloorplanPreview } from './preview/FloorplanPreview';
-
-function expiryLabel(plan: AssistantPlan, now: number): string {
-  const remainingMs = Number(plan.expiresAtMs) - now;
-  if (remainingMs <= 0) {
-    return 'Expired';
-  }
-  const minutes = Math.ceil(remainingMs / 60000);
-  return `Expires in ${minutes} min`;
-}
 
 function OperationRow({
   operation,
@@ -133,24 +124,13 @@ export function PlanCard({
   const [results, setResults] = useState<AssistantOperationResult[] | null>(
     initialResults,
   );
-  const [now, setNow] = useState(() => Date.now());
-
   const applied = results !== null;
-  const expired = Number(plan.expiresAtMs) <= now;
   const counts = useMemo(() => planOperationCounts(plan), [plan]);
   const resultsByOp = useMemo(
     () => new Map((results ?? []).map((result) => [result.opId, result])),
     [results],
   );
   const showPreview = useMemo(() => planTouchesFloorplanEntities(plan), [plan]);
-
-  useEffect(() => {
-    if (applied) {
-      return;
-    }
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
-  }, [applied]);
 
   const toggle = (opId: string) => {
     setAccepted((current) => {
@@ -165,7 +145,7 @@ export function PlanCard({
   };
 
   const apply = () => {
-    if (accepted.size === 0 || applyPlan.isPending || expired || applied) {
+    if (accepted.size === 0 || applyPlan.isPending || applied) {
       return;
     }
     applyPlan.mutate(
@@ -198,7 +178,7 @@ export function PlanCard({
   };
 
   const discard = () => {
-    if (applied || expired) {
+    if (applied) {
       onDiscard();
       return;
     }
@@ -232,13 +212,7 @@ export function PlanCard({
                   {counts.delete} delete
                 </Badge>
               ) : null}
-              <span
-                className={cn(
-                  expired && !applied && 'font-medium text-destructive',
-                )}
-              >
-                {applied ? 'Plan applied' : expiryLabel(plan, now)}
-              </span>
+              {applied ? <span>Plan applied</span> : null}
             </div>
           </div>
         </div>
@@ -246,7 +220,7 @@ export function PlanCard({
         {showPreview ? <FloorplanPreview plan={plan} /> : null}
       </div>
 
-      {!applied && !expired ? (
+      {!applied ? (
         <div className="flex items-center justify-between gap-2 text-xs">
           <span className="text-muted-foreground">
             {accepted.size} of {plan.operations.length} selected
@@ -284,19 +258,12 @@ export function PlanCard({
             key={operation.opId}
             operation={operation}
             accepted={accepted.has(operation.opId)}
-            disabled={applied || expired}
+            disabled={applied}
             result={resultsByOp.get(operation.opId)}
             onToggle={toggle}
           />
         ))}
       </div>
-
-      {expired && !applied ? (
-        <p className="text-xs text-muted-foreground">
-          This plan expired and can no longer be applied. Ask again to produce a
-          fresh plan.
-        </p>
-      ) : null}
 
       <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <Button
@@ -312,7 +279,7 @@ export function PlanCard({
         {!applied ? (
           <Button
             type="button"
-            disabled={accepted.size === 0 || applyPlan.isPending || expired}
+            disabled={accepted.size === 0 || applyPlan.isPending}
             onClick={apply}
           >
             {applyPlan.isPending ? <Loader2 className="animate-spin" /> : null}
