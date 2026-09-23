@@ -1,5 +1,5 @@
 import { useMediaQuery } from 'usehooks-ts';
-import { useCallback, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { FloorplanInspector } from '@/ui/FloorplanInspector';
 
 import { cn } from '@/lib/cn';
@@ -53,6 +53,58 @@ interface ResponsiveOverlayProps {
     description?: ReactNode;
     confirmLabel?: string;
   };
+}
+
+/**
+ * Live numbers for debugging sheet sizing on a phone, where the software
+ * keyboard shrinks the visual viewport but not the layout viewport. Open a
+ * sheet with `?viewport-debug` in the URL to see them.
+ */
+function ViewportDebugReadout() {
+  const [, force] = useState(0);
+
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+    const update = () => force((tick) => tick + 1);
+    viewport.addEventListener('resize', update);
+    viewport.addEventListener('scroll', update);
+    window.addEventListener('resize', update);
+    return () => {
+      viewport.removeEventListener('resize', update);
+      viewport.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+
+  if (!window.location.search.includes('viewport-debug')) return null;
+
+  const viewport = window.visualViewport;
+  const dialogs = document.querySelectorAll('[role="dialog"]');
+  const dialog = dialogs[dialogs.length - 1]?.getBoundingClientRect();
+  return (
+    <div className="pointer-events-none fixed left-1 top-1 z-[9999] rounded-lg bg-black/85 p-2 font-mono text-[10px] leading-tight text-white">
+      <div>innerH {window.innerHeight}</div>
+      <div>
+        vv {viewport ? Math.round(viewport.height) : '—'} top{' '}
+        {viewport ? Math.round(viewport.offsetTop) : '—'}
+      </div>
+      <div>
+        gap {viewport ? window.innerHeight - Math.round(viewport.height) : '—'}
+      </div>
+      <div>
+        cssVar{' '}
+        {getComputedStyle(document.documentElement)
+          .getPropertyValue('--app-visual-viewport-height')
+          .trim() || 'unset'}
+      </div>
+      <div>
+        dialog top {dialog ? Math.round(dialog.top) : '—'} h{' '}
+        {dialog ? Math.round(dialog.height) : '—'} bottom{' '}
+        {dialog ? Math.round(dialog.bottom) : '—'}
+      </div>
+    </div>
+  );
 }
 
 export function ResponsiveOverlay({
@@ -158,6 +210,7 @@ export function ResponsiveOverlay({
             <DrawerDescription>{description}</DrawerDescription>
           )}
         </DrawerHeader>
+        <ViewportDebugReadout />
         <div
           data-vaul-no-drag
           className={cn(
