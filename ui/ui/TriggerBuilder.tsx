@@ -576,7 +576,7 @@ export function TriggerBuilder({
         }}
         title="Add trigger"
         description="Pick the event that starts this routine, configure it, then add it to the routine."
-        presentation="fullscreen"
+        presentation="page"
         className="max-w-2xl"
       >
         {draft ? (
