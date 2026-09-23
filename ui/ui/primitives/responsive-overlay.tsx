@@ -127,8 +127,8 @@ export function ResponsiveOverlay({
     <Drawer open={open} onOpenChange={handleOpenChange}>
       <DrawerContent
         className={cn(
-          'h-auto max-h-[92dvh] overflow-hidden',
-          isFullscreen && 'h-[92dvh]',
+          'h-auto max-h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)] overflow-hidden',
+          isFullscreen && 'h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)]',
           className,
         )}
       >

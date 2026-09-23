@@ -369,7 +369,7 @@ export function AssistantPanel() {
         </span>
       }
       description="Describe a change. The assistant proposes a plan or light change you review and apply before anything is written."
-      className="h-[min(82dvh,44rem)] max-w-3xl"
+      className="h-[min(calc(var(--app-visual-viewport-height,100dvh)-4rem),44rem)] max-w-3xl"
     >
       <div className="flex h-full min-h-0 flex-col gap-3 px-5 pb-5 md:px-0 md:pb-0">
         <div className="flex shrink-0 items-center justify-between gap-2">

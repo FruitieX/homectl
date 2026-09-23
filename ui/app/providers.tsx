@@ -19,6 +19,7 @@ import { ConfirmDialogHost } from '@/ui/primitives/confirm-dialog';
 import { useApplyBackdropBlurEffects } from '@/hooks/visualEffects';
 import { createHomectlQueryClient } from '@/lib/query-client';
 import { Toaster } from '@/ui/primitives/toaster';
+import { useVisualViewportCssVariable } from '@/hooks/useVisualViewportHeight';
 import { TooltipProvider } from '@/ui/primitives/tooltip';
 import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Button } from '@/ui/primitives/button';
@@ -52,6 +53,9 @@ const AssistantPanel = lazy(() =>
 
 export const Providers = ({ children }: { children: ReactNode }) => {
   const [queryClient] = useState(() => createHomectlQueryClient());
+  // Expose the visual viewport height as a CSS variable so sheets can follow the
+  // software keyboard instead of leaving a dead area above it.
+  useVisualViewportCssVariable();
 
   return (
     <JotaiProvider>
