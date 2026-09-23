@@ -485,6 +485,7 @@ pub(super) fn assistant_routes(
     let thread_get = warp::path!("assistant" / "threads" / String)
         .and(warp::path::end())
         .and(warp::get())
+        .and(with_plan_store(&plans))
         .and_then(get_assistant_thread);
 
     let thread_delete = warp::path!("assistant" / "threads" / String)
@@ -2088,15 +2089,36 @@ async fn list_assistant_threads() -> Result<warp::reply::Response, warp::Rejecti
     }
 }
 
-async fn get_assistant_thread(thread_id: String) -> Result<warp::reply::Response, warp::Rejection> {
+async fn get_assistant_thread(
+    thread_id: String,
+    plans: Arc<PlanStore>,
+) -> Result<warp::reply::Response, warp::Rejection> {
     match config_queries::db_load_assistant_thread(&thread_id).await {
-        Ok(Some(thread)) => Ok(ApiResponse::success(thread).into_response()),
+        Ok(Some(thread)) => {
+            // Proposals live in an in-memory store for as long as the server
+            // runs while threads are persisted, so a conversation reopened
+            // after a restart would otherwise offer "Apply again" buttons that
+            // can only answer with a 404.
+            restore_thread_proposals(&plans, &thread);
+            Ok(ApiResponse::success(thread).into_response())
+        }
         Ok(None) => Ok(not_found("Assistant thread").into_response()),
         Err(error) => Ok(error_response(
             &format!("Failed to load assistant thread: {error}"),
             StatusCode::INTERNAL_SERVER_ERROR,
         )
         .into_response()),
+    }
+}
+
+/// Re-register the proposals stored on a thread's turns.
+fn restore_thread_proposals(plans: &PlanStore, thread: &AssistantThread) {
+    for message in &thread.messages {
+        match &message.proposal {
+            Some(AssistantThreadProposal::Plan { plan }) => plans.insert_plan(plan.clone()),
+            Some(AssistantThreadProposal::Action { action }) => plans.insert_action(action.clone()),
+            None => {}
+        }
     }
 }
 
@@ -2673,6 +2695,11 @@ async fn run_assistant_chat(
             None
         }
     };
+    // The proposals on those turns live in memory only; make sure continuing a
+    // conversation after a restart still offers applies that can succeed.
+    if let Some(thread) = stored_thread.as_ref() {
+        restore_thread_proposals(&plans, thread);
+    }
     let mut thread_messages: Vec<AssistantHistoryMessage> = stored_thread
         .as_ref()
         .map(|thread| thread.messages.clone())
@@ -6380,5 +6407,54 @@ mod tests {
             },
         })
         .unwrap()
+    }
+}
+
+#[cfg(test)]
+mod restore_proposals_tests {
+    use super::*;
+
+    /// A proposal carried by a stored turn, shaped like the one
+    /// `db_load_assistant_thread` returns for a reopened conversation.
+    fn stored_thread(action_id: &str) -> AssistantThread {
+        AssistantThread {
+            id: "thread-1".to_string(),
+            name: "Downstairs daycare morning".to_string(),
+            created_at_ms: 0,
+            updated_at_ms: 0,
+            messages: vec![AssistantHistoryMessage {
+                role: AssistantMessageRole::Assistant,
+                content: "Set the downstairs lights to a rainbow sweep.".to_string(),
+                proposal: Some(AssistantThreadProposal::Action {
+                    action: AssistantAction {
+                        action_id: action_id.to_string(),
+                        summary: "Rainbow sweep".to_string(),
+                        changes: vec![AssistantActionChange {
+                            device_key: "gx53/entryway".to_string(),
+                            name: Some("Entryway gx53".to_string()),
+                            power: Some(true),
+                            brightness: Some(1.0),
+                            color: None,
+                        }],
+                        created_at_ms: 0,
+                        model: "mock-model".to_string(),
+                    },
+                }),
+                outcome: None,
+            }],
+        }
+    }
+
+    #[test]
+    fn reopening_a_thread_makes_its_proposal_applyable_again() {
+        let plans = PlanStore::new(MAX_STORED_REVIEWS);
+
+        // A server that has just restarted holds no live handle for the
+        // proposal, which is what made "Apply again" answer with a 404.
+        assert!(plans.get_action("action-1").is_none());
+
+        restore_thread_proposals(&plans, &stored_thread("action-1"));
+
+        assert!(plans.get_action("action-1").is_some());
     }
 }
