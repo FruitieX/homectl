@@ -1,6 +1,8 @@
 import { Layout } from '../app/providers';
 import ConfigLayout from '../app/config/layout';
 
+import { RouteErrorScreen } from './RouteErrorScreen';
+
 import { Suspense, lazy, type ReactNode } from 'react';
 import { Outlet, createBrowserRouter } from 'react-router-dom';
 import { Navigate } from 'react-router-dom';
@@ -66,6 +68,9 @@ export const router = createBrowserRouter([
   {
     path: '/',
     element: <RootRouteLayout />,
+    // Without this, any render error replaces the app with React Router's
+    // minified stack trace, which is unreadable on a phone.
+    errorElement: <RouteErrorScreen />,
     children: [
       {
         index: true,
