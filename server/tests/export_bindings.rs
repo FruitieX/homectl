@@ -144,15 +144,9 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         TruthValue::export_all(&cfg)?;
         UnknownReason::export_all(&cfg)?;
         ValueSource::export_all(&cfg)?;
-        homectl_server::core::color_calibration::ColorCalibrationProfile::export_all(
-            &cfg,
-        )?;
-        homectl_server::core::color_calibration::ColorCalibrationAssignment::export_all(
-            &cfg,
-        )?;
-        homectl_server::core::color_calibration::DeviceColorCalibration::export_all(
-            &cfg,
-        )?;
+        homectl_server::core::color_calibration::ColorCalibrationProfile::export_all(&cfg)?;
+        homectl_server::core::color_calibration::ColorCalibrationAssignment::export_all(&cfg)?;
+        homectl_server::core::color_calibration::DeviceColorCalibration::export_all(&cfg)?;
         DevicesState::export_all(&cfg)?;
         FlattenedDimConfig::export_all(&cfg)?;
         FlattenedGroupConfig::export_all(&cfg)?;

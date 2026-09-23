@@ -24,7 +24,9 @@ use crate::types::config_authoring::ValueHistoryEntry;
 use crate::types::routine_history::RoutineHistoryEntry;
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
-use sea_orm::{ConnectionTrait, ExprTrait, QueryResult, StatementBuilder, TransactionSession, TransactionTrait};
+use sea_orm::{
+    ConnectionTrait, ExprTrait, QueryResult, StatementBuilder, TransactionSession, TransactionTrait,
+};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 
