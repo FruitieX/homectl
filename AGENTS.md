@@ -230,9 +230,10 @@ it is enabled and which model it uses.
 - `POST /api/v1/config/assistant/plans/{plan_id}/apply` – apply accepted
   operation ids
 
-Plans and light-state actions live in an in-memory TTL store (15 min default,
-`HOMECTL_ASSISTANT_PLAN_TTL_MS` overrides), are capped, and are single-use:
-applying or discarding removes them, and unknown/expired ids return 404. Every
+Plans and light-state actions live in an in-memory store for as long as the
+server process runs, are capped at 50 entries (oldest evicted first), and are
+single-use: applying or discarding removes them, and unknown ids return 404.
+Proposals do not expire on a timer. Every
 operation is re-validated against the live snapshot at apply time and executed
 through the existing `StateHandle`/config write paths; secrets are masked in
 plans and preserved when an update omits them. A unified `assistant/chat` turn
