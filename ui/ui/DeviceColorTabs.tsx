@@ -9,7 +9,7 @@ import { Input } from '@/ui/primitives/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import Circle from '@uiw/react-color-circle';
 import Wheel from '@uiw/react-color-wheel';
-import ColorThief from 'colorthief';
+import { getColorSync, getPaletteSync } from 'colorthief';
 import type { ColorResult } from 'react-color';
 import Color, { type ColorInstance } from 'color';
 
@@ -429,12 +429,12 @@ const ImageTab = ({
     pastedImage.style.marginRight = 'auto';
     pastedImageContainer.current?.replaceChildren(pastedImage);
 
-    const thief = new ColorThief();
-    const dominant: number[] = thief.getColor(pastedImage);
-    const palette: number[][] = thief.getPalette(pastedImage);
-    pastedImageColors.current = [dominant, ...palette].map((components) =>
-      Color(components, 'rgb').value(100).hex(),
-    );
+    const dominant = getColorSync(pastedImage);
+    const palette = getPaletteSync(pastedImage) ?? [];
+    pastedImageColors.current = [dominant, ...palette]
+      .filter((color) => color !== null)
+      .map((color) => color.array())
+      .map((components) => Color(components, 'rgb').value(100).hex());
     recomputeColors(null, null);
   }, [pastedImage, recomputeColors]);
 

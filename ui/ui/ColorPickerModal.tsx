@@ -14,7 +14,7 @@ import Circle from '@uiw/react-color-circle';
 import Color, { type ColorInstance } from 'color';
 
 type Color = ColorInstance;
-import ColorThief from 'colorthief';
+import { getColorSync, getPaletteSync } from 'colorthief';
 import {
   ChangeEvent,
   useCallback,
@@ -550,10 +550,11 @@ const ImageTab = ({
     pastedImage.style.marginRight = 'auto';
 
     pastedImageContainer.current?.replaceChildren(pastedImage);
-    const instance = new ColorThief();
-    const dominant: number[] = instance.getColor(pastedImage);
-    const palette: number[][] = instance.getPalette(pastedImage);
+    const dominant = getColorSync(pastedImage);
+    const palette = getPaletteSync(pastedImage) ?? [];
     const colors = [dominant, ...palette]
+      .filter((color) => color !== null)
+      .map((color) => color.array())
       .map((components) => Color(components, 'rgb'))
       .map(setMaxColorValue)
       .map((color) => color.hex());
