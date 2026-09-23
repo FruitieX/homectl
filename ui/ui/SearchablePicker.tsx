@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Check, ChevronsUpDown, X } from 'lucide-react';
+import { useMediaQuery } from 'usehooks-ts';
 import { Button } from '@/ui/primitives/button';
 import {
   Popover,
@@ -33,8 +34,80 @@ export function SearchablePicker({
   disabled?: boolean;
   clearable?: boolean;
 }) {
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const [open, setOpen] = useState(false);
   const selected = options.find((option) => option.value === value);
+  const triggerLabel =
+    selected?.label ?? (value ? `${value} (unavailable)` : placeholder);
+  const list = (
+    <Command>
+      <CommandInput autoFocus placeholder="Search by name or ID…" />
+      <CommandList className="max-h-[min(45dvh,20rem)]">
+        <CommandEmpty>No matches. Check the name or ID.</CommandEmpty>
+        {value && clearable && (
+          <CommandItem
+            value="clear selection"
+            onSelect={() => {
+              onChange('');
+              setOpen(false);
+            }}
+          >
+            Clear selection
+          </CommandItem>
+        )}
+        {options.map((option) => (
+          <CommandItem
+            key={option.value}
+            value={`${option.label} ${option.value} ${option.detail ?? ''}`}
+            onSelect={() => {
+              onChange(option.value);
+              setOpen(false);
+            }}
+          >
+            <Check
+              className={`size-4 shrink-0 ${value === option.value ? 'opacity-100' : 'opacity-0'}`}
+            />
+            <span className="min-w-0">
+              <span className="block truncate">{option.label}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {option.detail ?? option.value}
+              </span>
+            </span>
+          </CommandItem>
+        ))}
+      </CommandList>
+    </Command>
+  );
+
+  // On phones the list renders in flow rather than in a floating popover. A
+  // portal inside a drawer is positioned against the layout the software
+  // keyboard has just replaced, and it sits outside the sheet's scroll
+  // context, so it ends up clipped or anchored to a stale position.
+  if (!isDesktop) {
+    return (
+      <div className="space-y-2">
+        <Button
+          type="button"
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          aria-label={ariaLabel ?? placeholder}
+          disabled={disabled}
+          onClick={() => setOpen((current) => !current)}
+          className="h-auto min-h-11 w-full justify-between gap-2 text-left font-normal"
+        >
+          <span className="min-w-0 truncate">{triggerLabel}</span>
+          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+        </Button>
+        {open && (
+          <div className="overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground">
+            {list}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -47,54 +120,15 @@ export function SearchablePicker({
           disabled={disabled}
           className="h-auto min-h-11 w-full justify-between gap-2 text-left font-normal"
         >
-          <span className="min-w-0 truncate">
-            {selected?.label ??
-              (value ? `${value} (unavailable)` : placeholder)}
-          </span>
+          <span className="min-w-0 truncate">{triggerLabel}</span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="w-[var(--radix-popover-trigger-width)] p-0"
+        className="p-0 w-[var(--radix-popover-trigger-width)]"
       >
-        <Command>
-          <CommandInput autoFocus placeholder="Search by name or ID…" />
-          <CommandList>
-            <CommandEmpty>No matches. Check the name or ID.</CommandEmpty>
-            {value && clearable && (
-              <CommandItem
-                value="clear selection"
-                onSelect={() => {
-                  onChange('');
-                  setOpen(false);
-                }}
-              >
-                Clear selection
-              </CommandItem>
-            )}
-            {options.map((option) => (
-              <CommandItem
-                key={option.value}
-                value={`${option.label} ${option.value} ${option.detail ?? ''}`}
-                onSelect={() => {
-                  onChange(option.value);
-                  setOpen(false);
-                }}
-              >
-                <Check
-                  className={`size-4 shrink-0 ${value === option.value ? 'opacity-100' : 'opacity-0'}`}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate">{option.label}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {option.detail ?? option.value}
-                  </span>
-                </span>
-              </CommandItem>
-            ))}
-          </CommandList>
-        </Command>
+        {list}
       </PopoverContent>
     </Popover>
   );
