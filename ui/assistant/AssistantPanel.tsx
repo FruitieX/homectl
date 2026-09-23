@@ -1,7 +1,7 @@
 import {
+  ArrowLeft,
   Loader2,
   MessageSquare,
-  Plus,
   Search,
   Send,
   Sparkles,
@@ -13,6 +13,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 
 import type { AssistantActionChangeResult } from '@/bindings/AssistantActionChangeResult';
 import type { AssistantAttachment } from '@/bindings/AssistantAttachment';
+import type { AssistantOperationResult } from '@/bindings/AssistantOperationResult';
 import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
 import {
   useAssistantChat,
@@ -21,6 +22,7 @@ import {
   useAssistantThread,
   useAssistantThreads,
   useDeleteAssistantThread,
+  useRecordAssistantThreadOutcome,
   type AssistantChatStatus,
 } from '@/hooks/useAssistant';
 import {
@@ -135,15 +137,22 @@ export function AssistantPanel() {
   const [streamText, setStreamText] = useState('');
   const [status, setStatus] = useState<AssistantChatStatus | null>(null);
   const [loadingThreadId, setLoadingThreadId] = useState<string | null>(null);
+  // Explicit "past conversations" view: reachable from a thread with the back
+  // button, so browsing threads does not require closing the whole panel.
+  const [browsingThreads, setBrowsingThreads] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const searchQuery = attachQuery.trim();
   const searchResults = useAssistantEntitySearch(searchQuery);
   const searchHits: AssistantSearchResult[] = searchResults.data ?? [];
-  const showPastThreads = thread.length === 0 && !threadId && !isStreaming;
+  // The past-threads list is the panel's home: shown when the user asked for
+  // it, and whenever a fresh thread has nothing in it yet. A loaded thread
+  // shows its messages until the user goes back.
+  const showPastThreads = (browsingThreads || thread.length === 0) && !isStreaming;
   const threadsQuery = useAssistantThreads(state.open && showPastThreads);
   const pastThreads = threadsQuery.data ?? [];
   const deleteThread = useDeleteAssistantThread();
   const loadedThread = useAssistantThread(loadingThreadId);
+  const recordThreadOutcome = useRecordAssistantThreadOutcome();
 
   useEffect(() => {
     const loaded = loadedThread.data;
@@ -164,6 +173,7 @@ export function AssistantPanel() {
         // that proposal, so a reopened thread can list what the assistant
         // suggested instead of only the one-line summary.
         const proposal = message.proposal;
+        const outcome = message.outcome;
         if (proposal?.kind === 'plan') {
           return {
             id: createAssistantMessageId(),
@@ -171,6 +181,11 @@ export function AssistantPanel() {
             kind: 'plan',
             plan: proposal.plan,
             historical: true,
+            results: outcome?.kind === 'plan' ? outcome.results : undefined,
+            acceptedOperationIds:
+              outcome?.kind === 'plan'
+                ? outcome.acceptedOperationIds
+                : undefined,
           };
         }
         if (proposal?.kind === 'action') {
@@ -180,6 +195,7 @@ export function AssistantPanel() {
             kind: 'action',
             action: proposal.action,
             historical: true,
+            results: outcome?.kind === 'action' ? outcome.results : undefined,
           };
         }
         return {
@@ -194,6 +210,7 @@ export function AssistantPanel() {
     setThreadName(loaded.name);
     setUsage(null);
     setLoadingThreadId(null);
+    setBrowsingThreads(false);
   }, [
     loadedThread.data,
     loadingThreadId,
@@ -224,6 +241,11 @@ export function AssistantPanel() {
     const trimmed = prompt.trim();
     if (!trimmed || isStreaming) {
       return;
+    }
+    if (browsingThreads) {
+      // Typing in the past-conversations list starts a new thread.
+      startFreshThread();
+      setBrowsingThreads(false);
     }
     const attachments = state.attachments;
     appendMessage({
@@ -310,6 +332,7 @@ export function AssistantPanel() {
     }
     setStreamText('');
     setStatus(null);
+    setBrowsingThreads(false);
     setLoadingThreadId(id);
   };
 
@@ -365,13 +388,47 @@ export function AssistantPanel() {
     id: string,
     results: AssistantActionChangeResult[],
   ) => {
+    const message = thread.find((entry) => entry.id === id);
+    if (
+      threadId &&
+      message?.role === 'assistant' &&
+      message.kind === 'action'
+    ) {
+      recordThreadOutcome.mutate({
+        threadId,
+        proposalId: message.action.actionId,
+        outcome: { kind: 'action', results },
+      });
+    }
     setThread((current) =>
-      current.map((message) =>
-        message.id === id &&
-        message.role === 'assistant' &&
-        message.kind === 'action'
-          ? { ...message, results }
-          : message,
+      current.map((entry) =>
+        entry.id === id &&
+        entry.role === 'assistant' &&
+        entry.kind === 'action'
+          ? { ...entry, results, historical: true }
+          : entry,
+      ),
+    );
+  };
+
+  const recordPlanResults = (
+    id: string,
+    planId: string,
+    results: AssistantOperationResult[],
+    acceptedOperationIds: string[],
+  ) => {
+    if (threadId) {
+      recordThreadOutcome.mutate({
+        threadId,
+        proposalId: planId,
+        outcome: { kind: 'plan', results, acceptedOperationIds },
+      });
+    }
+    setThread((current) =>
+      current.map((entry) =>
+        entry.id === id && entry.role === 'assistant' && entry.kind === 'plan'
+          ? { ...entry, results, acceptedOperationIds, historical: true }
+          : entry,
       ),
     );
   };
@@ -396,34 +453,34 @@ export function AssistantPanel() {
       <div className="flex h-full min-h-0 flex-col gap-3 px-5 pb-5 md:px-0 md:pb-0">
         <div className="flex shrink-0 items-center justify-between gap-2">
           <p className="truncate text-xs text-muted-foreground">
-            {threadName
-              ? threadName
-              : thread.length > 0
-                ? `${thread.length} message${thread.length === 1 ? '' : 's'} in this thread`
-                : 'New conversation'}
+            {showPastThreads
+              ? 'Past conversations'
+              : threadName
+                ? threadName
+                : thread.length > 0
+                  ? `${thread.length} message${thread.length === 1 ? '' : 's'} in this thread`
+                  : 'New conversation'}
           </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            disabled={
-              thread.length === 0 &&
-              state.attachments.length === 0 &&
-              !isStreaming
-            }
-            onClick={startFreshThread}
-          >
-            <Plus className="size-3.5" />
-            New thread
-          </Button>
+          {showPastThreads ? null : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 shrink-0 px-2 text-xs"
+              aria-label="Back to past conversations"
+              onClick={() => setBrowsingThreads(true)}
+            >
+              <ArrowLeft className="size-3.5" />
+              Back
+            </Button>
+          )}
         </div>
 
         <div
           ref={scrollRef}
           className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain pr-1"
         >
-          {thread.length === 0 ? (
+          {showPastThreads ? (
             loadingThreadId ? (
               <div className="flex items-center justify-center gap-2 py-6 text-xs text-muted-foreground">
                 <Loader2 className="size-3.5 animate-spin" />
@@ -515,7 +572,9 @@ export function AssistantPanel() {
             )
           ) : null}
 
-          {thread.map((message) => {
+          {showPastThreads
+            ? null
+            : thread.map((message) => {
             if (message.role === 'user') {
               return (
                 <div
@@ -551,7 +610,9 @@ export function AssistantPanel() {
                   key={message.id}
                   action={message.action}
                   results={message.results ?? null}
-                  readOnly={message.historical === true}
+                  readOnly={
+                    message.historical === true && message.results === undefined
+                  }
                   onApplied={(results) =>
                     recordActionResults(message.id, results)
                   }
@@ -573,7 +634,19 @@ export function AssistantPanel() {
               <PlanCard
                 key={message.id}
                 plan={message.plan}
-                readOnly={message.historical === true}
+                initialResults={message.results ?? null}
+                initialAcceptedOperationIds={message.acceptedOperationIds}
+                readOnly={
+                  message.historical === true && message.results === undefined
+                }
+                onApplied={(results, acceptedOperationIds) =>
+                  recordPlanResults(
+                    message.id,
+                    message.plan.planId,
+                    results,
+                    acceptedOperationIds,
+                  )
+                }
                 onDiscard={() => discardMessage(message.id)}
               />
             );

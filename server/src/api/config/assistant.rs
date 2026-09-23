@@ -54,8 +54,9 @@ use crate::types::assistant::{
     AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
     AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
     AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread,
-    AssistantThreadProposal, AssistantUsage,
+    AssistantThreadOutcomeRequest, AssistantThreadProposal, AssistantUsage,
 };
+use crate::types::assistant::assistant_proposal_id;
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRef};
@@ -491,6 +492,12 @@ pub(super) fn assistant_routes(
         .and(warp::delete())
         .and_then(delete_assistant_thread);
 
+    let thread_outcome = warp::path!("assistant" / "threads" / String / "outcome")
+        .and(warp::path::end())
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(record_assistant_thread_outcome);
+
     let apply_action = warp::path!("assistant" / "actions" / String / "apply")
         .and(warp::path::end())
         .and(warp::post())
@@ -519,6 +526,7 @@ pub(super) fn assistant_routes(
         .or(threads_list)
         .or(thread_get)
         .or(thread_delete)
+        .or(thread_outcome)
         .or(apply_action)
         .or(discard_action)
 }
@@ -2077,6 +2085,44 @@ async fn discard_assistant_plan(
 // Persisted conversation threads
 // ============================================================================
 
+/// Record the result of applying a stored proposal against the thread turn that
+/// proposed it, so a reopened conversation shows the same applied state.
+async fn record_assistant_thread_outcome(
+    thread_id: String,
+    request: AssistantThreadOutcomeRequest,
+) -> Result<warp::reply::Response, warp::Rejection> {
+    let Some(mut thread) = config_queries::db_load_assistant_thread(&thread_id)
+        .await
+        .ok()
+        .flatten()
+    else {
+        return Ok(not_found("Assistant thread").into_response());
+    };
+
+    let mut recorded = false;
+    for message in thread.messages.iter_mut() {
+        let matching = message
+            .proposal
+            .as_ref()
+            .map(assistant_proposal_id)
+            .is_some_and(|id| id == request.proposal_id);
+        if matching {
+            message.outcome = Some(request.outcome.clone());
+            recorded = true;
+        }
+    }
+    if !recorded {
+        return Ok(not_found("Assistant thread turn").into_response());
+    }
+
+    thread.updated_at_ms = now_ms();
+    if let Err(error) = config_queries::db_save_assistant_thread(&thread).await {
+        log::warn!("Failed to record assistant thread outcome {thread_id}: {error}");
+        return Ok(ApiResponse::success(json!({ "recorded": false })).into_response());
+    }
+    Ok(ApiResponse::success(json!({ "recorded": true })).into_response())
+}
+
 async fn list_assistant_threads() -> Result<warp::reply::Response, warp::Rejection> {
     match config_queries::db_list_assistant_threads().await {
         Ok(threads) => Ok(ApiResponse::success(threads).into_response()),
@@ -2941,11 +2987,13 @@ async fn persist_thread_turn(
         role: AssistantMessageRole::User,
         content: prompt.to_string(),
         proposal: None,
+        outcome: None,
     });
     messages.push(AssistantHistoryMessage {
         role: AssistantMessageRole::Assistant,
         content: reply.to_string(),
         proposal,
+        outcome: None,
     });
     if messages.len() > MAX_STORED_THREAD_MESSAGES {
         let excess = messages.len() - MAX_STORED_THREAD_MESSAGES;
@@ -5890,11 +5938,13 @@ mod tests {
                 },
                 content: format!("turn {index}"),
                 proposal: None,
+                outcome: None,
             })
             .chain(std::iter::once(AssistantHistoryMessage {
                 role: AssistantMessageRole::User,
                 content: "x".repeat(MAX_HISTORY_MESSAGE_CHARS + 500),
                 proposal: None,
+                outcome: None,
             }))
             .collect();
 

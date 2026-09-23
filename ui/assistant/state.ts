@@ -2,6 +2,7 @@ import { atom } from 'jotai';
 
 import type { AssistantAction } from '@/bindings/AssistantAction';
 import type { AssistantActionChangeResult } from '@/bindings/AssistantActionChangeResult';
+import type { AssistantOperationResult } from '@/bindings/AssistantOperationResult';
 import type { AssistantAttachment } from '@/bindings/AssistantAttachment';
 import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import type { AssistantUsage } from '@/bindings/AssistantUsage';
@@ -32,6 +33,10 @@ export type AssistantThreadMessage =
       plan: AssistantPlan;
       /** Restored from a saved thread: the plan itself has expired. */
       historical?: boolean;
+      /** Results of applying the plan, restored with the thread. */
+      results?: AssistantOperationResult[];
+      /** Operations the user applied, restored with the thread. */
+      acceptedOperationIds?: string[];
     }
   | {
       id: string;

@@ -101,24 +101,37 @@ export function PlanCard({
   plan,
   onDiscard,
   readOnly = false,
+  initialResults = null,
+  initialAcceptedOperationIds,
+  onApplied,
 }: {
   plan: AssistantPlan;
   onDiscard: () => void;
   /** Stored plan from a reopened thread: offer no applies or discards. */
   readOnly?: boolean;
+  /** Results already applied to this plan, restored from a saved thread. */
+  initialResults?: AssistantOperationResult[] | null;
+  /** Operations the user applied, restored from a saved thread. */
+  initialAcceptedOperationIds?: string[];
+  /** Called with the results after the plan was applied. */
+  onApplied?: (
+    results: AssistantOperationResult[],
+    acceptedOperationIds: string[],
+  ) => void;
 }) {
   const applyPlan = useApplyAssistantPlan();
   const discardPlan = useDiscardAssistantPlan();
   const [accepted, setAccepted] = useState<Set<string>>(
     () =>
       new Set(
-        plan.operations
-          .filter((operation) => acceptedByDefault(operation))
-          .map((operation) => operation.opId),
+        initialAcceptedOperationIds ??
+          plan.operations
+            .filter((operation) => acceptedByDefault(operation))
+            .map((operation) => operation.opId),
       ),
   );
   const [results, setResults] = useState<AssistantOperationResult[] | null>(
-    null,
+    initialResults,
   );
   const [now, setNow] = useState(() => Date.now());
 
@@ -163,6 +176,7 @@ export function PlanCard({
       {
         onSuccess: (response) => {
           setResults(response.results);
+          onApplied?.(response.results, [...accepted]);
           const failed = response.results.filter((result) => !result.ok);
           if (failed.length === 0) {
             toast.success(

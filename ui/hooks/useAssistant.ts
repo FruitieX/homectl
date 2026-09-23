@@ -10,6 +10,7 @@ import type { AssistantPlan } from '@/bindings/AssistantPlan';
 import type { AssistantPlanRequest } from '@/bindings/AssistantPlanRequest';
 import type { AssistantSearchResult } from '@/bindings/AssistantSearchResult';
 import type { AssistantThread } from '@/bindings/AssistantThread';
+import type { AssistantThreadOutcome } from '@/bindings/AssistantThreadOutcome';
 import type { AssistantThreadSummary } from '@/bindings/AssistantThreadSummary';
 import type { AssistantUsage } from '@/bindings/AssistantUsage';
 import {
@@ -472,6 +473,43 @@ export function useApplyAssistantActionPlan() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['config'] });
     },
+  });
+}
+
+export interface RecordAssistantThreadOutcomeVariables {
+  threadId: string;
+  proposalId: string;
+  outcome: AssistantThreadOutcome;
+}
+
+/**
+ * Records what happened when a stored proposal was applied, so reopening the
+ * thread shows the same applied state. Best effort: a failure only costs the
+ * restore, so callers ignore it.
+ */
+export function useRecordAssistantThreadOutcome() {
+  const { apiEndpoint } = useAppConfig();
+
+  return useMutation({
+    mutationFn: async ({
+      threadId,
+      proposalId,
+      outcome,
+    }: RecordAssistantThreadOutcomeVariables) => {
+      const response = await fetch(
+        `${apiEndpoint}/api/v1/config/assistant/threads/${encodeURIComponent(threadId)}/outcome`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proposalId, outcome }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error('Failed to record assistant outcome');
+      }
+      return true;
+    },
+    retry: false,
   });
 }
 

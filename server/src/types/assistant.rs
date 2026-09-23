@@ -125,6 +125,10 @@ pub struct AssistantHistoryMessage {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub proposal: Option<AssistantThreadProposal>,
+    /// Result of applying that proposal, when the user applied it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub outcome: Option<AssistantThreadOutcome>,
 }
 
 /// A proposed plan or light-state action stored alongside the thread turn that
@@ -135,6 +139,41 @@ pub struct AssistantHistoryMessage {
 pub enum AssistantThreadProposal {
     Plan { plan: AssistantPlan },
     Action { action: AssistantAction },
+}
+
+/// What became of a stored proposal: the result of applying it, recorded so a
+/// reopened conversation shows the same applied state the user last saw.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum AssistantThreadOutcome {
+    Plan {
+        results: Vec<AssistantOperationResult>,
+        #[serde(rename = "acceptedOperationIds")]
+        #[ts(rename = "acceptedOperationIds")]
+        accepted_operation_ids: Vec<String>,
+    },
+    Action {
+        results: Vec<AssistantActionChangeResult>,
+    },
+}
+
+/// Request body for recording the outcome of applying a stored proposal.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AssistantThreadOutcomeRequest {
+    /// `planId` or `actionId` of the proposal inside the stored thread.
+    pub proposal_id: String,
+    pub outcome: AssistantThreadOutcome,
+}
+
+/// Stable id of a stored proposal, used to attach an outcome to its turn.
+pub fn assistant_proposal_id(proposal: &AssistantThreadProposal) -> &str {
+    match proposal {
+        AssistantThreadProposal::Plan { plan } => &plan.plan_id,
+        AssistantThreadProposal::Action { action } => &action.action_id,
+    }
 }
 
 #[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
