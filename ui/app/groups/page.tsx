@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { ChevronRight, Search, SlidersHorizontal } from 'lucide-react';
 import { useDevicesState, useGroupsState } from '@/hooks/websocket';
 import { useDeviceDisplayNames } from '@/hooks/useConfig';
@@ -20,7 +20,19 @@ import { GroupFloorplanPreview } from '@/ui/floorplan/GroupFloorplanPreview';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import type { Device } from '@/bindings/Device';
 
+const roomPath = (id: string) => `/groups/${encodeURIComponent(id)}`;
+
+// Controls inside a room card keep their own behaviour; a tap anywhere else on
+// the card (including the floorplan preview) follows the room link.
+const interactiveTargetSelector =
+  'a, button, input, select, textarea, [role="button"], [contenteditable="true"]';
+
+const isInteractiveTarget = (target: EventTarget | null) =>
+  target instanceof Element &&
+  target.closest(interactiveTargetSelector) !== null;
+
 export default function Page() {
+  const navigate = useNavigate();
   const groups = useGroupsState();
   const state = useDevicesState();
   const { data: overrides } = useDeviceDisplayNames();
@@ -157,11 +169,18 @@ export default function Page() {
                 return (
                   <section
                     key={id}
-                    className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4"
+                    className="flex cursor-pointer flex-col gap-3 rounded-xl border border-border bg-card p-4"
+                    onClick={(event) => {
+                      // The header link and the power toggle handle their own
+                      // clicks; every other tap opens the room.
+                      if (event.defaultPrevented) return;
+                      if (isInteractiveTarget(event.target)) return;
+                      navigate(roomPath(id));
+                    }}
                   >
                     <div className="flex min-w-0 items-start justify-between gap-3">
                       <Link
-                        to={`/groups/${encodeURIComponent(id)}`}
+                        to={roomPath(id)}
                         className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         <span className="min-w-0 flex-1">

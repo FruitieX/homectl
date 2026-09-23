@@ -1585,7 +1585,14 @@ export function PixiFloorplanRenderer({
   return (
     <div
       ref={containerRef}
-      className={cn('absolute inset-0 touch-none overflow-hidden', className)}
+      className={cn(
+        'absolute inset-0 overflow-hidden',
+        // An interactive map claims every gesture for pan and zoom. A
+        // read-only preview must not: vertical drags have to scroll the
+        // surrounding list, while taps still arrive as clicks.
+        interactive ? 'touch-none' : 'touch-pan-y touch-pinch-zoom',
+        className,
+      )}
     />
   );
 }
