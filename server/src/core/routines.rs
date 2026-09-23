@@ -2562,8 +2562,17 @@ mod tests {
     }
 
     fn deferred_routines(rules: Vec<Rule>) -> (Routines, RoutineId, RxEventChannel) {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        // Routine history lives in a process-wide store and tests in this module run
+        // in parallel, so each call needs its own routine id; sharing one made
+        // history-count assertions race with the other tests.
+        static NEXT_SCRIPTED_ID: AtomicU64 = AtomicU64::new(0);
         let (event_tx, event_rx) = mk_event_channel();
-        let routine_id = RoutineId::from("scripted".to_string());
+        let routine_id = RoutineId::from(format!(
+            "scripted-{}",
+            NEXT_SCRIPTED_ID.fetch_add(1, Ordering::Relaxed)
+        ));
         let mut config = RoutinesConfig::new();
         config.insert(
             routine_id.clone(),
