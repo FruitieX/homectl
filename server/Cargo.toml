@@ -70,7 +70,7 @@ newtype_derive = "=0.1.6"
 log = "=0.4.34"
 env_logger = "=0.10.2"
 pretty_env_logger = "=0.5.0"
-eyre = "=0.6.12"
+eyre = "=0.6.14"
 color-eyre = "=0.6.5"
 croner = "=2.2.0"
 ordered-float = { version = "=5.5.0", features = ["serde"] }
