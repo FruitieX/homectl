@@ -48,6 +48,7 @@ use super::*;
 use crate::core::automation::{self, ConfigCatalog};
 use crate::core::integrations::integration_config_schemas;
 use crate::core::snapshot::RuntimeSnapshot;
+use crate::types::assistant::assistant_proposal_id;
 use crate::types::assistant::{
     ApplyAssistantActionResponse, ApplyAssistantPlanRequest, ApplyAssistantPlanResponse,
     AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
@@ -56,7 +57,6 @@ use crate::types::assistant::{
     AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread,
     AssistantThreadOutcomeRequest, AssistantThreadProposal, AssistantUsage,
 };
-use crate::types::assistant::assistant_proposal_id;
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
 use crate::types::device::{Device, DeviceData, DeviceKey, DeviceRef};
