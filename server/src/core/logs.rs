@@ -15,7 +15,7 @@ static LOG_BUFFER: Lazy<RwLock<VecDeque<UiLogEntry>>> =
     Lazy::new(|| RwLock::new(VecDeque::with_capacity(MAX_LOG_ENTRIES)));
 
 pub fn init_logging() -> Result<(), SetLoggerError> {
-    let mut builder = pretty_env_logger::formatted_builder();
+    let mut builder = env_logger::Builder::new();
     let env_filters = std::env::var("RUST_LOG").ok();
     builder.parse_filters(log_filters_from_env_or_default(env_filters.as_deref()));
 

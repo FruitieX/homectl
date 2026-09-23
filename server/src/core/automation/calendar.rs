@@ -107,9 +107,10 @@ pub fn next_cron_occurrence(
     zone: ScheduleZone,
     after: DateTime<Utc>,
 ) -> Result<Option<ScheduleOccurrence>, String> {
-    let mut parsed = croner::Cron::new(cron);
-    parsed.with_seconds_required();
-    let parsed = parsed.parse().map_err(|error| error.to_string())?;
+    let parser = croner::parser::CronParser::builder()
+        .seconds(croner::parser::Seconds::Required)
+        .build();
+    let parsed = parser.parse(cron).map_err(|error| error.to_string())?;
 
     let mut cursor = after;
     let mut inclusive = false;

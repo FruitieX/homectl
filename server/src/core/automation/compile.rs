@@ -1529,9 +1529,10 @@ impl Compiler<'_> {
                 // pinned croner grammar is preserved (DOM/DOW-OR included),
                 // but its calendar resolution is never reused for DST
                 // semantics; occurrences are generated from civil time.
-                let mut parsed = croner::Cron::new(cron);
-                parsed.with_seconds_required();
-                if let Err(error) = parsed.parse() {
+                let parser = croner::parser::CronParser::builder()
+                    .seconds(croner::parser::Seconds::Required)
+                    .build();
+                if let Err(error) = parser.parse(cron) {
                     self.report.error_at_node(
                         format!("{path}/cron"),
                         node,

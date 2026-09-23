@@ -52,7 +52,7 @@ impl Integration for Cron {
             .wrap_err("Failed to deserialize config of Cron integration")?;
 
         for schedule in config.schedules.values() {
-            croner::Cron::new(&schedule.schedule).parse()?;
+            schedule.schedule.parse::<croner::Cron>()?;
         }
 
         Ok(Cron {
@@ -104,7 +104,7 @@ impl Integration for Cron {
             let action = config.action.clone();
             let id = id.clone();
 
-            let cron = croner::Cron::new(&config.schedule).parse()?;
+            let cron = config.schedule.parse::<croner::Cron>()?;
 
             self.tasks.spawn(async move {
                 loop {
@@ -187,7 +187,7 @@ mod tests {
     /// the v2 schedule trigger.
     #[test]
     fn b06_cron_parser_next_occurrence_is_pinned() {
-        let cron = croner::Cron::new("0 0 * * *").parse().unwrap();
+        let cron = "0 0 * * *".parse::<croner::Cron>().unwrap();
         let from = Local.with_ymd_and_hms(2024, 1, 1, 12, 0, 0).unwrap();
 
         let next = cron.find_next_occurrence(&from, false).unwrap();
@@ -196,7 +196,7 @@ mod tests {
         // Day-of-month and day-of-week both set. The pinned croner parser
         // implements OR semantics (next is the Monday, not the 1st), matching
         // Vixie cron. This is the grammar the v2 schedule compiler must expose.
-        let dom_dow = croner::Cron::new("0 0 1 * 1").parse().unwrap();
+        let dom_dow = "0 0 1 * 1".parse::<croner::Cron>().unwrap();
         let next = dom_dow.find_next_occurrence(&from, false).unwrap();
         assert_eq!(
             next,
