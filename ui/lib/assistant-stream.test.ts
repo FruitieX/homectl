@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  affectedDevicesSummary,
   buildAssistantHistory,
   contextUsagePercent,
   describeAssistantActionChange,
@@ -125,5 +126,24 @@ test('contextUsagePercent clamps to the context window', () => {
       approximate: false,
     }),
     100,
+  );
+});
+
+test('affectedDevicesSummary counts devices and surfaces failures', () => {
+  assert.equal(affectedDevicesSummary(1, null), '1 device');
+  assert.equal(affectedDevicesSummary(4, null), '4 devices');
+  assert.equal(
+    affectedDevicesSummary(2, [
+      { deviceKey: 'a', ok: true },
+      { deviceKey: 'b', ok: true },
+    ]),
+    '2 devices',
+  );
+  assert.equal(
+    affectedDevicesSummary(3, [
+      { deviceKey: 'a', ok: true },
+      { deviceKey: 'b', ok: false, error: 'no response' },
+    ]),
+    '3 devices · 1 failed',
   );
 });

@@ -30,6 +30,18 @@ interface ResponsiveOverlayProps {
   presentation?: 'default' | 'fullscreen';
   desktopPresentation?: 'dialog' | 'sidepanel' | 'floorplan';
   /**
+   * Size the sheet from the visual viewport instead of letting the drawer
+   * reposition itself for the software keyboard. The drawer's built-in
+   * repositioning writes an inline height measured while the keyboard was open,
+   * which then sticks after it closes and leaves the sheet too short.
+   */
+  sizeToVisualViewport?: boolean;
+  /**
+   * Drop the drawer description on phones. A keyboard-sized sheet needs the
+   * room for content that the user is actually working with.
+   */
+  hideDescriptionOnMobile?: boolean;
+  /**
    * When `dirty` is true, closing the overlay (Esc, overlay click, drawer
    * drag, or an explicit onOpenChange(false)) asks for confirmation first.
    */
@@ -50,6 +62,8 @@ export function ResponsiveOverlay({
   className,
   presentation = 'default',
   desktopPresentation = 'dialog',
+  sizeToVisualViewport = false,
+  hideDescriptionOnMobile = false,
   guard,
 }: ResponsiveOverlayProps) {
   const isDesktop = useMediaQuery('(min-width: 768px)');
@@ -124,7 +138,11 @@ export function ResponsiveOverlay({
   }
 
   return (
-    <Drawer open={open} onOpenChange={handleOpenChange}>
+    <Drawer
+      open={open}
+      onOpenChange={handleOpenChange}
+      repositionInputs={!sizeToVisualViewport}
+    >
       <DrawerContent
         className={cn(
           'h-auto max-h-[calc(var(--app-visual-viewport-height,100dvh)-1rem)] overflow-hidden',
@@ -134,7 +152,9 @@ export function ResponsiveOverlay({
       >
         <DrawerHeader className="shrink-0">
           <DrawerTitle>{title}</DrawerTitle>
-          {description && <DrawerDescription>{description}</DrawerDescription>}
+          {description && !hideDescriptionOnMobile && (
+            <DrawerDescription>{description}</DrawerDescription>
+          )}
         </DrawerHeader>
         <div
           data-vaul-no-drag

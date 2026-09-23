@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { useMediaQuery } from 'usehooks-ts';
 
 import type { AssistantActionChangeResult } from '@/bindings/AssistantActionChangeResult';
 import type { AssistantAttachment } from '@/bindings/AssistantAttachment';
@@ -140,6 +141,11 @@ export function AssistantPanel() {
   // Explicit "past conversations" view: reachable from a thread with the back
   // button, so browsing threads does not require closing the whole panel.
   const [browsingThreads, setBrowsingThreads] = useState(false);
+  // The entity search field costs a row of the sheet; on a phone that row is
+  // worth more to the conversation, so it opens on demand from the composer's
+  // action row.
+  const [attachOpen, setAttachOpen] = useState(false);
+  const isDesktop = useMediaQuery('(min-width: 768px)');
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const searchQuery = attachQuery.trim();
   const searchResults = useAssistantEntitySearch(searchQuery);
@@ -147,7 +153,10 @@ export function AssistantPanel() {
   // The past-threads list is the panel's home: shown when the user asked for
   // it, and whenever a fresh thread has nothing in it yet. A loaded thread
   // shows its messages until the user goes back.
-  const showPastThreads = (browsingThreads || thread.length === 0) && !isStreaming;
+  // The list is a first-class view rather than a transient state: it stays
+  // reachable while a reply streams (the stream keeps running in the thread
+  // view), which is what made the back button look broken on a phone.
+  const showPastThreads = browsingThreads || thread.length === 0;
   const threadsQuery = useAssistantThreads(state.open && showPastThreads);
   const pastThreads = threadsQuery.data ?? [];
   const deleteThread = useDeleteAssistantThread();
@@ -378,6 +387,7 @@ export function AssistantPanel() {
       }),
     );
     setAttachQuery('');
+    setAttachOpen(false);
   };
 
   const discardMessage = (id: string) => {
@@ -448,11 +458,13 @@ export function AssistantPanel() {
         </span>
       }
       description="Describe a change. The assistant proposes a plan or light change you review and apply before anything is written."
-      className="h-[min(calc(var(--app-visual-viewport-height,100dvh)-4rem),44rem)] max-w-3xl"
+      className="h-[calc(var(--app-visual-viewport-height,100dvh)-0.5rem)] max-w-3xl md:h-[min(calc(var(--app-visual-viewport-height,100dvh)-4rem),44rem)]"
+      sizeToVisualViewport
+      hideDescriptionOnMobile
     >
       <div className="flex h-full min-h-0 flex-col gap-3 px-5 pb-5 md:px-0 md:pb-0">
         <div className="flex shrink-0 items-center justify-between gap-2">
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
             {showPastThreads
               ? 'Past conversations'
               : threadName
@@ -461,6 +473,12 @@ export function AssistantPanel() {
                   ? `${thread.length} message${thread.length === 1 ? '' : 's'} in this thread`
                   : 'New conversation'}
           </p>
+          {isStreaming && showPastThreads ? (
+            <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              Replying…
+            </span>
+          ) : null}
           {showPastThreads ? null : (
             <Button
               type="button"
@@ -488,9 +506,6 @@ export function AssistantPanel() {
               </div>
             ) : pastThreads.length > 0 ? (
               <div className="space-y-1.5">
-                <p className="px-1 text-xs text-muted-foreground">
-                  Continue a conversation
-                </p>
                 <div className="max-h-72 space-y-0.5 overflow-y-auto overscroll-contain rounded-3xl border border-border bg-card p-1">
                   {pastThreads.map((entry) => (
                     <div
@@ -681,12 +696,13 @@ export function AssistantPanel() {
               ))}
             </div>
           ) : null}
-          {enabled ? (
+          {enabled && attachOpen ? (
             <div className="space-y-1.5">
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-3 size-4 text-muted-foreground" />
                 <Input
                   className="pl-9"
+                  autoFocus
                   aria-label="Search entities to attach"
                   placeholder="Attach an entity: search routines, scenes, devices…"
                   value={attachQuery}
@@ -735,7 +751,8 @@ export function AssistantPanel() {
             </div>
           ) : null}
           <Textarea
-            rows={2}
+            rows={isDesktop ? 2 : 1}
+            className="min-h-11 md:min-h-28"
             value={prompt}
             placeholder="Describe the change, for example “dim the office lights at sunset”"
             disabled={!enabled || isStreaming}
@@ -773,6 +790,21 @@ export function AssistantPanel() {
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              {enabled ? (
+                <Button
+                  type="button"
+                  variant={attachOpen ? 'secondary' : 'ghost'}
+                  size="icon"
+                  aria-label="Attach an entity"
+                  aria-expanded={attachOpen}
+                  onClick={() => {
+                    setAttachOpen((current) => !current);
+                    setAttachQuery('');
+                  }}
+                >
+                  <Search />
+                </Button>
+              ) : null}
               {isStreaming ? (
                 <Button type="button" variant="outline" onClick={stop}>
                   <Square />

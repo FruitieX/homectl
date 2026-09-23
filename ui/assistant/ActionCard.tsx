@@ -1,5 +1,6 @@
 import {
   CheckCircle2,
+  ChevronRight,
   Lightbulb,
   Loader2,
   Trash2,
@@ -15,7 +16,10 @@ import {
   useApplyAssistantActionPlan,
   useDiscardAssistantAction,
 } from '@/hooks/useAssistant';
-import { describeAssistantActionChange } from '@/lib/assistant-stream';
+import {
+  affectedDevicesSummary,
+  describeAssistantActionChange,
+} from '@/lib/assistant-stream';
 import { cn } from '@/lib/cn';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -47,11 +51,18 @@ export function ActionCard({
   const applyAction = useApplyAssistantActionPlan();
   const discardAction = useDiscardAssistantAction();
   const [now, setNow] = useState(() => Date.now());
+  // The device list can be long; the floorplan preview is the part worth
+  // showing at a glance, so the list starts collapsed.
+  const [devicesOpen, setDevicesOpen] = useState(false);
 
   const applied = results !== null;
   const expired = Number(action.expiresAtMs) <= now;
   const resultsByDevice = useMemo(
     () => new Map((results ?? []).map((result) => [result.deviceKey, result])),
+    [results],
+  );
+  const failedCount = useMemo(
+    () => (results ?? []).filter((result) => !result.ok).length,
     [results],
   );
 
@@ -129,40 +140,72 @@ export function ActionCard({
         <ActionFloorplanPreview changes={action.changes} className="h-40" />
       ) : null}
 
-      <ul className="space-y-1.5">
-        {action.changes.map((change) => {
-          const result = resultsByDevice.get(change.deviceKey);
-          return (
-            <li
-              key={change.deviceKey}
+      {action.changes.length > 0 ? (
+        <div className="rounded-2xl border border-border/60">
+          <button
+            type="button"
+            aria-expanded={devicesOpen}
+            onClick={() => setDevicesOpen((current) => !current)}
+            className="flex w-full items-center gap-2 rounded-2xl px-2.5 py-2 text-left transition hover:bg-muted/40"
+          >
+            <ChevronRight
               className={cn(
-                'flex items-start gap-2 rounded-2xl border border-border/60 px-2.5 py-2 text-sm',
-                result && !result.ok && 'border-destructive/40',
+                'size-4 shrink-0 text-muted-foreground transition-transform',
+                devicesOpen && 'rotate-90',
+              )}
+            />
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">
+              Affected devices
+            </span>
+            <span
+              className={cn(
+                'shrink-0 text-xs',
+                failedCount > 0
+                  ? 'font-medium text-destructive'
+                  : 'text-muted-foreground',
               )}
             >
-              {result ? (
-                result.ok ? (
-                  <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
-                ) : (
-                  <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-                )
-              ) : (
-                <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
-              )}
-              <div className="min-w-0 flex-1">
-                <p className="truncate font-medium">
-                  {change.name || change.deviceKey}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {result && !result.ok
-                    ? (result.error ?? 'Failed')
-                    : describeAssistantActionChange(change)}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+              {affectedDevicesSummary(action.changes.length, results)}
+            </span>
+          </button>
+          {devicesOpen ? (
+            <ul className="space-y-1.5 border-t border-border/60 p-2.5">
+              {action.changes.map((change) => {
+                const result = resultsByDevice.get(change.deviceKey);
+                return (
+                  <li
+                    key={change.deviceKey}
+                    className={cn(
+                      'flex items-start gap-2 rounded-2xl border border-border/60 px-2.5 py-2 text-sm',
+                      result && !result.ok && 'border-destructive/40',
+                    )}
+                  >
+                    {result ? (
+                      result.ok ? (
+                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-600 dark:text-emerald-300" />
+                      ) : (
+                        <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
+                      )
+                    ) : (
+                      <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-muted-foreground/50" />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-medium">
+                        {change.name || change.deviceKey}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {result && !result.ok
+                          ? (result.error ?? 'Failed')
+                          : describeAssistantActionChange(change)}
+                      </p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
 
       {action.changes.length === 0 ? (
         <p className="text-xs text-muted-foreground">

@@ -1,5 +1,6 @@
 import type { AssistantAction } from '../bindings/AssistantAction';
 import type { AssistantActionChange } from '../bindings/AssistantActionChange';
+import type { AssistantActionChangeResult } from '../bindings/AssistantActionChangeResult';
 import type { AssistantHistoryMessage } from '../bindings/AssistantHistoryMessage';
 import type { AssistantPlan } from '../bindings/AssistantPlan';
 import type { AssistantUsage } from '../bindings/AssistantUsage';
@@ -187,6 +188,20 @@ export function describeAssistantActionChange(
     );
   }
   return parts.length > 0 ? parts.join(' · ') : 'No changes';
+}
+
+/**
+ * Collapsed label for the affected-device list of an action card: how many
+ * devices the proposal touches, plus the failure count once it has been
+ * applied, so a partial failure stays visible while the list is collapsed.
+ */
+export function affectedDevicesSummary(
+  deviceCount: number,
+  results: AssistantActionChangeResult[] | null,
+): string {
+  const devices = `${deviceCount} device${deviceCount === 1 ? '' : 's'}`;
+  const failed = (results ?? []).filter((result) => !result.ok).length;
+  return failed > 0 ? `${devices} · ${failed} failed` : devices;
 }
 
 /** Percentage of the model context window used, clamped to 0..100. */
