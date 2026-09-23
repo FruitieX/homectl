@@ -1,0 +1,11 @@
+# pnpm 11 no longer reads the "pnpm" field of package.json, so shared settings
+# live here. Both pnpm 10 (the flake and CI) and pnpm 11 honour this file.
+overrides:
+  '@types/react': 19.2.7
+  '@types/react-dom': 19.2.3
+
+# canvas and sharp are optional native extras; the app and its tests run without
+# their build scripts (this states it explicitly instead of prompting).
+allowBuilds:
+  canvas: false
+  sharp: false
