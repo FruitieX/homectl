@@ -3,6 +3,9 @@
 overrides:
   '@types/react': 19.2.7
   '@types/react-dom': 19.2.3
+  # patched releases for open advisories (monaco-editor -> dompurify, colorthief -> sharp)
+  dompurify: 3.4.13
+  sharp: 0.35.4
 
 # canvas and sharp are optional native extras; the app and its tests run without
 # their build scripts (this states it explicitly instead of prompting).
