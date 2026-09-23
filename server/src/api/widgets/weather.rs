@@ -64,8 +64,7 @@ async fn handle(query: WeatherQuery, snapshot: SnapshotHandle, http: reqwest::Cl
 }
 
 #[cached(
-    result = true,
-    time = 3600,
+    ttl_secs = 3600,
     key = "String",
     convert = r#"{ url.clone() }"#,
     sync_writes = "by_key"

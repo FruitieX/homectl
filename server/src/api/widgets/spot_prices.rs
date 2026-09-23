@@ -68,8 +68,7 @@ async fn handle(snapshot: SnapshotHandle, http: reqwest::Client) -> Response {
 }
 
 #[cached(
-    result = true,
-    time = 60,
+    ttl_secs = 60,
     key = "String",
     convert = r#"{ url.clone() }"#,
     sync_writes = "by_key"

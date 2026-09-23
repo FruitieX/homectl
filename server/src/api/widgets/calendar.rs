@@ -67,8 +67,7 @@ async fn handle(query: CalendarQuery, snapshot: SnapshotHandle, http: reqwest::C
 }
 
 #[cached(
-    result = true,
-    time = 14400,
+    ttl_secs = 14400,
     key = "String",
     convert = r#"{ url.clone() }"#,
     sync_writes = "by_key"

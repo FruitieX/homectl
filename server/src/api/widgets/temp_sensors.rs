@@ -114,8 +114,7 @@ async fn handle(
 }
 
 #[cached(
-    result = true,
-    time = 60,
+    ttl_secs = 60,
     key = "String",
     convert = r#"{ format!("{}|{}|{}|{}", url, device_ids.join(","), range, window) }"#,
     sync_writes = "by_key"

@@ -15,8 +15,12 @@ use boa_engine::{Context, Source};
 use super::protocol::{MAX_CONTEXT_BYTES, MAX_RESULT_BYTES, MAX_SCRIPT_BYTES};
 use crate::core::scripting::SCENE_SCRIPT_HELPERS;
 
-/// In-engine loop iteration limit (legacy limit, kept until compatibility review).
-pub const LOOP_ITERATION_LIMIT: u64 = 10_000;
+/// In-engine loop iteration limit. Boa 0.22 counts `String.prototype.repeat`
+/// and other intrinsics toward this budget, so it must comfortably exceed
+/// [`MAX_RESULT_BYTES`] for a legitimate script to be able to build a
+/// maximum-size result; the supervisor's invocation timeout remains the
+/// primary guard against runaway scripts.
+pub const LOOP_ITERATION_LIMIT: u64 = 4 * 1024 * 1024;
 /// In-engine recursion limit (legacy limit, kept until compatibility review).
 pub const RECURSION_LIMIT: usize = 64;
 /// In-engine VM stack size limit (legacy limit, kept until compatibility review).

@@ -76,13 +76,13 @@ ordered-float = { version = "=5.5.0", features = ["serde"] }
 jsonptr = "=0.8.2"
 serde-this-or-that = "=0.5.0"
 clap = { version = "=4.6.7", features = ["derive", "env"] }
-boa_engine = "=0.20.0"
+boa_engine = "=0.22.0"
 percent-encoding = "=2.3.2"
 regex = "=1.13.1"
 reqwest = { version = "=0.13.5", default-features = false, features = ["json", "rustls"] }
 ical = { version = "=0.11.0", features = ["ical"] }
 csv = "=1.4.0"
-cached = { version = "=0.59.0", features = ["async"] }
+cached = { version = "=4.0.0", features = ["async"] }
 arc-swap = "=1.9.2"
 console-subscriber = { version = "=0.5.0", optional = true }
 chrono-tz = "=0.10.4"

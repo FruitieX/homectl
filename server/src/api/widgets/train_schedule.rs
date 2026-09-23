@@ -123,8 +123,7 @@ async fn handle(
 }
 
 #[cached(
-    result = true,
-    time = 60,
+    ttl_secs = 60,
     key = "String",
     convert = r#"{ format!("{url}|{station_id}") }"#,
     sync_writes = "by_key"
