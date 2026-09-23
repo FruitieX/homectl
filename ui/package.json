@@ -56,7 +56,7 @@
     "@visx/shape": "3.12.0",
     "@visx/tooltip": "3.12.0",
     "@visx/zoom": "3.12.0",
-    "canvas": "3.2.0",
+    "canvas": "3.2.3",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "cmdk": "1.1.1",
