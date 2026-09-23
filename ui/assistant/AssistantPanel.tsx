@@ -40,6 +40,7 @@ import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Textarea } from '@/ui/primitives/textarea';
 
 import { ActionCard } from './ActionCard';
+import { MarkdownMessage } from './MarkdownMessage';
 import { AssistantEntityIcon, AttachmentChip } from './AttachmentChip';
 import { PlanCard } from './PlanCard';
 import {
@@ -636,14 +637,7 @@ export function AssistantPanel() {
               );
             }
             if (message.kind === 'text') {
-              return (
-                <p
-                  key={message.id}
-                  className="whitespace-pre-wrap rounded-2xl bg-muted px-3 py-2 text-sm text-foreground/90"
-                >
-                  {message.text}
-                </p>
-              );
+              return <MarkdownMessage key={message.id} text={message.text} />;
             }
             return (
               <PlanCard
@@ -754,7 +748,11 @@ export function AssistantPanel() {
             rows={isDesktop ? 2 : 1}
             className="min-h-11 md:min-h-28"
             value={prompt}
-            placeholder="Describe the change, for example “dim the office lights at sunset”"
+            placeholder={
+              isDesktop
+                ? 'Describe the change, for example “dim the office lights at sunset”'
+                : 'Describe a change…'
+            }
             disabled={!enabled || isStreaming}
             onChange={(event) => setPrompt(event.target.value)}
             onKeyDown={(event) => {
