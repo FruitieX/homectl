@@ -685,12 +685,14 @@ export function useConfigDevices() {
 
   const remove = useCallback(
     async (deviceKey: string) => {
-      const response = await fetch(
-        `${baseUrl}/${encodeURIComponent(deviceKey)}`,
-        {
-          method: 'DELETE',
-        },
-      );
+      // The key contains a `/`; sending it in the path needs `%2F`, which
+      // gateways normalize back into a path separator and answer with a 307 to a
+      // route that cannot delete anything. Keep the key in the body instead.
+      const response = await fetch(`${baseUrl}/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device_key: deviceKey }),
+      });
       const result = await readApiResponse<DeviceConfigMutationResult>(
         response,
         'Failed to delete device',

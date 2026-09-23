@@ -2324,6 +2324,77 @@ fn config_api_replaces_device_references_and_removes_source_device() {
 }
 
 #[test]
+fn config_api_deletes_device_with_key_in_body_and_legacy_segments() {
+    let server = TestServer::with_config(TestServerConfig {
+        config_content: Some(
+            json!({
+                "version": 1,
+                "core": { "warmup_time_seconds": 0 },
+                "integrations": [
+                    {
+                        "id": "dummy",
+                        "plugin": "dummy",
+                        "enabled": true,
+                        "config": {
+                            "devices": {
+                                "sensor1": {
+                                    "name": "Body Delete Sensor",
+                                    "init_state": { "Sensor": { "value": false } }
+                                },
+                                "light1": { "name": "Segment Delete Light" }
+                            }
+                        }
+                    }
+                ],
+                "groups": [],
+                "scenes": [],
+                "routines": [],
+                "floorplan": null,
+                "floorplans": [],
+                "group_positions": [],
+                "device_display_overrides": [],
+                "device_sensor_configs": [],
+                "dashboard_layouts": [{ "id": 1, "name": "Default", "is_default": true }],
+                "dashboard_widgets": []
+            })
+            .to_string(),
+        ),
+        config_file_name: Some("config-backup.json".to_string()),
+        ..Default::default()
+    })
+    .expect("Failed to start device-delete-route test server");
+
+    wait_for("devices to appear", || {
+        let devices = get_json(&server.base_url, "/api/v1/devices");
+        device_by_name(&devices, "Body Delete Sensor").is_some()
+            && device_by_name(&devices, "Segment Delete Light").is_some()
+    });
+
+    // The UI cannot put `%2F` in the path: gateways normalize it and redirect to a
+    // two-segment path that used to answer 405 without deleting anything.
+    let response = post_json(
+        &server.base_url,
+        "/api/v1/config/devices/delete",
+        &json!({ "device_key": "dummy/sensor1" }),
+    );
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    assert_eq!(body["data"]["deleted_device_key"], json!("dummy/sensor1"));
+
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert!(device_by_name(&devices, "Body Delete Sensor").is_none());
+
+    // A gateway that rewrote the encoded slash sends the key as two real segments.
+    let response = delete(&server.base_url, "/api/v1/config/devices/dummy/light1");
+    assert_eq!(response.status(), StatusCode::OK);
+    let body: Value = response.json().unwrap();
+    assert_eq!(body["data"]["deleted_device_key"], json!("dummy/light1"));
+
+    let devices = get_json(&server.base_url, "/api/v1/devices");
+    assert!(device_by_name(&devices, "Segment Delete Light").is_none());
+}
+
+#[test]
 fn config_api_deletes_device_references_and_removes_source_device() {
     let server = TestServer::with_config(TestServerConfig {
         config_content: Some(

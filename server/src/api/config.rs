@@ -2435,7 +2435,49 @@ fn device_config_routes(
         .and(with_handle(handle))
         .and_then(delete_config_device);
 
-    replace_by_key.or(replace_legacy).or(delete)
+    // Device keys contain a `/`, so path-based variants only work when the client
+    // percent-encodes it (`%2F`). Proxies commonly normalize that back into a path
+    // separator and answer a 307 to the two-segment path, which makes the delete
+    // silently fail behind a gateway (405 or 404, device never removed). Accept the
+    // key in the body for callers, and keep a two-segment route for gateways that
+    // already rewrote the encoded slash.
+    let delete_by_key = warp::path!("devices" / "delete")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(delete_config_device_by_key);
+
+    let delete_legacy_segments = warp::path!("devices" / String / String)
+        .and(warp::delete())
+        .and(with_handle(handle))
+        .and_then(delete_config_device_legacy_segments);
+
+    delete
+        .or(delete_by_key)
+        .or(delete_legacy_segments)
+        .or(replace_by_key)
+        .or(replace_legacy)
+}
+
+#[derive(Deserialize)]
+struct DeleteDeviceByKeyRequest {
+    device_key: String,
+}
+
+async fn delete_config_device_by_key(
+    request: DeleteDeviceByKeyRequest,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    delete_config_device(request.device_key, handle).await
+}
+
+/// Gateway-normalized delete: `/devices/<integration>/<device id>`.
+async fn delete_config_device_legacy_segments(
+    integration_id: String,
+    device_id: String,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    delete_config_device(format!("{integration_id}/{device_id}"), handle).await
 }
 
 async fn replace_device_config_by_key(
