@@ -100,9 +100,12 @@ function OperationRow({
 export function PlanCard({
   plan,
   onDiscard,
+  readOnly = false,
 }: {
   plan: AssistantPlan;
   onDiscard: () => void;
+  /** Stored plan from a reopened thread: offer no applies or discards. */
+  readOnly?: boolean;
 }) {
   const applyPlan = useApplyAssistantPlan();
   const discardPlan = useDiscardAssistantPlan();
@@ -285,7 +288,7 @@ export function PlanCard({
         <Button
           type="button"
           variant="ghost"
-          disabled={discardPlan.isPending}
+          disabled={readOnly || discardPlan.isPending}
           onClick={discard}
           className="sm:mr-auto"
         >

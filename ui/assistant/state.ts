@@ -25,13 +25,22 @@ export type AssistantThreadMessage =
       attachments: AssistantAttachment[];
     }
   | { id: string; role: 'assistant'; kind: 'text'; text: string }
-  | { id: string; role: 'assistant'; kind: 'plan'; plan: AssistantPlan }
+  | {
+      id: string;
+      role: 'assistant';
+      kind: 'plan';
+      plan: AssistantPlan;
+      /** Restored from a saved thread: the plan itself has expired. */
+      historical?: boolean;
+    }
   | {
       id: string;
       role: 'assistant';
       kind: 'action';
       action: AssistantAction;
       results?: AssistantActionChangeResult[];
+      /** Restored from a saved thread: the action itself has expired. */
+      historical?: boolean;
     }
   | { id: string; role: 'assistant'; kind: 'error'; error: string };
 

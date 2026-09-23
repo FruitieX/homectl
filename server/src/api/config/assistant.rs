@@ -53,7 +53,8 @@ use crate::types::assistant::{
     AssistantAction, AssistantActionChange, AssistantActionChangeResult, AssistantActionColor,
     AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
     AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
-    AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread, AssistantUsage,
+    AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread,
+    AssistantThreadProposal, AssistantUsage,
 };
 use crate::types::automation_source::SourceDefinition;
 use crate::types::automation_value::HelperDefinition;
@@ -2816,6 +2817,7 @@ async fn run_assistant_chat(
                     &mut thread_messages,
                     &prompt,
                     &summary,
+                    Some(AssistantThreadProposal::Plan { plan: plan.clone() }),
                     suggested_name,
                     stored_thread_name.clone(),
                 )
@@ -2846,6 +2848,9 @@ async fn run_assistant_chat(
                     &mut thread_messages,
                     &prompt,
                     &summary,
+                    Some(AssistantThreadProposal::Action {
+                        action: action.clone(),
+                    }),
                     suggested_name,
                     stored_thread_name.clone(),
                 )
@@ -2866,6 +2871,7 @@ async fn run_assistant_chat(
                     &mut thread_messages,
                     &prompt,
                     &text,
+                    None,
                     suggested_name,
                     stored_thread_name.clone(),
                 )
@@ -2926,6 +2932,7 @@ async fn persist_thread_turn(
     messages: &mut Vec<AssistantHistoryMessage>,
     prompt: &str,
     reply: &str,
+    proposal: Option<AssistantThreadProposal>,
     suggested_name: Option<String>,
     stored_name: Option<String>,
 ) {
@@ -2933,10 +2940,12 @@ async fn persist_thread_turn(
     messages.push(AssistantHistoryMessage {
         role: AssistantMessageRole::User,
         content: prompt.to_string(),
+        proposal: None,
     });
     messages.push(AssistantHistoryMessage {
         role: AssistantMessageRole::Assistant,
         content: reply.to_string(),
+        proposal,
     });
     if messages.len() > MAX_STORED_THREAD_MESSAGES {
         let excess = messages.len() - MAX_STORED_THREAD_MESSAGES;
@@ -5880,10 +5889,12 @@ mod tests {
                     AssistantMessageRole::Assistant
                 },
                 content: format!("turn {index}"),
+                proposal: None,
             })
             .chain(std::iter::once(AssistantHistoryMessage {
                 role: AssistantMessageRole::User,
                 content: "x".repeat(MAX_HISTORY_MESSAGE_CHARS + 500),
+                proposal: None,
             }))
             .collect();
 

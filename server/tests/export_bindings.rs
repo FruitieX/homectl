@@ -8,7 +8,7 @@ use homectl_server::types::{
         AssistantAttachment, AssistantChatRequest, AssistantEntityKind, AssistantHistoryMessage,
         AssistantMessageRole, AssistantOpKind, AssistantOperation, AssistantOperationResult,
         AssistantPlan, AssistantPlanRequest, AssistantSearchResult, AssistantThread,
-        AssistantThreadSummary, AssistantUsage,
+        AssistantThreadProposal, AssistantThreadSummary, AssistantUsage,
     },
     automation_definition::{
         ChooseBranch, ConditionExpr, ExecutionPolicy, HelperId, NativeAction, NativeProgram,
@@ -72,6 +72,7 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         AssistantPlanRequest::export_all_to(&output_dir)?;
         AssistantSearchResult::export_all_to(&output_dir)?;
         AssistantThread::export_all_to(&output_dir)?;
+        AssistantThreadProposal::export_all_to(&output_dir)?;
         AssistantThreadSummary::export_all_to(&output_dir)?;
         AssistantUsage::export_all_to(&output_dir)?;
         homectl_server::types::config_diagnostics::ConfigDiagnostics::export_all_to(&output_dir)?;

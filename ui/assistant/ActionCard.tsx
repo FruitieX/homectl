@@ -35,11 +35,14 @@ export function ActionCard({
   results,
   onApplied,
   onDiscard,
+  readOnly = false,
 }: {
   action: AssistantAction;
   results: AssistantActionChangeResult[] | null;
   onApplied: (results: AssistantActionChangeResult[]) => void;
   onDiscard: () => void;
+  /** Stored action from a reopened thread: offer no applies or discards. */
+  readOnly?: boolean;
 }) {
   const applyAction = useApplyAssistantActionPlan();
   const discardAction = useDiscardAssistantAction();
@@ -178,7 +181,7 @@ export function ActionCard({
         <Button
           type="button"
           variant="ghost"
-          disabled={discardAction.isPending}
+          disabled={readOnly || discardAction.isPending}
           onClick={discard}
           className="sm:mr-auto"
         >

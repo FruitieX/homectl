@@ -80,7 +80,7 @@ pub struct AssistantThreadSummary {
 }
 
 /// A persisted assistant conversation thread.
-#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AssistantThread {
@@ -113,15 +113,31 @@ impl AssistantMessageRole {
 
 /// One earlier conversation turn sent back with a new request. History is
 /// client-held and session-only; the server caps and truncates it.
-#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AssistantHistoryMessage {
     pub role: AssistantMessageRole,
     pub content: String,
+    /// The plan or action this turn proposed, stored so a reopened thread can
+    /// show what the assistant suggested. The proposal itself has expired by
+    /// then and is only a record — it cannot be applied from history.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub proposal: Option<AssistantThreadProposal>,
 }
 
-#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A proposed plan or light-state action stored alongside the thread turn that
+/// produced it.
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+#[ts(export)]
+pub enum AssistantThreadProposal {
+    Plan { plan: AssistantPlan },
+    Action { action: AssistantAction },
+}
+
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AssistantPlanRequest {
@@ -136,7 +152,7 @@ pub struct AssistantPlanRequest {
 
 /// Unified assistant request: one prompt that the server routes to either a
 /// reviewed configuration plan or a proposed light-state action.
-#[derive(TS, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(TS, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct AssistantChatRequest {

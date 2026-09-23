@@ -151,22 +151,44 @@ export function AssistantPanel() {
       return;
     }
     setThread(
-      loaded.messages.map(
-        (message): AssistantThreadMessage =>
-          message.role === 'user'
-            ? {
-                id: createAssistantMessageId(),
-                role: 'user',
-                text: message.content,
-                attachments: [],
-              }
-            : {
-                id: createAssistantMessageId(),
-                role: 'assistant',
-                kind: 'text',
-                text: message.content,
-              },
-      ),
+      loaded.messages.map((message): AssistantThreadMessage => {
+        if (message.role === 'user') {
+          return {
+            id: createAssistantMessageId(),
+            role: 'user',
+            text: message.content,
+            attachments: [],
+          };
+        }
+        // Turns that proposed a plan or a light-state action are stored with
+        // that proposal, so a reopened thread can list what the assistant
+        // suggested instead of only the one-line summary.
+        const proposal = message.proposal;
+        if (proposal?.kind === 'plan') {
+          return {
+            id: createAssistantMessageId(),
+            role: 'assistant',
+            kind: 'plan',
+            plan: proposal.plan,
+            historical: true,
+          };
+        }
+        if (proposal?.kind === 'action') {
+          return {
+            id: createAssistantMessageId(),
+            role: 'assistant',
+            kind: 'action',
+            action: proposal.action,
+            historical: true,
+          };
+        }
+        return {
+          id: createAssistantMessageId(),
+          role: 'assistant',
+          kind: 'text',
+          text: message.content,
+        };
+      }),
     );
     setThreadId(loaded.id);
     setThreadName(loaded.name);
@@ -529,6 +551,7 @@ export function AssistantPanel() {
                   key={message.id}
                   action={message.action}
                   results={message.results ?? null}
+                  readOnly={message.historical === true}
                   onApplied={(results) =>
                     recordActionResults(message.id, results)
                   }
@@ -550,6 +573,7 @@ export function AssistantPanel() {
               <PlanCard
                 key={message.id}
                 plan={message.plan}
+                readOnly={message.historical === true}
                 onDiscard={() => discardMessage(message.id)}
               />
             );
