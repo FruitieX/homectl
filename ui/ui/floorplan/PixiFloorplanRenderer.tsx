@@ -1118,7 +1118,48 @@ function getApplicationCanvas(app: Application) {
   }
 }
 
+type GlContext = WebGL2RenderingContext | WebGLRenderingContext;
+
+function readGlContext(app: Application): GlContext | null {
+  try {
+    return (app.renderer as { gl?: GlContext } | undefined)?.gl ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Release a WebGL context deterministically.
+ *
+ * `Application.destroy` drops the renderer but leaves the context for the
+ * garbage collector, and a browser only keeps a small number of contexts alive
+ * per page. A list that scrolls through many previews therefore piles up
+ * contexts until the browser starts evicting the ones on screen, which shows up
+ * as previews flickering.
+ */
+function releaseGlContext(gl: GlContext | null) {
+  try {
+    gl?.getExtension('WEBGL_lose_context')?.loseContext();
+  } catch {
+    // The context may already be gone; cleanup stays best-effort.
+  }
+}
+
+/**
+ * Pixi marks its canvas `touch-action: none`, which swallows vertical drags
+ * that start on a preview and stops the surrounding list from scrolling. An
+ * interactive map claims every gesture on purpose; a read-only preview hands
+ * them back to the page.
+ */
+function applyCanvasTouchAction(
+  canvas: HTMLCanvasElement,
+  interactive: boolean,
+) {
+  canvas.style.touchAction = interactive ? 'none' : 'pan-y pinch-zoom';
+}
+
 function destroyApplication(app: Application) {
+  const gl = readGlContext(app);
   try {
     app.stop();
     app.destroy(true, { children: true, texture: false, textureSource: false });
@@ -1126,6 +1167,7 @@ function destroyApplication(app: Application) {
     // Pixi can throw when a WebGL context is lost before initialization has
     // produced a renderer. At that point cleanup should stay best-effort.
   }
+  releaseGlContext(gl);
 }
 
 export function PixiFloorplanRenderer({
@@ -1496,6 +1538,12 @@ export function PixiFloorplanRenderer({
         renderStateRef.current = renderState;
         app.stage.addChild(world);
         container.appendChild(canvas);
+        applyCanvasTouchAction(canvas, interactive);
+        if (!interactive) {
+          // A preview never needs Pixi to cancel the browser's default
+          // gestures; doing so would block scrolling started on the preview.
+          app.renderer.events.autoPreventDefault = false;
+        }
         canvas.addEventListener('webglcontextlost', handleContextLost);
         canvas.addEventListener('webglcontextrestored', handleContextRestored);
         fitSceneRef.current();
@@ -1512,9 +1560,24 @@ export function PixiFloorplanRenderer({
           app.stop();
         }
 
+        let lastContainerSize = {
+          width: container.clientWidth,
+          height: container.clientHeight,
+        };
         resizeObserver = new ResizeObserver(() => {
           app.resize();
-          if (fitOnResize || !hasInteractedRef.current) {
+          applyCanvasTouchAction(canvas, interactive);
+          const width = container.clientWidth;
+          const height = container.clientHeight;
+          // Mobile browsers resize the viewport when their toolbars slide away
+          // during a scroll. Re-framing for those height-only changes made
+          // previews visibly jump while scrolling, so only refit for real
+          // layout changes.
+          const toolbarResize =
+            width === lastContainerSize.width &&
+            Math.abs(height - lastContainerSize.height) <= 120;
+          lastContainerSize = { width, height };
+          if ((fitOnResize || !hasInteractedRef.current) && !toolbarResize) {
             fitSceneRef.current();
           }
         });

@@ -132,8 +132,9 @@ export class PreviewMountBudget {
 }
 
 /**
- * Global budget for group floorplan previews. Stays below the ~16 WebGL
- * contexts browsers keep alive per page (Chrome/Firefox) so evictions cannot
- * blank out previews the user is looking at.
+ * Global budget for group floorplan previews. Browsers keep only a handful of
+ * WebGL contexts alive per page (single digits on low-memory phones), and
+ * evicting a context blanks a preview the user is looking at. Staying well
+ * below that cap leaves headroom for the rest of the app's canvases.
  */
-export const previewMountBudget = new PreviewMountBudget(12);
+export const previewMountBudget = new PreviewMountBudget(6);
