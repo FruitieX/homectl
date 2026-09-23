@@ -5,7 +5,7 @@ import { useDeviceDisplayNames } from '@/hooks/useConfig';
 import { useImageState } from '@/hooks/useImageState';
 import { useAllFloorplans } from '@/hooks/useStoredFloorplan';
 import { useDevicesByKeysState, useGroupsState } from '@/hooks/websocket';
-import { hsToRgb } from '@/lib/colorCalibration';
+import { hsToRgbBytes } from '@/lib/colorBytes';
 import { cn } from '@/lib/cn';
 import { buildFloorplanScene } from '@/lib/floorplan-scene';
 import {
@@ -75,7 +75,7 @@ export function ActionFloorplanPreview({
         ...(change.brightness === undefined
           ? {}
           : { brightness: change.brightness }),
-        ...(change.color === undefined ? {} : { color: hsToRgb(change.color) }),
+        ...(change.color === undefined ? {} : { color: hsToRgbBytes(change.color) }),
       };
     }
     return map;
