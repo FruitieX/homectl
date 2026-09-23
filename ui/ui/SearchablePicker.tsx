@@ -100,7 +100,13 @@ export function SearchablePicker({
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </Button>
         {open && (
-          <div className="overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground">
+          // The drawer claims vertical drags to move the sheet, and this list
+          // scrolls, so keep the gesture here: pan-y scrolling starts on the
+          // list and the sheet only drags when the touch begins outside it.
+          <div
+            data-vaul-no-drag
+            className="touch-pan-y overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground"
+          >
             {list}
           </div>
         )}
