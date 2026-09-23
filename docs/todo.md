@@ -3,6 +3,21 @@
 Ideas and requested changes that are not implemented yet. Add new items at the
 top with enough context to act on them later, and remove an item once it lands.
 
+## Paused/drifted state for scenes after manual tweaks (2026-09-23)
+
+When a group is following a scene and its state is changed outside that scene —
+the user tweaking a light in the UI, applying an assistant suggestion, a routine
+firing — nothing marks the departure. The scene link is silently cleared on apply
+(`server/src/core/devices.rs:1117`, `set_scene(None, …)`; `linked_scene_id` goes
+to `None`), and there is no "paused" concept anywhere in the codebase (grepping
+for pause finds only a tokio test attribute). There is also no UI surface saying
+"this group was in scene X and has since been overridden".
+
+Decide the model first: a paused/drifted flag on the scene link, or per-group
+scene state? Then surface it (chip on the group card?), and define what applying
+a scene does to a paused group (resume vs re-assert). Related to the item below
+about expressing "which scene state is this group in".
+
 ## Brightness calibration for lights
 
 Color calibration covers HSV hue and saturation only: `docs/color-calibration.md`
@@ -29,5 +44,5 @@ temperature, RGB and XY calibration.
 ## Assistant plans that create what they reference (2026-09-23)
 
 - [ ] Let a plan reference entities its own earlier operations create. Plan: `.hermes/plans/20260923-assistant-and-housekeeping.md`; half-finished WIP is stashed as `staged-creates-wip` in `~/homectl-wt/panel`.
-- [ ] Dependency housekeeping: 87 Dependabot alerts (39 high) on the default branch.
+- [ ] Dependency housekeeping: down to 40 open alerts (10 high) after the pnpm-overrides lockfile fix; the to-latest migration is in flight — see `.hermes/plans/20260923-dependency-migration.md` (UI batch landing; Rust batch pending; holds: TypeScript 7 and ESLint 10 toolchain support).
 - [ ] Decide how "which scene state is this group in" should be expressed before asking the assistant to write such routines.
