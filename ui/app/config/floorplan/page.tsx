@@ -47,7 +47,7 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { selectClassNameLarge as selectClassName } from '@/ui/form-styles';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 
 const fieldClassName = 'space-y-2';
 const fieldLabelClassName = 'text-sm font-medium';
@@ -640,17 +640,16 @@ export default function FloorplanPage() {
           <div className="flex flex-wrap items-end gap-3">
             <label className={fieldClassName + ' w-full max-w-sm'}>
               <span className={fieldLabelClassName}>Active floorplan</span>
-              <select
-                className={selectClassName}
+              <SearchablePicker
+                options={floorplans.map((floorplan) => ({
+                  value: floorplan.id,
+                  label: floorplan.name,
+                  detail: floorplan.id,
+                }))}
                 value={selectedFloorplanId ?? ''}
-                onChange={(e) => selectFloorplan(e.target.value || null)}
-              >
-                {floorplans.map((floorplan) => (
-                  <option key={floorplan.id} value={floorplan.id}>
-                    {floorplan.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(id) => selectFloorplan(id || null)}
+                placeholder="Select floorplan…"
+              />
             </label>
 
             <label className={fieldClassName + ' w-full max-w-sm'}>

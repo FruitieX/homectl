@@ -27,6 +27,10 @@ use homectl_server::types::{
         RoutineV2RuntimeStatus, StepDisposition, TriggerRuntimeStatus, TruthValue, UnknownReason,
     },
     automation_value::{HelperDefinition, HelperKind, HelperPersistence, HelperRuntimeStatus},
+    config_authoring::{
+        PreviewStep, PreviewValidationError, RoutinePreviewOverride, RoutinePreviewRequest,
+        RoutinePreviewResponse, ValueFieldInfo, ValueHistoryEntry,
+    },
     device::{Device, DevicesState},
     dim::FlattenedDimConfig,
     group::{FlattenedGroupConfig, FlattenedGroupsConfig, GroupId},
@@ -85,6 +89,13 @@ fn export_ts_bindings() -> Result<(), ExportError> {
         ConditionEvaluation::export_all_to(&output_dir)?;
         ConditionExpr::export_all_to(&output_dir)?;
         ConditionTraceNode::export_all_to(&output_dir)?;
+        PreviewStep::export_all_to(&output_dir)?;
+        PreviewValidationError::export_all_to(&output_dir)?;
+        RoutinePreviewOverride::export_all_to(&output_dir)?;
+        RoutinePreviewRequest::export_all_to(&output_dir)?;
+        RoutinePreviewResponse::export_all_to(&output_dir)?;
+        ValueFieldInfo::export_all_to(&output_dir)?;
+        ValueHistoryEntry::export_all_to(&output_dir)?;
         Device::export_all_to(&output_dir)?;
         ExecutionPolicy::export_all_to(&output_dir)?;
         GroupEvaluation::export_all_to(&output_dir)?;

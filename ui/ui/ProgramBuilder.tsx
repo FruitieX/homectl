@@ -12,11 +12,7 @@ import type { SceneSelection } from '@/bindings/SceneSelection';
 import type { TargetSpec } from '@/bindings/TargetSpec';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
-import {
-  ConditionDatalists,
-  ConditionEditor,
-  describeCondition,
-} from '@/ui/ConditionBuilder';
+import { ConditionEditor, describeCondition } from '@/ui/ConditionBuilder';
 import {
   DeviceMultiSelect,
   DeviceSelect,
@@ -30,6 +26,7 @@ import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import RoutineScriptEditor from '@/ui/RoutineScriptEditor';
 import { useCallback, useRef, useState } from 'react';
 
@@ -282,18 +279,15 @@ function HelperValueEditor({
       );
     case 'enum':
       return (
-        <select
-          className={selectClassName}
+        <SearchablePicker
+          options={helper.kind.options.map((option) => ({
+            value: option,
+            label: option,
+          }))}
           value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          <option value="">Select value...</option>
-          {helper.kind.options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+          onChange={onChange}
+          placeholder="Select value…"
+        />
       );
     case 'string':
       return (
@@ -473,19 +467,16 @@ function ChooseStepEditor({
             />
           ))}
           <div className="flex flex-wrap items-center gap-2">
-            <select
-              className={selectClassName}
-              value={newBranchStepKind}
-              onChange={(event) =>
-                setNewBranchStepKind(event.target.value as StepKind)
-              }
-            >
-              {stepKindOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+            <div className="min-w-56">
+              <SearchablePicker
+                options={stepKindOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
+                value={newBranchStepKind}
+                onChange={(kind) => setNewBranchStepKind(kind as StepKind)}
+              />
+            </div>
             <Button
               type="button"
               variant="outline"
@@ -652,7 +643,6 @@ function SceneSelectionEditor({
   onClear: () => void;
 }) {
   const enumHelpers = helpers.filter((item) => item.kind.kind === 'enum');
-  const groupIds = Object.keys(groups);
   const selectedHelper = enumHelpers.find(
     (item) => selection.kind === 'helper_enum' && item.id === selection.helper,
   );
@@ -691,20 +681,16 @@ function SceneSelectionEditor({
             label="Helper"
             description="Enum helper whose current value picks the scene."
           >
-            <select
-              className={selectClassName}
+            <SearchablePicker
+              options={enumHelpers.map((helper) => ({
+                value: helper.id,
+                label: helper.name,
+                detail: helper.id,
+              }))}
               value={selection.helper}
-              onChange={(event) =>
-                onChange({ ...selection, helper: event.target.value })
-              }
-            >
-              <option value="">Select helper…</option>
-              {enumHelpers.map((helper) => (
-                <option key={helper.id} value={helper.id}>
-                  {helper.name} ({helper.id})
-                </option>
-              ))}
-            </select>
+              onChange={(helper) => onChange({ ...selection, helper })}
+              placeholder="Select helper…"
+            />
           </ConfigField>
           <ConfigField
             label="Value mapping"
@@ -749,20 +735,11 @@ function SceneSelectionEditor({
           label="Group"
           description="Uses the group's unanimous active scene when every member agrees."
         >
-          <select
-            className={selectClassName}
+          <GroupSelect
+            groups={groups}
             value={selection.group_id}
-            onChange={(event) =>
-              onChange({ ...selection, group_id: event.target.value })
-            }
-          >
-            <option value="">Select group…</option>
-            {groupIds.map((groupId) => (
-              <option key={groupId} value={groupId}>
-                {groups[groupId]?.name ?? groupId} ({groupId})
-              </option>
-            ))}
-          </select>
+            onChange={(group_id) => onChange({ ...selection, group_id })}
+          />
         </ConfigField>
       )}
       <ConfigField
@@ -1356,28 +1333,24 @@ function StepFields({
       return (
         <div className="grid gap-3 sm:grid-cols-2">
           <ConfigField label="Helper">
-            <select
-              className={selectClassName}
+            <SearchablePicker
+              options={helpers.map((candidate) => ({
+                value: candidate.id,
+                label: candidate.name,
+                detail: candidate.id,
+              }))}
               value={step.helper}
-              onChange={(event) =>
+              onChange={(selected) =>
                 onChange({
                   ...step,
-                  helper: event.target.value,
+                  helper: selected,
                   value: helperDefaultValue(
-                    helpers.find(
-                      (candidate) => candidate.id === event.target.value,
-                    ),
+                    helpers.find((candidate) => candidate.id === selected),
                   ),
                 })
               }
-            >
-              <option value="">Select helper...</option>
-              {helpers.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.name} ({candidate.id})
-                </option>
-              ))}
-            </select>
+              placeholder="Select helper…"
+            />
           </ConfigField>
           <ConfigField label="Value">
             <HelperValueEditor
@@ -1489,27 +1462,24 @@ function StepEditor({
                 label="Step type"
                 description="Changing the type replaces this step's settings."
               >
-                <select
-                  className={selectClassName}
+                <SearchablePicker
+                  options={stepKindOptions.map((option) => ({
+                    value: option.value,
+                    label: option.label,
+                  }))}
                   value={step.action}
-                  onChange={(event) =>
+                  onChange={(kind) =>
                     onChange(
                       defaultStep(
-                        event.target.value as StepKind,
+                        kind as StepKind,
                         nextNodeId(
-                          event.target.value,
+                          kind,
                           existingIds.filter((id) => id !== step.id),
                         ),
                       ),
                     )
                   }
-                >
-                  {stepKindOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
+                />
               </ConfigField>
               <ConfigField
                 label="Step ID"
@@ -1889,7 +1859,6 @@ export function ProgramBuilder({
 
   return (
     <div className="space-y-4">
-      <ConditionDatalists />
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h4 className="font-medium">Program</h4>
@@ -1950,19 +1919,14 @@ export function ProgramBuilder({
         <>
           <div className="flex flex-wrap items-end gap-3">
             <ConfigField label="Add step" className="min-w-64">
-              <select
-                className={selectClassName}
+              <SearchablePicker
+                options={stepKindOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
                 value={newStepKind}
-                onChange={(event) =>
-                  setNewStepKind(event.target.value as StepKind)
-                }
-              >
-                {stepKindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(kind) => setNewStepKind(kind as StepKind)}
+              />
             </ConfigField>
             <Button
               type="button"

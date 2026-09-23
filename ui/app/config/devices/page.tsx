@@ -43,6 +43,7 @@ import {
 import { SensorActionPanel } from '@/ui/SensorActionPanel';
 import { DeviceQuickControls } from '@/ui/DeviceControls';
 import { DeviceReportStatus } from '@/ui/DeviceReportStatus';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { isDeviceReadOnly } from '@/lib/deviceCapabilities';
 import { ColorCalibrationWizard } from '@/ui/ColorCalibrationWizard';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
@@ -1301,34 +1302,34 @@ export default function DevicesPage() {
                 </label>
                 <label className="block space-y-1.5 text-sm">
                   <span className="font-medium">Room</span>
-                  <select
-                    className={selectClassName + ' h-9 w-full'}
+                  <SearchablePicker
+                    options={[
+                      { value: 'all', label: 'All rooms' },
+                      ...availableGroups.map((group) => ({
+                        value: group.id,
+                        label: group.name,
+                        detail: group.hidden
+                          ? `${group.id} · hidden`
+                          : group.id,
+                      })),
+                    ]}
                     value={deviceGroupFilter}
-                    onChange={(e) => setDeviceGroupFilter(e.target.value)}
-                  >
-                    <option value="all">All rooms</option>
-                    {availableGroups.map((group) => (
-                      <option key={group.id} value={group.id}>
-                        {group.name}
-                        {group.hidden ? ' (hidden)' : ''}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setDeviceGroupFilter}
+                  />
                 </label>
                 <label className="block space-y-1.5 text-sm">
                   <span className="font-medium">Integration</span>
-                  <select
-                    className={selectClassName + ' h-9 w-full'}
+                  <SearchablePicker
+                    options={[
+                      { value: 'all', label: 'All integrations' },
+                      ...integrationIds.map((integrationId) => ({
+                        value: integrationId,
+                        label: integrationId,
+                      })),
+                    ]}
                     value={deviceIntegrationFilter}
-                    onChange={(e) => setDeviceIntegrationFilter(e.target.value)}
-                  >
-                    <option value="all">All integrations</option>
-                    {integrationIds.map((integrationId) => (
-                      <option key={integrationId} value={integrationId}>
-                        {integrationId}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setDeviceIntegrationFilter}
+                  />
                 </label>
                 <Button
                   variant="ghost"
@@ -1888,24 +1889,24 @@ export default function DevicesPage() {
                         label="Replacement device"
                         className="w-full max-w-md"
                       >
-                        <select
-                          className={selectClassName}
-                          disabled={isSaving || isMutating}
+                        <SearchablePicker
+                          options={availableReplacementOptions.map(
+                            (option) => ({
+                              value: option.key,
+                              label: option.label,
+                              detail: option.key,
+                            }),
+                          )}
                           value={replacementDraft}
-                          onChange={(event) =>
+                          onChange={(key) =>
                             setReplacementDrafts((previous) => ({
                               ...previous,
-                              [deviceKey]: event.target.value,
+                              [deviceKey]: key,
                             }))
                           }
-                        >
-                          <option value="">Select replacement device...</option>
-                          {availableReplacementOptions.map((option) => (
-                            <option key={option.key} value={option.key}>
-                              {option.label} ({option.key})
-                            </option>
-                          ))}
-                        </select>
+                          placeholder="Select replacement device…"
+                          disabled={isSaving || isMutating}
+                        />
                       </ConfigField>
 
                       <div className="flex flex-wrap justify-end gap-2">
@@ -2021,20 +2022,20 @@ export default function DevicesPage() {
           </Button>
           {selectedKeys.length > 0 ? (
             <>
-              <select
-                aria-label="Calibration profile for selected lights"
-                className={selectClassName + ' h-9'}
-                value={batchProfileId}
-                onChange={(event) => setBatchProfileId(event.target.value)}
-                disabled={assignCalibration.isPending || profilesLoading}
-              >
-                <option value="">Choose calibration profile</option>
-                {calibrationProfiles.map((profile) => (
-                  <option key={profile.id} value={profile.id}>
-                    {profile.name}
-                  </option>
-                ))}
-              </select>
+              <div className="min-w-48">
+                <SearchablePicker
+                  options={calibrationProfiles.map((profile) => ({
+                    value: profile.id,
+                    label: profile.name,
+                    detail: profile.id,
+                  }))}
+                  value={batchProfileId}
+                  onChange={setBatchProfileId}
+                  placeholder="Choose calibration profile"
+                  ariaLabel="Calibration profile for selected lights"
+                  disabled={assignCalibration.isPending || profilesLoading}
+                />
+              </div>
               <Button
                 size="sm"
                 disabled={

@@ -3,7 +3,8 @@ use crate::db::schema::{
     AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
     DeviceColorCalibrations, DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans,
     GroupDevices, GroupLinks, GroupPositions, Groups, Integrations, RoutineHistory, Routines,
-    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState, WidgetSettings,
+    SceneDeviceStates, SceneGroupStates, SceneOverrides, Scenes, UiState, ValueHistory,
+    WidgetSettings,
 };
 use sea_orm::sea_query::{Expr, OnConflict};
 use sea_orm_migration::prelude::*;
@@ -29,7 +30,62 @@ impl MigratorTrait for Migrator {
             Box::new(M20260922000000AutomationSources),
             Box::new(M20260922000001AssistantThreads),
             Box::new(M20260922000002RoutineHistory),
+            Box::new(M20260923000000ValueHistory),
         ]
+    }
+}
+
+struct M20260923000000ValueHistory;
+
+impl MigrationName for M20260923000000ValueHistory {
+    fn name(&self) -> &str {
+        "m20260923000000_value_history"
+    }
+}
+
+#[async_trait::async_trait]
+impl MigrationTrait for M20260923000000ValueHistory {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(ValueHistory::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new(ValueHistory::Id)
+                            .big_integer()
+                            .not_null()
+                            .auto_increment()
+                            .primary_key(),
+                    )
+                    .col(ColumnDef::new(ValueHistory::SourceKey).text().not_null())
+                    .col(ColumnDef::new(ValueHistory::Path).text().not_null())
+                    .col(
+                        ColumnDef::new(ValueHistory::ChangedAtMs)
+                            .big_integer()
+                            .not_null(),
+                    )
+                    .col(ColumnDef::new(ValueHistory::Value).text().not_null())
+                    .to_owned(),
+            )
+            .await?;
+        manager
+            .create_index(
+                Index::create()
+                    .table(ValueHistory::Table)
+                    .name("idx_value_history_source_path")
+                    .col(ValueHistory::SourceKey)
+                    .col(ValueHistory::Path)
+                    .col(ValueHistory::Id)
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(ValueHistory::Table).to_owned())
+            .await
     }
 }
 

@@ -8,6 +8,7 @@ import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { useHelperStatuses } from '@/hooks/websocket';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
   ConfigField,
@@ -147,17 +148,15 @@ function ValueControl({
       );
     case 'enum':
       return (
-        <select
-          className={selectClassName}
+        <SearchablePicker
+          options={kind.options.map((option) => ({
+            value: option,
+            label: option,
+          }))}
           value={typeof value === 'string' ? value : ''}
-          onChange={(event) => onChange(event.target.value)}
-        >
-          {kind.options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </select>
+          onChange={onChange}
+          clearable={false}
+        />
       );
     case 'number':
       return (

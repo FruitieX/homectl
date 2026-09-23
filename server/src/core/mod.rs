@@ -25,6 +25,7 @@ pub mod simulate;
 pub mod snapshot;
 pub mod state;
 pub mod ui;
+pub mod value_history;
 pub mod websockets;
 
 pub mod device_commands;

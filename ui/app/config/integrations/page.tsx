@@ -10,6 +10,7 @@ import {
 import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import {
@@ -1063,41 +1064,26 @@ function renderSelectInput(
 
   return (
     <div className="grid gap-1.5">
-      <select
-        className={selectClassName}
-        value={selectedValue}
-        onChange={(event) => {
-          if (event.target.value === unsetSelectValue) {
+      <SearchablePicker
+        options={options.map((option) => ({
+          value: stringifyOptionValue(option.value),
+          label: option.label,
+          detail: option.description || undefined,
+        }))}
+        value={selectedValue === unsetSelectValue ? '' : selectedValue}
+        clearable={!field.required}
+        placeholder={field.required ? 'Choose an option…' : 'Unset'}
+        onChange={(next) => {
+          if (!next) {
             onChange(undefined);
             return;
           }
-
           const nextOption = options.find(
-            (option) =>
-              stringifyOptionValue(option.value) === event.target.value,
+            (option) => stringifyOptionValue(option.value) === next,
           );
-
-          if (nextOption) {
-            onChange(nextOption.value);
-          }
+          if (nextOption) onChange(nextOption.value);
         }}
-      >
-        {field.required ? (
-          <option value={unsetSelectValue} disabled>
-            Select...
-          </option>
-        ) : (
-          <option value={unsetSelectValue}>Unset</option>
-        )}
-        {options.map((option) => (
-          <option
-            key={stringifyOptionValue(option.value)}
-            value={stringifyOptionValue(option.value)}
-          >
-            {option.label}
-          </option>
-        ))}
-      </select>
+      />
       {selectedOption?.description ? (
         <span className="text-xs leading-5 text-muted-foreground">
           {selectedOption.description}
@@ -1823,18 +1809,15 @@ function IntegrationOverlay({
                     </ConfigField>
 
                     <ConfigField label="Type">
-                      <select
-                        className={selectClassName}
+                      <SearchablePicker
+                        options={pluginOptions.map((option) => ({
+                          value: option,
+                          label: option,
+                        }))}
                         value={plugin}
-                        onChange={(event) => selectPlugin(event.target.value)}
-                      >
-                        <option value="">Select plugin...</option>
-                        {pluginOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={selectPlugin}
+                        placeholder="Select connection type…"
+                      />
                     </ConfigField>
                   </div>
                   <IntegrationGettingStarted

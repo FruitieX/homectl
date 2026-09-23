@@ -1029,7 +1029,11 @@ pub fn resolve_value(source: &ValueSource, view: EvaluationView<'_>) -> Resolved
     }
 }
 
-fn resolve_device_path(key: &DeviceKey, path: &str, view: EvaluationView<'_>) -> ResolvedValue {
+pub(crate) fn resolve_device_path(
+    key: &DeviceKey,
+    path: &str,
+    view: EvaluationView<'_>,
+) -> ResolvedValue {
     let Some(device) = view.devices.0.get(key) else {
         return ResolvedValue::absent(UnknownReason::MissingEntity {
             entity: key.to_string(),

@@ -280,3 +280,13 @@ pub enum RoutineHistory {
     Timestamp,
     Entry,
 }
+
+#[derive(Clone, Copy, Iden)]
+pub enum ValueHistory {
+    Table,
+    Id,
+    SourceKey,
+    Path,
+    ChangedAtMs,
+    Value,
+}

@@ -13,13 +13,14 @@ use super::schema::{
     AutomationValues, ConfigVersions, CoreConfig, DashboardLayouts, DashboardWidgets,
     DeviceDisplayOverrides, DeviceSensorConfigs, Devices, Floorplans, GroupDevices, GroupLinks,
     GroupPositions, Groups, Integrations, RoutineHistory, Routines, SceneDeviceStates,
-    SceneGroupStates, SceneOverrides, Scenes, WidgetSettings,
+    SceneGroupStates, SceneOverrides, Scenes, ValueHistory, WidgetSettings,
 };
 use crate::core::color_calibration::DeviceColorCalibration;
 use crate::types::assistant::{AssistantHistoryMessage, AssistantThread, AssistantThreadSummary};
 use crate::types::automation_definition::HelperId;
 use crate::types::automation_source::{SourceCompute, SourceDefinition};
 use crate::types::automation_value::{HelperDefinition, HelperKind, HelperPersistence};
+use crate::types::config_authoring::ValueHistoryEntry;
 use crate::types::routine_history::RoutineHistoryEntry;
 use color_eyre::Result;
 use sea_orm::sea_query::{Expr, OnConflict, Order, Query};
@@ -3627,6 +3628,168 @@ fn assistant_thread_from_row(row: QueryResult) -> Result<AssistantThread> {
 // ============================================================================
 // Routine history
 // ============================================================================
+
+pub async fn db_value_history(source_key: &str, path: &str) -> Result<Vec<ValueHistoryEntry>> {
+    value_history_on(get_db_connection()?, source_key, path).await
+}
+
+async fn value_history_on<C: ConnectionTrait>(
+    db: &C,
+    source_key: &str,
+    path: &str,
+) -> Result<Vec<ValueHistoryEntry>> {
+    let rows = all(
+        db,
+        Query::select()
+            .columns([ValueHistory::ChangedAtMs, ValueHistory::Value])
+            .from(ValueHistory::Table)
+            .and_where(Expr::col(ValueHistory::SourceKey).eq(source_key))
+            .and_where(Expr::col(ValueHistory::Path).eq(path))
+            .order_by(ValueHistory::Id, Order::Desc)
+            .limit(100)
+            .to_owned(),
+    )
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|row| {
+            let changed_at_ms = row.try_get("", "changed_at_ms").ok()?;
+            let text: String = row.try_get("", "value").ok()?;
+            Some(ValueHistoryEntry {
+                changed_at_ms,
+                value: serde_json::from_str(&text).ok()?,
+            })
+        })
+        .collect())
+}
+
+pub async fn db_record_value_change(
+    source_key: &str,
+    path: &str,
+    value: &serde_json::Value,
+    changed_at_ms: i64,
+) -> Result<()> {
+    record_value_change_on(get_db_connection()?, source_key, path, value, changed_at_ms).await
+}
+
+pub async fn db_delete_value_history(source_key: &str) -> Result<()> {
+    execute(
+        get_db_connection()?,
+        Query::delete()
+            .from_table(ValueHistory::Table)
+            .and_where(Expr::col(ValueHistory::SourceKey).eq(source_key))
+            .to_owned(),
+    )
+    .await?;
+    Ok(())
+}
+
+async fn record_value_change_on<C: ConnectionTrait>(
+    db: &C,
+    source_key: &str,
+    path: &str,
+    value: &serde_json::Value,
+    changed_at_ms: i64,
+) -> Result<()> {
+    let recent = all(
+        db,
+        Query::select()
+            .columns([ValueHistory::Id, ValueHistory::Value])
+            .from(ValueHistory::Table)
+            .and_where(Expr::col(ValueHistory::SourceKey).eq(source_key))
+            .and_where(Expr::col(ValueHistory::Path).eq(path))
+            .order_by(ValueHistory::Id, Order::Desc)
+            .limit(100)
+            .to_owned(),
+    )
+    .await?;
+    if recent
+        .first()
+        .and_then(|row| row.try_get::<String>("", "value").ok())
+        .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
+        .as_ref()
+        == Some(value)
+    {
+        return Ok(());
+    }
+    execute(
+        db,
+        Query::insert()
+            .into_table(ValueHistory::Table)
+            .columns([
+                ValueHistory::SourceKey,
+                ValueHistory::Path,
+                ValueHistory::ChangedAtMs,
+                ValueHistory::Value,
+            ])
+            .values_panic([
+                Expr::value(source_key),
+                Expr::value(path),
+                Expr::value(changed_at_ms),
+                Expr::value(serde_json::to_string(value)?),
+            ])
+            .to_owned(),
+    )
+    .await?;
+    if recent.len() == 100 {
+        let boundary: i64 = recent[98].try_get("", "id")?;
+        execute(
+            db,
+            Query::delete()
+                .from_table(ValueHistory::Table)
+                .and_where(Expr::col(ValueHistory::SourceKey).eq(source_key))
+                .and_where(Expr::col(ValueHistory::Path).eq(path))
+                .and_where(Expr::col(ValueHistory::Id).lt(boundary))
+                .to_owned(),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod value_history_tests {
+    use super::*;
+    use sea_orm::{Database, DbBackend};
+
+    #[tokio::test]
+    async fn stores_only_changes_and_keeps_the_latest_hundred_per_field() {
+        let db = Database::connect("sqlite::memory:").await.unwrap();
+        db.execute(Statement::from_string(DbBackend::Sqlite,
+            "CREATE TABLE value_history (id INTEGER PRIMARY KEY AUTOINCREMENT, source_key TEXT NOT NULL, path TEXT NOT NULL, changed_at_ms BIGINT NOT NULL, value TEXT NOT NULL)".to_string())).await.unwrap();
+        for index in 0..103 {
+            let value = serde_json::json!(index);
+            record_value_change_on(&db, "dummy/sensor", "/value", &value, index)
+                .await
+                .unwrap();
+            record_value_change_on(&db, "dummy/sensor", "/value", &value, index + 1)
+                .await
+                .unwrap();
+        }
+        record_value_change_on(
+            &db,
+            "dummy/sensor",
+            "/other",
+            &serde_json::json!("separate"),
+            1,
+        )
+        .await
+        .unwrap();
+        let rows = value_history_on(&db, "dummy/sensor", "/value")
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 100);
+        assert_eq!(rows[0].value, serde_json::json!(102));
+        assert_eq!(rows[99].value, serde_json::json!(3));
+        assert_eq!(
+            value_history_on(&db, "dummy/sensor", "/other")
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+}
 
 /// Persisted routine history rows kept in the database. The in-memory ring
 /// uses the same bound, so a restart restores exactly the buffered window.

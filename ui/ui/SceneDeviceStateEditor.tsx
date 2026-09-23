@@ -17,6 +17,11 @@ import { cn } from '@/lib/cn';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
+import {
+  DeviceSelect,
+  SceneSelect,
+  splitDeviceKey,
+} from '@/ui/config-selectors';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { SceneColorEditor } from '@/ui/SceneColorEditor';
 import { ChevronDown, ChevronUp } from 'lucide-react';
@@ -135,39 +140,25 @@ function DeviceLinkEditor({
   devices,
   onChange,
 }: DeviceLinkEditorProps) {
-  const deviceList = Object.entries(devices).map(([key, device]) => ({
-    key,
-    device: device as Device,
-  }));
-
   return (
     <div className="space-y-3">
       <div className={fieldClassName}>
         <label>
           <span className={fieldLabelClassName}>Link to Device</span>
         </label>
-        <select
-          className={selectClassName}
+        <DeviceSelect
+          devices={devices}
           value={getSceneDeviceLinkTargetKey(config)}
-          onChange={(e) => {
-            const [integration_id, ...deviceIdParts] =
-              e.target.value.split('/');
-            const device_id = deviceIdParts.join('/');
-
+          onChange={(key) => {
+            const { integration_id = '', device_id = '' } =
+              splitDeviceKey(key) ?? {};
             onChange({
               ...config,
               integration_id,
               device_id: device_id || undefined,
             });
           }}
-        >
-          <option value="">Select a device...</option>
-          {deviceList.map(({ key, device }) => (
-            <option key={key} value={key}>
-              {device.name} ({key})
-            </option>
-          ))}
-        </select>
+        />
         <span className={helpTextClassName}>
           Scene will copy state from this device (e.g. circadian color)
         </span>
@@ -228,18 +219,11 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
         <label>
           <span className={fieldLabelClassName}>Link to Scene</span>
         </label>
-        <select
-          className={selectClassName}
+        <SceneSelect
+          scenes={scenes}
           value={config.scene_id}
-          onChange={(e) => onChange({ ...config, scene_id: e.target.value })}
-        >
-          <option value="">Select a scene...</option>
-          {scenes.map((scene) => (
-            <option key={scene.id} value={scene.id}>
-              {scene.name} ({scene.id})
-            </option>
-          ))}
-        </select>
+          onChange={(scene_id) => onChange({ ...config, scene_id })}
+        />
         <span className={helpTextClassName}>
           Scene will inherit all device states from the linked scene
         </span>

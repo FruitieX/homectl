@@ -39,6 +39,8 @@ import { ProgramBuilder } from '@/ui/ProgramBuilder';
 import { RoutineExecutionPolicyEditor } from '@/ui/RoutineExecutionPolicyEditor';
 import { RoutineRuntimePanel } from '@/ui/routine-runtime';
 import { V2RoutineSummary } from '@/ui/v2-routine-summary';
+import { RoutineWhatIfPreview } from '@/ui/RoutineWhatIfPreview';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
 import {
@@ -405,15 +407,9 @@ function RoutineCard({
   const [enabled, setEnabled] = useState(routine.enabled);
   const [rules, setRules] = useState<Rule[]>(routine.rules as Rule[]);
   const [actions, setActions] = useState<Action[]>(routine.actions as Action[]);
-  const [editTab, setEditTab] = useState<
-    | 'overview'
-    | 'basics'
-    | 'rules'
-    | 'condition'
-    | 'program'
-    | 'actions'
-    | 'json'
-  >('overview');
+  const [editTab, setEditTab] = useState<'overview' | 'basics' | 'json'>(
+    'overview',
+  );
   const [rulesJson, setRulesJson] = useState(
     JSON.stringify(routine.rules, null, 2),
   );
@@ -427,6 +423,9 @@ function RoutineCard({
     JSON.stringify(routine.definition_v2 ?? {}, null, 2),
   );
   const wasOpenRef = useRef(false);
+  const whenRef = useRef<HTMLDetailsElement>(null);
+  const ifRef = useRef<HTMLDetailsElement>(null);
+  const thenRef = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
     const justOpened = isOpen && !wasOpenRef.current;
@@ -473,6 +472,10 @@ function RoutineCard({
     (status) => status.condition_match,
   ).length;
   const v2Status = runtimeStatus?.v2;
+  const draftProgram = definition.program as Program | undefined;
+  const draftChanged =
+    isV2 &&
+    JSON.stringify(definition) !== JSON.stringify(routine.definition_v2 ?? {});
   const triggerCount =
     v2Status?.triggers.length ?? routine.definition_v2?.triggers?.length ?? 0;
   const armedTriggerCount =
@@ -504,14 +507,7 @@ function RoutineCard({
       }
     }
 
-    if (
-      value === 'overview' ||
-      value === 'basics' ||
-      value === 'rules' ||
-      value === 'condition' ||
-      value === 'program' ||
-      value === 'actions'
-    ) {
+    if (value === 'overview' || value === 'basics') {
       setEditTab(value);
     }
   };
@@ -593,63 +589,213 @@ function RoutineCard({
   const editContent = (
     <div className="flex min-h-full flex-col">
       <Tabs value={editTab} onValueChange={changeTab}>
-        <TabsList
-          className={`grid h-auto w-full grid-cols-3 ${
-            isV2 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'
-          }`}
-        >
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="basics">Basics</TabsTrigger>
-          <TabsTrigger value="rules">{isV2 ? 'Triggers' : 'Rules'}</TabsTrigger>
-          {isV2 ? <TabsTrigger value="condition">Condition</TabsTrigger> : null}
-          {isV2 ? <TabsTrigger value="program">Program</TabsTrigger> : null}
-          {!isV2 ? <TabsTrigger value="actions">Actions</TabsTrigger> : null}
+        <TabsList className="grid h-auto w-full grid-cols-2">
+          <TabsTrigger value="overview">Build & preview</TabsTrigger>
+          <TabsTrigger value="basics">Details</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
           <p className="text-sm text-muted-foreground">
-            {!routine.enabled
-              ? 'Disabled: this routine does not evaluate or trigger.'
-              : isV2
-                ? !v2Status
-                  ? 'Waiting for runtime status.'
-                  : v2Status.condition.error
-                    ? 'The condition could not be evaluated. See the trigger details below.'
-                    : v2Status.will_trigger
-                      ? 'The condition and a triggering event matched. This status does not confirm physical device delivery.'
-                      : v2Status.condition.truth === 'true'
-                        ? 'The condition is met; waiting for a matching trigger event.'
-                        : v2Status.condition.truth === 'false'
-                          ? 'The condition is not met; the routine will not trigger yet.'
-                          : 'The condition is unknown right now. See the trigger details below.'
-                : !runtimeStatus
-                  ? 'Waiting for runtime status.'
-                  : runtimeStatus.rules.some((rule) => rule.error)
-                    ? 'A rule could not be evaluated. See its error below.'
-                    : runtimeStatus.will_trigger
-                      ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
-                      : runtimeStatus.all_conditions_match
-                        ? 'The conditions match; waiting for a matching trigger event.'
-                        : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
+            {draftChanged
+              ? 'You are editing an unsaved draft. Preview it below; live status reflects the saved routine.'
+              : !routine.enabled
+                ? 'Disabled: this routine does not evaluate or trigger.'
+                : isV2
+                  ? !v2Status
+                    ? 'Waiting for runtime status.'
+                    : v2Status.condition.error
+                      ? 'The condition could not be evaluated. See the trigger details below.'
+                      : v2Status.will_trigger
+                        ? 'The condition and a triggering event matched. This status does not confirm physical device delivery.'
+                        : v2Status.condition.truth === 'true'
+                          ? 'The condition is met; waiting for a matching trigger event.'
+                          : v2Status.condition.truth === 'false'
+                            ? 'The condition is not met; the routine will not trigger yet.'
+                            : 'The condition is unknown right now. See the trigger details below.'
+                  : !runtimeStatus
+                    ? 'Waiting for runtime status.'
+                    : runtimeStatus.rules.some((rule) => rule.error)
+                      ? 'A rule could not be evaluated. See its error below.'
+                      : runtimeStatus.will_trigger
+                        ? 'The conditions and triggering event matched. This status does not confirm physical device delivery.'
+                        : runtimeStatus.all_conditions_match
+                          ? 'The conditions match; waiting for a matching trigger event.'
+                          : `${matchingRuleCount ?? 0} of ${runtimeStatus.rules.length} conditions match. Unmatched rules are shown below.`}
           </p>
           {isV2 ? (
             <V2RoutineSummary
-              routine={routine}
-              status={runtimeStatus}
+              routine={{ ...routine, definition_v2: definition }}
+              status={draftChanged ? undefined : runtimeStatus}
               devices={devices}
               groups={groups}
               scenes={scenes}
               routines={routines}
               deviceDisplayNameMap={deviceDisplayNameMap}
+              onEdit={(section) => {
+                const target =
+                  section === 'when'
+                    ? whenRef.current
+                    : section === 'if'
+                      ? ifRef.current
+                      : thenRef.current;
+                if (target) {
+                  target.open = true;
+                  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+              }}
             />
           ) : null}
-          <RoutineRuntimePanel
-            routine={routine}
-            status={runtimeStatus}
-            timers={timers}
-            devices={devices}
-            deviceDisplayNameMap={deviceDisplayNameMap}
-          />
+          {isV2 ? (
+            <RoutineWhatIfPreview definition={definition} devices={devices} />
+          ) : null}
+          {draftChanged && (
+            <p className="text-xs text-muted-foreground">
+              This draft differs from the saved routine. Live status below
+              reflects the saved version.
+            </p>
+          )}
+          {isV2 && (
+            <details className="rounded-2xl border border-border bg-muted/20 p-4">
+              <summary className="cursor-pointer text-sm font-medium">
+                Live trigger and timer details
+              </summary>
+              <div className="mt-4">
+                <RoutineRuntimePanel
+                  routine={routine}
+                  status={runtimeStatus}
+                  timers={timers}
+                  devices={devices}
+                  deviceDisplayNameMap={deviceDisplayNameMap}
+                />
+              </div>
+            </details>
+          )}
+          {isV2 ? (
+            <div className="space-y-3">
+              <details
+                ref={whenRef}
+                className="rounded-2xl border border-border bg-background/70 p-4"
+              >
+                <summary className="cursor-pointer font-semibold">
+                  When · {definition.triggers?.length ?? 0} triggers
+                </summary>
+                <div className="mt-4">
+                  <TriggerBuilder
+                    triggers={definition.triggers ?? []}
+                    onChange={(triggers: TriggerSpec[]) =>
+                      setDefinition((current) => ({ ...current, triggers }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    helpers={helpers}
+                    runtimeStatus={draftChanged ? undefined : runtimeStatus}
+                  />
+                </div>
+              </details>
+              <details
+                ref={ifRef}
+                className="rounded-2xl border border-border bg-background/70 p-4"
+              >
+                <summary className="cursor-pointer font-semibold">
+                  If ·{' '}
+                  {!draftChanged && v2Status?.condition.truth === 'true'
+                    ? 'met now'
+                    : !draftChanged && v2Status?.condition.truth === 'false'
+                      ? 'not met now'
+                      : 'check conditions'}
+                </summary>
+                <div className="mt-4">
+                  <ConditionEditor
+                    condition={
+                      (definition.condition as ConditionExpr | undefined) ?? {
+                        kind: 'literal',
+                        value: true,
+                      }
+                    }
+                    onChange={(condition) =>
+                      setDefinition((current) => ({ ...current, condition }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    helpers={helpers}
+                  />
+                </div>
+              </details>
+              <details
+                ref={thenRef}
+                className="rounded-2xl border border-border bg-background/70 p-4"
+              >
+                <summary className="cursor-pointer font-semibold">
+                  Then ·{' '}
+                  {draftProgram?.kind === 'native'
+                    ? `${draftProgram.steps.length} steps`
+                    : draftProgram?.kind === 'script'
+                      ? 'script'
+                      : 'not configured'}
+                </summary>
+                <div className="mt-4 space-y-4">
+                  <ProgramBuilder
+                    program={definition.program as Program | undefined}
+                    onChange={(program) =>
+                      setDefinition((current) => ({ ...current, program }))
+                    }
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    routines={routines}
+                    helpers={helpers}
+                  />
+                  <Advanced
+                    label="Execution policy"
+                    description="Control overlapping runs, action budget, and rate limits."
+                  >
+                    <RoutineExecutionPolicyEditor
+                      policy={
+                        definition.execution as ExecutionPolicy | undefined
+                      }
+                      onChange={(execution) =>
+                        setDefinition((current) => ({ ...current, execution }))
+                      }
+                    />
+                  </Advanced>
+                </div>
+              </details>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <details className="rounded-2xl border border-border bg-background/70 p-4">
+                <summary className="cursor-pointer font-semibold">
+                  When and if · {rules.length} rules
+                </summary>
+                <div className="mt-4">
+                  <RuleBuilder
+                    rules={rules}
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    onChange={setRules}
+                  />
+                </div>
+              </details>
+              <details className="rounded-2xl border border-border bg-background/70 p-4">
+                <summary className="cursor-pointer font-semibold">
+                  Then · {actions.length} actions
+                </summary>
+                <div className="mt-4">
+                  <ActionBuilder
+                    actions={actions}
+                    devices={devices}
+                    groups={groups}
+                    scenes={scenes}
+                    routines={routines}
+                    onChange={setActions}
+                  />
+                </div>
+              </details>
+            </div>
+          )}
           <Advanced
             label="Advanced editor"
             description="Edit the raw definition when the visual editor does not cover a specific case."
@@ -741,100 +887,6 @@ function RoutineCard({
             </ConfigToggleRow>
           </ConfigFormSection>
         </TabsContent>
-
-        <TabsContent value="rules" className="mt-4">
-          <ConfigFormSection
-            aria-label={isV2 ? 'Routine triggers' : 'Routine rules'}
-          >
-            {isV2 ? (
-              <TriggerBuilder
-                triggers={definition.triggers ?? []}
-                onChange={(triggers: TriggerSpec[]) =>
-                  setDefinition((current) => ({ ...current, triggers }))
-                }
-                devices={devices}
-                groups={groups}
-                scenes={scenes}
-                helpers={helpers}
-                runtimeStatus={runtimeStatus}
-              />
-            ) : (
-              <RuleBuilder
-                rules={rules}
-                devices={devices}
-                groups={groups}
-                scenes={scenes}
-                onChange={setRules}
-              />
-            )}
-          </ConfigFormSection>
-        </TabsContent>
-
-        {isV2 ? (
-          <TabsContent value="condition" className="mt-4">
-            <ConfigFormSection aria-label="Routine condition">
-              <ConditionEditor
-                condition={
-                  (definition.condition as ConditionExpr | undefined) ?? {
-                    kind: 'literal',
-                    value: true,
-                  }
-                }
-                onChange={(condition) =>
-                  setDefinition((current) => ({ ...current, condition }))
-                }
-                devices={devices}
-                groups={groups}
-                scenes={scenes}
-                helpers={helpers}
-              />
-            </ConfigFormSection>
-          </TabsContent>
-        ) : null}
-
-        {isV2 ? (
-          <TabsContent value="program" className="mt-4 space-y-4">
-            <ConfigFormSection aria-label="Routine program">
-              <ProgramBuilder
-                program={definition.program as Program | undefined}
-                onChange={(program) =>
-                  setDefinition((current) => ({ ...current, program }))
-                }
-                devices={devices}
-                groups={groups}
-                scenes={scenes}
-                routines={routines}
-                helpers={helpers}
-              />
-            </ConfigFormSection>
-            <Advanced
-              label="Execution policy"
-              description="How overlapping invocations, the per-run action budget, and rate limits are handled."
-            >
-              <RoutineExecutionPolicyEditor
-                policy={definition.execution as ExecutionPolicy | undefined}
-                onChange={(execution) =>
-                  setDefinition((current) => ({ ...current, execution }))
-                }
-              />
-            </Advanced>
-          </TabsContent>
-        ) : null}
-
-        {!isV2 ? (
-          <TabsContent value="actions" className="mt-4">
-            <ConfigFormSection aria-label="Routine actions">
-              <ActionBuilder
-                actions={actions}
-                devices={devices}
-                groups={groups}
-                scenes={scenes}
-                routines={routines}
-                onChange={setActions}
-              />
-            </ConfigFormSection>
-          </TabsContent>
-        ) : null}
 
         <TabsContent value="json" className="mt-4">
           <Button
@@ -1186,6 +1238,7 @@ function CreateRoutineModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState(false);
+  const [startFrom, setStartFrom] = useState('blank');
 
   const applyAssistantDraft = (draft: AssistantDraft) => {
     setDefinition(draft.definition);
@@ -1234,6 +1287,7 @@ function CreateRoutineModal({
                 const next = Number(event.target.value) as 1 | 2;
                 setSemantics(next);
                 setPreview(false);
+                setStartFrom('blank');
                 if (next === 2) {
                   setDefinition(v2Draft('blank'));
                 } else {
@@ -1247,12 +1301,59 @@ function CreateRoutineModal({
             </select>
           </ConfigField>
           <ConfigField label="Start from">
-            <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              defaultValue="blank"
-              onChange={(event) => {
+            <SearchablePicker
+              value={startFrom}
+              options={
+                semantics === 2
+                  ? [
+                      {
+                        value: 'blank',
+                        label: 'Blank routine (manual trigger)',
+                      },
+                      {
+                        value: 'sensor',
+                        label: 'Device change activates a scene',
+                      },
+                      {
+                        value: 'motion',
+                        label: 'Motion report activates a scene',
+                      },
+                      { value: 'occupancy', label: 'Occupancy holds a scene' },
+                      {
+                        value: 'schedule',
+                        label: 'Schedule activates a scene',
+                      },
+                      ...routines
+                        .filter(
+                          (routine) =>
+                            routine.semantics_version === 2 ||
+                            Boolean(routine.definition_v2),
+                        )
+                        .map((routine) => ({
+                          value: `copy:${routine.id}`,
+                          label: routine.name,
+                          detail: `Copy routine · ${routine.id}`,
+                        })),
+                    ]
+                  : [
+                      { value: 'blank', label: 'Blank routine' },
+                      { value: 'sensor', label: 'Sensor activates a scene' },
+                      ...routines
+                        .filter(
+                          (routine) =>
+                            routine.semantics_version !== 2 &&
+                            !routine.definition_v2,
+                        )
+                        .map((routine) => ({
+                          value: `copy:${routine.id}`,
+                          label: routine.name,
+                          detail: `Copy routine · ${routine.id}`,
+                        })),
+                    ]
+              }
+              onChange={(value) => {
                 setPreview(false);
-                const value = event.target.value;
+                setStartFrom(value);
                 if (semantics === 2) {
                   if (
                     value === 'blank' ||
@@ -1290,54 +1391,7 @@ function CreateRoutineModal({
                   setActions(structuredClone(source.actions) as Action[]);
                 }
               }}
-            >
-              {semantics === 2 ? (
-                <>
-                  <option value="blank">Blank routine (manual trigger)</option>
-                  <option value="sensor">
-                    Device change activates a scene
-                  </option>
-                  <option value="motion">
-                    Motion report activates a scene
-                  </option>
-                  <option value="occupancy">
-                    Occupancy holds a scene (level)
-                  </option>
-                  <option value="schedule">Schedule activates a scene</option>
-                  <optgroup label="Reuse a v2 routine">
-                    {routines
-                      .filter(
-                        (routine) =>
-                          routine.semantics_version === 2 ||
-                          Boolean(routine.definition_v2),
-                      )
-                      .map((routine) => (
-                        <option key={routine.id} value={`copy:${routine.id}`}>
-                          {routine.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                </>
-              ) : (
-                <>
-                  <option value="blank">Blank routine</option>
-                  <option value="sensor">Sensor activates a scene</option>
-                  <optgroup label="Reuse a v1 routine">
-                    {routines
-                      .filter(
-                        (routine) =>
-                          routine.semantics_version !== 2 &&
-                          !routine.definition_v2,
-                      )
-                      .map((routine) => (
-                        <option key={routine.id} value={`copy:${routine.id}`}>
-                          {routine.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                </>
-              )}
-            </select>
+            />
           </ConfigField>
           <ConfigField label="Routine ID">
             <Input
@@ -1368,34 +1422,23 @@ function CreateRoutineModal({
         </ConfigFormSection>
 
         {semantics === 2 ? (
-          <div className="mt-4">
+          <div className="mt-4 space-y-4">
             <AssistantDraftPanel onDraft={applyAssistantDraft} />
+            <RoutineWhatIfPreview definition={definition} devices={devices} />
           </div>
         ) : null}
 
         <div className="mt-4 space-y-4">
           {semantics === 2 ? (
-            preview ? (
-              <>
-                <ConfigField label="Definition (JSON)">
-                  <Textarea
-                    className="h-96 font-mono text-xs"
-                    readOnly
-                    value={JSON.stringify(definition, null, 2)}
-                  />
-                </ConfigField>
-                <p className="text-sm text-muted-foreground">
-                  {enabled
-                    ? 'This routine will be enabled when saved.'
-                    : 'This routine will be saved disabled.'}
-                </p>
-              </>
-            ) : (
-              <>
-                <ConfigFormSection
-                  title="Triggers"
-                  description="The routine runs when one of these fires and the condition holds."
-                >
+            <div className="space-y-3">
+              <details
+                open
+                className="rounded-2xl border border-border bg-background/70 p-4"
+              >
+                <summary className="cursor-pointer font-semibold">
+                  When · {definition.triggers?.length ?? 0} triggers
+                </summary>
+                <div className="mt-4">
                   <TriggerBuilder
                     triggers={definition.triggers ?? []}
                     onChange={(triggers: TriggerSpec[]) =>
@@ -1406,11 +1449,13 @@ function CreateRoutineModal({
                     scenes={scenes}
                     helpers={helpers}
                   />
-                </ConfigFormSection>
-                <ConfigFormSection
-                  title="Condition"
-                  description="Every firing is checked against this condition before the program runs."
-                >
+                </div>
+              </details>
+              <details className="rounded-2xl border border-border bg-background/70 p-4">
+                <summary className="cursor-pointer font-semibold">
+                  If · condition
+                </summary>
+                <div className="mt-4">
                   <ConditionEditor
                     condition={
                       (definition.condition as ConditionExpr | undefined) ?? {
@@ -1426,11 +1471,13 @@ function CreateRoutineModal({
                     scenes={scenes}
                     helpers={helpers}
                   />
-                </ConfigFormSection>
-                <ConfigFormSection
-                  title="Program"
-                  description="Steps run in order after the trigger and condition match."
-                >
+                </div>
+              </details>
+              <details className="rounded-2xl border border-border bg-background/70 p-4">
+                <summary className="cursor-pointer font-semibold">
+                  Then · actions in order
+                </summary>
+                <div className="mt-4">
                   <ProgramBuilder
                     program={definition.program as Program | undefined}
                     onChange={(program) =>
@@ -1442,9 +1489,14 @@ function CreateRoutineModal({
                     routines={routines}
                     helpers={helpers}
                   />
-                </ConfigFormSection>
-              </>
-            )
+                </div>
+              </details>
+              <p className="text-sm text-muted-foreground">
+                {enabled
+                  ? 'This routine will be enabled when saved.'
+                  : 'This routine will be saved disabled.'}
+              </p>
+            </div>
           ) : preview ? (
             <>
               <RoutineRuleList
@@ -1497,11 +1549,18 @@ function CreateRoutineModal({
           <Button variant="ghost" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="outline" onClick={() => setPreview(!preview)}>
-            {preview ? 'Edit draft' : 'Preview'}
-          </Button>
+          {semantics === 1 && (
+            <Button variant="outline" onClick={() => setPreview(!preview)}>
+              {preview ? 'Edit draft' : 'Preview'}
+            </Button>
+          )}
           <Button
-            disabled={!id.trim() || !name.trim() || saving || !preview}
+            disabled={
+              !id.trim() ||
+              !name.trim() ||
+              saving ||
+              (semantics === 1 && !preview)
+            }
             onClick={async () => {
               if (semantics === 2) {
                 const validation = validateV2Draft(definition);

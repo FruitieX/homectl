@@ -15,6 +15,9 @@ import {
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
+import { ValuePathPicker } from '@/ui/ValuePathPicker';
+import { SearchablePicker } from '@/ui/SearchablePicker';
+import { useValueHistory } from '@/hooks/useValueHistory';
 import { useState } from 'react';
 
 export type ConditionKind = ConditionExpr['kind'];
@@ -38,26 +41,6 @@ export const operatorsWithoutValue = new Set<RawRuleOperator>([
   'exists',
   'truthy',
 ]);
-
-export const sensorPathSuggestions = [
-  '/value',
-  '/observed',
-  '/observed/value',
-  '/availability/online',
-  '/last_report/value',
-  '/name',
-];
-
-export const controllablePathSuggestions = [
-  '/power',
-  '/brightness',
-  '/color',
-  '/scene_id',
-  '/observed',
-  '/observed/power',
-  '/availability/online',
-  '/name',
-];
 
 const conditionKindOptions: Array<{ value: ConditionKind; label: string }> = [
   { value: 'all', label: 'All conditions hold' },
@@ -169,23 +152,6 @@ export function describeCondition(
   }
 }
 
-export function ConditionDatalists() {
-  return (
-    <>
-      <datalist id="v2-sensor-paths">
-        {sensorPathSuggestions.map((path) => (
-          <option key={path} value={path} />
-        ))}
-      </datalist>
-      <datalist id="v2-controllable-paths">
-        {controllablePathSuggestions.map((path) => (
-          <option key={path} value={path} />
-        ))}
-      </datalist>
-    </>
-  );
-}
-
 function ComparisonValueEditor({
   operator,
   value,
@@ -256,11 +222,13 @@ function ComparisonValueEditor({
 function ValueSourceEditor({
   source,
   onChange,
+  onChooseValue,
   devices,
   helpers,
 }: {
   source: ValueSource;
   onChange: (source: ValueSource) => void;
+  onChooseValue?: (value: unknown) => void;
   devices: DevicesState;
   helpers: HelperRuntimeStatus[];
 }) {
@@ -302,6 +270,10 @@ function ValueSourceEditor({
                     integration_id: '',
                     device_id: '',
                   },
+                  path:
+                    devices[key] && 'Controllable' in devices[key]!.data
+                      ? '/power'
+                      : '/value',
                 })
               }
             />
@@ -310,23 +282,12 @@ function ValueSourceEditor({
             label="Value path"
             description="JSON pointer into the device state, for example /power or /value."
           >
-            <Input
-              list={
-                devices[
-                  `${source.device.integration_id}/${source.device.device_id}`
-                ]?.data &&
-                'Sensor' in
-                  devices[
-                    `${source.device.integration_id}/${source.device.device_id}`
-                  ]!.data
-                  ? 'v2-sensor-paths'
-                  : 'v2-controllable-paths'
-              }
-              value={source.path}
-              placeholder="/value"
-              onChange={(event) =>
-                onChange({ ...source, path: event.target.value })
-              }
+            <ValuePathPicker
+              devices={devices}
+              deviceKey={`${source.device.integration_id}/${source.device.device_id}`}
+              path={source.path}
+              onChange={(path) => onChange({ ...source, path })}
+              onChooseValue={onChooseValue}
             />
           </ConfigField>
         </>
@@ -337,20 +298,25 @@ function ValueSourceEditor({
           label="Helper"
           description="Read the helper's current value."
         >
-          <select
-            className={selectClassName}
+          <SearchablePicker
+            options={helpers.map((helper) => ({
+              value: helper.id,
+              label: helper.name,
+              detail: helper.id,
+            }))}
             value={source.helper}
-            onChange={(event) =>
-              onChange({ ...source, helper: event.target.value })
-            }
-          >
-            <option value="">Select helper...</option>
-            {helpers.map((helper) => (
-              <option key={helper.id} value={helper.id}>
-                {helper.name} ({helper.id})
-              </option>
-            ))}
-          </select>
+            onChange={(helper) => onChange({ ...source, helper })}
+            placeholder="Select helper…"
+          />
+          {source.helper && (
+            <HelperValuePreview
+              id={source.helper}
+              value={
+                helpers.find((helper) => helper.id === source.helper)?.value
+              }
+              onChooseValue={onChooseValue}
+            />
+          )}
         </ConfigField>
       ) : null}
 
@@ -360,39 +326,88 @@ function ValueSourceEditor({
             label="Computed source"
             description="Computed source defined in the server configuration."
           >
-            <select
-              className={selectClassName}
+            <SearchablePicker
+              options={sources.map((item) => ({
+                value: item.id,
+                label: item.name,
+                detail: `${item.id}${item.enabled ? '' : ' · disabled'}`,
+              }))}
               value={source.source}
-              onChange={(event) =>
-                onChange({ ...source, source: event.target.value })
-              }
-            >
-              <option value="">Select a source…</option>
-              {sources.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name} ({item.id}){item.enabled ? '' : ' — disabled'}
-                </option>
-              ))}
-              {source.source !== '' &&
-              !sources.some((item) => item.id === source.source) ? (
-                <option value={source.source}>{source.source} — unknown</option>
-              ) : null}
-            </select>
+              onChange={(selected) => onChange({ ...source, source: selected })}
+              placeholder="Select a source…"
+            />
           </ConfigField>
           <ConfigField
             label="Value path"
             description="JSON pointer into the source value, for example /brightness or /color/ct."
           >
-            <Input
-              value={source.path}
-              placeholder="/"
-              onChange={(event) =>
-                onChange({ ...source, path: event.target.value })
-              }
+            <ValuePathPicker
+              devices={devices}
+              deviceKey={`computed/${source.source}`}
+              sourceKind="computed_source"
+              path={source.path}
+              onChange={(path) => onChange({ ...source, path })}
+              onChooseValue={onChooseValue}
             />
           </ConfigField>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function HelperValuePreview({
+  id,
+  value,
+  onChooseValue,
+}: {
+  id: string;
+  value: unknown;
+  onChooseValue?: (value: unknown) => void;
+}) {
+  const { history, error } = useValueHistory(`helper/${id}`, '/value');
+  return (
+    <div className="space-y-1 text-xs text-muted-foreground">
+      <p>
+        Current value:{' '}
+        <span className="font-mono">
+          {value === undefined ? 'Unavailable now' : JSON.stringify(value)}
+        </span>{' '}
+        {value !== undefined && onChooseValue && (
+          <button
+            type="button"
+            className="text-primary hover:underline"
+            onClick={() => onChooseValue(value)}
+          >
+            Use as expected value
+          </button>
+        )}
+      </p>
+      {history.length > 0 && (
+        <details>
+          <summary className="cursor-pointer">
+            Recent changes ({history.length})
+          </summary>
+          <div className="max-h-32 overflow-y-auto">
+            {history.slice(0, 20).map((entry, index) => (
+              <p key={`${entry.changed_at_ms}-${index}`}>
+                {JSON.stringify(entry.value)} ·{' '}
+                {new Date(Number(entry.changed_at_ms)).toLocaleString()}{' '}
+                {onChooseValue && (
+                  <button
+                    type="button"
+                    className="text-primary hover:underline"
+                    onClick={() => onChooseValue(entry.value)}
+                  >
+                    Use
+                  </button>
+                )}
+              </p>
+            ))}
+          </div>
+        </details>
+      )}
+      {error && <p>Recent changes are unavailable right now.</p>}
     </div>
   );
 }
@@ -570,6 +585,9 @@ export function ConditionEditor({
           <ValueSourceEditor
             source={condition.source}
             onChange={(source) => onChange({ ...condition, source })}
+            onChooseValue={(value) =>
+              onChange({ ...condition, value: value as JsonValue })
+            }
             devices={devices}
             helpers={helpers}
           />

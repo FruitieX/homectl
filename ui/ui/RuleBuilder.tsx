@@ -13,10 +13,12 @@ import { ConfigField } from '@/ui/config-form';
 import {
   DeviceSelect,
   GroupSelect,
+  SceneSelect,
   splitDeviceKey,
 } from '@/ui/config-selectors';
 import { Input } from '@/ui/primitives/input';
 import { Textarea } from '@/ui/primitives/textarea';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 
 const selectClassName =
   'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -522,20 +524,13 @@ function DeviceRuleEditor({
         </label>
         {rule.scene !== undefined && (
           <div className="ml-8 mt-1">
-            <select
-              className={selectClassName}
+            <SceneSelect
+              scenes={scenes}
               value={rule.scene || ''}
-              onChange={(e) =>
-                onChange({ ...rule, scene: e.target.value || undefined })
+              onChange={(scene) =>
+                onChange({ ...rule, scene: scene || undefined })
               }
-            >
-              <option value="">Select scene...</option>
-              {scenes.map((scene) => (
-                <option key={scene.id} value={scene.id}>
-                  {scene.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         )}
       </div>
@@ -566,11 +561,6 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
     previewValue,
   );
   const valueEditorKind = getRawRuleValueEditorKind(rule, previewValue);
-  const datalistId = `raw-rule-paths-${rule.integration_id ?? 'none'}-${
-    rule.device_id ?? 'none'
-  }`
-    .replaceAll('/', '-')
-    .replaceAll(' ', '-');
 
   const setPath = (nextPath: string) => {
     const nextPreviewValue = rawPayload
@@ -634,21 +624,28 @@ function RawRuleEditor({ rule, devices, onChange }: RawRuleEditorProps) {
                 : 'No raw payload fields to discover'}
           </span>
         </label>
-        <Input
-          type="text"
-          list={availablePaths.length > 0 ? datalistId : undefined}
-          className="h-9 font-mono"
-          placeholder="/payload/temperature"
+        <SearchablePicker
+          options={availablePaths.map((path) => ({
+            value: path,
+            label: path.split('/').at(-1) || path,
+            detail: path,
+          }))}
           value={rule.path}
-          onChange={(e) => setPath(e.target.value)}
+          onChange={setPath}
+          placeholder={
+            availablePaths.length ? 'Choose a field…' : 'No fields observed yet'
+          }
         />
-        {availablePaths.length > 0 && (
-          <datalist id={datalistId}>
-            {availablePaths.map((path) => (
-              <option key={path} value={path} />
-            ))}
-          </datalist>
-        )}
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Enter a custom path</summary>
+          <Input
+            type="text"
+            className="mt-2 font-mono"
+            placeholder="/payload/temperature"
+            value={rule.path}
+            onChange={(event) => setPath(event.target.value)}
+          />
+        </details>
         <span className={helpTextClassName}>
           Use{' '}
           <a
@@ -910,20 +907,13 @@ function GroupRuleEditor({
         </label>
         {rule.scene !== undefined && (
           <div className="ml-8 mt-1">
-            <select
-              className={selectClassName}
+            <SceneSelect
+              scenes={scenes}
               value={rule.scene || ''}
-              onChange={(e) =>
-                onChange({ ...rule, scene: e.target.value || undefined })
+              onChange={(scene) =>
+                onChange({ ...rule, scene: scene || undefined })
               }
-            >
-              <option value="">Select scene...</option>
-              {scenes.map((scene) => (
-                <option key={scene.id} value={scene.id}>
-                  {scene.name}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         )}
       </div>

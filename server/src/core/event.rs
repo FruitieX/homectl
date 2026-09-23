@@ -1272,6 +1272,7 @@ fn apply_helper_write(
 ) {
     match state.helpers.set_value(helper, value.clone()) {
         Ok(updated) => {
+            crate::core::value_history::observe_helper(&helper.to_string(), value);
             let durable = state
                 .helpers
                 .definition(helper)
@@ -2022,6 +2023,7 @@ impl AppState {
             // Scene/source materialization adds derived mutations; keep the
             // worklist bounded instead of recursing.
             queue.extend(self.devices.take_pending_mutations());
+            crate::core::value_history::observe_device(&mutation.after);
             mutations.push(mutation);
         }
 

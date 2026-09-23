@@ -8,7 +8,8 @@ import type { ScheduleSpec } from '@/bindings/ScheduleSpec';
 import type { TriggerSpec } from '@/bindings/TriggerSpec';
 import { useSchedulePreview } from '@/hooks/useConfig';
 import { DurationInput, selectClassName } from '@/ui/builder-fields';
-import { ConditionDatalists, ConditionEditor } from '@/ui/ConditionBuilder';
+import { ConditionEditor } from '@/ui/ConditionBuilder';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 import { DeviceSelect, splitDeviceKey } from '@/ui/config-selectors';
 import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
@@ -550,7 +551,6 @@ export function TriggerBuilder({
 
   return (
     <div className="space-y-4">
-      <ConditionDatalists />
       <datalist id="v2-timezones">
         {timezoneSuggestions.map((zone) => (
           <option key={zone} value={zone} />
@@ -585,19 +585,15 @@ export function TriggerBuilder({
               label="Trigger type"
               description="What kind of event should start this routine?"
             >
-              <select
-                className={`${selectClassName} w-full`}
+              <SearchablePicker
+                options={triggerKindOptions.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                }))}
                 value={draft.kind}
-                onChange={(event) =>
-                  changeDraftKind(event.target.value as TriggerKind)
-                }
-              >
-                {triggerKindOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+                onChange={(kind) => changeDraftKind(kind as TriggerKind)}
+                clearable={false}
+              />
             </ConfigField>
 
             <ConfigField

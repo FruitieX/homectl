@@ -381,6 +381,12 @@ impl Devices {
                         if let Err(error) = db_delete_device(&key).await {
                             warn!("Failed to delete stale device {key} from DB: {error}");
                         }
+                        if let Err(error) =
+                            crate::db::config_queries::db_delete_value_history(&key.to_string())
+                                .await
+                        {
+                            warn!("Failed to delete value history for {key}: {error}");
+                        }
                         continue;
                     }
 
@@ -423,6 +429,11 @@ fn spawn_device_db_deletes(keys: Vec<DeviceKey>) {
         for key in keys {
             if let Err(error) = db_delete_device(&key).await {
                 warn!("Failed to delete device {key} from DB: {error}");
+            }
+            if let Err(error) =
+                crate::db::config_queries::db_delete_value_history(&key.to_string()).await
+            {
+                warn!("Failed to delete value history for {key}: {error}");
             }
         }
     });

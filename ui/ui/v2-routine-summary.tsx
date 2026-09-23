@@ -8,6 +8,7 @@ import type { Routine } from '@/hooks/useConfig';
 import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
 import { describeCondition } from '@/ui/ConditionBuilder';
 import { Badge } from '@/ui/primitives/badge';
+import { Button } from '@/ui/primitives/button';
 import {
   StatusBadge,
   formatDue,
@@ -223,6 +224,7 @@ export function V2RoutineSummary({
   scenes,
   routines,
   deviceDisplayNameMap,
+  onEdit,
 }: {
   routine: Routine;
   status?: RoutineRuntimeStatus;
@@ -231,6 +233,7 @@ export function V2RoutineSummary({
   scenes: NameList;
   routines: NameList;
   deviceDisplayNameMap: Record<string, string>;
+  onEdit?: (section: 'when' | 'if' | 'then') => void;
 }) {
   const definition = routine.definition_v2;
   if (!definition) return null;
@@ -247,10 +250,22 @@ export function V2RoutineSummary({
       <section className="rounded-2xl border border-border bg-background/70 p-3">
         <header className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">When</h3>
-          <span className="text-xs text-muted-foreground">
-            {triggerSpecs.length}{' '}
-            {triggerSpecs.length === 1 ? 'trigger' : 'triggers'}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {triggerSpecs.length}{' '}
+              {triggerSpecs.length === 1 ? 'trigger' : 'triggers'}
+            </span>
+            {onEdit && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => onEdit('when')}
+              >
+                Edit
+              </Button>
+            )}
+          </div>
         </header>
         <div className="mt-2 space-y-2">
           {triggerSpecs.length === 0 ? (
@@ -308,7 +323,19 @@ export function V2RoutineSummary({
       <section className="rounded-2xl border border-border bg-background/70 p-3">
         <header className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">If</h3>
-          {runtimeTruthBadge(truth)}
+          <div className="flex items-center gap-2">
+            {runtimeTruthBadge(truth)}
+            {onEdit && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => onEdit('if')}
+              >
+                Edit
+              </Button>
+            )}
+          </div>
         </header>
         <div className="mt-2">
           <ConditionTree
@@ -329,11 +356,23 @@ export function V2RoutineSummary({
       <section className="rounded-2xl border border-border bg-background/70 p-3">
         <header className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-semibold">Then</h3>
-          <span className="text-xs text-muted-foreground">
-            {program?.kind === 'script'
-              ? 'script'
-              : `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {program?.kind === 'script'
+                ? 'script'
+                : `${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}
+            </span>
+            {onEdit && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => onEdit('then')}
+              >
+                Edit
+              </Button>
+            )}
+          </div>
         </header>
         <div className="mt-2">
           {program?.kind === 'script' ? (

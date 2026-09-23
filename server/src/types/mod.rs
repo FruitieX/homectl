@@ -6,6 +6,7 @@ pub mod automation_source;
 pub mod automation_trace;
 pub mod automation_value;
 pub mod color;
+pub mod config_authoring;
 pub mod config_diagnostics;
 pub mod device;
 pub mod dim;

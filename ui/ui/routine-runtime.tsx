@@ -310,8 +310,8 @@ export function RoutineRuntimePanel({
     <div className="space-y-4">
       {v2 ? (
         <PanelSection
-          title="Native triggers"
-          description="Live trigger state from the running v2 definition. Armed triggers show their next fire."
+          title="Trigger status"
+          description="What the saved routine is waiting for. Scheduled triggers show their next run."
           count={v2.triggers.length}
         >
           {v2.triggers.length === 0 ? (

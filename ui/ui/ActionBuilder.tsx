@@ -16,6 +16,7 @@ import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
 import { Textarea } from '@/ui/primitives/textarea';
+import { SearchablePicker } from '@/ui/SearchablePicker';
 
 const selectClassName =
   'h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -424,26 +425,27 @@ function RolloutEditor({ value, devices, onChange }: RolloutEditorProps) {
             <label>
               <span className={fieldLabelClassName}>Rollout Source Device</span>
             </label>
-            <select
-              className={selectClassName}
+            <SearchablePicker
+              options={[
+                {
+                  value: TRIGGERING_DEVICE_ROLLOUT_SOURCE,
+                  label: TRIGGERING_DEVICE_ROLLOUT_SOURCE_LABEL,
+                },
+                ...deviceList.map(({ key, device }) => ({
+                  value: key,
+                  label: device.name,
+                  detail: key,
+                })),
+              ]}
               value={value.rollout_source_device_key ?? ''}
-              onChange={(e) =>
+              onChange={(key) =>
                 onChange({
                   ...value,
-                  rollout_source_device_key: e.target.value || undefined,
+                  rollout_source_device_key: key || undefined,
                 })
               }
-            >
-              <option value="">Select a device...</option>
-              <option value={TRIGGERING_DEVICE_ROLLOUT_SOURCE}>
-                {TRIGGERING_DEVICE_ROLLOUT_SOURCE_LABEL}
-              </option>
-              {deviceList.map(({ key, device }) => (
-                <option key={key} value={key}>
-                  {device.name} ({key})
-                </option>
-              ))}
-            </select>
+              placeholder="Select a device…"
+            />
             <span className={helpTextClassName}>
               Use a fixed origin device, or choose the triggering device to
               center the rollout on whichever device fired the routine.

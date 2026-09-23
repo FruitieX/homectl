@@ -1615,6 +1615,9 @@ pub fn config(
             .or(diagnostics_routes(snapshot))
             .or(logs_routes())
             .or(routine_history_routes())
+            .or(value_history_routes())
+            .or(value_fields_routes(handle))
+            .or(routine_preview_routes(handle))
             .or(device_display_name_routes(snapshot, handle))
             .or(device_color_calibration_routes(snapshot, handle))
             .or(device_sensor_config_routes(snapshot, handle))
@@ -1819,6 +1822,344 @@ async fn list_routine_history() -> Result<impl Reply, warp::Rejection> {
     Ok(ApiResponse::success(recent_routine_history()))
 }
 
+#[derive(Deserialize)]
+struct ValueHistoryQuery {
+    source_key: String,
+    path: String,
+}
+
+fn value_history_routes(
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("value-history")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(warp::query::<ValueHistoryQuery>())
+        .and_then(list_value_history)
+}
+
+async fn list_value_history(query: ValueHistoryQuery) -> Result<impl Reply, warp::Rejection> {
+    if query.source_key.len() > 256 || query.path.len() > 256 || !query.path.starts_with('/') {
+        return Err(warp::reject::reject());
+    }
+    let entries = config_queries::db_value_history(&query.source_key, &query.path)
+        .await
+        .map_err(|error| {
+            log::warn!("Could not read value history: {error}");
+            warp::reject::reject()
+        })?;
+    Ok(ApiResponse::success(entries))
+}
+
+#[derive(Deserialize)]
+struct ValueFieldsQuery {
+    source_key: String,
+}
+
+fn value_fields_routes(
+    handle: &StateHandle,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path("value-fields")
+        .and(warp::path::end())
+        .and(warp::get())
+        .and(warp::query::<ValueFieldsQuery>())
+        .and(with_handle(handle))
+        .and_then(list_value_fields)
+}
+
+async fn list_value_fields(
+    query: ValueFieldsQuery,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    use crate::types::config_authoring::ValueFieldInfo;
+    if query.source_key.len() > 256 {
+        return Err(warp::reject::reject());
+    }
+    let fields = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                use crate::core::automation::{evaluate::resolve_device_path, EvaluationView};
+                let devices = state.devices.get_state();
+                let Some((key, device)) = devices
+                    .0
+                    .iter()
+                    .find(|(key, _)| key.to_string() == query.source_key)
+                else {
+                    return Vec::<ValueFieldInfo>::new();
+                };
+                let mut paths: Vec<String> = crate::core::value_history::fields_for_device(device)
+                    .into_iter()
+                    .map(|(path, _)| path)
+                    .collect();
+                let fixed: Vec<&str> = if device.is_sensor() {
+                    vec!["/value", "/observed/value", "/name"]
+                } else {
+                    vec![
+                        "/power",
+                        "/brightness",
+                        "/color",
+                        "/scene_id",
+                        "/observed/power",
+                        "/observed/brightness",
+                        "/availability/online",
+                    ]
+                };
+                paths.extend(fixed.iter().map(|path| (*path).to_string()));
+                paths.sort();
+                paths.dedup();
+                paths
+                    .into_iter()
+                    .filter_map(|path| {
+                        let resolved = resolve_device_path(
+                            key,
+                            &path,
+                            EvaluationView {
+                                devices,
+                                groups: &state.groups,
+                                helpers: Some(&state.helpers),
+                            },
+                        );
+                        if !resolved.present && !fixed.contains(&path.as_str()) {
+                            return None;
+                        }
+                        let value_type = match resolved.value.as_ref() {
+                            Some(serde_json::Value::Bool(_)) => "boolean",
+                            Some(serde_json::Value::Number(_)) => "number",
+                            Some(serde_json::Value::String(_)) => "text",
+                            Some(_) => "object",
+                            None => "unknown",
+                        };
+                        Some(ValueFieldInfo {
+                            path,
+                            value_type: value_type.to_string(),
+                            available: resolved.present && resolved.value.is_some(),
+                            value: resolved.value,
+                            reason: resolved.reason,
+                            error: resolved.error,
+                        })
+                    })
+                    .collect::<Vec<_>>()
+            })
+        })
+        .await
+        .map_err(|error| {
+            log::warn!("Could not list value fields: {error}");
+            warp::reject::reject()
+        })?;
+    Ok(ApiResponse::success(fields))
+}
+
+fn routine_preview_routes(
+    handle: &StateHandle,
+) -> impl Filter<Extract = (impl warp::Reply,), Error = warp::Rejection> + Clone {
+    warp::path!("routines" / "preview")
+        .and(warp::post())
+        .and(warp::body::content_length_limit(256 * 1024))
+        .and(warp::body::json())
+        .and(with_handle(handle))
+        .and_then(preview_routine)
+}
+
+async fn preview_routine(
+    request: crate::types::config_authoring::RoutinePreviewRequest,
+    handle: StateHandle,
+) -> Result<impl Reply, warp::Rejection> {
+    use crate::core::automation::{self, EvaluationView, PlanInputs, RoutineFrameEvaluation};
+    use crate::types::config_authoring::{
+        PreviewStep, PreviewValidationError, RoutinePreviewResponse,
+    };
+    use crate::types::{automation_trace::TruthValue, rule::RoutineId};
+    let result = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                if request.overrides.len() > 12 {
+                    return RoutinePreviewResponse {
+                        error: Some("Preview up to 12 hypothetical values at once.".into()),
+                        ..Default::default()
+                    };
+                }
+                let catalog = automation::ConfigCatalog::new(
+                    state.devices.get_state().0.keys().cloned(),
+                    &state.runtime_config,
+                );
+                let compiled =
+                    match automation::compile_definition_value(&request.definition, &catalog) {
+                        Ok(compiled) => compiled,
+                        Err(report) => {
+                            return RoutinePreviewResponse {
+                                validation_errors: report
+                                    .errors
+                                    .into_iter()
+                                    .map(|issue| PreviewValidationError {
+                                        path: issue.path,
+                                        message: issue.message,
+                                    })
+                                    .collect(),
+                                ..Default::default()
+                            }
+                        }
+                    };
+                let Some(trigger) = compiled
+                    .normalized
+                    .triggers
+                    .iter()
+                    .find(|item| item.id().to_string() == request.trigger_id)
+                else {
+                    return RoutinePreviewResponse {
+                        error: Some("Choose a configured trigger to preview.".into()),
+                        ..Default::default()
+                    };
+                };
+                let mut devices = state.devices.get_state().clone();
+                for item in &request.overrides {
+                    let Some((_, device)) = devices
+                        .0
+                        .iter_mut()
+                        .find(|(key, _)| key.to_string() == item.device_key)
+                    else {
+                        return RoutinePreviewResponse {
+                            error: Some(format!("Device {} is unavailable.", item.device_key)),
+                            ..Default::default()
+                        };
+                    };
+                    if !item.path.starts_with('/') || item.path.len() > 128 {
+                        return RoutinePreviewResponse {
+                            error: Some(
+                                "Use a supported value path for each hypothetical value.".into(),
+                            ),
+                            ..Default::default()
+                        };
+                    }
+                    let pointer = match &device.data {
+                        _ if item.path == "/name" => "/name".to_string(),
+                        crate::types::device::DeviceData::Sensor(
+                            crate::types::device::SensorDevice::Color(_),
+                        ) => {
+                            let suffix = item
+                                .path
+                                .strip_prefix("/observed/value")
+                                .or_else(|| item.path.strip_prefix("/value"))
+                                .unwrap_or(&item.path);
+                            format!("/data/Sensor{suffix}")
+                        }
+                        crate::types::device::DeviceData::Sensor(_) => {
+                            let path = if item.path == "/observed/value" {
+                                "/value"
+                            } else {
+                                &item.path
+                            };
+                            format!("/data/Sensor{path}")
+                        }
+                        crate::types::device::DeviceData::Controllable(_)
+                            if item.path.starts_with("/observed/") =>
+                        {
+                            format!(
+                                "/data/Controllable/last_report/state{}",
+                                item.path.trim_start_matches("/observed")
+                            )
+                        }
+                        crate::types::device::DeviceData::Controllable(_)
+                            if item.path.starts_with("/availability/")
+                                || item.path.starts_with("/last_report/")
+                                || item.path == "/scene_id" =>
+                        {
+                            format!("/data/Controllable{}", item.path)
+                        }
+                        crate::types::device::DeviceData::Controllable(_) => {
+                            format!("/data/Controllable/state{}", item.path)
+                        }
+                    };
+                    let Ok(mut json) = serde_json::to_value(&*device) else {
+                        return RoutinePreviewResponse {
+                            error: Some("Could not inspect device state.".into()),
+                            ..Default::default()
+                        };
+                    };
+                    let Some(target) = json.pointer_mut(&pointer) else {
+                        return RoutinePreviewResponse {
+                            error: Some(format!(
+                                "{} does not expose {}.",
+                                item.device_key, item.path
+                            )),
+                            ..Default::default()
+                        };
+                    };
+                    *target = item.value.clone();
+                    let Ok(updated) = serde_json::from_value(json) else {
+                        return RoutinePreviewResponse {
+                            error: Some(format!(
+                                "{} is not a valid value for {}.",
+                                item.value, item.path
+                            )),
+                            ..Default::default()
+                        };
+                    };
+                    *device = updated;
+                }
+                let condition = automation::evaluate_condition(
+                    &compiled.normalized.condition,
+                    EvaluationView {
+                        devices: &devices,
+                        groups: &state.groups,
+                        helpers: Some(&state.helpers),
+                    },
+                    "/condition",
+                );
+                let would_run = condition.error.is_none() && condition.truth == TruthValue::True;
+                let mut steps = Vec::new();
+                let mut suppressions = Vec::new();
+                if would_run {
+                    let evaluation = RoutineFrameEvaluation {
+                        routine_id: RoutineId("preview".into()),
+                        definition_revision: 1,
+                        matched_trigger_ids: vec![trigger.id().clone()],
+                        triggers: Vec::new(),
+                        condition: condition.clone(),
+                        will_trigger: true,
+                        predicate_jobs: Vec::new(),
+                        timer_captures: Vec::new(),
+                    };
+                    let plan = automation::plan_evaluation(
+                        &evaluation,
+                        &compiled,
+                        &PlanInputs {
+                            devices: &devices,
+                            groups: &state.groups,
+                            helpers: &state.helpers,
+                            intents: &state.intents,
+                        },
+                    );
+                    steps = plan
+                        .steps
+                        .iter()
+                        .map(|step| PreviewStep {
+                            id: step.action_id.clone(),
+                            kind: step.kind.into(),
+                            targets: automation::step_targets(step),
+                        })
+                        .collect();
+                    suppressions = plan.suppressions;
+                }
+                RoutinePreviewResponse {
+                    condition: Some(condition),
+                    would_run,
+                    steps,
+                    suppressions,
+                    script_unsupported: matches!(
+                        compiled.normalized.program,
+                        crate::types::automation_definition::Program::Script(_)
+                    ),
+                    ..Default::default()
+                }
+            })
+        })
+        .await
+        .map_err(|error| {
+            log::warn!("Could not preview routine: {error}");
+            warp::reject::reject()
+        })?;
+    Ok(ApiResponse::success(result))
+}
+
 fn core_routes(
     snapshot: &SnapshotHandle,
     handle: &StateHandle,
@@ -2015,6 +2356,9 @@ async fn delete_helper(id: String, handle: StateHandle) -> Result<impl Reply, wa
     };
     let database_available = db::is_db_connected();
     let persistence = config_queries::db_delete_helper(&id).await.map(|_| ());
+    if let Err(error) = config_queries::db_delete_value_history(&format!("helper/{id}")).await {
+        log::warn!("Could not remove value history for helper {id}: {error}");
+    }
     Ok(config_write_response(
         serde_json::json!({ "deleted": removed }),
         persistence,
@@ -2049,6 +2393,7 @@ async fn set_helper_value(
                         .helpers
                         .set_value(&helper_id, value.clone())
                         .map_err(|error| error.to_string())?;
+                    crate::core::value_history::observe_helper(&helper_id.0, &value);
                     let durable = state
                         .helpers
                         .definition(&helper_id)
@@ -4606,6 +4951,70 @@ mod tests {
     use super::*;
     use crate::types::device::DeviceId;
     use ordered_float::OrderedFloat;
+
+    #[tokio::test]
+    async fn what_if_preview_changes_only_its_isolated_device_copy() {
+        use crate::core::state::actor::spawn_state_actor;
+        use crate::types::{
+            color::Capabilities,
+            device::{ControllableDevice, Device, DeviceData, ManageKind},
+            integration::IntegrationId,
+        };
+        use warp::Reply;
+        let (mut state, _events) = crate::core::event::tests::test_state();
+        let lamp = Device::new(
+            IntegrationId::from("dummy".to_string()),
+            DeviceId::new("lamp"),
+            "Lamp".into(),
+            DeviceData::Controllable(ControllableDevice::new(
+                None,
+                false,
+                Some(0.5),
+                None,
+                None,
+                Capabilities::default(),
+                ManageKind::Unmanaged,
+            )),
+            None,
+        );
+        state.devices.set_state(&lamp, true, true);
+        let snapshot = state.snapshot.clone();
+        let (deferred_tx, _deferred_rx) = tokio::sync::mpsc::unbounded_channel();
+        let handle = spawn_state_actor(state, snapshot, deferred_tx);
+        let before = handle
+            .mutate(|state| {
+                Box::pin(async move { serde_json::to_value(state.devices.get_state()).unwrap() })
+            })
+            .await
+            .unwrap();
+        let request = serde_json::from_value(serde_json::json!({
+            "definition": {
+                "triggers": [{ "kind": "manual", "id": "manual_1" }],
+                "condition": { "kind": "comparison", "source": { "kind": "device", "device": { "integration_id": "dummy", "device_id": "lamp" }, "path": "/power" }, "operator": "eq", "value": true },
+                "program": { "kind": "native", "steps": [{ "action": "set_power", "id": "step_1", "device": { "integration_id": "dummy", "device_id": "lamp" }, "power": true }] }
+            },
+            "trigger_id": "manual_1",
+            "overrides": [{ "device_key": "dummy/lamp", "path": "/power", "value": true }]
+        })).unwrap();
+        let reply = preview_routine(request, handle.clone())
+            .await
+            .unwrap()
+            .into_response();
+        assert_eq!(reply.status(), StatusCode::OK);
+        let bytes = warp::hyper::body::to_bytes(reply.into_body())
+            .await
+            .unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(response["data"]["would_run"], true);
+        assert_eq!(response["data"]["steps"][0]["kind"], "set_power");
+        let after = handle
+            .mutate(|state| {
+                Box::pin(async move { serde_json::to_value(state.devices.get_state()).unwrap() })
+            })
+            .await
+            .unwrap();
+        assert_eq!(before, after);
+    }
 
     #[test]
     fn replacement_display_name_prefers_override_then_source_name() {
