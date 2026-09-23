@@ -3,6 +3,16 @@
 Ideas and requested changes that are not implemented yet. Add new items at the
 top with enough context to act on them later, and remove an item once it lands.
 
+## Adopt the React Compiler lint rules (2026-09-23)
+
+oxlint 1.85 ships the React Compiler rules (`react/set-state-in-effect`,
+`react/refs`, `react/purity`, `react/preserve-manual-memoization`,
+`react/immutability`, `react/incompatible-library`); they report 76 findings
+across the UI, so `ui/.oxlintrc.json` keeps them off to preserve the lint
+policy this repo has always used. Adopting them is a deliberate pass: derive
+state during render instead of `setState` inside effects, and keep refs out of
+render.
+
 ## Migrate the HTTP layer from warp to axum (2026-09-23)
 
 warp is effectively unmaintained next to axum, and it is why the server cannot
