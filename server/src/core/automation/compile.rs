@@ -57,31 +57,6 @@ pub struct ConfigCatalog {
 }
 
 impl ConfigCatalog {
-    /// Stage an entity that an earlier operation of the same plan creates, so
-    /// later operations may reference it before anything is applied.
-    pub fn stage_created(&mut self, kind: &str, id: &str, body: &serde_json::Value) {
-        match kind {
-            "group" => {
-                self.groups.insert(GroupId(id.to_string()));
-            }
-            "scene" => {
-                self.scenes.insert(id.to_string().into());
-            }
-            "routine" => {
-                self.routines.insert(id.to_string().into());
-            }
-            "source" => {
-                self.sources.insert(SourceId(id.to_string()));
-            }
-            "helper" => {
-                if let Ok(definition) = serde_json::from_value::<HelperDefinition>(body.clone()) {
-                    self.helpers.insert(HelperId(id.to_string()), definition);
-                }
-            }
-            _ => {}
-        }
-    }
-
     /// Build a strict catalog from a device snapshot and a config export.
     pub fn new<I>(devices: I, export: &ConfigExport) -> Self
     where
