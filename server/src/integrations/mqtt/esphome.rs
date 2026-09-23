@@ -146,6 +146,12 @@ fn capabilities_from_discovery(value: &Value, config: &MqttConfig) -> Capabiliti
     capabilities
 }
 
+/// ESPHome's light component defaults its `name:` to "Light", a placeholder
+/// rather than a label.
+fn is_placeholder_light_name(name: &str) -> bool {
+    name.eq_ignore_ascii_case("light")
+}
+
 impl Discovery {
     pub(super) fn remember_availability(
         &mut self,
@@ -214,13 +220,34 @@ impl Discovery {
             return vec![];
         };
 
-        let name = value
+        let entity_name = value
             .get("name")
             .and_then(Value::as_str)
             .map(str::trim)
-            .filter(|name| !name.is_empty())
-            .unwrap_or(&id)
-            .to_owned();
+            .filter(|name| !name.is_empty());
+        // ESPHome gives a light component with no `name:` of its own the
+        // placeholder "Light", which identifies nothing. The discovery
+        // payload's device block carries the node name ("entryway-gx53"),
+        // which is what the user recognises from their configuration.
+        let device_block_name = value
+            .get("device")
+            .or_else(|| value.get("dev"))
+            .and_then(|device| device.get("name"))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|name| !name.is_empty());
+        let node_from_topic = config_id
+            .as_deref()
+            .and_then(|id| id.split('/').next())
+            .filter(|node| !node.is_empty());
+        let name = match entity_name {
+            Some(name) if !is_placeholder_light_name(name) => name.to_owned(),
+            _ => device_block_name
+                .or(node_from_topic)
+                .or(entity_name)
+                .map(str::to_owned)
+                .unwrap_or_else(|| id.clone()),
+        };
         let metadata = Metadata {
             name,
             capabilities: capabilities_from_discovery(&value, config),
@@ -724,6 +751,60 @@ mod tests {
         assert_eq!(data.capabilities.brightness, Some(true));
         assert!(!data.capabilities.rgb);
         assert_eq!(data.capabilities.ct, Some(2703..6535));
+    }
+
+    #[test]
+    fn discovery_prefers_the_node_name_over_a_placeholder_light_name() {
+        let mut discovery = Discovery::default();
+        let integration: IntegrationId = "mqtt".parse().unwrap();
+        let config = config();
+        let config_topic = "homeassistant/light/gx53-test/light/config";
+
+        let discover = |discovery: &mut Discovery, name: &str, device: Option<&str>| {
+            let mut payload = json!({
+                "~": "esphome/gx53-test/light/light",
+                "stat_t": "~/state",
+                "schema": "json",
+                "name": name,
+                "sup_clrm": ["color_temp"],
+                "min_mirs": 153,
+                "max_mirs": 370,
+            });
+            if let Some(device_name) = device {
+                payload["device"] = json!({ "name": device_name, "identifiers": ["gx53-test"] });
+            }
+            discovery.receive(
+                "homeassistant",
+                config_topic,
+                &serde_json::to_vec(&payload).unwrap(),
+                integration.clone(),
+                &config,
+            );
+            discovery
+                .devices
+                .get("gx53-test")
+                .expect("discovery registered the device")
+                .name
+                .clone()
+        };
+
+        // ESPHome names a light component "Light" when it has no `name:` of its
+        // own, so the node name from the device block is used instead.
+        assert_eq!(
+            discover(&mut discovery, "Light", Some("Lower bathroom gx53")),
+            "Lower bathroom gx53"
+        );
+        // Without a device block the node segment of the discovery topic wins.
+        assert_eq!(discover(&mut discovery, "light", None), "gx53-test");
+        // A real entity name always wins.
+        assert_eq!(
+            discover(
+                &mut discovery,
+                "Lower bathroom downlight 1",
+                Some("Lower bathroom gx53")
+            ),
+            "Lower bathroom downlight 1"
+        );
     }
 
     #[test]
