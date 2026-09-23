@@ -32,7 +32,7 @@ serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"
 palette = { version = "=0.7.7", features = ["serializing"] }
 async-trait = "=0.1.92"
-rand = "=0.8.6"
+rand = "=0.10.3"
 warp = "=0.3.7"
 serde_path_to_error = "=0.1.20"
 tokio = { version = "=1.53.1", features = ["full"] }
@@ -59,8 +59,8 @@ sea-orm-migration = { version = "1.1", features = [
 ] }
 once_cell = "=1.21.4"
 rumqttc = { version = "=0.25.1", default-features = false }
-toml = "=0.9.12"
-ts-rs = { version = "=11.1.0", features = [
+toml = "=1.1.6"
+ts-rs = { version = "=12.0.1", features = [
   "ordered-float-impl",
   "no-serde-warnings",
   "serde-json-impl",

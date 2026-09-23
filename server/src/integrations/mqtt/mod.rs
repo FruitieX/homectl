@@ -17,7 +17,7 @@ use crate::{
 use async_trait::async_trait;
 use color_eyre::Result;
 use eyre::{eyre, Context};
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, RngExt};
 use rumqttc::{AsyncClient, MqttOptions, QoS};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -260,7 +260,7 @@ impl Integration for Mqtt {
 
     async fn start(&mut self) -> Result<()> {
         self.stop().await?;
-        let random_string: String = rand::thread_rng()
+        let random_string: String = rand::rng()
             .sample_iter(&Alphanumeric)
             .take(8)
             .map(char::from)

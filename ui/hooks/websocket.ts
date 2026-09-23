@@ -26,7 +26,7 @@ import {
   socketReadiness,
 } from '@/lib/websocketReconnect';
 
-type UiState = { [key in string]?: JsonValue };
+type UiState = { [key in string]: JsonValue };
 
 const devicesAtom = atom<DevicesState | null>(null);
 const scenesAtom = atom<FlattenedScenesConfig | null>(null);

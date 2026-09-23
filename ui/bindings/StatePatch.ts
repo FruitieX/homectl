@@ -11,4 +11,4 @@ export type StatePatch = {
 /**
  * Revision of this patch; apply only when it follows the last seen one.
  */
-revision: number, devices: DevicesPatch | null, scenes: FlattenedScenesConfig | null, groups: FlattenedGroupsConfig | null, routine_statuses: RoutineStatusesPatch | null, timers: Array<TimerRuntimeStatus> | null, helper_statuses: Array<HelperRuntimeStatus> | null, ui_state: { [key in string]?: JsonValue } | null, };
+revision: number, devices: DevicesPatch | null, scenes: FlattenedScenesConfig | null, groups: FlattenedGroupsConfig | null, routine_statuses: RoutineStatusesPatch | null, timers: Array<TimerRuntimeStatus> | null, helper_statuses: Array<HelperRuntimeStatus> | null, ui_state: { [key in string]: JsonValue } | null, };

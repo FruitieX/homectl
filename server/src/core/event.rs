@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use color_eyre::Result;
@@ -1521,7 +1521,7 @@ async fn handle_action(
             });
         }
         Action::RandomizeColor(descriptor) => {
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             let min_saturation = descriptor.min_saturation.unwrap_or(0.2).clamp(0.0, 1.0);
             let max_saturation = descriptor.max_saturation.unwrap_or(1.0).clamp(0.0, 1.0);
             let (min_saturation, max_saturation) = if min_saturation <= max_saturation {
@@ -1549,8 +1549,8 @@ async fn handle_action(
                 // treat this one-off color change as a scene activation.
                 controllable.scene_id = None;
                 controllable.state.color = Some(DeviceColor::new_from_hs(
-                    rng.gen_range(0..360),
-                    rng.gen_range(min_saturation..=max_saturation),
+                    rng.random_range(0..360),
+                    rng.random_range(min_saturation..=max_saturation),
                 ));
                 if descriptor.transition.is_some() {
                     controllable.state.transition = descriptor.transition;

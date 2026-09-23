@@ -2,4 +2,4 @@
 import type { RoutineId } from "./RoutineId";
 import type { RoutineRuntimeStatus } from "./RoutineRuntimeStatus";
 
-export type RoutineStatuses = { [key in RoutineId]?: RoutineRuntimeStatus };
+export type RoutineStatuses = { [key in RoutineId]: RoutineRuntimeStatus };

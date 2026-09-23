@@ -7,4 +7,4 @@ import type { SceneId } from "./SceneId";
  * Decision-time scene selection for a v2 activation. Resolved once at plan
  * time and frozen into the plan (A01).
  */
-export type SceneSelection = { "kind": "helper_enum", helper: HelperId, mapping: { [key in string]?: SceneId }, fallback_scene_id?: SceneId, } | { "kind": "group_active", group_id: GroupId, fallback_scene_id?: SceneId, };
+export type SceneSelection = { "kind": "helper_enum", helper: HelperId, mapping: { [key in string]: SceneId }, fallback_scene_id?: SceneId, } | { "kind": "group_active", group_id: GroupId, fallback_scene_id?: SceneId, };

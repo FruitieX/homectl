@@ -5,4 +5,4 @@ import type { SceneDeviceConfig } from "./SceneDeviceConfig";
 /**
  * Device "search" config as used directly in the configuration file. We use device names instead of device id as key.
  */
-export type SceneDevicesSearchConfig = { [key in IntegrationId]?: { [key in string]?: SceneDeviceConfig } };
+export type SceneDevicesSearchConfig = { [key in IntegrationId]: { [key in string]: SceneDeviceConfig } };

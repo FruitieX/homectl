@@ -101,24 +101,24 @@ impl Integration for Random {
 }
 
 fn get_random_color(random: &Random) -> DeviceColor {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // h should be between 0 and 360
-    let h: u16 = rng.gen_range(0..360);
+    let h: u16 = rng.random_range(0..360);
     let min_s = random.config.min_saturation.unwrap_or(0.0).clamp(0.2, 1.0);
     let max_s = random.config.max_saturation.unwrap_or(1.0).clamp(0.2, 1.0);
-    let s: f32 = rng.gen_range(min_s..=max_s);
+    let s: f32 = rng.random_range(min_s..=max_s);
 
     DeviceColor::new_from_hs(h, s)
 }
 
 fn get_random_brightness(random: &Random) -> f32 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     let min = random.config.min_brightness.unwrap_or(0.0).clamp(0.0, 1.0);
     let max = random.config.max_brightness.unwrap_or(1.0).clamp(0.0, 1.0);
 
-    rng.gen_range(min..=max)
+    rng.random_range(min..=max)
 }
 
 async fn poll_sensor(random: Random) {

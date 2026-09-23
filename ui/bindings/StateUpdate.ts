@@ -21,4 +21,4 @@ timers: Array<TimerRuntimeStatus>,
  * Current helper values (P12). Widgets and editors read these instead of
  * polling the config API.
  */
-helper_statuses: Array<HelperRuntimeStatus>, ui_state: { [key in string]?: JsonValue }, };
+helper_statuses: Array<HelperRuntimeStatus>, ui_state: { [key in string]: JsonValue }, };
