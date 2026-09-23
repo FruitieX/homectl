@@ -1,6 +1,8 @@
 import { useId, useMemo, useState } from 'react';
 import { scaleLinear, scaleTime } from '@visx/scale';
 
+import { enforceMinimumSpan, minimumSpanForUnit } from './axisSpan';
+
 export type PlotPoint = {
   time: number;
   value: number;
@@ -123,10 +125,11 @@ export function TimeSeriesPlot({
     range: [left, left + plotWidth],
   });
   const y = scaleLinear({
-    domain: [
+    domain: enforceMinimumSpan(
       Number.isFinite(low) ? (zero && low >= 0 ? 0 : low - padding) : 0,
       Number.isFinite(high) ? high + padding : 1,
-    ],
+      minimumSpanForUnit(unit),
+    ),
     range: [top + plotHeight, top],
     nice: true,
   });

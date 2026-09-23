@@ -8,6 +8,10 @@ import {
 } from '@/lib/sensorStats';
 import { isOffline } from '@/lib/sensorStats';
 import { cn } from '@/lib/cn';
+import {
+  MINIMUM_HUMIDITY_SPAN_PERCENT,
+  MINIMUM_TEMPERATURE_SPAN_C,
+} from '@/ui/charts/axisSpan';
 import { Sparkline } from '@/ui/charts/Sparkline';
 
 const trendLabel = (trend: SensorTrend) =>
@@ -89,6 +93,11 @@ export function SensorChip({
               sensor.temp_data.length >= 2
                 ? sensor.temp_data
                 : sensor.humidity_data
+            }
+            minSpan={
+              sensor.temp_data.length >= 2
+                ? MINIMUM_TEMPERATURE_SPAN_C
+                : MINIMUM_HUMIDITY_SPAN_PERCENT
             }
             className="dashboard-sensor-sparkline absolute inset-0 h-full w-full text-muted-foreground/70"
           />
