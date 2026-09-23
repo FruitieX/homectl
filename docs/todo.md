@@ -25,3 +25,9 @@ clamp to the device's usable minimum/maximum so a low evening request does not
 land below what a bulb can actually do, or above a high floor. Keep the existing
 profile persistence and batch validation semantics. Out of scope: native color
 temperature, RGB and XY calibration.
+
+## Assistant plans that create what they reference (2026-09-23)
+
+- [ ] Let a plan reference entities its own earlier operations create. Plan: `.hermes/plans/20260923-assistant-and-housekeeping.md`; half-finished WIP is stashed as `staged-creates-wip` in `~/homectl-wt/panel`.
+- [ ] Dependency housekeeping: 87 Dependabot alerts (39 high) on the default branch.
+- [ ] Decide how "which scene state is this group in" should be expressed before asking the assistant to write such routines.
