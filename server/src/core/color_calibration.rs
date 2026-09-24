@@ -347,9 +347,7 @@ impl DeviceColorCalibration {
             }
         }
         if self.points.is_empty() && self.brightness_points.is_empty() {
-            return Err(
-                "A calibration needs color points, a brightness curve, or both".into(),
-            );
+            return Err("A calibration needs color points, a brightness curve, or both".into());
         }
         Ok(())
     }
@@ -475,10 +473,7 @@ impl DeviceColorCalibration {
 /// clamp to its output, values above the last anchor clamp to its output, and
 /// values in between interpolate linearly. A flat segment is allowed: a device
 /// that quantizes gets the same output for a range of requests.
-pub fn map_brightness_output(
-    points: &[BrightnessCalibrationPoint],
-    logical: f32,
-) -> f32 {
+pub fn map_brightness_output(points: &[BrightnessCalibrationPoint], logical: f32) -> f32 {
     if points.is_empty() || !logical.is_finite() || logical <= 0.0 {
         return logical;
     }
@@ -512,10 +507,7 @@ pub fn map_brightness_output(
 /// for. Used when a report has to become logical state and there is no request
 /// to compare against; a plateau (or a clamp) resolves to its lowest logical
 /// level, deterministically.
-pub fn map_brightness_input(
-    points: &[BrightnessCalibrationPoint],
-    physical: f32,
-) -> f32 {
+pub fn map_brightness_input(points: &[BrightnessCalibrationPoint], physical: f32) -> f32 {
     if points.is_empty() || !physical.is_finite() || physical <= 0.0 {
         return physical;
     }
@@ -559,19 +551,31 @@ pub struct CalibrationChannels {
     pub brightness: bool,
 }
 
+/// The identity of a composed profile, so the composition itself stays under
+/// the argument limit and reads as "this profile, from these channels".
+#[derive(Debug, Clone, Default)]
+pub struct ProfileMeta {
+    pub id: String,
+    pub name: String,
+    pub reference_device_key: Option<String>,
+}
+
 /// Compose a profile for one device from what it resolves today plus the
 /// channels being authored. The source profile is never mutated: a change to
 /// brightness leaves every other device assigned to it untouched.
 pub fn compose_profile_for_device(
-    id: String,
-    name: String,
+    meta: ProfileMeta,
     existing: &DeviceColorCalibration,
     channels: CalibrationChannels,
     color_points: Vec<ColorCalibrationPoint>,
     brightness_points: Vec<BrightnessCalibrationPoint>,
     brightness: f32,
-    reference_device_key: Option<String>,
 ) -> ColorCalibrationProfile {
+    let ProfileMeta {
+        id,
+        name,
+        reference_device_key,
+    } = meta;
     // A channel the new profile carries but for which nothing new was authored
     // keeps what the device resolves today, so adding brightness never drops an
     // existing color match (and the other way round).
@@ -746,8 +750,11 @@ mod tests {
         // Authoring brightness for a device that already matches color keeps
         // those color points in the new profile.
         let composed = compose_profile_for_device(
-            "lamp-brightness".into(),
-            "Lamp brightness".into(),
+            ProfileMeta {
+                id: "lamp-brightness".into(),
+                name: "Lamp brightness".into(),
+                reference_device_key: None,
+            },
             &source,
             CalibrationChannels {
                 color: true,
@@ -756,7 +763,6 @@ mod tests {
             Vec::new(),
             curve(),
             1.0,
-            None,
         );
         assert_eq!(composed.brightness_points.len(), 3);
         assert_eq!(source.brightness_points.len(), 0);
@@ -765,8 +771,11 @@ mod tests {
         // Removing brightness keeps color: the composed profile has no curve
         // and still carries the color points.
         let without_brightness = compose_profile_for_device(
-            "lamp-color".into(),
-            "Lamp color".into(),
+            ProfileMeta {
+                id: "lamp-color".into(),
+                name: "Lamp color".into(),
+                reference_device_key: None,
+            },
             &source,
             CalibrationChannels {
                 color: true,
@@ -775,7 +784,6 @@ mod tests {
             source.points.clone(),
             Vec::new(),
             1.0,
-            None,
         );
         assert!(without_brightness.brightness_points.is_empty());
         assert_eq!(without_brightness.points.len(), 1);
@@ -808,7 +816,10 @@ mod tests {
 
         let round_tripped: ColorCalibrationProfile =
             serde_json::from_str(&serde_json::to_string(&brightness_only).unwrap()).unwrap();
-        assert_eq!(round_tripped.brightness_points, brightness_only.brightness_points);
+        assert_eq!(
+            round_tripped.brightness_points,
+            brightness_only.brightness_points
+        );
         assert!(round_tripped.brightness_points[0].logical.into_inner() > 0.0);
 
         // A combined profile carries both channels through an export, and the
@@ -828,7 +839,10 @@ mod tests {
             serde_json::to_value(&combined_round_trip.points).unwrap(),
             serde_json::to_value(&combined.points).unwrap()
         );
-        assert_eq!(combined_round_trip.brightness_points, combined.brightness_points);
+        assert_eq!(
+            combined_round_trip.brightness_points,
+            combined.brightness_points
+        );
         let resolved = DeviceColorCalibration {
             device_key: "mqtt/lamp".into(),
             points: combined_round_trip.points.clone(),
@@ -862,7 +876,10 @@ mod tests {
         let mapped = calibrated_device(&off, Some(&calibration));
         if let DeviceData::Controllable(data) = &mapped.data {
             assert!(!data.state.power);
-            assert_eq!(data.state.brightness.map(|value| value.into_inner()), Some(0.30));
+            assert_eq!(
+                data.state.brightness.map(|value| value.into_inner()),
+                Some(0.30)
+            );
         } else {
             panic!("expected a controllable device");
         }
@@ -873,12 +890,14 @@ mod tests {
         }
         let mapped_zero = calibrated_device(&zero, Some(&calibration));
         if let DeviceData::Controllable(data) = &mapped_zero.data {
-            assert_eq!(data.state.brightness.map(|value| value.into_inner()), Some(0.0));
+            assert_eq!(
+                data.state.brightness.map(|value| value.into_inner()),
+                Some(0.0)
+            );
         } else {
             panic!("expected a controllable device");
         }
     }
-
 
     fn uv(h: u16, s: f32) -> Uv {
         Uv::from_xy(&DeviceColor::new_from_hs(h, s).to_xy().unwrap())
@@ -1132,5 +1151,4 @@ mod tests {
         assert!(refused.contains("Dimmer"), "{refused}");
         assert!(refused.contains("color"), "{refused}");
     }
-
 }

@@ -1383,11 +1383,12 @@ mod tests {
     #[tokio::test]
     async fn unmanaged_reports_show_the_logical_brightness_behind_the_curve() {
         let (mut devices, mut rx) = test_devices();
-        let calibration: crate::core::color_calibration::DeviceColorCalibration = serde_json::from_value(serde_json::json!({
-            "device_key":"mqtt/lamp",
-            "brightness_points":[{"logical":0.10,"output":0.042},{"logical":1.0,"output":1.0}]
-        }))
-        .unwrap();
+        let calibration: crate::core::color_calibration::DeviceColorCalibration =
+            serde_json::from_value(serde_json::json!({
+                "device_key":"mqtt/lamp",
+                "brightness_points":[{"logical":0.10,"output":0.042},{"logical":1.0,"output":1.0}]
+            }))
+            .unwrap();
 
         let mut current = managed_controllable_device("lamp", "Lamp");
         if let DeviceData::Controllable(data) = &mut current.data {
@@ -1403,7 +1404,8 @@ mod tests {
 
         // A calibrated report: the light is at the physical level the curve
         // sent for the logical 10%, so the app keeps showing 10%.
-        let report = crate::core::color_calibration::calibrated_device(&current, Some(&calibration));
+        let report =
+            crate::core::color_calibration::calibrated_device(&current, Some(&calibration));
         let DeviceData::Controllable(report_state) = &report.data else {
             unreachable!()
         };

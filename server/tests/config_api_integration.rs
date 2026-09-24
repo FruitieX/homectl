@@ -653,7 +653,7 @@ fn calibration_profiles_assign_atomically_and_previews_preserve_runtime() {
     wait_for("calibration lights", || {
         device_by_name(&get_json(base, "/api/v1/devices"), "Target").is_some()
     });
-    let profile = json!({"id":"matching-model","name":"Matching model","reference_device_key":"dummy/reference","brightness":0.5,"points":[
+    let profile = json!({"id":"matching-model","name":"Matching model","reference_device_key":"dummy/reference","brightness":0.5,"brightness_points":[],"points":[
         {"reference":{"u":0.20,"v":0.47},"output":{"u":0.21,"v":0.48}}
     ]});
     client

@@ -298,8 +298,14 @@ mod tests {
         let physical = state.calibration_preview_device("dummy/target").unwrap();
         let reported = physical.get_controllable_state().unwrap();
         assert!(reported.power);
-        assert_eq!(reported.brightness.map(|value| value.into_inner()), Some(0.04));
-        assert_eq!(reported.transition.map(|value| value.into_inner()), Some(0.0));
+        assert_eq!(
+            reported.brightness.map(|value| value.into_inner()),
+            Some(0.04)
+        );
+        assert_eq!(
+            reported.transition.map(|value| value.into_inner()),
+            Some(0.0)
+        );
         // ...and without one, for manual authoring.
         state.finish_calibration("b1");
         state
@@ -314,7 +320,12 @@ mod tests {
                 true,
             )
             .unwrap();
-        assert!(state.calibration_sessions.get("b2").unwrap().reference.is_none());
+        assert!(state
+            .calibration_sessions
+            .get("b2")
+            .unwrap()
+            .reference
+            .is_none());
 
         // Zero is never a positive floor, and 100% is the ceiling.
         let zero = state
@@ -472,7 +483,6 @@ mod tests {
             .unwrap_err();
         assert!(expired.contains("expired"), "{expired}");
     }
-
 }
 
 #[derive(Clone, Deserialize)]
@@ -547,9 +557,7 @@ impl AppState {
     pub fn calibration_preview_device(&self, key: &str) -> Option<Device> {
         self.calibration_sessions
             .values()
-            .flat_map(|session| {
-                std::iter::once(&session.target).chain(session.reference.iter())
-            })
+            .flat_map(|session| std::iter::once(&session.target).chain(session.reference.iter()))
             .find(|device| device.get_device_key().to_string() == key)
             .cloned()
     }
@@ -731,9 +739,7 @@ impl AppState {
             let calibration = self.runtime_config.calibration_for_device(&reference_key);
             let mapped = calibration
                 .as_ref()
-                .map(|calibration| {
-                    map_brightness_output(&calibration.brightness_points, logical)
-                })
+                .map(|calibration| map_brightness_output(&calibration.brightness_points, logical))
                 .unwrap_or(logical);
             if let DeviceData::Controllable(data) = &mut reference_device.data {
                 data.state.power = true;

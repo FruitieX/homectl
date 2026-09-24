@@ -178,6 +178,46 @@ async fn upsert_source(
     ))
 }
 
+async fn delete_source(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
+    let _write_guard = match config_write_lock(&handle).await {
+        Ok(guard) => guard,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    let source_id = SourceId(id.clone());
+    let deleted = handle
+        .mutate(move |state| {
+            Box::pin(async move {
+                let deleted = state.delete_source(&source_id);
+                if deleted {
+                    state.schedule_ws_broadcast(SnapshotChanges {
+                        runtime_config: true,
+                        ..SnapshotChanges::none()
+                    });
+                }
+                deleted
+            })
+        })
+        .await;
+    let deleted = match deleted {
+        Ok(deleted) => deleted,
+        Err(_) => return Ok(actor_unavailable()),
+    };
+
+    if !deleted {
+        return Ok(not_found("Source"));
+    }
+
+    let database_available = db::is_db_connected();
+    let persistence = config_queries::db_delete_source(&id).await;
+    Ok(config_write_response(
+        (),
+        persistence,
+        database_available,
+        StatusCode::OK,
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -260,44 +300,4 @@ mod tests {
         empty_name.name = "  ".to_string();
         assert!(validate_source(&empty_name).unwrap_err().contains("name"));
     }
-}
-
-async fn delete_source(id: String, handle: StateHandle) -> Result<impl Reply, warp::Rejection> {
-    let _write_guard = match config_write_lock(&handle).await {
-        Ok(guard) => guard,
-        Err(_) => return Ok(actor_unavailable()),
-    };
-
-    let source_id = SourceId(id.clone());
-    let deleted = handle
-        .mutate(move |state| {
-            Box::pin(async move {
-                let deleted = state.delete_source(&source_id);
-                if deleted {
-                    state.schedule_ws_broadcast(SnapshotChanges {
-                        runtime_config: true,
-                        ..SnapshotChanges::none()
-                    });
-                }
-                deleted
-            })
-        })
-        .await;
-    let deleted = match deleted {
-        Ok(deleted) => deleted,
-        Err(_) => return Ok(actor_unavailable()),
-    };
-
-    if !deleted {
-        return Ok(not_found("Source"));
-    }
-
-    let database_available = db::is_db_connected();
-    let persistence = config_queries::db_delete_source(&id).await;
-    Ok(config_write_response(
-        (),
-        persistence,
-        database_available,
-        StatusCode::OK,
-    ))
 }

@@ -220,9 +220,9 @@ async fn brightness_session(
     let session_id = id.clone();
     let result = handle
         .mutate(move |state| {
-            Box::pin(async move {
-                state.preview_brightness_calibration(session_id, preview, start)
-            })
+            Box::pin(
+                async move { state.preview_brightness_calibration(session_id, preview, start) },
+            )
         })
         .await;
     match result {

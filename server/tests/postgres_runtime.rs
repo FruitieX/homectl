@@ -6,7 +6,7 @@ use homectl_server::db::schema::{CoreConfig, Floorplans};
 use reqwest::blocking::Client;
 use reqwest::StatusCode;
 use sea_orm::sea_query::{Expr, Query};
-use sea_orm::{ConnectionTrait, Database, ExprTrait, Statement, StatementBuilder};
+use sea_orm::{ConnectionTrait, Database, ExprTrait, StatementBuilder};
 use serde_json::Value;
 use sqlx::migrate::MigrateDatabase;
 use std::net::TcpListener;
