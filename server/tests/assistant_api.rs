@@ -445,7 +445,9 @@ fn assistant_repairs_an_invalid_draft() {
 
 #[test]
 fn assistant_fails_after_exhausting_repairs() {
+    // One response per allowed attempt: the draft path is capped at three.
     let provider = MockProvider::start(vec![
+        MockResponse::completion(&invalid_draft()),
         MockResponse::completion(&invalid_draft()),
         MockResponse::completion(&invalid_draft()),
     ]);
@@ -460,7 +462,7 @@ fn assistant_fails_after_exhausting_repairs() {
         .as_str()
         .unwrap()
         .contains("could not produce a valid definition"));
-    assert_eq!(provider.requests.load(Ordering::SeqCst), 2);
+    assert_eq!(provider.requests.load(Ordering::SeqCst), 3);
 }
 
 #[test]
