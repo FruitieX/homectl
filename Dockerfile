@@ -15,7 +15,7 @@ RUN VITE_GIT_COMMIT="$VITE_GIT_COMMIT" VITE_BUILD_DATE="$VITE_BUILD_DATE" pnpm b
 
 # The workspace dependencies declare rust-version 1.94 (sea-orm 2, sqlx 0.9), so
 # the image toolchain must not trail the flake's.
-FROM rust:1.98-slim-bookworm AS server-builder
+FROM rust:1.98-slim-bookworm@sha256:ff521445a372125ed4f76e1453a1f8098f2d05332d1601d30db1c1f62757e730 AS server-builder
 
 WORKDIR /app
 
@@ -25,7 +25,7 @@ COPY server ./server
 
 RUN cargo build --release -p homectl-server
 
-FROM debian:bookworm-slim AS runtime
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS runtime
 
 RUN apt-get update \
     && apt-get install --yes --no-install-recommends ca-certificates \
