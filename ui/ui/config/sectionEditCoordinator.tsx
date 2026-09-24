@@ -27,7 +27,7 @@ export type SectionEditState = {
   editing: boolean;
   dirty: boolean;
   saving: boolean;
-  save: () => Promise<void>;
+  save: () => Promise<boolean>;
   cancel: () => void;
   /** Human name of the section, used in the dialog copy. */
   title: string;
@@ -106,12 +106,12 @@ export function SectionEditProvider({ children }: { children: ReactNode }) {
         return;
       }
       setBusy(true);
-      await other.save();
+      const saved = await other.save();
       setBusy(false);
       // A successful save clears the draft, which the section reports on its
       // next render; if it is still editing, the save failed and its own error
       // summary is the right place to look.
-      if (otherId && states.current.get(otherId)?.editing) {
+      if (!saved) {
         setError(
           'Could not save that section. Fix the fields there, or discard its changes.',
         );

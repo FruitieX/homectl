@@ -133,8 +133,8 @@ export function Section<T extends object>({
         return;
       }
       const wasDirty = api.dirty;
-      await api.save();
-      if (!api.errors.length) {
+      const saved = await api.save();
+      if (saved) {
         setRestoreFocus(true);
         announce(wasDirty ? 'Changes saved' : 'Saved', 'success');
       }
@@ -174,7 +174,7 @@ export function Section<T extends object>({
             onClick={() => onOpenChange(!open)}
             aria-expanded={open}
             aria-controls={bodyId}
-            className="flex w-full cursor-pointer flex-col gap-1 rounded-2xl p-4 text-left transition hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5"
+            className="flex min-h-11 w-full cursor-pointer flex-col justify-center gap-1 rounded-2xl p-4 text-left transition hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:p-5"
           >
             <span className="flex w-full items-center gap-2">
               <ChevronRight
@@ -184,11 +184,11 @@ export function Section<T extends object>({
                   open && 'rotate-90',
                 )}
               />
-              <span className="min-w-0">{title}</span>
+              <span className="min-w-0 break-words">{title}</span>
               {badge ? <span className="shrink-0">{badge}</span> : null}
             </span>
             {summary ? (
-              <span className="block pl-[1.375rem] text-xs leading-5 font-normal text-muted-foreground">
+              <span className="block truncate pl-[1.375rem] text-xs leading-5 font-normal text-muted-foreground">
                 {summary}
               </span>
             ) : null}
@@ -206,7 +206,7 @@ export function Section<T extends object>({
           id={bodyId}
           role="group"
           aria-label={typeof title === 'string' ? title : undefined}
-          className="space-y-4 border-t border-border/70 p-4 sm:p-5"
+          className="min-w-0 space-y-4 border-t border-border/70 p-4 sm:p-5"
         >
           {api.editing ? (
             <>
@@ -227,6 +227,7 @@ export function Section<T extends object>({
                       type="button"
                       variant="outline"
                       size="sm"
+                      className="min-h-11"
                       onClick={() => {
                         api.reload();
                         setRestoreFocus(true);
@@ -238,6 +239,7 @@ export function Section<T extends object>({
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="min-h-11"
                       onClick={api.keepDraft}
                     >
                       Keep my draft
@@ -281,7 +283,7 @@ export function Section<T extends object>({
 
               {renderEditor(api)}
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center gap-2 border-t border-border/70 bg-background/95 px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur sm:static sm:mx-0 sm:border-0 sm:bg-transparent sm:px-0 sm:py-0 sm:pb-0 sm:backdrop-blur-none">
                 <Button
                   type="button"
                   onClick={() => void finishEditing('save')}
@@ -311,9 +313,11 @@ export function Section<T extends object>({
                 <div className="flex flex-wrap items-center gap-2">
                   <Button
                     ref={changeButtonRef}
+                    id={`${id}-change`}
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="min-h-11"
                     onClick={startEditing}
                     disabled={editDisabledReason !== null}
                     aria-describedby={

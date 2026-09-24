@@ -47,6 +47,7 @@ import { describeNativeAction } from '@/ui/v2-routine-summary';
 import type { NativeAction } from '@/bindings/NativeAction';
 import {
   describeConditionNarrative,
+  describeRoutineHistoryEvidence,
   describeRoutineStateLine,
   describeTriggerPhrase,
   describeUnknownReasonSentence,
@@ -59,7 +60,6 @@ import {
 } from '@/ui/v2-routine-summary';
 import { RoutineActionList, RoutineRuleList } from '@/ui/routine-summary';
 import { Advanced } from '@/ui/primitives/advanced';
-import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { StatusRegion } from '@/ui/config/StatusRegion';
@@ -74,20 +74,11 @@ const conditionFields = ['definition_v2.condition'] as const;
 const programFields = ['definition_v2.program'] as const;
 const policyFields = ['definition_v2.execution'] as const;
 const definitionFields = ['definition_v2'] as const;
-const detailsFields = ['name', 'enabled'] as const;
+const enabledFields = ['enabled'] as const;
+const detailsFields = ['name'] as const;
 const legacyRuleFields = ['rules'] as const;
 const legacyActionFields = ['actions'] as const;
 const legacyDefinitionFields = ['rules', 'actions'] as const;
-
-const statusBadgeClassName = {
-  success:
-    'border-transparent bg-emerald-500/15 text-emerald-700 dark:text-emerald-300',
-  error:
-    'border-transparent bg-destructive/15 text-destructive dark:text-red-300',
-  warning:
-    'border-transparent bg-amber-500/15 text-amber-700 dark:text-amber-300',
-  muted: 'border-transparent bg-muted text-muted-foreground',
-};
 
 export default function RoutineDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -215,6 +206,11 @@ export default function RoutineDetailPage() {
     fields: isV2 ? definitionFields : legacyDefinitionFields,
     save: (merged) => saveRoutine(merged),
   });
+  const enabledEditor = useSectionEditor({
+    item: routine,
+    fields: enabledFields,
+    save: (merged) => saveRoutine(merged),
+  });
   const details = useSectionEditor({
     item: routine,
     fields: detailsFields,
@@ -244,23 +240,33 @@ export default function RoutineDetailPage() {
     onlyIf.dirty ||
     then.dirty ||
     advanced.dirty ||
+    enabledEditor.dirty ||
     technical.dirty ||
     details.dirty ||
     legacyWhen.dirty ||
     legacyThen.dirty;
   // Hooks stay unconditional: the loading branch below must not change the
   // order of hook calls.
-  const { data: historyEntries } = useRoutineHistory(15000);
+  const { data: historyEntries, error: historyError } =
+    useRoutineHistory(15000);
+  const lastHistoryEntry = useMemo(
+    () =>
+      (historyEntries ?? [])
+        .filter((entry) => entry.routine_id === routine?.id)
+        .sort(
+          (left, right) =>
+            new Date(right.timestamp).getTime() -
+            new Date(left.timestamp).getTime(),
+        )[0] ?? null,
+    [historyEntries, routine?.id],
+  );
   const lastEventAt = useMemo(() => {
-    const entry = historyEntries?.find(
-      (item) => item.routine_id === routine?.id,
-    );
-    if (!entry?.timestamp) {
+    if (!lastHistoryEntry?.timestamp) {
       return null;
     }
-    const parsed = new Date(entry.timestamp);
+    const parsed = new Date(lastHistoryEntry.timestamp);
     return Number.isNaN(parsed.getTime()) ? null : parsed;
-  }, [historyEntries, routine?.id]);
+  }, [lastHistoryEntry]);
 
   useDirtyNavigationGuard(dirty, {
     description: 'This routine has unsaved section changes.',
@@ -334,7 +340,7 @@ export default function RoutineDetailPage() {
   // The same sentence the routines list shows, so the two views agree.
   const routineStateLine = describeRoutineStateLine({
     enabled: routine.enabled,
-    definition: definition as { condition?: unknown },
+    definition: definition as { condition?: unknown; triggers?: unknown[] },
     status: (isV2 ? v2Status : status) as never,
     context: narrativeContext,
     describeUnknown: (reason) =>
@@ -393,40 +399,17 @@ export default function RoutineDetailPage() {
   const thenSummary = `${
     firstStep.charAt(0).toUpperCase() + firstStep.slice(1)
   }${program?.kind === 'native' && program.steps.length > 1 ? ` (+${program.steps.length - 1} more)` : ''}`;
-  const liveStatusBadge = (() => {
-    if (!routine.enabled) return null;
-    const state = routineStateLine;
-    if (!status) {
-      return { label: 'No live state', className: statusBadgeClassName.muted };
-    }
-    if (state.tone === 'success') {
-      return { label: 'Running now', className: statusBadgeClassName.success };
-    }
-    if (state.tone === 'error') {
-      return {
-        label: 'Needs attention',
-        className: statusBadgeClassName.error,
-      };
-    }
-    if (state.tone === 'warning') {
-      return {
-        label: 'Waiting for data',
-        className: statusBadgeClassName.muted,
-      };
-    }
-    return { label: 'Idle', className: statusBadgeClassName.muted };
-  })();
-  // One sentence, in the same words the list card uses, plus what it means for
-  // delivery: a matched run is a dispatched command, not a confirmed device.
-  // Three separate facts: whether it is enabled (configuration), where it
-  // stands right now (evaluation), and what was recorded (history below).
+  // Current evaluation describes the present. Recorded history below has its
+  // own timestamp and reason, so today's condition never explains yesterday.
   const statusSentence = (() => {
-    const base = routineStateLine.text.replace(/\.$/, '');
-    const head = `${routine.enabled ? 'Enabled' : 'Disabled'} · ${base}`;
-    if (routineStateLine.tone === 'success') {
-      return `${head}. Dispatched commands are not confirmed device delivery.`;
-    }
-    return `${head}.`;
+    const current = routine.enabled
+      ? routineStateLine.text
+      : 'It does not run while disabled';
+    return `${routine.enabled ? 'Enabled' : 'Disabled'} · ${current}${
+      routineStateLine.tone === 'success'
+        ? ' Device delivery is reported separately.'
+        : ''
+    }`;
   })();
 
   const triggerCount = triggers.length;
@@ -436,17 +419,18 @@ export default function RoutineDetailPage() {
   // the full trace live in the activity view rather than in the hero.
   // The recorded past, with a time attached, kept apart from the saved
   // requirement and the current evaluation. Say when there is nothing.
-  const lastEventLine = lastEventAt
-    ? `Last event ${formatRelativeTime(lastEventAt.getTime(), Date.now())}${
-        lastRun
-          ? lastRun.accepted
-            ? lastRun.steps.length === 0
-              ? ' · nothing to do'
-              : ` · ${lastRun.steps.length} action${lastRun.steps.length === 1 ? '' : 's'}`
-            : ' · rejected before dispatch'
-          : ''
-      }`
-    : 'No matching event in retained history';
+  const historyOutcome = describeRoutineHistoryEvidence(
+    lastHistoryEntry,
+    !isV2,
+  );
+  const lastEventLine =
+    historyError && !lastHistoryEntry
+      ? 'Retained routine history could not be loaded.'
+      : `${historyError ? 'Could not refresh history; showing the last loaded entry. ' : ''}${
+          lastEventAt
+            ? `${historyOutcome} Last recorded ${formatRelativeTime(lastEventAt.getTime(), Date.now())}.`
+            : historyOutcome
+        }`;
   const policySummary = definition.execution
     ? describeExecutionPolicy(definition.execution as ExecutionPolicy)
     : 'Defaults: one run at a time, no action cap.';
@@ -463,52 +447,116 @@ export default function RoutineDetailPage() {
       backTo="/config/routines"
       backLabel="Back to routines"
       title={routine.name}
-      status={
-        <>
-          <span className="flex flex-wrap items-center gap-1.5">
-            <Badge
-              className={
-                routine.enabled
-                  ? statusBadgeClassName.success
-                  : statusBadgeClassName.error
-              }
-            >
-              {routine.enabled ? 'Enabled' : 'Disabled'}
-            </Badge>
-            {isV2 ? null : (
-              <Badge
-                variant="outline"
-                className="border-amber-500/50 text-amber-600 dark:text-amber-400"
-              >
-                Legacy routine
-              </Badge>
-            )}
-            {liveStatusBadge ? (
-              <Badge className={liveStatusBadge.className}>
-                {liveStatusBadge.label}
-              </Badge>
-            ) : null}
-          </span>
-          <span className="block">
-            {statusSentence}{' '}
-            <Link
-              className="underline underline-offset-2"
-              to="/config/routine-history"
-            >
-              See activity
-            </Link>
-          </span>
-          <span className="block text-muted-foreground">{lastEventLine}</span>
-          {routine.enabled && status ? (
-            <span className="block text-muted-foreground">
-              {statusReceivedAt === null
-                ? 'Live status has no receipt time yet.'
-                : `Live status received ${formatFreshness(statusReceivedAt, freshnessNow)}.`}
-            </span>
-          ) : null}
-        </>
-      }
+      status={statusSentence}
     >
+      <section className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
+        <h2 className="mb-3 text-base font-semibold">Evidence</h2>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Current evaluation</h3>
+            <p className="text-sm">{routineStateLine.text}</p>
+            {isV2 && !onlyIf.dirty ? (
+              <>
+                <p className="text-sm text-muted-foreground">
+                  Saved requirement: {ifSummary}
+                </p>
+                {ifStateLine ? (
+                  <p className="text-sm text-muted-foreground">{ifStateLine}</p>
+                ) : null}
+                {conditionNarrative.evidence ? (
+                  <p className="text-xs text-muted-foreground">
+                    Current value: {conditionNarrative.evidence}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+            {routine.enabled && status ? (
+              <p className="text-xs text-muted-foreground">
+                {statusReceivedAt === null
+                  ? 'Live status has no receipt time yet.'
+                  : `Live status received ${formatFreshness(statusReceivedAt, freshnessNow)}.`}
+              </p>
+            ) : routine.enabled ? (
+              <p className="text-xs text-muted-foreground">
+                No live evaluation has arrived yet.
+              </p>
+            ) : null}
+            {isV2 && onlyIf.dirty ? (
+              <p className="text-xs text-muted-foreground">
+                The live result still describes the saved condition; this draft
+                has not been evaluated.
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-sm font-medium">Last recorded event</h3>
+            <p className="text-sm text-muted-foreground">{lastEventLine}</p>
+            {lastHistoryEntry?.first_timestamp &&
+            (lastHistoryEntry.occurrence_count ?? 1) > 1 ? (
+              <p className="text-xs text-muted-foreground">
+                First matching attempt:{' '}
+                {new Date(lastHistoryEntry.first_timestamp).toLocaleString()}
+              </p>
+            ) : null}
+            {lastEventAt ? (
+              <time
+                className="block text-xs text-muted-foreground"
+                dateTime={lastEventAt.toISOString()}
+              >
+                {lastEventAt.toLocaleString()}
+              </time>
+            ) : null}
+            <Button asChild variant="ghost" size="sm" className="min-h-11 px-0">
+              <Link
+                to={`/config/routine-history?q=${encodeURIComponent(routine.id)}`}
+              >
+                Open routine history
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </section>
+      <Section
+        id="enabled"
+        title="Enabled"
+        summary={
+          routine.enabled
+            ? 'Runs when its start matches'
+            : 'Saved, but does not run'
+        }
+        open={activeSection === 'enabled'}
+        onOpenChange={(open) => openSection(open ? 'enabled' : null)}
+        api={enabledEditor}
+        fieldLabels={{ enabled: 'Enabled' }}
+        readView={
+          <p className="text-sm text-muted-foreground">
+            {routine.enabled
+              ? 'Homectl evaluates this routine when its saved triggers report a match.'
+              : 'This routine remains saved, but its triggers are not evaluated.'}
+          </p>
+        }
+        renderEditor={(api) => (
+          <label
+            className="flex min-h-12 items-center justify-between gap-4 rounded-xl border border-border p-3"
+            data-field="enabled"
+          >
+            <span className="space-y-0.5">
+              <span className="block text-sm font-medium">
+                Run this routine
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Turning it off preserves its saved triggers, conditions, and
+                actions.
+              </span>
+            </span>
+            <Switch
+              checked={Boolean(api.draft?.enabled ?? routine.enabled)}
+              onCheckedChange={(checked) => api.patch({ enabled: checked })}
+              aria-label="Run this routine"
+            />
+          </label>
+        )}
+      />
       {searchParams.get('created') === '1' ? (
         <Alert>
           <AlertDescription>
@@ -640,7 +688,9 @@ export default function RoutineDetailPage() {
                 program={program}
                 lastRun={
                   routine.enabled && !then.dirty
-                    ? v2Status?.last_run
+                    ? lastHistoryEntry?.trigger_kind === 'v2_run'
+                      ? lastHistoryEntry.v2?.last_run
+                      : undefined
                     : undefined
                 }
                 devices={devices}
@@ -673,10 +723,7 @@ export default function RoutineDetailPage() {
                     id: scene.id,
                     name: scene.name,
                   }))}
-                  routines={routines.map((entry) => ({
-                    id: entry.id,
-                    name: entry.name,
-                  }))}
+                  routines={routines}
                   helpers={helpers}
                 />
               );
@@ -889,16 +936,12 @@ export default function RoutineDetailPage() {
         open={activeSection === 'details'}
         onOpenChange={(open) => openSection(open ? 'details' : null)}
         api={details}
-        fieldLabels={{ name: 'Name', enabled: 'Enabled' }}
+        fieldLabels={{ name: 'Name' }}
         readView={
           <dl className="space-y-2 text-sm">
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Name</dt>
               <dd className="text-right">{routine.name}</dd>
-            </div>
-            <div className="flex justify-between gap-4">
-              <dt className="text-muted-foreground">Enabled</dt>
-              <dd className="text-right">{routine.enabled ? 'Yes' : 'No'}</dd>
             </div>
             <div className="flex justify-between gap-4">
               <dt className="text-muted-foreground">Routine id</dt>
@@ -921,27 +964,6 @@ export default function RoutineDetailPage() {
                   {api.fieldError('name')}
                 </span>
               ) : null}
-            </label>
-            <label
-              className="flex items-center justify-between gap-4 rounded-xl border border-border p-3"
-              data-field="enabled"
-            >
-              <span className="space-y-0.5">
-                <span className="block text-sm font-medium">Enabled</span>
-                <span className="block text-xs text-muted-foreground">
-                  Disabled routines do not evaluate triggers or run.
-                </span>
-              </span>
-              <Switch
-                checked={Boolean(
-                  (api.draft?.enabled as boolean | undefined) ??
-                  routine.enabled,
-                )}
-                onCheckedChange={(checked) =>
-                  api.patch({ enabled: checked } as never)
-                }
-                aria-label="Enabled"
-              />
             </label>
           </div>
         )}

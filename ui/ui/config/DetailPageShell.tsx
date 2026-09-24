@@ -79,14 +79,17 @@ export function DetailPageShell({
 
   return (
     <div
-      className={cn('mx-auto flex w-full max-w-3xl flex-col gap-4', className)}
+      className={cn(
+        'mx-auto flex w-full max-w-[60rem] flex-col gap-4',
+        className,
+      )}
     >
       <div className="flex flex-col gap-2">
         <Button
           asChild
           variant="ghost"
           size="sm"
-          className="-ml-2 w-fit text-muted-foreground"
+          className="-ml-2 min-h-11 w-fit text-muted-foreground"
         >
           <Link to={backTo}>
             <ChevronLeft aria-hidden />
@@ -104,18 +107,18 @@ export function DetailPageShell({
           }
         />
 
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
           <div className="min-w-0 space-y-1">
-            <h1 className="truncate text-lg font-semibold text-foreground">
+            <h1 className="break-words text-lg leading-tight font-semibold text-foreground sm:text-xl">
               {title}
             </h1>
             {status ? (
-              <p className="text-sm leading-5 text-muted-foreground">
+              <div className="max-w-[68ch] text-sm leading-5 text-muted-foreground">
                 {status}
-              </p>
+              </div>
             ) : null}
           </div>
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex max-w-full flex-wrap items-center gap-2 sm:shrink-0">
             {primaryAction}
             {menu && menu.length > 0 ? (
               <DropdownMenu>

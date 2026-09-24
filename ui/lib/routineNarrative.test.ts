@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   describeComparisonNarrative,
   describeRoutineLastOutcome,
+  describeRoutineHistoryEvidence,
   describeRoutineStateLine,
   describeConditionNarrative,
   describeScheduleNarrative,
@@ -265,7 +266,7 @@ test('disabled and unevaluated routines say so plainly', () => {
   );
   assert.equal(
     describeRoutineStateLine({ enabled: true, context }).text,
-    'Waiting for the first evaluation from the server',
+    'No trigger evaluation received yet; waiting for a report.',
   );
   assert.equal(
     describeRoutineStateLine({
@@ -276,6 +277,36 @@ test('disabled and unevaluated routines say so plainly', () => {
       context,
     }).text,
     'Needs attention: device zigbee2mqtt/kitchen_light is missing',
+  );
+});
+
+test('no trigger evaluation has a neutral waiting-for-report sentence', () => {
+  assert.equal(
+    describeRoutineStateLine({
+      enabled: true,
+      definition: { triggers: [{ id: 'motion' }] },
+      context,
+    }).text,
+    'No trigger evaluation received yet; waiting for a report.',
+  );
+});
+
+test('legacy live status describes current rule evaluation rather than past events', () => {
+  assert.equal(
+    describeRoutineStateLine({
+      enabled: true,
+      status: { all_conditions_match: false, will_trigger: false, rules: [] },
+      context,
+    }).text,
+    'Current rule conditions are not all met',
+  );
+  assert.equal(
+    describeRoutineStateLine({
+      enabled: true,
+      status: { all_conditions_match: true, will_trigger: false, rules: [] },
+      context,
+    }).text,
+    'Current rules match; waiting for a trigger',
   );
 });
 
@@ -305,6 +336,33 @@ test('the last recorded outcome stays separate from live evaluation', () => {
     'Last recorded outcome: the run was rejected',
   );
   assert.equal(describeRoutineLastOutcome(undefined), undefined);
+});
+
+test('recorded blocked attempts keep their reason and count separate from current evaluation', () => {
+  assert.equal(
+    describeRoutineHistoryEvidence({
+      trigger_kind: 'v2_blocked',
+      action_count: 0,
+      blocked_reason: 'the condition was false',
+      occurrence_count: 4,
+    }),
+    'A trigger matched, but no run was admitted: the condition was false · 4 matching attempts.',
+  );
+  assert.equal(
+    describeRoutineHistoryEvidence(null, true),
+    'No matching event is retained. Legacy v1 does not record blocked non-runs.',
+  );
+});
+
+test('a recorded routine run says dispatch, not device delivery', () => {
+  assert.match(
+    describeRoutineHistoryEvidence({
+      trigger_kind: 'v2_run',
+      action_count: 2,
+      v2: { last_run: { accepted: true } },
+    }),
+    /dispatched 2 commands\. Device delivery is not confirmed/,
+  );
 });
 
 test('durations read as words', () => {

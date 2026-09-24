@@ -28,9 +28,10 @@ import { ConfigField } from '@/ui/config-form';
 import { Button } from '@/ui/primitives/button';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
-import { SearchablePicker } from '@/ui/SearchablePicker';
+import { SearchablePicker, type PickerOption } from '@/ui/SearchablePicker';
 import RoutineScriptEditor from '@/ui/RoutineScriptEditor';
-import { useCallback, useRef, useState } from 'react';
+import { useTimers } from '@/hooks/websocket';
+import { useCallback, useMemo, useRef, useState } from 'react';
 
 type StepKind = NativeAction['action'];
 
@@ -71,6 +72,61 @@ function nextNodeId(prefix: string, existingIds: Iterable<string>) {
     id = `${prefix}_${index}`;
   }
   return id;
+}
+
+function collectTimerNames(value: unknown, names: Set<string>) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectTimerNames(item, names);
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  const object = value as Record<string, unknown>;
+  if (typeof object.timer === 'string' && object.timer.trim()) {
+    names.add(object.timer);
+  }
+  for (const child of Object.values(object)) collectTimerNames(child, names);
+}
+
+function TimerNameField({
+  value,
+  onChange,
+  options,
+  description,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: PickerOption[];
+  description: string;
+}) {
+  const savedValue = options.some((option) => option.value === value)
+    ? value
+    : '';
+  return (
+    <div className="grid gap-3 sm:grid-cols-2">
+      <ConfigField label="Timer name" description={description}>
+        <Input
+          value={value}
+          placeholder="Enter a timer name"
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </ConfigField>
+      {options.length > 0 ? (
+        <ConfigField label="Choose a saved or running timer">
+          <SearchablePicker
+            options={options}
+            value={savedValue}
+            onChange={onChange}
+            placeholder="Search timer names…"
+            ariaLabel="Choose a saved or running timer"
+            clearable={false}
+          />
+        </ConfigField>
+      ) : null}
+      <p className="text-xs text-muted-foreground sm:col-span-2">
+        Choose a saved or running timer, or enter a new name.
+      </p>
+    </div>
+  );
 }
 
 function defaultStep(kind: StepKind, id: string): NativeAction {
@@ -336,6 +392,7 @@ function ChooseStepEditor({
   routines,
   helpers,
   existingIds,
+  timerOptions,
 }: {
   step: Extract<NativeAction, { action: 'choose' }>;
   onChange: (step: NativeAction) => void;
@@ -345,6 +402,7 @@ function ChooseStepEditor({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
+  timerOptions: PickerOption[];
 }) {
   const [newBranchStepKind, setNewBranchStepKind] =
     useState<StepKind>('activate_scene');
@@ -440,6 +498,7 @@ function ChooseStepEditor({
               routines={routines}
               helpers={helpers}
               existingIds={existingIds}
+              timerOptions={timerOptions}
               onChange={(next) =>
                 updateBranch(index, {
                   ...branch,
@@ -773,6 +832,7 @@ function StepFields({
   routines,
   helpers,
   existingIds,
+  timerOptions,
 }: {
   step: NativeAction;
   onChange: (step: NativeAction) => void;
@@ -782,6 +842,7 @@ function StepFields({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
+  timerOptions: PickerOption[];
 }) {
   switch (step.action) {
     case 'activate_scene':
@@ -1244,33 +1305,24 @@ function StepFields({
     case 'replace_timer':
       return (
         <div className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <ConfigField
-              label="Timer name"
-              description={
-                step.action === 'schedule_timer'
-                  ? 'Fails if this timer already has a live deadline.'
-                  : 'Replaces the current deadline if one exists.'
+          <TimerNameField
+            value={step.timer}
+            onChange={(timer) => onChange({ ...step, timer })}
+            options={timerOptions}
+            description={
+              step.action === 'schedule_timer'
+                ? 'Fails if this timer already has a live deadline.'
+                : 'Replaces the current deadline if one exists.'
+            }
+          />
+          <ConfigField label="Delay" className="max-w-md">
+            <DurationInput
+              valueMs={Number(step.delay_ms)}
+              onChange={(delay_ms) =>
+                onChange({ ...step, delay_ms } as unknown as NativeAction)
               }
-            >
-              <Input
-                className="font-mono"
-                value={step.timer}
-                placeholder="off"
-                onChange={(event) =>
-                  onChange({ ...step, timer: event.target.value })
-                }
-              />
-            </ConfigField>
-            <ConfigField label="Delay">
-              <DurationInput
-                valueMs={Number(step.delay_ms)}
-                onChange={(delay_ms) =>
-                  onChange({ ...step, delay_ms } as unknown as NativeAction)
-                }
-              />
-            </ConfigField>
-          </div>
+            />
+          </ConfigField>
           <label className="flex cursor-pointer items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -1315,19 +1367,12 @@ function StepFields({
 
     case 'cancel_timer':
       return (
-        <ConfigField
-          label="Timer name"
+        <TimerNameField
+          value={step.timer}
+          onChange={(timer) => onChange({ ...step, timer })}
+          options={timerOptions}
           description="Cancelling a timer that is not running succeeds."
-        >
-          <Input
-            className="font-mono"
-            value={step.timer}
-            placeholder="off"
-            onChange={(event) =>
-              onChange({ ...step, timer: event.target.value })
-            }
-          />
-        </ConfigField>
+        />
       );
 
     case 'set_helper': {
@@ -1414,6 +1459,7 @@ function StepFields({
           routines={routines}
           helpers={helpers}
           existingIds={existingIds}
+          timerOptions={timerOptions}
         />
       );
   }
@@ -1429,6 +1475,7 @@ function StepEditor({
   routines,
   helpers,
   existingIds,
+  timerOptions,
   open = true,
   onToggleOpen,
   onChange,
@@ -1445,6 +1492,7 @@ function StepEditor({
   routines: Array<{ id: string; name: string }>;
   helpers: HelperRuntimeStatus[];
   existingIds: string[];
+  timerOptions: PickerOption[];
   /**
    * Only one step's fields are open at a time; the row stays a sentence. Left
    * undefined the fields stay open, which is what nested branch steps do.
@@ -1598,6 +1646,7 @@ function StepEditor({
             routines={routines}
             helpers={helpers}
             existingIds={existingIds}
+            timerOptions={timerOptions}
           />
         ) : null}
       </CardContent>
@@ -1847,12 +1896,48 @@ export function ProgramBuilder({
   devices: DevicesState;
   groups: FlattenedGroupsConfig;
   scenes: Array<{ id: string; name: string }>;
-  routines: Array<{ id: string; name: string }>;
+  routines: Array<{
+    id: string;
+    name: string;
+    definition_v2?: { program?: unknown; triggers?: unknown[] } | null;
+  }>;
   helpers: HelperRuntimeStatus[];
 }) {
   const [newStepKind, setNewStepKind] = useState<StepKind>('activate_scene');
   // One step's fields open at a time: the row stays a sentence until opened.
   const [openStepId, setOpenStepId] = useState<string | null>(null);
+  const liveTimersState = useTimers();
+  const timerOptions = useMemo(() => {
+    const names = new Set<string>();
+    for (const routine of routines) {
+      collectTimerNames(routine.definition_v2, names);
+    }
+    collectTimerNames(program, names);
+
+    const runningIn = new Map<string, Set<string>>();
+    const routineNames = new Map(
+      routines.map((routine) => [routine.id, routine.name]),
+    );
+    for (const timer of liveTimersState ?? []) {
+      names.add(timer.timer);
+      const active = runningIn.get(timer.timer) ?? new Set<string>();
+      active.add(routineNames.get(timer.routine_id) ?? timer.routine_id);
+      runningIn.set(timer.timer, active);
+    }
+
+    return [...names]
+      .sort((left, right) => left.localeCompare(right))
+      .map((name) => {
+        const activeRoutines = runningIn.get(name);
+        return {
+          value: name,
+          label: name,
+          detail: activeRoutines
+            ? `Running in ${[...activeRoutines].join(', ')}`
+            : 'Saved timer name',
+        };
+      });
+  }, [liveTimersState, program, routines]);
 
   const handleStepChange = useCallback(
     (index: number, next: NativeAction) => {
@@ -2039,6 +2124,7 @@ export function ProgramBuilder({
                   routines={routines}
                   helpers={helpers}
                   existingIds={existingIds}
+                  timerOptions={timerOptions}
                   onChange={(next) => handleStepChange(index, next)}
                   onRemove={() => {
                     if (openStepId === step.id) {

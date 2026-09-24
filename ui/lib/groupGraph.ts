@@ -138,9 +138,20 @@ export function missingGroupDevices(
   group: GroupLike,
   presentKeys: ReadonlySet<string>,
 ): string[] {
-  return (group.devices ?? [])
-    .map(groupDeviceKey)
-    .filter((key) => !presentKeys.has(key));
+  return summarizeGroupDeviceReferences(group, presentKeys).missing;
+}
+
+export function summarizeGroupDeviceReferences(
+  group: GroupLike,
+  presentKeys: ReadonlySet<string>,
+): { available: number; missing: string[]; saved: number } {
+  const keys = (group.devices ?? []).map(groupDeviceKey);
+  const missing = keys.filter((key) => !presentKeys.has(key));
+  return {
+    available: keys.length - missing.length,
+    missing,
+    saved: keys.length,
+  };
 }
 
 const FALLBACK_ID = 'room';

@@ -65,6 +65,7 @@ export function getSceneDeviceLinkTargetKey(config: SceneDeviceLink) {
 
 export interface ActivateSceneDescriptor {
   scene_id: string;
+  mirror_from_group?: string | null;
   device_keys?: string[];
   group_keys?: string[];
   use_scene_transition?: boolean;
@@ -255,6 +256,11 @@ function useConfigApi<T>(endpoint: string, keyInBody = false) {
 
   const query = useQuery({
     queryKey,
+    // Refresh saved configuration when returning to a detail page. This lets
+    // an active section editor notice a change made in another tab before it
+    // saves over the newer value.
+    refetchOnWindowFocus: true,
+    staleTime: 0,
     queryFn: async () => {
       const response = await fetch(`${baseUrl}/${endpoint}`);
       const result = await readApiResponse<T[]>(response, 'Failed to fetch');

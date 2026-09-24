@@ -185,58 +185,91 @@ function ComparisonValueEditor({
   operator,
   value,
   onChange,
+  fieldType,
+  fieldPath,
 }: {
   operator: RawRuleOperator;
   value: unknown;
   onChange: (value: unknown) => void;
+  fieldType?: string;
+  fieldPath?: string;
 }) {
   if (operatorsWithoutValue.has(operator)) {
     return null;
   }
 
+  const knownType =
+    fieldType === 'boolean' || fieldType === 'number' || fieldType === 'text'
+      ? fieldType
+      : null;
   const valueType =
-    typeof value === 'number'
+    knownType ??
+    (typeof value === 'number'
       ? 'number'
       : typeof value === 'boolean'
         ? 'boolean'
-        : 'text';
+        : 'text');
+  const isActiveField = /motion|occupancy|active/i.test(fieldPath ?? '');
+  const isBrightness = /brightness/i.test(fieldPath ?? '');
+  const unit = isBrightness ? '%' : '';
 
   return (
     <>
-      <ConfigField label="Value type">
-        <select
-          className={selectClassName}
-          value={valueType}
-          onChange={(event) => {
-            const next = event.target.value;
-            onChange(next === 'number' ? 0 : next === 'boolean' ? true : '');
-          }}
-        >
-          <option value="text">Text</option>
-          <option value="number">Number</option>
-          <option value="boolean">Boolean</option>
-        </select>
-      </ConfigField>
+      {!knownType ? (
+        <ConfigField label="Value type">
+          <select
+            className={selectClassName}
+            value={valueType}
+            onChange={(event) => {
+              const next = event.target.value;
+              onChange(next === 'number' ? 0 : next === 'boolean' ? true : '');
+            }}
+          >
+            <option value="text">Text</option>
+            <option value="number">Number</option>
+            <option value="boolean">Boolean</option>
+          </select>
+        </ConfigField>
+      ) : null}
       <ConfigField label="Value">
         {valueType === 'boolean' ? (
           <select
-            className={selectClassName}
+            className={selectClassName + ' min-h-11'}
             value={value === true ? 'true' : 'false'}
             onChange={(event) => onChange(event.target.value === 'true')}
           >
-            <option value="true">True</option>
-            <option value="false">False</option>
+            <option value="true">{isActiveField ? 'Active' : 'On'}</option>
+            <option value="false">{isActiveField ? 'Inactive' : 'Off'}</option>
           </select>
         ) : valueType === 'number' ? (
-          <Input
-            type="number"
-            step="any"
-            value={typeof value === 'number' ? value : ''}
-            onChange={(event) => {
-              const parsed = event.target.valueAsNumber;
-              onChange(Number.isNaN(parsed) ? 0 : parsed);
-            }}
-          />
+          <div className="flex items-center gap-2">
+            <Input
+              type="number"
+              inputMode="decimal"
+              step={isBrightness ? 0.1 : 'any'}
+              aria-label={unit ? `Expected value in ${unit}` : 'Expected value'}
+              value={
+                typeof value === 'number'
+                  ? isBrightness
+                    ? value * 100
+                    : value
+                  : ''
+              }
+              onChange={(event) => {
+                const parsed = event.target.valueAsNumber;
+                onChange(
+                  Number.isNaN(parsed)
+                    ? 0
+                    : isBrightness
+                      ? parsed / 100
+                      : parsed,
+                );
+              }}
+            />
+            {unit ? (
+              <span className="text-sm text-muted-foreground">{unit}</span>
+            ) : null}
+          </div>
         ) : (
           <Input
             value={typeof value === 'string' ? value : ''}
@@ -254,12 +287,14 @@ function ValueSourceEditor({
   onChooseValue,
   devices,
   helpers,
+  onFieldInfo,
 }: {
   source: ValueSource;
   onChange: (source: ValueSource) => void;
   onChooseValue?: (value: unknown) => void;
   devices: DevicesState;
   helpers: HelperRuntimeStatus[];
+  onFieldInfo: (info: { path: string; type: string } | null) => void;
 }) {
   const sourceKind = source.kind;
   const sources = useSources().data ?? [];
@@ -270,11 +305,12 @@ function ValueSourceEditor({
         <select
           className={selectClassName}
           value={sourceKind}
-          onChange={(event) =>
+          onChange={(event) => {
+            onFieldInfo(null);
             onChange(
               defaultValueSource(event.target.value as ValueSource['kind']),
-            )
-          }
+            );
+          }}
         >
           <option value="device">Device value</option>
           <option value="helper">Helper</option>
@@ -292,7 +328,8 @@ function ValueSourceEditor({
                   ? `${source.device.integration_id}/${source.device.device_id}`
                   : ''
               }
-              onChange={(key) =>
+              onChange={(key) => {
+                onFieldInfo(null);
                 onChange({
                   ...source,
                   device: splitDeviceKey(key) ?? {
@@ -303,13 +340,13 @@ function ValueSourceEditor({
                     devices[key] && 'Controllable' in devices[key]!.data
                       ? '/power'
                       : '/value',
-                })
-              }
+                });
+              }}
             />
           </ConfigField>
           <ConfigField
-            label="Value path"
-            description="JSON pointer into the device state, for example /power or /value."
+            label="Field"
+            description="Search fields on this device by name and current value."
           >
             <ValuePathPicker
               devices={devices}
@@ -317,6 +354,7 @@ function ValueSourceEditor({
               path={source.path}
               onChange={(path) => onChange({ ...source, path })}
               onChooseValue={onChooseValue}
+              onFieldInfo={onFieldInfo}
             />
           </ConfigField>
         </>
@@ -367,7 +405,7 @@ function ValueSourceEditor({
             />
           </ConfigField>
           <ConfigField
-            label="Value path"
+            label="Field"
             description="JSON pointer into the source value, for example /brightness or /color/ct."
           >
             <ValuePathPicker
@@ -377,6 +415,7 @@ function ValueSourceEditor({
               path={source.path}
               onChange={(path) => onChange({ ...source, path })}
               onChooseValue={onChooseValue}
+              onFieldInfo={onFieldInfo}
             />
           </ConfigField>
         </>
@@ -462,6 +501,10 @@ export function ConditionEditor({
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   // One nested clause is open for editing at a time; the others stay sentences.
   const [openChildIndex, setOpenChildIndex] = useState<number | null>(null);
+  const [fieldInfo, setFieldInfo] = useState<{
+    path: string;
+    type: string;
+  } | null>(null);
   const resolveDeviceLabel = (ref: {
     integration_id: string;
     device_id: string;
@@ -668,6 +711,7 @@ export function ConditionEditor({
             }
             devices={devices}
             helpers={helpers}
+            onFieldInfo={setFieldInfo}
           />
           <div className="grid gap-3 sm:grid-cols-2">
             <ConfigField label="Operator">
@@ -691,6 +735,18 @@ export function ConditionEditor({
             <ComparisonValueEditor
               operator={condition.operator}
               value={condition.value}
+              fieldType={
+                condition.source.kind === 'device'
+                  ? fieldInfo?.path === condition.source.path
+                    ? fieldInfo.type
+                    : undefined
+                  : undefined
+              }
+              fieldPath={
+                condition.source.kind === 'device'
+                  ? condition.source.path
+                  : undefined
+              }
               onChange={(value) =>
                 onChange({
                   ...condition,

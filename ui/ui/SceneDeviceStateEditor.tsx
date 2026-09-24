@@ -6,6 +6,7 @@ import {
   SceneDeviceLink,
   ActivateSceneDescriptor,
   Scene,
+  Group,
   getSceneDeviceLinkTargetKey,
 } from '@/hooks/useConfig';
 import { Device } from '@/bindings/Device';
@@ -16,6 +17,7 @@ import {
 } from '@/ui/SceneResolvedColorPreview';
 import { cn } from '@/lib/cn';
 import { Button } from '@/ui/primitives/button';
+import { confirmDialog } from '@/ui/primitives/confirm-dialog';
 import { Card, CardContent } from '@/ui/primitives/card';
 import { Input } from '@/ui/primitives/input';
 import {
@@ -25,6 +27,13 @@ import {
 } from '@/ui/config-selectors';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { SceneColorEditor } from '@/ui/SceneColorEditor';
+import { isDimmableDevice } from '@/lib/brightnessCalibration';
+import type { DeviceColorMode } from '@/lib/deviceColor';
+import {
+  SearchableMultiPicker,
+  SearchablePicker,
+  type PickerOption,
+} from '@/ui/SearchablePicker';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 const selectClassName =
@@ -36,6 +45,10 @@ const rangeClassName =
 const fieldClassName = 'space-y-2';
 const fieldLabelClassName = 'text-sm font-medium';
 const helpTextClassName = 'text-xs text-muted-foreground';
+
+function percentText(value: number) {
+  return String(Number((value * 100).toFixed(3)));
+}
 
 // Helper to determine the config type
 function getConfigType(
@@ -63,72 +76,232 @@ function isSceneLink(
 
 interface DeviceStateEditorProps {
   config: SceneDeviceState;
+  device?: Device;
   onChange: (config: SceneDeviceState) => void;
 }
 
 export function DeviceStateEditor({
   config,
+  device,
   onChange,
 }: DeviceStateEditorProps) {
+  const controllable =
+    device && 'Controllable' in device.data ? device.data.Controllable : null;
+  const supportsBrightness = device
+    ? Boolean(controllable && isDimmableDevice(device))
+    : true;
+  const supportedColorModes: DeviceColorMode[] | undefined = device
+    ? controllable
+      ? [
+          ...(controllable.capabilities.hs ? (['hs'] as const) : []),
+          ...(controllable.capabilities.rgb ? (['rgb'] as const) : []),
+          ...(controllable.capabilities.xy ? (['xy'] as const) : []),
+          ...(controllable.capabilities.ct ? (['ct'] as const) : []),
+        ]
+      : []
+    : undefined;
+  const supportsColor =
+    supportedColorModes === undefined ||
+    supportedColorModes.length > 0 ||
+    config.color !== undefined;
+  const [brightnessInput, setBrightnessInput] = useState(
+    config.brightness === undefined ? '' : percentText(config.brightness),
+  );
+  const [transitionInput, setTransitionInput] = useState(
+    config.transition === undefined ? '' : String(config.transition),
+  );
+
+  useEffect(() => {
+    setBrightnessInput(
+      config.brightness === undefined ? '' : percentText(config.brightness),
+    );
+  }, [config.brightness]);
+  useEffect(() => {
+    setTransitionInput(
+      config.transition === undefined ? '' : String(config.transition),
+    );
+  }, [config.transition]);
+
+  const setOptionalNumber = (
+    key: 'brightness' | 'transition',
+    value: number | undefined,
+  ) => {
+    const next = { ...config };
+    if (value === undefined) delete next[key];
+    else next[key] = value;
+    onChange(next);
+  };
+
   return (
     <div className="space-y-3">
-      {/* Power */}
       <div className={fieldClassName}>
-        <label className="flex cursor-pointer items-center gap-3">
+        <label className={fieldLabelClassName}>
+          Power
+          <select
+            className={`${selectClassName} mt-2 block`}
+            value={
+              config.power === undefined
+                ? 'unchanged'
+                : config.power
+                  ? 'on'
+                  : 'off'
+            }
+            onChange={(event) => {
+              const value = event.target.value;
+              onChange({
+                ...config,
+                power: value === 'unchanged' ? undefined : value === 'on',
+              });
+            }}
+          >
+            <option value="unchanged">Leave unchanged</option>
+            <option value="on">On</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+      </div>
+
+      {supportsBrightness || config.brightness !== undefined ? (
+        <div className={fieldClassName}>
+          <span className={fieldLabelClassName}>Brightness</span>
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              className={checkboxClassName}
+              checked={config.brightness !== undefined}
+              onChange={(event) =>
+                setOptionalNumber(
+                  'brightness',
+                  event.target.checked ? 1 : undefined,
+                )
+              }
+            />
+            Set brightness
+          </label>
+          {config.brightness !== undefined ? (
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={config.brightness * 100}
+                aria-label="Brightness slider"
+                className={cn(rangeClassName, 'flex-1')}
+                onChange={(event) =>
+                  setOptionalNumber(
+                    'brightness',
+                    Number(event.target.value) / 100,
+                  )
+                }
+              />
+              <div className="flex items-center gap-1">
+                <Input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={brightnessInput}
+                  aria-label="Brightness percent"
+                  className="h-9 w-24"
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setBrightnessInput(value);
+                    if (value !== '' && Number.isFinite(Number(value))) {
+                      setOptionalNumber(
+                        'brightness',
+                        Math.max(0, Math.min(100, Number(value))) / 100,
+                      );
+                    }
+                  }}
+                  onBlur={() => {
+                    if (brightnessInput === '') {
+                      setOptionalNumber('brightness', undefined);
+                    }
+                  }}
+                />
+                <span className="text-sm text-muted-foreground">%</span>
+              </div>
+            </div>
+          ) : null}
+          {!supportsBrightness && config.brightness !== undefined ? (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              This saved brightness is retained, though the device does not
+              advertise brightness support.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className={fieldClassName}>
+        <span className={fieldLabelClassName}>Fade</span>
+        <label className="flex min-h-11 items-center gap-3 text-sm">
           <input
             type="checkbox"
             className={checkboxClassName}
-            checked={config.power ?? true}
-            onChange={(e) => onChange({ ...config, power: e.target.checked })}
+            checked={config.transition !== undefined}
+            onChange={(event) =>
+              setOptionalNumber(
+                'transition',
+                event.target.checked ? 0.4 : undefined,
+              )
+            }
           />
-          <span className={fieldLabelClassName}>Power</span>
+          Set a fade duration
         </label>
+        {config.transition !== undefined ? (
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min="0"
+              max="5"
+              step="0.1"
+              value={config.transition}
+              aria-label="Fade duration slider"
+              className={cn(rangeClassName, 'flex-1')}
+              onChange={(event) =>
+                setOptionalNumber('transition', Number(event.target.value))
+              }
+            />
+            <div className="flex items-center gap-1">
+              <Input
+                type="number"
+                min="0"
+                max="5"
+                step="0.1"
+                value={transitionInput}
+                aria-label="Fade duration seconds"
+                className="h-9 w-24"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTransitionInput(value);
+                  if (value !== '' && Number.isFinite(Number(value))) {
+                    setOptionalNumber(
+                      'transition',
+                      Math.max(0, Math.min(5, Number(value))),
+                    );
+                  }
+                }}
+                onBlur={() => {
+                  if (transitionInput === '') {
+                    setOptionalNumber('transition', undefined);
+                  }
+                }}
+              />
+              <span className="text-sm text-muted-foreground">s</span>
+            </div>
+          </div>
+        ) : null}
       </div>
 
-      {/* Brightness */}
-      <div className={fieldClassName}>
-        <label>
-          <span className={fieldLabelClassName}>
-            Brightness: {Math.round((config.brightness ?? 1) * 100)}%
-          </span>
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="100"
-          value={Math.round((config.brightness ?? 1) * 100)}
-          className={rangeClassName}
-          onChange={(e) =>
-            onChange({ ...config, brightness: Number(e.target.value) / 100 })
-          }
+      {supportsColor ? (
+        <SceneColorEditor
+          color={config.color}
+          brightness={config.brightness}
+          supportedModes={supportedColorModes}
+          onChange={(color) => onChange({ ...config, color })}
         />
-      </div>
-
-      {/* Transition */}
-      <div className={fieldClassName}>
-        <label>
-          <span className={fieldLabelClassName}>
-            Transition: {config.transition ?? 0.4}s
-          </span>
-        </label>
-        <input
-          type="range"
-          min="0"
-          max="50"
-          step="1"
-          value={(config.transition ?? 0.4) * 10}
-          className={rangeClassName}
-          onChange={(e) =>
-            onChange({ ...config, transition: Number(e.target.value) / 10 })
-          }
-        />
-      </div>
-
-      <SceneColorEditor
-        color={config.color}
-        brightness={config.brightness}
-        onChange={(color) => onChange({ ...config, color })}
-      />
+      ) : null}
     </div>
   );
 }
@@ -168,44 +341,66 @@ function DeviceLinkEditor({
         </span>
       </div>
 
-      <div className={fieldClassName}>
-        <label>
-          <span className={fieldLabelClassName}>
-            Brightness Override:{' '}
-            {config.brightness !== undefined
-              ? `${Math.round(config.brightness * 100)}%`
-              : 'None'}
-          </span>
-        </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            className={checkboxClassName}
-            checked={config.brightness !== undefined}
-            onChange={(e) =>
-              onChange({
-                ...config,
-                brightness: e.target.checked ? 1 : undefined,
-              })
-            }
-          />
-          {config.brightness !== undefined && (
+      <details>
+        <summary className="min-h-11 cursor-pointer text-sm font-medium">
+          Advanced options
+        </summary>
+        <div className="space-y-3 pt-2">
+          <label className="flex min-h-11 items-center gap-3 text-sm">
             <input
-              type="range"
-              min="0"
-              max="100"
-              value={Math.round(config.brightness * 100)}
-              className={cn(rangeClassName, 'flex-1')}
+              type="checkbox"
+              className={checkboxClassName}
+              checked={config.brightness !== undefined}
               onChange={(e) =>
                 onChange({
                   ...config,
-                  brightness: Number(e.target.value) / 100,
+                  brightness: e.target.checked ? 1 : undefined,
                 })
               }
             />
-          )}
+            Override brightness from the source
+          </label>
+          {config.brightness !== undefined ? (
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="0.1"
+                value={config.brightness * 100}
+                aria-label="Brightness override slider"
+                className={cn(rangeClassName, 'flex-1')}
+                onChange={(e) =>
+                  onChange({
+                    ...config,
+                    brightness: Number(e.target.value) / 100,
+                  })
+                }
+              />
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                aria-label="Brightness override percent"
+                className="h-9 w-24"
+                value={percentText(config.brightness)}
+                onChange={(e) => {
+                  if (e.target.value === '') return;
+                  const value = Number(e.target.value);
+                  if (Number.isFinite(value)) {
+                    onChange({
+                      ...config,
+                      brightness: Math.max(0, Math.min(100, value)) / 100,
+                    });
+                  }
+                }}
+              />
+              <span className="text-sm text-muted-foreground">%</span>
+            </div>
+          ) : null}
         </div>
-      </div>
+      </details>
     </div>
   );
 }
@@ -213,10 +408,32 @@ function DeviceLinkEditor({
 interface SceneLinkEditorProps {
   config: ActivateSceneDescriptor;
   scenes: Scene[];
+  devices: DevicesState;
+  groups: Group[];
   onChange: (config: ActivateSceneDescriptor) => void;
 }
 
-function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
+function SceneLinkEditor({
+  config,
+  scenes,
+  devices,
+  groups,
+  onChange,
+}: SceneLinkEditorProps) {
+  const deviceOptions: PickerOption[] = Object.entries(devices)
+    .filter((entry): entry is [string, Device] => Boolean(entry[1]))
+    .map(([key, device]) => ({
+      value: key,
+      label: device.name || key,
+      detail: `Device · ${key.split('/', 1)[0]} · ${key}`,
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+  const groupOptions: PickerOption[] = groups.map((group) => ({
+    value: group.id,
+    label: group.name,
+    detail: `Room · ${group.id}`,
+  }));
+
   return (
     <div className="space-y-3">
       <div className={fieldClassName}>
@@ -233,31 +450,108 @@ function SceneLinkEditor({ config, scenes, onChange }: SceneLinkEditorProps) {
         </span>
       </div>
 
-      <div className={fieldClassName}>
-        <label>
-          <span className={fieldLabelClassName}>Transition Override (s)</span>
-        </label>
-        <Input
-          type="number"
-          min="0"
-          step="0.1"
-          className="h-9"
-          value={config.transition ?? ''}
-          placeholder="Use linked scene transition"
-          onChange={(e) => {
-            const nextValue = e.target.value.trim();
-            onChange({
-              ...config,
-              transition: nextValue
-                ? Math.max(0, Number(nextValue))
-                : undefined,
-            });
-          }}
-        />
-        <span className={helpTextClassName}>
-          Leave empty to inherit the linked scene&apos;s transition values.
-        </span>
-      </div>
+      <details>
+        <summary className="min-h-11 cursor-pointer text-sm font-medium">
+          Advanced options
+        </summary>
+        <div className="space-y-4 pt-2">
+          <div className={fieldClassName}>
+            <span className={fieldLabelClassName}>Mirror from room</span>
+            <SearchablePicker
+              options={groupOptions}
+              value={config.mirror_from_group ?? ''}
+              onChange={(mirror_from_group) =>
+                onChange({
+                  ...config,
+                  mirror_from_group: mirror_from_group || undefined,
+                })
+              }
+              placeholder="Use this scene"
+              ariaLabel="Mirror from room"
+            />
+            <span className={helpTextClassName}>
+              Use that room&apos;s current scene, falling back to the selected
+              scene when there is no unanimous current scene.
+            </span>
+          </div>
+
+          <label className="flex min-h-11 items-center gap-3 text-sm">
+            <input
+              type="checkbox"
+              className={checkboxClassName}
+              checked={config.use_scene_transition ?? false}
+              onChange={(event) =>
+                onChange({
+                  ...config,
+                  use_scene_transition: event.target.checked,
+                })
+              }
+            />
+            Preserve the linked scene&apos;s transitions
+          </label>
+
+          <div className={fieldClassName}>
+            <span className={fieldLabelClassName}>Limit to devices</span>
+            <SearchableMultiPicker
+              options={deviceOptions}
+              value={config.device_keys ?? []}
+              onChange={(device_keys) =>
+                onChange({
+                  ...config,
+                  device_keys: device_keys.length ? device_keys : undefined,
+                })
+              }
+              placeholder="Add devices…"
+            />
+            <span className={helpTextClassName}>
+              Leave empty to include every device matched by the linked scene.
+            </span>
+          </div>
+
+          <div className={fieldClassName}>
+            <span className={fieldLabelClassName}>Limit to rooms</span>
+            <SearchableMultiPicker
+              options={groupOptions}
+              value={config.group_keys ?? []}
+              onChange={(group_keys) =>
+                onChange({
+                  ...config,
+                  group_keys: group_keys.length ? group_keys : undefined,
+                })
+              }
+              placeholder="Add rooms…"
+            />
+            <span className={helpTextClassName}>
+              Leave empty to include every room matched by the linked scene.
+            </span>
+          </div>
+
+          <div className={fieldClassName}>
+            <label className={fieldLabelClassName}>
+              Transition override (seconds)
+              <Input
+                type="number"
+                min="0"
+                step="0.1"
+                className="mt-2 h-11"
+                value={config.transition ?? ''}
+                placeholder="Use linked scene transition"
+                onChange={(event) => {
+                  const value = event.target.value;
+                  onChange({
+                    ...config,
+                    transition:
+                      value === '' ? undefined : Math.max(0, Number(value)),
+                  });
+                }}
+              />
+            </label>
+            <span className={helpTextClassName}>
+              Leave empty to inherit the linked scene&apos;s transition values.
+            </span>
+          </div>
+        </div>
+      </details>
     </div>
   );
 }
@@ -267,6 +561,7 @@ export interface SceneTargetConfigEditorProps {
   targetLabel?: string;
   config: SceneDeviceConfig;
   devices: DevicesState;
+  groups?: Group[];
   allScenes: Scene[];
   targetKind: SceneTargetKind;
   scenes: Scene[];
@@ -287,6 +582,7 @@ export function SceneTargetConfigEditor({
   targetLabel,
   config,
   devices,
+  groups = [],
   allScenes,
   targetKind,
   scenes,
@@ -308,11 +604,22 @@ export function SceneTargetConfigEditor({
     }
   }, [focused]);
 
-  const handleTypeChange = (
+  const handleTypeChange = async (
     newType: 'device_state' | 'device_link' | 'scene_link',
   ) => {
+    const color = 'color' in config ? config.color : undefined;
+    if (newType !== 'device_state' && color) {
+      const confirmed = await confirmDialog({
+        title: 'Change target mode?',
+        description:
+          'This target has a saved color. Changing to a follow mode removes that color from this target.',
+        confirmLabel: 'Change mode',
+        cancelLabel: 'Keep current mode',
+      });
+      if (!confirmed) return;
+    }
     if (newType === 'device_state') {
-      onChange({ power: true, brightness: 1 });
+      onChange({});
     } else if (newType === 'device_link') {
       onChange({ integration_id: '', device_id: '' });
     } else {
@@ -329,7 +636,7 @@ export function SceneTargetConfigEditor({
       )}
     >
       <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-2 min-[360px]:flex-row min-[360px]:items-start min-[360px]:justify-between">
           <button
             type="button"
             onClick={onSelect}
@@ -344,14 +651,16 @@ export function SceneTargetConfigEditor({
                   selected && 'rotate-90',
                 )}
               />
-              <span className="min-w-0 truncate">{targetLabel ?? targetKey}</span>
+              <span className="min-w-0 truncate">
+                {targetLabel ?? targetKey}
+              </span>
             </h4>
             {/* One line: what this target does right now, so the fields below
                 stay closed until someone wants to change them. */}
             <p className="text-xs text-muted-foreground">
               {summarizeTarget(config)}
               {targetLabel && targetLabel !== targetKey ? (
-                <span className="ml-2 font-mono">{targetKey}</span>
+                <span className="ml-2 break-all font-mono">{targetKey}</span>
               ) : null}
             </p>
           </button>
@@ -362,7 +671,7 @@ export function SceneTargetConfigEditor({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-8"
+                  className="size-11"
                   aria-label={`Move ${targetLabel ?? targetKey} earlier`}
                   title="Move earlier"
                   disabled={position === 0}
@@ -374,7 +683,7 @@ export function SceneTargetConfigEditor({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-8"
+                  className="size-11"
                   aria-label={`Move ${targetLabel ?? targetKey} later`}
                   title="Move later"
                   disabled={position === (targetCount ?? 1) - 1}
@@ -388,10 +697,10 @@ export function SceneTargetConfigEditor({
               type="button"
               variant="ghost"
               size="sm"
-              className="text-destructive hover:text-destructive"
+              className="min-h-11 text-destructive hover:text-destructive"
               onClick={onRemove}
             >
-              ✕
+              Remove
             </Button>
           </div>
         </div>
@@ -399,52 +708,65 @@ export function SceneTargetConfigEditor({
         {selected ? (
           <>
             <div className={cn(fieldClassName, 'mt-3')}>
-            <label>
-              <span className={fieldLabelClassName}>What this target does</span>
-            </label>
-            <select
-              className={selectClassName}
-              value={configType}
-              onChange={(e) =>
-                handleTypeChange(
-                  e.target.value as
-                    'device_state' | 'device_link' | 'scene_link',
-                )
-              }
-            >
-              <option value="device_state">Set a state</option>
-              <option value="device_link">Follow a device</option>
-              <option value="scene_link">Use another scene</option>
-            </select>
-          </div>
+              <label>
+                <span className={fieldLabelClassName}>
+                  What this target does
+                </span>
+              </label>
+              <select
+                className={selectClassName}
+                value={configType}
+                onChange={(e) =>
+                  void handleTypeChange(
+                    e.target.value as
+                      'device_state' | 'device_link' | 'scene_link',
+                  )
+                }
+              >
+                <option value="device_state">Set a state</option>
+                <option value="device_link">Follow a device</option>
+                <option value="scene_link">Use another scene</option>
+              </select>
+            </div>
 
-          <div className="my-2 h-px bg-border" />
+            <div className="my-2 h-px bg-border" />
 
-          <SceneResolvedColorPreview
-            config={config}
-            devices={devices}
-            scenes={allScenes}
-            targetKey={targetKey}
-            targetKind={targetKind}
-          />
-
-          {isDeviceState(config) && (
-            <DeviceStateEditor config={config} onChange={onChange} />
-          )}
-          {isDeviceLink(config) && (
-            <DeviceLinkEditor
+            <p className="text-xs font-medium text-muted-foreground">
+              Draft preview · updates as you change this target
+            </p>
+            <SceneResolvedColorPreview
               config={config}
               devices={devices}
-              onChange={onChange}
+              scenes={allScenes}
+              targetKey={targetKey}
+              targetKind={targetKind}
             />
-          )}
-          {isSceneLink(config) && (
-            <SceneLinkEditor
-              config={config}
-              scenes={scenes}
-              onChange={onChange}
-            />
-          )}
+
+            {isDeviceState(config) && (
+              <DeviceStateEditor
+                config={config}
+                device={
+                  targetKind === 'device' ? devices[targetKey] : undefined
+                }
+                onChange={onChange}
+              />
+            )}
+            {isDeviceLink(config) && (
+              <DeviceLinkEditor
+                config={config}
+                devices={devices}
+                onChange={onChange}
+              />
+            )}
+            {isSceneLink(config) && (
+              <SceneLinkEditor
+                config={config}
+                scenes={scenes}
+                devices={devices}
+                groups={groups}
+                onChange={onChange}
+              />
+            )}
           </>
         ) : null}
       </CardContent>
@@ -478,12 +800,14 @@ function summarizeTarget(config: SceneDeviceConfig): string {
 export interface SceneTargetOption {
   key: string;
   label: string;
+  detail?: string;
+  kind?: SceneTargetKind;
 }
 
 export interface AddSceneTargetModalProps {
   options: SceneTargetOption[];
   existingKeys: string[];
-  onAdd: (targetKey: string) => void;
+  onAdd: (targetKey: string, kind?: SceneTargetKind) => void;
   onClose: () => void;
 }
 
@@ -495,13 +819,20 @@ export function AddSceneTargetModal({
 }: AddSceneTargetModalProps) {
   const [search, setSearch] = useState('');
 
-  const availableTargets = options
-    .filter(({ key }) => !existingKeys.includes(key))
-    .filter(
-      ({ key, label }) =>
-        key.toLowerCase().includes(search.toLowerCase()) ||
-        label.toLowerCase().includes(search.toLowerCase()),
+  const availableMatches = options.filter(({ key, label, detail, kind }) => {
+    const selectedKey = kind ? `${kind}:${key}` : key;
+    if (existingKeys.includes(key) || existingKeys.includes(selectedKey)) {
+      return false;
+    }
+    const query = search.trim().toLocaleLowerCase();
+    return (
+      !query ||
+      `${label} ${key} ${detail ?? ''} ${kind ?? ''}`
+        .toLocaleLowerCase()
+        .includes(query)
     );
+  });
+  const availableTargets = availableMatches.slice(0, 40);
 
   return (
     <ResponsiveOverlay
@@ -511,43 +842,64 @@ export function AddSceneTargetModal({
           onClose();
         }
       }}
-      title="Add Target"
-      description="Choose a device or group target for this scene."
+      title="Add device or room"
+      description="Search by name, room, integration, or ID."
       className="max-w-2xl"
     >
       <div className="space-y-4 px-5 pb-5 md:px-0 md:pb-0">
         <Input
           type="text"
           className="w-full"
-          placeholder="Search targets..."
+          aria-label="Search devices and rooms"
+          placeholder="Search by name, room, integration, or ID…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
 
         <div className="mt-4 max-h-60 overflow-y-auto">
-          {availableTargets.length === 0 ? (
+          {availableMatches.length === 0 ? (
             <p className="py-4 text-center text-sm text-muted-foreground">
-              No targets found
+              No devices or rooms match this search.
             </p>
           ) : (
-            <div className="space-y-1">
-              {availableTargets.map(({ key, label }) => (
+            <div
+              className="space-y-1"
+              role="group"
+              aria-label="Available targets"
+            >
+              {availableTargets.map(({ key, label, detail, kind }) => (
                 <Button
-                  key={key}
+                  key={`${kind ?? 'target'}:${key}`}
                   variant="ghost"
-                  size="sm"
-                  className="w-full justify-start"
+                  className="h-auto min-h-11 w-full justify-start py-2 text-left"
                   onClick={() => {
-                    onAdd(key);
+                    onAdd(key, kind);
                     onClose();
                   }}
                 >
-                  <span className="truncate">
-                    {label}{' '}
-                    <span className="text-muted-foreground">({key})</span>
+                  <span className="min-w-0">
+                    <span className="block truncate">
+                      {label}{' '}
+                      <span className="text-xs text-muted-foreground">
+                        {kind === 'group'
+                          ? 'Room'
+                          : kind === 'device'
+                            ? 'Device'
+                            : ''}
+                      </span>
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {detail ?? key}
+                    </span>
                   </span>
                 </Button>
               ))}
+              {availableMatches.length > availableTargets.length ? (
+                <p className="px-2 py-2 text-xs text-muted-foreground">
+                  Showing {availableTargets.length} of {availableMatches.length}{' '}
+                  matches. Add more search terms to narrow the list.
+                </p>
+              ) : null}
             </div>
           )}
         </div>
@@ -581,6 +933,7 @@ interface SceneTargetSectionEditorProps {
   sectionTitle: string;
   targetKind: SceneTargetKind;
   devices: DevicesState;
+  groups?: Group[];
   onChange: (items: Record<string, SceneDeviceConfig>) => void;
   order?: string[];
   onOrderChange?: (order: string[]) => void;
@@ -599,6 +952,7 @@ export function SceneTargetSectionEditor({
   sectionTitle,
   targetKind,
   devices,
+  groups = [],
   onChange,
   order,
   onOrderChange,
@@ -727,6 +1081,7 @@ export function SceneTargetSectionEditor({
                 targetLabel={optionLabelByKey[targetKey]}
                 config={config}
                 devices={devices}
+                groups={groups}
                 allScenes={allScenes}
                 targetKind={targetKind}
                 scenes={scenes}

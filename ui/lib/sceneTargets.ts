@@ -135,6 +135,9 @@ export function describeSceneTarget(
   config: Config,
   context: {
     sceneIds?: string[];
+    sceneNames?: Record<string, string>;
+    groupNames?: Record<string, string>;
+    deviceNames?: Record<string, string>;
     deviceKeys?: string[];
     aliases?: Record<string, string>;
   } = {},
@@ -156,7 +159,12 @@ export function describeSceneTarget(
         `${groupKeys.length} room${groupKeys.length === 1 ? '' : 's'}`,
       );
     }
-    const summary = `Follows scene "${sceneId}"${scope.length > 0 ? ` for ${scope.join(', ')}` : ''}`;
+    const sceneName = context.sceneNames?.[sceneId] ?? sceneId;
+    const mirrorGroup = read(config, 'mirror_from_group');
+    const mirrorGroupId = typeof mirrorGroup === 'string' ? mirrorGroup : '';
+    const mirrorGroupName =
+      context.groupNames?.[mirrorGroupId] ?? mirrorGroupId;
+    const summary = `${mirrorGroupId ? `Uses the current scene in ${mirrorGroupName}, with ` : 'Follows '}scene "${sceneName}"${mirrorGroupId ? ' as fallback' : ''}${scope.length > 0 ? ` for ${scope.join(', ')}` : ''}`;
     const known = context.sceneIds
       ? context.sceneIds.includes(sceneId)
       : undefined;
@@ -178,7 +186,11 @@ export function describeSceneTarget(
   if (mode === 'device-link') {
     const targetKey = deviceLinkTargetKey(config);
     const brightness = brightnessText(config);
-    const summary = `Tracks ${targetKey || 'an unchosen device'}${brightness ? ` · ${brightness}` : ''}`;
+    const sourceName = context.deviceNames?.[targetKey];
+    const source = sourceName
+      ? `${sourceName} (${targetKey})`
+      : targetKey || 'an unchosen device';
+    const summary = `Tracks ${source}${brightness ? ` · ${brightness}` : ''}`;
     const resolution = resolveDeviceLink(
       targetKey,
       context.deviceKeys,

@@ -8,6 +8,8 @@
  */
 
 import { resolveDeviceLink } from './sceneTargets.ts';
+import type { DeviceColor } from '@/bindings/DeviceColor';
+import { describeColorName, isDeviceColor } from './deviceColor.ts';
 
 export type SceneEffectTargetKind = 'device' | 'group' | 'scene';
 
@@ -28,39 +30,9 @@ export type SceneDeviceStateWords = {
   empty: boolean;
 };
 
-/** Hue bands for naming a colour the way a person would. */
-const HUE_BANDS: Array<[number, string]> = [
-  [12, 'red'],
-  [32, 'orange'],
-  [52, 'amber'],
-  [70, 'yellow'],
-  [100, 'lime'],
-  [160, 'green'],
-  [200, 'teal'],
-  [230, 'cyan'],
-  [265, 'blue'],
-  [300, 'indigo'],
-  [330, 'purple'],
-  [352, 'pink'],
-  [360, 'red'],
-];
-
-/** “warm white”, “cool white”, “blue” — never a raw hue number. */
+/** “warm white”, “cool white”, “blue” — never a raw coordinate. */
 export function describeColorWords(color: unknown): string | null {
-  if (!color || typeof color !== 'object') {
-    return null;
-  }
-  const h = read(color, 'h');
-  const s = read(color, 's');
-  if (typeof h !== 'number' || typeof s !== 'number') {
-    return null;
-  }
-  if (s < 0.45) {
-    if (h <= 90 || h >= 300) return 'warm white';
-    return 'cool white';
-  }
-  const band = HUE_BANDS.find(([limit]) => h <= limit);
-  return band ? band[1] : 'coloured';
+  return isDeviceColor(color) ? describeColorName(color) : null;
 }
 
 /**
@@ -92,7 +64,7 @@ export function describeSceneStateWords(
 
 export type SceneEffectMode = 'state' | 'device-link' | 'scene-link';
 
-export type SceneResolvedColor = { h: number; s: number };
+export type SceneResolvedColor = DeviceColor;
 
 /**
  * The same state split into a form the UI can render: words for on/brightness/
@@ -120,20 +92,11 @@ export function describeSceneStateParts(config: Config | null | undefined): {
     changes.push(`${transition} s fade`);
   }
   const raw = read(config, 'color');
-  const color =
-    raw && typeof raw === 'object' && 'h' in raw && 's' in raw
-      ? {
-          h: Number((raw as { h: unknown }).h),
-          s: Number((raw as { s: unknown }).s),
-        }
-      : null;
+  const color = isDeviceColor(raw) ? raw : null;
   return {
     changes,
     colorWords,
-    color:
-      color && Number.isFinite(color.h) && Number.isFinite(color.s)
-        ? color
-        : null,
+    color,
     empty: changes.length === 0 && colorWords === null,
   };
 }
@@ -164,6 +127,8 @@ export type SceneEffectTarget = {
   devices: SceneEffectDevice[];
   /** Saved members of this room that are not in the current catalog. */
   missingMembers: string[];
+  /** Missing references inside a linked scene used by this target. */
+  linkedIssues: string[];
 };
 
 export type SceneEffects = {
@@ -187,9 +152,46 @@ export type SceneEffects = {
   };
   /** True when the scene has a script that can override these values. */
   scripted: boolean;
+  /** Scene links using a live mirrored scene whose output cannot be known yet. */
+  unknownOutcomeCount: number;
   /** Devices that a room target sets but a device target then overrides. */
   overrideNotes: string[];
 };
+
+export type SceneEffectOutcomeGroup = {
+  fromLabel: string;
+  /** Power/fade-like values shared by every device in this group. */
+  changes: string[];
+  color: SceneResolvedColor | null;
+  colorWords: string | null;
+  entries: SceneEffects['finalByDevice'];
+};
+
+/**
+ * Compact outcomes by saved target and shared state. Brightness may differ
+ * within one room, so those exact percentages stay on the group as entries.
+ */
+export function groupSceneEffectOutcomes(
+  entries: SceneEffects['finalByDevice'],
+): SceneEffectOutcomeGroup[] {
+  const groups = new Map<string, SceneEffectOutcomeGroup>();
+  for (const entry of entries) {
+    const changes = entry.changes.filter(
+      (change) => !/^\d+(?:\.\d+)?%$/.test(change),
+    );
+    const key = JSON.stringify([entry.fromLabel, changes, entry.color]);
+    const group = groups.get(key) ?? {
+      fromLabel: entry.fromLabel,
+      changes,
+      color: entry.color,
+      colorWords: entry.colorWords,
+      entries: [],
+    };
+    group.entries.push(entry);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
 
 type DeviceLike = { name?: string };
 
@@ -203,9 +205,14 @@ export type SceneEffectsContext = {
   /** Legacy device keys a computed source still answers to. */
   sourceAliases?: Record<string, string>;
   /** Follows a scene link when a target reads another scene. */
-  resolveSceneLink?: (
-    sceneId: string,
-  ) => { device_states?: Record<string, Config> } | undefined;
+  resolveSceneLink?: (sceneId: string) =>
+    | {
+        device_states?: Record<string, Config>;
+        group_states?: Record<string, Config>;
+        group_state_order?: readonly string[];
+        script?: string | null;
+      }
+    | undefined;
 };
 
 function labelFor(
@@ -254,8 +261,17 @@ export function resolveSceneEffects(
     script?: string | null;
   },
   context: SceneEffectsContext = {},
+  visitedSceneIds: ReadonlySet<string> = new Set(),
 ): SceneEffects {
   const targets: SceneEffectTarget[] = [];
+  let linkedScripted = false;
+  let unknownOutcomeCount = 0;
+  const linkedUnresolvedByKind = {
+    directTargets: 0,
+    roomTargets: 0,
+    roomMembers: 0,
+  };
+  let linkedUnresolvedCount = 0;
   const written = new Map<
     string,
     { targetIndex: number; deviceIndex: number }
@@ -294,6 +310,7 @@ export function resolveSceneEffects(
       repair: null,
       devices: [],
       missingMembers: [],
+      linkedIssues: [],
     };
 
     if (kind === 'group' && !context.groups?.[key]) {
@@ -312,18 +329,76 @@ export function resolveSceneEffects(
           : 'It does not follow a scene yet';
         target.repair = 'Pick an existing scene, or remove this target.';
       }
-      // Scoped followers only touch their listed devices; the summary says so
-      // without pretending to know the values that scene will write.
-      const listed = (read(config, 'device_keys') ?? []) as unknown[];
-      for (const entry of listed) {
-        const deviceKey = String(entry);
-        target.devices.push({
-          deviceKey,
-          deviceLabel: labelFor(deviceKey, context, deviceKey),
-          changes: [`follows “${sceneId}”`],
-          color: null,
-          colorWords: null,
-        });
+      if (linked && sceneId && !visitedSceneIds.has(sceneId)) {
+        const nextVisited = new Set(visitedSceneIds);
+        nextVisited.add(sceneId);
+        const nested = resolveSceneEffects(linked, context, nextVisited);
+        target.linkedIssues = nested.targets.flatMap((nestedTarget) => [
+          ...(nestedTarget.unresolvedReason
+            ? [
+                `${nestedTarget.kind === 'group' ? 'Room' : 'Device'} ${nestedTarget.label} (${nestedTarget.key}): ${nestedTarget.unresolvedReason}`,
+              ]
+            : []),
+          ...nestedTarget.missingMembers.map(
+            (memberKey) =>
+              `Room member ${memberKey} in ${nestedTarget.label} is unavailable`,
+          ),
+          ...nestedTarget.linkedIssues,
+        ]);
+        linkedScripted ||= nested.scripted;
+        unknownOutcomeCount += nested.unknownOutcomeCount;
+        linkedUnresolvedCount += nested.unresolvedCount;
+        linkedUnresolvedByKind.directTargets +=
+          nested.unresolvedByKind.directTargets;
+        linkedUnresolvedByKind.roomTargets +=
+          nested.unresolvedByKind.roomTargets;
+        linkedUnresolvedByKind.roomMembers +=
+          nested.unresolvedByKind.roomMembers;
+
+        const mirrorGroupId = String(read(config, 'mirror_from_group') ?? '');
+        if (mirrorGroupId) unknownOutcomeCount += 1;
+
+        const requestedDeviceKeys = read(config, 'device_keys');
+        const deviceScope = Array.isArray(requestedDeviceKeys)
+          ? requestedDeviceKeys.map(String)
+          : null;
+        const requestedGroupKeys = read(config, 'group_keys');
+        const groupScope = Array.isArray(requestedGroupKeys)
+          ? new Set(
+              requestedGroupKeys.flatMap((groupId) =>
+                memberKeys(String(groupId), context),
+              ),
+            )
+          : null;
+        const parentDevices = new Set(
+          kind === 'group' ? memberKeys(key, context) : [key],
+        );
+
+        for (const entry of nested.finalByDevice) {
+          if (!parentDevices.has(entry.deviceKey)) continue;
+          if (deviceScope && !deviceScope.includes(entry.deviceKey)) continue;
+          if (groupScope && !groupScope.has(entry.deviceKey)) continue;
+          const override = read(config, 'transition');
+          const changes = entry.changes.filter(
+            (change) => !/^\d+(?:\.\d+)? s fade$/.test(change),
+          );
+          if (typeof override === 'number') {
+            if (override > 0) changes.push(`${override} s fade`);
+          } else {
+            changes.push(
+              ...entry.changes.filter((change) =>
+                /^\d+(?:\.\d+)? s fade$/.test(change),
+              ),
+            );
+          }
+          target.devices.push({
+            ...entry,
+            changes,
+          });
+        }
+      } else if (linked && sceneId && visitedSceneIds.has(sceneId)) {
+        target.unresolvedReason = `It links to scene “${sceneId}” through a cycle`;
+        target.repair = 'Change the linked scene or remove this target.';
       }
       targets.push(target);
       return;
@@ -485,7 +560,7 @@ export function resolveSceneEffects(
     }
   }
 
-  const unresolvedByKind = {
+  const localUnresolvedByKind = {
     directTargets: targets.filter(
       (target) => target.kind === 'device' && target.unresolvedReason !== null,
     ).length,
@@ -497,9 +572,19 @@ export function resolveSceneEffects(
       0,
     ),
   };
-  const unresolvedCount =
+  const localUnresolvedCount =
     targets.filter((target) => target.unresolvedReason !== null).length +
-    unresolvedByKind.roomMembers;
+    localUnresolvedByKind.roomMembers;
+  const unresolvedByKind = {
+    directTargets:
+      localUnresolvedByKind.directTargets +
+      linkedUnresolvedByKind.directTargets,
+    roomTargets:
+      localUnresolvedByKind.roomTargets + linkedUnresolvedByKind.roomTargets,
+    roomMembers:
+      localUnresolvedByKind.roomMembers + linkedUnresolvedByKind.roomMembers,
+  };
+  const unresolvedCount = localUnresolvedCount + linkedUnresolvedCount;
 
   return {
     targets,
@@ -507,7 +592,9 @@ export function resolveSceneEffects(
     affectedDeviceCount: finalByDevice.length,
     unresolvedCount,
     unresolvedByKind,
-    scripted: Boolean(scene.script && scene.script.trim() !== ''),
+    scripted:
+      Boolean(scene.script && scene.script.trim() !== '') || linkedScripted,
+    unknownOutcomeCount,
     overrideNotes,
   };
 }

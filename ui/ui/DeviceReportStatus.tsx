@@ -1,5 +1,6 @@
 import {
   deviceReachability,
+  hasCurrentRequestedMismatch,
   reachabilityLabels,
 } from '@/lib/deviceReachability';
 import { DeviceEnabledToggle } from '@/ui/DeviceEnabledToggle';
@@ -59,21 +60,12 @@ export function DeviceReportStatus({
       {
         device,
         health,
-        // XY/HS values are commonly clipped by the lamp's physical gamut.
-        // Keep the detailed report, but only flag actionable power/brightness
-        // divergence in this compact status surface.
+        // The server compares supported fields with its device color and
+        // brightness tolerances; use that result rather than guessing here.
+        // The server handles brightness and color tolerances. Ignore a cached,
+        // old, or pre-request report when describing the current request.
         differs:
-          // Only flags when the report is newer than the request and they
-          // actually disagree; color gamut clipping is deliberately ignored.
-          health !== 'disabled' &&
-          report &&
-          !report.retained &&
-          report.received_at_ms >= (data.requested_at_ms ?? 0) &&
-          (report.state.power !== data.state.power ||
-            (report.state.brightness !== null &&
-              data.state.brightness !== null &&
-              Math.abs(report.state.brightness - data.state.brightness) >
-                0.03)),
+          health !== 'disabled' && hasCurrentRequestedMismatch(data, now),
         key: `${device.integration_id}/${device.id}`,
         name: device.name,
         label,

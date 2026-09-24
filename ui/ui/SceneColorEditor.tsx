@@ -30,13 +30,25 @@ const MODES: DeviceColorMode[] = ['hs', 'rgb', 'xy', 'ct'];
 export function SceneColorEditor({
   color,
   brightness,
+  supportedModes,
   onChange,
 }: {
   color?: DeviceColor;
   brightness?: number;
+  /** Omit when target capabilities are unknown or shared across a room. */
+  supportedModes?: DeviceColorMode[];
   onChange: (color: DeviceColor | undefined) => void;
 }) {
   const colorMode = getColorMode(color);
+  const modeSupported =
+    !colorMode ||
+    supportedModes === undefined ||
+    supportedModes.includes(colorMode);
+  const modeOptions = supportedModes
+    ? MODES.filter(
+        (mode) => supportedModes.includes(mode) || mode === colorMode,
+      )
+    : MODES;
   const preview = color ? colorToCss(color, brightness ?? 1) : 'transparent';
   const parts = color ? colorParts(color) : [];
 
@@ -56,9 +68,12 @@ export function SceneColorEditor({
           }}
         >
           <option value="none">No color</option>
-          {MODES.map((mode) => (
+          {modeOptions.map((mode) => (
             <option key={mode} value={mode}>
               {COLOR_MODE_LABELS[mode]}
+              {supportedModes && !supportedModes.includes(mode)
+                ? ' (saved; not advertised)'
+                : ''}
             </option>
           ))}
         </select>
@@ -133,6 +148,12 @@ export function SceneColorEditor({
           <p className="text-xs text-muted-foreground">
             {describeColorName(color)} · {formatColorExact(color)}
           </p>
+          {!modeSupported ? (
+            <p className="text-xs text-amber-700 dark:text-amber-300">
+              The current device does not advertise this saved color mode. It
+              remains unchanged unless you choose another mode.
+            </p>
+          ) : null}
         </div>
       ) : null}
     </div>

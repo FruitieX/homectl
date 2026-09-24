@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 
 import { Button } from '@/ui/primitives/button';
 
@@ -14,6 +14,7 @@ export function BoundedList<T>({
   batchSize = 30,
   emptyMessage,
   moreLabel,
+  revealKey = null,
 }: {
   items: readonly T[];
   keyOf: (item: T) => string;
@@ -21,8 +22,17 @@ export function BoundedList<T>({
   batchSize?: number;
   emptyMessage?: ReactNode;
   moreLabel?: (remaining: number) => string;
+  /** Expand enough batches to reveal a focused row from a deep link. */
+  revealKey?: string | null;
 }) {
   const [visible, setVisible] = useState(batchSize);
+  useEffect(() => {
+    if (!revealKey) return;
+    const index = items.findIndex((item) => keyOf(item) === revealKey);
+    if (index >= visible) {
+      setVisible(Math.ceil((index + 1) / batchSize) * batchSize);
+    }
+  }, [batchSize, items, keyOf, revealKey, visible]);
   const shown = items.slice(0, visible);
   const remaining = items.length - shown.length;
 

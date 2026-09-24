@@ -7,6 +7,7 @@ import { useAppConfig } from '@/hooks/appConfig';
 import {
   type Scene,
   type SceneDeviceConfig,
+  type DeviceColor,
   getSceneDeviceLinkTargetKey,
   useGroups,
   useScenes,
@@ -20,8 +21,12 @@ import {
   sceneTargetsSummary,
 } from '@/lib/sceneTargets';
 import Color from 'color';
+import { colorToRgb, formatColorExact } from '@/lib/deviceColor';
 
-import { resolveSceneEffects } from '@/lib/sceneEffects';
+import {
+  groupSceneEffectOutcomes,
+  resolveSceneEffects,
+} from '@/lib/sceneEffects';
 import { sourceAliasKeys } from '@/lib/sceneTargets';
 import { BoundedList } from '@/ui/config/BoundedList';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
@@ -56,8 +61,11 @@ import { Suspense, lazy } from 'react';
 
 const LazySceneScriptEditor = lazy(() => import('@/ui/SceneScriptEditor'));
 
-const DEVICE_FIELDS = ['device_states'] as const;
-const ROOM_FIELDS = ['group_states', 'group_state_order'] as const;
+const TARGET_FIELDS = [
+  'device_states',
+  'group_states',
+  'group_state_order',
+] as const;
 const DETAIL_FIELDS = ['name', 'hidden'] as const;
 const SCRIPT_FIELDS = ['script'] as const;
 
@@ -103,16 +111,12 @@ function modeLabel(mode: string): string {
 }
 
 /**
- * Scene detail: what the scene would set, then the device and room targets as
- * separate sections that save independently, then details, script, delete.
+ * Scene detail: what the scene would set, then one coherent target collection,
+ * then details, script, and delete.
  */
-/** Exact colour for a tooltip or the details block, never a bare hue number. */
-function colourDetail(
-  color: { h: number; s: number },
-  words: string | null,
-): string {
-  const hex = Color({ h: color.h, s: color.s * 100, v: 100 }).hex();
-  const exact = `h ${Math.round(color.h)}° · s ${Math.round(color.s * 100)}% · ${hex}`;
+/** Exact colour for a tooltip or the details block, never a raw coordinate. */
+function colourDetail(color: DeviceColor, words: string | null): string {
+  const exact = formatColorExact(color);
   return words ? `${words} · ${exact}` : exact;
 }
 
@@ -131,11 +135,16 @@ export default function SceneDetailPage() {
   const { status, announce } = useStatusAnnouncements();
 
   const [activating, setActivating] = useState(false);
-  const [addingTarget, setAddingTarget] = useState<'device' | 'room' | null>(
-    null,
-  );
+  const [addingTarget, setAddingTarget] = useState(false);
 
   const scene = scenes.find((entry) => entry.id === id);
+  const urlTargetRevealKey = target
+    ? Object.hasOwn(scene?.group_states ?? {}, target)
+      ? `group:${target}`
+      : Object.hasOwn(scene?.device_states ?? {}, target)
+        ? `device:${target}`
+        : null
+    : null;
 
   const deviceKeys = useMemo(
     () =>
@@ -145,20 +154,60 @@ export default function SceneDetailPage() {
     [devices],
   );
   const sceneIds = useMemo(() => scenes.map((entry) => entry.id), [scenes]);
+  const sceneNames = useMemo(
+    () =>
+      Object.fromEntries(
+        scenes.map((candidate) => [candidate.id, candidate.name]),
+      ),
+    [scenes],
+  );
+  const groupNames = useMemo(
+    () => Object.fromEntries(groups.map((group) => [group.id, group.name])),
+    [groups],
+  );
+  const deviceNames = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(devices).map(([deviceKey, device]) => [
+          deviceKey,
+          device?.name ?? deviceKey,
+        ]),
+      ),
+    [devices],
+  );
   // While the device catalog is still loading there is no verdict to give.
   const knownDeviceKeys = devicesLoading ? undefined : deviceKeys;
 
   const deviceOptions: SceneTargetOption[] = useMemo(
     () =>
       deviceKeys
-        .map((key) => ({ key, label: devices[key]?.name ?? key }))
+        .map((key) => {
+          const [integrationId] = key.split('/', 1);
+          const containingRooms = groups
+            .filter((group) =>
+              (group.devices ?? []).some(
+                (member: { integration_id: string; device_id: string }) =>
+                  `${member.integration_id}/${member.device_id}` === key,
+              ),
+            )
+            .map((group) => group.name);
+          return {
+            key,
+            label: devices[key]?.name ?? key,
+            detail: `Device · ${containingRooms.length ? containingRooms.join(', ') : 'No room'} · ${integrationId} · ${key}`,
+          };
+        })
         .sort((left, right) => left.label.localeCompare(right.label)),
-    [deviceKeys, devices],
+    [deviceKeys, devices, groups],
   );
   const roomOptions: SceneTargetOption[] = useMemo(
     () =>
       groups
-        .map((group) => ({ key: group.id, label: group.name }))
+        .map((group) => ({
+          key: group.id,
+          label: group.name,
+          detail: `Room · ${group.devices?.length ?? 0} saved direct devices · ${group.id}`,
+        }))
         .sort((left, right) => left.label.localeCompare(right.label)),
     [groups],
   );
@@ -202,14 +251,9 @@ export default function SceneDetailPage() {
   const coordinator = useSectionEditCoordinator();
   // Collections keep exactly one row editor open.
   const [openTargetKey, setOpenTargetKey] = useState<string | null>(null);
-  const deviceEditor = useSectionEditor<Scene>({
+  const targetEditor = useSectionEditor<Scene>({
     item: scene,
-    fields: DEVICE_FIELDS,
-    save: saveSection,
-  });
-  const roomEditor = useSectionEditor<Scene>({
-    item: scene,
-    fields: ROOM_FIELDS,
+    fields: TARGET_FIELDS,
     save: saveSection,
   });
   const scriptEditor = useSectionEditor<Scene>({
@@ -218,11 +262,7 @@ export default function SceneDetailPage() {
     save: saveSection,
   });
 
-  const dirty =
-    detailEditor.dirty ||
-    deviceEditor.dirty ||
-    roomEditor.dirty ||
-    scriptEditor.dirty;
+  const dirty = detailEditor.dirty || targetEditor.dirty || scriptEditor.dirty;
   useDirtyNavigationGuard(dirty);
 
   useAssistantPageContext(
@@ -231,10 +271,21 @@ export default function SceneDetailPage() {
       : { kind: 'scene' },
   );
 
+  useEffect(() => {
+    if (loading || (activeSection !== 'devices' && activeSection !== 'rooms')) {
+      return;
+    }
+    openSection('targets', { target });
+  }, [activeSection, loading, openSection, target]);
+
   const headingRefs = useRef<Record<string, HTMLElement | null>>({});
   useEffect(() => {
     if (!activeSection || loading) return;
-    const node = headingRefs.current[activeSection];
+    const headingId =
+      activeSection === 'devices' || activeSection === 'rooms'
+        ? 'targets'
+        : activeSection;
+    const node = headingRefs.current[headingId];
     if (node) {
       node.focus();
       node.scrollIntoView({ block: 'start' });
@@ -242,15 +293,19 @@ export default function SceneDetailPage() {
   }, [activeSection, loading]);
 
   useEffect(() => {
-    if (!target || loading) return;
-    const node = document.querySelector<HTMLElement>(
-      `[data-target-key="${CSS.escape(target)}"]`,
-    );
-    if (node) {
+    if (!target || !urlTargetRevealKey || loading) return;
+    const frame = window.requestAnimationFrame(() => {
+      const node = Array.from(
+        document.querySelectorAll<HTMLElement>(
+          '#targets-body [data-target-key]',
+        ),
+      ).find((entry) => entry.dataset.targetKey === target);
+      if (!node) return;
       node.scrollIntoView({ block: 'center' });
-      node.querySelector<HTMLElement>('button, a, input')?.focus();
-    }
-  }, [loading, target]);
+      (node.querySelector<HTMLElement>('button, a, input') ?? node).focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loading, target, urlTargetRevealKey]);
 
   if (loading) {
     return (
@@ -286,23 +341,6 @@ export default function SceneDetailPage() {
     scene.group_state_order,
   );
 
-  const resolvedAll = [
-    ...deviceTargets.map(([key, config]) => ({
-      key,
-      kind: 'device' as const,
-      config,
-    })),
-    ...roomTargets.map(([key, config]) => ({
-      key,
-      kind: 'group' as const,
-      config,
-    })),
-  ];
-
-  // What the engine would actually apply: rooms first, then devices, with the
-  // last writer per device winning.
-  const visibleEffectCount = showAllEffects ? Number.POSITIVE_INFINITY : 8;
-
   const effects = resolveSceneEffects(scene, {
     sourceAliases,
     devices,
@@ -322,12 +360,17 @@ export default function SceneDetailPage() {
     resolveSceneLink: (sceneId) => scenes.find((entry) => entry.id === sceneId),
   });
 
+  // Group resolved device requests by the target and shared outcome. Brightness
+  // can vary within a room, so retain each exact value for the compact summary.
+  const groupedEffects = groupSceneEffectOutcomes(effects.finalByDevice);
+  const visibleEffectCount = showAllEffects ? Number.POSITIVE_INFINITY : 4;
+
   const activate = async () => {
     setActivating(true);
     try {
       await triggerScene(apiEndpoint, scene.id);
       announce(
-        'Applied to the server’s runtime state. Devices confirm as they report.',
+        'Accepted by homectl. Devices confirm as they report.',
         'success',
       );
     } catch (activationError) {
@@ -343,16 +386,16 @@ export default function SceneDetailPage() {
   };
 
   const updateDevices = (next: TargetDraft) =>
-    deviceEditor.patch({ device_states: next });
+    targetEditor.patch({ device_states: next });
   const updateRooms = (next: TargetDraft, order?: string[]) =>
-    roomEditor.patch({
+    targetEditor.patch({
       group_states: next,
       ...(order ? { group_state_order: order } : {}),
     });
 
-  const roomOrder = roomEditor.draft?.group_state_order?.length
-    ? roomEditor.draft.group_state_order
-    : Object.keys(roomEditor.draft?.group_states ?? {});
+  const roomOrder = targetEditor.draft?.group_state_order?.length
+    ? targetEditor.draft.group_state_order
+    : Object.keys(targetEditor.draft?.group_states ?? {});
 
   const moveRoom = (key: string, delta: number) => {
     const ordered = [...roomOrder];
@@ -361,7 +404,17 @@ export default function SceneDetailPage() {
     const nextIndex = index + delta;
     if (nextIndex < 0 || nextIndex >= ordered.length) return;
     ordered.splice(nextIndex, 0, ...ordered.splice(index, 1));
-    updateRooms(roomEditor.draft?.group_states ?? {}, ordered);
+    updateRooms(targetEditor.draft?.group_states ?? {}, ordered);
+  };
+
+  const beginAddingTarget = () => {
+    const begin = () => {
+      targetEditor.begin();
+      setAddingTarget(true);
+      openSection('targets', { target: null });
+    };
+    if (coordinator) coordinator.requestBegin('targets', begin);
+    else begin();
   };
 
   const targetRow = (
@@ -369,8 +422,14 @@ export default function SceneDetailPage() {
     kind: 'device' | 'group',
     config: SceneDeviceConfig,
   ) => {
+    const resolvedTarget = effects.targets.find(
+      (entry) => entry.key === key && entry.kind === kind,
+    );
     const descriptor = describeSceneTarget(key, { kind }, config, {
       sceneIds,
+      sceneNames,
+      groupNames,
+      deviceNames,
       deviceKeys: knownDeviceKeys,
       aliases: sourceAliases,
     });
@@ -378,24 +437,112 @@ export default function SceneDetailPage() {
       kind === 'device'
         ? (devices[key]?.name ?? key)
         : (groups.find((group) => group.id === key)?.name ?? key);
+    const missingReferenceKey =
+      kind === 'device' &&
+      knownDeviceKeys !== undefined &&
+      !knownDeviceKeys.includes(key)
+        ? key
+        : kind === 'group' && !groups.some((group) => group.id === key)
+          ? key
+          : 'integration_id' in config && descriptor.unresolvedReason
+            ? getSceneDeviceLinkTargetKey(config)
+            : 'scene_id' in config && descriptor.unresolvedReason
+              ? config.scene_id
+              : null;
+    const linkedIssues = resolvedTarget?.linkedIssues ?? [];
 
     return (
-      <div className="space-y-2" data-target-key={key}>
-        {/* One line per target: name, then what it resolves to. */}
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="min-w-0 truncate text-sm font-medium">{label}</span>
-          <span aria-hidden className="text-muted-foreground">
-            →
+      <div className="min-w-0 space-y-2" data-target-key={key} tabIndex={-1}>
+        <p className="text-sm leading-5">
+          <span className="font-medium">{label}</span>
+          <span className="text-muted-foreground"> · </span>
+          <span className="text-foreground/80">
+            {modeLabel(descriptor.mode)}: {descriptor.summary}
           </span>
-          <span className="min-w-0 truncate text-sm text-foreground/80">
-            {descriptor.summary}
-          </span>
-        </div>
+        </p>
         {descriptor.unresolvedReason ? (
-          <p className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
-            <AlertTriangle aria-hidden className="size-3 shrink-0" />
-            {descriptor.unresolvedReason}
-          </p>
+          <div className="space-y-2 rounded-xl border border-amber-500/35 bg-amber-500/5 p-3 text-sm">
+            <p className="flex items-start gap-2 text-amber-800 dark:text-amber-200">
+              <AlertTriangle aria-hidden className="mt-0.5 size-4 shrink-0" />
+              <span>
+                {descriptor.unresolvedReason}
+                {missingReferenceKey ? (
+                  <span className="mt-1 block break-all font-mono text-xs">
+                    {missingReferenceKey}
+                  </span>
+                ) : null}
+              </span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <a
+                href="#targets-change"
+                className="inline-flex min-h-11 items-center rounded-lg px-3 font-medium text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Change targets below
+              </a>
+              {missingReferenceKey ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="ghost"
+                  className="min-h-11"
+                  onClick={() => {
+                    void navigator.clipboard
+                      .writeText(missingReferenceKey)
+                      .then(() => announce('Saved key copied', 'success'))
+                      .catch(() =>
+                        announce('Could not copy the saved key', 'error'),
+                      );
+                  }}
+                >
+                  Copy key
+                </Button>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+        {resolvedTarget && resolvedTarget.missingMembers.length > 0 ? (
+          <div className="rounded-xl border border-amber-500/35 bg-amber-500/5 p-3 text-sm">
+            <p className="text-amber-800 dark:text-amber-200">
+              {resolvedTarget.missingMembers.length} saved room member
+              {resolvedTarget.missingMembers.length === 1 ? '' : 's'} are
+              unavailable. Their keys remain saved in this room.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs">
+              {resolvedTarget.missingMembers.map((memberKey) => (
+                <li key={memberKey} className="break-all font-mono">
+                  {memberKey}
+                </li>
+              ))}
+            </ul>
+            <Link
+              to={`/config/groups/${encodeURIComponent(key)}?section=devices`}
+              className="mt-2 inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Repair room devices
+            </Link>
+          </div>
+        ) : null}
+        {linkedIssues.length > 0 && 'scene_id' in config ? (
+          <div className="rounded-xl border border-amber-500/35 bg-amber-500/5 p-3 text-sm">
+            <p className="text-amber-800 dark:text-amber-200">
+              The linked scene has {linkedIssues.length} unavailable saved
+              reference{linkedIssues.length === 1 ? '' : 's'}.
+            </p>
+            <ul className="mt-2 space-y-1 text-xs text-amber-800 dark:text-amber-200">
+              {linkedIssues.map((issue) => (
+                <li key={issue} className="break-words">
+                  {issue}
+                </li>
+              ))}
+            </ul>
+            <Link
+              to={`/config/scenes/${encodeURIComponent(config.scene_id)}?section=targets`}
+              className="mt-2 inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Review linked scene targets
+            </Link>
+          </div>
         ) : null}
         <details className="text-xs text-muted-foreground">
           <summary className="cursor-pointer">Details</summary>
@@ -420,13 +567,16 @@ export default function SceneDetailPage() {
             ) : null}
           </dl>
         </details>
-        <SceneResolvedColorPreview
-          config={config}
-          devices={devices}
-          scenes={scenes}
-          targetKey={key}
-          targetKind={kind}
-        />
+        {descriptor.mode === 'state' &&
+        descriptor.summary !== 'No state set' ? (
+          <SceneResolvedColorPreview
+            config={config}
+            devices={devices}
+            scenes={scenes}
+            targetKey={key}
+            targetKind={kind}
+          />
+        ) : null}
       </div>
     );
   };
@@ -439,76 +589,152 @@ export default function SceneDetailPage() {
   ) => {
     const entries = orderedSceneTargets(items, order);
     return (
-      <div className="space-y-4">
-        {entries.map(([key, config], index) => {
-          const label =
-            kind === 'device'
-              ? (devices[key]?.name ?? key)
-              : (groups.find((group) => group.id === key)?.name ?? key);
-          return (
-            <div key={key} data-target-key={key}>
-              <SceneTargetConfigEditor
-                targetKey={key}
-                targetLabel={label}
-                config={config}
-                devices={devices}
-                allScenes={scenes}
-                scenes={scenes.filter((candidate) => candidate.id !== scene.id)}
-                targetKind={kind}
-                onChange={(next) => onChange({ ...items, [key]: next })}
-                onRemove={() => {
-                  const copy = { ...items };
-                  delete copy[key];
-                  onChange(copy);
-                }}
-                {...(kind === 'group'
-                  ? {
-                      position: index,
-                      targetCount: entries.length,
-                      onMoveUp: () => moveRoom(key, -1),
-                      onMoveDown: () => moveRoom(key, 1),
+      <div className="min-w-0 space-y-4">
+        <BoundedList
+          items={entries}
+          keyOf={([key]) => `${kind}:${key}`}
+          revealKey={
+            openTargetKey?.startsWith(`${kind}:`) ? openTargetKey : null
+          }
+          moreLabel={(remaining) =>
+            `Show ${Math.min(remaining, 30)} more ${kind === 'device' ? 'device' : 'room'} targets`
+          }
+          renderItem={([key, config], index) => {
+            const label =
+              kind === 'device'
+                ? (devices[key]?.name ?? key)
+                : (groups.find((group) => group.id === key)?.name ?? key);
+            const descriptor = describeSceneTarget(key, { kind }, config, {
+              sceneIds,
+              sceneNames,
+              groupNames,
+              deviceNames,
+              deviceKeys: knownDeviceKeys,
+              aliases: sourceAliases,
+            });
+            const unavailable = /no longer exists|not available/i.test(
+              descriptor.unresolvedReason ?? '',
+            );
+            const missingMembers =
+              kind === 'group'
+                ? (effects.targets.find(
+                    (target) => target.kind === 'group' && target.key === key,
+                  )?.missingMembers ?? [])
+                : [];
+            return (
+              <div data-target-key={key}>
+                <SceneTargetConfigEditor
+                  targetKey={key}
+                  targetLabel={label}
+                  config={config}
+                  devices={devices}
+                  groups={groups}
+                  allScenes={scenes}
+                  scenes={scenes.filter(
+                    (candidate) => candidate.id !== scene.id,
+                  )}
+                  targetKind={kind}
+                  onChange={(next) => onChange({ ...items, [key]: next })}
+                  onRemove={() => {
+                    const copy = { ...items };
+                    delete copy[key];
+                    if (kind === 'group') {
+                      updateRooms(
+                        copy,
+                        (order ?? Object.keys(items)).filter(
+                          (orderedKey) => orderedKey !== key,
+                        ),
+                      );
+                    } else {
+                      onChange(copy);
                     }
-                  : {})}
-                selected={openTargetKey === key}
-                onSelect={() =>
-                  setOpenTargetKey((current) => (current === key ? null : key))
-                }
-              />
-            </div>
-          );
-        })}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setAddingTarget(kind === 'device' ? 'device' : 'room')}
-        >
-          {kind === 'device' ? 'Add device target' : 'Add room target'}
-        </Button>
-        {addingTarget === (kind === 'device' ? 'device' : 'room') ? (
-          <AddSceneTargetModal
-            options={kind === 'device' ? deviceOptions : roomOptions}
-            existingKeys={Object.keys(items)}
-            onAdd={(targetKey) => {
-              onChange({
-                ...items,
-                [targetKey]:
-                  kind === 'device'
-                    ? { power: true, brightness: 1 }
-                    : { power: true, brightness: 0.8 },
-              });
-              setAddingTarget(null);
-              openSection(kind === 'device' ? 'devices' : 'rooms', {
-                target: targetKey,
-              });
-            }}
-            onClose={() => setAddingTarget(null)}
-          />
-        ) : null}
+                  }}
+                  {...(kind === 'group'
+                    ? {
+                        position: index,
+                        targetCount: entries.length,
+                        onMoveUp: () => moveRoom(key, -1),
+                        onMoveDown: () => moveRoom(key, 1),
+                      }
+                    : {})}
+                  selected={openTargetKey === `${kind}:${key}`}
+                  onSelect={() =>
+                    setOpenTargetKey((current) =>
+                      current === `${kind}:${key}` ? null : `${kind}:${key}`,
+                    )
+                  }
+                />
+                {unavailable ? (
+                  <p className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/35 bg-amber-500/5 p-2.5 text-xs text-amber-800 dark:text-amber-200">
+                    <AlertTriangle
+                      aria-hidden
+                      className="mt-0.5 size-3.5 shrink-0"
+                    />
+                    <span>
+                      {descriptor.unresolvedReason}. Open this row to choose a
+                      replacement or remove the saved target.
+                      <span className="mt-1 block break-all font-mono">
+                        {kind === 'device' ? key : label === key ? key : null}
+                      </span>
+                    </span>
+                  </p>
+                ) : null}
+                {missingMembers.length > 0 ? (
+                  <div className="mt-2 rounded-lg border border-amber-500/35 bg-amber-500/5 p-2.5 text-xs text-amber-800 dark:text-amber-200">
+                    <p>
+                      {missingMembers.length} saved room member
+                      {missingMembers.length === 1 ? '' : 's'} are unavailable:
+                    </p>
+                    <ul className="mt-1 space-y-1">
+                      {missingMembers.map((memberKey) => (
+                        <li key={memberKey} className="break-all font-mono">
+                          {memberKey}
+                        </li>
+                      ))}
+                    </ul>
+                    <Link
+                      to={`/config/groups/${encodeURIComponent(key)}?section=devices`}
+                      className="mt-2 inline-flex min-h-11 items-center font-medium text-primary underline-offset-4 hover:underline"
+                    >
+                      Repair room devices
+                    </Link>
+                  </div>
+                ) : null}
+              </div>
+            );
+          }}
+        />
       </div>
     );
   };
 
+  const targetSectionOpen =
+    activeSection === 'targets' ||
+    activeSection === 'devices' ||
+    activeSection === 'rooms';
+  const draftDeviceStates = targetEditor.draft?.device_states ?? {};
+  const draftGroupStates = targetEditor.draft?.group_states ?? {};
+  const selectedTargetKeys = [
+    ...Object.keys(draftDeviceStates).map((key) => `device:${key}`),
+    ...Object.keys(draftGroupStates).map((key) => `group:${key}`),
+  ];
+  const targetAddOptions: SceneTargetOption[] = [
+    ...deviceOptions.map((option) => ({ ...option, kind: 'device' as const })),
+    ...roomOptions.map((option) => ({ ...option, kind: 'group' as const })),
+  ];
+
+  const savedTargetRows = [
+    ...roomTargets.map(([key, config]) => ({
+      key,
+      config,
+      kind: 'group' as const,
+    })),
+    ...deviceTargets.map(([key, config]) => ({
+      key,
+      config,
+      kind: 'device' as const,
+    })),
+  ];
   const scriptPreview = (scene.script ?? '').trim();
 
   return (
@@ -522,19 +748,20 @@ export default function SceneDetailPage() {
       backLabel="Back to scenes"
       title={scene.name}
       status={
-        <>
-          {`${summary.deviceCount} device target${summary.deviceCount === 1 ? '' : 's'} · ${summary.groupCount} room target${summary.groupCount === 1 ? '' : 's'}`}
-          {effects.unresolvedCount > 0 ? (
-            <>
-              {' · '}
-              <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300">
-                <AlertTriangle aria-hidden className="size-3.5" />
-                {effects.unresolvedCount} saved reference
-                {effects.unresolvedCount === 1 ? '' : 's'} cannot be resolved
-              </span>
-            </>
-          ) : null}
-        </>
+        <span>
+          {scene.hidden ? 'Hidden · ' : ''}
+          {effects.unknownOutcomeCount > 0
+            ? effects.affectedDeviceCount > 0
+              ? `${effects.affectedDeviceCount} fallback device effect${effects.affectedDeviceCount === 1 ? '' : 's'}`
+              : 'Output depends on the current room scene'
+            : effects.scripted
+              ? effects.affectedDeviceCount > 0
+                ? `${effects.affectedDeviceCount} resolved device effect${effects.affectedDeviceCount === 1 ? '' : 's'} before script`
+                : 'Script output is not predicted'
+              : effects.affectedDeviceCount > 0
+                ? `${effects.affectedDeviceCount} device${effects.affectedDeviceCount === 1 ? '' : 's'} would be affected`
+                : 'This scene would change nothing'}
+        </span>
       }
       primaryAction={
         <Button
@@ -549,334 +776,213 @@ export default function SceneDetailPage() {
       <div className="space-y-4">
         <StatusRegion message={status?.message ?? null} tone={status?.tone} />
 
+        {effects.unresolvedCount > 0 ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-amber-500/35 bg-amber-500/5 px-3 py-2 text-sm text-amber-800 dark:text-amber-200">
+            <AlertTriangle aria-hidden className="size-4 shrink-0" />
+            <span>
+              {effects.unresolvedCount} saved reference
+              {effects.unresolvedCount === 1 ? '' : 's'} cannot be resolved;
+              activation would request changes for {effects.affectedDeviceCount}{' '}
+              available device{effects.affectedDeviceCount === 1 ? '' : 's'}.
+            </span>
+            <span className="w-full pl-6 text-xs text-amber-800/90 dark:text-amber-200/90">
+              Missing:{' '}
+              {[
+                effects.unresolvedByKind.directTargets > 0
+                  ? `${effects.unresolvedByKind.directTargets} device target${effects.unresolvedByKind.directTargets === 1 ? '' : 's'}`
+                  : null,
+                effects.unresolvedByKind.roomTargets > 0
+                  ? `${effects.unresolvedByKind.roomTargets} room target${effects.unresolvedByKind.roomTargets === 1 ? '' : 's'}`
+                  : null,
+                effects.unresolvedByKind.roomMembers > 0
+                  ? `${effects.unresolvedByKind.roomMembers} saved room member${effects.unresolvedByKind.roomMembers === 1 ? '' : 's'}`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="min-h-11 text-amber-900 underline dark:text-amber-100"
+              onClick={() => openSection('targets', { target: null })}
+            >
+              Review targets
+            </Button>
+          </p>
+        ) : null}
+
         <div className="rounded-2xl border border-border/70 bg-card p-4">
           <h2 className="text-sm font-semibold">
-            What activating would change
+            {effects.scripted
+              ? 'Saved targets before script'
+              : 'What activation would request'}
           </h2>
           {effects.targets.length === 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              This scene has no targets yet, so activating it would change
-              nothing. Add device or room targets below.
-            </p>
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-muted-foreground">
+                {effects.scripted
+                  ? 'This scene has no saved targets. Its script may create effects that are not predicted here.'
+                  : 'This scene has no targets yet, so activating it would change nothing.'}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={beginAddingTarget}
+              >
+                Add a target
+              </Button>
+            </div>
           ) : (
             <>
               <p className="mt-1 text-xs text-muted-foreground">
                 {effects.affectedDeviceCount === 0
-                  ? 'No device would change.'
-                  : `Affects ${effects.affectedDeviceCount} device${
-                      effects.affectedDeviceCount === 1 ? '' : 's'
-                    }.`}
-                {effects.unresolvedCount > 0
-                  ? ` ${effects.unresolvedCount} saved reference${
-                      effects.unresolvedCount === 1 ? '' : 's'
-                    } cannot be resolved and will be skipped (${[
-                      effects.unresolvedByKind.directTargets > 0
-                        ? `${effects.unresolvedByKind.directTargets} direct device target${
-                            effects.unresolvedByKind.directTargets === 1
-                              ? ''
-                              : 's'
-                          }`
-                        : null,
-                      effects.unresolvedByKind.roomTargets > 0
-                        ? `${effects.unresolvedByKind.roomTargets} room target${
-                            effects.unresolvedByKind.roomTargets === 1
-                              ? ''
-                              : 's'
-                          }`
-                        : null,
-                      effects.unresolvedByKind.roomMembers > 0
-                        ? `${effects.unresolvedByKind.roomMembers} device${
-                            effects.unresolvedByKind.roomMembers === 1
-                              ? ''
-                              : 's'
-                          } inside a room`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(', ')}).`
-                  : ''}
+                  ? effects.unknownOutcomeCount > 0
+                    ? 'The current scene in a linked room determines which devices receive requests.'
+                    : 'No available device would change.'
+                  : `${effects.affectedDeviceCount} available device${effects.affectedDeviceCount === 1 ? '' : 's'} match the saved target preview.`}
                 {effects.scripted
-                  ? ' Its script can override these values at runtime.'
+                  ? ' The script can override these saved targets when it runs.'
+                  : ''}
+                {effects.unknownOutcomeCount > 0
+                  ? ' A mirrored target may use a different current scene when activated.'
                   : ''}
               </p>
-              {effects.unresolvedCount > 0 ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-2"
-                  onClick={() => {
-                    const first = effects.targets.find(
-                      (target) => target.unresolvedReason !== null,
-                    );
-                    if (first) {
-                      openSection(first.kind === 'group' ? 'rooms' : 'devices', {
-                        target: first.key,
-                      });
-                    } else {
-                      // Only a room member is missing; the room target is where
-                      // the repair lives.
-                      openSection('rooms');
-                    }
-                  }}
-                >
-                  Review {effects.unresolvedCount} skipped reference
-                  {effects.unresolvedCount === 1 ? '' : 's'}
-                </Button>
-              ) : null}
 
               <ul className="mt-3 space-y-1.5">
-                {effects.finalByDevice
-                  .slice(0, visibleEffectCount)
-                  .map((entry) => {
-                    const winner = effects.targets.find(
-                      (target) =>
-                        target.label === entry.fromLabel &&
-                        target.devices.some(
-                          (device) => device.deviceKey === entry.deviceKey,
-                        ),
-                    );
-                    const replaced = winner?.devices.find(
-                      (device) =>
-                        device.deviceKey === entry.deviceKey &&
-                        device.overriddenBy,
-                    );
-                    return (
-                      <li
-                        key={entry.deviceKey}
-                        className="text-sm"
-                        data-target-key={entry.deviceKey}
-                      >
-                        <span className="text-foreground/90">
-                          {entry.deviceLabel}
-                        </span>{' '}
-                        <span aria-hidden className="text-muted-foreground">
-                          →
-                        </span>{' '}
-                        <span className="inline-flex items-center gap-1.5 align-middle">
-                          <span>
-                            {entry.changes.length > 0
-                              ? entry.changes.join(' · ')
-                              : 'no change'}
-                          </span>
-                          {entry.color ? (
-                            <ResolvedColorDot
-                              color={Color({
-                                h: entry.color.h,
-                                s: entry.color.s * 100,
-                                v: 100,
-                              })}
-                              isPowered
-                              label={entry.colorWords ?? 'colour set'}
-                              detail={colourDetail(
-                                entry.color,
-                                entry.colorWords,
-                              )}
-                            />
-                          ) : null}
+                {groupedEffects.slice(0, visibleEffectCount).map((group) => {
+                  const brightness = group.entries
+                    .map((entry) =>
+                      entry.changes.find((change) =>
+                        /^\d+(?:\.\d+)?%$/.test(change),
+                      ),
+                    )
+                    .filter((value): value is string => Boolean(value));
+                  const brightnessSummary = [...new Set(brightness)].join(
+                    ' and ',
+                  );
+                  const colorRgb = group.color ? colorToRgb(group.color) : null;
+                  const powered = !group.changes.includes('off');
+                  return (
+                    <li
+                      key={`${group.fromLabel}:${group.changes.join(',')}:${JSON.stringify(group.color)}`}
+                      className="rounded-lg px-2 py-1.5 text-sm even:bg-muted/30"
+                    >
+                      <p className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        <span className="font-medium">{group.fromLabel}</span>
+                        <span className="text-muted-foreground">
+                          {group.entries.length} device
+                          {group.entries.length === 1 ? '' : 's'}
                         </span>
-                        {replaced || entry.color ? (
-                          <details className="mt-0.5">
-                            <summary className="cursor-pointer text-xs text-muted-foreground">
-                              {replaced
-                                ? 'which target set this'
-                                : 'exact values'}
-                            </summary>
-                            <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
-                              {entry.color ? (
-                                <p>
-                                  Colour: {entry.colorWords ?? 'set'} —{' '}
-                                  {colourDetail(entry.color, null)}
-                                </p>
-                              ) : null}
-                              <p>
-                                Set by {entry.fromLabel}
-                                {replaced
-                                  ? `; the room setting it replaced came from ${replaced.overriddenBy}`
-                                  : ''}
-                                .
-                              </p>
-                            </div>
-                          </details>
+                        {group.color && powered ? (
+                          <ResolvedColorDot
+                            color={Color.rgb(
+                              colorRgb!.r,
+                              colorRgb!.g,
+                              colorRgb!.b,
+                            )}
+                            isPowered={powered}
+                            label={group.colorWords ?? 'color set'}
+                            detail={colourDetail(group.color, group.colorWords)}
+                          />
                         ) : null}
-                      </li>
-                    );
-                  })}
+                        <span className="text-foreground/85">
+                          {[
+                            ...group.changes,
+                            ...(brightnessSummary ? [brightnessSummary] : []),
+                          ].join(' · ') || 'no state change'}
+                        </span>
+                        {group.colorWords && powered ? (
+                          <span className="text-foreground/85">
+                            {group.colorWords}
+                          </span>
+                        ) : null}
+                      </p>
+                      {group.entries.length > 1 || group.color ? (
+                        <details className="mt-1">
+                          <summary className="cursor-pointer text-xs text-muted-foreground">
+                            Device details
+                          </summary>
+                          <div className="mt-1 space-y-1 text-xs text-muted-foreground">
+                            {group.color ? (
+                              <p>
+                                Color:{' '}
+                                {colourDetail(group.color, group.colorWords)}
+                              </p>
+                            ) : null}
+                            <ul className="space-y-0.5">
+                              {group.entries.slice(0, 40).map((entry) => (
+                                <li key={entry.deviceKey}>
+                                  {entry.deviceLabel}:{' '}
+                                  {entry.changes.join(' · ') ||
+                                    'no state change'}
+                                </li>
+                              ))}
+                              {group.entries.length > 40 ? (
+                                <li>
+                                  +{group.entries.length - 40} more devices
+                                </li>
+                              ) : null}
+                            </ul>
+                          </div>
+                        </details>
+                      ) : null}
+                    </li>
+                  );
+                })}
               </ul>
-              {effects.finalByDevice.length > visibleEffectCount ? (
+              {groupedEffects.length > visibleEffectCount ? (
                 <button
                   type="button"
-                  className="mt-2 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                  className="min-h-11 text-xs font-medium text-primary underline-offset-4 hover:underline"
                   onClick={() => setShowAllEffects(true)}
                 >
-                  Show all {effects.finalByDevice.length} devices
+                  Show all {groupedEffects.length} outcomes
                 </button>
               ) : null}
 
-              {effects.unresolvedCount > 0 ? (
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Activating now affects only the available devices listed
-                  above; the missing references are skipped.
-                </p>
+              {effects.overrideNotes.length > 0 ? (
+                <details className="mt-3">
+                  <summary className="min-h-11 cursor-pointer text-xs font-medium text-muted-foreground">
+                    When targets overlap
+                  </summary>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    {effects.overrideNotes.map((note, index) => (
+                      <li key={`${index}:${note}`}>{note}</li>
+                    ))}
+                  </ul>
+                </details>
               ) : null}
-
-              <details className="mt-3">
-                <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                  Show the saved targets ({effects.targets.length})
-                </summary>
-                <ul className="mt-2 space-y-2">
-                  {effects.targets.map((target) => (
-                    <li
-                      key={`${target.kind}:${target.key}`}
-                      className="rounded-xl border border-border/70 bg-background/60 p-2.5"
-                    >
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="text-sm font-medium">
-                          {target.label}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {target.kind === 'group' ? 'Room' : 'Device'}
-                        </span>
-                        {target.unresolvedReason ? (
-                          <span className="text-xs text-amber-700 dark:text-amber-300">
-                            {target.unresolvedReason}
-                          </span>
-                        ) : null}
-                      </div>
-                      {target.devices.length > 0 ? (
-                        <ul className="mt-1.5 space-y-1 text-xs">
-                          {target.devices.slice(0, 8).map((device) => (
-                            <li
-                              key={device.deviceKey}
-                              className="flex flex-wrap items-baseline gap-x-1.5"
-                            >
-                              <span className="text-foreground/85">
-                                {device.deviceLabel}
-                              </span>
-                              <span aria-hidden>→</span>
-                              <span>
-                                {target.unresolvedReason ? 'would set ' : ''}
-                                {device.changes.join(', ')}
-                              </span>
-                              {device.overriddenBy ? (
-                                <span className="text-muted-foreground">
-                                  (replaced by {device.overriddenBy})
-                                </span>
-                              ) : null}
-                            </li>
-                          ))}
-                          {target.devices.length > 8 ? (
-                            <li className="text-muted-foreground">
-                              +{target.devices.length - 8} more
-                            </li>
-                          ) : null}
-                        </ul>
-                      ) : null}
-                      {target.missingMembers.length > 0 ? (
-                        <p className="mt-1.5 text-xs text-amber-700 dark:text-amber-300">
-                          {target.missingMembers.length} saved member
-                          {target.missingMembers.length === 1 ? '' : 's'} no
-                          longer exist
-                          {target.missingMembers.length === 1 ? 's' : ''}:{' '}
-                          {target.missingMembers.join(', ')}
-                        </p>
-                      ) : null}
-                      {target.repair ? (
-                        <button
-                          type="button"
-                          className="mt-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
-                          onClick={() => {
-                            const begin =
-                              target.kind === 'group'
-                                ? roomEditor.begin
-                                : deviceEditor.begin;
-                            const sectionId =
-                              target.kind === 'group' ? 'rooms' : 'devices';
-                            if (coordinator) {
-                              coordinator.requestBegin(sectionId, begin);
-                            } else {
-                              begin();
-                            }
-                          }}
-                        >
-                          {target.repair}
-                        </button>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              </details>
             </>
           )}
         </div>
 
         <Section<Scene>
-          id="devices"
-          title="Device targets"
-          summary={
-            summary.deviceCount === 0
-              ? 'No device targets'
-              : `${summary.deviceCount} device target${summary.deviceCount === 1 ? '' : 's'}`
-          }
-          open={activeSection === 'devices'}
-          onOpenChange={(open) => openSection(open ? 'devices' : null)}
-          api={deviceEditor}
+          id="targets"
+          title="Targets"
+          summary={`${summary.groupCount} room · ${summary.deviceCount} device target${summary.deviceCount === 1 ? '' : 's'}${summary.groupCount > 1 ? ' · rooms apply in order' : ''}`}
+          open={targetSectionOpen}
+          onOpenChange={(open) => openSection(open ? 'targets' : null)}
+          api={targetEditor}
           changeLabel="Change targets"
           headingRef={(node) => {
-            headingRefs.current.devices = node;
+            headingRefs.current.targets = node;
           }}
           readView={
             <BoundedList
-              items={deviceTargets}
-              keyOf={([key]) => key}
-              emptyMessage="No device targets yet. Add one to give every device in this scene its own state."
-              renderItem={([key, config]) => targetRow(key, 'device', config)}
-            />
-          }
-          renderEditor={() => (
-            <ConfigFormSection
-              className="border-0 bg-transparent p-0 shadow-none"
-              description="Choose a target to change it, or add another."
-            >
-              {draftTargetEditor(
-                'device',
-                deviceEditor.draft?.device_states ?? {},
-                updateDevices,
-              )}
-            </ConfigFormSection>
-          )}
-        />
-
-        <Section<Scene>
-          id="rooms"
-          title="Room targets"
-          summary={
-            summary.groupCount === 0
-              ? 'No room targets'
-              : `${summary.groupCount} room target${summary.groupCount === 1 ? '' : 's'}${
-                  summary.groupCount > 1 ? ' · applied in order' : ''
-                }`
-          }
-          open={activeSection === 'rooms'}
-          onOpenChange={(open) => openSection(open ? 'rooms' : null)}
-          api={roomEditor}
-          changeLabel="Change targets"
-          headingRef={(node) => {
-            headingRefs.current.rooms = node;
-          }}
-          readView={
-            <BoundedList
-              items={roomTargets}
-              keyOf={([key]) => key}
-              emptyMessage="No room targets yet. Add a room to apply shared state to all of its devices."
-              renderItem={([key, config], index) => (
-                <div className="space-y-1">
-                  {index > 0 && roomTargets.length > 1 ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Overrides the room above for shared devices
+              items={savedTargetRows}
+              keyOf={(item) => `${item.kind}:${item.key}`}
+              revealKey={urlTargetRevealKey}
+              emptyMessage="No targets yet. Add a device or room to decide what this scene requests."
+              renderItem={({ key, config, kind }, index) => (
+                <div className="space-y-2">
+                  {kind === 'group' && index > 0 ? (
+                    <p className="text-xs text-muted-foreground">
+                      Later room targets win when rooms share a device.
                     </p>
                   ) : null}
-                  {targetRow(key, 'group', config)}
+                  {targetRow(key, kind, config)}
                 </div>
               )}
             />
@@ -886,16 +992,61 @@ export default function SceneDetailPage() {
               className="border-0 bg-transparent p-0 shadow-none"
               description={
                 roomTargets.length > 1
-                  ? 'Rooms apply in order. If two rooms share a device, the later room wins for it.'
-                  : 'Every device in this room gets the state below.'
+                  ? 'Room targets run in order, then direct device targets. Later targets win for shared devices.'
+                  : 'Room targets run first, then direct device targets.'
               }
             >
-              {draftTargetEditor(
-                'group',
-                roomEditor.draft?.group_states ?? {},
-                (next) => updateRooms(next, roomOrder),
-                roomOrder,
-              )}
+              <div className="space-y-5">
+                {roomTargets.length > 1 ? (
+                  <p className="text-xs text-muted-foreground">
+                    Reorder rooms only when their members overlap. Direct device
+                    targets always run after rooms.
+                  </p>
+                ) : null}
+                <div className="grid gap-3 md:grid-cols-2">
+                  {draftTargetEditor(
+                    'group',
+                    draftGroupStates,
+                    (next) => updateRooms(next, roomOrder),
+                    roomOrder,
+                  )}
+                  {draftTargetEditor(
+                    'device',
+                    draftDeviceStates,
+                    updateDevices,
+                  )}
+                </div>
+                <div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setAddingTarget(true)}
+                  >
+                    Add device or room
+                  </Button>
+                  {addingTarget ? (
+                    <AddSceneTargetModal
+                      options={targetAddOptions}
+                      existingKeys={selectedTargetKeys}
+                      onAdd={(key, kind) => {
+                        const targetKind = kind ?? 'device';
+                        if (targetKind === 'device') {
+                          updateDevices({ ...draftDeviceStates, [key]: {} });
+                        } else {
+                          updateRooms({ ...draftGroupStates, [key]: {} }, [
+                            ...roomOrder,
+                            key,
+                          ]);
+                        }
+                        setOpenTargetKey(`${targetKind}:${key}`);
+                        setAddingTarget(false);
+                        openSection('targets', { target: key });
+                      }}
+                      onClose={() => setAddingTarget(false)}
+                    />
+                  ) : null}
+                </div>
+              </div>
             </ConfigFormSection>
           )}
         />

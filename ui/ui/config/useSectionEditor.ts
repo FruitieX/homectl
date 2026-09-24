@@ -21,7 +21,7 @@ export type SectionEditorApi<T extends object> = {
   begin: () => void;
   patch: (values: Partial<T>) => void;
   cancel: () => void;
-  save: () => Promise<void>;
+  save: () => Promise<boolean>;
   /** Drop the draft and adopt the latest server values. */
   reload: () => void;
   /** Dismiss the conflict warning and keep editing the draft. */
@@ -116,11 +116,11 @@ export function useSectionEditor<T extends object>({
     draft !== null && baseline !== null && !deepEqual(draft, baseline);
 
   const saveDraft = useCallback(async () => {
-    if (!draft || !item) return;
+    if (!draft || !item) return false;
     const found = validate ? validate(draft) : [];
     if (found.length > 0) {
       setErrors(found);
-      return;
+      return false;
     }
     setErrors([]);
     setSaving(true);
@@ -132,6 +132,7 @@ export function useSectionEditor<T extends object>({
       setConflict(false);
       setConflictDismissed(false);
       onSaved?.();
+      return true;
     } catch (error) {
       // The network/server error is surfaced by the caller (which owns the
       // Retry affordance); keep the draft so nothing typed is lost.
@@ -141,6 +142,7 @@ export function useSectionEditor<T extends object>({
           message: error instanceof Error ? error.message : 'Save failed',
         },
       ]);
+      return false;
     } finally {
       setSaving(false);
     }

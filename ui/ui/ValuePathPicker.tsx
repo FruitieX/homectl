@@ -6,6 +6,8 @@ import { useValueHistory } from '@/hooks/useValueHistory';
 import { useAppConfig } from '@/hooks/appConfig';
 import type { ValueFieldInfo } from '@/bindings/ValueFieldInfo';
 import { formatUnknownReason } from '@/ui/routine-runtime';
+import { formatReading } from '@/lib/routineNarrative';
+import { Advanced } from '@/ui/primitives/advanced';
 
 const sensorFields: PickerOption[] = [
   { value: '/value', label: 'Sensor value' },
@@ -73,6 +75,7 @@ export function ValuePathPicker({
   path,
   onChange,
   onChooseValue,
+  onFieldInfo,
 }: {
   devices: DevicesState;
   deviceKey: string;
@@ -80,31 +83,46 @@ export function ValuePathPicker({
   path: string;
   onChange: (path: string) => void;
   onChooseValue?: (value: unknown) => void;
+  onFieldInfo?: (info: { path: string; type: string } | null) => void;
 }) {
-  const [custom, setCustom] = useState(false);
   const { history, error: historyError } = useValueHistory(deviceKey, path);
   const device = devices[deviceKey];
   const { apiEndpoint } = useAppConfig();
   const [serverFields, setServerFields] = useState<ValueFieldInfo[]>([]);
+  const [fieldsLoading, setFieldsLoading] = useState(false);
+  const [fieldsError, setFieldsError] = useState(false);
+  const [fieldsRequest, setFieldsRequest] = useState(0);
   useEffect(() => {
     setServerFields([]);
+    setFieldsError(false);
     if (!deviceKey || !device) {
+      setFieldsLoading(false);
       return;
     }
     const controller = new AbortController();
     const params = new URLSearchParams({ source_key: deviceKey });
+    setFieldsLoading(true);
     fetch(`${apiEndpoint}/api/v1/config/value-fields?${params}`, {
       signal: controller.signal,
     })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not load fields');
+        return response.json();
+      })
       .then((body) => {
         if (!controller.signal.aborted) setServerFields(body?.data ?? []);
       })
       .catch(() => {
-        if (!controller.signal.aborted) setServerFields([]);
+        if (!controller.signal.aborted) {
+          setServerFields([]);
+          setFieldsError(true);
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setFieldsLoading(false);
       });
     return () => controller.abort();
-  }, [apiEndpoint, deviceKey, device]);
+  }, [apiEndpoint, deviceKey, device, fieldsRequest]);
   const options = useMemo(() => {
     const base =
       device && 'Controllable' in device.data
@@ -157,13 +175,18 @@ export function ValuePathPicker({
     return atPath(state, path);
   })();
   const fieldStatus = serverFields.find((field) => field.path === path);
+  useEffect(() => {
+    onFieldInfo?.(
+      fieldStatus ? { path: fieldStatus.path, type: fieldStatus.type } : null,
+    );
+  }, [fieldStatus, onFieldInfo]);
   const current = fieldStatus
     ? fieldStatus.available
       ? fieldStatus.value
       : undefined
     : live;
   const shown =
-    current === undefined ? 'Unavailable now' : JSON.stringify(current);
+    current === undefined ? 'Unavailable now' : formatReading(path, current);
   return (
     <div className="space-y-2">
       <SearchablePicker
@@ -175,39 +198,59 @@ export function ValuePathPicker({
                 ...options,
               ]
         }
-        value={custom ? '' : path}
+        value={path}
         onChange={(next) => {
-          setCustom(false);
           onChange(next);
         }}
         placeholder={deviceKey ? 'Choose a field…' : 'Choose a device first…'}
       />
-      {custom || (path && !options.some((option) => option.value === path)) ? (
+      {fieldsLoading ? (
+        <p className="text-xs text-muted-foreground">
+          Loading available fields…
+        </p>
+      ) : null}
+      {fieldsError ? (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          Could not load the field list.
+          <button
+            type="button"
+            className="min-h-11 text-primary underline"
+            onClick={() => setFieldsRequest((current) => current + 1)}
+          >
+            Retry
+          </button>
+        </p>
+      ) : null}
+      <Advanced
+        label="Advanced custom path"
+        description="Enter a JSON pointer only when the field is not available in the list above."
+        summary={
+          path && !options.some((option) => option.value === path)
+            ? 'Needs review'
+            : undefined
+        }
+        openWhen={Boolean(
+          path && !options.some((option) => option.value === path),
+        )}
+      >
         <Input
           aria-label="Custom value path"
           value={path}
           onChange={(event) => onChange(event.target.value)}
           placeholder="/value"
-          className="font-mono"
+          className="min-h-11 font-mono"
         />
-      ) : null}
-      <button
-        type="button"
-        className="text-xs text-primary hover:underline"
-        onClick={() => setCustom((current) => !current)}
-      >
-        {custom ? 'Use suggested fields' : 'Enter a custom path'}
-      </button>
+      </Advanced>
       <p className="text-xs text-muted-foreground">
         Current value: <span className="font-mono">{shown}</span>
         {sourceKind === 'computed_source' ? ' · computed source' : ''}{' '}
         {canUseAsComparison(current) && onChooseValue && (
           <button
             type="button"
-            className="text-primary hover:underline"
+            className="min-h-11 text-primary underline"
             onClick={() => onChooseValue(current)}
           >
-            Use as expected value
+            Use this value
           </button>
         )}
       </p>
@@ -220,41 +263,42 @@ export function ValuePathPicker({
         </p>
       )}
       {history.length > 0 && (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">
-            Recent changes ({history.length})
-          </summary>
-          <ol className="mt-2 max-h-36 space-y-1 overflow-y-auto">
-            {history.slice(0, 20).map((entry, index) => (
-              <li
-                key={`${entry.changed_at_ms}-${index}`}
-                className="flex justify-between gap-2"
-              >
-                <span className="font-mono text-foreground">
-                  {JSON.stringify(entry.value)}
-                </span>
-                <span className="flex shrink-0 items-center gap-2">
-                  <time
-                    dateTime={new Date(
-                      Number(entry.changed_at_ms),
-                    ).toISOString()}
-                  >
-                    {new Date(Number(entry.changed_at_ms)).toLocaleString()}
-                  </time>
-                  {canUseAsComparison(entry.value) && onChooseValue && (
-                    <button
-                      type="button"
-                      className="text-primary hover:underline"
-                      onClick={() => onChooseValue(entry.value)}
+        <div className="space-y-1.5 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">Recent changes</p>
+          <ol className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-border/70 bg-background/60 p-2">
+            {[...history]
+              .sort((a, b) => Number(b.changed_at_ms) - Number(a.changed_at_ms))
+              .slice(0, 5)
+              .map((entry, index) => (
+                <li
+                  key={`${entry.changed_at_ms}-${index}`}
+                  className="flex justify-between gap-2"
+                >
+                  <span className="font-mono text-foreground">
+                    {JSON.stringify(entry.value)}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    <time
+                      dateTime={new Date(
+                        Number(entry.changed_at_ms),
+                      ).toISOString()}
                     >
-                      Use
-                    </button>
-                  )}
-                </span>
-              </li>
-            ))}
+                      {new Date(Number(entry.changed_at_ms)).toLocaleString()}
+                    </time>
+                    {canUseAsComparison(entry.value) && onChooseValue && (
+                      <button
+                        type="button"
+                        className="min-h-11 text-primary underline"
+                        onClick={() => onChooseValue(entry.value)}
+                      >
+                        Use this value
+                      </button>
+                    )}
+                  </span>
+                </li>
+              ))}
           </ol>
-        </details>
+        </div>
       )}
       {historyError && (
         <p className="text-xs text-muted-foreground">

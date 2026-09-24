@@ -10,6 +10,11 @@ import {
   useIntegrations,
 } from '@/hooks/useConfig';
 import { useDevicesState } from '@/hooks/websocket';
+import { configItemHref } from '@/lib/configItemHref';
+import {
+  deviceReachability,
+  hasCurrentRequestedMismatch,
+} from '@/lib/deviceReachability';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { Section } from '@/ui/config/Section';
 import { useSectionEditor } from '@/ui/config/useSectionEditor';
@@ -62,6 +67,11 @@ function readFieldValue(
   config: ConfigPatch,
 ): string {
   const value = getConfigPathValue(config, field.key);
+  if (field.kind === 'password') {
+    return value === undefined || value === null || value === ''
+      ? 'Not set'
+      : 'Stored secret (masked)';
+  }
   const option = field.options?.find(
     (candidate) => JSON.stringify(candidate.value) === JSON.stringify(value),
   );
@@ -168,7 +178,11 @@ export default function IntegrationDetailPage() {
     update,
     remove,
   } = useIntegrations();
-  const { data: schemas, error: schemasError } = useIntegrationConfigSchemas();
+  const {
+    data: schemas,
+    error: schemasError,
+    refetch: refetchSchemas,
+  } = useIntegrationConfigSchemas();
   const devices = useDevicesState();
   const { activeSection, openSection } = useSectionParams();
   const headingRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -190,7 +204,12 @@ export default function IntegrationDetailPage() {
   const health = useMemo(() => {
     const entry: {
       total: number;
-      notReporting: Array<{ key: string; label: string; lastReport?: number }>;
+      notReporting: Array<{
+        key: string;
+        label: string;
+        lastReport?: number;
+        reason: 'offline' | 'stale' | 'mismatch';
+      }>;
     } = { total: 0, notReporting: [] };
     for (const [key, device] of Object.entries(devices ?? {})) {
       const [integrationId] = key.split('/');
@@ -198,14 +217,25 @@ export default function IntegrationDetailPage() {
       entry.total += 1;
       const controllable =
         'Controllable' in device.data ? device.data.Controllable : undefined;
-      const availability = controllable?.availability;
-      if (availability && availability.online === false) {
+      if (!controllable) continue;
+      const availability = controllable.availability;
+      const report = controllable.last_report;
+      const reachability = deviceReachability(device);
+      const mismatch = hasCurrentRequestedMismatch(controllable);
+      const reason =
+        availability?.online === false
+          ? 'offline'
+          : reachability === 'stale'
+            ? 'stale'
+            : mismatch
+              ? 'mismatch'
+              : null;
+      if (reason) {
         entry.notReporting.push({
           key,
           label: device.name || (key.split('/')[1] ?? key),
-          lastReport:
-            (availability as { observed_at_ms?: number }).observed_at_ms ??
-            (availability as { last_report_ms?: number }).last_report_ms,
+          lastReport: report?.received_at_ms ?? availability?.observed_at_ms,
+          reason,
         });
       }
     }
@@ -220,7 +250,10 @@ export default function IntegrationDetailPage() {
     }
   }, [activeSection]);
 
-  const config = (integration?.config ?? {}) as ConfigPatch;
+  const config = useMemo(
+    () => (integration?.config ?? {}) as ConfigPatch,
+    [integration?.config],
+  );
   const schema: IntegrationConfigSchema | undefined = (schemas ?? []).find(
     (entry) => entry.plugin === integration?.plugin,
   );
@@ -239,6 +272,21 @@ export default function IntegrationDetailPage() {
       optionalSections.push(name);
     }
   }
+  const optionalSummary = (fields: IntegrationConfigFieldSchema[]) => {
+    const customized = fields.filter((field) => {
+      const value = getConfigPathValue(config, field.key);
+      if (value === undefined || value === null || value === '') return false;
+      return JSON.stringify(value) !== JSON.stringify(field.default_value);
+    });
+    if (customized.length === 0) {
+      return `${fields.length} optional field${fields.length === 1 ? '' : 's'} · defaults`;
+    }
+    const labels = customized
+      .slice(0, 2)
+      .map((field) => field.label)
+      .join(', ');
+    return `${customized.length} customized · ${labels}${customized.length > 2 ? ` +${customized.length - 2}` : ''}`;
+  };
   const missingFields = missingRequiredFieldLabels(schema, config);
   const profileError =
     integration?.plugin === 'mqtt' ? mqttProfileValidationError(config) : null;
@@ -271,6 +319,11 @@ export default function IntegrationDetailPage() {
       }
       await savePatch(parsed);
     },
+  });
+  const staticEditor = useSectionEditor<{ json: string }>({
+    item: { json: '' },
+    fields: ['json'],
+    save: async () => undefined,
   });
 
   const deleteConnection = () => {
@@ -333,6 +386,13 @@ export default function IntegrationDetailPage() {
   const enabled = integration.enabled ?? true;
   const notReporting = health.notReporting[0];
   const lastReport = describeLastReport(notReporting?.lastReport);
+  const issueText = notReporting
+    ? notReporting.reason === 'mismatch'
+      ? `${notReporting.label} reports a different state`
+      : notReporting.reason === 'offline'
+        ? `${notReporting.label} is reported offline`
+        : `${notReporting.label} has not reported recently`
+    : null;
 
   return (
     <DetailPageShell
@@ -351,25 +411,30 @@ export default function IntegrationDetailPage() {
               {enabled ? 'Enabled in configuration' : 'Disabled'}
             </Badge>
             <span className="text-sm text-muted-foreground">
-              {integration.plugin}
+              {schema?.name ?? integration.plugin}
             </span>
           </span>
           <span className="block text-muted-foreground">
             {enabled
-              ? 'The runtime starts this connection. Reachability is reported per device, not here.'
+              ? 'The runtime starts this connection.'
               : 'Disabled: the runtime does not start this connection.'}
           </span>
           {notReporting ? (
             <span className="block">
               <Link
                 className="underline underline-offset-2"
-                to={`/config/devices/${encodeURIComponent(notReporting.key)}`}
+                to={configItemHref('device', notReporting.key)}
               >
-                {notReporting.label} stopped reporting
+                {issueText}
                 {lastReport ? ` (last report ${lastReport})` : ''}
               </Link>
             </span>
-          ) : null}
+          ) : (
+            <span className="block text-muted-foreground">
+              No connection-wide status is available; reachability is reported
+              per device.
+            </span>
+          )}
         </>
       }
     >
@@ -381,17 +446,32 @@ export default function IntegrationDetailPage() {
         ) : null}
 
         {/* One next action, above the settings that need it. */}
-        <Alert>
-          <AlertDescription>
-            {schemasError
-              ? `Next step: reload this page. The plugin schema could not be loaded (${schemasError}), so the fields below may be incomplete.`
-              : missingFields.length > 0
-                ? `Next step: fill in ${missingFields[0]}${missingFields.length > 1 ? ` and ${missingFields.length - 1} more field${missingFields.length === 2 ? '' : 's'}` : ''}, then save.`
-                : profileError
-                  ? `Next step: ${profileError}`
-                  : 'All required fields are present. Saving applies the configuration to the running connection.'}
-          </AlertDescription>
-        </Alert>
+        {schemasError || missingFields.length > 0 || profileError ? (
+          <Alert>
+            <AlertDescription>
+              {schemasError ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span>
+                    Next step: reload the schema. Its fields could not be loaded
+                    ({schemasError}), so the form below may be incomplete.
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    onClick={() => void refetchSchemas()}
+                  >
+                    Reload schema
+                  </Button>
+                </div>
+              ) : missingFields.length > 0 ? (
+                `Next step: fill in ${missingFields[0]}${missingFields.length > 1 ? ` and ${missingFields.length - 1} more field${missingFields.length === 2 ? '' : 's'}` : ''}, then save.`
+              ) : (
+                profileError
+              )}
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <Section<{ enabled: boolean }>
           id="enabled"
@@ -457,7 +537,7 @@ export default function IntegrationDetailPage() {
               key={sectionId}
               id={sectionId}
               title={name}
-              summary={`${fields.length} optional field${fields.length === 1 ? '' : 's'}`}
+              summary={optionalSummary(fields)}
               fields={fields}
               config={config}
               save={savePatch}
@@ -474,7 +554,7 @@ export default function IntegrationDetailPage() {
           <ConfigFieldsSection
             id="advanced"
             title="Advanced settings"
-            summary={`${advancedFields.length} field${advancedFields.length === 1 ? '' : 's'}`}
+            summary={optionalSummary(advancedFields)}
             fields={advancedFields}
             config={config}
             save={savePatch}
@@ -529,7 +609,7 @@ export default function IntegrationDetailPage() {
           headingRef={(node) => {
             headingRefs.current.danger = node;
           }}
-          api={jsonEditor}
+          api={staticEditor}
           editable={false}
           danger
           readView={

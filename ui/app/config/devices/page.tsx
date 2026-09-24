@@ -20,11 +20,14 @@ import {
   useAssignCalibrationProfile,
 } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
+import { useValueHistory } from '@/hooks/useValueHistory';
 import { useDevicesState } from '@/hooks/websocket';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import { Breadcrumbs } from '@/ui/config/Breadcrumbs';
 import { getDeviceKey } from '@/lib/device';
+import { configItemHref } from '@/lib/configItemHref';
+import { hasCurrentRequestedMismatch } from '@/lib/deviceReachability';
 import {
   canCalibrateDevice,
   toggleSelectedKey,
@@ -57,6 +60,11 @@ import { BrightnessCalibrationWizard } from '@/ui/BrightnessCalibrationWizard';
 import { isDimmableDevice } from '@/lib/brightnessCalibration';
 import { ResolvedColorDot } from '@/ui/SceneResolvedColorPreview';
 import { ExpandableConfigCard } from '@/ui/ExpandableConfigCard';
+import { DetailPageShell } from '@/ui/config/DetailPageShell';
+import { Section } from '@/ui/config/Section';
+import { useSectionEditor } from '@/ui/config/useSectionEditor';
+import { useSectionParams } from '@/ui/config/useSectionParams';
+import { useDirtyNavigationGuard } from '@/ui/config/useDirtyNavigationGuard';
 import {
   ConfigField,
   ConfigFormSection,
@@ -436,6 +444,90 @@ const getStateSourceSummary = (
 const getGroupCountLabel = (groupNames: string[]) =>
   `${groupNames.length} group${groupNames.length === 1 ? '' : 's'}`;
 
+const formatObservedAt = (timestamp: number | null | undefined) => {
+  if (typeof timestamp !== 'number' || timestamp <= 0) return null;
+  const age = Math.max(0, Date.now() - timestamp);
+  const ageLabel =
+    age < 60_000
+      ? 'just now'
+      : age < 3_600_000
+        ? `${Math.floor(age / 60_000)}m ago`
+        : age < 86_400_000
+          ? `${Math.floor(age / 3_600_000)}h ago`
+          : `${Math.floor(age / 86_400_000)}d ago`;
+  return `${new Date(timestamp).toLocaleString()} (${ageLabel})`;
+};
+
+function SensorValueHistory({ sourceKey }: { sourceKey: string }) {
+  const { history, error } = useValueHistory(sourceKey, '/value');
+  const recent = [...history]
+    .sort(
+      (left, right) => Number(right.changed_at_ms) - Number(left.changed_at_ms),
+    )
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-2 border-t border-border/60 pt-3">
+      <h3 className="text-sm font-medium">Recent saved changes</h3>
+      {error ? (
+        <p className="text-sm text-muted-foreground">
+          Sensor history is unavailable right now.
+        </p>
+      ) : recent.length > 0 ? (
+        <ol className="space-y-2">
+          {recent.map((entry) => (
+            <li
+              key={entry.changed_at_ms}
+              className="flex flex-wrap justify-between gap-x-3 gap-y-1 text-sm"
+            >
+              <span className="font-medium">
+                {typeof entry.value === 'boolean'
+                  ? entry.value
+                    ? 'Active'
+                    : 'Inactive'
+                  : typeof entry.value === 'string'
+                    ? entry.value
+                    : JSON.stringify(entry.value)}
+              </span>
+              <time
+                className="text-xs text-muted-foreground"
+                dateTime={new Date(Number(entry.changed_at_ms)).toISOString()}
+              >
+                {formatObservedAt(Number(entry.changed_at_ms))}
+              </time>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          No sensor changes are retained yet.
+        </p>
+      )}
+    </div>
+  );
+}
+
+const describeState = (state: {
+  power: boolean;
+  brightness?: number | null;
+  color?: DeviceColor | null;
+}) => {
+  const parts = [state.power ? 'On' : 'Off'];
+  if (state.power && typeof state.brightness === 'number') {
+    parts.push(`${Math.round(state.brightness * 100)}%`);
+  }
+  if (state.power && state.color) {
+    parts.push(formatDeviceColor(state.color) ?? 'Color set');
+  }
+  return parts.join(' · ');
+};
+
+type DeviceDisplaySettings = { display_name: string };
+type DeviceSensorSettings = Pick<
+  DeviceSensorConfig,
+  'device_ref' | 'interaction_kind' | 'config'
+>;
+
 type SensorConfigFieldsProps = {
   kind: SensorInteractionKind;
   config: Record<string, string>;
@@ -591,6 +683,7 @@ export default function DevicesPage() {
   const requestedDeviceKey =
     searchParams.get('key') ?? searchParams.get('device');
   const detailKey = routeKey || requestedDeviceKey;
+  const { activeSection, target, openSection } = useSectionParams();
   const appliedDeviceRequest = useRef<string | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const resultsRef = useRef<HTMLSpanElement | null>(null);
@@ -620,6 +713,7 @@ export default function DevicesPage() {
     Record<string, string>
   >({});
   const [feedbackKey, setFeedbackKey] = useState<string | null>(null);
+  const [technicalOpen, setTechnicalOpen] = useState(false);
 
   useEffect(() => {
     setDisplayNameDrafts(
@@ -691,14 +785,12 @@ export default function DevicesPage() {
       ),
     [deviceSensorConfigs],
   );
-  const openDevice = useMemo(
-    () =>
-      openDeviceKey
-        ? (devices.find((device) => getDeviceKey(device) === openDeviceKey) ??
-          null)
-        : null,
-    [devices, openDeviceKey],
-  );
+  const openDevice = useMemo(() => {
+    const key = detailKey ?? openDeviceKey;
+    return key
+      ? (devices.find((device) => getDeviceKey(device) === key) ?? null)
+      : null;
+  }, [detailKey, devices, openDeviceKey]);
   useAssistantPageContext(
     openDevice && openDeviceKey
       ? {
@@ -869,9 +961,9 @@ export default function DevicesPage() {
           const deviceRef = getSensorConfigRef(device);
           const type = getDeviceType(device);
           const groupIds = groupIdsByDeviceKey[deviceKey] ?? [];
-          const groupNames = groupIds.map(
-            (groupId) => groups[groupId]?.name ?? groupId,
-          );
+          const groupNames = groupIds
+            .filter((groupId) => groupId !== 'all')
+            .map((groupId) => groups[groupId]?.name ?? groupId);
           const resolvedInteraction = resolveSensorInteraction(
             device,
             deviceSensorConfigMap[deviceRef] ?? null,
@@ -923,6 +1015,7 @@ export default function DevicesPage() {
           } satisfies VisibleDeviceEntry;
         })
         .filter((entry) => {
+          if (entry.deviceKey === detailKey) return true;
           if (deviceTypeFilter !== 'all' && entry.type !== deviceTypeFilter) {
             return false;
           }
@@ -965,6 +1058,7 @@ export default function DevicesPage() {
         ),
     [
       deviceDisplayNameMap,
+      detailKey,
       deviceGroupFilter,
       deviceIntegrationFilter,
       deviceSensorConfigMap,
@@ -983,10 +1077,74 @@ export default function DevicesPage() {
     [devices],
   );
   const batchDevices = useMemo(
-    () => visibleDevices.slice(0, visibleCount),
-    [visibleCount, visibleDevices],
+    () =>
+      detailKey
+        ? visibleDevices.filter((entry) => entry.deviceKey === detailKey)
+        : visibleDevices.slice(0, visibleCount),
+    [detailKey, visibleCount, visibleDevices],
   );
   const remainingDevices = visibleDevices.length - batchDevices.length;
+  const detailEntry = detailKey
+    ? (visibleDevices.find((entry) => entry.deviceKey === detailKey) ?? null)
+    : null;
+  const detailDevice = detailEntry?.device ?? null;
+  const detailDeviceKey = detailEntry?.deviceKey ?? '';
+  const detailDeviceRef = detailEntry?.deviceRef ?? '';
+  const displayNameEditor = useSectionEditor<DeviceDisplaySettings>({
+    item: detailDevice
+      ? { display_name: deviceDisplayNameMap[detailDeviceKey] ?? '' }
+      : null,
+    fields: ['display_name'],
+    save: async (merged) => {
+      const displayName = merged.display_name.trim();
+      if (!displayName) {
+        if (deviceDisplayNameMap[detailDeviceKey]) {
+          await removeDeviceDisplayName(detailDeviceKey);
+        }
+      } else if (displayName !== deviceDisplayNameMap[detailDeviceKey]) {
+        await updateDeviceDisplayName(detailDeviceKey, {
+          device_key: detailDeviceKey,
+          display_name: displayName,
+        });
+      }
+    },
+  });
+  const savedSensorSettings = detailDevice
+    ? (deviceSensorConfigMap[detailDeviceRef] ??
+      createEmptySensorConfig(detailDeviceRef))
+    : null;
+  const sensorSettingsEditor = useSectionEditor<DeviceSensorSettings>({
+    item:
+      detailDevice && 'Sensor' in detailDevice.data
+        ? savedSensorSettings
+        : null,
+    fields: ['interaction_kind', 'config'],
+    save: async (merged) => {
+      const kind = normalizeSensorInteractionKind(merged.interaction_kind);
+      const config = normalizeSensorInteractionConfig(kind, merged.config);
+      const existing = deviceSensorConfigMap[detailDeviceRef];
+      if (kind === 'auto') {
+        if (existing) await removeDeviceSensorConfig(detailDeviceRef);
+      } else {
+        await updateDeviceSensorConfig(detailDeviceRef, {
+          device_ref: detailDeviceRef,
+          interaction_kind: kind,
+          config,
+        });
+      }
+    },
+  });
+  const staticSectionEditor = useSectionEditor<{ marker: string }>({
+    item: detailDevice ? { marker: 'read-only' } : null,
+    fields: ['marker'],
+    save: async () => undefined,
+  });
+  useDirtyNavigationGuard(
+    displayNameEditor.dirty || sensorSettingsEditor.dirty,
+  );
+  const openConfigSection = (id: string, open: boolean) => {
+    openSection(open ? id : null);
+  };
 
   useEffect(() => {
     setVisibleCount(30);
@@ -1308,6 +1466,590 @@ export default function DevicesPage() {
       <div className="flex h-full items-center justify-center">
         <Skeleton className="size-12 rounded-full" />
       </div>
+    );
+  }
+
+  if (detailKey) {
+    if (!detailEntry) {
+      return (
+        <DetailPageShell
+          crumbs={[
+            { label: 'Devices', to: '/config/devices' },
+            { label: detailKey },
+          ]}
+          backTo="/config/devices"
+          title="Device"
+          notFound
+          notFoundMessage={`No current device matches ${detailKey}. It may have been removed or renamed.`}
+        />
+      );
+    }
+
+    const {
+      activeSceneId,
+      capabilityLabels,
+      defaultLabel,
+      device,
+      deviceKey,
+      deviceRef,
+      groupNames,
+      label,
+      manageLabel,
+      resolvedInteraction,
+      runtimeSummary,
+      sensorDetails,
+      stateSource,
+    } = detailEntry;
+    const controllable =
+      'Controllable' in device.data ? device.data.Controllable : null;
+    const report = controllable?.last_report ?? null;
+    const requested = controllable?.state ?? null;
+    const reported = report?.state ?? null;
+    const stateDiffers = controllable
+      ? hasCurrentRequestedMismatch(controllable)
+      : false;
+    const currentLabel = deviceDisplayNameMap[deviceKey] ?? '';
+    const sensorDraft = sensorSettingsEditor.draft ?? savedSensorSettings;
+    const sensorKind = normalizeSensorInteractionKind(
+      sensorDraft?.interaction_kind,
+    );
+    const sensorConfig = normalizeSensorInteractionConfig(
+      sensorKind,
+      sensorDraft?.config ?? {},
+    );
+    const calibrationAssignment = calibrationAssignments.find(
+      (row) => row.device_key === deviceKey,
+    );
+    const assignedProfile = calibrationProfiles.find(
+      (profile) => profile.id === calibrationAssignment?.profile_id,
+    );
+    const resolvedCalibration = deviceColorCalibrations.find(
+      (row) => row.device_key === deviceKey,
+    );
+    const calibratedChannels = [
+      (assignedProfile?.points?.length ?? 0) > 0 ? 'color' : null,
+      (assignedProfile?.brightness_points?.length ?? 0) > 0
+        ? 'brightness'
+        : null,
+    ].filter(Boolean);
+    const isCalibratable =
+      canCalibrateDevice(device) || isDimmableDevice(device);
+    const status = controllable
+      ? [
+          controllable.availability
+            ? `${controllable.availability.online ? 'Available' : 'Offline'} · observed ${formatObservedAt(controllable.availability.observed_at_ms) ?? 'at an unknown time'}`
+            : 'Availability status unknown',
+          report
+            ? `${stateDiffers ? 'Latest report differs from the request' : report.retained ? 'Latest report is cached' : 'Latest integration report'} · received ${formatObservedAt(report.received_at_ms) ?? 'at an unknown time'}`
+            : 'No integration report yet',
+        ].join(' · ')
+      : `Current sensor reading · ${runtimeSummary}`;
+    const roomStatus =
+      groupNames.length > 0
+        ? `Rooms: ${groupNames.slice(0, 2).join(', ')}${
+            groupNames.length > 2 ? ` +${groupNames.length - 2}` : ''
+          }`
+        : null;
+    const liveStateSummary = requested
+      ? describeState(requested)
+      : runtimeSummary;
+
+    return (
+      <DetailPageShell
+        crumbs={[{ label: 'Devices', to: '/config/devices' }, { label }]}
+        backTo="/config/devices"
+        title={label}
+        status={roomStatus ? `${roomStatus} · ${status}` : status}
+      >
+        {error || notice ? (
+          <Alert variant={error ? 'destructive' : 'default'}>
+            <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+              <span>{error ?? notice}</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11"
+                onClick={() => {
+                  setError(null);
+                  setNotice(null);
+                }}
+              >
+                Dismiss
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {controllable ? (
+          <section className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
+            <div className="mb-4 space-y-1">
+              <h2 className="text-base font-semibold">Control now</h2>
+              <p className="text-sm text-muted-foreground">
+                These controls send an immediate request. A successful response
+                means homectl accepted it; the next integration report is the
+                separate evidence of device state.
+              </p>
+            </div>
+            {stateDiffers ? (
+              <Alert className="mb-4">
+                <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                  <span>
+                    Requested {describeState(requested!)}; the integration
+                    reported {describeState(reported!)} at{' '}
+                    {formatObservedAt(report?.received_at_ms) ??
+                      'an unknown time'}
+                    .
+                  </span>
+                  <Button
+                    asChild
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                  >
+                    <Link
+                      to={configItemHref('integration', device.integration_id)}
+                    >
+                      Inspect {device.integration_id}
+                    </Link>
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <DeviceQuickControls devices={[device]} showExactBrightness />
+          </section>
+        ) : (
+          <section className="rounded-2xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
+            <h2 className="text-base font-semibold">Current reading</h2>
+            <p className="mt-2 text-sm">{runtimeSummary}</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Field shape: {sensorDetails.kind}. Sensor values are shown as
+              received; this integration does not provide a reading timestamp
+              here.
+            </p>
+            <SensorValueHistory sourceKey={deviceKey} />
+          </section>
+        )}
+
+        <Section
+          id="reports"
+          title="What it reports"
+          summary={controllable ? liveStateSummary : runtimeSummary}
+          open={activeSection === 'reports' || activeSection === null}
+          onOpenChange={(open) => openConfigSection('reports', open)}
+          api={staticSectionEditor}
+          editable={false}
+          readView={
+            controllable ? (
+              <div className="space-y-3">
+                <DeviceFactRow
+                  label="Requested"
+                  value={describeState(controllable.state)}
+                />
+                <DeviceFactRow
+                  label="Requested at"
+                  value={
+                    formatObservedAt(controllable.requested_at_ms) ??
+                    'No request timestamp recorded'
+                  }
+                />
+                {report ? (
+                  <>
+                    <DeviceFactRow
+                      label={
+                        report.retained ? 'Cached report' : 'Integration report'
+                      }
+                      value={describeState(report.state)}
+                    />
+                    <DeviceFactRow
+                      label="Reported at"
+                      value={
+                        formatObservedAt(report.received_at_ms) ??
+                        'Time unknown'
+                      }
+                    />
+                    <DeviceFactRow
+                      label="Report match"
+                      value={
+                        report.retained
+                          ? 'Cached report; it does not confirm the latest request'
+                          : report.received_at_ms <
+                              (controllable.requested_at_ms ?? 0)
+                            ? 'This report predates the latest request'
+                            : report.matches_requested
+                              ? 'Matches the request'
+                              : 'Differs from the request'
+                      }
+                    />
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No integration report yet. There is no reported state to
+                    compare with the request.
+                  </p>
+                )}
+                {controllable.availability ? (
+                  <DeviceFactRow
+                    label="Availability"
+                    value={`${controllable.availability.online ? 'Online' : 'Offline'} · observed ${formatObservedAt(controllable.availability.observed_at_ms) ?? 'at an unknown time'}`}
+                  />
+                ) : (
+                  <DeviceFactRow label="Availability" value="Status unknown" />
+                )}
+                {activeSceneId ? (
+                  <DeviceFactRow
+                    label="Active scene"
+                    value={getSceneLabel(activeSceneId, sceneNameById)}
+                  />
+                ) : null}
+                {stateSource ? (
+                  <DeviceFactRow
+                    label="State source"
+                    value={
+                      getStateSourceSummary(
+                        stateSource,
+                        activeSceneId,
+                        sceneNameById,
+                        groupNameById,
+                      ).description
+                    }
+                  />
+                ) : null}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <DeviceFactRow label="Current value" value={runtimeSummary} />
+                <DeviceFactRow
+                  label="Payload shape"
+                  value={sensorDetails.kind}
+                />
+                <DeviceFactRow
+                  label="Sensor display"
+                  value={getSensorInteractionLabel(resolvedInteraction.kind)}
+                />
+                <p className="text-sm text-muted-foreground">
+                  This integration does not include a timestamp or retained flag
+                  for sensor values in the current device payload.
+                </p>
+              </div>
+            )
+          }
+          renderEditor={() => null}
+          actions={
+            <Button asChild variant="ghost" size="sm" className="min-h-11">
+              <Link
+                to={`/config/routine-history?q=${encodeURIComponent(deviceKey)}`}
+              >
+                Search routine history
+              </Link>
+            </Button>
+          }
+        />
+
+        <Section
+          id="display-name"
+          title="Display name"
+          summary={currentLabel || `Using integration label · ${defaultLabel}`}
+          open={activeSection === 'display-name'}
+          onOpenChange={(open) => openConfigSection('display-name', open)}
+          api={displayNameEditor}
+          changeLabel="Change display name"
+          readView={
+            <DeviceFactRow
+              label={currentLabel ? 'Custom label' : 'Integration label'}
+              value={currentLabel || defaultLabel}
+            />
+          }
+          fieldLabels={{ display_name: 'Display name' }}
+          renderEditor={(api) => (
+            <div className="space-y-3">
+              <ConfigField label="Name shown in homectl" className="max-w-xl">
+                <Input
+                  data-field="display_name"
+                  value={api.draft?.display_name ?? ''}
+                  placeholder={defaultLabel}
+                  maxLength={120}
+                  onChange={(event) =>
+                    api.patch({ display_name: event.target.value })
+                  }
+                />
+              </ConfigField>
+              <p className="text-sm text-muted-foreground">
+                Clear this field to return to the integration label.
+              </p>
+            </div>
+          )}
+        />
+
+        {'Sensor' in device.data ? (
+          <Section
+            id="sensor-mapping"
+            title="Sensor display"
+            summary={getSensorInteractionLabel(resolvedInteraction.kind)}
+            open={activeSection === 'sensor-mapping'}
+            onOpenChange={(open) => openConfigSection('sensor-mapping', open)}
+            api={sensorSettingsEditor}
+            changeLabel="Change sensor display"
+            readView={
+              <div className="space-y-3">
+                <DeviceFactRow
+                  label="Display mode"
+                  value={getSensorInteractionLabel(resolvedInteraction.kind)}
+                />
+                <DeviceFactRow
+                  label="Mapping source"
+                  value={
+                    resolvedInteraction.source === 'saved'
+                      ? 'Saved sensor mapping'
+                      : 'Auto detected from payload'
+                  }
+                />
+              </div>
+            }
+            renderEditor={(api) => (
+              <div className="space-y-4">
+                <ConfigField label="Sensor display mode" className="max-w-xl">
+                  <select
+                    data-field="interaction_kind"
+                    className={selectClassName + ' min-h-11'}
+                    value={sensorKind}
+                    onChange={(event) => {
+                      const kind = event.target.value as SensorInteractionKind;
+                      api.patch({
+                        interaction_kind: kind,
+                        config: normalizeSensorInteractionConfig(kind, {}),
+                      });
+                    }}
+                  >
+                    {SENSOR_INTERACTION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </ConfigField>
+                <SensorConfigFields
+                  kind={sensorKind}
+                  config={sensorConfig}
+                  resolvedLabel={getSensorInteractionLabel(
+                    resolvedInteraction.kind,
+                  )}
+                  onChange={(field, value) =>
+                    api.patch({
+                      config: { ...sensorConfig, [field]: value },
+                    })
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  Sensor reference:{' '}
+                  <span className="font-mono">{deviceRef}</span>
+                </p>
+              </div>
+            )}
+          />
+        ) : null}
+
+        {isCalibratable ? (
+          <Section
+            id="calibration"
+            title="Calibration"
+            summary={
+              assignedProfile
+                ? `${calibratedChannels.join(' and ') || 'No assigned channels'} · ${assignedProfile.name}`
+                : 'No calibration profile assigned'
+            }
+            open={activeSection === 'calibration'}
+            onOpenChange={(open) => openConfigSection('calibration', open)}
+            api={staticSectionEditor}
+            editable={false}
+            readView={
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Calibration profiles map requested brightness or color to this
+                  device’s observed output. Start a wizard to review and save a
+                  profile.
+                </p>
+                {brightnessOpen === deviceKey ? (
+                  <BrightnessCalibrationWizard
+                    key={`brightness-${deviceKey}`}
+                    device={device}
+                    devices={liveDevices}
+                    existingPoints={
+                      (assignedProfile?.points ??
+                        resolvedCalibration?.points ??
+                        []) as Array<{
+                        reference: unknown;
+                        output: unknown;
+                      }>
+                    }
+                    profile={assignedProfile ?? null}
+                    existingBrightnessPoints={
+                      assignedProfile?.brightness_points ??
+                      resolvedCalibration?.brightness_points ??
+                      []
+                    }
+                    profileUsage={
+                      assignedProfile
+                        ? calibrationAssignments.filter(
+                            (row) => row.profile_id === assignedProfile.id,
+                          ).length
+                        : 0
+                    }
+                    onSaved={() => void refetchDevices()}
+                  />
+                ) : null}
+                {calibrationOpen === deviceKey ? (
+                  <ColorCalibrationWizard
+                    key={`color-${deviceKey}`}
+                    device={device}
+                    devices={liveDevices}
+                  />
+                ) : null}
+                {brightnessOpen !== deviceKey &&
+                calibrationOpen !== deviceKey ? (
+                  <div className="flex flex-wrap gap-2">
+                    {isDimmableDevice(device) ? (
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        onClick={() => setBrightnessOpen(deviceKey)}
+                      >
+                        Calibrate brightness
+                      </Button>
+                    ) : null}
+                    {canCalibrateDevice(device) ? (
+                      <Button
+                        variant="outline"
+                        className="min-h-11"
+                        onClick={() => setCalibrationOpen(deviceKey)}
+                      >
+                        Calibrate color
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            }
+            renderEditor={() => null}
+          />
+        ) : null}
+
+        <Section
+          id="technical"
+          title="Technical details"
+          summary={`${device.integration_id} · ${deviceKey}`}
+          open={activeSection === 'technical'}
+          onOpenChange={(open) => openConfigSection('technical', open)}
+          api={staticSectionEditor}
+          editable={false}
+          readView={
+            <div className="space-y-3">
+              <DeviceFactRow label="Device key" value={deviceKey} />
+              <DeviceFactRow
+                label="Integration"
+                value={device.integration_id}
+              />
+              <DeviceFactRow label="Integration label" value={defaultLabel} />
+              {manageLabel ? (
+                <DeviceFactRow label="Manage mode" value={manageLabel} />
+              ) : null}
+              {capabilityLabels.length > 0 ? (
+                <DeviceFactRow
+                  label="Capabilities"
+                  value={capabilityLabels.join(' · ')}
+                />
+              ) : null}
+              {groupNames.length > 0 ? (
+                <DeviceFactRow label="Rooms" value={groupNames.join(' · ')} />
+              ) : null}
+              <details
+                open={technicalOpen}
+                onToggle={(event) => setTechnicalOpen(event.currentTarget.open)}
+              >
+                <summary className="min-h-11 cursor-pointer py-3 text-sm font-medium">
+                  Latest raw integration payload
+                </summary>
+                {device.raw ? (
+                  <pre className="max-h-96 overflow-auto rounded-xl border border-border bg-muted/30 p-3 text-xs whitespace-pre-wrap break-all">
+                    {JSON.stringify(device.raw, null, 2)}
+                  </pre>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No raw payload is available.
+                  </p>
+                )}
+              </details>
+            </div>
+          }
+          renderEditor={() => null}
+        />
+
+        <Section
+          id="danger"
+          title="Replace or delete device"
+          summary="Affects saved references across homectl"
+          open={activeSection === 'danger'}
+          onOpenChange={(open) => openConfigSection('danger', open)}
+          api={staticSectionEditor}
+          editable={false}
+          danger
+          readView={
+            <div className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Replace this device in saved rooms, scenes, and routines with
+                  another catalog device. The replacement is applied after you
+                  confirm it.
+                </p>
+                <ConfigField label="Replacement device" className="max-w-xl">
+                  <SearchablePicker
+                    options={replacementOptions
+                      .filter((option) => option.key !== deviceKey)
+                      .map((option) => ({
+                        value: option.key,
+                        label: option.label,
+                        detail: option.key,
+                      }))}
+                    value={replacementDrafts[deviceKey] ?? ''}
+                    onChange={(key) =>
+                      setReplacementDrafts((current) => ({
+                        ...current,
+                        [deviceKey]: key,
+                      }))
+                    }
+                    placeholder="Search the device catalog…"
+                  />
+                </ConfigField>
+                <Button
+                  variant="outline"
+                  className="min-h-11"
+                  disabled={
+                    mutatingKey === deviceKey || !replacementDrafts[deviceKey]
+                  }
+                  onClick={() => void replaceDeviceReferences(device)}
+                >
+                  {mutatingKey === deviceKey
+                    ? 'Replacing…'
+                    : 'Replace references'}
+                </Button>
+              </div>
+              <div className="space-y-2 border-t border-border pt-4">
+                <p className="text-sm text-muted-foreground">
+                  Deleting also removes saved references to this device.
+                </p>
+                <Button
+                  variant="destructive"
+                  className="min-h-11"
+                  disabled={mutatingKey === deviceKey}
+                  onClick={() => void deleteDeviceConfig(device)}
+                >
+                  Delete device
+                </Button>
+              </div>
+            </div>
+          }
+          renderEditor={() => null}
+        />
+      </DetailPageShell>
     );
   }
 
@@ -1982,7 +2724,8 @@ export default function DevicesPage() {
                                       assignedProfile
                                         ? calibrationAssignments.filter(
                                             (row) =>
-                                              row.profile_id === assignedProfile.id,
+                                              row.profile_id ===
+                                              assignedProfile.id,
                                           ).length
                                         : 0
                                     }

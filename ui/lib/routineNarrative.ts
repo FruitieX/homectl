@@ -677,6 +677,8 @@ export type RoutineTone = 'success' | 'warning' | 'neutral' | 'error' | 'info';
 
 type RoutineStatusLike = {
   will_trigger?: boolean;
+  all_conditions_match?: boolean;
+  rules?: Array<{ error?: string | null }>;
   condition?: { truth?: string; error?: string; unknown_reason?: unknown };
   triggers?: Array<{
     kind?: string;
@@ -724,7 +726,7 @@ export function describeRoutineStateLine({
 }: {
   enabled: boolean;
   /** The stored definition; its condition is typed loosely by the bindings. */
-  definition?: { condition?: unknown } | null;
+  definition?: { condition?: unknown; triggers?: unknown[] } | null;
   status?: RoutineStatusLike | null;
   context: NarrativeContext;
   describeUnknown?: (reason: unknown) => string;
@@ -733,14 +735,21 @@ export function describeRoutineStateLine({
     return { text: 'Off — it does not run', tone: 'neutral' };
   }
   if (!status) {
+    if (definition?.triggers?.length === 0) {
+      return { text: 'No saved trigger is configured yet', tone: 'neutral' };
+    }
     return {
-      text: 'Waiting for the first evaluation from the server',
+      text: 'No trigger evaluation received yet; waiting for a report.',
       tone: 'neutral',
     };
   }
   const condition = status.condition;
   if (condition?.error) {
     return { text: `Needs attention: ${condition.error}`, tone: 'error' };
+  }
+  const ruleError = status.rules?.find((rule) => rule.error)?.error;
+  if (ruleError) {
+    return { text: `Needs attention: ${ruleError}`, tone: 'error' };
   }
   const unknownTrigger = (status.triggers ?? []).find(
     (trigger) =>
@@ -776,6 +785,15 @@ export function describeRoutineStateLine({
       tone: 'neutral',
     };
   }
+  if (status.all_conditions_match === false) {
+    return { text: 'Current rule conditions are not all met', tone: 'neutral' };
+  }
+  if (status.all_conditions_match === true) {
+    return {
+      text: 'Current rules match; waiting for a trigger',
+      tone: 'neutral',
+    };
+  }
   return { text: 'No matching event recorded recently', tone: 'neutral' };
 }
 
@@ -800,4 +818,40 @@ export function describeRoutineLastOutcome(
   return dropped > 0
     ? `Last recorded outcome: ran${steps}, ${dropped} dropped`
     : `Last recorded outcome: ran${steps}`;
+}
+
+export type RoutineHistoryEvidence = {
+  trigger_kind: string;
+  action_count: number;
+  blocked_reason?: string | null;
+  occurrence_count?: number | null;
+  v2?: { last_run?: { accepted?: boolean } | null } | null;
+};
+
+/** Describe a retained past event without borrowing today's live evaluation. */
+export function describeRoutineHistoryEvidence(
+  entry: RoutineHistoryEvidence | null | undefined,
+  legacy = false,
+): string {
+  if (!entry) {
+    return legacy
+      ? 'No matching event is retained. Legacy v1 does not record blocked non-runs.'
+      : 'No event is recorded in retained history.';
+  }
+  if (entry.trigger_kind === 'v2_blocked') {
+    const count = Math.max(1, entry.occurrence_count ?? 1);
+    return `A trigger matched, but no run was admitted: ${entry.blocked_reason ?? 'the run was blocked'}${count > 1 ? ` · ${count} matching attempts` : ''}.`;
+  }
+  if (entry.trigger_kind === 'v2_run') {
+    if (entry.v2?.last_run?.accepted === false) {
+      return 'The recorded run was rejected before command dispatch.';
+    }
+    return entry.action_count > 0
+      ? `The recorded run dispatched ${entry.action_count} command${entry.action_count === 1 ? '' : 's'}. Device delivery is not confirmed by this record.`
+      : 'The recorded run completed without dispatching a command.';
+  }
+  if (entry.trigger_kind === 'force_trigger') {
+    return `A manual trigger was recorded${entry.action_count > 0 ? ` · ${entry.action_count} action${entry.action_count === 1 ? '' : 's'} dispatched` : ''}.`;
+  }
+  return `A matching rule was recorded${entry.action_count > 0 ? ` · ${entry.action_count} action${entry.action_count === 1 ? '' : 's'} dispatched` : ''}.`;
 }

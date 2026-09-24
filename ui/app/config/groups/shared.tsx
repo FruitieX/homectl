@@ -5,6 +5,7 @@ import { type Device } from '@/bindings/Device';
 import { type Group, useDeviceDisplayNames } from '@/hooks/useConfig';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { getDeviceKey } from '@/lib/device';
+import { BoundedList } from '@/ui/config/BoundedList';
 import {
   getDeviceDisplayLabel,
   getDeviceDisplayLabelFromKey,
@@ -106,6 +107,7 @@ export function SelectedDeviceRows({
   onStartReplace?: (key: string) => void;
   onCancelReplace?: () => void;
 }) {
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   if (devices.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
@@ -115,20 +117,33 @@ export function SelectedDeviceRows({
   }
 
   return (
-    <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
-      {devices.map((device) => {
+    <BoundedList
+      items={devices}
+      keyOf={groupDeviceKey}
+      revealKey={replaceTarget}
+      moreLabel={(remaining) =>
+        `Show ${Math.min(remaining, 30)} more saved members`
+      }
+      renderItem={(device) => {
         const key = groupDeviceKey(device);
         const missing = !presentKeys.has(key);
         const replacing = replaceTarget === key;
         return (
-          <li
-            key={key}
+          <div
             data-target-key={key}
-            className="flex items-center gap-3 px-3 py-2"
+            className="flex flex-wrap items-center gap-3 px-3 py-2"
           >
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm">{labelFor(device)}</p>
-              <p className="truncate text-xs text-muted-foreground">{key}</p>
+              <p
+                className={
+                  missing
+                    ? 'break-all text-xs text-muted-foreground'
+                    : 'truncate text-xs text-muted-foreground'
+                }
+              >
+                {key}
+              </p>
             </div>
             {missing ? (
               <Badge variant="warning" className="shrink-0 gap-1">
@@ -136,11 +151,24 @@ export function SelectedDeviceRows({
                 Missing
               </Badge>
             ) : null}
-            {missing && onStartReplace ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="min-h-11"
+              aria-expanded={activeKey === key}
+              onClick={() =>
+                setActiveKey((current) => (current === key ? null : key))
+              }
+            >
+              {activeKey === key ? 'Done' : 'Manage member'}
+            </Button>
+            {activeKey === key && missing && onStartReplace ? (
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="min-h-11"
                 onClick={() =>
                   replacing ? onCancelReplace?.() : onStartReplace(key)
                 }
@@ -150,24 +178,26 @@ export function SelectedDeviceRows({
             ) : null}
             {/* A labelled action rather than a bare ×, so it reads and is
                 reachable the same way for everyone. */}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:text-destructive"
-              aria-label={`Remove ${labelFor(device)} from this room`}
-              onClick={() =>
-                onChange(
-                  devices.filter((entry) => groupDeviceKey(entry) !== key),
-                )
-              }
-            >
-              Remove
-            </Button>
-          </li>
+            {activeKey === key ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="min-h-11 text-destructive hover:text-destructive"
+                aria-label={`Remove ${labelFor(device)} from this room`}
+                onClick={() =>
+                  onChange(
+                    devices.filter((entry) => groupDeviceKey(entry) !== key),
+                  )
+                }
+              >
+                Remove
+              </Button>
+            ) : null}
+          </div>
         );
-      })}
-    </ul>
+      }}
+    />
   );
 }
 
@@ -182,7 +212,7 @@ export function DeviceAdder({
   onReplace,
   placeholder = 'Search devices by name, id, or integration',
 }: {
-  options: { key: string; label: string; device: Device }[];
+  options: { key: string; label: string; detail?: string; device: Device }[];
   selectedKeys: ReadonlySet<string>;
   onAdd: (device: Device) => void;
   onReplace?: (device: Device) => void;
@@ -191,16 +221,15 @@ export function DeviceAdder({
   const [query, setQuery] = useState('');
   const trimmed = query.trim().toLowerCase();
 
-  const matches = useMemo(() => {
+  const matchingOptions = useMemo(() => {
     if (trimmed === '') return [];
-    return options
-      .filter(({ key, label, device }) =>
-        `${label} ${device.name} ${device.id} ${device.integration_id} ${key}`
-          .toLowerCase()
-          .includes(trimmed),
-      )
-      .slice(0, 20);
+    return options.filter(({ key, label, detail, device }) =>
+      `${label} ${detail ?? ''} ${device.name} ${device.id} ${device.integration_id} ${key}`
+        .toLowerCase()
+        .includes(trimmed),
+    );
   }, [options, trimmed]);
+  const matches = matchingOptions.slice(0, 20);
 
   return (
     <div className="space-y-2">
@@ -223,33 +252,46 @@ export function DeviceAdder({
           No devices match “{query}”.
         </p>
       ) : (
-        <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
-          {matches.map(({ key, label, device }) => {
-            const selected = selectedKeys.has(key);
-            return (
-              <li key={key} className="flex items-center gap-3 px-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm">{label}</p>
-                  <p className="truncate text-xs text-muted-foreground">
-                    {key}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={selected && !onReplace}
-                  onClick={() =>
-                    selected && onReplace ? onReplace(device) : onAdd(device)
-                  }
-                >
-                  <Plus aria-hidden />
-                  {selected ? (onReplace ? 'Use here' : 'Added') : 'Add'}
-                </Button>
-              </li>
-            );
-          })}
-        </ul>
+        <>
+          <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
+            {matches.map(({ key, label, detail, device }) => {
+              const selected = selectedKeys.has(key);
+              return (
+                <li key={key} className="flex items-center gap-3 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm">{label}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {detail ?? key}
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="min-h-11"
+                    disabled={selected}
+                    onClick={() =>
+                      onReplace ? onReplace(device) : onAdd(device)
+                    }
+                  >
+                    <Plus aria-hidden />
+                    {selected
+                      ? 'Already in room'
+                      : onReplace
+                        ? 'Use here'
+                        : 'Add'}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+          {matchingOptions.length > matches.length ? (
+            <p className="text-xs text-muted-foreground">
+              Showing {matches.length} of {matchingOptions.length} matches.
+              Refine the search to narrow the results.
+            </p>
+          ) : null}
+        </>
       )}
     </div>
   );
@@ -324,16 +366,19 @@ export function RoomAdder({
   const candidates = useMemo(() => {
     return groups
       .filter(
-        (group) => group.id !== groupId && !selectedIds.includes(group.id),
+        (group) => group.id === groupId || !selectedIds.includes(group.id),
       )
       .map((group) => {
-        const cycle = groupId
-          ? findNestedCycle(groups, groupId, group.id)
-          : null;
-        const existing = groupId
-          ? findExistingPath(groups, groupId, group.id)
-          : null;
-        return { group, cycle, existing };
+        const isSelf = group.id === groupId;
+        const cycle =
+          groupId && !isSelf
+            ? findNestedCycle(groups, groupId, group.id)
+            : null;
+        const existing =
+          groupId && !isSelf
+            ? findExistingPath(groups, groupId, group.id)
+            : null;
+        return { group, cycle, existing, isSelf };
       })
       .filter(({ group }) =>
         trimmed === ''
@@ -363,24 +408,28 @@ export function RoomAdder({
         </p>
       ) : (
         <ul className="divide-y divide-border/60 rounded-2xl border border-border/70">
-          {shown.map(({ group, cycle, existing }) => (
+          {shown.map(({ group, cycle, existing, isSelf }) => (
             <li key={group.id} className="flex items-center gap-3 px-3 py-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm">{group.name}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {cycle
-                    ? `Would create a loop: ${cycle.join(' → ')}`
-                    : existing
-                      ? `Already included through ${existing.slice(0, -1).join(' → ')}`
-                      : group.id}
+                  {isSelf
+                    ? 'A room cannot link to itself'
+                    : cycle
+                      ? `Would create a loop: ${cycle.join(' → ')}`
+                      : existing
+                        ? `Already included through ${existing.slice(0, -1).join(' → ')}`
+                        : group.id}
                 </p>
               </div>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                disabled={Boolean(cycle)}
-                aria-describedby={cycle ? `link-cycle-${group.id}` : undefined}
+                disabled={isSelf || Boolean(cycle)}
+                aria-describedby={
+                  isSelf || cycle ? `link-cycle-${group.id}` : undefined
+                }
                 onClick={() => onAdd(group.id)}
               >
                 <Plus aria-hidden />
@@ -388,7 +437,9 @@ export function RoomAdder({
               </Button>
               {cycle ? (
                 <span id={`link-cycle-${group.id}`} className="sr-only">
-                  {`Linking ${group.name} would create a nesting loop through ${cycle.join(', ')}`}
+                  {isSelf
+                    ? `Linking ${group.name} to itself is not allowed`
+                    : `Linking ${group.name} would create a nesting loop through ${cycle?.join(', ')}`}
                 </span>
               ) : null}
             </li>

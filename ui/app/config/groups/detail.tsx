@@ -12,7 +12,17 @@ import {
   missingGroupDevices,
   describeGroupUsage,
   groupDeviceKey,
+  summarizeGroupDeviceReferences,
 } from '@/lib/groupGraph';
+import {
+  resolveGroupDeviceKeys,
+  type GroupPreviewMap,
+} from '@/lib/group-floorplan-preview';
+import { getSensorDetails } from '@/lib/sensorInteraction';
+import {
+  deviceReachability,
+  reachabilityLabels,
+} from '@/lib/deviceReachability';
 import { BoundedList } from '@/ui/config/BoundedList';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { Section } from '@/ui/config/Section';
@@ -20,11 +30,8 @@ import { StatusRegion, useStatusAnnouncements } from '@/ui/config/StatusRegion';
 import { useDirtyNavigationGuard } from '@/ui/config/useDirtyNavigationGuard';
 import { useSectionEditor } from '@/ui/config/useSectionEditor';
 import { useSectionParams } from '@/ui/config/useSectionParams';
-import {
-  ConfigField,
-  ConfigFormSection,
-  ConfigToggleRow,
-} from '@/ui/config-form';
+import { ConfigField, ConfigToggleRow } from '@/ui/config-form';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Badge } from '@/ui/primitives/badge';
 import { toast } from 'sonner';
 import { Button } from '@/ui/primitives/button';
@@ -142,6 +149,35 @@ export default function GroupDetailPage() {
   }, [loading, target]);
 
   const missing = group ? missingGroupDevices(group, lookups.presentKeys) : [];
+  const deviceReferenceCounts = group
+    ? summarizeGroupDeviceReferences(group, lookups.presentKeys)
+    : { available: 0, missing: [], saved: 0 };
+  const previewGroups = useMemo(
+    () =>
+      Object.fromEntries(
+        groups.map((entry) => [
+          entry.id,
+          { devices: entry.devices, linked_groups: entry.linked_groups },
+        ]),
+      ) as GroupPreviewMap,
+    [groups],
+  );
+  const resolvedDeviceKeys = group
+    ? resolveGroupDeviceKeys(group.id, previewGroups)
+    : [];
+  const availableResolvedDeviceCount = resolvedDeviceKeys.filter((key) =>
+    lookups.presentKeys.has(key),
+  ).length;
+  const roomNamesByDevice = useMemo(() => {
+    const names: Record<string, string[]> = {};
+    for (const room of groups) {
+      for (const member of room.devices) {
+        const key = groupDeviceKey(member);
+        (names[key] ??= []).push(room.name);
+      }
+    }
+    return names;
+  }, [groups]);
 
   // Facts with a count of zero are not facts: say what the room has, and name
   // the single scene or routine that uses it instead of a chain of counts.
@@ -154,12 +190,12 @@ export default function GroupDetailPage() {
         : `used by ${usage.scenes.length} scene${usage.scenes.length === 1 ? '' : 's'} and ${usage.routines.length} routine${usage.routines.length === 1 ? '' : 's'}`;
   const statusSentence = group
     ? [
-        `${group.devices.length} available device${group.devices.length === 1 ? '' : 's'}`,
-        missing.length > 0
-          ? `${missing.length} missing reference${missing.length === 1 ? '' : 's'}`
+        `${deviceReferenceCounts.available} available device${deviceReferenceCounts.available === 1 ? '' : 's'}`,
+        deviceReferenceCounts.missing.length > 0
+          ? `${deviceReferenceCounts.missing.length} missing saved member${deviceReferenceCounts.missing.length === 1 ? '' : 's'}`
           : null,
         group.linked_groups.length > 0
-          ? `${group.linked_groups.length} linked room${group.linked_groups.length === 1 ? '' : 's'}`
+          ? `${group.linked_groups.length} linked room${group.linked_groups.length === 1 ? '' : 's'} · ${availableResolvedDeviceCount} resolved available devices`
           : null,
         usageSentence,
       ]
@@ -168,19 +204,19 @@ export default function GroupDetailPage() {
     : undefined;
 
   const devicesSummary =
-    group && group.devices.length > 0
+    group && deviceReferenceCounts.saved > 0
       ? [
-          `${group.devices.length} device${group.devices.length === 1 ? '' : 's'}`,
-          missing.length > 0
-            ? `${missing.length} missing device reference${
-                missing.length === 1 ? '' : 's'
+          `${deviceReferenceCounts.available} available device${deviceReferenceCounts.available === 1 ? '' : 's'}`,
+          deviceReferenceCounts.missing.length > 0
+            ? `${deviceReferenceCounts.missing.length} missing saved member${
+                deviceReferenceCounts.missing.length === 1 ? '' : 's'
               }`
             : null,
           // Examples help while the section is collapsed; once it is open the
           // rows say the same thing in more detail.
           activeSection === 'devices'
             ? null
-            : `${examples(deviceNames, group.devices.length)}`,
+            : `${examples(deviceNames, deviceReferenceCounts.saved)}`,
         ]
           .filter(Boolean)
           .join(' · ')
@@ -230,18 +266,33 @@ export default function GroupDetailPage() {
             </p>
           ) : null}
 
+          {missing.length > 0 ? (
+            <Alert>
+              <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+                <span>
+                  {lookups.labelFor(missing[0])} is missing from the current
+                  catalog. Its saved key remains in this room
+                  {missing.length > 1
+                    ? `, along with ${missing.length - 1} other missing member${missing.length === 2 ? '' : 's'}`
+                    : ''}
+                  .
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-11"
+                  onClick={() => openSection('devices', { target: missing[0] })}
+                >
+                  Review saved members
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           <Section<Group>
             id="devices"
             title="Devices"
             summary={devicesSummary}
-            badge={
-              missing.length > 0 ? (
-                <Badge variant="warning" className="font-medium">
-                  {missing.length} missing reference
-                  {missing.length === 1 ? '' : 's'}
-                </Badge>
-              ) : undefined
-            }
             open={activeSection === 'devices'}
             onOpenChange={(open) => openSection(open ? 'devices' : null)}
             api={deviceEditor}
@@ -252,10 +303,31 @@ export default function GroupDetailPage() {
               <BoundedList
                 items={group.devices}
                 keyOf={(device) => groupDeviceKey(device)}
+                revealKey={target}
                 emptyMessage="No devices in this room yet."
                 renderItem={(device) => {
                   const key = groupDeviceKey(device);
                   const isMissing = !lookups.presentKeys.has(key);
+                  const liveDevice = lookups.devicesByKey[key];
+                  const currentState =
+                    liveDevice && 'Controllable' in liveDevice.data
+                      ? liveDevice.data.Controllable.state
+                      : null;
+                  const currentSummary = currentState
+                    ? currentState.power
+                      ? `On${
+                          typeof currentState.brightness === 'number'
+                            ? ` · ${Math.round(currentState.brightness * 100)}%`
+                            : ''
+                        }`
+                      : 'Off'
+                    : liveDevice && 'Sensor' in liveDevice.data
+                      ? `Current sensor value: ${JSON.stringify(getSensorDetails(liveDevice).value)}`
+                      : null;
+                  const reachability =
+                    liveDevice && 'Controllable' in liveDevice.data
+                      ? reachabilityLabels[deviceReachability(liveDevice)]
+                      : null;
                   return (
                     <div
                       className="flex items-center gap-3"
@@ -279,6 +351,16 @@ export default function GroupDetailPage() {
                         </p>
                         {/* The key is the only thing that identifies a missing
                             member for repair, so it is never truncated. */}
+                        {currentSummary ? (
+                          <p className="text-xs text-muted-foreground">
+                            {currentSummary}
+                          </p>
+                        ) : null}
+                        {reachability ? (
+                          <p className="text-xs text-muted-foreground">
+                            {reachability}
+                          </p>
+                        ) : null}
                         <p
                           className={
                             isMissing
@@ -297,7 +379,7 @@ export default function GroupDetailPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="shrink-0"
+                            className="min-h-11 shrink-0"
                             onClick={() => {
                               void navigator.clipboard
                                 .writeText(key)
@@ -340,7 +422,16 @@ export default function GroupDetailPage() {
                   }
                 >
                   <DeviceAdder
-                    options={lookups.options}
+                    options={lookups.options.map((option) => ({
+                      ...option,
+                      detail: [
+                        roomNamesByDevice[option.key]?.join(', '),
+                        option.device.integration_id,
+                        option.key,
+                      ]
+                        .filter(Boolean)
+                        .join(' · '),
+                    }))}
                     selectedKeys={
                       new Set(
                         (deviceEditor.draft?.devices ?? []).map(groupDeviceKey),
@@ -432,23 +523,11 @@ export default function GroupDetailPage() {
             }
             renderEditor={() => (
               <div className="space-y-4">
-                <ConfigFormSection
-                  title="Nested rooms"
-                  description={
-                    group.linked_groups.length >= 2
-                      ? // Only the part that changes a decision: link order.
-                        'Later links do not override earlier ones; each device keeps its own settings.'
-                      : undefined
-                  }
-                >
-                  <SelectedRoomRows
-                    ids={linkEditor.draft?.linked_groups ?? []}
-                    groups={groups}
-                    onChange={(next) =>
-                      linkEditor.patch({ linked_groups: next })
-                    }
-                  />
-                </ConfigFormSection>
+                <SelectedRoomRows
+                  ids={linkEditor.draft?.linked_groups ?? []}
+                  groups={groups}
+                  onChange={(next) => linkEditor.patch({ linked_groups: next })}
+                />
                 <RoomAdder
                   groups={groups}
                   groupId={group.id}

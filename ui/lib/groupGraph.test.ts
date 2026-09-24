@@ -6,6 +6,7 @@ import {
   findExistingPath,
   findNestedCycle,
   missingGroupDevices,
+  summarizeGroupDeviceReferences,
   suggestId,
 } from './groupGraph.ts';
 
@@ -144,6 +145,25 @@ test('missingGroupDevices keeps unresolved members visible', () => {
   assert.deepEqual(missingGroupDevices(group, new Set(['zigbee2mqtt/lamp'])), [
     'zigbee2mqtt/removed_lamp',
   ]);
+  assert.deepEqual(
+    summarizeGroupDeviceReferences(group, new Set(['zigbee2mqtt/lamp'])),
+    { available: 1, missing: ['zigbee2mqtt/removed_lamp'], saved: 2 },
+  );
+});
+
+test('group member counts classify every saved direct reference', () => {
+  const group = {
+    id: 'room',
+    devices: [
+      { integration_id: 'mqtt', device_id: 'lamp' },
+      { integration_id: 'mqtt', device_id: 'lamp' },
+      { integration_id: 'mqtt', device_id: 'gone' },
+    ],
+  };
+  assert.deepEqual(
+    summarizeGroupDeviceReferences(group, new Set(['mqtt/lamp'])),
+    { available: 2, missing: ['mqtt/gone'], saved: 3 },
+  );
 });
 
 test('suggestId slugifies a name and avoids collisions', () => {

@@ -10,6 +10,7 @@ import {
   type DeviceColor,
   type RawDeviceColor,
   colorToRgb,
+  describeColorName,
   getColorMode,
 } from '@/lib/deviceColor';
 import Color, { type ColorInstance } from 'color';
@@ -249,9 +250,15 @@ export function SceneResolvedColorPreview({
     return null;
   }
 
+  const rgb = resolved.color.rgb().object();
+
   return (
     <div className="mt-3 flex items-center gap-2 text-xs opacity-75">
-      <ResolvedColorDot color={resolved.color} isPowered={resolved.isPowered} />
+      <ResolvedColorDot
+        color={resolved.color}
+        isPowered={resolved.isPowered}
+        label={describeColorName({ r: rgb.r, g: rgb.g, b: rgb.b })}
+      />
       <span>{resolved.sourceLabel}</span>
       {!resolved.isPowered && <span className="opacity-60">device off</span>}
     </div>

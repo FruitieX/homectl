@@ -31,17 +31,19 @@ if (!fixtures[initial]) {
 
 let name = initial;
 let db = fixtures[initial]();
+let failWrites = false;
 
 function reload(nextName) {
   if (!fixtures[nextName]) return false;
   name = nextName;
   db = fixtures[nextName]();
+  failWrites = false;
   return true;
 }
 
 const writeOk = {
   applied: true,
-  persistence: { kind: 'persisted' },
+  persistence: 'persisted',
   warning: null,
 };
 
@@ -269,8 +271,7 @@ function buildIntegrationSchemas() {
           label: 'State topic',
           kind: 'text',
           required: true,
-          description:
-            'Topic to subscribe to for device state messages.',
+          description: 'Topic to subscribe to for device state messages.',
           placeholder: 'home/+/example/{id}',
           section: 'Topics',
           help_text:
@@ -298,6 +299,84 @@ function buildIntegrationSchemas() {
         }),
       ],
     },
+  ];
+}
+
+function fixtureDeviceForSource(db, sourceKey) {
+  return db.devices.find(
+    (device) => `${device.integration_id}/${device.id}` === sourceKey,
+  );
+}
+
+function fixtureValueFields(db, sourceKey) {
+  const device = fixtureDeviceForSource(db, sourceKey);
+  if (!device) return [];
+
+  const fields = [];
+  const add = (path, value) => {
+    const valueType =
+      value === null || value === undefined
+        ? 'unknown'
+        : typeof value === 'boolean'
+          ? 'boolean'
+          : typeof value === 'number'
+            ? 'number'
+            : typeof value === 'string'
+              ? 'text'
+              : 'object';
+    fields.push({
+      path,
+      type: valueType,
+      value: value ?? null,
+      available: value !== null && value !== undefined,
+      reason: null,
+      error: null,
+    });
+  };
+
+  if (device.data?.Sensor) {
+    const value = device.data.Sensor.value;
+    add('/value', value);
+    add('/observed/value', value);
+    add('/name', device.name);
+    return fields;
+  }
+
+  const controllable = device.data?.Controllable;
+  if (!controllable) return fields;
+  const reported = controllable.last_report?.state ?? {};
+  const requested = controllable.state ?? {};
+  add('/power', reported.power ?? requested.power ?? null);
+  add('/brightness', reported.brightness ?? requested.brightness ?? null);
+  add('/color', reported.color ?? requested.color ?? null);
+  add('/scene_id', controllable.scene_id ?? null);
+  add('/observed/power', reported.power ?? null);
+  add('/observed/brightness', reported.brightness ?? null);
+  add('/availability/online', controllable.availability?.online ?? null);
+  return fields;
+}
+
+function fixtureValueHistory(db, sourceKey, path) {
+  const field = fixtureValueFields(db, sourceKey).find(
+    (candidate) => candidate.path === path,
+  );
+  if (!field?.available) return [];
+
+  const current = field.value;
+  const previous =
+    typeof current === 'boolean'
+      ? !current
+      : typeof current === 'number'
+        ? Number((current - Math.max(Math.abs(current) * 0.04, 0.5)).toFixed(2))
+        : typeof current === 'string'
+          ? current === 'idle'
+            ? 'pressed'
+            : 'idle'
+          : current;
+  const now = Date.now();
+  return [
+    { changed_at_ms: now - 37 * 60_000, value: previous },
+    { changed_at_ms: now - 8 * 60_000, value: current },
   ];
 }
 
@@ -334,6 +413,14 @@ const server = http.createServer(async (req, res) => {
       fixtures: Object.keys(fixtures),
     });
   }
+  if (path === '/__fixture/fail-writes') {
+    failWrites = true;
+    return send(res, 200, { success: true, fail_writes: true });
+  }
+  if (path === '/__fixture/allow-writes') {
+    failWrites = false;
+    return send(res, 200, { success: true, fail_writes: false });
+  }
   if (path.startsWith('/__fixture/')) {
     const next = decodeURIComponent(path.slice('/__fixture/'.length));
     if (reload(next)) {
@@ -347,6 +434,13 @@ const server = http.createServer(async (req, res) => {
   }
 
   console.log(`${method} ${req.url}`);
+
+  if (failWrites && path.startsWith('/api/v1/config/') && method !== 'GET') {
+    return send(res, 503, {
+      success: false,
+      error: 'Simulated fixture write failure',
+    });
+  }
 
   if (path === '/api/config') return send(res, 200, {});
   if (path === '/health/live' || path === '/health/ready')
@@ -459,7 +553,12 @@ const server = http.createServer(async (req, res) => {
     });
     return send(res, 200, {
       success: true,
-      data: { timezone, day_start_ms: dayStart.getTime(), step_ms: stepMs, samples },
+      data: {
+        timezone,
+        day_start_ms: dayStart.getTime(),
+        step_ms: stepMs,
+        samples,
+      },
     });
   }
 
@@ -478,6 +577,9 @@ const server = http.createServer(async (req, res) => {
     if (db.lagMs && method === 'GET') await sleep(db.lagMs);
 
     if (method === 'GET') {
+      if (endpoint === 'assistant' && rest === 'status') {
+        return send(res, 200, { success: true, data: { enabled: false } });
+      }
       if (rest) {
         // Single item GETs are used by detail pages; fall back to the list.
         const list = Array.isArray(db.config[endpoint])
@@ -487,6 +589,25 @@ const server = http.createServer(async (req, res) => {
         if (item) return send(res, 200, { success: true, data: item });
         console.log(`  !! no fixture item for config/${endpoint}/${rest}`);
         return send(res, 404, { success: false, error: 'not found' });
+      }
+      if (endpoint === 'value-fields') {
+        return send(res, 200, {
+          success: true,
+          data: fixtureValueFields(
+            db,
+            url.searchParams.get('source_key') ?? '',
+          ),
+        });
+      }
+      if (endpoint === 'value-history') {
+        return send(res, 200, {
+          success: true,
+          data: fixtureValueHistory(
+            db,
+            url.searchParams.get('source_key') ?? '',
+            url.searchParams.get('path') ?? '',
+          ),
+        });
       }
       const special = SPECIAL_GET[endpoint];
       if (special) return send(res, 200, { success: true, data: special() });
@@ -545,6 +666,11 @@ const server = http.createServer(async (req, res) => {
         ...body,
         id: id ?? body?.id,
       };
+      if (endpoint === 'groups' && Array.isArray(item.devices)) {
+        item.device_keys = item.devices.map(
+          (device) => `${device.integration_id}/${device.device_id}`,
+        );
+      }
       if (idx >= 0) list[idx] = item;
       else list.push(item);
       return send(res, 200, { success: true, data: item, write: writeOk });

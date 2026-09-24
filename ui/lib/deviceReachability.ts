@@ -1,13 +1,40 @@
 import type { Device } from '@/bindings/Device';
 
 export type DeviceReachability =
-  | 'online'
-  | 'offline'
-  | 'stale'
-  | 'unknown'
-  | 'cached'
-  | 'disabled';
+  'online' | 'offline' | 'stale' | 'unknown' | 'cached' | 'disabled';
 const RECENT_MS = 10 * 60 * 1000;
+
+type RequestedReportEvidence = {
+  requested_at_ms?: number | null;
+  last_report?: {
+    received_at_ms: number;
+    retained: boolean;
+    matches_requested: boolean;
+  } | null;
+};
+
+/** A recent, non-cached report after the latest request can show a mismatch. */
+export function hasCurrentRequestedMismatch(
+  device: RequestedReportEvidence,
+  now = Date.now(),
+): boolean {
+  const report = device.last_report;
+  if (
+    !report ||
+    report.retained ||
+    report.matches_requested ||
+    device.requested_at_ms === undefined ||
+    device.requested_at_ms === null
+  ) {
+    return false;
+  }
+  const ageMs = now - report.received_at_ms;
+  return (
+    report.received_at_ms >= device.requested_at_ms &&
+    ageMs >= 0 &&
+    ageMs <= RECENT_MS
+  );
+}
 
 export function deviceReachability(
   device: Device,

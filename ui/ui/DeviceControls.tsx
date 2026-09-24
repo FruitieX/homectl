@@ -45,7 +45,7 @@ export function useLiveDeviceControls() {
     const sceneId = device.data.Controllable.scene_id;
     const persist = Boolean(
       sceneId &&
-        scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
+      scenes?.[sceneId]?.active_overrides.includes(getDeviceKey(device)),
     );
     // Omitted color/brightness preserve each device's own state and color mode.
     setState(device, persist, power, undefined, brightness, undefined, color);
@@ -155,10 +155,12 @@ export function DeviceQuickControls({
   devices,
   compact = false,
   showColorTabs = true,
+  showExactBrightness = false,
 }: {
   devices: Device[];
   compact?: boolean;
   showColorTabs?: boolean;
+  showExactBrightness?: boolean;
 }) {
   const connected = useConnectionStatus() === 'connected';
   const setState = useLiveDeviceControls();
@@ -166,6 +168,10 @@ export function DeviceQuickControls({
   const [pendingBrightness, setPendingBrightness] = useState<number | null>(
     null,
   );
+  const [typedBrightness, setTypedBrightness] = useState<string | null>(null);
+  const [brightnessOutcome, setBrightnessOutcome] = useState<
+    'reported' | 'timeout' | null
+  >(null);
   const scenes = useScenesState();
   const ws = useWebsocket();
   const previousScenes = useAtomValue(previousDeviceScenesAtom);
@@ -228,11 +234,29 @@ export function DeviceQuickControls({
   const mixed = values.some((value) => value !== values[0]);
   const confirmed =
     pendingBrightness !== null &&
-    values.length > 0 &&
-    values.every((value) => Math.round(value * 100) === pendingBrightness);
+    dimmable.length > 0 &&
+    dimmable.every((device) => {
+      if (!('Controllable' in device.data)) return false;
+      const data = device.data.Controllable;
+      const report = data.last_report;
+      if (
+        !report ||
+        report.retained ||
+        report.received_at_ms < (data.requested_at_ms ?? 0) ||
+        !report.matches_requested
+      ) {
+        return false;
+      }
+      return pendingBrightness === 0
+        ? !report.state.power
+        : report.state.power &&
+            typeof data.state.brightness === 'number' &&
+            Math.abs(data.state.brightness - pendingBrightness) < 0.005;
+    });
   useEffect(() => {
     if (pendingBrightness === null) return;
-    if (confirmed || !connected) {
+    if (confirmed) {
+      setBrightnessOutcome('reported');
       setDraft(null);
       setPendingBrightness(null);
       return;
@@ -242,9 +266,10 @@ export function DeviceQuickControls({
     const timeout = setTimeout(() => {
       setDraft(null);
       setPendingBrightness(null);
+      setBrightnessOutcome('timeout');
     }, 10000);
     return () => clearTimeout(timeout);
-  }, [pendingBrightness, confirmed, connected]);
+  }, [pendingBrightness, confirmed]);
   const onCount = controllable.filter((device) => getPower(device.data)).length;
   if (controllable.length === 0)
     return readonlyCount > 0 ? (
@@ -304,6 +329,48 @@ export function DeviceQuickControls({
                   : `${brightness}%`}
             </span>
           </div>
+          {showExactBrightness ? (
+            <div className="mb-2 flex flex-wrap items-end gap-2">
+              <label className="grid min-w-28 gap-1 text-sm">
+                <span className="text-muted-foreground">
+                  Exact brightness (%)
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 tabular-nums"
+                  value={typedBrightness ?? String(brightness)}
+                  disabled={!connected}
+                  onChange={(event) => setTypedBrightness(event.target.value)}
+                />
+              </label>
+              <Button
+                className="min-h-11"
+                disabled={
+                  !connected ||
+                  typedBrightness === null ||
+                  typedBrightness.trim() === '' ||
+                  !Number.isFinite(Number(typedBrightness)) ||
+                  Number(typedBrightness) < 0 ||
+                  Number(typedBrightness) > 100
+                }
+                onClick={() => {
+                  const value = Number(typedBrightness);
+                  setBrightnessOutcome(null);
+                  dimmable.forEach((device) =>
+                    setState(device, value > 0, value / 100),
+                  );
+                  setDraft(value);
+                  setPendingBrightness(value / 100);
+                  setTypedBrightness(null);
+                }}
+              >
+                Send brightness
+              </Button>
+            </div>
+          ) : null}
           <Slider
             aria-label="Brightness"
             className="min-h-11"
@@ -317,17 +384,29 @@ export function DeviceQuickControls({
             step={1}
             disabled={!connected}
             onValueChange={([value]) => {
+              setBrightnessOutcome(null);
               setPendingBrightness(null);
               setDraft(value);
+              if (showExactBrightness) setTypedBrightness(String(value));
             }}
             onValueCommit={([value]) => {
               dimmable.forEach((device) =>
                 setState(device, value > 0, value / 100),
               );
               setDraft(value);
-              setPendingBrightness(value);
+              setPendingBrightness(value / 100);
+              if (showExactBrightness) setTypedBrightness(null);
             }}
           />
+          {pendingBrightness !== null || brightnessOutcome ? (
+            <p role="status" className="mt-1 text-xs text-muted-foreground">
+              {brightnessOutcome === 'reported'
+                ? 'The latest integration report matches this brightness request.'
+                : brightnessOutcome === 'timeout'
+                  ? 'No fresh matching report arrived within 10 seconds. Requested state remains separate from the integration report.'
+                  : 'Brightness request sent; waiting for a fresh integration report.'}
+            </p>
+          ) : null}
           {dimmable.length !== controllable.length && (
             <p className="text-sm text-muted-foreground">
               Applies to {dimmable.length} devices with brightness control.
