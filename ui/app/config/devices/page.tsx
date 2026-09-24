@@ -571,6 +571,8 @@ export default function DevicesPage() {
   const requestedDeviceKey =
     searchParams.get('key') ?? searchParams.get('device');
   const appliedDeviceRequest = useRef<string | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const resultsRef = useRef<HTMLSpanElement | null>(null);
   const [deviceSearch, setDeviceSearch] = useState(
     () => searchParams.get('q') ?? '',
   );
@@ -1314,8 +1316,10 @@ export default function DevicesPage() {
 
       <Card className="sticky top-0 z-20 border-border/60 bg-background/95 backdrop-blur">
         <CardContent className="space-y-2 p-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative min-w-0 flex-1">
+          {/* Search has room to type; filters and bulk select sit in a second
+              row instead of competing with it for width. */}
+          <div className="relative min-w-0">
+            <div className="relative min-w-0">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
@@ -1326,84 +1330,106 @@ export default function DevicesPage() {
                 onChange={(e) => setDeviceSearch(e.target.value)}
               />
             </div>
+          </div>
 
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 gap-1.5">
-                  <SlidersHorizontal className="size-4" />
-                  Filters
-                  {activeFilterCount > 0 ? (
-                    <Badge
-                      variant="secondary"
-                      className="h-5 min-w-5 justify-center rounded-full px-1 text-[0.65rem]"
-                    >
-                      {activeFilterCount}
-                    </Badge>
-                  ) : null}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="w-72 space-y-4">
-                <label className="block space-y-1.5 text-sm">
-                  <span className="font-medium">Type</span>
-                  <select
-                    className={selectClassName + ' h-9 w-full'}
-                    value={deviceTypeFilter}
-                    onChange={(e) =>
-                      setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
-                    }
-                  >
-                    <option value="all">All devices</option>
-                    <option value="controllable">Lights / devices</option>
-                    <option value="sensor">Sensors</option>
-                    <option value="other">Other</option>
-                  </select>
-                </label>
-                <label className="block space-y-1.5 text-sm">
-                  <span className="font-medium">Room</span>
-                  <SearchablePicker
-                    options={[
-                      { value: 'all', label: 'All rooms' },
-                      ...availableGroups.map((group) => ({
-                        value: group.id,
-                        label: group.name,
-                        detail: group.hidden
-                          ? `${group.id} · hidden`
-                          : group.id,
-                      })),
-                    ]}
-                    value={deviceGroupFilter}
-                    onChange={setDeviceGroupFilter}
-                  />
-                </label>
-                <label className="block space-y-1.5 text-sm">
-                  <span className="font-medium">Integration</span>
-                  <SearchablePicker
-                    options={[
-                      { value: 'all', label: 'All integrations' },
-                      ...integrationIds.map((integrationId) => ({
-                        value: integrationId,
-                        label: integrationId,
-                      })),
-                    ]}
-                    value={deviceIntegrationFilter}
-                    onChange={setDeviceIntegrationFilter}
-                  />
-                </label>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="w-full"
-                  disabled={activeFilterCount === 0}
-                  onClick={() => {
-                    setDeviceTypeFilter('all');
-                    setDeviceGroupFilter('all');
-                    setDeviceIntegrationFilter('all');
-                  }}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 gap-1.5"
+              aria-expanded={filtersOpen}
+              aria-controls="device-filters"
+              onClick={() => setFiltersOpen((current) => !current)}
+            >
+              <SlidersHorizontal className="size-4" />
+              Filters
+              {activeFilterCount > 0 ? (
+                <Badge
+                  variant="secondary"
+                  className="h-5 min-w-5 justify-center rounded-full px-1 text-[0.65rem]"
                 >
-                  Clear filters
-                </Button>
-              </PopoverContent>
-            </Popover>
+                  {activeFilterCount}
+                </Badge>
+              ) : null}
+            </Button>
+            <span className="sr-only" aria-hidden>
+              {''}
+            </span>
+            <div
+              id="device-filters"
+              hidden={!filtersOpen}
+              className="w-full space-y-4 rounded-xl border border-border bg-card p-3"
+            >
+              <label className="block space-y-1.5 text-sm">
+                <span className="font-medium">Type</span>
+                <select
+                  className={selectClassName + ' h-9 w-full'}
+                  value={deviceTypeFilter}
+                  onChange={(e) =>
+                    setDeviceTypeFilter(e.target.value as DeviceTypeFilter)
+                  }
+                >
+                  <option value="all">All devices</option>
+                  <option value="controllable">Lights / devices</option>
+                  <option value="sensor">Sensors</option>
+                  <option value="other">Other</option>
+                </select>
+              </label>
+              <label className="block space-y-1.5 text-sm">
+                <span className="font-medium">Room</span>
+                <SearchablePicker
+                  options={[
+                    { value: 'all', label: 'All rooms' },
+                    ...availableGroups.map((group) => ({
+                      value: group.id,
+                      label: group.name,
+                      detail: group.hidden ? `${group.id} · hidden` : group.id,
+                    })),
+                  ]}
+                  value={deviceGroupFilter}
+                  onChange={setDeviceGroupFilter}
+                />
+              </label>
+              <label className="block space-y-1.5 text-sm">
+                <span className="font-medium">Integration</span>
+                <SearchablePicker
+                  options={[
+                    { value: 'all', label: 'All integrations' },
+                    ...integrationIds.map((integrationId) => ({
+                      value: integrationId,
+                      label: integrationId,
+                    })),
+                  ]}
+                  value={deviceIntegrationFilter}
+                  onChange={setDeviceIntegrationFilter}
+                />
+              </label>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                disabled={activeFilterCount === 0}
+                onClick={() => {
+                  setDeviceTypeFilter('all');
+                  setDeviceGroupFilter('all');
+                  setDeviceIntegrationFilter('all');
+                }}
+              >
+                Clear filters
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setFiltersOpen(false);
+                  resultsRef.current?.focus();
+                }}
+              >
+                Show {visibleDevices.length} device
+                {visibleDevices.length === 1 ? '' : 's'}
+              </Button>
+            </div>
 
             <Button
               variant={selectMode ? 'secondary' : 'outline'}
@@ -1423,7 +1449,11 @@ export default function DevicesPage() {
               {selectMode ? 'Done' : 'Select'}
             </Button>
 
-            <span className="ml-auto text-sm text-muted-foreground">
+            <span
+              ref={resultsRef}
+              tabIndex={-1}
+              className="ml-auto text-sm text-muted-foreground focus-visible:outline-none"
+            >
               {visibleDevices.length === devices.length
                 ? `${devices.length} devices`
                 : `${visibleDevices.length} of ${devices.length} devices`}
@@ -1830,8 +1860,16 @@ export default function DevicesPage() {
                       </ConfigFormSection>
                     ) : null}
                     <ConfigFormSection
-                      title="Display and sensor behavior"
-                      description="How this device is displayed, and how its sensor payload is presented in control surfaces."
+                      title={
+                        'Sensor' in device.data
+                          ? 'Display and sensor behavior'
+                          : 'Display'
+                      }
+                      description={
+                        'Sensor' in device.data
+                          ? 'How this device is displayed, and how its sensor payload is presented in control surfaces.'
+                          : 'How this device is labelled and displayed in control surfaces.'
+                      }
                     >
                       <ConfigField
                         label="Custom label"
@@ -1928,7 +1966,7 @@ export default function DevicesPage() {
                             }))
                           }
                         >
-                          Use Integration Label
+                          Use integration label
                         </Button>
                         {'Sensor' in device.data && (
                           <Button
@@ -1939,7 +1977,7 @@ export default function DevicesPage() {
                               updateSensorDraftKind(deviceRef, 'auto')
                             }
                           >
-                            Use Auto Sensor UI
+                            Use auto sensor UI
                           </Button>
                         )}
                         <Button
@@ -1975,41 +2013,66 @@ export default function DevicesPage() {
                       </ConfigFormSection>
                     ) : null}
 
+                    <div>
+                      <ConfigFormSection
+                        title="Technical details"
+                        description="The device key and the latest raw payload published by the integration, exactly as it arrived."
+                      >
+                        <p className="text-sm">
+                          <span className="text-muted-foreground">Key: </span>
+                          <span className="font-mono text-xs break-all">
+                            {deviceRef}
+                          </span>
+                        </p>
+                        {device.raw ? (
+                          <details>
+                            <summary className="cursor-pointer select-none text-sm text-foreground/80">
+                              Show live payload from the integration
+                            </summary>
+                            <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
+                              {JSON.stringify(device.raw, null, 2)}
+                            </pre>
+                          </details>
+                        ) : (
+                          <p className="text-sm text-muted-foreground">
+                            This device has not published a raw payload.
+                          </p>
+                        )}
+                      </ConfigFormSection>
+                    </div>
                     <details className="rounded-2xl border border-destructive/30 bg-destructive/5 p-4">
                       <summary className="cursor-pointer text-sm font-semibold">
-                        Danger zone: replace references or delete this device
+                        Replace references or delete this device
                       </summary>
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Replace config references with another device, or delete
-                        this device from runtime memory and the database while
-                        removing saved references. Both ask for confirmation.
-                      </p>
-                      <div className="mt-3 space-y-3">
-                        <ConfigField
-                          label="Replacement device"
-                          className="w-full max-w-md"
-                        >
-                          <SearchablePicker
-                            options={availableReplacementOptions.map(
-                              (option) => ({
-                                value: option.key,
-                                label: option.label,
-                                detail: option.key,
-                              }),
-                            )}
-                            value={replacementDraft}
-                            onChange={(key) =>
-                              setReplacementDrafts((previous) => ({
-                                ...previous,
-                                [deviceKey]: key,
-                              }))
-                            }
-                            placeholder="Select replacement device…"
-                            disabled={isSaving || isMutating}
-                          />
-                        </ConfigField>
-
-                        <div className="flex flex-wrap justify-end gap-2">
+                      <div className="mt-3 space-y-4">
+                        <div className="space-y-2">
+                          <p className="text-xs text-muted-foreground">
+                            Replace references: scenes, rooms, and routines that
+                            name this device point at the replacement instead.
+                          </p>
+                          <ConfigField
+                            label="Replacement device"
+                            className="w-full max-w-md"
+                          >
+                            <SearchablePicker
+                              options={availableReplacementOptions.map(
+                                (option) => ({
+                                  value: option.key,
+                                  label: option.label,
+                                  detail: option.key,
+                                }),
+                              )}
+                              value={replacementDraft}
+                              onChange={(key) =>
+                                setReplacementDrafts((previous) => ({
+                                  ...previous,
+                                  [deviceKey]: key,
+                                }))
+                              }
+                              placeholder="Select replacement device…"
+                              disabled={isSaving || isMutating}
+                            />
+                          </ConfigField>
                           <Button
                             variant="outline"
                             size="sm"
@@ -2022,8 +2085,16 @@ export default function DevicesPage() {
                             {isMutating && (
                               <span className={spinnerClassName} />
                             )}
-                            Replace References
+                            Replace references
                           </Button>
+                        </div>
+
+                        <div className="space-y-2 border-t border-destructive/30 pt-3">
+                          <p className="text-xs text-muted-foreground">
+                            Delete: the device disappears from runtime memory
+                            and the database, and saved references to it are
+                            removed.
+                          </p>
                           <Button
                             variant="destructive"
                             size="sm"
@@ -2033,33 +2104,11 @@ export default function DevicesPage() {
                             {isMutating && (
                               <span className={spinnerClassName} />
                             )}
-                            Delete Device
+                            Delete device
                           </Button>
                         </div>
                       </div>
                     </details>
-                  </div>
-
-                  <div>
-                    <ConfigFormSection
-                      title="Technical details"
-                      description="Latest raw payload published by the integration, exactly as it arrived."
-                    >
-                      {device.raw ? (
-                        <details>
-                          <summary className="cursor-pointer select-none text-sm text-foreground/80">
-                            Show live payload from the integration
-                          </summary>
-                          <pre className="mt-3 max-h-96 overflow-auto rounded-2xl border border-border bg-background p-3 text-xs font-mono whitespace-pre-wrap break-all">
-                            {JSON.stringify(device.raw, null, 2)}
-                          </pre>
-                        </details>
-                      ) : (
-                        <p className="text-sm text-muted-foreground">
-                          This device has not published a raw payload.
-                        </p>
-                      )}
-                    </ConfigFormSection>
                   </div>
                 </div>
               ) : null}
