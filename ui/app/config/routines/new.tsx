@@ -1,5 +1,5 @@
 import { ArrowRight, ChevronRight } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 import {
@@ -88,6 +88,19 @@ export default function NewRoutinePage() {
   const devicesState = useDevicesState();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
 
+  // After a choice, the fields it reveals become the obvious next focus.
+  const revealRef = useRef<HTMLDivElement | null>(null);
+  const focusRevealed = () => {
+    requestAnimationFrame(() => {
+      const container = revealRef.current;
+      if (!container) return;
+      container.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      const field = container.querySelector<HTMLElement>(
+        'input, select, textarea, button',
+      );
+      field?.focus({ preventScroll: true });
+    });
+  };
   const [draft, setDraft] = useState<JourneyDraft>(() => {
     const restored = loadCreationDraft<JourneyDraft>('routine');
     const presetScene = searchParams.get('scene');
@@ -366,7 +379,10 @@ export default function NewRoutinePage() {
                     key={intent.id}
                     type="button"
                     aria-pressed={selected}
-                    onClick={() => update({ intent: intent.id })}
+                    onClick={() => {
+                      update({ intent: intent.id });
+                      focusRevealed();
+                    }}
                     className={cn(
                       'rounded-xl border p-3 text-left transition-colors',
                       selected
@@ -398,94 +414,31 @@ export default function NewRoutinePage() {
               </button>
             </div>
 
-            {errorStep === 'when' && error ? (
-              <Alert variant="destructive">
-                <AlertDescription>
-                  The server rejected the start above: {error}
-                </AlertDescription>
-              </Alert>
-            ) : null}
+            <div ref={revealRef} tabIndex={-1} className="outline-none">
+              {errorStep === 'when' && error ? (
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    The server rejected the start above: {error}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
 
-            {draft.intent === 'copy' ? (
-              <div className="space-y-2 border-t border-border pt-3">
-                {draft.copyFromId ? (
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline">
-                      {sourceRoutine?.name ?? draft.copyFromId}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground">
-                      {sourceRoutine?.enabled
-                        ? 'Enabled today'
-                        : 'Disabled today'}
-                    </span>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => update({ copyFromId: '', name: '' })}
-                    >
-                      Change
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Input
-                      aria-label="Search routines to copy"
-                      placeholder="Search routines"
-                      value={routineQuery}
-                      onChange={(event) => setRoutineQuery(event.target.value)}
-                    />
-                    <ul className="space-y-1">
-                      {matchingRoutines.map((routine) => (
-                        <li key={routine.id}>
-                          <button
-                            type="button"
-                            onClick={() =>
-                              update({
-                                copyFromId: routine.id,
-                                name: `${routine.name} copy`,
-                              })
-                            }
-                            className="flex w-full items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-left text-sm hover:border-primary/50"
-                          >
-                            <span className="truncate">{routine.name}</span>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {routine.id}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                      {matchingRoutines.length === 0 ? (
-                        <li className="text-sm text-muted-foreground">
-                          No routines match that search.
-                        </li>
-                      ) : null}
-                    </ul>
-                  </>
-                )}
-                <p className="text-xs text-muted-foreground">
-                  A copy keeps the source routine&apos;s start and actions
-                  exactly as they are, including any advanced parts this page
-                  does not show. Edit them afterwards on the routine page.
-                </p>
-              </div>
-            ) : null}
-
-            {draft.intent === 'change' ? (
-              <div className="space-y-3 border-t border-border pt-3">
-                <div className="space-y-2">
-                  <span className="text-sm font-medium">Device</span>
-                  {draft.deviceKey ? (
+              {draft.intent === 'copy' ? (
+                <div className="space-y-2 border-t border-border pt-3">
+                  {draft.copyFromId ? (
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline">
-                        {labelFor(draft.deviceKey)}
+                        {sourceRoutine?.name ?? draft.copyFromId}
                       </Badge>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {draft.deviceKey}
+                      <span className="text-xs text-muted-foreground">
+                        {sourceRoutine?.enabled
+                          ? 'Enabled today'
+                          : 'Disabled today'}
                       </span>
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => update({ deviceKey: '', fieldPath: '' })}
+                        onClick={() => update({ copyFromId: '', name: '' })}
                       >
                         Change
                       </Button>
@@ -493,293 +446,368 @@ export default function NewRoutinePage() {
                   ) : (
                     <>
                       <Input
-                        aria-label="Search devices"
-                        placeholder="Search devices by name or id"
-                        value={deviceQuery}
-                        onChange={(event) => setDeviceQuery(event.target.value)}
+                        aria-label="Search routines to copy"
+                        placeholder="Search routines"
+                        value={routineQuery}
+                        onChange={(event) =>
+                          setRoutineQuery(event.target.value)
+                        }
                       />
                       <ul className="space-y-1">
-                        {matchingDevices.map((entry) => {
-                          const options = deviceFieldOptions(entry.device);
-                          return (
-                            <li key={entry.key}>
-                              <button
-                                type="button"
-                                disabled={options.length === 0}
-                                onClick={() =>
-                                  update({
-                                    deviceKey: entry.key,
-                                    fieldPath: options[0]?.path ?? '',
-                                    fieldKind: options[0]?.kind ?? 'boolean',
-                                    value:
-                                      options[0]?.kind === 'boolean'
-                                        ? 'true'
-                                        : '',
-                                    anyValue: false,
-                                  })
-                                }
-                                className="flex w-full items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-left text-sm hover:border-primary/50 disabled:opacity-50"
-                              >
-                                <span className="truncate">{entry.label}</span>
-                                <span className="font-mono text-xs text-muted-foreground">
-                                  {options.length === 0
-                                    ? 'no reported values'
-                                    : options
-                                        .map((option) => option.label)
-                                        .join(', ')}
-                                </span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                        {matchingDevices.length === 0 ? (
+                        {matchingRoutines.map((routine) => (
+                          <li key={routine.id}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                update({
+                                  copyFromId: routine.id,
+                                  name: `${routine.name} copy`,
+                                })
+                              }
+                              className="flex w-full items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-left text-sm hover:border-primary/50"
+                            >
+                              <span className="truncate">{routine.name}</span>
+                              <span className="font-mono text-xs text-muted-foreground">
+                                {routine.id}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                        {matchingRoutines.length === 0 ? (
                           <li className="text-sm text-muted-foreground">
-                            No devices match that search.
+                            No routines match that search.
                           </li>
                         ) : null}
                       </ul>
                     </>
                   )}
+                  <p className="text-xs text-muted-foreground">
+                    A copy keeps the source routine&apos;s start and actions
+                    exactly as they are, including any advanced parts this page
+                    does not show. Edit them afterwards on the routine page.
+                  </p>
                 </div>
+              ) : null}
 
-                {draft.deviceKey && fieldOptions.length > 0 ? (
+              {draft.intent === 'change' ? (
+                <div className="space-y-3 border-t border-border pt-3">
                   <div className="space-y-2">
-                    <span className="text-sm font-medium">Value to watch</span>
-                    <div className="flex flex-wrap gap-2">
-                      {fieldOptions.map((option) => (
-                        <button
-                          key={option.path}
-                          type="button"
-                          aria-pressed={draft.fieldPath === option.path}
+                    <span className="text-sm font-medium">Device</span>
+                    {draft.deviceKey ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">
+                          {labelFor(draft.deviceKey)}
+                        </Badge>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {draft.deviceKey}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="ghost"
                           onClick={() =>
-                            update({
-                              fieldPath: option.path,
-                              fieldKind: option.kind,
-                              value: option.kind === 'boolean' ? 'true' : '',
-                            })
+                            update({ deviceKey: '', fieldPath: '' })
                           }
+                        >
+                          Change
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <Input
+                          aria-label="Search devices"
+                          placeholder="Search devices by name or id"
+                          value={deviceQuery}
+                          onChange={(event) =>
+                            setDeviceQuery(event.target.value)
+                          }
+                        />
+                        <ul className="space-y-1">
+                          {matchingDevices.map((entry) => {
+                            const options = deviceFieldOptions(entry.device);
+                            return (
+                              <li key={entry.key}>
+                                <button
+                                  type="button"
+                                  disabled={options.length === 0}
+                                  onClick={() =>
+                                    update({
+                                      deviceKey: entry.key,
+                                      fieldPath: options[0]?.path ?? '',
+                                      fieldKind: options[0]?.kind ?? 'boolean',
+                                      value:
+                                        options[0]?.kind === 'boolean'
+                                          ? 'true'
+                                          : '',
+                                      anyValue: false,
+                                    })
+                                  }
+                                  className="flex w-full items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-left text-sm hover:border-primary/50 disabled:opacity-50"
+                                >
+                                  <span className="truncate">
+                                    {entry.label}
+                                  </span>
+                                  <span className="font-mono text-xs text-muted-foreground">
+                                    {options.length === 0
+                                      ? 'no reported values'
+                                      : options
+                                          .map((option) => option.label)
+                                          .join(', ')}
+                                  </span>
+                                </button>
+                              </li>
+                            );
+                          })}
+                          {matchingDevices.length === 0 ? (
+                            <li className="text-sm text-muted-foreground">
+                              No devices match that search.
+                            </li>
+                          ) : null}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+
+                  {draft.deviceKey && fieldOptions.length > 0 ? (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">
+                        Value to watch
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        {fieldOptions.map((option) => (
+                          <button
+                            key={option.path}
+                            type="button"
+                            aria-pressed={draft.fieldPath === option.path}
+                            onClick={() =>
+                              update({
+                                fieldPath: option.path,
+                                fieldKind: option.kind,
+                                value: option.kind === 'boolean' ? 'true' : '',
+                              })
+                            }
+                            className={cn(
+                              'rounded-lg border px-2.5 py-1 text-xs',
+                              draft.fieldPath === option.path
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border',
+                            )}
+                          >
+                            {option.label}
+                          </button>
+                        ))}
+                      </div>
+                      {selectedField ? (
+                        <p className="text-xs text-muted-foreground">
+                          Current value:{' '}
+                          {describeFieldValue(selectedField) ?? 'not reported'}
+                          {selectedField.updatedAt
+                            ? ` · updated ${describeFreshness(selectedField.updatedAt, now)}`
+                            : ''}
+                          . Recent changes are not stored for this device, so no
+                          history is shown.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {draft.deviceKey && draft.fieldPath ? (
+                    <div className="space-y-2">
+                      <span className="text-sm font-medium">
+                        When should it start?
+                      </span>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          aria-pressed={draft.anyValue}
+                          onClick={() => update({ anyValue: true })}
                           className={cn(
                             'rounded-lg border px-2.5 py-1 text-xs',
-                            draft.fieldPath === option.path
+                            draft.anyValue
                               ? 'border-primary bg-primary/5'
                               : 'border-border',
                           )}
                         >
-                          {option.label}
+                          Any change
                         </button>
-                      ))}
-                    </div>
-                    {selectedField ? (
-                      <p className="text-xs text-muted-foreground">
-                        Current value:{' '}
-                        {describeFieldValue(selectedField) ?? 'not reported'}
-                        {selectedField.updatedAt
-                          ? ` · updated ${describeFreshness(selectedField.updatedAt, now)}`
-                          : ''}
-                        . Recent changes are not stored for this device, so no
-                        history is shown.
-                      </p>
-                    ) : null}
-                  </div>
-                ) : null}
-
-                {draft.deviceKey && draft.fieldPath ? (
-                  <div className="space-y-2">
-                    <span className="text-sm font-medium">
-                      When should it start?
-                    </span>
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        type="button"
-                        aria-pressed={draft.anyValue}
-                        onClick={() => update({ anyValue: true })}
-                        className={cn(
-                          'rounded-lg border px-2.5 py-1 text-xs',
-                          draft.anyValue
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border',
-                        )}
-                      >
-                        Any change
-                      </button>
-                      <button
-                        type="button"
-                        aria-pressed={!draft.anyValue}
-                        onClick={() => update({ anyValue: false })}
-                        className={cn(
-                          'rounded-lg border px-2.5 py-1 text-xs',
-                          !draft.anyValue
-                            ? 'border-primary bg-primary/5'
-                            : 'border-border',
-                        )}
-                      >
-                        A specific value
-                      </button>
-                    </div>
-                    {!draft.anyValue ? (
-                      draft.fieldKind === 'boolean' ? (
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            aria-pressed={draft.value === 'true'}
-                            onClick={() => update({ value: 'true' })}
-                            className={cn(
-                              'rounded-lg border px-2.5 py-1 text-xs',
-                              draft.value === 'true'
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border',
-                            )}
-                          >
-                            Turns on
-                          </button>
-                          <button
-                            type="button"
-                            aria-pressed={draft.value === 'false'}
-                            onClick={() => update({ value: 'false' })}
-                            className={cn(
-                              'rounded-lg border px-2.5 py-1 text-xs',
-                              draft.value === 'false'
-                                ? 'border-primary bg-primary/5'
-                                : 'border-border',
-                            )}
-                          >
-                            Turns off
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap items-center gap-2">
-                          {draft.fieldKind === 'number' ? (
-                            <select
-                              aria-label="Comparison"
-                              className="rounded-lg border border-border bg-background px-2 py-1 text-sm"
-                              value={draft.operator}
-                              onChange={(event) =>
-                                update({
-                                  operator: event.target
-                                    .value as JourneyDraft['operator'],
-                                })
-                              }
-                            >
-                              <option value="eq">is exactly</option>
-                              <option value="gt">is above</option>
-                              <option value="lt">is below</option>
-                              <option value="ne">is not</option>
-                            </select>
-                          ) : null}
-                          <Input
-                            aria-label="Expected value"
-                            className="max-w-40"
-                            value={draft.value}
-                            onChange={(event) =>
-                              update({ value: event.target.value })
-                            }
-                          />
-                          <span className="text-xs text-muted-foreground">
-                            {describeExpected(draft)}
-                          </span>
-                        </div>
-                      )
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {draft.intent === 'schedule' ? (
-              <div className="space-y-3 border-t border-border pt-3">
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-medium">Time of day</span>
-                  <Input
-                    type="time"
-                    className="max-w-40"
-                    aria-label="Time of day"
-                    value={draft.time}
-                    onChange={(event) => update({ time: event.target.value })}
-                  />
-                </label>
-                <div className="space-y-1.5">
-                  <span className="text-sm font-medium">Days</span>
-                  <div className="flex flex-wrap gap-1">
-                    {WEEKDAY_LABELS.map((label, index) => {
-                      const selected = draft.days.includes(index);
-                      return (
                         <button
-                          key={`${label}-${index}`}
                           type="button"
-                          aria-pressed={selected}
-                          aria-label={
-                            [
-                              'Sunday',
-                              'Monday',
-                              'Tuesday',
-                              'Wednesday',
-                              'Thursday',
-                              'Friday',
-                              'Saturday',
-                            ][index]
-                          }
-                          onClick={() =>
-                            update({
-                              days: selected
-                                ? draft.days.filter((day) => day !== index)
-                                : [...draft.days, index],
-                            })
-                          }
+                          aria-pressed={!draft.anyValue}
+                          onClick={() => update({ anyValue: false })}
                           className={cn(
-                            'size-8 rounded-lg border text-xs',
-                            selected
+                            'rounded-lg border px-2.5 py-1 text-xs',
+                            !draft.anyValue
                               ? 'border-primary bg-primary/5'
                               : 'border-border',
                           )}
                         >
-                          {label}
+                          A specific value
                         </button>
-                      );
-                    })}
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {describeSchedule(draft.time, draft.days)}
-                  {toCron(draft.time, draft.days) ? (
-                    <>
-                      {' '}
-                      · engine expression{' '}
-                      <span className="font-mono">
-                        {toCron(draft.time, draft.days)}
-                      </span>{' '}
-                      (times are
-                      {` ${Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Helsinki'}`}
-                      )
-                    </>
+                      </div>
+                      {!draft.anyValue ? (
+                        draft.fieldKind === 'boolean' ? (
+                          <div className="flex flex-wrap gap-2">
+                            <button
+                              type="button"
+                              aria-pressed={draft.value === 'true'}
+                              onClick={() => update({ value: 'true' })}
+                              className={cn(
+                                'rounded-lg border px-2.5 py-1 text-xs',
+                                draft.value === 'true'
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border',
+                              )}
+                            >
+                              Turns on
+                            </button>
+                            <button
+                              type="button"
+                              aria-pressed={draft.value === 'false'}
+                              onClick={() => update({ value: 'false' })}
+                              className={cn(
+                                'rounded-lg border px-2.5 py-1 text-xs',
+                                draft.value === 'false'
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-border',
+                              )}
+                            >
+                              Turns off
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="flex flex-wrap items-center gap-2">
+                            {draft.fieldKind === 'number' ? (
+                              <select
+                                aria-label="Comparison"
+                                className="rounded-lg border border-border bg-background px-2 py-1 text-sm"
+                                value={draft.operator}
+                                onChange={(event) =>
+                                  update({
+                                    operator: event.target
+                                      .value as JourneyDraft['operator'],
+                                  })
+                                }
+                              >
+                                <option value="eq">is exactly</option>
+                                <option value="gt">is above</option>
+                                <option value="lt">is below</option>
+                                <option value="ne">is not</option>
+                              </select>
+                            ) : null}
+                            <Input
+                              aria-label="Expected value"
+                              className="max-w-40"
+                              value={draft.value}
+                              onChange={(event) =>
+                                update({ value: event.target.value })
+                              }
+                            />
+                            <span className="text-xs text-muted-foreground">
+                              {describeExpected(draft)}
+                            </span>
+                          </div>
+                        )
+                      ) : null}
+                    </div>
                   ) : null}
-                </p>
-              </div>
-            ) : null}
+                </div>
+              ) : null}
 
-            {draft.intent === 'change' ? (
-              <Advanced
-                label="Extra conditions"
-                description="Narrow the trigger further."
-              >
-                <label className="block space-y-1.5">
-                  <span className="text-sm font-medium">
-                    Only if it stays this way for (minutes)
-                  </span>
-                  <Input
-                    className="max-w-32"
-                    inputMode="numeric"
-                    placeholder="e.g. 5"
-                    value={draft.forMinutes}
-                    onChange={(event) =>
-                      update({ forMinutes: event.target.value })
-                    }
-                  />
-                  <span className="block text-xs text-muted-foreground">
-                    Leave empty to run as soon as the change is reported.
-                  </span>
-                </label>
-              </Advanced>
-            ) : null}
+              {draft.intent === 'schedule' ? (
+                <div className="space-y-3 border-t border-border pt-3">
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">Time of day</span>
+                    <Input
+                      type="time"
+                      className="max-w-40"
+                      aria-label="Time of day"
+                      value={draft.time}
+                      onChange={(event) => update({ time: event.target.value })}
+                    />
+                  </label>
+                  <div className="space-y-1.5">
+                    <span className="text-sm font-medium">Days</span>
+                    <div className="flex flex-wrap gap-1">
+                      {WEEKDAY_LABELS.map((label, index) => {
+                        const selected = draft.days.includes(index);
+                        return (
+                          <button
+                            key={`${label}-${index}`}
+                            type="button"
+                            aria-pressed={selected}
+                            aria-label={
+                              [
+                                'Sunday',
+                                'Monday',
+                                'Tuesday',
+                                'Wednesday',
+                                'Thursday',
+                                'Friday',
+                                'Saturday',
+                              ][index]
+                            }
+                            onClick={() =>
+                              update({
+                                days: selected
+                                  ? draft.days.filter((day) => day !== index)
+                                  : [...draft.days, index],
+                              })
+                            }
+                            className={cn(
+                              'size-8 rounded-lg border text-xs',
+                              selected
+                                ? 'border-primary bg-primary/5'
+                                : 'border-border',
+                            )}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {describeSchedule(draft.time, draft.days)}
+                    {toCron(draft.time, draft.days) ? (
+                      <>
+                        {' '}
+                        · engine expression{' '}
+                        <span className="font-mono">
+                          {toCron(draft.time, draft.days)}
+                        </span>{' '}
+                        (times are
+                        {` ${Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Helsinki'}`}
+                        )
+                      </>
+                    ) : null}
+                  </p>
+                </div>
+              ) : null}
+
+              {draft.intent === 'change' ? (
+                <Advanced
+                  label="Extra conditions"
+                  description="Narrow the trigger further."
+                >
+                  <label className="block space-y-1.5">
+                    <span className="text-sm font-medium">
+                      Only if it stays this way for (minutes)
+                    </span>
+                    <Input
+                      className="max-w-32"
+                      inputMode="numeric"
+                      placeholder="e.g. 5"
+                      value={draft.forMinutes}
+                      onChange={(event) =>
+                        update({ forMinutes: event.target.value })
+                      }
+                    />
+                    <span className="block text-xs text-muted-foreground">
+                      Leave empty to run as soon as the change is reported.
+                    </span>
+                  </label>
+                </Advanced>
+              ) : null}
+            </div>
           </section>
           {step === 1 ? (
             <div className="flex items-center justify-between gap-2">

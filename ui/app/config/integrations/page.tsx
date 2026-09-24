@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -9,6 +9,7 @@ import {
   useIntegrations,
 } from '@/hooks/useConfig';
 import { useCreateDeepLink, useSearchParamState } from '@/hooks/useDeepLink';
+import { useDevicesState } from '@/hooks/websocket';
 import { matchesConfigSearch } from '@/lib/configSearch';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { SearchablePicker } from '@/ui/SearchablePicker';
@@ -599,6 +600,35 @@ export default function IntegrationsPage() {
   const [showCreate, setShowCreate] = useState(false);
   useCreateDeepLink(useCallback(() => setShowCreate(true), []));
   const [createPlugin, setCreatePlugin] = useState<string | null>(null);
+  // “Is anything offline?” answered from the data that exists: which devices
+  // have stopped reporting, grouped by the connection they belong to.
+  const devices = useDevicesState();
+  const connectionHealth = useMemo(() => {
+    const map = new Map<
+      string,
+      { total: number; notReporting: Array<{ key: string; label: string }> }
+    >();
+    for (const [key, device] of Object.entries(devices ?? {})) {
+      const [integrationId] = key.split('/');
+      if (!integrationId) continue;
+      const entry = map.get(integrationId) ?? {
+        total: 0,
+        notReporting: [],
+      };
+      entry.total += 1;
+      const controllable =
+        'Controllable' in device.data ? device.data.Controllable : undefined;
+      const availability = controllable?.availability;
+      if (availability && availability.online === false) {
+        entry.notReporting.push({
+          key,
+          label: device.name || (key.split('/')[1] ?? key),
+        });
+      }
+      map.set(integrationId, entry);
+    }
+    return map;
+  }, [devices]);
   const editingIntegration = integrations.find(
     (integration) => integration.id === editingId,
   );
@@ -727,6 +757,7 @@ export default function IntegrationsPage() {
             <IntegrationCard
               key={integration.id}
               integration={integration}
+              health={connectionHealth.get(integration.id)}
               onOpen={() =>
                 void navigate(
                   `/config/integrations/${encodeURIComponent(integration.id)}`,
@@ -794,10 +825,16 @@ function IntegrationCard({
   integration,
   onOpen,
   onDelete,
+  health,
 }: {
   integration: Integration;
   onOpen: () => void;
   onDelete: () => void;
+  /** Devices on this connection and how many stopped reporting. */
+  health?: {
+    total: number;
+    notReporting: Array<{ key: string; label: string }>;
+  };
 }) {
   return (
     <Card
@@ -830,6 +867,31 @@ function IntegrationCard({
                 {integration.enabled ? 'Enabled' : 'Disabled'}
               </Badge>
             </div>
+            {health ? (
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                {health.total === 0
+                  ? 'No devices from this connection yet.'
+                  : `${health.total} device${health.total === 1 ? '' : 's'}`}
+                {health.notReporting.length > 0 ? (
+                  <>
+                    {' · '}
+                    <Link
+                      className="font-medium text-amber-600 underline-offset-4 hover:underline dark:text-amber-400"
+                      to={
+                        health.notReporting.length === 1
+                          ? `/config/devices/detail?key=${encodeURIComponent(health.notReporting[0].key)}`
+                          : `/config/devices?q=${encodeURIComponent(integration.id)}`
+                      }
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {health.notReporting.length === 1
+                        ? `${health.notReporting[0].label} stopped reporting`
+                        : `${health.notReporting.length} devices stopped reporting`}
+                    </Link>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
           </div>
           <div className="flex gap-2">
             <Button
