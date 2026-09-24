@@ -256,39 +256,37 @@ export default function NewScenePage() {
         </Alert>
       ) : null}
 
+      <nav className="flex items-center gap-2 text-xs" aria-label="Steps">
+        <span className="font-medium text-foreground">Step {step} of 3</span>
+        <span aria-hidden className="text-muted-foreground">
+          ·
+        </span>
+        <span className="truncate text-muted-foreground">
+          {STEP_LABELS[step]}
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          {([1, 2, 3] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              aria-label={`Go to step ${value}: ${STEP_LABELS[value]}`}
+              aria-current={step === value ? 'step' : undefined}
+              onClick={() => setStep(value)}
+              className={cn(
+                'size-6 rounded-full border text-[11px] font-medium transition',
+                step === value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border text-muted-foreground hover:border-primary/40',
+              )}
+            >
+              {value}
+            </button>
+          ))}
+        </span>
+      </nav>
+
       {step === 1 ? (
         <>
-          <nav className="flex items-center gap-2 text-xs" aria-label="Steps">
-            <span className="font-medium text-foreground">
-              Step {step} of 3
-            </span>
-            <span aria-hidden className="text-muted-foreground">
-              ·
-            </span>
-            <span className="truncate text-muted-foreground">
-              {STEP_LABELS[step]}
-            </span>
-            <span className="ml-auto flex items-center gap-1">
-              {([1, 2, 3] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  aria-label={`Go to step ${value}: ${STEP_LABELS[value]}`}
-                  aria-current={step === value ? 'step' : undefined}
-                  onClick={() => setStep(value)}
-                  className={cn(
-                    'size-6 rounded-full border text-[11px] font-medium transition',
-                    step === value
-                      ? 'border-primary bg-primary/10 text-primary'
-                      : 'border-border text-muted-foreground hover:border-primary/40',
-                  )}
-                >
-                  {value}
-                </button>
-              ))}
-            </span>
-          </nav>
-
           <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
             <h2 className="text-sm font-semibold">
               Which devices or rooms should this scene affect?
