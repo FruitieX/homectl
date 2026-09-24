@@ -78,57 +78,88 @@ function readBody(req) {
   });
 }
 
-/** config endpoint name -> array in db.config (or a special key) */
-const SPECIAL_GET = {
-  'runtime-status': () => db.runtimeStatus,
-  'routine-history': () => db.routineHistory,
-  logs: () => db.logs,
-  diagnostics: () => ({
-    // Mirrors the codes the server emits, and each suggestion names a repair
-    // that exists in the UI (room member list, scene target rows).
-    issues: [
-      {
+/**
+ * Diagnostics derived from the active fixture, so every issue names an item
+ * that really exists in this data and every suggestion has a repair in the UI.
+ * The codes mirror the server's config_diagnostics output.
+ */
+function buildDiagnostics() {
+  const deviceKeys = new Set(
+    (db.devices ?? []).map((device) => `${device.integration_id}/${device.id}`),
+  );
+  const groupIds = new Set((db.config.groups ?? []).map((group) => group.id));
+  const issues = [];
+
+  for (const scene of db.config.scenes ?? []) {
+    for (const key of Object.keys(scene.device_states ?? {})) {
+      if (deviceKeys.has(key)) continue;
+      issues.push({
         entity: 'scene',
-        entity_id: 'normal',
-        name: 'Normal',
+        entity_id: scene.id,
+        name: scene.name,
         code: 'missing_scene_device',
         severity: 'warning',
-        message: 'Target device mqtt/attic_lamp is not available.',
+        message: `Target device ${key} is not available.`,
         suggestion:
           'Open the scene and choose another device for that target, or remove it.',
-      },
-      {
+      });
+    }
+    for (const id of Object.keys(scene.group_states ?? {})) {
+      if (groupIds.has(id)) continue;
+      issues.push({
         entity: 'scene',
-        entity_id: 'night',
-        name: 'Night',
+        entity_id: scene.id,
+        name: scene.name,
         code: 'missing_scene_group',
         severity: 'warning',
-        message: 'Target room attic does not exist.',
+        message: `Target room ${id} does not exist.`,
         suggestion: 'Choose an existing room for that target, or remove it.',
-      },
-      {
+      });
+    }
+  }
+
+  for (const group of db.config.groups ?? []) {
+    const members =
+      group.device_keys ??
+      (group.devices ?? []).map(
+        (member) => `${member.integration_id}/${member.device_id}`,
+      );
+    for (const key of members) {
+      if (deviceKeys.has(key)) continue;
+      issues.push({
         entity: 'group',
-        entity_id: 'hallway',
-        name: 'Hallway',
+        entity_id: group.id,
+        name: group.name,
         code: 'missing_group_device',
         severity: 'warning',
-        message:
-          'Device mqtt/hallway_spot is not available in the current runtime.',
+        message: `Device ${key} is not available in the current runtime.`,
         suggestion:
           'Check its integration, replace the device reference, or remove it from this room.',
-      },
-      {
+      });
+    }
+    if (members.length === 0 && (group.linked_groups ?? []).length === 0) {
+      issues.push({
         entity: 'group',
-        entity_id: 'guest_room',
-        name: 'Guest room',
+        entity_id: group.id,
+        name: group.name,
         code: 'empty_group',
         severity: 'info',
         message: 'This room has no devices or nested rooms.',
         suggestion:
           'Add members if it should control devices. An intentionally empty room can be left as it is.',
-      },
-    ],
-  }),
+      });
+    }
+  }
+
+  return { issues };
+}
+
+/** config endpoint name -> array in db.config (or a special key) */
+const SPECIAL_GET = {
+  'runtime-status': () => db.runtimeStatus,
+  'routine-history': () => db.routineHistory,
+  logs: () => db.logs,
+  diagnostics: () => buildDiagnostics(),
   'config-export': () => ({
     version: 1,
     exported_at: new Date().toISOString(),

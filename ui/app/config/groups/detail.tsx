@@ -540,13 +540,6 @@ export default function GroupDetailPage() {
           />
 
           <StatusRegion message={status?.message ?? null} tone={status?.tone} />
-
-          <p className="text-xs text-muted-foreground">
-            Looking for the device list?{' '}
-            <Link to="/config/devices" className="underline underline-offset-2">
-              Open devices
-            </Link>
-          </p>
         </div>
       ) : null}
     </DetailPageShell>
