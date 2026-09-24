@@ -2,6 +2,8 @@
   "private": true,
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 3000",
+    "dev:fixtures": "node dev/fixture-server.mjs",
+    "dev:against-fixtures": "HOMECTL_DEV_PROXY_TARGET=http://127.0.0.1:45901 vite --host 0.0.0.0 --port 3000",
     "build": "vite build",
     "start": "vite preview --host 0.0.0.0 --port 3000",
     "lint": "oxlint",

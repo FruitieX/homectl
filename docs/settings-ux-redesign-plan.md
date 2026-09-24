@@ -12,9 +12,11 @@ This is an implementation checklist for an agent working in the homectl reposito
 
 ## Phase 0 — map the current behavior before replacing it
 
-- [ ] Read the current list and editor components in ui/app/config and the route table in ui/src/routes.tsx. Record the API mutation each Save, Delete, command, and preview currently invokes. Preserve these semantics while moving the UI.
-- [ ] Make a short inventory of each screen's current summary, edit controls, advanced controls, empty/error/loading states, deep links, and direct actions. Use it to remove duplicate surfaces after migration. Do not leave the old modal and the new page both authoring the same item.
-- [ ] Prepare representative fixture data: no items; a normal home; 300 devices across multiple integrations and rooms; a routine with many nested conditions and actions; a scene with many targets; a broken reference; an offline device; and a missing database or stale API response. Use these fixtures in visual and behavior checks, not as runtime defaults.
+- [x] Read the current list and editor components in ui/app/config and the route table in ui/src/routes.tsx. Record the API mutation each Save, Delete, command, and preview currently invokes. Preserve these semantics while moving the UI.
+- [x] Make a short inventory of each screen's current summary, edit controls, advanced controls, empty/error/loading states, deep links, and direct actions. Use it to remove duplicate surfaces after migration. Do not leave the old modal and the new page both authoring the same item.
+- [x] Prepare representative fixture data: no items; a normal home; 300 devices across multiple integrations and rooms; a routine with many nested conditions and actions; a scene with many targets; a broken reference; an offline device; and a missing database or stale API response. Use these fixtures in visual and behavior checks, not as runtime defaults.
+
+Artifacts: [`settings-ux-inventory.md`](settings-ux-inventory.md) records the mutation contract and per-screen inventory; `ui/dev/fixture-server.mjs` (with `ui/dev/fixtures.mjs`) serves the fixture sets for visual and behavior checks.
 
 Start here in the code:
 
