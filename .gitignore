@@ -49,3 +49,15 @@ ui/bindings/generated/
 *.db-wal
 *.toml
 *.toml.bak
+
+# Local working plans, reviews, and design mockups
+/.hermes/plans/
+/docs/settings-mockups/
+/docs/*-plan.md
+/docs/backend-review.md
+/docs/improvement-pass.md
+/docs/rule-model-review.md
+/docs/settings-ux-inventory.md
+/docs/todo.md
+/homectl-*-plan.md
+/v2.md
