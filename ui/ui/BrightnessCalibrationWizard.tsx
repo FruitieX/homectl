@@ -37,6 +37,10 @@ type BrightnessCalibrationWizardProps = {
   existingPoints?: Array<{ reference: unknown; output: unknown }>;
   /** The profile this light is assigned to, when there is one. */
   profile?: ColorCalibrationProfile | null;
+  /** The brightness curve this light resolves to today, when it has one. */
+  existingBrightnessPoints?: BrightnessPoint[];
+  /** How many lights share the profile, so a shared edit is not a surprise. */
+  profileUsage?: number;
   onSaved?: () => void;
 };
 
@@ -53,6 +57,8 @@ export function BrightnessCalibrationWizard({
   devices,
   existingPoints = [],
   profile = null,
+  existingBrightnessPoints = [],
+  profileUsage = 0,
   onSaved,
 }: BrightnessCalibrationWizardProps) {
   const { apiEndpoint } = useAppConfig();
@@ -64,7 +70,10 @@ export function BrightnessCalibrationWizard({
   const [referenceKey, setReferenceKey] = useState('');
   const [previewLogical, setPreviewLogical] = useState<number | null>(null);
   const [points, setPoints] = useState<BrightnessPoint[]>(() =>
-    suggestedBrightnessPoints(),
+    // Editing what a light already has beats starting from a blank curve.
+    existingBrightnessPoints.length >= 2
+      ? sortBrightnessPoints(existingBrightnessPoints)
+      : suggestedBrightnessPoints(),
   );
   const [preview, setPreview] = useState<{
     state: 'idle' | 'starting' | 'active' | 'error';
@@ -383,6 +392,9 @@ export function BrightnessCalibrationWizard({
                 .filter(Boolean)
                 .join(' and ')}
               . Saving a new profile keeps the other part.
+              {profileUsage > 1
+                ? ` ${profileUsage} lights share this profile; they keep it.`
+                : null}
             </p>
           ) : null}
           <fieldset className="space-y-2">

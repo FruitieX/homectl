@@ -810,6 +810,32 @@ mod tests {
             serde_json::from_str(&serde_json::to_string(&brightness_only).unwrap()).unwrap();
         assert_eq!(round_tripped.brightness_points, brightness_only.brightness_points);
         assert!(round_tripped.brightness_points[0].logical.into_inner() > 0.0);
+
+        // A combined profile carries both channels through an export, and the
+        // resolved calibration of an assigned profile copies both sets.
+        let combined = ColorCalibrationProfile {
+            points: vec![ColorCalibrationPoint {
+                reference: uv(30, 0.25),
+                output: uv(55, 0.1),
+            }],
+            brightness_points: curve(),
+            ..brightness_only.clone()
+        };
+        combined.validate().unwrap();
+        let combined_round_trip: ColorCalibrationProfile =
+            serde_json::from_str(&serde_json::to_string(&combined).unwrap()).unwrap();
+        assert_eq!(
+            serde_json::to_value(&combined_round_trip.points).unwrap(),
+            serde_json::to_value(&combined.points).unwrap()
+        );
+        assert_eq!(combined_round_trip.brightness_points, combined.brightness_points);
+        let resolved = DeviceColorCalibration {
+            device_key: "mqtt/lamp".into(),
+            points: combined_round_trip.points.clone(),
+            brightness_points: combined_round_trip.brightness_points.clone(),
+        };
+        assert_eq!(resolved.points.len(), 1);
+        assert_eq!(resolved.brightness_points.len(), 3);
     }
 
     #[test]

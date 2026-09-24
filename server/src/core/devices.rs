@@ -524,15 +524,30 @@ impl Devices {
                     if let Some(expected) = physical.get_controllable_state() {
                         color_only.state.power = expected.power;
                         color_only.state.brightness = expected.brightness;
-                        data.state.color = if expected.color.is_some()
-                            && cmp_device_states(&color_only, expected)
-                        {
+                        let report_is_ours =
+                            expected.color.is_some() && cmp_device_states(&color_only, expected);
+                        data.state.color = if report_is_ours {
                             current
                                 .get_controllable_state()
                                 .and_then(|state| state.color.clone())
                         } else {
                             Some(calibration.reference_for_report(color))
                         };
+                        // Brightness travels the other way: a physical report is
+                        // shown as the logical level that produced it. Only a
+                        // report that matches what we would have sent is treated
+                        // as ours; anything else is a real external change and
+                        // is displayed as reported.
+                        if report_is_ours {
+                            if let Some(physical_brightness) = data.state.brightness {
+                                data.state.brightness = Some(OrderedFloat(
+                                    crate::core::color_calibration::map_brightness_input(
+                                        &calibration.brightness_points,
+                                        physical_brightness.0,
+                                    ),
+                                ));
+                            }
+                        }
                     }
                 }
             }
@@ -1363,6 +1378,92 @@ mod tests {
                 current.get_controllable_state().unwrap().color
             );
         }
+    }
+
+    #[tokio::test]
+    async fn unmanaged_reports_show_the_logical_brightness_behind_the_curve() {
+        let (mut devices, mut rx) = test_devices();
+        let calibration: crate::core::color_calibration::DeviceColorCalibration = serde_json::from_value(serde_json::json!({
+            "device_key":"mqtt/lamp",
+            "brightness_points":[{"logical":0.10,"output":0.042},{"logical":1.0,"output":1.0}]
+        }))
+        .unwrap();
+
+        let mut current = managed_controllable_device("lamp", "Lamp");
+        if let DeviceData::Controllable(data) = &mut current.data {
+            data.capabilities.hs = true;
+            data.capabilities.brightness = Some(true);
+            data.state.power = true;
+            data.state.brightness = Some(OrderedFloat(0.10));
+            data.state.color = Some(crate::types::color::DeviceColor::new_from_hs(30, 0.25));
+            data.managed = ManageKind::Unmanaged;
+        }
+        devices.set_state(&current, true, true);
+        while rx.try_recv().is_ok() {}
+
+        // A calibrated report: the light is at the physical level the curve
+        // sent for the logical 10%, so the app keeps showing 10%.
+        let report = crate::core::color_calibration::calibrated_device(&current, Some(&calibration));
+        let DeviceData::Controllable(report_state) = &report.data else {
+            unreachable!()
+        };
+        assert!(
+            (report_state.state.brightness.unwrap().0 - 0.042).abs() < 1e-4,
+            "the fixture must send the physical level"
+        );
+        devices
+            .handle_controllable_update_calibrated(
+                current.clone(),
+                &report,
+                report_state,
+                Some(&calibration),
+            )
+            .await
+            .unwrap();
+        let stored = devices
+            .get_device(&current.get_device_key())
+            .unwrap()
+            .get_controllable_state()
+            .unwrap()
+            .brightness
+            .unwrap()
+            .0;
+        assert!(
+            (stored - 0.10).abs() < 1e-4,
+            "physical 4.2% should read as the logical 10%, got {stored}"
+        );
+
+        // A report from outside the curve is not ours: it is shown as reported.
+        let mut external = current.clone();
+        if let DeviceData::Controllable(data) = &mut external.data {
+            data.state.brightness = Some(OrderedFloat(0.80));
+        }
+        let DeviceData::Controllable(external_state) = &external.data else {
+            unreachable!()
+        };
+        devices
+            .handle_controllable_update_calibrated(
+                external.clone(),
+                &external,
+                external_state,
+                Some(&calibration),
+            )
+            .await
+            .unwrap();
+        let stored = devices
+            .get_device(&current.get_device_key())
+            .unwrap()
+            .get_controllable_state()
+            .unwrap()
+            .brightness
+            .unwrap()
+            .0;
+        // Shown as reported: the stored value tracks the report rather than
+        // being pushed back through the curve.
+        assert!(
+            (stored - 0.80).abs() < 0.05,
+            "an external level must be shown as reported, got {stored}"
+        );
     }
 
     #[tokio::test]

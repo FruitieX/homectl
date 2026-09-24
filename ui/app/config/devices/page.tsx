@@ -1973,6 +1973,19 @@ export default function DevicesPage() {
                                       }>
                                     }
                                     profile={assignedProfile ?? null}
+                                    existingBrightnessPoints={
+                                      assignedProfile?.brightness_points ??
+                                      resolved?.brightness_points ??
+                                      []
+                                    }
+                                    profileUsage={
+                                      assignedProfile
+                                        ? calibrationAssignments.filter(
+                                            (row) =>
+                                              row.profile_id === assignedProfile.id,
+                                          ).length
+                                        : 0
+                                    }
                                     onSaved={() => {
                                       void refetchDevices();
                                     }}
