@@ -226,7 +226,7 @@ test('a false condition says which reading is short', () => {
   });
   assert.equal(
     line.text,
-    'Not running: only if Living room lamp brightness is below 30%, brightness is 45%',
+    'Waiting for its trigger — the current condition is not met',
   );
   assert.equal(line.tone, 'neutral');
 });
@@ -252,7 +252,10 @@ test('waiting for data is reserved for unreadable inputs', () => {
     definition: { condition: { kind: 'literal', value: false } },
     context,
   });
-  assert.equal(quiet.text, 'Not running: only if never');
+  assert.equal(
+    quiet.text,
+    'Waiting for its trigger — the current condition is not met',
+  );
 });
 
 test('disabled and unevaluated routines say so plainly', () => {

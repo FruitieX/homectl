@@ -11,6 +11,10 @@ test('describeExecutionPolicy explains overlapping runs and action caps', () => 
   });
   assert.match(skipped, /skipped, not queued/);
   assert.match(skipped, /At most 8 actions/);
+  // The server rejects an over-budget plan as a whole, so never say the
+  // surplus actions are dropped.
+  assert.match(skipped, /rejected as a whole/);
+  assert.doesNotMatch(skipped, /the rest are dropped/);
   const queued = describeExecutionPolicy({ mode: 'queued', max_actions: 1 });
   assert.match(queued, /waits its turn/);
   assert.match(queued, /At most 1 action /);

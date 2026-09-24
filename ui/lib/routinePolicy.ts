@@ -27,7 +27,7 @@ export function describeExecutionPolicy(
   const maxActions = Number(policy.max_actions);
   parts.push(
     Number.isFinite(maxActions) && maxActions > 0
-      ? `At most ${maxActions} action${maxActions === 1 ? '' : 's'} are dispatched per run; the rest are dropped.`
+      ? `At most ${maxActions} action${maxActions === 1 ? '' : 's'} are dispatched per run. A run that would dispatch more is rejected as a whole — nothing from it is sent.`
       : 'No cap on dispatched actions per run.',
   );
   const interval = policy.min_interval_ms;

@@ -27,6 +27,8 @@ import { describeExecutionPolicy } from '@/lib/routinePolicy';
 import { formatFreshness } from '@/lib/configSection';
 import { useDirtyNavigationGuard } from '@/ui/config/useDirtyNavigationGuard';
 import { useSectionEditor } from '@/ui/config/useSectionEditor';
+import { useRoutineHistory } from '@/hooks/useConfig';
+import { formatRelativeTime } from '@/ui/routine-runtime';
 import { useSectionParams } from '@/ui/config/useSectionParams';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { Section } from '@/ui/config/Section';
@@ -246,6 +248,20 @@ export default function RoutineDetailPage() {
     details.dirty ||
     legacyWhen.dirty ||
     legacyThen.dirty;
+  // Hooks stay unconditional: the loading branch below must not change the
+  // order of hook calls.
+  const { data: historyEntries } = useRoutineHistory(15000);
+  const lastEventAt = useMemo(() => {
+    const entry = historyEntries?.find(
+      (item) => item.routine_id === routine?.id,
+    );
+    if (!entry?.timestamp) {
+      return null;
+    }
+    const parsed = new Date(entry.timestamp);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [historyEntries, routine?.id]);
+
   useDirtyNavigationGuard(dirty, {
     description: 'This routine has unsaved section changes.',
   });
@@ -262,7 +278,9 @@ export default function RoutineDetailPage() {
       ...((advanced.draft?.definition_v2 ?? {}) as RoutineDefinitionV2Body),
     };
   }, [advanced.draft, definition, onlyIf.draft, then.draft, when.draft]);
-  const previewIsDraft = draftDefinition !== definition;
+  // A section's draft object exists as soon as it opens; what matters is
+  // whether anything was actually changed.
+  const previewIsDraft = dirty;
 
   if (loading) {
     return (
@@ -400,12 +418,15 @@ export default function RoutineDetailPage() {
   })();
   // One sentence, in the same words the list card uses, plus what it means for
   // delivery: a matched run is a dispatched command, not a confirmed device.
+  // Three separate facts: whether it is enabled (configuration), where it
+  // stands right now (evaluation), and what was recorded (history below).
   const statusSentence = (() => {
-    const base = routineStateLine.text;
+    const base = routineStateLine.text.replace(/\.$/, '');
+    const head = `${routine.enabled ? 'Enabled' : 'Disabled'} · ${base}`;
     if (routineStateLine.tone === 'success') {
-      return `${base}. Dispatched commands are not confirmed device delivery.`;
+      return `${head}. Dispatched commands are not confirmed device delivery.`;
     }
-    return base.endsWith('.') ? base : `${base}.`;
+    return `${head}.`;
   })();
 
   const triggerCount = triggers.length;
@@ -413,13 +434,19 @@ export default function RoutineDetailPage() {
   const lastRun = v2Status?.last_run;
   // One sentence about the last recorded run; the run id, per-step counts, and
   // the full trace live in the activity view rather than in the hero.
-  const lastRunLine = lastRun
-    ? lastRun.accepted
-      ? lastRun.steps.length === 0
-        ? 'Its last recorded run had nothing to do.'
-        : 'Its last recorded run ran the actions below.'
-      : 'Its last recorded run was rejected before anything was dispatched.'
-    : null;
+  // The recorded past, with a time attached, kept apart from the saved
+  // requirement and the current evaluation. Say when there is nothing.
+  const lastEventLine = lastEventAt
+    ? `Last event ${formatRelativeTime(lastEventAt.getTime(), Date.now())}${
+        lastRun
+          ? lastRun.accepted
+            ? lastRun.steps.length === 0
+              ? ' · nothing to do'
+              : ` · ${lastRun.steps.length} action${lastRun.steps.length === 1 ? '' : 's'}`
+            : ' · rejected before dispatch'
+          : ''
+      }`
+    : 'No matching event in retained history';
   const policySummary = definition.execution
     ? describeExecutionPolicy(definition.execution as ExecutionPolicy)
     : 'Defaults: one run at a time, no action cap.';
@@ -448,9 +475,7 @@ export default function RoutineDetailPage() {
             >
               {routine.enabled ? 'Enabled' : 'Disabled'}
             </Badge>
-            {isV2 ? (
-              <Badge variant="outline">Routine</Badge>
-            ) : (
+            {isV2 ? null : (
               <Badge
                 variant="outline"
                 className="border-amber-500/50 text-amber-600 dark:text-amber-400"
@@ -473,9 +498,7 @@ export default function RoutineDetailPage() {
               See activity
             </Link>
           </span>
-          {lastRunLine ? (
-            <span className="block text-muted-foreground">{lastRunLine}</span>
-          ) : null}
+          <span className="block text-muted-foreground">{lastEventLine}</span>
           {routine.enabled && status ? (
             <span className="block text-muted-foreground">
               {statusReceivedAt === null

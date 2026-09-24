@@ -763,21 +763,12 @@ export function describeRoutineStateLine({
     return { text: 'Running now', tone: 'success' };
   }
   if (condition?.truth === 'false') {
-    const narrative = describeConditionNarrative(
-      definition?.condition as ConditionLike | undefined,
-      context,
-    );
-    // A condition that is always true cannot be why nothing ran; say what is
-    // actually true instead of “only if always”.
-    if (narrative.text === 'always') {
-      return { text: 'No matching event recorded recently', tone: 'neutral' };
-    }
-    // The rule, then the reading that makes it false: “only if brightness is
-    // below 30%, brightness is 45%”.
-    const detail = narrative.evidence
-      ? `${narrative.text}, ${narrative.evidence}`
-      : narrative.text;
-    return { text: `Not running: only if ${detail}`, tone: 'neutral' };
+    // The saved requirement belongs in Only if; this line only says where the
+    // routine stands right now. Never restate the rule as a verdict.
+    return {
+      text: 'Waiting for its trigger — the current condition is not met',
+      tone: 'neutral',
+    };
   }
   if (condition?.truth === 'true') {
     return {
