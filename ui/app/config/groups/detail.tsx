@@ -436,8 +436,9 @@ export default function GroupDetailPage() {
                   title="Nested rooms"
                   description={
                     group.linked_groups.length >= 2
-                      ? 'Devices from linked rooms become part of this room. Later links do not override earlier ones; devices keep their own settings.'
-                      : 'Devices from linked rooms become part of this room.'
+                      ? // Only the part that changes a decision: link order.
+                        'Later links do not override earlier ones; each device keeps its own settings.'
+                      : undefined
                   }
                 >
                   <SelectedRoomRows

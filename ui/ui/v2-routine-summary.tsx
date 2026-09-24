@@ -298,7 +298,9 @@ function TraceNode({
     node.truth === 'true'
       ? 'text-emerald-700 dark:text-emerald-300'
       : node.truth === 'false'
-        ? 'text-destructive'
+        ? // A false clause is ordinary: neutral, not a warning. Amber is
+          // reserved for evidence the runtime cannot supply.
+          'text-muted-foreground'
         : 'text-amber-700 dark:text-amber-300';
   return (
     <li className="space-y-1">
