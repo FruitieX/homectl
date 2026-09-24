@@ -180,8 +180,28 @@ export default function GroupsPage() {
                       <div>
                         <CardTitle>{group.name}</CardTitle>
                         <CardDescription>
-                          {group.devices.length}{' '}
-                          {group.devices.length === 1 ? 'device' : 'devices'}
+                          {group.devices.length === 0
+                            ? 'No devices yet'
+                            : `${group.devices.length} ${
+                                group.devices.length === 1
+                                  ? 'device'
+                                  : 'devices'
+                              } · ${group.devices
+                                .slice(0, 2)
+                                .map((device) => {
+                                  const key = `${device.integration_id}/${device.device_id}`;
+                                  const entry = devicesByKey[key];
+                                  return getDeviceDisplayLabelFromKey(
+                                    key,
+                                    entry?.name ?? device.device_id,
+                                    deviceDisplayNameMap,
+                                  );
+                                })
+                                .join(', ')}${
+                                group.devices.length > 2
+                                  ? ` +${group.devices.length - 2} more`
+                                  : ''
+                              }`}
                           {group.linked_groups.length > 0
                             ? ` · ${group.linked_groups.length} linked ${group.linked_groups.length === 1 ? 'room' : 'rooms'}`
                             : ''}
@@ -210,6 +230,22 @@ export default function GroupsPage() {
                     </CardContent>
                   ) : null}
                 </Link>
+                {missing.length > 0 ? (
+                  <CardContent className="pt-0">
+                    <Link
+                      to={`/config/groups/${encodeURIComponent(
+                        group.id,
+                      )}?section=devices&target=${encodeURIComponent(
+                        missing[0],
+                      )}`}
+                      className="inline-flex items-center gap-1 text-xs font-medium text-amber-800 underline-offset-4 hover:underline dark:text-amber-200"
+                    >
+                      {missing.length === 1
+                        ? '1 device is unavailable — open the room to fix it'
+                        : `${missing.length} devices are unavailable — open the room to fix them`}
+                    </Link>
+                  </CardContent>
+                ) : null}
               </Card>
             );
           })}

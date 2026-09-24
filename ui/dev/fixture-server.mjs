@@ -84,25 +84,48 @@ const SPECIAL_GET = {
   'routine-history': () => db.routineHistory,
   logs: () => db.logs,
   diagnostics: () => ({
+    // Mirrors the codes the server emits, and each suggestion names a repair
+    // that exists in the UI (room member list, scene target rows).
     issues: [
-      {
-        entity: 'group',
-        entity_id: 'kitchen',
-        name: 'Kitchen',
-        severity: 'warning',
-        message:
-          'This room references a device that is not assigned anywhere else.',
-        suggestion:
-          'Open the room and confirm the device list, or move the device to the room that controls it.',
-      },
       {
         entity: 'scene',
         entity_id: 'normal',
         name: 'Normal',
-        severity: 'info',
-        message: 'This scene was captured from a device that is offline.',
+        code: 'missing_scene_device',
+        severity: 'warning',
+        message: 'Target device mqtt/attic_lamp is not available.',
         suggestion:
-          'Re-capture the scene once the device reports again so the stored state is current.',
+          'Open the scene and choose another device for that target, or remove it.',
+      },
+      {
+        entity: 'scene',
+        entity_id: 'night',
+        name: 'Night',
+        code: 'missing_scene_group',
+        severity: 'warning',
+        message: 'Target room attic does not exist.',
+        suggestion: 'Choose an existing room for that target, or remove it.',
+      },
+      {
+        entity: 'group',
+        entity_id: 'hallway',
+        name: 'Hallway',
+        code: 'missing_group_device',
+        severity: 'warning',
+        message:
+          'Device mqtt/hallway_spot is not available in the current runtime.',
+        suggestion:
+          'Check its integration, replace the device reference, or remove it from this room.',
+      },
+      {
+        entity: 'group',
+        entity_id: 'guest_room',
+        name: 'Guest room',
+        code: 'empty_group',
+        severity: 'info',
+        message: 'This room has no devices or nested rooms.',
+        suggestion:
+          'Add members if it should control devices. An intentionally empty room can be left as it is.',
       },
     ],
   }),

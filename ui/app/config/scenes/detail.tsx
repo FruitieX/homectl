@@ -18,6 +18,7 @@ import {
   orderedSceneTargets,
   sceneTargetsSummary,
 } from '@/lib/sceneTargets';
+import { resolveSceneEffects } from '@/lib/sceneEffects';
 import { BoundedList } from '@/ui/config/BoundedList';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
 import { Section } from '@/ui/config/Section';
@@ -25,7 +26,11 @@ import { StatusRegion, useStatusAnnouncements } from '@/ui/config/StatusRegion';
 import { useDirtyNavigationGuard } from '@/ui/config/useDirtyNavigationGuard';
 import { useSectionEditor } from '@/ui/config/useSectionEditor';
 import { useSectionParams } from '@/ui/config/useSectionParams';
-import { ConfigField, ConfigFormSection, ConfigToggleRow } from '@/ui/config-form';
+import {
+  ConfigField,
+  ConfigFormSection,
+  ConfigToggleRow,
+} from '@/ui/config-form';
 import {
   AddSceneTargetModal,
   SceneTargetConfigEditor,
@@ -107,7 +112,9 @@ export default function SceneDetailPage() {
   const { status, announce } = useStatusAnnouncements();
 
   const [activating, setActivating] = useState(false);
-  const [addingTarget, setAddingTarget] = useState<'device' | 'room' | null>(null);
+  const [addingTarget, setAddingTarget] = useState<'device' | 'room' | null>(
+    null,
+  );
 
   const scene = scenes.find((entry) => entry.id === id);
 
@@ -139,7 +146,13 @@ export default function SceneDetailPage() {
     () =>
       scene
         ? sceneTargetsSummary(scene, { sceneIds, deviceKeys })
-        : { deviceCount: 0, groupCount: 0, total: 0, unresolvedCount: 0, scripted: false },
+        : {
+            deviceCount: 0,
+            groupCount: 0,
+            total: 0,
+            unresolvedCount: 0,
+            scripted: false,
+          },
     [deviceKeys, scene, sceneIds],
   );
 
@@ -245,9 +258,37 @@ export default function SceneDetailPage() {
   );
 
   const resolvedAll = [
-    ...deviceTargets.map(([key, config]) => ({ key, kind: 'device' as const, config })),
-    ...roomTargets.map(([key, config]) => ({ key, kind: 'group' as const, config })),
+    ...deviceTargets.map(([key, config]) => ({
+      key,
+      kind: 'device' as const,
+      config,
+    })),
+    ...roomTargets.map(([key, config]) => ({
+      key,
+      kind: 'group' as const,
+      config,
+    })),
   ];
+
+  // What the engine would actually apply: rooms first, then devices, with the
+  // last writer per device winning.
+  const effects = resolveSceneEffects(scene, {
+    devices,
+    groups: Object.fromEntries(
+      groups.map((group) => [
+        group.id,
+        {
+          name: group.name,
+          device_keys: (group.devices ?? []).map(
+            (member: { integration_id: string; device_id: string }) =>
+              `${member.integration_id}/${member.device_id}`,
+          ),
+        },
+      ]),
+    ),
+    scenes: scenes.map((entry) => ({ id: entry.id, name: entry.name })),
+    resolveSceneLink: (sceneId) => scenes.find((entry) => entry.id === sceneId),
+  });
 
   const activate = async () => {
     setActivating(true);
@@ -269,7 +310,8 @@ export default function SceneDetailPage() {
     }
   };
 
-  const updateDevices = (next: TargetDraft) => deviceEditor.patch({ device_states: next });
+  const updateDevices = (next: TargetDraft) =>
+    deviceEditor.patch({ device_states: next });
   const updateRooms = (next: TargetDraft, order?: string[]) =>
     roomEditor.patch({
       group_states: next,
@@ -349,29 +391,29 @@ export default function SceneDetailPage() {
               : (groups.find((group) => group.id === key)?.name ?? key);
           return (
             <div key={key} data-target-key={key}>
-            <SceneTargetConfigEditor
-              targetKey={key}
-              targetLabel={label}
-              config={config}
-              devices={devices}
-              allScenes={scenes}
-              scenes={scenes.filter((candidate) => candidate.id !== scene.id)}
-              targetKind={kind}
-              onChange={(next) => onChange({ ...items, [key]: next })}
-              onRemove={() => {
-                const copy = { ...items };
-                delete copy[key];
-                onChange(copy);
-              }}
-              {...(kind === 'group'
-                ? {
-                    position: index,
-                    targetCount: entries.length,
-                    onMoveUp: () => moveRoom(key, -1),
-                    onMoveDown: () => moveRoom(key, 1),
-                  }
-                : {})}
-            />
+              <SceneTargetConfigEditor
+                targetKey={key}
+                targetLabel={label}
+                config={config}
+                devices={devices}
+                allScenes={scenes}
+                scenes={scenes.filter((candidate) => candidate.id !== scene.id)}
+                targetKind={kind}
+                onChange={(next) => onChange({ ...items, [key]: next })}
+                onRemove={() => {
+                  const copy = { ...items };
+                  delete copy[key];
+                  onChange(copy);
+                }}
+                {...(kind === 'group'
+                  ? {
+                      position: index,
+                      targetCount: entries.length,
+                      onMoveUp: () => moveRoom(key, -1),
+                      onMoveDown: () => moveRoom(key, 1),
+                    }
+                  : {})}
+              />
             </div>
           );
         })}
@@ -448,8 +490,10 @@ export default function SceneDetailPage() {
         <StatusRegion message={status?.message ?? null} tone={status?.tone} />
 
         <div className="rounded-2xl border border-border/70 bg-card p-4">
-          <h2 className="text-sm font-semibold">What this scene would set</h2>
-          {summary.total === 0 ? (
+          <h2 className="text-sm font-semibold">
+            What activating would change
+          </h2>
+          {effects.targets.length === 0 ? (
             <p className="mt-2 text-sm text-muted-foreground">
               This scene has no targets yet, so activating it would change
               nothing. Add device or room targets below.
@@ -457,75 +501,105 @@ export default function SceneDetailPage() {
           ) : (
             <>
               <p className="mt-1 text-xs text-muted-foreground">
-                {summary.total} target{summary.total === 1 ? '' : 's'}
-                {summary.scripted
-                  ? ' · a script can override these values at runtime'
+                {effects.affectedDeviceCount} device
+                {effects.affectedDeviceCount === 1 ? '' : 's'} in{' '}
+                {effects.targets.length} target
+                {effects.targets.length === 1 ? '' : 's'}
+                {effects.scripted
+                  ? ' · its script can override these values at runtime'
                   : ''}
-                {summary.unresolvedCount > 0
-                  ? ` · ${summary.unresolvedCount} cannot be resolved`
+                {effects.unresolvedCount > 0
+                  ? ` · ${effects.unresolvedCount} target${
+                      effects.unresolvedCount === 1 ? '' : 's'
+                    } cannot be resolved and will be skipped`
                   : ''}
               </p>
-              <div className="mt-3 space-y-3">
-                {(['device', 'group'] as const).map((chipKind) => {
-                  const entries = resolvedAll.filter(
-                    (entry) => entry.kind === chipKind,
-                  );
-                  if (entries.length === 0) return null;
-                  return (
-                    <div key={chipKind} className="space-y-1">
-                      <p className="text-[11px] font-medium text-muted-foreground">
-                        {chipKind === 'device' ? 'Devices' : 'Rooms'}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {entries.slice(0, 12).map(({ key, kind, config }) => {
-                          const resolved = resolveSceneColor(
-                            config,
-                            kind,
-                            key,
-                            scenes,
-                            devices,
-                          );
-                          const label =
-                            kind === 'device'
-                              ? (devices[key]?.name ?? key)
-                              : (groups.find((group) => group.id === key)?.name ??
-                                key);
-                          return (
-                            <span
-                              key={`${kind}:${key}`}
-                              className="inline-flex max-w-full items-center gap-2 rounded-full border border-border bg-background/60 px-3 py-1 text-xs text-foreground/85"
-                            >
-                              {resolved ? (
-                                <ResolvedColorDot
-                                  className="inline-flex h-3 w-3 shrink-0 rounded-full border border-foreground/15 shadow-inner"
-                                  color={resolved.color}
-                                  isPowered={resolved.isPowered}
-                                />
-                              ) : (
-                                <AlertTriangle
-                                  aria-hidden
-                                  className="size-3 shrink-0 text-amber-600 dark:text-amber-300"
-                                />
-                              )}
-                              <span className="max-w-36 truncate">{label}</span>
-                              {!resolved ? (
-                                <span className="text-amber-700 dark:text-amber-300">
-                                  unresolved
-                                </span>
-                              ) : null}
-                            </span>
-                          );
-                        })}
-                        {entries.length > 12 ? (
-                          <Badge variant="muted">
-                            +{entries.length - 12} more
-                          </Badge>
-                        ) : null}
-                      </div>
+              <ul className="mt-3 space-y-2">
+                {effects.targets.map((target) => (
+                  <li
+                    key={`${target.kind}:${target.key}`}
+                    className="rounded-xl border border-border/70 bg-background/60 p-2.5"
+                    data-target-key={target.key}
+                  >
+                    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                      <span className="text-sm font-medium">
+                        {target.label}
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {target.kind === 'group' ? 'Room' : 'Device'}
+                      </span>
+                      {target.unresolvedReason ? (
+                        <span className="text-xs text-amber-700 dark:text-amber-300">
+                          {target.unresolvedReason}
+                        </span>
+                      ) : null}
                     </div>
-                  );
-                })}
-              </div>
+                    {target.devices.length > 0 ? (
+                      <ul className="mt-1.5 space-y-1 text-xs">
+                        {target.devices.slice(0, 8).map((device) => (
+                          <li
+                            key={device.deviceKey}
+                            className="flex flex-wrap items-baseline gap-x-1.5"
+                          >
+                            <span className="text-foreground/85">
+                              {device.deviceLabel}
+                            </span>
+                            <span aria-hidden>→</span>
+                            <span>
+                              {target.unresolvedReason ? 'would set ' : ''}
+                              {device.changes.join(', ')}
+                            </span>
+                            {device.overriddenBy ? (
+                              <span className="text-muted-foreground">
+                                (replaced by {device.overriddenBy})
+                              </span>
+                            ) : null}
+                          </li>
+                        ))}
+                        {target.devices.length > 8 ? (
+                          <li className="text-muted-foreground">
+                            +{target.devices.length - 8} more
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
+                    {target.repair ? (
+                      <button
+                        type="button"
+                        className="mt-1.5 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                        onClick={() => {
+                          if (target.kind === 'group') {
+                            roomEditor.begin();
+                          } else {
+                            deviceEditor.begin();
+                          }
+                        }}
+                      >
+                        {target.repair}
+                      </button>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+              {effects.unresolvedCount > 0 &&
+              effects.affectedDeviceCount > 0 ? (
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Activating now still changes{' '}
+                  {effects.finalByDevice
+                    .slice(0, 6)
+                    .map(
+                      (entry) =>
+                        `${entry.deviceLabel} → ${entry.changes.join(', ')}`,
+                    )
+                    .join('; ')}
+                  {effects.finalByDevice.length > 6
+                    ? `; and ${effects.finalByDevice.length - 6} more`
+                    : ''}
+                  . The unresolved target
+                  {effects.unresolvedCount === 1 ? '' : 's'} above{' '}
+                  {effects.unresolvedCount === 1 ? 'is' : 'are'} skipped.
+                </p>
+              ) : null}
             </>
           )}
         </div>
@@ -647,12 +721,14 @@ export default function SceneDetailPage() {
                 <Input
                   data-field="name"
                   value={String(detailEditor.draft?.name ?? '')}
-                  onChange={(event) => detailEditor.patch({ name: event.target.value })}
+                  onChange={(event) =>
+                    detailEditor.patch({ name: event.target.value })
+                  }
                 />
               </ConfigField>
               <p className="text-xs text-muted-foreground">
-                ID <span className="font-mono">{scene.id}</span> is referenced by
-                routines and scene links and cannot be changed here.
+                ID <span className="font-mono">{scene.id}</span> is referenced
+                by routines and scene links and cannot be changed here.
               </p>
               <ConfigToggleRow
                 label="Hidden"
@@ -680,7 +756,11 @@ export default function SceneDetailPage() {
               ? `Script set (${scriptPreview.split('\n').length} line${scriptPreview.split('\n').length === 1 ? '' : 's'})`
               : 'No script — targets above decide the state'
           }
-          badge={scriptPreview ? <Badge variant="secondary">Customized</Badge> : undefined}
+          badge={
+            scriptPreview ? (
+              <Badge variant="secondary">Customized</Badge>
+            ) : undefined
+          }
           open={activeSection === 'script'}
           onOpenChange={(open) => openSection(open ? 'script' : null)}
           api={scriptEditor}

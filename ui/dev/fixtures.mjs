@@ -288,7 +288,11 @@ function normalHome() {
         ]),
         group('hallway', 'Hallway', [
           { integration_id: 'mqtt', device_id: 'hallway_strip' },
+          // References a device that no longer exists, so diagnostics and the
+          // room page have a real, repairable problem to show.
+          { integration_id: 'mqtt', device_id: 'hallway_spot' },
         ]),
+        group('guest_room', 'Guest room', []),
       ],
       scenes: [
         scene('normal', 'Normal', {
@@ -298,6 +302,9 @@ function normalHome() {
               brightness: 0.8,
               color: { h: 32, s: 0.4 },
             },
+            // Target device that is gone: the scene page explains it and offers
+            // a repair, and diagnostics reports the same code the server uses.
+            'mqtt/attic_lamp': { power: true },
             // Tracks another device instead of setting a state.
             'esphome/kitchen_pendant': {
               integration_id: 'zigbee2mqtt',
@@ -343,6 +350,7 @@ function normalHome() {
             living_room: { power: false },
             kitchen: { power: false },
             bedroom: { power: false },
+            attic: { power: false },
           },
         }),
         scene('movie', 'Movie', {

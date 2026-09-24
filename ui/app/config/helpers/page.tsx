@@ -84,6 +84,10 @@ function formatValue(value: JsonValue) {
   if (typeof value === 'string') {
     return value === '' ? '(empty)' : value;
   }
+  // Booleans read as words, not as JSON: “Off”, never “false”.
+  if (typeof value === 'boolean') {
+    return value ? 'On' : 'Off';
+  }
   return JSON.stringify(value);
 }
 
@@ -277,8 +281,17 @@ function HelperEditor({
               {formatValue(status?.value ?? draft.initial_value)}
             </span>
             <Badge variant="outline">{kindLabel(kind)}</Badge>
-            <Badge variant="outline">
-              {draft.persistence === 'durable' ? 'Durable' : 'Session'}
+            <Badge
+              variant="outline"
+              title={
+                draft.persistence === 'durable'
+                  ? 'Keeps its value across restarts'
+                  : 'Resets to its initial value when homectl restarts'
+              }
+            >
+              {draft.persistence === 'durable'
+                ? 'Durable'
+                : 'Session — resets on restart'}
             </Badge>
             {status ? (
               <span className="text-xs text-muted-foreground">
@@ -518,7 +531,7 @@ function HelperEditor({
             }
           >
             <option value="durable">Durable (stored in the database)</option>
-            <option value="session">Session (reset on restart)</option>
+            <option value="session">Session — resets on restart</option>
           </select>
         </ConfigField>
         <ConfigToggleRow

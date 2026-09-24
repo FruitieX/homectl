@@ -822,6 +822,21 @@ export default function DevicesPage() {
   );
 
   const normalizedSearch = deviceSearch.trim().toLowerCase();
+  // Names that collide are the one case where the raw key is worth showing on
+  // the card; otherwise it belongs in the expanded detail.
+  const duplicateLabels = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const device of liveDevices) {
+      const label = getDeviceDisplayLabel(device, deviceDisplayNameMap);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return new Set(
+      [...counts.entries()]
+        .filter(([, count]) => count > 1)
+        .map(([label]) => label),
+    );
+  }, [deviceDisplayNameMap, liveDevices]);
+
   const visibleDevices = useMemo(
     () =>
       liveDevices
@@ -1501,6 +1516,22 @@ export default function DevicesPage() {
             sceneNameById,
             groupNameById,
           );
+          // One actionable line when what the device reports disagrees with
+          // what homectl asked for; nothing when they agree.
+          const controllable =
+            'Controllable' in device.data ? device.data.Controllable : null;
+          const reported = controllable?.last_report?.state ?? null;
+          const requested = controllable?.state ?? null;
+          const discrepancy =
+            reported && requested && reported.power !== requested.power
+              ? `Reports ${reported.power ? 'on' : 'off'}, but homectl set it ${requested.power ? 'on' : 'off'}`
+              : reported && requested && reported.power && requested.power
+                ? Math.abs(
+                    (reported.brightness ?? 0) - (requested.brightness ?? 0),
+                  ) > 0.05
+                  ? `Reports ${Math.round((reported.brightness ?? 0) * 100)}%, but homectl set ${Math.round((requested.brightness ?? 0) * 100)}%`
+                  : null
+                : null;
 
           return (
             <ExpandableConfigCard
@@ -1552,9 +1583,11 @@ export default function DevicesPage() {
                       <h2 className="truncate text-base font-semibold">
                         {label}
                       </h2>
-                      <div className="text-xs text-muted-foreground">
-                        {deviceKey}
-                      </div>
+                      {duplicateLabels.has(label) ? (
+                        <div className="truncate text-xs text-muted-foreground">
+                          {deviceKey}
+                        </div>
+                      ) : null}
                     </div>
 
                     {hasDisplayOverride && <Badge>Custom label</Badge>}
@@ -1575,45 +1608,32 @@ export default function DevicesPage() {
 
                   <div className="text-sm text-foreground/80">
                     {'Controllable' in device.data
-                      ? `Requested: ${runtimeSummary}`
+                      ? `Set to ${runtimeSummary}`
                       : runtimeSummary}
                   </div>
 
                   {resolvedColorPreview && (
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <ResolvedColorDot
-                        color={resolvedColorPreview.color}
-                        isPowered={resolvedColorPreview.isPowered}
-                      />
-                      <span>
-                        {stateSource && stateSource.kind !== 'device_state'
-                          ? 'Resolved color'
-                          : 'Current color'}
+                      <span
+                        title={
+                          stateSource && stateSource.kind !== 'device_state'
+                            ? 'Colour resolved from its scene or source'
+                            : 'Colour the device reports'
+                        }
+                      >
+                        <ResolvedColorDot
+                          color={resolvedColorPreview.color}
+                          isPowered={resolvedColorPreview.isPowered}
+                        />
                       </span>
-                      {!resolvedColorPreview.isPowered && (
-                        <span>device off</span>
-                      )}
                     </div>
                   )}
 
-                  <div className="flex flex-wrap gap-2 text-xs">
-                    <Badge variant="outline">{type}</Badge>
-                    {'Controllable' in device.data && (
-                      <Badge variant="outline">
-                        {getSceneLabel(activeSceneId, sceneNameById)}
-                      </Badge>
-                    )}
-                    {'Controllable' in device.data ? (
-                      <Badge variant="outline">{sourceSummary.badge}</Badge>
-                    ) : (
-                      <Badge variant="outline">{interactionLabel}</Badge>
-                    )}
-                    {groupNames.length > 0 && (
-                      <Badge variant="muted">
-                        {getGroupCountLabel(groupNames)}
-                      </Badge>
-                    )}
-                  </div>
+                  {discrepancy && (
+                    <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
+                      {discrepancy}
+                    </p>
+                  )}
                 </div>
               }
             >

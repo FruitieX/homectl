@@ -3,6 +3,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   Bot,
+  Check,
   Monitor,
   Moon,
   Save,
@@ -256,7 +257,7 @@ export default function SettingsPage() {
         )}
 
         <Tabs value={settingsTab} onValueChange={changeSettingsTab}>
-          <TabsList className="grid h-auto w-full grid-cols-2 sm:grid-cols-4">
+          <TabsList className="flex h-auto w-full flex-nowrap items-stretch gap-1 overflow-x-auto">
             <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="core">
               Behavior{form.formState.isDirty ? ' •' : ''}
@@ -570,22 +571,35 @@ function AppearanceSettingsCard() {
               </span>
             </div>
             <div className="flex flex-wrap gap-2">
-              {accents.map((option) => (
-                <button
-                  key={option.id}
-                  type="button"
-                  aria-label={`Use ${option.label} accent`}
-                  aria-pressed={accent === option.id}
-                  onClick={() => setAccent(option.id)}
-                  className={cn(
-                    'size-9 rounded-full border-2 transition',
-                    accent === option.id
-                      ? 'border-foreground'
-                      : 'border-transparent hover:border-border',
-                  )}
-                  style={{ backgroundColor: option.swatch }}
-                />
-              ))}
+              {accents.map((option) => {
+                const selected = accent === option.id;
+                return (
+                  <button
+                    key={option.id}
+                    type="button"
+                    aria-label={`Use ${option.label} accent`}
+                    aria-pressed={selected}
+                    onClick={() => setAccent(option.id)}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-full border py-1 pl-1 pr-2.5 text-xs font-medium transition',
+                      selected
+                        ? 'border-foreground/70 bg-background'
+                        : 'border-border/70 hover:border-border',
+                    )}
+                  >
+                    <span
+                      aria-hidden
+                      className="flex size-6 items-center justify-center rounded-full text-white"
+                      style={{ backgroundColor: option.swatch }}
+                    >
+                      {selected ? (
+                        <Check aria-hidden className="size-3.5" />
+                      ) : null}
+                    </span>
+                    <span>{option.label}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
