@@ -112,7 +112,7 @@ function sourceSearchValues(source: SourceConfig) {
   ];
 }
 
-function liveValue(device: Device | undefined) {
+export function liveValue(device: Device | undefined) {
   if (!device || !('Sensor' in device.data)) {
     return null;
   }
@@ -136,7 +136,7 @@ function liveValue(device: Device | undefined) {
   return parts.join(' · ');
 }
 
-function validationError(draft: SourceConfig): string | null {
+export function validationError(draft: SourceConfig): string | null {
   if (!draft.id.trim()) {
     return 'Id must not be empty.';
   }
@@ -168,7 +168,7 @@ function validationError(draft: SourceConfig): string | null {
   return null;
 }
 
-function SourceEditor({
+export function SourceEditor({
   draft,
   presets,
   onChange,
@@ -179,6 +179,8 @@ function SourceEditor({
   error,
   isNew,
   liveOutput,
+  hideCurrentOutput = false,
+  hideActions = false,
 }: {
   draft: SourceConfig;
   presets: SourcePresetInfo[];
@@ -191,6 +193,9 @@ function SourceEditor({
   isNew: boolean;
   /** What the running source publishes right now, when it is reachable. */
   liveOutput?: { value: string; updatedAt?: number } | null;
+  /** The detail page shows output and Save itself; the editor is one section. */
+  hideCurrentOutput?: boolean;
+  hideActions?: boolean;
 }) {
   const [jsonText, setJsonText] = useState(() =>
     JSON.stringify(draft, null, 2),
@@ -223,30 +228,32 @@ function SourceEditor({
 
   return (
     <div className="space-y-4">
-      <ConfigFormSection
-        title="Current output"
-        description="What this source publishes right now, and whether it is switched on."
-      >
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <span className="font-medium">
-            {liveOutput?.value ?? 'No output received yet'}
-          </span>
-          <Badge variant={draft.enabled ? 'outline' : 'muted'}>
-            {draft.enabled ? 'Enabled' : 'Disabled'}
-          </Badge>
-          {liveOutput?.updatedAt ? (
-            <span className="text-xs text-muted-foreground">
-              updated {new Date(liveOutput.updatedAt).toLocaleTimeString()}
+      {hideCurrentOutput ? null : (
+        <ConfigFormSection
+          title="Current output"
+          description="What this source publishes right now, and whether it is switched on."
+        >
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">
+              {liveOutput?.value ?? 'No output received yet'}
             </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              {draft.enabled
-                ? 'The source has not published a value in this session.'
-                : 'A disabled source never computes or publishes.'}
-            </span>
-          )}
-        </div>
-      </ConfigFormSection>
+            <Badge variant={draft.enabled ? 'outline' : 'muted'}>
+              {draft.enabled ? 'Enabled' : 'Disabled'}
+            </Badge>
+            {liveOutput?.updatedAt ? (
+              <span className="text-xs text-muted-foreground">
+                updated {new Date(liveOutput.updatedAt).toLocaleTimeString()}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {draft.enabled
+                  ? 'The source has not published a value in this session.'
+                  : 'A disabled source never computes or publishes.'}
+              </span>
+            )}
+          </div>
+        </ConfigFormSection>
+      )}
 
       <ConfigFormSection
         title="Identity"
@@ -643,31 +650,35 @@ function SourceEditor({
         </Alert>
       ) : null}
 
-      <ConfigFormActions>
-        <Button type="button" variant="outline" onClick={onCancel}>
-          Cancel
-        </Button>
-        <Button disabled={saving} type="button" onClick={onSave}>
-          {saving ? 'Saving…' : 'Save source'}
-        </Button>
-      </ConfigFormActions>
-
-      {onDelete ? (
-        <details className="mt-6 rounded-2xl border border-destructive/40 p-4">
-          <summary className="cursor-pointer text-sm font-semibold text-destructive">
-            Danger zone
-          </summary>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-sm text-muted-foreground">
-              Deleting this source stops the values it publishes; routines that
-              read it lose their input.
-            </span>
-            <Button type="button" variant="destructive" onClick={onDelete}>
-              Delete source
+      {hideActions ? null : (
+        <>
+          <ConfigFormActions>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
             </Button>
-          </div>
-        </details>
-      ) : null}
+            <Button disabled={saving} type="button" onClick={onSave}>
+              {saving ? 'Saving…' : 'Save source'}
+            </Button>
+          </ConfigFormActions>
+
+          {onDelete ? (
+            <details className="mt-6 rounded-2xl border border-destructive/40 p-4">
+              <summary className="cursor-pointer text-sm font-semibold text-destructive">
+                Danger zone
+              </summary>
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground">
+                  Deleting this source stops the values it publishes; routines
+                  that read it lose their input.
+                </span>
+                <Button type="button" variant="destructive" onClick={onDelete}>
+                  Delete source
+                </Button>
+              </div>
+            </details>
+          ) : null}
+        </>
+      )}
     </div>
   );
 }

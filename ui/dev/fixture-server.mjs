@@ -433,6 +433,36 @@ const server = http.createServer(async (req, res) => {
     return undefined;
   }
 
+  // Stateless preview of a draft source definition
+  // (server/src/api/config/sources.rs::preview_source).
+  if (path === '/api/v1/config/source-preview' && method === 'POST') {
+    const body = await readBody(req);
+    const timezone = body?.timezone ?? 'UTC';
+    const count = Math.min(Math.max(Number(body?.samples ?? 24), 1), 96);
+    const dayStart = new Date();
+    dayStart.setHours(0, 0, 0, 0);
+    const stepMs = Math.round((24 * 60 * 60 * 1000) / count);
+    const samples = Array.from({ length: count }, (_value, index) => {
+      const timeMs = dayStart.getTime() + index * stepMs;
+      const hour = (index * 24) / count;
+      // A day-shaped curve: dim at night, full around midday.
+      const daylight = Math.max(0, Math.sin(((hour - 6) / 12) * Math.PI));
+      return {
+        time_ms: timeMs,
+        local_time: `${String(Math.floor(hour)).padStart(2, '0')}:00`,
+        profile: {
+          brightness: Number(daylight.toFixed(3)),
+          color: { h: 32, s: 0.35 },
+          transition: null,
+        },
+      };
+    });
+    return send(res, 200, {
+      success: true,
+      data: { timezone, day_start_ms: dayStart.getTime(), step_ms: stepMs, samples },
+    });
+  }
+
   const configMatch = /^\/api\/v1\/config\/([a-z0-9-]+)(?:\/(.*))?$/.exec(path);
   if (configMatch) {
     const endpoint = configMatch[1];

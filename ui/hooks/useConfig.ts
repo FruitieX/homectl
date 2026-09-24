@@ -224,7 +224,10 @@ type ApiResponse<T> = {
   error?: string | null;
 };
 
-async function readApiResponse<T>(response: Response, fallbackMessage: string) {
+export async function readApiResponse<T>(
+  response: Response,
+  fallbackMessage: string,
+) {
   const contentType = response.headers.get('content-type') ?? '';
 
   if (contentType.includes('application/json')) {
