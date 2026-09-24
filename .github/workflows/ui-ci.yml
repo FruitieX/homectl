@@ -19,7 +19,7 @@ jobs:
     name: Conventional commits
     runs-on: ubuntu-latest
     steps:
-      - uses: webiny/action-conventional-commits@8bc41ff4e7d423d56fa4905f6ff79209a78776c7 # v1.3.0
+      - uses: webiny/action-conventional-commits@7f91b1595ca1951cdb671ddc9f07a49081ec5b69 # v1.4.2
 
   build-ui:
     name: Typecheck & build UI
