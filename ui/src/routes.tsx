@@ -11,6 +11,8 @@ const DashboardPage = lazy(() => import('../app/dashboard/page'));
 const ConfigDevicesPage = lazy(() => import('../app/config/devices/page'));
 const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
 const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
+const ConfigGroupDetailPage = lazy(() => import('../app/config/groups/detail'));
+const ConfigGroupNewPage = lazy(() => import('../app/config/groups/new'));
 const ConfigHelpersPage = lazy(() => import('../app/config/helpers/page'));
 const ConfigImportExportPage = lazy(
   () => import('../app/config/import-export/page'),
@@ -115,6 +117,14 @@ export const router = createBrowserRouter([
           {
             path: 'groups',
             element: withSuspense(<ConfigGroupsPage />),
+          },
+          {
+            path: 'groups/new',
+            element: withSuspense(<ConfigGroupNewPage />),
+          },
+          {
+            path: 'groups/:id',
+            element: withSuspense(<ConfigGroupDetailPage />),
           },
           {
             path: 'import-export',

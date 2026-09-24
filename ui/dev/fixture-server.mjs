@@ -11,6 +11,7 @@
  * runtime with `curl -X POST http://127.0.0.1:45901/__fixture/large`.
  */
 
+import crypto from 'node:crypto';
 import http from 'node:http';
 import { fixtures } from './fixtures.mjs';
 
@@ -40,6 +41,9 @@ const writeOk = { applied: true, persistence: { kind: 'persisted' }, warning: nu
 
 function send(res, status, body, extraHeaders = {}) {
   const payload = body === undefined ? '' : JSON.stringify(body);
+  if (status >= 400) {
+    console.log(`  <- ${status} ${payload.slice(0, 160)}`);
+  }
   res.writeHead(status, {
     'content-type': 'application/json',
     'cache-control': 'no-store',
@@ -139,7 +143,9 @@ const server = http.createServer(async (req, res) => {
         // Single item GETs are used by detail pages; fall back to the list.
         const list = Array.isArray(db.config[endpoint]) ? db.config[endpoint] : [];
         const item = list.find((i) => i.id === rest || i.device_key === rest);
-        return item ? send(res, 200, { success: true, data: item }) : send(res, 404, { success: false, error: 'not found' });
+        if (item) return send(res, 200, { success: true, data: item });
+        console.log(`  !! no fixture item for config/${endpoint}/${rest}`);
+        return send(res, 404, { success: false, error: 'not found' });
       }
       const special = SPECIAL_GET[endpoint];
       if (special) return send(res, 200, { success: true, data: special() });
@@ -206,6 +212,34 @@ const server = http.createServer(async (req, res) => {
 
   console.warn(`  !! unhandled ${method} ${path}`);
   return send(res, 200, { success: true, data: [] });
+});
+
+/**
+ * Accept the live-state WebSocket upgrade so the UI does not reconnect in a
+ * loop. Fixtures have no live state, so the socket stays open and silent
+ * instead of pushing frames it does not have.
+ */
+server.on('upgrade', (req, socket) => {
+  const key = req.headers['sec-websocket-key'];
+  if (!key) {
+    socket.destroy();
+    return;
+  }
+  const accept = crypto
+    .createHash('sha1')
+    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+    .digest('base64');
+  socket.write(
+    [
+      'HTTP/1.1 101 Switching Protocols',
+      'Upgrade: websocket',
+      'Connection: Upgrade',
+      `Sec-WebSocket-Accept: ${accept}`,
+      '',
+      '',
+    ].join('\r\n'),
+  );
+  socket.on('error', () => socket.destroy());
 });
 
 server.listen(port, '0.0.0.0', () => {

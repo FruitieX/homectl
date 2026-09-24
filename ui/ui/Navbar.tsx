@@ -30,6 +30,9 @@ export const Navbar = () => {
 
   let title = 'homectl';
   let back: string | null = null;
+  // Settings pages render their own page heading, so the shell must not add a
+  // second <h1> for the same screen.
+  let pageOwnsHeading = false;
 
   if (pathname === '/' || pathname === '/dashboard') {
     title = 'Home';
@@ -48,6 +51,7 @@ export const Navbar = () => {
     back = '/groups';
   } else if (pathname?.startsWith('/config')) {
     title = 'Settings';
+    pageOwnsHeading = true;
   }
 
   const navigateBack = useCallback(() => {
@@ -105,9 +109,15 @@ export const Navbar = () => {
         </Button>
       )}
       <div className="flex min-w-0 flex-1 items-center gap-3 px-1">
-        <h1 className="truncate text-xl font-semibold text-foreground">
-          {title}
-        </h1>
+        {pageOwnsHeading ? (
+          <p className="truncate text-xl font-semibold text-foreground">
+            {title}
+          </p>
+        ) : (
+          <h1 className="truncate text-xl font-semibold text-foreground">
+            {title}
+          </h1>
+        )}
       </div>
       {(pathname === '/map' || pathname?.startsWith('/groups/')) && (
         <div id="floorplan-tabs" className="flex min-w-0 items-center gap-1" />

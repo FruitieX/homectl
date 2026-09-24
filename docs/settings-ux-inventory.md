@@ -86,3 +86,19 @@ header for how to run it against the dev server): `empty`, `normal`, `large` (30
 deeply nested routine, a scene with many targets), and `degraded` (broken reference, offline
 device, stale report, failing list request). Fixtures are development-only and are never
 runtime defaults.
+
+Run the UI against fixtures (writes land in the fixture server's memory, never anywhere else):
+
+```sh
+node dev/fixture-server.mjs --port 45901        # terminal 1
+HOMECTL_DEV_PROXY_TARGET=http://127.0.0.1:45901 pnpm dev --port 3011   # terminal 2
+```
+
+`HOMECTL_DEV_PROXY_TARGET` does two things: it points the dev-server proxy at that backend, and
+it makes `vite.config.ts` blank `API_ENDPOINT` so the app issues same-origin requests. Without
+that second part `ui/.env` keeps the app talking to the deployed instance behind the proxy's
+back — reads look plausible and writes go to production.
+
+For browser checks use `ui/dev/cdp-probe.mjs` (screenshot + `--eval` against an already-running
+CDP browser, no extra dependency). It reports console errors and flags any non-localhost
+mutating request as a problem.

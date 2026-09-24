@@ -67,8 +67,17 @@ land below what a bulb can actually do, or above a high floor. Keep the existing
 profile persistence and batch validation semantics. Out of scope: native color
 temperature, RGB and XY calibration.
 
-## Assistant plans that create what they reference (2026-09-23)
+## Formatting drift in the UI tree (2026-09-24)
 
-- [ ] Let a plan reference entities its own earlier operations create. Plan: `.hermes/plans/20260923-assistant-and-housekeeping.md`; half-finished WIP is stashed as `staged-creates-wip` in `~/homectl-wt/panel`.
-- [ ] Dependency housekeeping: down to 40 open alerts (10 high) after the pnpm-overrides lockfile fix; the to-latest migration is in flight — see `.hermes/plans/20260923-dependency-migration.md` (UI batch landing; Rust batch pending; holds: TypeScript 7 and ESLint 10 toolchain support).
-- [ ] Decide how "which scene state is this group in" should be expressed before asking the assistant to write such routines.
+`pnpm format` (prettier 3.9.8, the version `ui/package.json` pins) rewrites about
+twenty unrelated files because they were last formatted with an older prettier;
+there is no `format:check` in CI, so nothing enforces either style. Either run
+`pnpm format` once as a standalone, review-only commit or pin the older
+formatting; until then keep unrelated files out of feature diffs.
+
+## Decide how "which scene state is this group in" is expressed
+
+The assistant needs a way to express "if the scene is normal, if dark" for a
+group. Decide the model (per-group `scene_state`, or scene catalog plus
+conditions) before asking the assistant to author such routines. Related to the
+paused/drifted scene state item above.

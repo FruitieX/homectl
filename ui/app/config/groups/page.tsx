@@ -1,7 +1,7 @@
-import { useSearchParams } from 'react-router-dom';
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { AlertTriangle } from 'lucide-react';
 
-import { type Device } from '@/bindings/Device';
 import {
   type Group,
   useDeviceDisplayNames,
@@ -14,20 +14,12 @@ import {
   getDeviceDisplayLabel,
   getDeviceDisplayLabelFromKey,
 } from '@/lib/deviceLabel';
+import { missingGroupDevices } from '@/lib/groupGraph';
 import { useDevicesApi } from '@/hooks/useDevicesApi';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
-import {
-  ConfigField,
-  ConfigFormActions,
-  ConfigFormSection,
-  ConfigReadOnlyGrid,
-  ConfigReadOnlyItem,
-  ConfigToggleRow,
-} from '@/ui/config-form';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
-import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import {
@@ -38,81 +30,71 @@ import {
   CardTitle,
 } from '@/ui/primitives/card';
 import { EmptyState } from '@/ui/primitives/empty-state';
-import { Input } from '@/ui/primitives/input';
-import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
-import { checkboxClassName } from '@/ui/form-styles';
 
-const fieldLabelClassName = 'text-sm font-medium';
-
-type GroupDevice = Group['devices'][number];
-
-const getGroupDeviceKey = (device: GroupDevice) =>
+const getGroupDeviceKey = (device: Group['devices'][number]) =>
   `${device.integration_id}/${device.device_id}`;
 
-const getGroupSearchValues = (
-  group: Group,
-  deviceDisplayNameMap: Record<string, string>,
-  devicesByKey: Record<string, Device>,
-) => {
-  const deviceLabels = group.devices.map((device) => {
-    const deviceKey = getGroupDeviceKey(device);
-    const matchingDevice = devicesByKey[deviceKey];
-
-    return matchingDevice
-      ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
-      : getDeviceDisplayLabelFromKey(
-          deviceKey,
-          device.device_id,
-          deviceDisplayNameMap,
-        );
-  });
-
-  return [
-    group.id,
-    group.name,
-    group.hidden ? 'hidden' : 'visible',
-    group.linked_groups,
-    group.devices.map((device) => getGroupDeviceKey(device)),
-    deviceLabels,
-  ];
-};
-
 export default function GroupsPage() {
-  const {
-    data: groups,
-    loading,
-    error,
-    refetch,
-    create,
-    update,
-    remove,
-  } = useGroups();
+  const { data: groups, loading, error, refetch } = useGroups();
   const { devices: allDevices } = useDevicesApi();
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
-  const [showCreate, setShowCreate] = useState(false);
-  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
-  const editingGroup = groups.find((group) => group.id === editingId);
-  useAssistantPageContext(
-    editingGroup
-      ? { kind: 'group', id: editingGroup.id, label: editingGroup.name }
-      : { kind: 'group' },
+  const navigate = useNavigate();
+  useCreateDeepLink(
+    useCallback(() => navigate('/config/groups/new'), [navigate]),
   );
-  const deviceDisplayNameMap = Object.fromEntries(
-    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+  useAssistantPageContext({ kind: 'group' });
+
+  const deviceDisplayNameMap = useMemo(
+    () =>
+      Object.fromEntries(
+        deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
+      ),
+    [deviceDisplayNames],
   );
-  const devicesByKey = Object.fromEntries(
-    allDevices.map((device) => [getDeviceKey(device), device]),
-  ) as Record<string, Device>;
+
+  const devicesByKey = useMemo(
+    () =>
+      Object.fromEntries(
+        allDevices.map((device) => [getDeviceKey(device), device]),
+      ),
+    [allDevices],
+  );
+  const presentKeys = useMemo(
+    () => new Set(allDevices.map((device) => getDeviceKey(device))),
+    [allDevices],
+  );
+
+  const searchValues = useCallback(
+    (group: Group) => {
+      const deviceLabels = group.devices.map((device) => {
+        const deviceKey = getGroupDeviceKey(device);
+        const matchingDevice = devicesByKey[deviceKey];
+        return matchingDevice
+          ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
+          : getDeviceDisplayLabelFromKey(
+              deviceKey,
+              device.device_id,
+              deviceDisplayNameMap,
+            );
+      });
+
+      return [
+        group.id,
+        group.name,
+        group.hidden ? 'hidden' : 'visible',
+        group.linked_groups,
+        group.devices.map((device) => getGroupDeviceKey(device)),
+        deviceLabels,
+      ];
+    },
+    [deviceDisplayNameMap, devicesByKey],
+  );
+
   const visibleGroups = groups.filter((group) =>
-    matchesConfigSearch(
-      search,
-      ...getGroupSearchValues(group, deviceDisplayNameMap, devicesByKey),
-    ),
+    matchesConfigSearch(search, ...searchValues(group)),
   );
 
   if (loading) {
@@ -141,7 +123,11 @@ export default function GroupsPage() {
       <ConfigPageHeader
         title="Rooms"
         description="Organize the devices you want to control together. Sensors can stay outside a room."
-        actions={<Button onClick={() => setShowCreate(true)}>Add room</Button>}
+        actions={
+          <Button asChild>
+            <Link to="/config/groups/new">Add room</Link>
+          </Button>
+        }
       />
 
       <ConfigListSearchBar
@@ -166,8 +152,8 @@ export default function GroupsPage() {
           }
           action={
             groups.length === 0 ? (
-              <Button size="sm" onClick={() => setShowCreate(true)}>
-                New room
+              <Button size="sm" asChild>
+                <Link to="/config/groups/new">New room</Link>
               </Button>
             ) : (
               <Button variant="outline" size="sm" onClick={() => setSearch('')}>
@@ -178,459 +164,57 @@ export default function GroupsPage() {
         />
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {visibleGroups.map((group) => (
-            <GroupCard
-              key={group.id}
-              group={group}
-              onOpen={() => setEditingId(group.id)}
-              onDelete={async () => {
-                if (
-                  await confirmDestructive(
-                    `Delete group "${group.name}"?`,
-                    'Scenes, links, and routines that target this room will stop resolving.',
-                  )
-                ) {
-                  await remove(group.id);
-                }
-              }}
-            />
-          ))}
-        </div>
-      )}
-
-      {showCreate && (
-        <GroupOverlay
-          allGroups={groups}
-          onClose={() => setShowCreate(false)}
-          onSubmit={async (group) => {
-            await create(group);
-            setShowCreate(false);
-          }}
-        />
-      )}
-
-      {editingGroup && (
-        <GroupOverlay
-          mode="edit"
-          group={editingGroup}
-          allGroups={groups}
-          onClose={() => setEditingId(null)}
-          onSubmit={async (updated) => {
-            await update(editingGroup.id, updated);
-            setEditingId(null);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function DevicePicker({
-  selected,
-  onChange,
-}: {
-  selected: GroupDevice[];
-  onChange: (devices: GroupDevice[]) => void;
-}) {
-  const { devices: allDevices } = useDevicesApi();
-  const { data: deviceDisplayNames } = useDeviceDisplayNames();
-  const [search, setSearch] = useState('');
-  const deviceDisplayNameMap = Object.fromEntries(
-    deviceDisplayNames.map((row) => [row.device_key, row.display_name]),
-  );
-  const devicesByKey = Object.fromEntries(
-    allDevices.map((device) => [getDeviceKey(device), device]),
-  ) as Record<string, Device>;
-  const availableDevices = allDevices
-    .map((device) => ({
-      key: getDeviceKey(device),
-      label: getDeviceDisplayLabel(device, deviceDisplayNameMap),
-      device,
-    }))
-    .sort(
-      (a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key),
-    );
-
-  const isSelected = (deviceKey: string) =>
-    selected.some((device) => getGroupDeviceKey(device) === deviceKey);
-
-  const toggle = (deviceKey: string) => {
-    if (isSelected(deviceKey)) {
-      onChange(
-        selected.filter((device) => getGroupDeviceKey(device) !== deviceKey),
-      );
-      return;
-    }
-
-    const nextDevice = devicesByKey[deviceKey];
-    if (!nextDevice) {
-      return;
-    }
-
-    onChange([
-      ...selected,
-      {
-        integration_id: nextDevice.integration_id,
-        device_id: nextDevice.id,
-      },
-    ]);
-  };
-
-  const filtered = availableDevices.filter(({ key, label, device }) =>
-    `${label} ${device.name} ${key}`
-      .toLowerCase()
-      .includes(search.toLowerCase()),
-  );
-
-  return (
-    <div className="space-y-2">
-      <div className={fieldLabelClassName}>
-        Devices ({selected.length} selected)
-      </div>
-
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map((device) => {
-            const deviceKey = getGroupDeviceKey(device);
-            const matchingDevice = devicesByKey[deviceKey];
-            const label = matchingDevice
-              ? getDeviceDisplayLabel(matchingDevice, deviceDisplayNameMap)
-              : getDeviceDisplayLabelFromKey(
-                  deviceKey,
-                  device.device_id,
-                  deviceDisplayNameMap,
-                );
-
+          {visibleGroups.map((group) => {
+            const missing = missingGroupDevices(group, presentKeys);
             return (
-              <Badge key={deviceKey} variant="secondary" className="gap-1">
-                {label}
-                <button
-                  type="button"
-                  className="text-xs opacity-60 hover:opacity-100"
-                  onClick={() => toggle(deviceKey)}
-                >
-                  ✕
-                </button>
-              </Badge>
-            );
-          })}
-        </div>
-      )}
-
-      <Input
-        className="h-9"
-        placeholder="Search devices..."
-        value={search}
-        onChange={(event) => setSearch(event.target.value)}
-      />
-
-      <div className="max-h-48 overflow-y-auto rounded-2xl border border-border bg-background/60 p-1">
-        {filtered.length === 0 ? (
-          <div className="p-2 text-center text-sm text-muted-foreground">
-            {availableDevices.length === 0
-              ? 'No devices available'
-              : 'No matching devices'}
-          </div>
-        ) : (
-          filtered.map(({ key, label, device }) => (
-            <label
-              key={key}
-              className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-muted"
-            >
-              <input
-                type="checkbox"
-                className={checkboxClassName}
-                checked={isSelected(key)}
-                onChange={() => toggle(key)}
-              />
-              <span className="truncate text-sm">{label}</span>
-              <span className="ml-auto truncate text-xs text-muted-foreground">
-                {device.integration_id}/{device.id}
-              </span>
-            </label>
-          ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-function GroupLinker({
-  currentGroupId,
-  allGroups,
-  selected,
-  onChange,
-}: {
-  currentGroupId?: string;
-  allGroups: Group[];
-  selected: string[];
-  onChange: (groups: string[]) => void;
-}) {
-  const available = allGroups.filter((group) => group.id !== currentGroupId);
-
-  if (available.length === 0) {
-    return null;
-  }
-
-  const toggle = (groupId: string) => {
-    if (selected.includes(groupId)) {
-      onChange(selected.filter((id) => id !== groupId));
-    } else {
-      onChange([...selected, groupId]);
-    }
-  };
-
-  return (
-    <div className="space-y-2">
-      <div className={fieldLabelClassName}>
-        Linked rooms ({selected.length} selected)
-      </div>
-
-      {selected.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {selected.map((id) => {
-            const group = allGroups.find((item) => item.id === id);
-            return (
-              <Badge key={id} className="gap-1">
-                {group?.name ?? id}
-                <button
-                  type="button"
-                  className="text-xs opacity-60 hover:opacity-100"
-                  onClick={() => toggle(id)}
-                >
-                  ✕
-                </button>
-              </Badge>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="max-h-32 overflow-y-auto rounded-2xl border border-border bg-background/60 p-1">
-        {available.map((group) => (
-          <label
-            key={group.id}
-            className="flex cursor-pointer items-center gap-2 rounded-lg p-1.5 hover:bg-muted"
-          >
-            <input
-              type="checkbox"
-              className={checkboxClassName}
-              checked={selected.includes(group.id)}
-              onChange={() => toggle(group.id)}
-            />
-            <span className="truncate text-sm">{group.name}</span>
-            <span className="ml-auto text-xs text-muted-foreground">
-              {group.id}
-            </span>
-          </label>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function GroupCard({
-  group,
-  onOpen,
-  onDelete,
-}: {
-  group: Group;
-  onOpen: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <Card
-      role="button"
-      tabIndex={0}
-      aria-label={`Edit room ${group.name}`}
-      onClick={onOpen}
-      onKeyDown={(event) => {
-        if (event.target !== event.currentTarget) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onOpen();
-        }
-      }}
-      className="cursor-pointer rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-    >
-      <CardHeader>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <CardTitle>{group.name}</CardTitle>
-            <CardDescription>
-              {group.devices.length}{' '}
-              {group.devices.length === 1 ? 'device' : 'devices'}
-              {group.linked_groups.length > 0
-                ? ` · ${group.linked_groups.length} linked ${group.linked_groups.length === 1 ? 'room' : 'rooms'}`
-                : ''}
-            </CardDescription>
-          </div>
-          {group.hidden && <Badge variant="muted">Hidden</Badge>}
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-destructive hover:text-destructive"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
-          >
-            Delete
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
-function GroupOverlay({
-  mode = 'create',
-  group,
-  onClose,
-  onSubmit,
-  allGroups,
-}: {
-  mode?: 'create' | 'edit';
-  group?: Group;
-  onClose: () => void;
-  onSubmit: (group: Partial<Group>) => Promise<void>;
-  allGroups: Group[];
-}) {
-  const [id, setId] = useState(group?.id ?? '');
-  const [name, setName] = useState(group?.name ?? '');
-  const [hidden, setHidden] = useState(group?.hidden ?? false);
-  const [devices, setDevices] = useState<GroupDevice[]>(group?.devices ?? []);
-  const [linkedGroups, setLinkedGroups] = useState<string[]>(
-    group?.linked_groups ?? [],
-  );
-  const [editTab, setEditTab] = useState<'basics' | 'devices' | 'links'>(
-    'basics',
-  );
-  const isCreate = mode === 'create';
-
-  const changeTab = (value: string) => {
-    if (value === 'basics' || value === 'devices' || value === 'links') {
-      setEditTab(value);
-    }
-  };
-
-  return (
-    <ResponsiveOverlay
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      title={isCreate ? 'Add Group' : `Edit ${group?.name ?? name}`}
-      description={
-        isCreate
-          ? 'Create a group and optionally add devices or linked groups.'
-          : 'Update group visibility, device membership, and nested links.'
-      }
-      presentation="fullscreen"
-      className="max-w-2xl"
-    >
-      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
-        <Tabs value={editTab} onValueChange={changeTab}>
-          <TabsList className="grid h-auto w-full grid-cols-3">
-            <TabsTrigger value="basics">Basics</TabsTrigger>
-            <TabsTrigger value="devices">Devices</TabsTrigger>
-            <TabsTrigger value="links">Links</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="basics" className="mt-4 space-y-4">
-            <ConfigFormSection
-              title="Group identity"
-              description="Keep ids stable; names and visibility can be adjusted any time."
-            >
-              {isCreate ? (
-                <ConfigField
-                  label="Group ID"
-                  description="Used in scenes, routines, and nested group references."
-                >
-                  <Input
-                    value={id}
-                    onChange={(event) => setId(event.target.value)}
-                    placeholder="living-room"
-                  />
-                </ConfigField>
-              ) : (
-                <ConfigReadOnlyGrid>
-                  <ConfigReadOnlyItem label="Group ID" value={group?.id} />
-                </ConfigReadOnlyGrid>
-              )}
-
-              <ConfigField label="Name">
-                <Input
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  placeholder="Living Room"
-                />
-              </ConfigField>
-
-              <ConfigToggleRow
-                label="Hidden"
-                description="Hidden groups are available for automation but stay out of primary control surfaces."
+              <Card
+                key={group.id}
+                className="rounded-2xl border-border/70 shadow-sm transition hover:border-primary/40 hover:bg-accent/30 hover:shadow-md"
               >
-                <input
-                  type="checkbox"
-                  className={checkboxClassName}
-                  checked={hidden}
-                  onChange={(event) => setHidden(event.target.checked)}
-                />
-              </ConfigToggleRow>
-            </ConfigFormSection>
-          </TabsContent>
-
-          <TabsContent value="devices" className="mt-4">
-            <ConfigFormSection
-              title="Devices"
-              description="Select all directly controlled devices that belong to this group."
-            >
-              <DevicePicker selected={devices} onChange={setDevices} />
-            </ConfigFormSection>
-          </TabsContent>
-
-          <TabsContent value="links" className="mt-4">
-            <ConfigFormSection
-              title="Linked groups"
-              description="Nest other groups to build larger controllable areas without duplicating devices."
-            >
-              <GroupLinker
-                currentGroupId={group?.id}
-                allGroups={allGroups}
-                selected={linkedGroups}
-                onChange={setLinkedGroups}
-              />
-            </ConfigFormSection>
-          </TabsContent>
-        </Tabs>
-
-        <ConfigFormActions>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!id || !name}
-            onClick={() =>
-              onSubmit({
-                id,
-                name,
-                hidden,
-                devices,
-                linked_groups: linkedGroups,
-              })
-            }
-          >
-            {isCreate ? 'Create' : 'Save'}
-          </Button>
-        </ConfigFormActions>
-      </div>
-    </ResponsiveOverlay>
+                <Link
+                  to={`/config/groups/${encodeURIComponent(group.id)}`}
+                  className="block rounded-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <CardTitle>{group.name}</CardTitle>
+                        <CardDescription>
+                          {group.devices.length}{' '}
+                          {group.devices.length === 1 ? 'device' : 'devices'}
+                          {group.linked_groups.length > 0
+                            ? ` · ${group.linked_groups.length} linked ${group.linked_groups.length === 1 ? 'room' : 'rooms'}`
+                            : ''}
+                        </CardDescription>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        {group.hidden && <Badge variant="muted">Hidden</Badge>}
+                        {missing.length > 0 ? (
+                          <Badge
+                            variant="warning"
+                            className="gap-1 font-medium"
+                          >
+                            <AlertTriangle aria-hidden className="size-3" />
+                            {missing.length} unavailable
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  </CardHeader>
+                  {group.devices.length === 0 ? (
+                    <CardContent>
+                      <p className="text-xs text-muted-foreground">
+                        Empty room — add devices to use it in scenes and
+                        routines.
+                      </p>
+                    </CardContent>
+                  ) : null}
+                </Link>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }

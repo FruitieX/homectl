@@ -81,13 +81,18 @@ function sensor(id, name, integration, value) {
 }
 
 function group(id, name, devices, linkedGroups = []) {
+  // Groups store references, not device copies (matches the server payload).
+  const refs = devices.map((device) => ({
+    integration_id: device.integration_id,
+    device_id: device.device_id ?? device.id,
+  }));
   return {
     id,
     name,
     hidden: false,
-    devices,
+    devices: refs,
     linked_groups: linkedGroups,
-    device_keys: devices.map((d) => `${d.integration_id}/${d.device_id}`),
+    device_keys: refs.map((d) => `${d.integration_id}/${d.device_id}`),
   };
 }
 
@@ -177,7 +182,17 @@ function normalHome() {
     devices,
     config: {
       groups: [
-        group('all', 'All', devices.filter((d) => 'Controllable' in d.data), ['office']),
+        group(
+          'all',
+          'All',
+          [
+            ...devices.filter((d) => 'Controllable' in d.data),
+            // One member that no longer exists, so the "missing member" states
+            // stay exercised instead of only appearing by accident.
+            { integration_id: 'zigbee2mqtt', device_id: 'living_room_spot_retired' },
+          ],
+          ['office'],
+        ),
         group('living_room', 'Living room', [
           { integration_id: 'zigbee2mqtt', device_id: 'living_room_lamp' },
           { integration_id: 'zigbee2mqtt', device_id: 'living_room_floor_lamp' },
