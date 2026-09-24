@@ -32,10 +32,14 @@ test('a room target expands to the devices it changes', () => {
     context,
   );
   assert.equal(effects.affectedDeviceCount, 1);
+  // The colour travels as a value plus its words, so the row can draw a
+  // swatch from what the scene sets instead of parsing text back out.
   assert.deepEqual(effects.targets[0].devices[0], {
     deviceKey: 'mqtt/living_room_lamp',
     deviceLabel: 'Living room lamp',
-    changes: ['on', '80%', 'warm white'],
+    changes: ['on', '80%'],
+    color: { h: 32, s: 0.3 },
+    colorWords: 'warm white',
   });
 });
 
@@ -52,6 +56,8 @@ test('a device target after a room target wins, and says so', () => {
       deviceKey: 'mqtt/living_room_lamp',
       deviceLabel: 'Living room lamp',
       changes: ['off'],
+      color: null,
+      colorWords: null,
       fromLabel: 'Living room lamp',
     },
   ]);

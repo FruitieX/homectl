@@ -141,7 +141,47 @@ const tasks = [
 
 const setupDismissalKey = 'homectl-settings-setup-dismissed';
 
-export default function ConfigPage() {
+type DiagnosticIssue = {
+  entity: string;
+  entity_id: string;
+  name: string;
+  code: string;
+  message: string;
+  suggestion: string;
+};
+
+/**
+ * A short, human consequence for one issue: what will not happen, without raw
+ * device keys or a truncated sentence. Counts come from the same issue list.
+ */
+function describeIssueConsequence(
+  issue: DiagnosticIssue,
+  all: DiagnosticIssue[],
+): string {
+  const sameScene = all.filter(
+    (other) =>
+      other.entity === issue.entity && other.entity_id === issue.entity_id,
+  ).length;
+  switch (issue.code) {
+    case 'missing_scene_device':
+    case 'missing_scene_group':
+      return sameScene > 1
+        ? `${sameScene} targets will be skipped when you activate it.`
+        : 'A target will be skipped when you activate it.';
+    case 'missing_group_device':
+      return sameScene > 1
+        ? `${sameScene} saved device references are missing.`
+        : 'A saved device reference is missing.';
+    case 'empty_group':
+      return 'This room has no devices or nested rooms.';
+    case 'unavailable_group':
+      return 'This room has a member that is not available right now.';
+    default:
+      return issue.message.replace(/\s+/g, ' ').trim();
+  }
+}
+
+export default function ConfigHomePage() {
   const [search, setSearch] = useState('');
   const [setupDismissed, setSetupDismissed] = useState(
     () =>
@@ -495,17 +535,24 @@ export default function ConfigPage() {
               </span>
               <div className="min-w-0 flex-1">
                 <h2 id="home-status" className="text-sm font-semibold">
-                  {diagnostics.isPending
-                    ? 'Checking your setup…'
-                    : diagnostics.isError
-                      ? 'Could not check your setup'
-                      : warnings.length
-                        ? `${warnings.length} ${warnings.length === 1 ? 'issue needs' : 'issues need'} a look`
-                        : diagnostics.data?.warming_up
-                          ? 'Your home is starting up'
-                          : reviewCount > 0
-                            ? 'No warnings need attention'
-                            : 'Your setup looks good'}
+                  {diagnostics.isPending ? (
+                    'Checking your setup…'
+                  ) : diagnostics.isError ? (
+                    'Could not check your setup'
+                  ) : warnings.length ? (
+                    <Link
+                      to="/config/diagnostics"
+                      className="underline-offset-4 hover:underline"
+                    >
+                      {`${warnings.length} ${warnings.length === 1 ? 'issue needs' : 'issues need'} a look`}
+                    </Link>
+                  ) : diagnostics.data?.warming_up ? (
+                    'Your home is starting up'
+                  ) : reviewCount > 0 ? (
+                    'No warnings need attention'
+                  ) : (
+                    'Your setup looks good'
+                  )}
                 </h2>
                 <p className="mt-0.5 line-clamp-2 text-xs leading-5 text-muted-foreground">
                   {diagnostics.isPending
@@ -515,7 +562,7 @@ export default function ConfigPage() {
                       : diagnostics.data?.warming_up
                         ? 'Some checks will be available after devices finish starting.'
                         : warnings.length
-                          ? `${warnings[0].name}: ${warnings[0].message} ${warnings[0].suggestion}`
+                          ? `${warnings[0].name} ${warnings[0].entity}: ${describeIssueConsequence(warnings[0], warnings)}`
                           : reviewCount > 0
                             ? `${reviewCount} ${reviewCount === 1 ? 'item is' : 'items are'} available for review.`
                             : 'No problems found by these checks.'}
@@ -545,7 +592,9 @@ export default function ConfigPage() {
                         : '/config/diagnostics'
                     }
                   >
-                    {warnings.length ? 'Fix this' : 'View checks'}
+                    {warnings.length
+                      ? `Review ${warnings[0].entity}`
+                      : 'View checks'}
                     <ArrowRight className="size-4" />
                   </Link>
                 </Button>

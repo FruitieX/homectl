@@ -431,15 +431,6 @@ export function ConditionReadView({
           <ConditionTree condition={condition} resolveDevice={resolveDevice} />
         </div>
       </details>
-      {onEdit ? (
-        <button
-          type="button"
-          className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-          onClick={onEdit}
-        >
-          Edit this condition
-        </button>
-      ) : null}
     </div>
   );
 }

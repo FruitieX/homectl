@@ -5,6 +5,12 @@ import { Link, useNavigate } from 'react-router-dom';
 /** The creation journey shows one decision at a time. */
 type Step = 1 | 2 | 3;
 
+const STEP_LABELS: Record<Step, string> = {
+  1: 'Choose targets',
+  2: 'Set what they do',
+  3: 'Review',
+};
+
 import { cn } from '@/lib/cn';
 import { loadCreationDraft } from '@/lib/creationDraft';
 import {
@@ -252,40 +258,36 @@ export default function NewScenePage() {
 
       {step === 1 ? (
         <>
-          <ol
-            className="flex flex-wrap items-center gap-2 text-xs"
-            aria-label="Steps"
-          >
-            {(
-              [
-                [1, 'Choose targets'],
-                [2, 'Set what they do'],
-                [3, 'Review'],
-              ] as const
-            ).map(([value, label]) => (
-              <li key={value} className="flex items-center gap-2">
+          <nav className="flex items-center gap-2 text-xs" aria-label="Steps">
+            <span className="font-medium text-foreground">
+              Step {step} of 3
+            </span>
+            <span aria-hidden className="text-muted-foreground">
+              ·
+            </span>
+            <span className="truncate text-muted-foreground">
+              {STEP_LABELS[step]}
+            </span>
+            <span className="ml-auto flex items-center gap-1">
+              {([1, 2, 3] as const).map((value) => (
                 <button
+                  key={value}
                   type="button"
+                  aria-label={`Go to step ${value}: ${STEP_LABELS[value]}`}
                   aria-current={step === value ? 'step' : undefined}
                   onClick={() => setStep(value)}
                   className={cn(
-                    'rounded-full border px-2.5 py-1 font-medium transition',
+                    'size-6 rounded-full border text-[11px] font-medium transition',
                     step === value
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-border text-muted-foreground hover:border-primary/40',
                   )}
                 >
-                  {value}. {label}
+                  {value}
                 </button>
-                {value < 3 ? (
-                  <ChevronRight
-                    className="size-3 text-muted-foreground"
-                    aria-hidden
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ol>
+              ))}
+            </span>
+          </nav>
 
           <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
             <h2 className="text-sm font-semibold">
@@ -405,10 +407,21 @@ export default function NewScenePage() {
               ) : (
                 <span />
               )}
-              <Button size="sm" onClick={() => setStep((step + 1) as Step)}>
-                Continue
-                <ArrowRight className="size-4" aria-hidden />
-              </Button>
+              <div className="flex items-center gap-2">
+                {targetCount === 0 ? (
+                  <span className="text-xs text-muted-foreground">
+                    Choose at least one device or room to continue.
+                  </span>
+                ) : null}
+                <Button
+                  size="sm"
+                  disabled={targetCount === 0}
+                  onClick={() => setStep((step + 1) as Step)}
+                >
+                  Continue
+                  <ArrowRight className="size-4" aria-hidden />
+                </Button>
+              </div>
             </div>
           ) : null}
         </>
@@ -773,28 +786,28 @@ export default function NewScenePage() {
       ) : null}
       <StatusRegion message={status} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          disabled={
-            saving || targetCount === 0 || finalName.trim().length === 0
-          }
-          onClick={() => void submit(false)}
-        >
-          {saving ? 'Creating…' : 'Create scene'}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() => navigate('/config/scenes')}
-          disabled={saving}
-        >
-          Cancel
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          {targetCount === 0
-            ? 'Add at least one target, or use the empty draft escape hatch under Advanced.'
-            : 'Creating saves the scene; activate it when you want it to run.'}
-        </span>
-      </div>
+      {step === 3 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            disabled={
+              saving || targetCount === 0 || finalName.trim().length === 0
+            }
+            onClick={() => void submit(false)}
+          >
+            {saving ? 'Creating…' : 'Create scene'}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => navigate('/config/scenes')}
+            disabled={saving}
+          >
+            Cancel
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Creating saves the scene; activate it when you want it to run.
+          </span>
+        </div>
+      ) : null}
 
       <p className="text-xs text-muted-foreground">
         Need a room to group devices first?{' '}

@@ -88,10 +88,27 @@ function buildDiagnostics() {
     (db.devices ?? []).map((device) => `${device.integration_id}/${device.id}`),
   );
   const groupIds = new Set((db.config.groups ?? []).map((group) => group.id));
+  const sceneIds = new Set((db.config.scenes ?? []).map((scene) => scene.id));
   const issues = [];
 
   for (const scene of db.config.scenes ?? []) {
-    for (const key of Object.keys(scene.device_states ?? {})) {
+    for (const [key, config] of Object.entries(scene.device_states ?? {})) {
+      // A target that follows another scene: the code matches the server's
+      // missing_scene_link, so this page and the scene page agree on counts.
+      const linkedScene =
+        config && typeof config === 'object' ? config.scene_id : undefined;
+      if (typeof linkedScene === 'string' && !sceneIds.has(linkedScene)) {
+        issues.push({
+          entity: 'scene',
+          entity_id: scene.id,
+          name: scene.name,
+          code: 'missing_scene_link',
+          severity: 'warning',
+          message: `Target ${key} follows scene ${linkedScene}, which does not exist.`,
+          suggestion:
+            'Open the scene and pick an existing scene for that target, or remove it.',
+        });
+      }
       if (deviceKeys.has(key)) continue;
       issues.push({
         entity: 'scene',

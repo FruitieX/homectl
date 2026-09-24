@@ -331,7 +331,34 @@ export default function RoutineDetailPage() {
     definition.condition as never,
     narrativeContext,
   );
-  const ifSummary = conditionNarrative.evidence ?? conditionNarrative.text;
+  // The rule and today's reading are different facts. The summary states the
+  // rule (“Only if motion is active”); the line under it says whether that is
+  // met right now, using the evidence from the same narrative.
+  const ifSummary = conditionNarrative.text;
+  const ifStateLine = (() => {
+    if (onlyIf.dirty || !routine.enabled || !v2Status) {
+      return null;
+    }
+    const condition = v2Status.condition;
+    const evidence = conditionNarrative.evidence ?? null;
+    if (condition.error) {
+      return `Evaluation error: ${condition.error}`;
+    }
+    if (condition.truth === 'true') {
+      return evidence ? `Met now: ${evidence}` : 'Met now.';
+    }
+    if (condition.truth === 'false') {
+      return evidence ? `Not met now: ${evidence}` : 'Not met now.';
+    }
+    return `Waiting for data: ${
+      condition.unknown_reason
+        ? describeUnknownReasonSentence(
+            condition.unknown_reason,
+            narrativeContext,
+          )
+        : 'part of this condition cannot be evaluated yet'
+    }`;
+  })();
   const firstStep =
     program?.kind === 'native' && program.steps.length > 0
       ? describeNativeAction(
@@ -384,15 +411,14 @@ export default function RoutineDetailPage() {
   const triggerCount = triggers.length;
   const stepCount = program?.kind === 'native' ? program.steps.length : 0;
   const lastRun = v2Status?.last_run;
+  // One sentence about the last recorded run; the run id, per-step counts, and
+  // the full trace live in the activity view rather than in the hero.
   const lastRunLine = lastRun
-    ? (() => {
-        const dispatched = lastRun.steps.filter(
-          (step) => step.disposition === 'dispatched',
-        ).length;
-        const suppressed = lastRun.steps.length - dispatched;
-        const dropped = Number(lastRun.dropped);
-        return `Latest recorded run #${Number(lastRun.run_id)}: ${lastRun.accepted ? 'accepted' : 'rejected'} · ${dispatched} dispatched, ${suppressed} suppressed${dropped > 0 ? `, ${dropped} dropped` : ''}.`;
-      })()
+    ? lastRun.accepted
+      ? lastRun.steps.length === 0
+        ? 'Its last recorded run had nothing to do.'
+        : 'Its last recorded run ran the actions below.'
+      : 'Its last recorded run was rejected before anything was dispatched.'
     : null;
   const policySummary = definition.execution
     ? describeExecutionPolicy(definition.execution as ExecutionPolicy)
@@ -520,7 +546,18 @@ export default function RoutineDetailPage() {
           <Section
             id="only-if"
             title="Only if"
-            summary={onlyIf.dirty ? undefined : ifSummary}
+            summary={
+              onlyIf.dirty ? undefined : (
+                <>
+                  <span>{ifSummary}</span>
+                  {ifStateLine ? (
+                    <span className="block text-muted-foreground/90">
+                      {ifStateLine}
+                    </span>
+                  ) : null}
+                </>
+              )
+            }
             badge={v2Status?.condition.error ? 'Evaluation error' : undefined}
             open={activeSection === 'only-if'}
             onOpenChange={(open) => openSection(open ? 'only-if' : null)}

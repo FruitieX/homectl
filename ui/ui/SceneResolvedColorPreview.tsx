@@ -48,14 +48,23 @@ export function ResolvedColorDot({
   color,
   isPowered,
   className = previewDotClassName,
+  label,
+  detail,
 }: {
   color: Color;
   isPowered: boolean;
   className?: string;
+  /** Accessible name, e.g. “warm white”. The dot alone conveys nothing. */
+  label?: string;
+  /** Exact colour for the tooltip, e.g. “h 32° s 40% · #ffb066”. */
+  detail?: string;
 }) {
   return (
     <span
       className={className}
+      role="img"
+      aria-label={label}
+      title={detail ?? label}
       style={{
         backgroundColor: color.hex(),
         opacity: isPowered ? 1 : 0.45,

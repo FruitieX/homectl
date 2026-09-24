@@ -132,11 +132,10 @@ test('comparisons name the reading and the limit', () => {
     },
     context,
   );
+  // The rule and today's reading stay separate: the rule is the condition,
+  // the evidence is the reading that currently makes it false.
   assert.equal(text, 'Living room lamp brightness is below 30%');
-  assert.equal(
-    evidence,
-    'Living room lamp brightness is below 30%, currently 45%',
-  );
+  assert.equal(evidence, 'brightness is 45%');
 });
 
 test('missing readings are reported as waiting for data, not as false', () => {
@@ -179,10 +178,7 @@ test('nested conditions join with and/or and keep their evidence', () => {
     context,
   );
   assert.equal(text, 'Living room lamp brightness is below 30% and always');
-  assert.equal(
-    evidence,
-    'Living room lamp brightness is below 30%, currently 45%',
-  );
+  assert.equal(evidence, 'brightness is 45%');
 });
 
 test('room conditions read as membership statements', () => {
@@ -230,7 +226,7 @@ test('a false condition says which reading is short', () => {
   });
   assert.equal(
     line.text,
-    'Not running: only if Living room lamp brightness is below 30%, currently 45%',
+    'Not running: only if Living room lamp brightness is below 30%, brightness is 45%',
   );
   assert.equal(line.tone, 'neutral');
 });

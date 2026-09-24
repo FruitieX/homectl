@@ -90,10 +90,59 @@ export function describeSceneStateWords(
 
 export type SceneEffectMode = 'state' | 'device-link' | 'scene-link';
 
+export type SceneResolvedColor = { h: number; s: number };
+
+/**
+ * The same state split into a form the UI can render: words for on/brightness/
+ * fade, and the colour as a value so a swatch comes from what the scene sets
+ * rather than from parsing the words back out.
+ */
+export function describeSceneStateParts(config: Config | null | undefined): {
+  changes: string[];
+  colorWords: string | null;
+  color: SceneResolvedColor | null;
+  empty: boolean;
+} {
+  const changes: string[] = [];
+  const power = read(config, 'power');
+  if (typeof power === 'boolean') {
+    changes.push(power ? 'on' : 'off');
+  }
+  const brightness = read(config, 'brightness');
+  if (typeof brightness === 'number') {
+    changes.push(`${Math.round(brightness * 100)}%`);
+  }
+  const colorWords = describeColorWords(read(config, 'color'));
+  const transition = read(config, 'transition');
+  if (typeof transition === 'number' && transition > 0) {
+    changes.push(`${transition} s fade`);
+  }
+  const raw = read(config, 'color');
+  const color =
+    raw && typeof raw === 'object' && 'h' in raw && 's' in raw
+      ? {
+          h: Number((raw as { h: unknown }).h),
+          s: Number((raw as { s: unknown }).s),
+        }
+      : null;
+  return {
+    changes,
+    colorWords,
+    color:
+      color && Number.isFinite(color.h) && Number.isFinite(color.s)
+        ? color
+        : null,
+    empty: changes.length === 0 && colorWords === null,
+  };
+}
+
 export type SceneEffectDevice = {
   deviceKey: string;
   deviceLabel: string;
   changes: string[];
+  /** What the target sets, as a value, so a swatch needs no text parsing. */
+  color: SceneResolvedColor | null;
+  colorWords: string | null;
   /** Set when a later target replaced this device's effect. */
   overriddenBy?: string;
 };
@@ -120,6 +169,8 @@ export type SceneEffects = {
     deviceKey: string;
     deviceLabel: string;
     changes: string[];
+    color: SceneResolvedColor | null;
+    colorWords: string | null;
     fromLabel: string;
   }>;
   affectedDeviceCount: number;
@@ -264,6 +315,8 @@ export function resolveSceneEffects(
           deviceKey,
           deviceLabel: labelFor(deviceKey, context, deviceKey),
           changes: [`follows “${sceneId}”`],
+          color: null,
+          colorWords: null,
         });
       }
       targets.push(target);
@@ -279,7 +332,7 @@ export function resolveSceneEffects(
         target.unresolvedReason = `It tracks ${sourceKey}, which is not available`;
         target.repair = 'Choose another source device, or remove this target.';
       }
-      const words = describeSceneStateWords(config);
+      const words = describeSceneStateParts(config);
       const deviceKey = kind === 'group' ? `group:${key}` : key;
       target.devices.push({
         deviceKey,
@@ -291,12 +344,14 @@ export function resolveSceneEffects(
             : labelFor(key, context, key),
         changes:
           words.changes.length > 0 ? words.changes : ['tracks the source'],
+        color: null,
+        colorWords: null,
       });
       targets.push(target);
       return;
     }
 
-    const words = describeSceneStateWords(config);
+    const words = describeSceneStateParts(config);
     if (words.empty) {
       target.unresolvedReason = 'It sets no state yet';
       target.repair = 'Choose what this target should set, or remove it.';
@@ -330,6 +385,8 @@ export function resolveSceneEffects(
           deviceKey,
           deviceLabel: labelFor(deviceKey, context, deviceKey),
           changes: words.changes,
+          color: words.color,
+          colorWords: words.colorWords,
         });
         written.set(deviceKey, {
           targetIndex: index,
@@ -358,6 +415,8 @@ export function resolveSceneEffects(
       deviceKey: key,
       deviceLabel: labelFor(key, context, key),
       changes: words.changes,
+      color: words.color,
+      colorWords: words.colorWords,
     });
     written.set(key, {
       targetIndex: index,
@@ -388,6 +447,8 @@ export function resolveSceneEffects(
         deviceKey: device.deviceKey,
         deviceLabel: device.deviceLabel,
         changes: device.changes,
+        color: device.color,
+        colorWords: device.colorWords,
         fromLabel: target.label,
       });
     }

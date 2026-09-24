@@ -18,6 +18,8 @@ import {
   orderedSceneTargets,
   sceneTargetsSummary,
 } from '@/lib/sceneTargets';
+import Color from 'color';
+
 import { resolveSceneEffects } from '@/lib/sceneEffects';
 import { BoundedList } from '@/ui/config/BoundedList';
 import { DetailPageShell } from '@/ui/config/DetailPageShell';
@@ -101,6 +103,16 @@ function modeLabel(mode: string): string {
  * Scene detail: what the scene would set, then the device and room targets as
  * separate sections that save independently, then details, script, delete.
  */
+/** Exact colour for a tooltip or the details block, never a bare hue number. */
+function colourDetail(
+  color: { h: number; s: number },
+  words: string | null,
+): string {
+  const hex = Color({ h: color.h, s: color.s * 100, v: 100 }).hex();
+  const exact = `h ${Math.round(color.h)}° · s ${Math.round(color.s * 100)}% · ${hex}`;
+  return words ? `${words} · ${exact}` : exact;
+}
+
 export default function SceneDetailPage() {
   const { id = '' } = useParams();
   const navigate = useNavigate();
@@ -571,16 +583,50 @@ export default function SceneDetailPage() {
                         <span aria-hidden className="text-muted-foreground">
                           →
                         </span>{' '}
-                        <span>{entry.changes.join(', ')}</span>
-                        {replaced ? (
+                        <span className="inline-flex items-center gap-1.5 align-middle">
+                          <span>
+                            {entry.changes.length > 0
+                              ? entry.changes.join(' · ')
+                              : 'no change'}
+                          </span>
+                          {entry.color ? (
+                            <ResolvedColorDot
+                              color={Color({
+                                h: entry.color.h,
+                                s: entry.color.s * 100,
+                                v: 100,
+                              })}
+                              isPowered
+                              label={entry.colorWords ?? 'colour set'}
+                              detail={colourDetail(
+                                entry.color,
+                                entry.colorWords,
+                              )}
+                            />
+                          ) : null}
+                        </span>
+                        {replaced || entry.color ? (
                           <details className="mt-0.5">
                             <summary className="cursor-pointer text-xs text-muted-foreground">
-                              which target set this
+                              {replaced
+                                ? 'which target set this'
+                                : 'exact values'}
                             </summary>
-                            <p className="mt-1 text-xs text-muted-foreground">
-                              Set by {entry.fromLabel}; the room setting it
-                              replaced came from {replaced.overriddenBy}.
-                            </p>
+                            <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
+                              {entry.color ? (
+                                <p>
+                                  Colour: {entry.colorWords ?? 'set'} —{' '}
+                                  {colourDetail(entry.color, null)}
+                                </p>
+                              ) : null}
+                              <p>
+                                Set by {entry.fromLabel}
+                                {replaced
+                                  ? `; the room setting it replaced came from ${replaced.overriddenBy}`
+                                  : ''}
+                                .
+                              </p>
+                            </div>
                           </details>
                         ) : null}
                       </li>

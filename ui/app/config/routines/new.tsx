@@ -28,6 +28,12 @@ import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
 
 /** The creation journey shows one decision at a time. */
 type Step = 1 | 2 | 3;
+
+const STEP_LABELS: Record<Step, string> = {
+  1: 'When it runs',
+  2: 'What it does',
+  3: 'Review',
+};
 import {
   useDeviceDisplayNames,
   useRoutines,
@@ -210,6 +216,9 @@ export default function NewRoutinePage() {
     })
     .slice(0, 6);
   const [step, setStep] = useState<Step>(1);
+  // Continue only advances once the current step has an answer.
+  const startIsValid =
+    draft.intent !== '' && (draft.intent !== 'copy' || draft.copyFromId !== '');
   const errorStep: 'when' | 'then' | 'review' | null = error
     ? /scene/i.test(error)
       ? 'then'
@@ -280,40 +289,34 @@ export default function NewRoutinePage() {
         description="Describe what should start it and what it should do. The app writes the definition for you."
       />
 
-      <ol
-        className="flex flex-wrap items-center gap-2 text-xs"
-        aria-label="Steps"
-      >
-        {(
-          [
-            [1, 'When it runs'],
-            [2, 'What it does'],
-            [3, 'Review'],
-          ] as const
-        ).map(([value, label]) => (
-          <li key={value} className="flex items-center gap-2">
+      <nav className="flex items-center gap-2 text-xs" aria-label="Steps">
+        <span className="font-medium text-foreground">Step {step} of 3</span>
+        <span aria-hidden className="text-muted-foreground">
+          ·
+        </span>
+        <span className="truncate text-muted-foreground">
+          {STEP_LABELS[step]}
+        </span>
+        <span className="ml-auto flex items-center gap-1">
+          {([1, 2, 3] as const).map((value) => (
             <button
+              key={value}
               type="button"
+              aria-label={`Go to step ${value}: ${STEP_LABELS[value]}`}
               aria-current={step === value ? 'step' : undefined}
               onClick={() => setStep(value)}
               className={cn(
-                'rounded-full border px-2.5 py-1 font-medium transition',
+                'size-6 rounded-full border text-[11px] font-medium transition',
                 step === value
                   ? 'border-primary bg-primary/10 text-primary'
                   : 'border-border text-muted-foreground hover:border-primary/40',
               )}
             >
-              {value}. {label}
+              {value}
             </button>
-            {value < 3 ? (
-              <ChevronRight
-                className="size-3 text-muted-foreground"
-                aria-hidden
-              />
-            ) : null}
-          </li>
-        ))}
-      </ol>
+          ))}
+        </span>
+      </nav>
 
       {restoredNotice && restoredAt ? (
         <Alert>
@@ -401,13 +404,6 @@ export default function NewRoutinePage() {
                   The server rejected the start above: {error}
                 </AlertDescription>
               </Alert>
-            ) : null}
-
-            {draft.intent === '' ? (
-              <p className="text-sm text-muted-foreground">
-                Pick one of the cards above: the fields for that choice appear
-                here, and nothing is chosen for you.
-              </p>
             ) : null}
 
             {draft.intent === 'copy' ? (
@@ -798,10 +794,21 @@ export default function NewRoutinePage() {
               ) : (
                 <span />
               )}
-              <Button size="sm" onClick={() => setStep((step + 1) as Step)}>
-                Continue
-                <ArrowRight className="size-4" aria-hidden />
-              </Button>
+              <div className="flex items-center gap-2">
+                {step === 1 && !startIsValid ? (
+                  <span className="text-xs text-muted-foreground">
+                    Choose what should start it to continue.
+                  </span>
+                ) : null}
+                <Button
+                  size="sm"
+                  disabled={step === 1 && !startIsValid}
+                  onClick={() => setStep((step + 1) as Step)}
+                >
+                  Continue
+                  <ArrowRight className="size-4" aria-hidden />
+                </Button>
+              </div>
             </div>
           ) : null}
         </>

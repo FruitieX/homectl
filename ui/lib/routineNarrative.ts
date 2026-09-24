@@ -292,27 +292,44 @@ export function describeComparisonNarrative(
 
   const standalone = standaloneOperatorPhrase(expr.operator, path, deviceName);
   const live = readSourceValue(source, context);
-  // A standalone state (“is active”) reads better as the state that is true
-  // right now, rather than “is active (currently no)”.
-  if (standalone && live.known && typeof live.value === 'boolean') {
-    const isStateField = /active|present/.test(standalone);
-    const positive = isStateField
-      ? 'is active'
-      : standalone.replace(/^is /, 'is ');
-    const negative = isStateField ? 'is not active' : 'is off';
-    return { text: `${subject} ${live.value ? positive : negative}` };
-  }
-  const text = standalone
-    ? `${subject} ${standalone}`
+  // The rule is what the saved condition requires — never today's reading.
+  // “Only if motion is active” is the rule; “motion is inactive now” is the
+  // evidence underneath it. Mixing them made a routine look self-contradictory.
+  const isStateField = /active|present/.test(standalone ?? '');
+  const negated = expr.value === false;
+  const ruleState = standalone
+    ? isStateField
+      ? negated
+        ? 'is not active'
+        : 'is active'
+      : negated
+        ? 'is off'
+        : 'is on or set'
+    : null;
+  const text = ruleState
+    ? `${subject} ${ruleState}`
     : `${subject} ${operatorWords(expr.operator)} ${formatReading(path, limit)}`;
-  if (live.known) {
-    const reading = formatReading(live.path, live.value);
+
+  if (!live.known) {
+    return { text };
+  }
+  // Evidence states the current reading as its own fact, so the rule and the
+  // reading never blend into one sentence.
+  if (typeof live.value === 'boolean') {
     return {
       text,
-      evidence: `${text}, currently ${reading}`,
+      evidence: isStateField
+        ? `${deviceName} is ${live.value ? 'active' : 'inactive'}`
+        : `${deviceName} is ${live.value ? 'on' : 'off'}`,
     };
   }
-  return { text };
+  const liveField = humanField(live.path) ?? field;
+  return {
+    text,
+    evidence: liveField
+      ? `${liveField} is ${formatReading(live.path, live.value)}`
+      : `${formatReading(live.path, live.value)} right now`,
+  };
 }
 
 function describeGroupConditionNarrative(
@@ -755,7 +772,11 @@ export function describeRoutineStateLine({
     if (narrative.text === 'always') {
       return { text: 'No matching event recorded recently', tone: 'neutral' };
     }
-    const detail = narrative.evidence ?? narrative.text;
+    // The rule, then the reading that makes it false: “only if brightness is
+    // below 30%, brightness is 45%”.
+    const detail = narrative.evidence
+      ? `${narrative.text}, ${narrative.evidence}`
+      : narrative.text;
     return { text: `Not running: only if ${detail}`, tone: 'neutral' };
   }
   if (condition?.truth === 'true') {
