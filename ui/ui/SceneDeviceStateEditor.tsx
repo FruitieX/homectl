@@ -400,7 +400,7 @@ export function SceneTargetConfigEditor({
           <>
             <div className={cn(fieldClassName, 'mt-3')}>
             <label>
-              <span className={fieldLabelClassName}>Config Type</span>
+              <span className={fieldLabelClassName}>What this target does</span>
             </label>
             <select
               className={selectClassName}
@@ -412,9 +412,9 @@ export function SceneTargetConfigEditor({
                 )
               }
             >
-              <option value="device_state">Device State</option>
-              <option value="device_link">Link to Device</option>
-              <option value="scene_link">Link to Scene</option>
+              <option value="device_state">Set a state</option>
+              <option value="device_link">Follow a device</option>
+              <option value="scene_link">Use another scene</option>
             </select>
           </div>
 

@@ -561,11 +561,15 @@ export default function SceneScriptEditor({
     };
   }, [deviceOptions, editorId, groupOptions, monaco, sceneIds]);
 
+  // A one-line script gets a small pane; a long one grows up to a bound, so the
+  // editor never opens as a mostly empty page or pushes Save off screen.
+  const editorHeight = `${Math.min(Math.max(value.split('\n').length + 3, 7), 24)}rem`;
+
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card/70">
       <Editor
         defaultLanguage="javascript"
-        height="24rem"
+        height={editorHeight}
         language="javascript"
         onMount={(_editor, mountedMonaco) => {
           setMonaco(mountedMonaco as typeof MonacoEditor);

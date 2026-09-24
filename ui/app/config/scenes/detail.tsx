@@ -97,9 +97,9 @@ async function triggerScene(apiEndpoint: string, sceneId: string) {
 type TargetDraft = Record<string, SceneDeviceConfig>;
 
 function modeLabel(mode: string): string {
-  if (mode === 'device-link') return 'Tracks a device';
-  if (mode === 'scene-link') return 'Links to a scene';
-  return 'Sets state';
+  if (mode === 'device-link') return 'Follow a device';
+  if (mode === 'scene-link') return 'Use another scene';
+  return 'Set a state';
 }
 
 /**
@@ -599,6 +599,31 @@ export default function SceneDetailPage() {
                   ? ' Its script can override these values at runtime.'
                   : ''}
               </p>
+              {effects.unresolvedCount > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-2"
+                  onClick={() => {
+                    const first = effects.targets.find(
+                      (target) => target.unresolvedReason !== null,
+                    );
+                    if (first) {
+                      openSection(first.kind === 'group' ? 'rooms' : 'devices', {
+                        target: first.key,
+                      });
+                    } else {
+                      // Only a room member is missing; the room target is where
+                      // the repair lives.
+                      openSection('rooms');
+                    }
+                  }}
+                >
+                  Review {effects.unresolvedCount} skipped reference
+                  {effects.unresolvedCount === 1 ? '' : 's'}
+                </Button>
+              ) : null}
 
               <ul className="mt-3 space-y-1.5">
                 {effects.finalByDevice
@@ -796,6 +821,7 @@ export default function SceneDetailPage() {
           open={activeSection === 'devices'}
           onOpenChange={(open) => openSection(open ? 'devices' : null)}
           api={deviceEditor}
+          changeLabel="Change targets"
           headingRef={(node) => {
             headingRefs.current.devices = node;
           }}
@@ -810,8 +836,7 @@ export default function SceneDetailPage() {
           renderEditor={() => (
             <ConfigFormSection
               className="border-0 bg-transparent p-0 shadow-none"
-              title="Device targets"
-              description="Set an explicit state, track another device, or follow another scene."
+              description="Choose a target to change it, or add another."
             >
               {draftTargetEditor(
                 'device',
@@ -835,6 +860,7 @@ export default function SceneDetailPage() {
           open={activeSection === 'rooms'}
           onOpenChange={(open) => openSection(open ? 'rooms' : null)}
           api={roomEditor}
+          changeLabel="Change targets"
           headingRef={(node) => {
             headingRefs.current.rooms = node;
           }}
@@ -858,8 +884,11 @@ export default function SceneDetailPage() {
           renderEditor={() => (
             <ConfigFormSection
               className="border-0 bg-transparent p-0 shadow-none"
-              title="Room targets"
-              description="Rooms apply in order. If two rooms share a device, the later room wins for it."
+              description={
+                roomTargets.length > 1
+                  ? 'Rooms apply in order. If two rooms share a device, the later room wins for it.'
+                  : 'Every device in this room gets the state below.'
+              }
             >
               {draftTargetEditor(
                 'group',
@@ -910,12 +939,12 @@ export default function SceneDetailPage() {
                 />
               </ConfigField>
               <p className="text-xs text-muted-foreground">
-                ID <span className="font-mono">{scene.id}</span> is referenced
-                by routines and scene links and cannot be changed here.
+                ID <span className="font-mono">{scene.id}</span> is fixed once
+                routines or scene links refer to it.
               </p>
               <ConfigToggleRow
                 label="Hidden"
-                description="Hidden scenes stay available for automations and scene links, but are left out of primary control surfaces."
+                description="Hidden scenes still run from automations and scene links; they are just left out of the main lists."
               >
                 <input
                   type="checkbox"
