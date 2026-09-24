@@ -117,6 +117,10 @@ export const router = createBrowserRouter([
             element: withSuspense(<ConfigDevicesPage />),
           },
           {
+            path: 'devices/detail',
+            element: withSuspense(<ConfigDevicesPage />),
+          },
+          {
             path: 'floorplan',
             element: withSuspense(<ConfigFloorplanPage />),
           },
@@ -141,6 +145,10 @@ export const router = createBrowserRouter([
             element: withSuspense(<ConfigIntegrationsPage />),
           },
           {
+            path: 'integrations/:id',
+            element: withSuspense(<ConfigIntegrationsPage />),
+          },
+          {
             path: 'diagnostics',
             element: withSuspense(<ConfigDiagnosticsPage />),
           },
@@ -154,6 +162,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'helpers',
+            element: withSuspense(<ConfigHelpersPage />),
+          },
+          {
+            path: 'helpers/:id',
             element: withSuspense(<ConfigHelpersPage />),
           },
           {
@@ -186,6 +198,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'sources',
+            element: withSuspense(<ConfigSourcesPage />),
+          },
+          {
+            path: 'sources/:id',
             element: withSuspense(<ConfigSourcesPage />),
           },
           {

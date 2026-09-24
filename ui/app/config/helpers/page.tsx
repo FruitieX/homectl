@@ -1,3 +1,4 @@
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { HelperDefinition } from '@/bindings/HelperDefinition';
 import type { HelperKind } from '@/bindings/HelperKind';
 import type { HelperPersistence } from '@/bindings/HelperPersistence';
@@ -27,7 +28,7 @@ import { EmptyState } from '@/ui/primitives/empty-state';
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
@@ -541,16 +542,6 @@ function HelperEditor({
       ) : null}
 
       <ConfigFormActions>
-        {onDelete ? (
-          <Button
-            className="sm:mr-auto"
-            type="button"
-            variant="destructive"
-            onClick={onDelete}
-          >
-            Delete
-          </Button>
-        ) : null}
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
@@ -558,6 +549,23 @@ function HelperEditor({
           {saving ? 'Saving…' : 'Save helper'}
         </Button>
       </ConfigFormActions>
+
+      {onDelete ? (
+        <details className="mt-6 rounded-2xl border border-destructive/40 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-destructive">
+            Danger zone
+          </summary>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              Deleting this helper removes its stored value; routines that read
+              it lose their input.
+            </span>
+            <Button type="button" variant="destructive" onClick={onDelete}>
+              Delete helper
+            </Button>
+          </div>
+        </details>
+      ) : null}
     </>
   );
 }
@@ -573,6 +581,10 @@ export default function HelpersConfigPage() {
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [missingRouteId, setMissingRouteId] = useState<string | null>(null);
+  const { id: routeId } = useParams();
+  const navigate = useNavigate();
+  const appliedRouteIdRef = useRef<string | null>(null);
 
   const openCreate = useCallback(() => {
     setEditing({ draft: newHelperDraft(), isNew: true });
@@ -612,7 +624,7 @@ export default function HelpersConfigPage() {
     ),
   );
 
-  const openEdit = (status: HelperRuntimeStatus) => {
+  const openEdit = useCallback((status: HelperRuntimeStatus) => {
     setEditing({
       draft: {
         id: status.id,
@@ -625,7 +637,31 @@ export default function HelpersConfigPage() {
       isNew: false,
     });
     setSaveError(null);
-  };
+  }, []);
+
+  // Deep link: /config/helpers/<id> opens that helper's editor once the list
+  // has loaded, and a stale link says so instead of silently showing the list.
+  useEffect(() => {
+    if (!routeId) {
+      appliedRouteIdRef.current = null;
+      setMissingRouteId(null);
+      return;
+    }
+    if (loading) {
+      return;
+    }
+    if (appliedRouteIdRef.current === routeId) {
+      return;
+    }
+    const match = statuses.find((status) => status.id === routeId);
+    if (match) {
+      appliedRouteIdRef.current = routeId;
+      setMissingRouteId(null);
+      openEdit(match);
+      return;
+    }
+    setMissingRouteId(routeId);
+  }, [loading, openEdit, routeId, statuses]);
 
   const save = async () => {
     if (!editing) {
@@ -709,6 +745,20 @@ export default function HelpersConfigPage() {
         </Alert>
       ) : null}
 
+      {missingRouteId ? (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              No helper is called “{missingRouteId}”; it may have been renamed
+              or deleted.
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/config/helpers">Back to helpers</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {!error && (
         <ConfigListSearchBar
           filteredCount={visible.length}
@@ -744,8 +794,15 @@ export default function HelpersConfigPage() {
           <ExpandableConfigCard
             key={status.id}
             open={editing?.draft.id === status.id && !editing.isNew}
-            onOpen={() => openEdit(status)}
-            onClose={() => setEditing(null)}
+            onOpen={() =>
+              void navigate(`/config/helpers/${encodeURIComponent(status.id)}`)
+            }
+            onClose={() => {
+              setEditing(null);
+              if (routeId) {
+                void navigate('/config/helpers', { replace: true });
+              }
+            }}
             summary={
               <div className="flex flex-wrap items-center gap-3">
                 <span className="font-medium">{status.name}</span>

@@ -1,3 +1,5 @@
+import { useCallback, useEffect, useRef } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { Device } from '@/bindings/Device';
 import type { SourcePresetInfo } from '@/bindings/SourcePresetInfo';
 import {
@@ -642,16 +644,6 @@ function SourceEditor({
       ) : null}
 
       <ConfigFormActions>
-        {onDelete ? (
-          <Button
-            className="sm:mr-auto"
-            type="button"
-            variant="destructive"
-            onClick={onDelete}
-          >
-            Delete
-          </Button>
-        ) : null}
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
@@ -659,6 +651,23 @@ function SourceEditor({
           {saving ? 'Saving…' : 'Save source'}
         </Button>
       </ConfigFormActions>
+
+      {onDelete ? (
+        <details className="mt-6 rounded-2xl border border-destructive/40 p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-destructive">
+            Danger zone
+          </summary>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-sm text-muted-foreground">
+              Deleting this source stops the values it publishes; routines that
+              read it lose their input.
+            </span>
+            <Button type="button" variant="destructive" onClick={onDelete}>
+              Delete source
+            </Button>
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
@@ -681,6 +690,10 @@ export default function SourcesConfigPage() {
   const [editorMode, setEditorMode] = useState<'create' | 'edit'>('edit');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [missingRouteId, setMissingRouteId] = useState<string | null>(null);
+  const { id: routeId } = useParams();
+  const navigate = useNavigate();
+  const appliedRouteIdRef = useRef<string | null>(null);
 
   const visibleSources = useMemo(
     () =>
@@ -700,12 +713,12 @@ export default function SourcesConfigPage() {
       : { kind: 'computed_source' },
   );
 
-  const openEditor = (source: SourceConfig) => {
+  const openEditor = useCallback((source: SourceConfig) => {
     setDraft(JSON.parse(JSON.stringify(source)) as SourceConfig);
     setEditorMode('edit');
     setSaveError(null);
     setOpenId(source.id);
-  };
+  }, []);
 
   const openCreate = () => {
     setDraft(newSourceDraft());
@@ -714,11 +727,39 @@ export default function SourcesConfigPage() {
     setOpenId(null);
   };
 
-  const closeEditor = () => {
+  const closeEditor = (options?: { keepUrl?: boolean }) => {
     setDraft(null);
     setOpenId(null);
     setSaveError(null);
+    if (!options?.keepUrl && routeId) {
+      void navigate('/config/sources', { replace: true });
+    }
   };
+
+  // A deep link like /config/sources/circadian opens that source's editor as
+  // soon as the collection has loaded, and reports a link that no longer
+  // resolves instead of silently showing the list.
+  useEffect(() => {
+    if (!routeId) {
+      appliedRouteIdRef.current = null;
+      setMissingRouteId(null);
+      return;
+    }
+    if (loading) {
+      return;
+    }
+    if (appliedRouteIdRef.current === routeId) {
+      return;
+    }
+    const match = sources.find((source) => source.id === routeId);
+    if (match) {
+      appliedRouteIdRef.current = routeId;
+      setMissingRouteId(null);
+      openEditor(match);
+      return;
+    }
+    setMissingRouteId(routeId);
+  }, [loading, openEditor, routeId, sources]);
 
   const save = async () => {
     if (!draft) {
@@ -801,6 +842,20 @@ export default function SourcesConfigPage() {
         </Alert>
       ) : null}
 
+      {missingRouteId ? (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              No computed source is called “{missingRouteId}”; it may have been
+              renamed or deleted.
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/config/sources">Back to computed sources</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {!error && (
         <ConfigListSearchBar
           filteredCount={visibleSources.length}
@@ -842,7 +897,11 @@ export default function SourcesConfigPage() {
             <ExpandableConfigCard
               key={source.id}
               open={openId === source.id}
-              onOpen={() => openEditor(source)}
+              onOpen={() =>
+                void navigate(
+                  `/config/sources/${encodeURIComponent(source.id)}`,
+                )
+              }
               onClose={closeEditor}
               dialogTitle={source.name}
               dialogSubtitle={`computed/${source.id}`}

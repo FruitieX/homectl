@@ -83,6 +83,29 @@ const SPECIAL_GET = {
   'runtime-status': () => db.runtimeStatus,
   'routine-history': () => db.routineHistory,
   logs: () => db.logs,
+  diagnostics: () => ({
+    issues: [
+      {
+        entity: 'group',
+        entity_id: 'kitchen',
+        name: 'Kitchen',
+        severity: 'warning',
+        message:
+          'This room references a device that is not assigned anywhere else.',
+        suggestion:
+          'Open the room and confirm the device list, or move the device to the room that controls it.',
+      },
+      {
+        entity: 'scene',
+        entity_id: 'normal',
+        name: 'Normal',
+        severity: 'info',
+        message: 'This scene was captured from a device that is offline.',
+        suggestion:
+          'Re-capture the scene once the device reports again so the stored state is current.',
+      },
+    ],
+  }),
   'config-export': () => ({
     version: 1,
     exported_at: new Date().toISOString(),

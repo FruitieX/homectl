@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
   type Integration,
@@ -590,6 +591,10 @@ export default function IntegrationsPage() {
     error: schemasError,
   } = useIntegrationConfigSchemas();
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [missingRouteId, setMissingRouteId] = useState<string | null>(null);
+  const { id: routeId } = useParams();
+  const navigate = useNavigate();
+  const appliedRouteIdRef = useRef<string | null>(null);
   const [search, setSearch] = useSearchParamState();
   const [showCreate, setShowCreate] = useState(false);
   useCreateDeepLink(useCallback(() => setShowCreate(true), []));
@@ -609,6 +614,30 @@ export default function IntegrationsPage() {
         }
       : { kind: 'integration' },
   );
+
+  // Deep link: /config/integrations/<id> opens that connection's editor once
+  // the list has loaded, and a stale link says so instead of silently showing
+  // the list.
+  useEffect(() => {
+    if (!routeId) {
+      appliedRouteIdRef.current = null;
+      setMissingRouteId(null);
+      return;
+    }
+    if (loading) {
+      return;
+    }
+    if (appliedRouteIdRef.current === routeId) {
+      return;
+    }
+    if (integrations.some((integration) => integration.id === routeId)) {
+      appliedRouteIdRef.current = routeId;
+      setMissingRouteId(null);
+      setEditingId(routeId);
+      return;
+    }
+    setMissingRouteId(routeId);
+  }, [integrations, loading, routeId]);
 
   if (loading || schemasLoading) {
     return (
@@ -648,6 +677,20 @@ export default function IntegrationsPage() {
         }
       />
 
+      {missingRouteId ? (
+        <Alert variant="destructive">
+          <AlertDescription className="flex flex-wrap items-center justify-between gap-3">
+            <span>
+              No connection is called “{missingRouteId}”; it may have been
+              renamed or deleted.
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link to="/config/integrations">Back to connections</Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       {integrations.length === 0 ? (
         <IntegrationGettingStarted
           schemas={integrationSchemas}
@@ -684,7 +727,11 @@ export default function IntegrationsPage() {
             <IntegrationCard
               key={integration.id}
               integration={integration}
-              onOpen={() => setEditingId(integration.id)}
+              onOpen={() =>
+                void navigate(
+                  `/config/integrations/${encodeURIComponent(integration.id)}`,
+                )
+              }
               onDelete={async () => {
                 if (
                   await confirmDestructive(
@@ -724,10 +771,18 @@ export default function IntegrationsPage() {
           integration={editingIntegration}
           schemas={integrationSchemas}
           schemasError={schemasError}
-          onClose={() => setEditingId(null)}
+          onClose={() => {
+            setEditingId(null);
+            if (routeId) {
+              void navigate('/config/integrations', { replace: true });
+            }
+          }}
           onSubmit={async (integration) => {
             await update(editingIntegration.id, integration);
             setEditingId(null);
+            if (routeId) {
+              void navigate('/config/integrations', { replace: true });
+            }
           }}
         />
       )}

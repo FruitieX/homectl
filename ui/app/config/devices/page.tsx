@@ -566,7 +566,10 @@ export default function DevicesPage() {
   const { replace: replaceConfigDevice, remove: removeConfigDevice } =
     useConfigDevices();
   const [searchParams] = useSearchParams();
-  const requestedDeviceKey = searchParams.get('device');
+  // /config/devices/detail?key=<encoded device key> is the canonical detail
+  // link; ?device= stays supported for older links.
+  const requestedDeviceKey =
+    searchParams.get('key') ?? searchParams.get('device');
   const appliedDeviceRequest = useRef<string | null>(null);
   const [deviceSearch, setDeviceSearch] = useState(
     () => searchParams.get('q') ?? '',

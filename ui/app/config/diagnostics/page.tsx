@@ -14,6 +14,29 @@ import { ConfigPageHeader } from '../page-header';
 const sections = { group: 'groups', scene: 'scenes', device: 'devices' };
 const labels = { group: 'room', scene: 'scene', device: 'device' };
 
+/** The item's own page, so a check never dumps the user back into a list. */
+function itemHref(entity: string, entityId: string) {
+  const encoded = encodeURIComponent(entityId);
+  switch (entity) {
+    case 'group':
+      return `/config/groups/${encoded}`;
+    case 'scene':
+      return `/config/scenes/${encoded}`;
+    case 'device':
+      return `/config/devices/detail?key=${encoded}`;
+    case 'routine':
+      return `/config/routines/${encoded}`;
+    case 'integration':
+      return `/config/integrations/${encoded}`;
+    case 'helper':
+      return `/config/helpers/${encoded}`;
+    case 'source':
+      return `/config/sources/${encoded}`;
+    default:
+      return `/config/${sections[entity as keyof typeof sections] ?? 'devices'}?q=${encoded}`;
+  }
+}
+
 function Issue({ issue }: { issue: ConfigDiagnostic }) {
   const Icon = issue.severity === 'warning' ? AlertTriangle : Info;
   return (
@@ -25,31 +48,48 @@ function Issue({ issue }: { issue: ConfigDiagnostic }) {
       <div className="min-w-0 flex-1 space-y-2">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <h2 className="break-words font-semibold">{issue.name}</h2>
-          <span className="text-xs capitalize text-muted-foreground">
-            {issue.entity}
+          <span className="text-xs text-muted-foreground">
+            {labels[issue.entity] ?? issue.entity}
           </span>
         </div>
-        <div className="grid gap-2 text-sm sm:grid-cols-2">
+        <div className="space-y-2 text-sm">
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               What we found
             </span>
-            <p className="mt-1 break-words">{issue.message}</p>
+            <p className="mt-0.5 break-words">{issue.message}</p>
           </div>
           <div>
-            <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-xs font-medium text-muted-foreground">
               What to do
             </span>
-            <p className="mt-1 break-words">{issue.suggestion}</p>
+            <p className="mt-0.5 break-words">{issue.suggestion}</p>
           </div>
         </div>
-        <Button asChild size="sm" variant="outline">
-          <Link
-            to={`/config/${sections[issue.entity]}?q=${encodeURIComponent(issue.entity_id)}`}
-          >
-            Open {labels[issue.entity]}
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild size="sm" variant="outline">
+            <Link to={itemHref(issue.entity, issue.entity_id)}>
+              Open {labels[issue.entity] ?? issue.entity}
+            </Link>
+          </Button>
+          <details className="text-xs text-muted-foreground">
+            <summary className="cursor-pointer">Technical details</summary>
+            <dl className="mt-2 grid gap-1">
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="font-medium">Type</dt>
+                <dd className="font-mono">{issue.entity}</dd>
+              </div>
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="font-medium">ID</dt>
+                <dd className="break-all font-mono">{issue.entity_id}</dd>
+              </div>
+              <div className="flex flex-wrap gap-x-2">
+                <dt className="font-medium">Severity</dt>
+                <dd className="font-mono">{issue.severity}</dd>
+              </div>
+            </dl>
+          </details>
+        </div>
       </div>
     </article>
   );

@@ -8,6 +8,7 @@ import { type PlannedRunStatus } from '@/bindings/PlannedRunStatus';
 import { type RuleRuntimeStatus } from '@/bindings/RuleRuntimeStatus';
 import { type TruthValue } from '@/bindings/TruthValue';
 import { type UnknownReason } from '@/bindings/UnknownReason';
+import { Link } from 'react-router-dom';
 import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigPageHeader } from '../page-header';
 import { Advanced } from '@/ui/primitives/advanced';
@@ -79,6 +80,43 @@ function formatTimestamp(timestamp: string) {
     dateStyle: 'short',
     timeStyle: 'medium',
   });
+}
+
+function formatShortTime(timestamp: string) {
+  return new Date(timestamp).toLocaleTimeString(undefined, {
+    timeStyle: 'short',
+  });
+}
+
+/** What happened, in the words of the event rather than the schema. */
+function entryEvent(entry: RoutineHistoryEntry) {
+  if (entry.v2) {
+    const ids = entry.v2.matched_trigger_ids;
+    if (ids.length === 0) {
+      return 'no trigger matched';
+    }
+    return `${ids.length} trigger${ids.length === 1 ? '' : 's'} matched`;
+  }
+  return entry.event_source_device_key
+    ? `event from ${entry.event_source_device_key}`
+    : 'rule or manual trigger';
+}
+
+/** What the routine did about it, or why it did nothing. */
+function entryOutcome(entry: RoutineHistoryEntry) {
+  if (entry.v2) {
+    if (entry.v2.last_run) {
+      if (!entry.v2.last_run.accepted) {
+        return 'run rejected';
+      }
+      const dropped = Number(entry.v2.last_run.dropped);
+      return `ran, ${entry.action_count} dispatched${dropped > 0 ? `, ${dropped} dropped` : ''}`;
+    }
+    return entry.v2.condition.truth === 'true'
+      ? 'waiting for a run'
+      : `condition ${truthLabel(entry.v2.condition.truth)}`;
+  }
+  return entry.status?.will_trigger ? 'will trigger' : 'not run';
 }
 
 function flattenRuleStatuses(rules: RuleRuntimeStatus[]) {
@@ -586,6 +624,23 @@ export default function RoutineHistoryPage() {
                     <CardHeader className="gap-3">
                       <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0 space-y-2">
+                          <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                            <span className="font-mono text-xs text-muted-foreground">
+                              {formatShortTime(entry.timestamp)}
+                            </span>
+                            <Link
+                              className="font-semibold wrap-break-word underline-offset-2 hover:underline"
+                              to={`/config/routines/${encodeURIComponent(entry.routine_id)}`}
+                            >
+                              {entry.routine_name || entry.routine_id}
+                            </Link>
+                            <span className="text-muted-foreground">
+                              · {entryEvent(entry)}
+                            </span>
+                            <span className="font-medium">
+                              · {entryOutcome(entry)}
+                            </span>
+                          </p>
                           <div className="flex flex-wrap items-center gap-2">
                             <Badge
                               variant={
@@ -643,19 +698,19 @@ export default function RoutineHistoryPage() {
                               </Badge>
                             ) : null}
                           </div>
-                          <CardTitle className="wrap-break-word text-base">
-                            {entry.routine_name || entry.routine_id}
-                          </CardTitle>
-                          <CardDescription className="wrap-break-word">
-                            {entry.routine_id}
-                            {entry.event_source_device_key
-                              ? ` · source ${entry.event_source_device_key}`
-                              : ''}
-                          </CardDescription>
+                          <details className="text-xs text-muted-foreground">
+                            <summary className="cursor-pointer">
+                              IDs, source, and record
+                            </summary>
+                            <p className="mt-1 font-mono wrap-break-word">
+                              {entry.routine_id}
+                              {entry.event_source_device_key
+                                ? ` · ${entry.event_source_device_key}`
+                                : ''}
+                              {entry.id ? ` · record ${entry.id}` : ''}
+                            </p>
+                          </details>
                         </div>
-                        <CardDescription>
-                          {formatTimestamp(entry.timestamp)}
-                        </CardDescription>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">

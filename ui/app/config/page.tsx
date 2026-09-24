@@ -51,21 +51,21 @@ const tasks = [
   {
     key: 'new-group',
     label: 'Add a room',
-    href: '/config/groups?new=1',
+    href: '/config/groups/new',
     icon: Layers3,
     keywords: 'group organize devices',
   },
   {
     key: 'new-scene',
     label: 'Create a scene',
-    href: '/config/scenes?new=1',
+    href: '/config/scenes/new',
     icon: Lightbulb,
     keywords: 'preset lighting',
   },
   {
     key: 'new-routine',
     label: 'Create a routine',
-    href: '/config/routines?new=1',
+    href: '/config/routines/new',
     icon: Wand2,
     keywords: 'automation trigger action',
   },
@@ -178,7 +178,7 @@ export default function ConfigPage() {
         key: `device:${key}`,
         label: getDeviceDisplayLabel(device),
         description: 'Device',
-        href: `/config/devices?device=${encodeURIComponent(key)}`,
+        href: `/config/devices/detail?key=${encodeURIComponent(key)}`,
         group: 'Devices',
         keywords: key,
       });
@@ -189,7 +189,7 @@ export default function ConfigPage() {
         key: `group:${key}`,
         label: group.name,
         description: 'Room',
-        href: `/config/groups?q=${encodeURIComponent(group.name)}`,
+        href: `/config/groups/${encodeURIComponent(key)}`,
         group: 'Rooms',
         keywords: key,
       });
@@ -200,7 +200,7 @@ export default function ConfigPage() {
         key: `scene:${key}`,
         label: scene.name,
         description: 'Scene',
-        href: `/config/scenes?scene=${encodeURIComponent(key)}`,
+        href: `/config/scenes/${encodeURIComponent(key)}`,
         group: 'Scenes',
         keywords: key,
       });
@@ -210,7 +210,7 @@ export default function ConfigPage() {
         key: `routine:${routine.id}`,
         label: routine.name,
         description: 'Routine',
-        href: `/config/routines?q=${encodeURIComponent(routine.name)}`,
+        href: `/config/routines/${encodeURIComponent(routine.id)}`,
         group: 'Routines',
         keywords: routine.id,
       });
@@ -220,7 +220,7 @@ export default function ConfigPage() {
         key: `helper:${helper.id}`,
         label: helper.name || helper.id,
         description: 'Helper',
-        href: `/config/helpers?q=${encodeURIComponent(helper.name || helper.id)}`,
+        href: `/config/helpers/${encodeURIComponent(helper.id)}`,
         group: 'Helpers',
         keywords: helper.id,
       });
@@ -230,7 +230,7 @@ export default function ConfigPage() {
         key: `integration:${integration.id}`,
         label: integration.id,
         description: 'Connection or service',
-        href: `/config/integrations?q=${encodeURIComponent(integration.id)}`,
+        href: `/config/integrations/${encodeURIComponent(integration.id)}`,
         group: 'Connections',
         keywords: integration.id,
       });
@@ -277,21 +277,21 @@ export default function ConfigPage() {
               label: 'Create a room',
               detail:
                 'Group the devices you want to control together. Sensors can stay unassigned.',
-              href: '/config/groups?new=1',
+              href: '/config/groups/new',
             }
           : Object.keys(scenes ?? {}).length === 0
             ? {
                 label: 'Save a scene',
                 detail:
                   'Capture a useful device state so you can recall it later.',
-                href: '/config/scenes?new=1',
+                href: '/config/scenes/new',
               }
             : (routines?.length ?? 0) === 0
               ? {
                   label: 'Create an automation',
                   detail:
                     'Use a sensor, schedule, or button to activate a scene automatically.',
-                  href: '/config/routines?new=1',
+                  href: '/config/routines/new',
                 }
               : null;
 

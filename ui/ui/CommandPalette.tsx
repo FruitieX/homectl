@@ -180,7 +180,7 @@ export function CommandPalette() {
         description: 'Automate a trigger, condition, and program',
         group: 'Create',
         icon: <Wand2 />,
-        run: () => go('action:new-routine', '/config/routines?new=1'),
+        run: () => go('action:new-routine', '/config/routines/new'),
       },
       {
         key: 'action:new-scene',
@@ -188,7 +188,7 @@ export function CommandPalette() {
         description: 'Capture or compose a scene',
         group: 'Create',
         icon: <Lightbulb />,
-        run: () => go('action:new-scene', '/config/scenes?new=1'),
+        run: () => go('action:new-scene', '/config/scenes/new'),
       },
       {
         key: 'action:new-group',
@@ -196,7 +196,7 @@ export function CommandPalette() {
         description: 'Group devices into a room',
         group: 'Create',
         icon: <Layers3 />,
-        run: () => go('action:new-group', '/config/groups?new=1'),
+        run: () => go('action:new-group', '/config/groups/new'),
       },
       {
         key: 'action:new-helper',
@@ -298,7 +298,7 @@ export function CommandPalette() {
         run: () =>
           go(
             `device:${key}`,
-            `/config/devices?device=${encodeURIComponent(key)}`,
+            `/config/devices/detail?key=${encodeURIComponent(key)}`,
           ),
       });
     }
@@ -313,7 +313,7 @@ export function CommandPalette() {
         group: 'Scenes',
         icon: <Lightbulb />,
         run: () =>
-          go(`scene:${key}`, `/config/scenes?scene=${encodeURIComponent(key)}`),
+          go(`scene:${key}`, `/config/scenes/${encodeURIComponent(key)}`),
       });
     }
 
@@ -341,7 +341,7 @@ export function CommandPalette() {
         run: () =>
           go(
             `routine:${routine.id}`,
-            `/config/routines?q=${encodeURIComponent(routine.name)}`,
+            `/config/routines/${encodeURIComponent(routine.id)}`,
           ),
       });
     }
@@ -357,7 +357,7 @@ export function CommandPalette() {
         run: () =>
           go(
             `helper:${helper.id}`,
-            `/config/helpers?q=${encodeURIComponent(helper.name || helper.id)}`,
+            `/config/helpers/${encodeURIComponent(helper.id)}`,
           ),
       });
     }
@@ -373,7 +373,7 @@ export function CommandPalette() {
         run: () =>
           go(
             `integration:${integration.id}`,
-            `/config/integrations?q=${encodeURIComponent(integration.id)}`,
+            `/config/integrations/${encodeURIComponent(integration.id)}`,
           ),
       });
     }
