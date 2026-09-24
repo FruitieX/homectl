@@ -1,6 +1,11 @@
+import { ArrowRight, ChevronRight } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 
+/** The creation journey shows one decision at a time. */
+type Step = 1 | 2 | 3;
+
+import { cn } from '@/lib/cn';
 import { loadCreationDraft } from '@/lib/creationDraft';
 import {
   captureSceneDeviceState,
@@ -70,6 +75,9 @@ export default function NewScenePage() {
   const { data: deviceDisplayNames } = useDeviceDisplayNames();
 
   const [query, setQuery] = useState('');
+  // The picker stays quiet until someone searches or asks for the full list.
+  const [browseAll, setBrowseAll] = useState(false);
+  const [step, setStep] = useState<Step>(1);
   const [deviceTargets, setDeviceTargets] = useState<
     Record<string, DeviceTarget>
   >({});
@@ -138,6 +146,10 @@ export default function NewScenePage() {
   const selectedRoomNames = Object.keys(roomTargets).map(
     (roomId) => rooms.find((room) => room.id === roomId)?.name ?? roomId,
   );
+
+  const availableCount =
+    deviceEntries.filter((entry) => !(entry.key in deviceTargets)).length +
+    rooms.filter((room) => !(room.id in roomTargets)).length;
   const suggestedName = suggestSceneName(
     selectedDeviceNames,
     selectedRoomNames,
@@ -238,333 +250,493 @@ export default function NewScenePage() {
         </Alert>
       ) : null}
 
-      <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
-        <h2 className="text-sm font-semibold">
-          Which devices or rooms should this scene affect?
-        </h2>
-        <Input
-          aria-label="Search devices and rooms"
-          placeholder="Search by name, id, or integration"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-        />
-        {matchingDevices.length === 0 && matchingRooms.length === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nothing left to add{search ? ' for that search' : ''}.
-          </p>
-        ) : (
-          <ul className="space-y-1">
-            {matchingRooms.map((room) => (
-              <li
-                key={`room:${room.id}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  {room.name}
-                  <span className="ml-2 text-xs text-muted-foreground">
-                    room
-                  </span>
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addRoom(room.id)}
+      {step === 1 ? (
+        <>
+          <ol
+            className="flex flex-wrap items-center gap-2 text-xs"
+            aria-label="Steps"
+          >
+            {(
+              [
+                [1, 'Choose targets'],
+                [2, 'Set what they do'],
+                [3, 'Review'],
+              ] as const
+            ).map(([value, label]) => (
+              <li key={value} className="flex items-center gap-2">
+                <button
+                  type="button"
+                  aria-current={step === value ? 'step' : undefined}
+                  onClick={() => setStep(value)}
+                  className={cn(
+                    'rounded-full border px-2.5 py-1 font-medium transition',
+                    step === value
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground hover:border-primary/40',
+                  )}
                 >
-                  Add room
-                </Button>
+                  {value}. {label}
+                </button>
+                {value < 3 ? (
+                  <ChevronRight
+                    className="size-3 text-muted-foreground"
+                    aria-hidden
+                  />
+                ) : null}
               </li>
             ))}
-            {matchingDevices.map(({ key, label }) => (
-              <li
-                key={`device:${key}`}
-                className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm">
-                  {label}
-                  <span className="ml-2 font-mono text-xs text-muted-foreground">
-                    {key}
-                  </span>
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => addDevice(key)}
-                >
-                  Add device
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          </ol>
 
-      <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
-        <div className="flex items-baseline justify-between gap-2">
-          <h2 className="text-sm font-semibold">Selected targets</h2>
-          <span className="text-xs text-muted-foreground">
-            {targetCount} target{targetCount === 1 ? '' : 's'}
-          </span>
-        </div>
-        {targetCount === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No targets yet. Add a device or room above; the scene will set what
-            you see here.
-          </p>
-        ) : null}
-
-        {Object.entries(deviceTargets).map(([key, target]) => {
-          const label =
-            deviceEntries.find((entry) => entry.key === key)?.label ?? key;
-          const open = openRow === `device:${key}`;
-          return (
-            <div
-              key={key}
-              className="space-y-2 rounded-xl border border-border p-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{label}</span>
-                    <Badge variant="outline">
-                      {target.mode === 'captured'
-                        ? 'Captured from requested state'
-                        : 'Set manually'}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    {describeState(target.state)}
-                  </p>
-                  {target.notes.map((note) => (
-                    <p
-                      key={note}
-                      className="text-xs text-amber-700 dark:text-amber-300"
+          <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
+            <h2 className="text-sm font-semibold">
+              Which devices or rooms should this scene affect?
+            </h2>
+            <Input
+              aria-label="Search devices and rooms"
+              placeholder="Search by name, id, or integration"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+            {targetCount > 0 ? (
+              <div className="rounded-xl border border-border/70 bg-muted/20 p-2.5">
+                <p className="text-xs font-medium text-muted-foreground">
+                  Chosen ({targetCount})
+                </p>
+                <ul className="mt-1 flex flex-wrap gap-1.5">
+                  {Object.keys(deviceTargets).map((key) => (
+                    <li
+                      key={key}
+                      className="rounded-full border border-border bg-background px-2.5 py-1 text-xs"
                     >
-                      {note}
-                    </p>
+                      {deviceEntries.find((entry) => entry.key === key)
+                        ?.label ?? key}
+                    </li>
                   ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const captured = captureSceneDeviceState(
-                        devicesState?.[key],
-                      );
-                      setDeviceTargets((current) => ({
-                        ...current,
-                        [key]:
-                          current[key]?.mode === 'captured'
-                            ? {
-                                mode: 'manual',
-                                state: current[key].state,
-                                notes: [],
-                              }
-                            : {
+                  {Object.keys(roomTargets).map((roomId) => (
+                    <li
+                      key={roomId}
+                      className="rounded-full border border-border bg-background px-2.5 py-1 text-xs"
+                    >
+                      {rooms.find((room) => room.id === roomId)?.name ?? roomId}
+                      <span className="ml-1 text-muted-foreground">room</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-1.5 text-xs text-muted-foreground">
+                  Continue to choose what each one should set.
+                </p>
+              </div>
+            ) : null}
+
+            {!search && !browseAll ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
+                <span>
+                  Type to search {availableCount} device
+                  {availableCount === 1 ? '' : 's'} and rooms, or browse the
+                  full list.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setBrowseAll(true)}
+                >
+                  Browse all
+                </Button>
+              </div>
+            ) : matchingDevices.length === 0 && matchingRooms.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nothing left to add{search ? ' for that search' : ''}.
+              </p>
+            ) : (
+              <ul className="space-y-1">
+                {matchingRooms.map((room) => (
+                  <li
+                    key={`room:${room.id}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {room.name}
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        room
+                      </span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => addRoom(room.id)}
+                    >
+                      Add room
+                    </Button>
+                  </li>
+                ))}
+                {matchingDevices.map(({ key, label }) => (
+                  <li
+                    key={`device:${key}`}
+                    className="flex items-center justify-between gap-3 rounded-xl border border-border px-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {label}
+                      <span className="ml-2 font-mono text-xs text-muted-foreground">
+                        {key}
+                      </span>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => addDevice(key)}
+                    >
+                      Add device
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+          {step === 1 ? (
+            <div className="flex items-center justify-between gap-2">
+              {step > 1 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStep((step - 1) as Step)}
+                >
+                  Back
+                </Button>
+              ) : (
+                <span />
+              )}
+              <Button size="sm" onClick={() => setStep((step + 1) as Step)}>
+                Continue
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {step === 2 ? (
+        <>
+          <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
+            <div className="flex items-baseline justify-between gap-2">
+              <h2 className="text-sm font-semibold">Selected targets</h2>
+              <span className="text-xs text-muted-foreground">
+                {targetCount} target{targetCount === 1 ? '' : 's'}
+              </span>
+            </div>
+            {targetCount === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No targets yet. Add a device or room above; the scene will set
+                what you see here.
+              </p>
+            ) : null}
+
+            {Object.entries(deviceTargets).map(([key, target]) => {
+              const label =
+                deviceEntries.find((entry) => entry.key === key)?.label ?? key;
+              const open = openRow === `device:${key}`;
+              return (
+                <div
+                  key={key}
+                  className="space-y-2 rounded-xl border border-border p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <Badge variant="outline">
+                          {target.mode === 'captured'
+                            ? 'Captured from requested state'
+                            : 'Set manually'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {describeState(target.state)}
+                      </p>
+                      {target.notes.map((note) => (
+                        <p
+                          key={note}
+                          className="text-xs text-amber-700 dark:text-amber-300"
+                        >
+                          {note}
+                        </p>
+                      ))}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const captured = captureSceneDeviceState(
+                            devicesState?.[key],
+                          );
+                          setDeviceTargets((current) => ({
+                            ...current,
+                            [key]:
+                              current[key]?.mode === 'captured'
+                                ? {
+                                    mode: 'manual',
+                                    state: current[key].state,
+                                    notes: [],
+                                  }
+                                : {
+                                    mode: 'captured',
+                                    state: captured.state,
+                                    notes: captured.notes,
+                                  },
+                          }));
+                          setOpenRow(`device:${key}`);
+                        }}
+                      >
+                        {target.mode === 'captured'
+                          ? 'Set manually'
+                          : 'Use captured state'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-expanded={open}
+                        onClick={() =>
+                          setOpenRow(open ? null : `device:${key}`)
+                        }
+                      >
+                        {open ? 'Close' : 'Adjust'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => removeDevice(key)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                  {open ? (
+                    <div className="space-y-3 border-t border-border pt-3">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          setDeviceTargets((current) => {
+                            const captured = captureSceneDeviceState(
+                              devicesState?.[key],
+                            );
+                            return {
+                              ...current,
+                              [key]: {
                                 mode: 'captured',
                                 state: captured.state,
                                 notes: captured.notes,
                               },
-                      }));
-                      setOpenRow(`device:${key}`);
-                    }}
-                  >
-                    {target.mode === 'captured'
-                      ? 'Set manually'
-                      : 'Use captured state'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-expanded={open}
-                    onClick={() => setOpenRow(open ? null : `device:${key}`)}
-                  >
-                    {open ? 'Close' : 'Adjust'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => removeDevice(key)}
-                  >
-                    Remove
-                  </Button>
+                            };
+                          })
+                        }
+                      >
+                        Use captured requested state
+                      </Button>
+                      <DeviceStateEditor
+                        config={target.state}
+                        onChange={(state) =>
+                          setDeviceTargets((current) => ({
+                            ...current,
+                            [key]: { mode: 'manual', state, notes: [] },
+                          }))
+                        }
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-              {open ? (
-                <div className="space-y-3 border-t border-border pt-3">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() =>
-                      setDeviceTargets((current) => {
-                        const captured = captureSceneDeviceState(
-                          devicesState?.[key],
-                        );
-                        return {
-                          ...current,
-                          [key]: {
-                            mode: 'captured',
-                            state: captured.state,
-                            notes: captured.notes,
-                          },
-                        };
-                      })
-                    }
-                  >
-                    Use captured requested state
-                  </Button>
-                  <DeviceStateEditor
-                    config={target.state}
-                    onChange={(state) =>
-                      setDeviceTargets((current) => ({
-                        ...current,
-                        [key]: { mode: 'manual', state, notes: [] },
-                      }))
-                    }
-                  />
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+              );
+            })}
 
-        {Object.entries(roomTargets).map(([roomId, state]) => {
-          const label =
-            rooms.find((room) => room.id === roomId)?.name ?? roomId;
-          const open = openRow === `room:${roomId}`;
-          return (
-            <div
-              key={roomId}
-              className="space-y-2 rounded-xl border border-border p-3"
-            >
-              <div className="flex flex-wrap items-start justify-between gap-2">
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-sm font-medium">{label}</span>
-                    <Badge variant="outline">Set manually</Badge>
+            {Object.entries(roomTargets).map(([roomId, state]) => {
+              const label =
+                rooms.find((room) => room.id === roomId)?.name ?? roomId;
+              const open = openRow === `room:${roomId}`;
+              return (
+                <div
+                  key={roomId}
+                  className="space-y-2 rounded-xl border border-border p-3"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-sm font-medium">{label}</span>
+                        <Badge variant="outline">Set manually</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {describeState(state)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        A room has no single physical state: this is the shared
+                        state every member gets.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        aria-expanded={open}
+                        onClick={() =>
+                          setOpenRow(open ? null : `room:${roomId}`)
+                        }
+                      >
+                        {open ? 'Close' : 'Adjust'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => removeRoom(roomId)}
+                      >
+                        Remove
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    {describeState(state)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    A room has no single physical state: this is the shared
-                    state every member gets.
-                  </p>
+                  {open ? (
+                    <div className="border-t border-border pt-3">
+                      <DeviceStateEditor
+                        config={state}
+                        onChange={(next) =>
+                          setRoomTargets((current) => ({
+                            ...current,
+                            [roomId]: next,
+                          }))
+                        }
+                      />
+                    </div>
+                  ) : null}
                 </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-expanded={open}
-                    onClick={() => setOpenRow(open ? null : `room:${roomId}`)}
-                  >
-                    {open ? 'Close' : 'Adjust'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive"
-                    onClick={() => removeRoom(roomId)}
-                  >
-                    Remove
-                  </Button>
-                </div>
-              </div>
-              {open ? (
-                <div className="border-t border-border pt-3">
-                  <DeviceStateEditor
-                    config={state}
-                    onChange={(next) =>
-                      setRoomTargets((current) => ({
-                        ...current,
-                        [roomId]: next,
-                      }))
-                    }
-                  />
-                </div>
-              ) : null}
+              );
+            })}
+          </section>
+          {step === 2 ? (
+            <div className="flex items-center justify-between gap-2">
+              {step > 1 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStep((step - 1) as Step)}
+                >
+                  Back
+                </Button>
+              ) : (
+                <span />
+              )}
+              <Button size="sm" onClick={() => setStep((step + 1) as Step)}>
+                Continue
+                <ArrowRight className="size-4" aria-hidden />
+              </Button>
             </div>
-          );
-        })}
-      </section>
+          ) : null}
+        </>
+      ) : null}
 
-      <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
-        <h2 className="text-sm font-semibold">What this will set</h2>
-        {targetCount === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            Nothing yet: a scene with no targets does not change anything.
-          </p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {Object.entries(deviceTargets).map(([key, target]) => (
-              <li key={key} className="flex flex-wrap items-baseline gap-2">
-                <span className="font-medium">
-                  {deviceEntries.find((entry) => entry.key === key)?.label ??
-                    key}
+      {step === 3 ? (
+        <>
+          <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
+            <h2 className="text-sm font-semibold">What this will set</h2>
+            {targetCount === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Nothing yet: a scene with no targets does not change anything.
+              </p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {Object.entries(deviceTargets).map(([key, target]) => (
+                  <li key={key} className="flex flex-wrap items-baseline gap-2">
+                    <span className="font-medium">
+                      {deviceEntries.find((entry) => entry.key === key)
+                        ?.label ?? key}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {describeState(target.state)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      (
+                      {target.mode === 'captured'
+                        ? 'captured from requested state'
+                        : 'set manually'}
+                      )
+                    </span>
+                  </li>
+                ))}
+                {Object.entries(roomTargets).map(([roomId, state]) => (
+                  <li
+                    key={roomId}
+                    className="flex flex-wrap items-baseline gap-2"
+                  >
+                    <span className="font-medium">
+                      {rooms.find((room) => room.id === roomId)?.name ?? roomId}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {describeState(state)}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      (shared room state, set manually)
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="text-xs text-muted-foreground">
+              A captured target means the app's requested state, not a claim
+              about the physical device. Nothing is commanded until you activate
+              the scene.
+            </p>
+          </section>
+          <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
+            <h2 className="text-sm font-semibold">Details</h2>
+            <label className="block space-y-1.5">
+              <span className="text-sm font-medium">Name</span>
+              <Input
+                value={nameEdited ? name : suggestedName}
+                onChange={(event) => {
+                  setName(event.target.value);
+                  setNameEdited(true);
+                }}
+              />
+            </label>
+            <details className="rounded-xl border border-border p-3">
+              <summary className="cursor-pointer text-sm font-medium">
+                Details
+              </summary>
+              <label className="mt-3 block space-y-1.5">
+                <span className="text-sm font-medium">Scene ID</span>
+                <Input
+                  className="font-mono"
+                  value={idEdited ? id : effectiveId}
+                  onChange={(event) => {
+                    setId(event.target.value);
+                    setIdEdited(true);
+                  }}
+                />
+                <span className="block text-xs text-muted-foreground">
+                  Generated from the name. Scenes and routines refer to this id;
+                  you only need to change it if you have a reason to.
                 </span>
-                <span className="text-muted-foreground">
-                  {describeState(target.state)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  (
-                  {target.mode === 'captured'
-                    ? 'captured from requested state'
-                    : 'set manually'}
-                  )
-                </span>
-              </li>
-            ))}
-            {Object.entries(roomTargets).map(([roomId, state]) => (
-              <li key={roomId} className="flex flex-wrap items-baseline gap-2">
-                <span className="font-medium">
-                  {rooms.find((room) => room.id === roomId)?.name ?? roomId}
-                </span>
-                <span className="text-muted-foreground">
-                  {describeState(state)}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  (shared room state, set manually)
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="text-xs text-muted-foreground">
-          A captured target means the app's requested state, not a claim about
-          the physical device. Nothing is commanded until you activate the
-          scene.
-        </p>
-      </section>
-
-      <section className="space-y-3 rounded-2xl border border-border bg-background/70 p-4">
-        <h2 className="text-sm font-semibold">Details</h2>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Name</span>
-          <Input
-            value={nameEdited ? name : suggestedName}
-            onChange={(event) => {
-              setName(event.target.value);
-              setNameEdited(true);
-            }}
-          />
-        </label>
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium">Scene ID</span>
-          <Input
-            className="font-mono"
-            value={idEdited ? id : effectiveId}
-            onChange={(event) => {
-              setId(event.target.value);
-              setIdEdited(true);
-            }}
-          />
-          <span className="block text-xs text-muted-foreground">
-            Scenes and routines refer to this id. Existing scenes:{' '}
-            {scenes.map((scene) => scene.id).join(', ') || 'none yet'}.
-          </span>
-        </label>
-      </section>
+              </label>
+            </details>
+          </section>
+          {step === 3 ? (
+            <div className="flex items-center justify-between gap-2">
+              {step > 1 ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStep((step - 1) as Step)}
+                >
+                  Back
+                </Button>
+              ) : (
+                <span />
+              )}
+              <span className="text-xs text-muted-foreground">
+                Review above, then create the scene.
+              </span>
+            </div>
+          ) : null}
+        </>
+      ) : null}
 
       <Advanced
         label="Advanced"
