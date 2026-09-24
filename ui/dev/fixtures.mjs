@@ -173,7 +173,7 @@ function v1Routine(id, name, { rules, actions, enabled = true }) {
   };
 }
 
-function helper(id, name, kind, value, persistence = 'persistent') {
+function helper(id, name, kind, value, persistence = 'durable') {
   return {
     id,
     name,

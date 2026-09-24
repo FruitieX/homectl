@@ -34,14 +34,15 @@ import { useAssistantPageContext } from '@/assistant/useAssistantPageContext';
 import { ConfigPageHeader } from '../page-header';
 import { selectClassName } from '@/ui/form-styles';
 
-const KIND_OPTIONS: Array<{ value: HelperKind['kind']; label: string }> = [
-  { value: 'boolean', label: 'Boolean' },
-  { value: 'enum', label: 'Enum (fixed options)' },
-  { value: 'number', label: 'Number (bounded)' },
-  { value: 'string', label: 'String' },
-];
+export const KIND_OPTIONS: Array<{ value: HelperKind['kind']; label: string }> =
+  [
+    { value: 'boolean', label: 'Boolean' },
+    { value: 'enum', label: 'Enum (fixed options)' },
+    { value: 'number', label: 'Number (bounded)' },
+    { value: 'string', label: 'String' },
+  ];
 
-function kindLabel(kind: HelperKind) {
+export function kindLabel(kind: HelperKind) {
   switch (kind.kind) {
     case 'boolean':
       return 'Boolean';
@@ -54,7 +55,7 @@ function kindLabel(kind: HelperKind) {
   }
 }
 
-function defaultKind(kind: HelperKind['kind']): HelperKind {
+export function defaultKind(kind: HelperKind['kind']): HelperKind {
   switch (kind) {
     case 'boolean':
       return { kind: 'boolean' };
@@ -67,7 +68,7 @@ function defaultKind(kind: HelperKind['kind']): HelperKind {
   }
 }
 
-function defaultValueForKind(kind: HelperKind): JsonValue {
+export function defaultValueForKind(kind: HelperKind): JsonValue {
   switch (kind.kind) {
     case 'boolean':
       return false;
@@ -80,7 +81,7 @@ function defaultValueForKind(kind: HelperKind): JsonValue {
   }
 }
 
-function formatValue(value: JsonValue) {
+export function formatValue(value: JsonValue) {
   if (typeof value === 'string') {
     return value === '' ? '(empty)' : value;
   }
@@ -91,7 +92,7 @@ function formatValue(value: JsonValue) {
   return JSON.stringify(value);
 }
 
-function newHelperDraft(): HelperDefinition {
+export function newHelperDraft(): HelperDefinition {
   const kind: HelperKind = { kind: 'boolean' };
   return {
     id: '',
@@ -102,7 +103,7 @@ function newHelperDraft(): HelperDefinition {
   };
 }
 
-function validateDraft(draft: HelperDefinition): string | null {
+export function validateDraft(draft: HelperDefinition): string | null {
   if (!draft.id.trim()) {
     return 'Helper id must not be empty.';
   }
@@ -131,7 +132,7 @@ function validateDraft(draft: HelperDefinition): string | null {
   return null;
 }
 
-function ValueControl({
+export function ValueControl({
   kind,
   value,
   onChange,

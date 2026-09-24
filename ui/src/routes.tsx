@@ -20,6 +20,9 @@ const ConfigSceneDetailPage = lazy(() => import('../app/config/scenes/detail'));
 const ConfigSceneNewPage = lazy(() => import('../app/config/scenes/new'));
 const ConfigGroupNewPage = lazy(() => import('../app/config/groups/new'));
 const ConfigHelpersPage = lazy(() => import('../app/config/helpers/page'));
+const ConfigHelperDetailPage = lazy(
+  () => import('../app/config/helpers/detail'),
+);
 const ConfigImportExportPage = lazy(
   () => import('../app/config/import-export/page'),
 );
@@ -176,7 +179,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'helpers/:id',
-            element: withSuspense(<ConfigHelpersPage />),
+            element: withSuspense(<ConfigHelperDetailPage />),
           },
           {
             path: 'routines/new',
