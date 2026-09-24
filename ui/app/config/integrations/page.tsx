@@ -996,9 +996,57 @@ function renderSchemaInput(
   }
 
   const textValue = typeof value === 'string' ? value : '';
+
+  if (field.kind === 'password') {
+    return (
+      <div className="space-y-2">
+        <Input
+          type="password"
+          value={textValue}
+          placeholder={
+            value === undefined
+              ? 'Stored key stays as it is; type only to replace it'
+              : fieldPlaceholder(field)
+          }
+          onChange={(event) => {
+            // An empty password box never means deletion: leaving it empty
+            // keeps whatever the server already holds.
+            if (event.target.value === '') {
+              return;
+            }
+            onChange(event.target.value);
+          }}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              void confirmDestructive(
+                'Clear the stored key?',
+                'The configuration will no longer carry a value for this field, and the connection may stop working until you set a new one.',
+                'Clear stored key',
+              ).then((confirmed) => {
+                if (confirmed) {
+                  onChange('');
+                }
+              })
+            }
+          >
+            Clear stored key
+          </Button>
+          <span className="text-xs text-muted-foreground">
+            Removing the key is deliberate: an empty box above leaves it alone.
+          </span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Input
-      type={field.kind === 'password' ? 'password' : 'text'}
+      type="text"
       value={textValue}
       placeholder={fieldPlaceholder(field)}
       onChange={(event) => {
@@ -1468,8 +1516,7 @@ function formatJsonValue(value: unknown) {
 }
 
 type JsonParseResult =
-  | { ok: true; value: unknown }
-  | { ok: false; error: string };
+  { ok: true; value: unknown } | { ok: false; error: string };
 
 function parseJsonText(text: string): JsonParseResult {
   let value: unknown;
@@ -1691,10 +1738,10 @@ function IntegrationOverlay({
       : null;
   const canSubmit = Boolean(
     id &&
-      plugin &&
-      missingFields.length === 0 &&
-      !profileValidationError &&
-      (editTab !== 'json' || validationConfig),
+    plugin &&
+    missingFields.length === 0 &&
+    !profileValidationError &&
+    (editTab !== 'json' || validationConfig),
   );
 
   const selectPlugin = (nextPlugin: string) => {
@@ -1785,6 +1832,41 @@ function IntegrationOverlay({
       className="max-w-2xl"
     >
       <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
+        <div className="space-y-3 pb-3">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">
+              {integration?.plugin ?? (plugin || 'No type chosen')}
+            </span>
+            <Badge
+              className={
+                enabled ? enabledBadgeClassName : disabledBadgeClassName
+              }
+            >
+              {enabled ? 'Enabled' : 'Disabled'}
+            </Badge>
+            {plugin ? (
+              <span className="text-xs text-muted-foreground">
+                {enabled
+                  ? 'The runtime starts this connection; reachability is reported per device, not here.'
+                  : 'Disabled: the runtime does not start this connection.'}
+              </span>
+            ) : null}
+          </div>
+          {!isCreate ? (
+            <Alert>
+              <AlertDescription>
+                {schemasError
+                  ? `Next step: reload this page. The plugin schema could not be loaded (${schemasError}), so the fields below may be incomplete.`
+                  : missingFields.length > 0
+                    ? `Next step: fill in ${missingFields[0]}${missingFields.length > 1 ? ` and ${missingFields.length - 1} more field${missingFields.length === 2 ? '' : 's'}` : ''}, then save.`
+                    : profileValidationError
+                      ? `Next step: ${profileValidationError}`
+                      : 'All required fields are present. Saving applies the configuration to the running connection.'}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </div>
+
         <Tabs value={editTab} onValueChange={changeTab}>
           <TabsList className="grid h-auto w-full grid-cols-2">
             <TabsTrigger value="settings">Settings</TabsTrigger>
