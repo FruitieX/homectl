@@ -19,6 +19,7 @@ import {
   ConfigToggleRow,
 } from '@/ui/config-form';
 import { Alert, AlertDescription } from '@/ui/primitives/alert';
+import { StatusRegion } from '@/ui/config/StatusRegion';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
@@ -210,7 +211,12 @@ function HelperEditor({
   );
   const [valueError, setValueError] = useState<string | null>(null);
   const [valueSaved, setValueSaved] = useState(false);
+  const [enumNotice, setEnumNotice] = useState<string | null>(null);
   const kind = draft.kind;
+  const currentValueOutOfRange =
+    kind.kind === 'enum' &&
+    typeof status?.value === 'string' &&
+    !kind.options.includes(status.value);
 
   const changeKind = (kind: HelperKind['kind']) => {
     const next = defaultKind(kind);
@@ -226,6 +232,14 @@ function HelperEditor({
     const initialStillValid =
       typeof draft.initial_value === 'string' &&
       options.includes(draft.initial_value);
+    if (!initialStillValid) {
+      // Never silently rewrite the initial value: say what happened and why.
+      setEnumNotice(
+        `The initial value changed to “${options[0] ?? ''}” because “${String(
+          draft.initial_value,
+        )}” was removed from the options.`,
+      );
+    }
     setDraft({
       ...draft,
       kind: nextKind,
@@ -252,8 +266,86 @@ function HelperEditor({
 
   return (
     <>
+      {!isNew ? (
+        <ConfigFormSection
+          title="Current value"
+          description="What routines read right now. Setting it does not change the definition, so you do not have to save the helper for it."
+        >
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="font-medium">
+              {formatValue(status?.value ?? draft.initial_value)}
+            </span>
+            <Badge variant="outline">{kindLabel(kind)}</Badge>
+            <Badge variant="outline">
+              {draft.persistence === 'durable' ? 'Durable' : 'Session'}
+            </Badge>
+            {status ? (
+              <span className="text-xs text-muted-foreground">
+                revision {String(status.revision)}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                No runtime status received yet.
+              </span>
+            )}
+          </div>
+          {currentValueOutOfRange ? (
+            <Alert>
+              <AlertDescription>
+                The options below no longer include the current value “
+                {String(status?.value)}”, so writes of that value would be
+                rejected.
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="ml-2"
+                  onClick={() => {
+                    setValueSaved(false);
+                    setValueDraft(kind.options[0] ?? '');
+                  }}
+                >
+                  Use “{kind.options[0] ?? ''}”
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          <div className="flex items-center gap-2">
+            <div className="flex-1">
+              <ValueControl
+                kind={draft.kind}
+                value={valueDraft}
+                onChange={(value) => {
+                  setValueSaved(false);
+                  setValueDraft(value);
+                }}
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              disabled={setHelperValue.isPending}
+              onClick={() => void saveValue()}
+            >
+              {setHelperValue.isPending ? 'Setting…' : 'Set current value'}
+            </Button>
+          </div>
+          <StatusRegion
+            message={valueSaved ? 'Current value written.' : null}
+          />
+          {valueError ? (
+            <p role="alert" className="text-xs text-destructive">
+              {valueError}
+            </p>
+          ) : null}
+          {enumNotice ? (
+            <p className="text-xs text-muted-foreground">{enumNotice}</p>
+          ) : null}
+        </ConfigFormSection>
+      ) : null}
+
       <ConfigFormSection
-        title="Identity"
+        title="Name and visibility"
         description="The id is the stable reference routines and scripts use; it is fixed once the helper exists."
       >
         <ConfigFormGrid>
@@ -282,7 +374,7 @@ function HelperEditor({
       </ConfigFormSection>
 
       <ConfigFormSection
-        title="Kind"
+        title="Type and constraints"
         description="The declared type constrains every write; the server rejects values outside it."
       >
         <ConfigField label="Type">
@@ -397,8 +489,8 @@ function HelperEditor({
       </ConfigFormSection>
 
       <ConfigFormSection
-        title="Value"
-        description="The initial value is used before any durable value exists; the current value is what routines read."
+        title="Initial value"
+        description="Used at initialization and after a restart. The current value above is what routines read while the app runs; setting it does not change this."
       >
         <ConfigField label="Initial value">
           <ValueControl
@@ -407,47 +499,11 @@ function HelperEditor({
             onChange={(initial_value) => setDraft({ ...draft, initial_value })}
           />
         </ConfigField>
-        {!isNew ? (
-          <ConfigField
-            label={`Current value${
-              status ? ` (revision ${String(status.revision)})` : ''
-            }`}
-            description="Writes go through the same validation as routine writes."
-          >
-            <div className="flex items-center gap-2">
-              <div className="flex-1">
-                <ValueControl
-                  kind={draft.kind}
-                  value={valueDraft}
-                  onChange={(value) => {
-                    setValueSaved(false);
-                    setValueDraft(value);
-                  }}
-                />
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={setHelperValue.isPending}
-                onClick={() => void saveValue()}
-              >
-                {setHelperValue.isPending ? 'Setting…' : 'Set value'}
-              </Button>
-            </div>
-            {valueSaved ? (
-              <p className="text-xs text-muted-foreground">Value written.</p>
-            ) : null}
-            {valueError ? (
-              <p className="text-xs text-destructive">{valueError}</p>
-            ) : null}
-          </ConfigField>
-        ) : null}
       </ConfigFormSection>
 
       <ConfigFormSection
-        title="Behavior"
-        description="Durable values survive restarts; session values reset to the initial value."
+        title="Persistence and visibility"
+        description="Durable values are stored in the database and survive restarts; session values reset to the initial value. Hidden helpers stay usable but are left out of widgets."
       >
         <ConfigField label="Persistence">
           <select

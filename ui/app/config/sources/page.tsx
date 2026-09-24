@@ -37,7 +37,6 @@ import {
 import { Input } from '@/ui/primitives/input';
 import { ResponsiveOverlay } from '@/ui/primitives/responsive-overlay';
 import { Skeleton } from '@/ui/primitives/skeleton';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/primitives/tabs';
 import { Textarea } from '@/ui/primitives/textarea';
 import { useMemo, useState } from 'react';
 
@@ -177,6 +176,7 @@ function SourceEditor({
   saving,
   error,
   isNew,
+  liveOutput,
 }: {
   draft: SourceConfig;
   presets: SourcePresetInfo[];
@@ -187,6 +187,8 @@ function SourceEditor({
   saving: boolean;
   error: string | null;
   isNew: boolean;
+  /** What the running source publishes right now, when it is reachable. */
+  liveOutput?: { value: string; updatedAt?: number } | null;
 }) {
   const [jsonText, setJsonText] = useState(() =>
     JSON.stringify(draft, null, 2),
@@ -218,88 +220,122 @@ function SourceEditor({
   };
 
   return (
-    <Tabs defaultValue="basics">
-      <TabsList className="flex-wrap">
-        <TabsTrigger value="basics">Basics</TabsTrigger>
-        <TabsTrigger value="compute">Compute</TabsTrigger>
-        <TabsTrigger value="params">Parameters</TabsTrigger>
-        <TabsTrigger value="script">Script</TabsTrigger>
-        <TabsTrigger value="preview">Preview</TabsTrigger>
-        <TabsTrigger value="json">Advanced JSON</TabsTrigger>
-      </TabsList>
+    <div className="space-y-4">
+      <ConfigFormSection
+        title="Current output"
+        description="What this source publishes right now, and whether it is switched on."
+      >
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium">
+            {liveOutput?.value ?? 'No output received yet'}
+          </span>
+          <Badge variant={draft.enabled ? 'outline' : 'muted'}>
+            {draft.enabled ? 'Enabled' : 'Disabled'}
+          </Badge>
+          {liveOutput?.updatedAt ? (
+            <span className="text-xs text-muted-foreground">
+              updated {new Date(liveOutput.updatedAt).toLocaleTimeString()}
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              {draft.enabled
+                ? 'The source has not published a value in this session.'
+                : 'A disabled source never computes or publishes.'}
+            </span>
+          )}
+        </div>
+      </ConfigFormSection>
 
-      <TabsContent value="basics" className="space-y-4 pt-4">
-        <ConfigFormSection
-          title="Identity"
-          description="The canonical device key is computed/<id>; the id is fixed once the source exists."
-        >
-          <ConfigFormGrid>
-            <ConfigField label="Id">
-              <Input
-                disabled={!isNew}
-                value={draft.id}
-                onChange={(event) =>
-                  onChange({ ...draft, id: event.target.value })
-                }
-              />
-            </ConfigField>
-            <ConfigField label="Name">
-              <Input
-                value={draft.name}
-                onChange={(event) =>
-                  onChange({ ...draft, name: event.target.value })
-                }
-              />
-            </ConfigField>
-            <ConfigField
-              label="Timezone"
-              description="IANA zone or fixed offset used to derive civil time."
-            >
-              <Input
-                value={draft.timezone}
-                onChange={(event) =>
-                  onChange({ ...draft, timezone: event.target.value })
-                }
-              />
-            </ConfigField>
-            <ConfigField
-              label="Refresh interval (ms)"
-              description="Minimum one second; startup always computes once."
-            >
-              <Input
-                min={MIN_REFRESH_INTERVAL_MS}
-                step={1000}
-                type="number"
-                value={draft.refresh_interval_ms}
-                onChange={(event) =>
-                  onChange({
-                    ...draft,
-                    refresh_interval_ms: Number(event.target.value),
-                  })
-                }
-              />
-            </ConfigField>
-          </ConfigFormGrid>
-
-          <ConfigToggleRow
-            label="Enabled"
-            description="Disabled sources never compute or publish."
-          >
-            <input
-              checked={draft.enabled}
-              className="size-4 rounded border border-input accent-primary"
-              type="checkbox"
+      <ConfigFormSection
+        title="Identity"
+        description="The canonical device key is computed/<id>; the id is fixed once the source exists."
+      >
+        <ConfigFormGrid>
+          <ConfigField label="Id">
+            <Input
+              disabled={!isNew}
+              value={draft.id}
               onChange={(event) =>
-                onChange({ ...draft, enabled: event.target.checked })
+                onChange({ ...draft, id: event.target.value })
               }
             />
-          </ConfigToggleRow>
-        </ConfigFormSection>
+          </ConfigField>
+          <ConfigField label="Name">
+            <Input
+              value={draft.name}
+              onChange={(event) =>
+                onChange({ ...draft, name: event.target.value })
+              }
+            />
+          </ConfigField>
+        </ConfigFormGrid>
 
-        <ConfigFormSection
-          title="Legacy aliases"
-          description="Device keys this source also answers for, one per line. The alias resolves to the same entity and never duplicates it."
+        <details className="rounded-2xl border border-border p-4">
+          <summary className="cursor-pointer text-sm font-semibold">
+            Schedule: {draft.timezone} · every{' '}
+            {Math.round(draft.refresh_interval_ms / 1000)}s
+          </summary>
+          <div className="mt-3">
+            <ConfigFormGrid>
+              <ConfigField
+                label="Timezone"
+                description="IANA zone or fixed offset used to derive civil time."
+              >
+                <Input
+                  value={draft.timezone}
+                  onChange={(event) =>
+                    onChange({ ...draft, timezone: event.target.value })
+                  }
+                />
+              </ConfigField>
+              <ConfigField
+                label="Refresh interval (ms)"
+                description="Minimum one second; startup always computes once."
+              >
+                <Input
+                  min={MIN_REFRESH_INTERVAL_MS}
+                  step={1000}
+                  type="number"
+                  value={draft.refresh_interval_ms}
+                  onChange={(event) =>
+                    onChange({
+                      ...draft,
+                      refresh_interval_ms: Number(event.target.value),
+                    })
+                  }
+                />
+              </ConfigField>
+            </ConfigFormGrid>
+          </div>
+        </details>
+
+        <ConfigToggleRow
+          label="Enabled"
+          description="Disabled sources never compute or publish."
         >
+          <input
+            checked={draft.enabled}
+            className="size-4 rounded border border-input accent-primary"
+            type="checkbox"
+            onChange={(event) =>
+              onChange({ ...draft, enabled: event.target.checked })
+            }
+          />
+        </ConfigToggleRow>
+      </ConfigFormSection>
+
+      <details className="rounded-2xl border border-border p-4">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Advanced: legacy aliases
+          {(draft.aliases ?? []).length > 0
+            ? ` · ${(draft.aliases ?? []).length} configured`
+            : ' · none'}
+        </summary>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Device keys this source also answers for, one per line. The alias
+          resolves to the same entity and never duplicates it.
+        </p>
+        <div className="mt-3">
           <Textarea
             placeholder="circadian/color"
             rows={3}
@@ -314,221 +350,250 @@ function SourceEditor({
               })
             }
           />
-        </ConfigFormSection>
-      </TabsContent>
+        </div>
+      </details>
 
-      <TabsContent value="compute" className="space-y-4 pt-4">
-        <ConfigFormSection
-          title="Computation"
-          description="Built-in presets are frozen and versioned; script presets are shipped assets you can fork into a DB-backed body."
-        >
-          <ConfigField label="Kind">
-            <select
-              className={selectClassName}
-              value={compute.kind}
-              onChange={(event) => {
-                if (event.target.value === 'circadian_compat') {
-                  setCompute({
-                    kind: 'circadian_compat',
-                    preset_version: 1,
-                    params: circadianParamsToJson(circadianParamsOf(compute)),
-                  });
-                } else {
-                  const first = presets[0];
-                  setCompute({
-                    kind: 'script',
-                    preset: first
-                      ? { id: first.id, version: first.version }
-                      : undefined,
-                    source_body: first ? undefined : SOURCE_SCRIPT_STARTER,
-                    params: circadianParamsToJson(circadianParamsOf(compute)),
-                  });
-                }
-              }}
+      <ConfigFormSection
+        title="Computation"
+        description="Built-in presets are frozen and versioned; script presets are shipped assets you can fork into a DB-backed body."
+      >
+        <ConfigField label="Kind">
+          <select
+            className={selectClassName}
+            value={compute.kind}
+            onChange={(event) => {
+              if (event.target.value === 'circadian_compat') {
+                setCompute({
+                  kind: 'circadian_compat',
+                  preset_version: 1,
+                  params: circadianParamsToJson(circadianParamsOf(compute)),
+                });
+              } else {
+                const first = presets[0];
+                setCompute({
+                  kind: 'script',
+                  preset: first
+                    ? { id: first.id, version: first.version }
+                    : undefined,
+                  source_body: first ? undefined : SOURCE_SCRIPT_STARTER,
+                  params: circadianParamsToJson(circadianParamsOf(compute)),
+                });
+              }
+            }}
+          >
+            <option value="circadian_compat">Built-in circadian preset</option>
+            <option value="script">JavaScript script</option>
+          </select>
+        </ConfigField>
+
+        {compute.kind === 'script' ? (
+          <>
+            <ConfigField
+              label="Shipped preset"
+              description="Pinned by id and version so later preset updates never mutate this source."
             >
-              <option value="circadian_compat">
-                Built-in circadian preset
-              </option>
-              <option value="script">JavaScript script</option>
-            </select>
-          </ConfigField>
-
-          {compute.kind === 'script' ? (
-            <>
-              <ConfigField
-                label="Shipped preset"
-                description="Pinned by id and version so later preset updates never mutate this source."
-              >
-                <select
-                  className={selectClassName}
-                  value={
-                    compute.preset
-                      ? `${compute.preset.id}@${compute.preset.version}`
-                      : 'custom'
-                  }
-                  onChange={(event) => {
-                    const value = event.target.value;
-                    if (value === 'custom') {
-                      setCompute({
-                        kind: 'script',
-                        source_body:
-                          compute.source_body ??
-                          shippedPreset?.source_body ??
-                          SOURCE_SCRIPT_STARTER,
-                        params: compute.params,
-                      });
-                      return;
-                    }
-                    const [id, version] = value.split('@');
-                    const match = presets.find(
-                      (candidate) =>
-                        candidate.id === id &&
-                        candidate.version === Number(version),
-                    );
+              <select
+                className={selectClassName}
+                value={
+                  compute.preset
+                    ? `${compute.preset.id}@${compute.preset.version}`
+                    : 'custom'
+                }
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (value === 'custom') {
                     setCompute({
                       kind: 'script',
-                      preset: { id, version: Number(version) },
-                      params: match?.default_params ?? compute.params,
+                      source_body:
+                        compute.source_body ??
+                        shippedPreset?.source_body ??
+                        SOURCE_SCRIPT_STARTER,
+                      params: compute.params,
                     });
-                  }}
-                >
-                  {presets.map((candidate) => (
-                    <option
-                      key={`${candidate.id}@${candidate.version}`}
-                      value={`${candidate.id}@${candidate.version}`}
-                    >
-                      {candidate.name} v{candidate.version}
-                    </option>
-                  ))}
-                  <option value="custom">Custom script</option>
-                </select>
-              </ConfigField>
-
-              {shippedPreset ? (
-                <ConfigHelpPanel>
-                  <p>{shippedPreset.description}</p>
-                  <div className="mt-3">
-                    <Button size="sm" type="button" onClick={forkPreset}>
-                      Fork into editable script
-                    </Button>
-                  </div>
-                </ConfigHelpPanel>
-              ) : null}
-            </>
-          ) : null}
-        </ConfigFormSection>
-      </TabsContent>
-
-      <TabsContent value="params" className="space-y-4 pt-4">
-        {circadianShaped ? (
-          <ConfigFormSection
-            title="Circadian parameters"
-            description="Strictly validated: fades must not cross midnight or overlap, and brightness stays optional."
-          >
-            <SourceParamsForm
-              params={circadianParamsOf(compute)}
-              onChange={(params) =>
-                setCompute({
-                  ...compute,
-                  params: circadianParamsToJson(params),
-                })
-              }
-            />
-          </ConfigFormSection>
-        ) : (
-          <ConfigFormSection
-            title="Parameters"
-            description="Opaque JSON object passed to the script as ctx.params."
-          >
-            <Textarea
-              className="font-mono text-xs"
-              rows={10}
-              value={JSON.stringify(
-                compute.kind === 'script' ? compute.params : {},
-                null,
-                2,
-              )}
-              onChange={(event) => {
-                try {
-                  const parsed = JSON.parse(event.target.value);
-                  setCompute({ ...compute, params: parsed });
-                  setJsonError(null);
-                } catch {
-                  setJsonError('Parameters must be valid JSON.');
-                }
-              }}
-            />
-            {jsonError ? (
-              <p className="text-xs text-destructive">{jsonError}</p>
-            ) : null}
-          </ConfigFormSection>
-        )}
-      </TabsContent>
-
-      <TabsContent value="script" className="space-y-4 pt-4">
-        {compute.kind !== 'script' ? (
-          <ConfigHelpPanel>
-            Switch the computation kind to JavaScript to author or fork a script
-            body.
-          </ConfigHelpPanel>
-        ) : compute.preset ? (
-          <ConfigFormSection
-            title="Shipped preset body"
-            description="Read-only asset. Fork it to edit a DB-backed copy; the shipped preset stays untouched for everyone else."
-            actions={
-              shippedPreset ? (
-                <Button size="sm" type="button" onClick={forkPreset}>
-                  Fork
-                </Button>
-              ) : undefined
-            }
-          >
-            <SourceScriptEditor
-              readOnly
-              value={shippedPreset?.source_body ?? ''}
-              onChange={() => undefined}
-            />
-          </ConfigFormSection>
-        ) : (
-          <ConfigFormSection
-            title="Script body"
-            description="Pure function body returning one light profile. Reads parameters and injected civil time only."
-            actions={
-              <Button
-                size="sm"
-                type="button"
-                variant="outline"
-                onClick={() =>
+                    return;
+                  }
+                  const [id, version] = value.split('@');
+                  const match = presets.find(
+                    (candidate) =>
+                      candidate.id === id &&
+                      candidate.version === Number(version),
+                  );
+                  const replacesCustomBody =
+                    !compute.preset &&
+                    (compute.source_body ?? '') !== '' &&
+                    (compute.source_body ?? '') !== SOURCE_SCRIPT_STARTER;
+                  if (replacesCustomBody) {
+                    void confirmDestructive(
+                      'Replace your custom script?',
+                      'Choosing a shipped preset removes the script body you wrote in this draft. The shipped preset cannot be edited, only forked.',
+                      'Replace with preset',
+                    ).then((confirmed) => {
+                      if (!confirmed) {
+                        return;
+                      }
+                      setCompute({
+                        kind: 'script',
+                        preset: { id, version: Number(version) },
+                        params: match?.default_params ?? compute.params,
+                      });
+                    });
+                    return;
+                  }
                   setCompute({
                     kind: 'script',
-                    source_body: SOURCE_SCRIPT_STARTER,
-                    params: compute.params,
-                  })
-                }
+                    preset: { id, version: Number(version) },
+                    params: match?.default_params ?? compute.params,
+                  });
+                }}
               >
-                Insert starter
-              </Button>
-            }
-          >
-            <SourceScriptEditor
-              value={compute.source_body ?? ''}
-              onChange={(source_body) =>
-                setCompute({ ...compute, source_body })
-              }
-            />
-          </ConfigFormSection>
-        )}
-      </TabsContent>
+                {presets.map((candidate) => (
+                  <option
+                    key={`${candidate.id}@${candidate.version}`}
+                    value={`${candidate.id}@${candidate.version}`}
+                  >
+                    {candidate.name} v{candidate.version}
+                  </option>
+                ))}
+                <option value="custom">Custom script</option>
+              </select>
+            </ConfigField>
 
-      <TabsContent value="preview">
-        <SourcePreviewPanel timezone={draft.timezone} compute={compute} />
-      </TabsContent>
+            {shippedPreset ? (
+              <ConfigHelpPanel>
+                <p>{shippedPreset.description}</p>
+                <div className="mt-3">
+                  <Button size="sm" type="button" onClick={forkPreset}>
+                    Fork into editable script
+                  </Button>
+                </div>
+              </ConfigHelpPanel>
+            ) : null}
+          </>
+        ) : null}
+      </ConfigFormSection>
 
-      <TabsContent value="json" className="space-y-4 pt-4">
+      {circadianShaped ? (
         <ConfigFormSection
-          title="Raw definition"
-          description="Advanced escape hatch. Apply parses the JSON back into the editor."
+          title="Circadian parameters"
+          description="Strictly validated: fades must not cross midnight or overlap, and brightness stays optional."
         >
+          <SourceParamsForm
+            params={circadianParamsOf(compute)}
+            onChange={(params) =>
+              setCompute({
+                ...compute,
+                params: circadianParamsToJson(params),
+              })
+            }
+          />
+        </ConfigFormSection>
+      ) : (
+        <ConfigFormSection
+          title="Parameters"
+          description="Opaque JSON object passed to the script as ctx.params."
+        >
+          <Textarea
+            className="font-mono text-xs"
+            rows={10}
+            value={JSON.stringify(
+              compute.kind === 'script' ? compute.params : {},
+              null,
+              2,
+            )}
+            onChange={(event) => {
+              try {
+                const parsed = JSON.parse(event.target.value);
+                setCompute({ ...compute, params: parsed });
+                setJsonError(null);
+              } catch {
+                setJsonError('Parameters must be valid JSON.');
+              }
+            }}
+          />
+          {jsonError ? (
+            <p className="text-xs text-destructive">{jsonError}</p>
+          ) : null}
+        </ConfigFormSection>
+      )}
+
+      <ConfigFormSection
+        title="Preview"
+        description="Evaluates the unsaved draft in this editor, not the saved source."
+      >
+        <SourcePreviewPanel timezone={draft.timezone} compute={compute} />
+      </ConfigFormSection>
+
+      <details className="rounded-2xl border border-border p-4">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Advanced: script
+          {compute.kind !== 'script'
+            ? ' · not a script source'
+            : compute.preset
+              ? ` · preset ${compute.preset.id} v${compute.preset.version}`
+              : ' · custom body'}
+        </summary>
+        <div className="mt-3 space-y-4">
+          {compute.kind !== 'script' ? (
+            <ConfigHelpPanel>
+              Switch the computation kind to JavaScript to author or fork a
+              script body.
+            </ConfigHelpPanel>
+          ) : compute.preset ? (
+            <ConfigFormSection
+              title="Shipped preset body"
+              description="Read-only asset. Fork it to edit a DB-backed copy; the shipped preset stays untouched for everyone else."
+              actions={
+                shippedPreset ? (
+                  <Button size="sm" type="button" onClick={forkPreset}>
+                    Fork
+                  </Button>
+                ) : undefined
+              }
+            >
+              <SourceScriptEditor
+                readOnly
+                value={shippedPreset?.source_body ?? ''}
+                onChange={() => undefined}
+              />
+            </ConfigFormSection>
+          ) : (
+            <ConfigFormSection
+              title="Script body"
+              description="Pure function body returning one light profile. Reads parameters and injected civil time only."
+              actions={
+                <Button
+                  size="sm"
+                  type="button"
+                  variant="outline"
+                  onClick={() =>
+                    setCompute({
+                      kind: 'script',
+                      source_body: SOURCE_SCRIPT_STARTER,
+                      params: compute.params,
+                    })
+                  }
+                >
+                  Insert starter
+                </Button>
+              }
+            >
+              <SourceScriptEditor
+                value={compute.source_body ?? ''}
+                onChange={(source_body) =>
+                  setCompute({ ...compute, source_body })
+                }
+              />
+            </ConfigFormSection>
+          )}
+        </div>
+      </details>
+
+      <details className="rounded-2xl border border-border p-4">
+        <summary className="cursor-pointer text-sm font-semibold">
+          Advanced: raw definition
+          {jsonError ? ' · invalid JSON' : ' · parses back into the editor'}
+        </summary>
+        <div className="mt-3 space-y-3">
           <Textarea
             className="font-mono text-xs"
             rows={16}
@@ -567,8 +632,8 @@ function SourceEditor({
           {jsonError ? (
             <p className="text-xs text-destructive">{jsonError}</p>
           ) : null}
-        </ConfigFormSection>
-      </TabsContent>
+        </div>
+      </details>
 
       {error ? (
         <Alert className="mt-4" variant="destructive">
@@ -594,7 +659,7 @@ function SourceEditor({
           {saving ? 'Saving…' : 'Save source'}
         </Button>
       </ConfigFormActions>
-    </Tabs>
+    </div>
   );
 }
 
@@ -819,6 +884,11 @@ export default function SourcesConfigPage() {
                 saving={saving}
                 error={saveError}
                 isNew={false}
+                liveOutput={
+                  liveValue(device) !== null
+                    ? { value: String(liveValue(device)) }
+                    : null
+                }
               />
             </ExpandableConfigCard>
           );
