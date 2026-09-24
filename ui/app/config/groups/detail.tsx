@@ -26,6 +26,7 @@ import {
   ConfigToggleRow,
 } from '@/ui/config-form';
 import { Badge } from '@/ui/primitives/badge';
+import { toast } from 'sonner';
 import { Button } from '@/ui/primitives/button';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
 import { Input } from '@/ui/primitives/input';
@@ -142,14 +143,28 @@ export default function GroupDetailPage() {
 
   const missing = group ? missingGroupDevices(group, lookups.presentKeys) : [];
 
+  // Facts with a count of zero are not facts: say what the room has, and name
+  // the single scene or routine that uses it instead of a chain of counts.
+  const usageUsers = [...usage.scenes, ...usage.routines];
+  const usageSentence =
+    usageUsers.length === 0
+      ? null
+      : usageUsers.length === 1
+        ? `used by ${usageUsers[0].name}`
+        : `used by ${usage.scenes.length} scene${usage.scenes.length === 1 ? '' : 's'} and ${usage.routines.length} routine${usage.routines.length === 1 ? '' : 's'}`;
   const statusSentence = group
     ? [
-        `${group.devices.length} device${group.devices.length === 1 ? '' : 's'}`,
-        `${group.linked_groups.length} linked room${group.linked_groups.length === 1 ? '' : 's'}`,
-        usage.scenes.length + usage.routines.length > 0
-          ? `used by ${usage.scenes.length} scene${usage.scenes.length === 1 ? '' : 's'} and ${usage.routines.length} routine${usage.routines.length === 1 ? '' : 's'}`
-          : 'not used by any scene or routine yet',
-      ].join(' · ')
+        `${group.devices.length} available device${group.devices.length === 1 ? '' : 's'}`,
+        missing.length > 0
+          ? `${missing.length} missing reference${missing.length === 1 ? '' : 's'}`
+          : null,
+        group.linked_groups.length > 0
+          ? `${group.linked_groups.length} linked room${group.linked_groups.length === 1 ? '' : 's'}`
+          : null,
+        usageSentence,
+      ]
+        .filter(Boolean)
+        .join(' · ')
     : undefined;
 
   const devicesSummary =
@@ -262,14 +277,37 @@ export default function GroupDetailPage() {
                             </Link>
                           )}
                         </p>
-                        <p className="truncate text-xs text-muted-foreground">
+                        {/* The key is the only thing that identifies a missing
+                            member for repair, so it is never truncated. */}
+                        <p
+                          className={
+                            isMissing
+                              ? 'text-xs break-all text-muted-foreground'
+                              : 'truncate text-xs text-muted-foreground'
+                          }
+                        >
                           {key}
                         </p>
                       </div>
                       {isMissing ? (
-                        <Badge variant="warning" className="shrink-0">
-                          Missing
-                        </Badge>
+                        <>
+                          <Badge variant="warning" className="shrink-0">
+                            Missing
+                          </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => {
+                              void navigator.clipboard
+                                .writeText(key)
+                                .then(() => toast.success('Key copied'))
+                                .catch(() => toast.error('Could not copy'));
+                            }}
+                          >
+                            Copy key
+                          </Button>
+                        </>
                       ) : null}
                     </div>
                   );
@@ -278,10 +316,8 @@ export default function GroupDetailPage() {
             }
             renderEditor={() => (
               <div className="space-y-4">
-                <ConfigFormSection
-                  title="Members"
-                  description="Directly controlled devices that belong to this room."
-                >
+                {/* No inner card: the section already has a heading. */}
+                <div className="space-y-3">
                   <SelectedDeviceRows
                     devices={deviceEditor.draft?.devices ?? []}
                     onChange={(next: GroupDeviceRef[]) =>
@@ -297,7 +333,7 @@ export default function GroupDetailPage() {
                       openSection('devices', { target: null })
                     }
                   />
-                </ConfigFormSection>
+                </div>
                 <div
                   data-target-key={
                     replaceTarget ? `replace:${replaceTarget}` : undefined
@@ -362,7 +398,7 @@ export default function GroupDetailPage() {
               <BoundedList
                 items={group.linked_groups}
                 keyOf={(linkedId) => linkedId}
-                emptyMessage="Devices from linked rooms are not part of this room yet."
+                emptyMessage="No linked rooms. Search to add one."
                 renderItem={(linkedId) => {
                   const linked = groups.find((entry) => entry.id === linkedId);
                   return (
@@ -398,7 +434,11 @@ export default function GroupDetailPage() {
               <div className="space-y-4">
                 <ConfigFormSection
                   title="Nested rooms"
-                  description="Devices from linked rooms become part of this room. Later links do not override earlier ones; devices keep their own settings."
+                  description={
+                    group.linked_groups.length >= 2
+                      ? 'Devices from linked rooms become part of this room. Later links do not override earlier ones; devices keep their own settings.'
+                      : 'Devices from linked rooms become part of this room.'
+                  }
                 >
                   <SelectedRoomRows
                     ids={linkEditor.draft?.linked_groups ?? []}
@@ -444,7 +484,14 @@ export default function GroupDetailPage() {
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">ID</dt>
-                  <dd className="font-mono text-xs">{group.id}</dd>
+                  <dd className="font-mono text-xs">
+                    {group.id}
+                    {usageUsers.length === 1
+                      ? ` · used by ${usageUsers[0].name}`
+                      : usageUsers.length > 1
+                        ? ` · used by ${usageUsers.length} automations`
+                        : ''}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Visibility</dt>
@@ -484,12 +531,15 @@ export default function GroupDetailPage() {
                   />
                 </ConfigField>
                 <p className="text-xs text-muted-foreground">
-                  ID <span className="font-mono">{group.id}</span> is used by
-                  scenes and routines and cannot be changed here.
+                  ID: <span className="font-mono">{group.id}</span>
+                  {usageUsers.length > 0
+                    ? ` · used by ${usageUsers.length} automation${usageUsers.length === 1 ? '' : 's'}`
+                    : ''}
+                  . It cannot be changed here.
                 </p>
                 <ConfigToggleRow
                   label="Hidden"
-                  description="Hidden rooms stay available for automation but are left out of primary control surfaces."
+                  description="Hide from main controls; automations still use it."
                 >
                   <input
                     type="checkbox"

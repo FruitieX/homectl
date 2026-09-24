@@ -148,10 +148,13 @@ export function SelectedDeviceRows({
                 {replacing ? 'Cancel' : 'Replace'}
               </Button>
             ) : null}
+            {/* A labelled action rather than a bare ×, so it reads and is
+                reachable the same way for everyone. */}
             <Button
               type="button"
               variant="ghost"
-              size="icon"
+              size="sm"
+              className="text-destructive hover:text-destructive"
               aria-label={`Remove ${labelFor(device)} from this room`}
               onClick={() =>
                 onChange(
@@ -159,7 +162,7 @@ export function SelectedDeviceRows({
                 )
               }
             >
-              <X aria-hidden />
+              Remove
             </Button>
           </li>
         );
