@@ -6,6 +6,9 @@
 # Level mode (default for device/group rules): Original behavior - triggers when rule becomes true
 #
 # @configfile configs/trigger-modes.json
+# NOTE: routine actions land asynchronously (the device-state API returns
+# before the engine applies the resulting action), so state assertions use
+# `retry` to carry the assertion until it holds instead of racing the engine.
 
 # ============================================================================
 # SETUP - Create devices
@@ -90,6 +93,9 @@ HTTP 200
 
 # 1. Initial state - lights should be off
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
@@ -108,6 +114,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
@@ -128,6 +137,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
@@ -148,6 +160,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
@@ -166,6 +181,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
@@ -213,6 +231,9 @@ HTTP 200
 
 # Verify lights are off
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
@@ -231,6 +252,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true
@@ -288,6 +312,9 @@ HTTP 200
 
 # Lights should STILL be off (edge mode didn't re-trigger)
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
@@ -308,6 +335,9 @@ HTTP 200
 
 # Lights still off (release doesn't match the rule)
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes false
@@ -327,6 +357,9 @@ HTTP 200
 
 # NOW lights should be on (edge transition detected)
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bed_light_1')].data.Controllable.state.power" includes true

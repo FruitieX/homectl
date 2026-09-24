@@ -8,6 +8,9 @@
 # - Should correctly determine next scene based on current state
 #
 # @configfile configs/scene-cycling-mixed.json
+# NOTE: routine actions land asynchronously (the device-state API returns
+# before the engine applies the resulting action), so state assertions use
+# `retry` to carry the assertion until it holds instead of racing the engine.
 
 # ============================================================================
 # SETUP - Create devices
@@ -142,6 +145,9 @@ HTTP 200
 
 # Bedroom should be in "dark" scene now
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains true
@@ -169,6 +175,9 @@ HTTP 200
 
 # Bedroom should be in "night" scene now (power off)
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
@@ -194,6 +203,9 @@ HTTP 200
 
 # Bedroom should STILL be in "night" scene (nowrap prevents cycling back)
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.state.power" contains false
@@ -236,6 +248,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" contains "dark"
@@ -254,6 +269,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" contains "night"
@@ -272,6 +290,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bathroom_lamp')].data.Controllable.scene_id" contains "normal"
@@ -333,6 +354,9 @@ HTTP 200
 
 # After cycling from mixed state, both should be in same scene
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "dark"
@@ -392,6 +416,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "normal"
@@ -411,6 +438,9 @@ Content-Type: application/json
 HTTP 200
 
 GET {{base_url}}/api/v1/devices
+[Options]
+retry: 10
+retry-interval: 50
 HTTP 200
 [Asserts]
 jsonpath "$.devices[?(@.id=='bedroom_lamp')].data.Controllable.scene_id" contains "bright"
