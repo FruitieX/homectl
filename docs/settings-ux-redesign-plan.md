@@ -133,7 +133,7 @@ If the evidence cannot support a sentence, use “Not enough information yet” 
 
 ## Phase 4 — finding and explaining problems
 
-- [ ] Settings home keeps search, current setup health, and one next step. Show four category rows without opening multiple large lists at once. Recents and task links must not duplicate the same item in the first screenful.
+- [x] Settings home keeps search, current setup health, and one next step. Show four category rows without opening multiple large lists at once. Recents and task links must not duplicate the same item in the first screenful.
 - [x] Diagnostics rows show affected item, observed problem, and a concrete next action in that order. Technical IDs and longer evidence are expandable. “Open item” navigates directly to the relevant detail section, not to a filtered list.
 - [x] Automation history entries lead with time, routine, event, and outcome in one line. Expand for trigger, condition trace, dispatched/suppressed steps, revision, and technical fields. Use names in primary text and IDs only in details. Search/filter remains available over the whole history.
 - [ ] Add bounded v2 “trigger matched but routine did not run” history so a user can inspect a past blocked attempt. Record only when one or more configured triggers matched and the condition was false, unknown, or errored. Do not record every idle evaluation. Add a `V2Blocked` history kind; include matched trigger IDs, the condition evaluation/trace, definition revision, and a short reason. Action count is zero and the snapshot's previous `last_run` must be cleared in this entry. Record at the evaluation decision point before the next frame can replace the evidence; do not infer a block later from live status.
