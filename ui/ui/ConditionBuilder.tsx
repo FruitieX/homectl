@@ -7,6 +7,11 @@ import type { ValueSource } from '@/bindings/ValueSource';
 import type { JsonValue } from '@/bindings/serde_json/JsonValue';
 import { useSources } from '@/hooks/useConfig';
 import { getDeviceDisplayLabelFromKey } from '@/lib/deviceLabel';
+import {
+  OPERATORS_WITHOUT_VALUE,
+  conditionWords,
+  fieldLabel,
+} from '@/lib/conditionWords';
 import { selectClassName } from '@/ui/builder-fields';
 import {
   DeviceSelect,
@@ -103,6 +108,35 @@ function defaultValueSource(kind: ValueSource['kind']): ValueSource {
   }
 }
 
+function sourceSubject(
+  source: ValueSource,
+  resolveDevice?: (ref: {
+    integration_id: string;
+    device_id: string;
+  }) => string,
+): { subject: string; field: string } {
+  switch (source.kind) {
+    case 'device':
+      return {
+        subject:
+          (resolveDevice
+            ? resolveDevice(source.device)
+            : source.device.device_id) || 'device',
+        field: fieldLabel(source.path),
+      };
+    case 'helper':
+      return {
+        subject: fieldLabel(source.helper || '?'),
+        field: 'helper',
+      };
+    case 'computed_source':
+      return {
+        subject: `${source.source || 'source'} ·`,
+        field: fieldLabel(source.path),
+      };
+  }
+}
+
 function describeSource(
   source: ValueSource,
   resolveDevice?: (ref: {
@@ -110,14 +144,8 @@ function describeSource(
     device_id: string;
   }) => string,
 ): string {
-  switch (source.kind) {
-    case 'device':
-      return `${(resolveDevice ? resolveDevice(source.device) : source.device.device_id) || 'device'} ${source.path}`;
-    case 'helper':
-      return `helper ${source.helper || '?'}`;
-    case 'computed_source':
-      return `source ${source.source || '?'} ${source.path}`;
-  }
+  const { subject, field } = sourceSubject(source, resolveDevice);
+  return `${subject} ${field}`;
 }
 
 export function describeCondition(
@@ -141,10 +169,10 @@ export function describeCondition(
     case 'not':
       return `not (${describeCondition(expr.condition, resolveDevice)})`;
     case 'comparison': {
-      const value = operatorsWithoutValue.has(expr.operator)
-        ? ''
-        : ` ${JSON.stringify(expr.value ?? null)}`;
-      return `${describeSource(expr.source, resolveDevice)} ${expr.operator}${value}`;
+      // A sentence, not a JSON pointer plus an operator token: "Hallway spot
+      // brightness is more than 50%". The raw pointer stays in the editor.
+      const { subject, field } = sourceSubject(expr.source, resolveDevice);
+      return conditionWords({ subject, field }, expr.operator, expr.value);
     }
     case 'group':
       return `group ${expr.group_id || '?'} (${quantifierLabels[expr.quantifier] ?? expr.quantifier})`;
@@ -431,6 +459,7 @@ export function ConditionEditor({
   depth?: number;
 }) {
   const [newChildKind, setNewChildKind] = useState<ConditionKind>('comparison');
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   // One nested clause is open for editing at a time; the others stay sentences.
   const [openChildIndex, setOpenChildIndex] = useState<number | null>(null);
   const resolveDeviceLabel = (ref: {
@@ -533,31 +562,38 @@ export function ConditionEditor({
           Add at least one condition; the server rejects an empty group.
         </p>
       ) : null}
-      <div className="flex items-center gap-2">
-        <select
-          className={selectClassName}
-          value={newChildKind}
-          onChange={(event) =>
-            setNewChildKind(event.target.value as ConditionKind)
-          }
-        >
-          {conditionKindOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+      {/* One chooser instead of a type select plus an Add button: pick the kind
+          you want and it lands already open for editing. */}
+      <div className="flex flex-wrap items-center gap-1">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => {
-            setOpenChildIndex(children.length);
-            update([...children, defaultCondition(newChildKind)]);
-          }}
+          aria-expanded={addMenuOpen}
+          aria-haspopup="menu"
+          onClick={() => setAddMenuOpen((open) => !open)}
         >
-          Add condition
+          Add condition…
         </Button>
+        {addMenuOpen
+          ? conditionKindOptions.map((option) => (
+              <Button
+                key={option.value}
+                type="button"
+                role="menuitem"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setNewChildKind(option.value);
+                  setOpenChildIndex(children.length);
+                  update([...children, defaultCondition(option.value)]);
+                  setAddMenuOpen(false);
+                }}
+              >
+                {option.label}
+              </Button>
+            ))
+          : null}
       </div>
     </div>
   );
