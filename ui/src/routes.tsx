@@ -13,6 +13,7 @@ const ConfigFloorplanPage = lazy(() => import('../app/config/floorplan/page'));
 const ConfigGroupsPage = lazy(() => import('../app/config/groups/page'));
 const ConfigGroupDetailPage = lazy(() => import('../app/config/groups/detail'));
 const ConfigSceneDetailPage = lazy(() => import('../app/config/scenes/detail'));
+const ConfigSceneNewPage = lazy(() => import('../app/config/scenes/new'));
 const ConfigGroupNewPage = lazy(() => import('../app/config/groups/new'));
 const ConfigHelpersPage = lazy(() => import('../app/config/helpers/page'));
 const ConfigImportExportPage = lazy(
@@ -31,6 +32,7 @@ const ConfigRoutineHistoryPage = lazy(
   () => import('../app/config/routine-history/page'),
 );
 const ConfigRoutinesPage = lazy(() => import('../app/config/routines/page'));
+const ConfigRoutineNewPage = lazy(() => import('../app/config/routines/new'));
 const ConfigRoutineDetailPage = lazy(
   () => import('../app/config/routines/detail'),
 );
@@ -155,6 +157,10 @@ export const router = createBrowserRouter([
             element: withSuspense(<ConfigHelpersPage />),
           },
           {
+            path: 'routines/new',
+            element: withSuspense(<ConfigRoutineNewPage />),
+          },
+          {
             path: 'routines',
             element: withSuspense(<ConfigRoutinesPage />),
           },
@@ -169,6 +175,10 @@ export const router = createBrowserRouter([
           {
             path: 'scenes',
             element: withSuspense(<ConfigScenesPage />),
+          },
+          {
+            path: 'scenes/new',
+            element: withSuspense(<ConfigSceneNewPage />),
           },
           {
             path: 'scenes/:id',

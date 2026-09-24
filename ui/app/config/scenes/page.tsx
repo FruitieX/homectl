@@ -50,9 +50,10 @@ export default function ScenesPage() {
   const { devicesState: devices } = useDevicesApi();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('q') ?? '');
-  const [showCreate, setShowCreate] = useState(false);
   const navigate = useNavigate();
-  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
+  useCreateDeepLink(
+    useCallback(() => navigate('/config/scenes/new'), [navigate]),
+  );
   useAssistantPageContext({ kind: 'scene' });
 
   // Legacy `?scene=<id>` links open the new detail route instead of expanding a
@@ -64,10 +65,9 @@ export default function ScenesPage() {
     const query = requestedDeviceKey
       ? `?target=${encodeURIComponent(requestedDeviceKey)}`
       : '';
-    navigate(
-      `/config/scenes/${encodeURIComponent(requestedSceneId)}${query}`,
-      { replace: true },
-    );
+    navigate(`/config/scenes/${encodeURIComponent(requestedSceneId)}${query}`, {
+      replace: true,
+    });
   }, [loading, navigate, requestedDeviceKey, requestedSceneId]);
 
   const deviceKeys = useMemo(
@@ -105,7 +105,11 @@ export default function ScenesPage() {
       <ConfigPageHeader
         title="Scenes"
         description="Save a state you can recall by hand or from an automation."
-        actions={<Button onClick={() => setShowCreate(true)}>Add scene</Button>}
+        actions={
+          <Button asChild>
+            <Link to="/config/scenes/new">Add scene</Link>
+          </Button>
+        }
       />
 
       <ConfigListSearchBar
@@ -118,7 +122,11 @@ export default function ScenesPage() {
 
       {visibleScenes.length === 0 ? (
         <EmptyState
-          title={scenes.length === 0 ? 'No scenes yet' : 'No scenes match the current search'}
+          title={
+            scenes.length === 0
+              ? 'No scenes yet'
+              : 'No scenes match the current search'
+          }
           description={
             scenes.length === 0
               ? 'Save a useful light or device state to recall it later.'
@@ -126,8 +134,8 @@ export default function ScenesPage() {
           }
           action={
             scenes.length === 0 ? (
-              <Button size="sm" onClick={() => setShowCreate(true)}>
-                Create your first scene
+              <Button size="sm" asChild>
+                <Link to="/config/scenes/new">Create your first scene</Link>
               </Button>
             ) : (
               <Button variant="outline" size="sm" onClick={() => setSearch('')}>
@@ -144,19 +152,37 @@ export default function ScenesPage() {
               sceneIds: scenes.map((entry) => entry.id),
             });
             const resolved = [
-              ...Object.entries(scene.device_states ?? {}).map(([key, config]) => ({
-                key: `device:${key}`,
-                resolved: resolveSceneColor(config, 'device', key, scenes, devices),
-              })),
-              ...Object.entries(scene.group_states ?? {}).map(([key, config]) => ({
-                key: `group:${key}`,
-                resolved: resolveSceneColor(config, 'group', key, scenes, devices),
-              })),
+              ...Object.entries(scene.device_states ?? {}).map(
+                ([key, config]) => ({
+                  key: `device:${key}`,
+                  resolved: resolveSceneColor(
+                    config,
+                    'device',
+                    key,
+                    scenes,
+                    devices,
+                  ),
+                }),
+              ),
+              ...Object.entries(scene.group_states ?? {}).map(
+                ([key, config]) => ({
+                  key: `group:${key}`,
+                  resolved: resolveSceneColor(
+                    config,
+                    'group',
+                    key,
+                    scenes,
+                    devices,
+                  ),
+                }),
+              ),
             ].filter(
               (
                 entry,
-              ): entry is { key: string; resolved: NonNullable<typeof entry.resolved> } =>
-                entry.resolved !== null,
+              ): entry is {
+                key: string;
+                resolved: NonNullable<typeof entry.resolved>;
+              } => entry.resolved !== null,
             );
 
             return (
@@ -198,14 +224,16 @@ export default function ScenesPage() {
                       </p>
                     ) : (
                       <div className="flex flex-wrap items-center gap-1.5">
-                        {resolved.slice(0, 8).map(({ key, resolved: colors }) => (
-                          <ResolvedColorDot
-                            key={key}
-                            className="inline-flex h-3.5 w-3.5 rounded-full border border-foreground/15 shadow-inner"
-                            color={colors.color}
-                            isPowered={colors.isPowered}
-                          />
-                        ))}
+                        {resolved
+                          .slice(0, 8)
+                          .map(({ key, resolved: colors }) => (
+                            <ResolvedColorDot
+                              key={key}
+                              className="inline-flex h-3.5 w-3.5 rounded-full border border-foreground/15 shadow-inner"
+                              color={colors.color}
+                              isPowered={colors.isPowered}
+                            />
+                          ))}
                         {summary.scripted ? (
                           <Badge variant="secondary">Script</Badge>
                         ) : null}
@@ -237,92 +265,6 @@ export default function ScenesPage() {
           })}
         </div>
       )}
-
-      {showCreate && (
-        <CreateSceneModal
-          onClose={() => setShowCreate(false)}
-          onCreate={async (scene) => {
-            const created = await create(scene);
-            setShowCreate(false);
-            const createdId = (created as { id?: string } | undefined)?.id;
-            if (createdId) {
-              navigate(`/config/scenes/${encodeURIComponent(createdId)}`);
-            }
-          }}
-        />
-      )}
     </div>
-  );
-}
-
-function CreateSceneModal({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void;
-  onCreate: (scene: Partial<Scene>) => Promise<void>;
-}) {
-  const [id, setId] = useState('');
-  const [name, setName] = useState('');
-  const [hidden, setHidden] = useState(false);
-
-  return (
-    <ResponsiveOverlay
-      open
-      onOpenChange={(open) => {
-        if (!open) {
-          onClose();
-        }
-      }}
-      title="Add Scene"
-      description="Create a new scene preset."
-      className="max-w-xl"
-    >
-      <div className="flex min-h-full flex-col px-5 pb-5 md:px-0 md:pb-0">
-        <ConfigFormSection
-          title="Scene identity"
-          description="Create the scene shell first; targets and scripts can be added from the scene page."
-        >
-          <ConfigField label="Scene ID">
-            <Input
-              type="text"
-              value={id}
-              onChange={(e) => setId(e.target.value)}
-              placeholder="evening-relax"
-            />
-          </ConfigField>
-
-          <ConfigField label="Name">
-            <Input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Evening Relax"
-            />
-          </ConfigField>
-
-          <ConfigToggleRow label="Hidden">
-            <input
-              type="checkbox"
-              className={checkboxClassName}
-              checked={hidden}
-              onChange={(e) => setHidden(e.target.checked)}
-            />
-          </ConfigToggleRow>
-        </ConfigFormSection>
-
-        <ConfigFormActions>
-          <Button variant="ghost" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button
-            disabled={!id || !name}
-            onClick={() => onCreate({ id, name, hidden })}
-          >
-            Create
-          </Button>
-        </ConfigFormActions>
-      </div>
-    </ResponsiveOverlay>
   );
 }

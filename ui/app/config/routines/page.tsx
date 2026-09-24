@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 import { matchesConfigSearch } from '@/lib/configSearch';
 import {
@@ -15,7 +15,6 @@ import { useDevicesState, useRoutineStatuses } from '@/hooks/websocket';
 import { ConfigTabs } from '@/ui/ConfigTabs';
 import { ConfigListSearchBar } from '@/ui/ConfigListSearchBar';
 import { ConfigPageHeader } from '../page-header';
-import { CreateRoutineModal } from './create-routine-modal';
 import { Button } from '@/ui/primitives/button';
 import { Button as UiButton } from '@/ui/primitives/button';
 import { Badge } from '@/ui/primitives/badge';
@@ -51,9 +50,11 @@ export default function RoutinesPage() {
   const routineStatuses = useRoutineStatuses();
   const groups = useGroupsState();
   const [search, setSearch] = useSearchParamState();
-  const [showCreate, setShowCreate] = useState(false);
   const [showManage, setShowManage] = useState(false);
-  useCreateDeepLink(useCallback(() => setShowCreate(true), []));
+  const navigate = useNavigate();
+  useCreateDeepLink(
+    useCallback(() => navigate('/config/routines/new'), [navigate]),
+  );
 
   const devices = useMemo(() => {
     const merged = { ...apiDevices };
@@ -172,7 +173,9 @@ export default function RoutinesPage() {
             <UiButton variant="outline" onClick={() => setShowManage(true)}>
               Manage
             </UiButton>
-            <Button onClick={() => setShowCreate(true)}>Add Routine</Button>
+            <Button asChild>
+              <Link to="/config/routines/new">Add Routine</Link>
+            </Button>
           </>
         }
       />
@@ -204,8 +207,8 @@ export default function RoutinesPage() {
           }
           action={
             routines.length === 0 ? (
-              <Button onClick={() => setShowCreate(true)}>
-                Add your first routine
+              <Button asChild>
+                <Link to="/config/routines/new">Add your first routine</Link>
               </Button>
             ) : (
               <UiButton variant="outline" onClick={() => setSearch('')}>
@@ -325,21 +328,6 @@ export default function RoutinesPage() {
             for (const routineId of ids) {
               await remove(routineId);
             }
-          }}
-        />
-      )}
-
-      {showCreate && (
-        <CreateRoutineModal
-          devices={devices}
-          groups={groups}
-          scenes={sceneList}
-          routines={routines}
-          helpers={helpers}
-          onClose={() => setShowCreate(false)}
-          onCreate={async (routine) => {
-            await create(routine);
-            setShowCreate(false);
           }}
         />
       )}

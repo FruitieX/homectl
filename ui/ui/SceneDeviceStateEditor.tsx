@@ -65,7 +65,7 @@ interface DeviceStateEditorProps {
   onChange: (config: SceneDeviceState) => void;
 }
 
-function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
+export function DeviceStateEditor({ config, onChange }: DeviceStateEditorProps) {
   return (
     <div className="space-y-3">
       {/* Power */}

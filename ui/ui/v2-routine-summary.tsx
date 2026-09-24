@@ -14,10 +14,10 @@ import { describeCondition } from '@/ui/ConditionBuilder';
 import { Badge } from '@/ui/primitives/badge';
 import {
   StatusBadge,
-  formatDue,
   formatUnknownReason,
   triggerBadge,
   triggerLabel,
+  triggerStateSentence,
 } from '@/ui/routine-runtime';
 
 /**
@@ -166,39 +166,13 @@ export function WhenReadList({
               ) : null}
             </summary>
             <div className="space-y-1 border-t border-border/70 px-2.5 py-2 text-xs text-muted-foreground">
+              <p>{triggerStateSentence(runtime)}</p>
               {runtime ? (
-                <>
-                  {runtime.armed && runtime.due_wall_ms !== undefined ? (
-                    <p>
-                      Armed — next fire{' '}
-                      {formatDue(Number(runtime.due_wall_ms), Date.now())}
-                    </p>
-                  ) : (
-                    <p>
-                      {runtime.eligible
-                        ? 'Eligible, but no deadline is armed for it right now.'
-                        : 'Not eligible in the current evaluation frame.'}
-                    </p>
-                  )}
-                  <p>
-                    Fired for the current frame: {runtime.fired ? 'yes' : 'no'}{' '}
-                    · condition {runtime.truth}
-                  </p>
-                  {runtime.error ? (
-                    <p className="text-destructive">{runtime.error}</p>
-                  ) : null}
-                  {runtime.unknown_reason ? (
-                    <p>
-                      Unknown: {formatUnknownReason(runtime.unknown_reason)}
-                    </p>
-                  ) : null}
-                </>
-              ) : (
                 <p>
-                  Live trigger state is not reported yet. Enable the routine and
-                  wait for the next status update.
+                  Fired for the current frame: {runtime.fired ? 'yes' : 'no'} ·
+                  condition {runtime.truth}
                 </p>
-              )}
+              ) : null}
             </div>
           </details>
         );

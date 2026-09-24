@@ -24,6 +24,14 @@ function controllable(
     reportPower = null,
     reportBrightness = null,
     reportColor = null,
+    // What the integration advertises; real devices declare this.
+    capabilities = {
+      brightness: true,
+      xy: true,
+      hs: true,
+      rgb: false,
+      ct: { start: 2000, end: 6500 },
+    },
   } = {},
 ) {
   const now = Date.now();
@@ -60,7 +68,7 @@ function controllable(
         requested_at_ms: now - receivedAgoMs - 1500,
         scene_id: sceneId,
         state_source: { kind: 'Manual', scope: 'Device' },
-        capabilities: {},
+        capabilities,
         state,
         managed: 'Full',
       },

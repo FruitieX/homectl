@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useInterval } from 'usehooks-ts';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 
 import type { ConditionExpr } from '@/bindings/ConditionExpr';
 import type { DevicesState } from '@/bindings/DevicesState';
@@ -52,6 +52,7 @@ import { Badge } from '@/ui/primitives/badge';
 import { Button } from '@/ui/primitives/button';
 import { Input } from '@/ui/primitives/input';
 import { StatusRegion } from '@/ui/config/StatusRegion';
+import { Alert, AlertDescription } from '@/ui/primitives/alert';
 import { Switch } from '@/ui/primitives/switch';
 import { Textarea } from '@/ui/primitives/textarea';
 import { confirmDestructive } from '@/ui/primitives/confirm-dialog';
@@ -79,6 +80,7 @@ const statusBadgeClassName = {
 
 export default function RoutineDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const {
     data: routines,
     loading,
@@ -422,6 +424,18 @@ export default function RoutineDetailPage() {
         </>
       }
     >
+      {searchParams.get('created') === '1' ? (
+        <Alert>
+          <AlertDescription>
+            <span className="block font-medium">Routine created.</span>
+            {routine.enabled
+              ? 'It is enabled and reacts the next time the start above matches.'
+              : 'It is saved disabled, so it will not run until you enable it.'}{' '}
+            The What-if preview below shows whether the body can be evaluated
+            right now.
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {isV2 ? (
         <>
           <Section

@@ -406,7 +406,14 @@ server.on('upgrade', (req, socket) => {
     const frame = {
       State: {
         revision: 1,
-        devices: {},
+        // Keyed by device key, exactly like the server's state frame: the UI
+        // reads live device state from here, not from the config endpoint.
+        devices: Object.fromEntries(
+          db.devices.map((device) => [
+            `${device.integration_id}/${device.id}`,
+            device,
+          ]),
+        ),
         scenes: {},
         groups: {},
         routine_statuses: buildRoutineStatuses(db),
