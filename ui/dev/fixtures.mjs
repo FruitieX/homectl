@@ -595,6 +595,42 @@ function normalHome() {
     },
     routineHistory: [
       {
+        // A blocked attempt: the trigger matched, the condition was false.
+        // This is what "why did my lights stay off?" looks like in history.
+        id: '9002',
+        timestamp: new Date(Date.now() - 12 * 60_000).toISOString(),
+        first_timestamp: new Date(Date.now() - 41 * 60_000).toISOString(),
+        routine_id: 'motion_on',
+        routine_name: 'Living room motion on',
+        trigger_kind: 'v2_blocked',
+        event_source_device_key: null,
+        action_count: 0,
+        status: null,
+        occurrence_count: 7,
+        blocked_reason: 'the condition was false',
+        v2: {
+          definition_revision: 3,
+          fingerprint: 'a1b2c3d4e5f60718',
+          matched_trigger_ids: ['t1'],
+          triggers: [
+            {
+              trigger_id: 't1',
+              kind: 'state_change',
+              fired: true,
+              eligible: true,
+              truth: 'true',
+              armed: true,
+            },
+          ],
+          condition: {
+            truth: 'false',
+            trace: { path: '/condition', truth: 'false', evaluated: true },
+          },
+          will_trigger: false,
+          execution_pending: false,
+        },
+      },
+      {
         id: '9001',
         timestamp: new Date(Date.now() - 47 * 60_000).toISOString(),
         routine_id: 'motion_on',
