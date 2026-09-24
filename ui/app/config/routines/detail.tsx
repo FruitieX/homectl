@@ -309,7 +309,10 @@ export default function RoutineDetailPage() {
         className: statusBadgeClassName.warning,
       };
     }
-    return { label: 'Waiting', className: statusBadgeClassName.muted };
+    return {
+      label: 'Waiting for data',
+      className: statusBadgeClassName.muted,
+    };
   })();
   const statusSentence = (() => {
     if (!routine.enabled) {

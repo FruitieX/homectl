@@ -4,7 +4,11 @@ import ConfigLayout from '../app/config/layout';
 import { RouteErrorScreen } from './RouteErrorScreen';
 
 import { Suspense, lazy, type ReactNode } from 'react';
-import { Outlet, createBrowserRouter } from 'react-router-dom';
+import {
+  Outlet,
+  ScrollRestoration,
+  createBrowserRouter,
+} from 'react-router-dom';
 import { Navigate } from 'react-router-dom';
 
 const DashboardPage = lazy(() => import('../app/dashboard/page'));
@@ -59,6 +63,9 @@ function withSuspense(element: ReactNode) {
 function RootRouteLayout() {
   return (
     <Layout>
+      {/* Back and Forward return to the scroll position the user left, so a
+          list they had scrolled through does not jump to the top. */}
+      <ScrollRestoration />
       <Outlet />
     </Layout>
   );

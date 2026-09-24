@@ -10,6 +10,8 @@ import { cn } from '@/lib/cn';
 export function Advanced({
   label = 'Advanced',
   description,
+  /** Replaces the “Optional” tag, e.g. “Customized” or “Needs attention”. */
+  summary,
   defaultOpen,
   openWhen,
   className,
@@ -17,6 +19,7 @@ export function Advanced({
 }: {
   label?: ReactNode;
   description?: ReactNode;
+  summary?: ReactNode;
   defaultOpen?: boolean;
   openWhen?: boolean;
   className?: string;
@@ -44,8 +47,13 @@ export function Advanced({
           className={cn('size-3.5 transition-transform', open && 'rotate-90')}
         />
         {label}
-        <span className="ml-auto text-xs font-normal text-muted-foreground">
-          Optional
+        <span
+          className={cn(
+            'ml-auto text-xs font-normal',
+            summary ? 'text-foreground' : 'text-muted-foreground',
+          )}
+        >
+          {summary ?? 'Optional'}
         </span>
       </button>
       {open ? (

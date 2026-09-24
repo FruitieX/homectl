@@ -343,7 +343,16 @@ export default function SettingsPage() {
                       )}
                     />
                     <Advanced
-                      label={`Transition defaults${form.watch('defaultTransitionMs') !== null || form.watch('sceneTransitionMs') !== null ? ' · customized' : ''}`}
+                      label="Transition defaults"
+                      summary={
+                        form.formState.errors.defaultTransitionMs ||
+                        form.formState.errors.sceneTransitionMs
+                          ? 'Needs attention'
+                          : form.watch('defaultTransitionMs') !== null ||
+                              form.watch('sceneTransitionMs') !== null
+                            ? 'Customized'
+                            : undefined
+                      }
                       description="Leave a value empty to use the integration's own behavior. 1000 milliseconds is one second."
                       className="mt-6"
                       openWhen={Boolean(
@@ -608,7 +617,10 @@ function AppearanceSettingsCard() {
             </div>
           </div>
 
-          <Advanced label="Display performance and troubleshooting">
+          <Advanced
+            label="Display performance and troubleshooting"
+            summary={blurEffectsEnabled ? undefined : 'Customized'}
+          >
             <div className="flex items-center justify-between gap-4 rounded-2xl border border-border bg-muted/30 p-4">
               <span className="space-y-1">
                 <span className="block text-sm font-medium text-foreground">
@@ -946,13 +958,17 @@ function AssistantSettingsCard() {
               </div>
             </div>
             <Advanced
-              label={
-                form.reasoningEffort ||
-                form.timezone ||
-                form.maxTokens !== '2048' ||
-                form.timeoutMs !== '60000'
-                  ? 'Provider options · customized'
-                  : 'Provider options'
+              label="Provider options"
+              summary={
+                validationError !== null &&
+                !validationError.startsWith('Set both')
+                  ? 'Needs attention'
+                  : form.reasoningEffort ||
+                      form.timezone ||
+                      form.maxTokens !== '2048' ||
+                      form.timeoutMs !== '60000'
+                    ? 'Customized'
+                    : undefined
               }
               description="Use these only if your provider needs different limits, reasoning, or timezone settings."
               openWhen={

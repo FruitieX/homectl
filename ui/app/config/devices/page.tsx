@@ -1655,7 +1655,7 @@ export default function DevicesPage() {
 
                           {stateDetails.length > 0 && (
                             <div className="space-y-2 pt-1">
-                              <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                              <div className="text-xs text-muted-foreground">
                                 State details
                               </div>
                               <div className="flex flex-wrap gap-2">
@@ -1744,7 +1744,7 @@ export default function DevicesPage() {
 
                         {capabilityLabels.length > 0 && (
                           <div className="space-y-2 pt-1">
-                            <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                               Capabilities
                             </div>
                             <div className="flex flex-wrap gap-2">
@@ -1761,7 +1761,7 @@ export default function DevicesPage() {
                         )}
 
                         <div className="space-y-2 pt-1">
-                          <div className="text-xs uppercase tracking-wide text-muted-foreground">
+                          <div className="text-xs text-muted-foreground">
                             Groups
                           </div>
                           {groupNames.length > 0 ? (

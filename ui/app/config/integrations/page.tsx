@@ -924,7 +924,7 @@ function IntegrationConfigFieldsEditor({
       {renderFieldGroups(normalFields)}
       {advancedFields.length > 0 ? (
         <details className="group rounded-3xl border border-border bg-muted/20 p-4 shadow-sm sm:p-5">
-          <summary className="cursor-pointer list-none text-sm font-semibold uppercase tracking-wide text-foreground [&::-webkit-details-marker]:hidden">
+          <summary className="cursor-pointer list-none text-sm font-semibold text-foreground [&::-webkit-details-marker]:hidden">
             <span className="mr-2 inline-block transition-transform group-open:rotate-90">
               ▸
             </span>

@@ -275,7 +275,7 @@ export function triggerBadge(trigger: TriggerRuntimeStatus): {
   if (trigger.eligible) {
     return { label: 'Ready', tone: 'neutral' };
   }
-  return { label: 'Waiting', tone: 'ghost' };
+  return { label: 'Waiting for data', tone: 'ghost' };
 }
 
 function PanelSection({
@@ -294,7 +294,7 @@ function PanelSection({
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-foreground/80">
+            <h3 className="text-sm font-semibold text-foreground/80">
               {title}
             </h3>
             <p className="mt-1 text-sm text-muted-foreground">{description}</p>
@@ -427,7 +427,7 @@ export function RoutineRuntimePanel({
           </p>
 
           <details className="rounded-2xl border border-border bg-background/70">
-            <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
               Condition trace
             </summary>
             <div className="space-y-2 px-3 pb-3">
@@ -437,7 +437,7 @@ export function RoutineRuntimePanel({
 
           {routine.definition_v2 ? (
             <details className="rounded-2xl border border-border bg-background/70">
-              <summary className="cursor-pointer px-3 py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
                 Native definition
               </summary>
               <pre className="overflow-x-auto px-3 pb-3 text-xs">

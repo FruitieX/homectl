@@ -269,7 +269,7 @@ export default function RoutinesPage() {
                           ? 'Triggering'
                           : status.all_conditions_match
                             ? 'Conditions met'
-                            : 'Waiting'
+                            : 'Waiting for data'
                       }
                       tone={
                         status.will_trigger

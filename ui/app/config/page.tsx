@@ -369,7 +369,7 @@ export default function ConfigPage() {
           ) : (
             searchGroups.map((group) => (
               <section key={group} className="space-y-2">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <h2 className="text-xs font-semibold text-muted-foreground">
                   {group}
                 </h2>
                 <div className="overflow-hidden rounded-2xl border bg-card divide-y divide-border/60">
@@ -473,9 +473,7 @@ export default function ConfigPage() {
                 <Wand2 className="size-4" />
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                  Next step
-                </p>
+                <p className="text-xs font-semibold text-primary">Next step</p>
                 <Link
                   to={setupStep.href}
                   className="mt-0.5 inline-flex items-center gap-1 font-medium hover:underline"
